@@ -945,10 +945,14 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --model opus"))
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
+		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \""+me.ID+"/probe\", \"parent\": \""+me.ID+"\", \"read_only\": true, \"check\": {\"target\": \"\", \"script\": \"probe.buzz\"}}\nEOF"),
+		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
 		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths cmd/magus/**",
 		"magus job fork " + me.ID + "/scout --parent " + me.ID + " --read-only --read-paths **",
 		"client op=put id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
+		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \"" + me.ID + "/probe\", \"parent\": \"" + me.ID + "\", \"read_only\": true, \"check\": {\"target\": \"go-test\", \"project\": \".\"}}\nEOF",
 	} {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "nothing would grade", "%q", command)
 	}

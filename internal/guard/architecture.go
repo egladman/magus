@@ -32,34 +32,34 @@ var architectureVocabulary = regexp.MustCompile(`(?i)\b(?:` +
 	`)\b`)
 
 // architectureElsewhere is the same word meaning something else: an instruction set, or a
-// figure someone wants redrawn. Both are cut from the prompt before the vocabulary is
-// asked, so the rest of the prompt can still match on its own terms.
+// figure someone wants redrawn. Both are cut from the message before the vocabulary is
+// asked, so the rest of the message can still match on its own terms.
 var architectureElsewhere = regexp.MustCompile(`(?i)\b(?:` +
 	`(?:cpu|platform|target|host|machine|processor|instruction[- ]set)\s+architectures?` +
 	`|architectures?\s+(?:diagrams?|figures?)` +
 	`)\b`)
 
-// cpuArchitecture names an instruction set. A prompt that names one means a CPU by the
+// cpuArchitecture names an instruction set. A message that names one means a CPU by the
 // bare word "architecture", so that word alone stops counting there.
 var cpuArchitecture = regexp.MustCompile(`(?i)\b(?:arm64|aarch64|amd64|x86[-_]64|x86|i386|riscv64|ppc64le|s390x|goarch)\b`)
 
 var architectureWord = regexp.MustCompile(`(?i)\barchitect(?:ure|ures|ural|urally)\b`)
 
-// asksArchitecture reports whether a submitted prompt is a structure question.
-func asksArchitecture(prompt string) bool {
-	text := architectureElsewhere.ReplaceAllString(prompt, " ")
+// asksArchitecture reports whether a message the person typed is a structure question.
+func asksArchitecture(message string) bool {
+	text := architectureElsewhere.ReplaceAllString(message, " ")
 	if cpuArchitecture.MatchString(text) {
 		text = architectureWord.ReplaceAllString(text, " ")
 	}
 	return architectureVocabulary.MatchString(text)
 }
 
-// recordPromptTopics marks the topics a submitted prompt raises on the session's facts,
-// and reports whether it marked any. It judges nothing and returns no text: the person's
-// words are not something to answer with an advisory, and the rule that reads the mark
-// speaks on the model's next call instead.
-func recordPromptTopics(facts hint.Gate, prompt string) bool {
-	if facts.Session() == "" || !asksArchitecture(prompt) {
+// recordMessageTopics marks the topics a message the person typed raises on the session's
+// facts, and reports whether it marked any. It judges nothing and returns no text: the
+// person's words are not something to answer with an advisory, and the rule that reads the
+// mark speaks on the model's next call instead.
+func recordMessageTopics(facts hint.Gate, message string) bool {
+	if facts.Session() == "" || !asksArchitecture(message) {
 		return false
 	}
 	facts.MarkFired(topicArchitecture)
@@ -74,16 +74,16 @@ func recordPromptTopics(facts hint.Gate, prompt string) bool {
 // facts holds the session's topic mark and skills the calling agent's own loads, so a
 // subagent working in an architecture conversation is briefed by its own load and never
 // by its parent's.
-func denyArchitectureWithoutSkill(facts, skills hint.Gate, observesSkillLoads bool, workspace, newDir string) string {
+func denyArchitectureWithoutSkill(facts, skills hint.Gate, reportsSkills bool, workspace, newDir string) string {
 	const carries = "The knowledge graph answers imports, cycles, layering and coupling from the workspace's own edges; reading files does not."
 	if newDir != "" {
-		return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
+		return denyUntilSkillLoaded(skills, reportsSkills, workspace, architectureSkill,
 			"creating the new directory `"+newDir+"`", carries)
 	}
 	if !facts.AlreadyFired(topicArchitecture) {
 		return ""
 	}
-	return denyUntilSkillLoaded(skills, observesSkillLoads, workspace, architectureSkill,
+	return denyUntilSkillLoaded(skills, reportsSkills, workspace, architectureSkill,
 		"acting on an architecture question", carries)
 }
 

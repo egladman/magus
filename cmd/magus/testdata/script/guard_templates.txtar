@@ -157,7 +157,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --read-only --criteria 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
@@ -237,7 +237,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # A spawn carries a prompt and a subagent type rather than one string, so it takes the same
 # whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
 # an entry declares about itself. Only a wiring that also matches its host's skill tool may
-# pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
+# pass --reports-skills, so the rule that requires a skill before a spawn fires
 # exactly where loads are reported.
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
@@ -258,7 +258,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # case: command/deny
 # A SUPPORTED flag: the glue matches it against the set it publishes and passes it on.
 stdin $WORK/spawn-call.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 stdout '"permissionDecision":"deny"'
 stdout 'magus-multi-agent'
 
@@ -271,7 +271,7 @@ stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
 stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
-stderr 'Supported: --observes-skill-loads'
+stderr 'Supported: --reports-skills'
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -289,17 +289,17 @@ stdout '"permissionDecision":"deny"'
 # Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
 # one the single-flag case above already pins.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --observes-skill-loads --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --reports-skills --reports-skills
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 
 cd $WORK
 
-# --- magus-command.buzz: a prompt the person submitted ------------------------
+# --- magus-command.buzz: a message the person typed ---------------------------
 #
-# An event that names no tool and carries text at `prompt` is the person's prompt, not a
-# call. The glue hands it to `magus shell --prompt` and says NOTHING: a prompt hook's
-# stdout reaches the model, and a recorded topic is not news to it. What the record does
+# An event that names no tool and carries text at `prompt` (Claude Code's envelope key) is
+# the person's message, not a call. The glue hands it to `magus shell --message` and says
+# NOTHING: a message hook's stdout reaches the model, and a recorded topic is not news to it. What the record does
 # shows on the next call, which architecture-unbriefed holds until the agent loads the
 # architecture skill. The workspace sets that rule to deny, since it only advises by
 # default.
@@ -307,40 +307,40 @@ cd $WORK
 cd arch-ws
 
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 ! stderr .
 
 # case: command/deny
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 stdout '"permissionDecision":"deny"'
 stdout 'magus-architecture-review'
 
 # case: command/pass
 # Loading the skill clears it.
 stdin $WORK/arch-skill.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 stdin $WORK/arch-bash.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 
 # case: command/pass
-# A prompt that asks no structure question records nothing, so that session's next call runs.
+# A message that asks no structure question records nothing, so that session's next call runs.
 stdin $WORK/prompt-ordinary.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 ! stderr .
 stdin $WORK/arch-bash-s2.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 
 # case: path/deny
 # The path entry declares the capability too, and a write that creates a directory waits
 # on the same load whatever was asked.
 stdin $WORK/arch-new-dir.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
 stdout 'creating the new directory'
@@ -506,7 +506,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/cursor-mcp-worker --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-worker --read-only --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 
@@ -688,10 +688,10 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_N
 ! stdout .
 ! stderr .
 
-# A prompt is as silent: the guard's unavailable notice would reach the model as context
-# on every turn, and nothing about the prompt itself was ever going to be enforced.
+# A message is as silent: the guard's unavailable notice would reach the model as context
+# on every turn, and nothing about the message itself was ever going to be enforced.
 stdin $WORK/prompt-architecture.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 ! stderr .
 
@@ -1010,7 +1010,7 @@ stdout '"additionalContext":"pushing'
 # takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
-exec magus job fork harness/push-worker --parent harness --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job fork harness/push-worker --parent harness --read-only --criteria 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json
@@ -1064,7 +1064,7 @@ import "magus";
 
 magus\project({
     "sources": ["*.buzz"],
-    "no_language": "fixture workspace: only the guard's view of a prompt and the call after it matters here",
+    "no_language": "fixture workspace: only the guard's view of a message and the call after it matters here",
 });
 magus\guard.builtins({"architecture-unbriefed": "deny"});
 -- prompt-architecture.json --

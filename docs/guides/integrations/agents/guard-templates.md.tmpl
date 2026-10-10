@@ -68,7 +68,7 @@ argv, after `--`:
   guessed host's dialect, because a reply shaped for the wrong host can let a call
   through.
 - `magus shell` flags an entry declares about itself, such as
-  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
+  `-- --agent-name claude-code --reports-skills`. The template parses them
   against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
   named on stderr and left out, and the call is judged anyway; your host shows that
   line as a hook error. Nothing is dropped quietly: a guard running with flags nobody

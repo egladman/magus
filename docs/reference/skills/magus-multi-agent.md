@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25676
-skill_short_bytes: 19058
+skill_full_bytes: 26432
+skill_short_bytes: 19814
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `116` |
+| `agent-skill-version` | `117` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `7cd473a6644b` |
+| `skill-content` | `c81888aef742` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -233,6 +233,8 @@ To prove something, brute-force it at economy. Many economy workers finish about
 fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
+  Give each a script check whose recorded run proves the claim, so `magus job wait`
+  can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref.
 - The principal tier only reconciles the claims where workers disagree.
@@ -404,6 +406,18 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
+- Only a row with a check or a goal can pass. A read-only scout passes only through a
+  script check, below; a check-less one ends no_return by design.
+
+A scout that only reads is forked `--read-only`. `magus job fork` refuses a row
+naming no write paths otherwise.
+
+- To make its claim gradeable, fork it with `--stdin` and a check naming a probe script:
+  `"check": {"script": "<probe>.buzz"}`.
+- It runs `magus buzz --record <probe>.buzz` after the fork and cites the printed ref
+  as its result's `output_ref`.
+- A scout whose output is prose gets no check. The root ends it with
+  `magus job exit <job>`, recorded no_return, which is its expected end.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
@@ -714,6 +728,8 @@ To prove something, brute-force it at economy. Many economy workers finish about
 fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
+  Give each a script check whose recorded run proves the claim, so `magus job wait`
+  can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
 - The principal tier only reconciles the claims where workers disagree.
@@ -909,6 +925,18 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
+- Only a row with a check or a goal can pass. A read-only scout passes only through a
+  script check, below; a check-less one ends no_return by design.
+
+A scout that only reads is forked `--read-only`. `magus job fork` refuses a row
+naming no write paths otherwise.
+
+- To make its claim gradeable, fork it with `--stdin` and a check naming a probe script:
+  `"check": {"script": "<probe>.buzz"}`.
+- It runs `magus buzz --record <probe>.buzz` after the fork and cites the printed ref
+  as its result's `output_ref`.
+- A scout whose output is prose gets no check. The root ends it with
+  `magus job exit <job>`, recorded no_return, which is its expected end.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.

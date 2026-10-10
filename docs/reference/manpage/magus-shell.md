@@ -41,10 +41,10 @@ applies to a read, so the verdict is always pass and the activity event
 previews as observed rather than as a guard decision. Which of a host's tools
 only look is the caller's knowledge, never magus's.
 
---prompt reads the input as a prompt the person submitted. Nothing is judged
-and nothing is said back: the guard records the topics the prompt raises, such
+--message reads the input as a message the person typed. Nothing is judged
+and nothing is said back: the guard records the topics the message raises, such
 as a question about package structure, and a rule reads that record on the
-agent's next call. The prompt text itself is not kept.
+agent's next call. The message text itself is not kept.
 
 --agent-name, --session, --transcript, and --event are attribution, not policy.
 They record who produced the observation on the activity event, and the verdict
@@ -95,20 +95,20 @@ not block every tool call.
 **--lease** *string*
 : The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
 
+**--message**
+: Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass
+
 **--observe**
 : Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
-
-**--observes-skill-loads**
-: This host's wiring reports skill loads to magus, so a rule may require one before a spawn, a write or a command; without it those rules stand down
 
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
-**--prompt**
-: Read the input as a prompt the person submitted, without judging it: it records the topics the prompt raises for a later rule, and the verdict is always pass
-
 **--renders-ask**
 : This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny
+
+**--reports-skills**
+: This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down
 
 **--rewrites-input**
 : The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed
@@ -125,7 +125,7 @@ not block every tool call.
 ## Exit status
 
 **0**
-: The input is allowed: pass, or advise, which attaches context and does not block. --observe and --prompt always land here, because they judge nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call.
+: The input is allowed: pass, or advise, which attaches context and does not block. --observe and --message always land here, because they judge nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call.
 
 **1**
 : Not returned by a verdict. A wrapper should treat anything other than 2 as allowed rather than enumerating codes, so that a future signal added here does not start blocking commands.

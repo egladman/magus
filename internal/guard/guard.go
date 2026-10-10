@@ -422,9 +422,9 @@ type Request struct {
 	IsPath bool
 	// Observe records the input as a path the agent REACHED and judges nothing.
 	Observe bool
-	// Prompt reads the input as a prompt the person submitted. It judges nothing and
-	// records only the topics the prompt raises, for a rule to read on a later call.
-	Prompt bool
+	// Message reads the input as a message the person typed. It judges nothing and
+	// records only the topics the message raises, for a rule to read on a later call.
+	Message bool
 	// DryRun reaches the verdict the call would and writes nothing: the session state the
 	// rules spend is read from a discarded copy, and no trail line, policy record, binding
 	// or registration is made. One difference in wording: a repeated deny is shown in full,
@@ -450,7 +450,7 @@ type Request struct {
 	// guard remembers for a caller no host delivered a session for, and is never recorded
 	// as a session: a terminal window is not a host's conversation.
 	Window string
-	// ObservesSkillLoads is the one CAPABILITY on this struct rather than attribution: the
+	// ReportsSkills is the one CAPABILITY on this struct rather than attribution: the
 	// host's wiring reports skill loads to magus, so a rule may require one. It is set by
 	// the wiring that provides the observation, never inferred from Host, because guard
 	// code may not branch on a host's name and a name would not prove the wiring anyway.
@@ -566,9 +566,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
-	if req.Prompt {
+	if req.Message {
 		if !req.DryRun {
-			recordPromptTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
+			recordMessageTopics(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.factsKey()), input)
 		}
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	}

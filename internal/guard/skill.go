@@ -124,7 +124,7 @@ func skillLoaded(markers hint.Gate, skill agent.SkillRef) bool {
 // denyUntilSkillLoaded is the shared verdict body: act is what the caller was about to do,
 // carries says what the skill holds that the act needs, and skill is what to load.
 //
-// observesSkillLoads is the difference between a rule and a trap, and it is the caller's to
+// reportsSkills is the difference between a rule and a trap, and it is the caller's to
 // pass rather than something this can detect. Only a host whose wiring reports skill loads
 // can ever satisfy one of these rules, and the four harnesses magus ships do not agree: one
 // matches a skill tool, one wires four other matchers, one uses its own event names, and
@@ -132,8 +132,8 @@ func skillLoaded(markers hint.Gate, skill agent.SkillRef) bool {
 // anyway would deny for the life of the session with no action the reader could take.
 //
 // Three lines, like every other deny here: what happened, why it matters, what to do.
-func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace string, skill agent.SkillRef, act, carries string) string {
-	if !observesSkillLoads {
+func denyUntilSkillLoaded(markers hint.Gate, reportsSkills bool, workspace string, skill agent.SkillRef, act, carries string) string {
+	if !reportsSkills {
 		return ""
 	}
 	// No session pointer means no marker can be keyed, so every call in every session would
@@ -147,7 +147,7 @@ func denyUntilSkillLoaded(markers hint.Gate, observesSkillLoads bool, workspace 
 	// location whenever the envelope's cwd sits outside a workspace or the cache dir will
 	// not resolve, so this is reachable rather than theoretical.
 	//
-	// It is the same trap observesSkillLoads exists to avoid, arriving by another road: a
+	// It is the same trap reportsSkills exists to avoid, arriving by another road: a
 	// deny the reader cannot clear by doing what it asks. Standing down is the only honest
 	// answer in both.
 	if markers.CacheDir() == "" {

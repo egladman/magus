@@ -1499,10 +1499,10 @@ applies to a read, so the verdict is always pass and the activity event
 previews as observed rather than as a guard decision. Which of a host's tools
 only look is the caller's knowledge, never magus's.
 
---prompt reads the input as a prompt the person submitted. Nothing is judged
-and nothing is said back: the guard records the topics the prompt raises, such
+--message reads the input as a message the person typed. Nothing is judged
+and nothing is said back: the guard records the topics the message raises, such
 as a question about package structure, and a rule reads that record on the
-agent's next call. The prompt text itself is not kept.
+agent's next call. The message text itself is not kept.
 
 --agent-name, --session, --transcript, and --event are attribution, not policy.
 They record who produced the observation on the activity event, and the verdict
@@ -1542,7 +1542,7 @@ not block every tool call.`,
 	Flags: []Flag{
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-		{Name: "prompt", Kind: FlagBool, Doc: "Read the input as a prompt the person submitted, without judging it: it records the topics the prompt raises for a later rule, and the verdict is always pass"},
+		{Name: "message", Kind: FlagBool, Doc: "Read the input as a message the person typed, without judging it: it records the topics the message raises, which a later rule reads, and the verdict is always pass"},
 		{Name: "lease", Kind: FlagString, Doc: "The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only); required with --transport"},
 		{Name: "transport", Kind: FlagString, Doc: "The form of the hook calling, such as sh or buzz; the once-per-session notices and deny explanations are kept per host, transport and session. Without --agent-name it is refused (MGS3024)"},
@@ -1550,7 +1550,7 @@ not block every tool call.`,
 		{Name: "agent", Kind: FlagString, Doc: "The host's id for the subagent making this call, empty for the main conversation; a subagent magus saw spawned is graded under its job"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
-		{Name: "observes-skill-loads", Kind: FlagBool, Doc: "This host's wiring reports skill loads to magus, so a rule may require one before a spawn, a write or a command; without it those rules stand down"},
+		{Name: "reports-skills", Kind: FlagBool, Doc: "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down"},
 		{Name: "renders-ask", Kind: FlagBool, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 		{Name: "rewrites-input", Kind: FlagBool, Doc: "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed"},
 	},
@@ -1567,7 +1567,7 @@ not block every tool call.`,
 	// and runs the command on 0, so a wrapper author has to be told that advise passes
 	// and that 2 is overloaded.
 	ExitStatus: []ExitCode{
-		{0, "The input is allowed: pass, or advise, which attaches context and does not block. --observe and --prompt always land here, because they judge nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call."},
+		{0, "The input is allowed: pass, or advise, which attaches context and does not block. --observe and --message always land here, because they judge nothing. An EMPTY input is also 0: a wrapper that hands this nothing must not block every tool call."},
 		{1, "Not returned by a verdict. A wrapper should treat anything other than 2 as allowed rather than enumerating codes, so that a future signal added here does not start blocking commands."},
 		{2, "A DENIED command or path, and also input that could not be READ - the two share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases. Misuse (an unquoted command, an unknown flag) is also 2."},
 	},

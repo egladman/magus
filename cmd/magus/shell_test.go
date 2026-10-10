@@ -1495,7 +1495,7 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"briefless","tool_name":"Task",` +
 		`"tool_input":{"subagent_type":"Explore","prompt":"read the cache package"}}`
 
-	// Without --observes-skill-loads the rule stands down, which is what keeps it from
+	// Without --reports-skills the rule stands down, which is what keeps it from
 	// denying forever on a harness that reports no skill loads. Asserted first, because it
 	// is the behaviour three of the four shipped harnesses get.
 	var unobserved bytes.Buffer
@@ -1506,14 +1506,14 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 
 	var advised bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &advised,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "--reports-skills", "-o", "name"}))
 	assert.Equal(t, "advise\n", advised.String())
 
 	loadSkillForTest(t, ctx, dir, "briefless")
 
 	var allowed bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &allowed,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "--reports-skills", "-o", "name"}))
 	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
 }
 

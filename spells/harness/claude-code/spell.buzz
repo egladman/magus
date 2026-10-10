@@ -73,26 +73,26 @@ fun claude_glue_command(input: str, flags: [str]) > str {
 // the wiring that reports them is what declares it; a harness without that matcher passes
 // nothing and those rules stand down rather than denying forever. It is the one thing an
 // entry knows that the event cannot say, which is why it is the one thing written on it.
-final OBSERVES_SKILL_LOADS = "--observes-skill-loads";
+final REPORTS_SKILLS = "--reports-skills";
 
-// The Bash, MCP, Skill, spawn and prompt entries all take this one string. Their payloads
+// The Bash, MCP, Skill, spawn and message entries all take this one string. Their payloads
 // differ, but each has to reach `magus shell` whole or as the one field the glue selects,
 // and the glue reads which off the event rather than off the entry, so there is nothing
 // else to write on it.
 fun claude_guard_command() > str {
-    return claude_glue_command("command", flags: [OBSERVES_SKILL_LOADS]);
+    return claude_glue_command("command", flags: [REPORTS_SKILLS]);
 }
 
 fun claude_path_command() > str {
-    return claude_glue_command("path", flags: [OBSERVES_SKILL_LOADS]);
+    return claude_glue_command("path", flags: [REPORTS_SKILLS]);
 }
 
 fun claude_observe_command() > str {
     return claude_glue_command("observe", flags: [<str>]);
 }
 
-// The matcher that makes skill loads observable, named once so the entry that DECLARES
-// they are observable can be checked against the entry that produces them. "Keep the two
+// The matcher that makes skill loads reportable, named once so the entry that DECLARES
+// they are reported can be checked against the entry that produces them. "Keep the two
 // in step" used to be a comment; the invariant test below is what keeps them.
 final SKILL_MATCHER = "Skill";
 
@@ -195,9 +195,9 @@ fun claude_entries() > [any] {
                 },
             ],
         },
-        // The person's prompt, which the glue hands to `magus shell --prompt` and answers
+        // The person's message, which the glue hands to `magus shell --message` and answers
         // with nothing: it records the topics a later rule reads, and changes no verdict
-        // on the prompt itself.
+        // on the message itself.
         {
             "path": ["hooks", "UserPromptSubmit"],
             "entries": [
@@ -410,9 +410,9 @@ test "the spawn entry also sees every continuation" {
 }
 
 test "the one per-entry flag rides after the argv separator" {
-    assert\equal(claude_guard_command(), claude_glue_command("command", flags: [<str>]) + " " + OBSERVES_SKILL_LOADS,
+    assert\equal(claude_guard_command(), claude_glue_command("command", flags: [<str>]) + " " + REPORTS_SKILLS,
         "the guard entry is the named glue command plus one forwarded flag");
-    assert\equal(claude_path_command(), claude_glue_command("path", flags: [<str>]) + " " + OBSERVES_SKILL_LOADS,
+    assert\equal(claude_path_command(), claude_glue_command("path", flags: [<str>]) + " " + REPORTS_SKILLS,
         "the path entry is the named glue command plus one forwarded flag");
 }
 
@@ -420,7 +420,7 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
     // The glue reads the host from this argument and nowhere else, and refuses a call
     // without it, so every entry that reaches the glue carries the declaration's own name.
     final named = " -- --agent-name {mgs_getName()}";
-    assert\isTrue(claude_guard_command().indexOf(named) != null, "command, mcp, skill, spawn and prompt hooks");
+    assert\isTrue(claude_guard_command().indexOf(named) != null, "command, mcp, skill, spawn and message hooks");
     assert\isTrue(claude_path_command().indexOf(named) != null, "path hook");
     assert\isTrue(claude_observe_command().endsWith(named), "read hook");
     assert\isTrue(claude_checkpoint_command().endsWith(named), "Stop checkpoint");
@@ -430,9 +430,9 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
 
 // The judging entries claim loads are REPORTED, and only the skill matcher reports them.
 // Left to a comment, dropping the matcher leaves the claim standing, and every skill gate
-// then denies over a load the host can no longer observe. Derived from the entries rather
+// then denies over a load the host can no longer report. Derived from the entries rather
 // than pinned as a pair, so the coupling is what fails when it breaks.
-test "every judging entry declares observed skill loads exactly while a matcher reports them" {
+test "every judging entry declares reports-skills exactly while a matcher reports them" {
     var reports_loads = false;
     foreach (entry in claude_entries()[0]["entries"] as [any]) {
         if (((entry["matcher"] as? str) ?? "") == SKILL_MATCHER) { reports_loads = true; }
@@ -441,7 +441,7 @@ test "every judging entry declares observed skill loads exactly while a matcher 
         foreach (entry in block["entries"] as [any]) {
             foreach (hook in entry["hooks"] as [any]) {
                 final command = (hook["command"] as? str) ?? "";
-                final claims = command.indexOf(OBSERVES_SKILL_LOADS) != null;
+                final claims = command.indexOf(REPORTS_SKILLS) != null;
                 if (command.indexOf("magus-command.buzz") != null or command.indexOf("magus-path.buzz") != null) {
                     assert\equal(claims, reports_loads,
                         "a judging entry declares the flag exactly when a matcher reports loads: {command}");
@@ -453,18 +453,18 @@ test "every judging entry declares observed skill loads exactly while a matcher 
     }
 }
 
-test "the prompt entry is the guard glue, unmatched" {
+test "the message entry is the guard glue, unmatched" {
     var found = false;
     foreach (block in claude_entries()) {
         if ((block["path"] as [str])[1] != "UserPromptSubmit") { continue; }
         found = true;
         final entries = block["entries"] as [any];
-        assert\equal(entries.len(), 1, "one prompt entry");
-        assert\isTrue(entries[0]["matcher"] == null, "a prompt event takes no matcher");
+        assert\equal(entries.len(), 1, "one message entry");
+        assert\isTrue(entries[0]["matcher"] == null, "a message event takes no matcher");
         assert\equal("{(entries[0]["hooks"] as [any])[0]["command"]}", claude_guard_command(),
-            "the glue tells a prompt from a call by the event's shape");
+            "the glue tells a message from a call by the event's shape");
     }
-    assert\isTrue(found, "the prompt is wired");
+    assert\isTrue(found, "the message is wired");
 }
 
 test "the lifecycle wrappers name the Buzz ports too" {
@@ -562,8 +562,8 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     final subagent_hooks = subagent_entries[0]["hooks"] as [any];
     assert\equal("{subagent_hooks[0]["command"]}", claude_guard_command(),
         "the guard glue reads the stop whole");
-    final prompt_path = entries[5]["path"] as [str];
-    assert\equal(prompt_path[1], "UserPromptSubmit", "the person's prompt, recorded and never answered");
+    final message_path = entries[5]["path"] as [str];
+    assert\equal(message_path[1], "UserPromptSubmit", "the person's message, recorded and never answered");
 }
 
 test "harness_mcp registers a per-checkout stdio server" {

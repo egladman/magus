@@ -192,8 +192,9 @@ session fork a NEW row that names its own job as `parent`, as flags, as a
 parent is refused there, once. The store grades a child only when it writes as
 that lease, which it reads from the checkout's binding; a worker the guard
 identified in a checkout bound to nobody may fork only a `--read-only` child
-that declares no paths, check or goals. A child neither read-only nor handed
-write paths is refused either way, since an empty write set scopes nothing.
+that declares no paths or goals, and at most a script check. A child neither
+read-only nor handed write paths is refused either way, since an empty write set
+scopes nothing; `magus job fork` refuses it for every caller.
 The guard also lets `magus job wait` through for the session's own
 descendants, and refuses it for any other job.
 
@@ -238,7 +239,13 @@ holder take its lease from another. A store an older magus left behind is
 carried forward the first time the new one opens it.
 
 **A read-only job carries an abbreviated row**: `read_only` set, and empty write
-and deny paths that then read as deliberate rather than forgotten.
+and deny paths that then read as deliberate rather than forgotten. It passes
+`magus job wait` only through a script check, `{"check": {"script":
+"<probe>.buzz"}}`, whose result cites the ref `magus buzz --record <probe>.buzz`
+printed after the fork. A check grants nothing, so a scout may carry one. A
+read-only row with no check cannot pass: whoever forked it ends it with `magus
+job exit <job>`, recorded `no_return`, which is the expected end for a scout
+whose findings are prose.
 
 **A timeout is optional.** `magus job fork <job> --timeout 2h` (or `timeout` in
 the `--stdin` record or the `client` call) has the store stamp a `deadline`

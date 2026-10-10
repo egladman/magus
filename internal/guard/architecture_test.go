@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/libs/testkit"
 )
 
-// The phrasings these came from are prompts people actually sent, verbatim where quoted.
+// The phrasings these came from are messages people actually sent, verbatim where quoted.
 func TestAsksArchitectureMatchesRealPhrasings(t *testing.T) {
 	t.Parallel()
 	for _, prompt := range []string{
@@ -56,10 +56,10 @@ func TestAsksArchitectureIgnoresCPUsAndDiagrams(t *testing.T) {
 		assert.Falsef(t, asksArchitecture(prompt), "%q is not a structure question", prompt)
 	}
 	assert.True(t, asksArchitecture("update the architecture diagram, and check the imports"),
-		"a cut phrase leaves the rest of the prompt to match on its own terms")
+		"a cut phrase leaves the rest of the message to match on its own terms")
 }
 
-// archSession drives one Claude Code session through Judge: prompts, Bash calls, writes and
+// archSession drives one Claude Code session through Judge: messages, Bash calls, writes and
 // skill loads, each from the root (agent "") or a subagent.
 type archSession struct {
 	t        *testing.T
@@ -86,8 +86,8 @@ func (s archSession) judge(event string) Verdict {
 	return Judge(s.ctx, s.deps, Request{Input: event, Host: "claude-code", Form: "buzz", ReportsSkills: s.observes})
 }
 
-func (s archSession) prompt(text string) Verdict {
-	return Judge(s.ctx, s.deps, Request{Input: text, Prompt: true, Host: "claude-code", Form: "buzz", Session: s.session})
+func (s archSession) message(text string) Verdict {
+	return Judge(s.ctx, s.deps, Request{Input: text, Message: true, Host: "claude-code", Form: "buzz", Session: s.session})
 }
 
 func (s archSession) head(agentID string) string {
@@ -119,13 +119,13 @@ func requireArchitectureDeny(t *testing.T, v Verdict, msgAndArgs ...any) {
 	assert.Equal(t, string(denyArchitectureUnbriefed), v.Rule, msgAndArgs...)
 }
 
-func TestArchitectureUnbriefedDeniesAfterAStructurePrompt(t *testing.T) {
+func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
 
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "no structure question, nothing to read first")
 
-	v := s.prompt("does this respect our current architecture patterns?")
-	assert.Equal(t, "pass", v.Decision, "a prompt is recorded, never judged")
+	v := s.message("does this respect our current architecture patterns?")
+	assert.Equal(t, "pass", v.Decision, "a message is recorded, never judged")
 	assert.Empty(t, v.Context, "and nothing is said back")
 
 	v = s.bash("", "echo hello")
@@ -139,22 +139,22 @@ func TestArchitectureUnbriefedDeniesAfterAStructurePrompt(t *testing.T) {
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "the load clears the gate")
 }
 
-func TestArchitectureUnbriefedIgnoresAnOrdinaryPrompt(t *testing.T) {
+func TestArchitectureUnbriefedIgnoresAnOrdinaryMessage(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	s.prompt("fix the flaky cache test")
+	s.message("fix the flaky cache test")
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)
 }
 
 func TestArchitectureUnbriefedStandsDownWhereLoadsAreNotObserved(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), false)
-	s.prompt("why do we need a new package called audit package?")
+	s.message("why do we need a new package called audit package?")
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision,
 		"a wiring that reports no loads could never clear it")
 }
 
 func TestArchitectureUnbriefedClearsOnTheFullTwin(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	s.prompt("check the blast radius of this")
+	s.message("check the blast radius of this")
 	s.load("", agent.FullTwinName(architectureSkill.String()))
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)
 }
@@ -163,7 +163,7 @@ func TestArchitectureUnbriefedClearsOnTheFullTwin(t *testing.T) {
 // unbriefed, and a subagent's load leaves its parent unbriefed.
 func TestArchitectureUnbriefedCountsLoadsPerAgent(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	s.prompt("respecting the current like application boundaries")
+	s.message("respecting the current like application boundaries")
 
 	s.load("", architectureSkill.String())
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision, "the root loaded it")
@@ -176,7 +176,7 @@ func TestArchitectureUnbriefedCountsLoadsPerAgent(t *testing.T) {
 
 func TestASubagentLoadDoesNotBriefItsParent(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	s.prompt("the architecture skill should be able to catch all these crazy imports and the sprawl")
+	s.message("the architecture skill should be able to catch all these crazy imports and the sprawl")
 	s.load("a1b2c3", architectureSkill.String())
 	requireArchitectureDeny(t, s.bash("", "echo hello"))
 }
@@ -205,7 +205,7 @@ func TestANewDirectoryStillAdvisesWhereLoadsAreNotObserved(t *testing.T) {
 // Shipped default: a workspace that sets nothing is told once, and never refused.
 func TestArchitectureUnbriefedAdvisesOnceByDefault(t *testing.T) {
 	s := newArchSession(t, testDependencies(), true)
-	s.prompt("where should the retry helper live?")
+	s.message("where should the retry helper live?")
 
 	v := s.bash("", "echo hello")
 	assert.Equal(t, "advise", v.Decision)
@@ -214,9 +214,9 @@ func TestArchitectureUnbriefedAdvisesOnceByDefault(t *testing.T) {
 	assert.NotEqual(t, string(denyArchitectureUnbriefed), s.bash("", "echo hello").Rule, "said once per session")
 }
 
-func TestAPromptIsNeverRecordedOnADryRun(t *testing.T) {
+func TestAMessageIsNeverRecordedOnADryRun(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), true)
-	v := Judge(s.ctx, s.deps, Request{Input: "check the blast radius", Prompt: true, DryRun: true,
+	v := Judge(s.ctx, s.deps, Request{Input: "check the blast radius", Message: true, DryRun: true,
 		Host: "claude-code", Form: "buzz", Session: s.session})
 	assert.Equal(t, "pass", v.Decision)
 	assert.NotEqual(t, "deny", s.bash("", "echo hello").Decision)

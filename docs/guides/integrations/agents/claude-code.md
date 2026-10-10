@@ -89,7 +89,7 @@ magus agent harness verify --id claude-code
 ```
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
-(recorded and judged), subagent spawns, and the person's prompts (recorded, never
+(recorded and judged), subagent spawns, and the person's messages (recorded, never
 answered). Each is one `magus buzz` command that
 runs a shipped script, which talks to `magus shell`: file edits run
 `magus-path.buzz`, reads also run `magus-observe.buzz`, and every other entry runs
@@ -105,7 +105,7 @@ runs a shipped script, which talks to `magus shell`: file edits run
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --observes-skill-loads"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills"
         }]
       }
     ]
@@ -290,7 +290,7 @@ prints this entry alongside the entries above:
       {
         "matcher": "Agent|Task|SendMessage",
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --reports-skills", "timeout": 10 }
         ]
       }
     ],
@@ -336,7 +336,7 @@ Same script as the MCP-call entry and for the same reason: a spawn's payload is 
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
 `tool_input.command` to select and the event goes whole. The one capability written
 on this entry, and on every other entry that judges, is the flag after `--`, which
-`magus buzz` forwards to the script as its own argv: `--observes-skill-loads` says
+`magus buzz` forwards to the script as its own argv: `--reports-skills` says
 that THIS config also matches the host's `Skill` tool, so a rule that requires a
 skill before a spawn, a write or a command has loads to read. A load counts for the
 agent that made it: a subagent loads a skill itself, and its parent's load does not
@@ -545,12 +545,12 @@ cannot otherwise get. An advisory that fires every turn to restate guidance the
 skills already carry fails it.
 
 `UserPromptSubmit` passes that test without saying anything. The guard glue hands
-the submitted prompt to `magus shell --prompt`, which records a topic marker when
-the prompt asks a structure question (architecture, boundaries, layering, imports,
+the message the person typed to `magus shell --message`, which records a topic marker when
+the message asks a structure question (architecture, boundaries, layering, imports,
 a new package, where something belongs, blast radius) and prints nothing, so the
-model's context gets no advisory and the prompt is never blocked. The marker
+model's context gets no advisory and the message is never blocked. The marker
 changes a later verdict: `architecture-unbriefed` holds the agent's next call
-until it loads `magus-architecture-review`. The prompt text is not kept.
+until it loads `magus-architecture-review`. The message text is not kept.
 
 `SubagentStart` is the one worth naming, because it looks like it should replace
 the [lease wiring](#lease-capture) above and does not. It fires when a subagent

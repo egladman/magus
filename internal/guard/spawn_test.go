@@ -71,7 +71,7 @@ func TestSpawnRuleStandsDownWhereLoadsGoUnobserved(t *testing.T) {
 	assert.Empty(t, denySpawnWithoutBrief(g, false, ""),
 		"a host that cannot report a skill load must not be held to having reported one")
 	assert.NotEmpty(t, denySpawnWithoutBrief(g, true, ""),
-		"the same session denies once the wiring declares it observes loads")
+		"the same session denies once the wiring declares it reports skills")
 }
 
 // TestEitherCopyClearsTheBrief pins that the twins are interchangeable as EVIDENCE: they

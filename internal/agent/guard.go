@@ -182,8 +182,8 @@ var guardInputs = []string{"command", "path", "mcp"}
 // the workspace root (`magus buzz -C <root>`). magus-session.buzz is new, and sets the
 // session's PATH that a shell line in the config used to.
 //
-// 21: magus-path.buzz accepts --observes-skill-loads, which a config written for 21 passes
-// on every judging entry, and magus-command.buzz records a submitted prompt. Under that
+// 21: magus-path.buzz accepts --reports-skills, which a config written for 21 passes
+// on every judging entry, and magus-command.buzz records a message the person typed. Under that
 // config a 20 copy reports the flag as unsupported and every skill gate stands down.
 const GuardTemplateVersion = 21
 
