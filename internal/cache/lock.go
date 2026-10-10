@@ -97,7 +97,7 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 	}
 
 	// Past here this caller is queued behind somebody. Report it once, by name. Every
-	// notice carries its elapsed time: an agent's display holds back the short ones.
+	// notice carries its elapsed time: a quiet display holds back the short ones.
 	holder := k.currentHolder(key)
 	if onBlock != nil {
 		done := onBlock(holder)

@@ -182,13 +182,10 @@ Output format: pretty, plain, text, or json (default: pretty). Equivalent magus.
 Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: \fBlog.level\fR.
 .TP
 \fBMAGUS_LOG_SILENT\fR
-When true, the env equivalent of \-s/\-\-silent: suppress progress, bound the failing\-project dump, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: \fBlog.silent\fR.
+When true, the env equivalent of \-s/\-\-silent: suppress progress, bound the failing\-project dump, print a failure's reasoning only at \-v, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: \fBlog.silent\fR.
 .TP
 \fBMAGUS_LOG_STREAM\fR
 When true, the env equivalent of \-vv: stream every target's output live instead of withholding a passing target's output (default: false). Equivalent magus.yaml key: \fBlog.stream\fR.
-.TP
-\fBMAGUS_LOG_AUDIENCE\fR
-Who reads the log display: human (every record with its reasoning) or agent (facts only, reasoning at \-v, no wait note under a minute); empty resolves per invocation. Equivalent magus.yaml key: \fBlog.audience\fR.
 .TP
 \fBMAGUS_CONCURRENCY\fR
 Maximum number of concurrently running per\-project build steps; overrides concurrency_profile when positive (default: concurrency_profile decides). Equivalent magus.yaml key: \fBconcurrency\fR.

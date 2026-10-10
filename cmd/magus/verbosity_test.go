@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/log/audience"
+	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,9 +151,10 @@ func TestApplyDisplayHonorsConfiguredLevel(t *testing.T) {
 	assert.False(t, slog.Default().Enabled(context.Background(), slog.LevelWarn))
 }
 
-// The audience filter sits on the display alone: the run log's capture chain keeps the
-// reasoning and the short wait an agent's display drops.
-func TestApplyDisplayAudienceFiltersTheDisplayNotTheCapture(t *testing.T) {
+// A quiet display drops a failure's reasoning and a short wait; the run log's capture
+// chain keeps both.
+func TestApplyDisplayQuietFiltersTheDisplayNotTheCapture(t *testing.T) {
+	silent := true
 	savedCfg, savedGlobal, savedLogger, savedStderr := globalCfg, global, slog.Default(), os.Stderr
 	t.Cleanup(func() {
 		globalCfg, global = savedCfg, savedGlobal
@@ -165,7 +166,7 @@ func TestApplyDisplayAudienceFiltersTheDisplayNotTheCapture(t *testing.T) {
 	t.Cleanup(func() { _ = display.Close() })
 	os.Stderr = display
 
-	globalCfg, global = config.Config{Log: config.Log{Format: "text", Audience: "agent"}}, globalFlags{}
+	globalCfg, global = config.Config{Log: config.Log{Format: "text", Silent: &silent}}, globalFlags{}
 	applyDisplay()
 
 	ctx := context.Background()
@@ -197,18 +198,19 @@ func TestApplyDisplayAudienceFiltersTheDisplayNotTheCapture(t *testing.T) {
 	assert.Equal(t, []string{attr.WhyKey, attr.ElapsedKey}, kept)
 }
 
-// -o jsonl hands a parser every notice whole, so no audience filter applies. Its notices
+// -o jsonl hands a parser every notice whole, so no quiet filter applies. Its notices
 // go through an encoder bound to the process's stderr at init, which a test cannot
 // redirect, so this pins the installed chain instead of the bytes.
-func TestApplyDisplayAudienceLeavesJSONLNoticesWhole(t *testing.T) {
+func TestApplyDisplayQuietLeavesJSONLNoticesWhole(t *testing.T) {
+	silent := true
 	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
 	t.Cleanup(func() {
 		globalCfg, global = savedCfg, savedGlobal
 		slog.SetDefault(savedLogger)
 	})
-	filtered := reflect.TypeOf(audience.Wrap(slog.DiscardHandler, audience.Agent, false))
+	filtered := reflect.TypeOf(quiet.Wrap(slog.DiscardHandler, false))
 
-	globalCfg, global = config.Config{Log: config.Log{Format: "text", Audience: "agent"}}, globalFlags{}
+	globalCfg, global = config.Config{Log: config.Log{Format: "text", Silent: &silent}}, globalFlags{}
 	applyDisplay()
 	require.IsType(t, dirHandler{}, slog.Default().Handler())
 	assert.Equal(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "text display")
@@ -216,4 +218,35 @@ func TestApplyDisplayAudienceLeavesJSONLNoticesWhole(t *testing.T) {
 	global.output = string(FormatJSONL)
 	applyDisplay()
 	assert.NotEqual(t, filtered, reflect.TypeOf(slog.Default().Handler().(dirHandler).Handler), "-o jsonl notices")
+}
+
+// With no -q, -s or log.silent, a person sees a failure's reasoning and every wait note.
+func TestApplyDisplayDefaultKeepsTheReasoning(t *testing.T) {
+	savedCfg, savedGlobal, savedLogger, savedStderr := globalCfg, global, slog.Default(), os.Stderr
+	t.Cleanup(func() {
+		globalCfg, global = savedCfg, savedGlobal
+		slog.SetDefault(savedLogger)
+		os.Stderr = savedStderr
+	})
+	display, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = display.Close() })
+	os.Stderr = display
+
+	globalCfg, global = config.Config{Log: config.Log{Format: "text"}}, globalFlags{}
+	applyDisplay()
+
+	ctx := context.Background()
+	reasoned := slog.NewRecord(time.Now(), slog.LevelWarn, "index stale", 0)
+	reasoned.AddAttrs(attr.Why("stale symbols mislead"))
+	wait := slog.NewRecord(time.Now(), slog.LevelInfo, "waiting for the broker", 0)
+	wait.AddAttrs(attr.Elapsed(5 * time.Second))
+	for _, r := range []slog.Record{reasoned, wait} {
+		require.NoError(t, slog.Default().Handler().Handle(ctx, r))
+	}
+
+	shown, err := os.ReadFile(display.Name())
+	require.NoError(t, err)
+	assert.Contains(t, string(shown), `why="stale symbols mislead"`)
+	assert.Contains(t, string(shown), "waiting for the broker")
 }

@@ -15,7 +15,7 @@ integration is a single download.
 | --------------- | -------------------------------------------------------------------------- |
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
 | guard wiring    | `.cursor/hooks.json`                                                       |
-| output audience | not set: Cursor documents no way; set `MAGUS_LOG_AUDIENCE=agent` yourself  |
+| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself  |
 | shell commands  | deny and advise both reach the model                                       |
 | file writes     | deny and advise both reach the model                                       |
 | MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
@@ -58,17 +58,17 @@ prefer env interpolation. Restart Cursor after changing the client config.
 An agent uses the CLI fallback when MCP is unavailable; it does not manually
 start Magus solely to obtain tools.
 
-## Who reads the output
+## Quiet output
 
-magus picks its display from what it is told, never from which host runs it.
-Cursor documents no setting for the environment of the commands its agent runs:
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. Cursor documents no setting for the environment of the commands its agent runs:
 the `env` a `sessionStart` reply carries reaches later hooks, and nothing
 documents it reaching the agent's shell. So `.cursor/hooks.json` sets nothing, and
 `magus describe harness cursor` says so. Set it yourself in the environment you
 start Cursor from:
 
 ```sh
-MAGUS_LOG_AUDIENCE=agent cursor .
+MAGUS_LOG_SILENT=true cursor .
 ```
 
 ## Guard hook

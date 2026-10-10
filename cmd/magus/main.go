@@ -252,9 +252,9 @@ type dispatchProfile struct {
 	// loaded the machine is, and starting a broker for one would make every read command
 	// spawn a background process.
 	spawnsWork bool
-	// agentHosted marks a command whose stderr only an agent host reads, so its display
-	// takes the agent audience whatever the terminal says (see resolveAudience).
-	agentHosted bool
+	// hostOnly marks a command whose stderr only a host's glue reads, never a person, so
+	// its display is quiet (see quietDisplay).
+	hostOnly bool
 }
 
 // isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
@@ -470,7 +470,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
 		// that adopted the call would serve its own. The preload opens the workspace the
 		// host launched it in and hosts the proc server the tools' runs share.
-		return dispatchProfile{needsConfig: true, needsWorkspace: true, agentHosted: true}
+		return dispatchProfile{needsConfig: true, needsWorkspace: true, hostOnly: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -684,8 +684,8 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
 	// Before the first applyDisplay below, so the workspace preload already logs under it.
-	if profile.agentHosted {
-		audienceForced.Store(true)
+	if profile.hostOnly {
+		quietForced.Store(true)
 	}
 
 	if !profile.needsConfig {

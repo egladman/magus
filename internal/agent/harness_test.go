@@ -289,7 +289,7 @@ func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
   "id": "envhost",
   "display": {"name": "Env Host"},
   "config": {"path": "envhost/settings.json"},
-  "config_defaults": {"env": {"MAGUS_LOG_AUDIENCE": "agent"}},
+  "config_defaults": {"env": {"MAGUS_LOG_SILENT": "true"}},
   "skills": {"paths": [], "form": "short"},
   "managed_entries": [
     {"path": ["hooks"], "entries": [{"command": "magus buzz -s magus-command.buzz"}]}
@@ -303,19 +303,19 @@ func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
 		{
 			name:     "no env object",
 			existing: `{"hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
-			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env", Value: map[string]any{"MAGUS_LOG_AUDIENCE": "agent"}}},
-			env:      map[string]any{"MAGUS_LOG_AUDIENCE": "agent"},
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env", Value: map[string]any{"MAGUS_LOG_SILENT": "true"}}},
+			env:      map[string]any{"MAGUS_LOG_SILENT": "true"},
 		},
 		{
 			name:     "env without the variable",
 			existing: `{"env": {"FOO": "1"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
-			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env.MAGUS_LOG_AUDIENCE", Value: "agent"}},
-			env:      map[string]any{"FOO": "1", "MAGUS_LOG_AUDIENCE": "agent"},
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env.MAGUS_LOG_SILENT", Value: "true"}},
+			env:      map[string]any{"FOO": "1", "MAGUS_LOG_SILENT": "true"},
 		},
 		{
 			name:     "the person chose human",
-			existing: `{"env": {"MAGUS_LOG_AUDIENCE": "human"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
-			env:      map[string]any{"MAGUS_LOG_AUDIENCE": "human"},
+			existing: `{"env": {"MAGUS_LOG_SILENT": "false"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			env:      map[string]any{"MAGUS_LOG_SILENT": "false"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

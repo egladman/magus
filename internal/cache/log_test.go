@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/screen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/log/audience"
+	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -282,45 +282,51 @@ func failureWithReason() slog.Record {
 	return r
 }
 
-// One failure, two readers: a person reads the reason dim under the cause; an agent gets
-// the verdict and the ref, and the reason only when it asks with -v.
-func TestPrettyHandlerFailureWhyByAudience(t *testing.T) {
-	render := func(a audience.Audience, verbose bool) string {
+// One failure at two verbosities: the default prints the reason dim under the cause; a
+// quiet display prints the verdict and the ref, and the reason only at -v.
+func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
+	render := func(quieted, verbose bool) string {
 		var buf bytes.Buffer
-		require.NoError(t, audience.Wrap(newTestHandler(&buf), a, verbose).Handle(context.Background(), failureWithReason()))
+		h := slog.Handler(newTestHandler(&buf))
+		if quieted {
+			h = quiet.Wrap(h, verbose)
+		}
+		require.NoError(t, h.Handle(context.Background(), failureWithReason()))
 		return buf.String()
 	}
 	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
 	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)\n"
 
-	human := render(audience.Human, false)
-	assert.Contains(t, human, cause+"       "+why+"\n  output: outbadcafe\n")
+	assert.Contains(t, render(false, false), cause+"       "+why+"\n  output: outbadcafe\n")
 
-	agent := render(audience.Agent, false)
-	assert.Contains(t, agent, cause+"  output: outbadcafe\n")
-	assert.NotContains(t, agent, why)
+	quieted := render(true, false)
+	assert.Contains(t, quieted, cause+"  output: outbadcafe\n")
+	assert.NotContains(t, quieted, why)
 
-	assert.Contains(t, render(audience.Agent, true), cause+"       "+why+"\n", "-v is the agent asking for the reason")
+	assert.Contains(t, render(true, true), cause+"       "+why+"\n", "-v brings the reason back")
 
 	t.Setenv("NO_COLOR", "")
 	t.Setenv("TERM", "xterm-256color")
 	var term ttyBuf
-	require.NoError(t, audience.Wrap(newTerminalHandler(&term), audience.Human, false).Handle(context.Background(), failureWithReason()))
+	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
 	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
 }
 
-// A wait note reaches a person from the first beat; an agent hears of it only past a
+// A wait note shows from the first beat by default; a quiet display shows it only past a
 // minute. The lock and upstream waits stamp every note with attr.Elapsed for this filter.
-func TestPrettyHandlerWaitByAudience(t *testing.T) {
+func TestPrettyHandlerWaitByVerbosity(t *testing.T) {
 	wait := func(elapsed time.Duration) slog.Record {
 		r := slog.NewRecord(time.Now(), slog.LevelInfo,
 			fmt.Sprintf(". coverage-badge is still waiting for a cache lock held by . generate (%s so far)", elapsed), 0)
 		r.AddAttrs(attr.Component("magus"), attr.Elapsed(elapsed))
 		return r
 	}
-	render := func(a audience.Audience) string {
+	render := func(quieted bool) string {
 		var buf bytes.Buffer
-		h := audience.Wrap(newTestHandler(&buf), a, false)
+		h := slog.Handler(newTestHandler(&buf))
+		if quieted {
+			h = quiet.Wrap(h, false)
+		}
 		require.NoError(t, h.Handle(context.Background(), wait(30*time.Second)))
 		require.NoError(t, h.Handle(context.Background(), wait(90*time.Second)))
 		return buf.String()
@@ -329,8 +335,8 @@ func TestPrettyHandlerWaitByAudience(t *testing.T) {
 		short = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (30s so far)\n"
 		long  = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (1m30s so far)\n"
 	)
-	assert.Equal(t, short+long, render(audience.Human), "a person sees both, with no elapsed= dump")
-	assert.Equal(t, long, render(audience.Agent), "an agent sees only the wait past a minute")
+	assert.Equal(t, short+long, render(false), "the default shows both, with no elapsed= dump")
+	assert.Equal(t, long, render(true), "a quiet display shows only the wait past a minute")
 }
 
 // TestPrettyHandlerGenericLevels verifies the level-to-tag mapping for generic records.

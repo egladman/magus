@@ -1,4 +1,4 @@
-package audience
+package quiet
 
 import (
 	"bytes"
@@ -23,13 +23,7 @@ func textHandler(buf *bytes.Buffer) slog.Handler {
 	})
 }
 
-func TestAudienceWrapHumanReturnsTheHandler(t *testing.T) {
-	var buf bytes.Buffer
-	h := textHandler(&buf)
-	assert.Equal(t, h, Wrap(h, Human, false))
-}
-
-func TestAudienceWrapAgentPolicy(t *testing.T) {
+func TestWrapPolicy(t *testing.T) {
 	cases := []struct {
 		name    string
 		verbose bool
@@ -98,16 +92,16 @@ func TestAudienceWrapAgentPolicy(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			tc.log(slog.New(Wrap(textHandler(&buf), Agent, tc.verbose)))
+			tc.log(slog.New(Wrap(textHandler(&buf), tc.verbose)))
 			assert.Equal(t, tc.want, buf.String())
 		})
 	}
 }
 
-func TestAudienceWrapAgentKeepsEnabled(t *testing.T) {
+func TestWrapKeepsEnabled(t *testing.T) {
 	var buf bytes.Buffer
 	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
-	h := Wrap(inner, Agent, false)
+	h := Wrap(inner, false)
 	ctx := context.Background()
 	require.False(t, h.Enabled(ctx, slog.LevelInfo))
 	require.True(t, h.Enabled(ctx, slog.LevelWarn))

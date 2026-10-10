@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/log/audience"
+	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/std"
@@ -183,8 +183,8 @@ func restoreTerminal() {
 }
 
 // applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
-// the process-global slog logger at the level globalCfg.Log names, filtered for the
-// invocation's audience (see resolveAudience).
+// the process-global slog logger at the level globalCfg.Log names, filtered when the
+// display is quiet (see quietDisplay).
 func applyDisplay() {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
@@ -198,12 +198,12 @@ func applyDisplay() {
 	})
 
 	// --silent implies --quiet's suppression; the extra behavior rides on Log.Silent.
-	quiet := global.quiet || global.silent
-	addSource := !quiet && global.verbose >= 3
+	hushed := global.quiet || global.silent
+	addSource := !hushed && global.verbose >= 3
 
 	// Only a flag overrides log.level; with none given, yaml, env and --log-level stand.
-	if quiet || global.verbose > 0 {
-		globalCfg.Log.Level = levelName(effectiveLevel(global.verbose, quiet))
+	if hushed || global.verbose > 0 {
+		globalCfg.Log.Level = levelName(effectiveLevel(global.verbose, hushed))
 	}
 	lvl := globalCfg.Log.SlogLevel()
 	if global.silent {
@@ -217,8 +217,8 @@ func applyDisplay() {
 	// quiet dominates: -vv -q asked for silence, and streaming every target's output
 	// would be the loudest possible reading of that. Set explicitly in both directions
 	// so a magus.yaml log.stream cannot resurrect it under --quiet either.
-	if global.verbose >= 2 || quiet {
-		stream := global.verbose >= 2 && !quiet
+	if global.verbose >= 2 || hushed {
+		stream := global.verbose >= 2 && !hushed
 		globalCfg.Log.Stream = &stream
 	}
 
@@ -248,9 +248,9 @@ func applyDisplay() {
 		h = ph
 	}
 	// -o jsonl notices stay whole: a parser selects what it reads. The run log never passes
-	// through here, so it keeps what the audience filter drops.
-	if global.output != string(FormatJSONL) {
-		h = audience.Wrap(h, invocationAudience(), global.verbose >= 1)
+	// through here, so it keeps what a quiet display drops.
+	if global.output != string(FormatJSONL) && quietDisplay() {
+		h = quiet.Wrap(h, global.verbose >= 1)
 	}
 	slog.SetDefault(slog.New(dirHandler{h}))
 }

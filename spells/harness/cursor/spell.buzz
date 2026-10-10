@@ -153,12 +153,12 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     return cursor_entries();
 }
 
-// cursor_env_hint is what the printed config says about MAGUS_LOG_AUDIENCE. Cursor
+// cursor_env_hint is what the printed config says about MAGUS_LOG_SILENT. Cursor
 // documents no setting for the environment of the commands its agent runs: sessionStart's
 // env reply reaches later hooks only (docs/guides/integrations/agents/cursor.md), so there
 // is no key to print and nothing to guess at.
 fun cursor_env_hint() > str {
-    return "Cursor documents no way to set an environment variable on the commands its agent runs, so this config sets none: set MAGUS_LOG_AUDIENCE=agent in the environment you start Cursor from yourself, so magus prints its agent display there.";
+    return "Cursor documents no way to set an environment variable on the commands its agent runs, so this config sets none: set MAGUS_LOG_SILENT=true in the environment you start Cursor from yourself, so magus prints its quiet output there.";
 }
 
 fun cursor_mcp() > {str: any} {
@@ -340,10 +340,10 @@ test "harness_mcp prints Cursor setup guidance only" {
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus mcp.json write");
 }
 
-test "the printed config says Cursor has no place for MAGUS_LOG_AUDIENCE" {
+test "the printed config says Cursor has no place for MAGUS_LOG_SILENT" {
     final hint = "{cursor_mcp()["hint"]}";
     assert\isTrue(hint.indexOf(cursor_env_hint()) != null, "describe prints it");
-    assert\isTrue(cursor_env_hint().indexOf("MAGUS_LOG_AUDIENCE=agent") != null, "names the variable and its value");
+    assert\isTrue(cursor_env_hint().indexOf("MAGUS_LOG_SILENT=true") != null, "names the variable and its value");
     assert\isTrue(cursor_env_hint().indexOf("documents no way") != null, "says why it is not in hooks.json");
     assert\isTrue(cursor_config_defaults()["env"] == null, "hooks.json gains no env key");
 }

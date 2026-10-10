@@ -25,7 +25,7 @@ contract.
 | checkpoint      | `Stop`                                                          |
 | rehydration     | `SessionStart` (`compact`)                                      |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
-| output audience | `[shell_environment_policy.set]` in `~/.codex/config.toml`      |
+| quiet output    | `[shell_environment_policy.set]` in `~/.codex/config.toml`      |
 
 ## Skills
 
@@ -70,16 +70,16 @@ app, and what to do when `mcp.address` changes. This is user-owned host setup;
 an agent that cannot reach MCP uses the CLI fallback and does not manually start
 Magus solely to obtain tools.
 
-## Who reads the output
+## Quiet output
 
-magus picks its display from what it is told, never from which host runs it.
-Codex sets the values in `shell_environment_policy.set` on every subprocess it
-spawns, so the same paste carries a second table that tells magus an agent reads
-what the shell commands print:
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. Codex sets the values in
+`shell_environment_policy.set` on every subprocess it spawns, so the same paste
+carries a second table:
 
 ```toml
 [shell_environment_policy.set]
-MAGUS_LOG_AUDIENCE = "agent"
+MAGUS_LOG_SILENT = "true"
 ```
 
 The harness merges only `.codex/hooks.json`, which has no place for an

@@ -28,7 +28,7 @@ event.
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
-| output audience  | `env.MAGUS_LOG_AUDIENCE` in `.claude/settings.json`: `agent`  |
+| quiet output     | `env.MAGUS_LOG_SILENT` in `.claude/settings.json`: `true`  |
 
 ## Skills
 
@@ -153,18 +153,19 @@ other consumer.
 fails when it is a different build from the doctor's own, or cannot print its
 version, naming both binaries.
 
-### Who reads the output
+### Quiet output
 
-magus picks its display from what it is told, never from which host runs it. The
-printed settings tell it through Claude Code's own `env` object, which Claude Code
-sets on the session, so every Bash tool command the agent runs inherits it:
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. The printed settings set it in
+Claude Code's own `env` object, which Claude Code sets on the session, so every Bash
+tool command inherits it:
 
 ```json
-{ "env": { "MAGUS_LOG_AUDIENCE": "agent" } }
+{ "env": { "MAGUS_LOG_SILENT": "true" } }
 ```
 
 `magus describe harness claude-code` sets only the variable your `env` lacks, beside
-whatever else it holds. A value you already chose, `human` included, stays.
+whatever else it holds. A value you already chose, `false` included, stays.
 
 ### When the hook itself cannot run
 

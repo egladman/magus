@@ -40,7 +40,6 @@ config knowledge.vcs.authorship
 config knowledge.vcs.enabled
 config knowledge.vcs.max_commits
 config knowledge.workspaces
-config log.audience
 config log.format
 config log.level
 config log.silent

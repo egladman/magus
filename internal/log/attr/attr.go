@@ -21,9 +21,9 @@ const (
 func Component(name string) slog.Attr { return slog.String(ComponentKey, name) }
 
 // Why attaches the reasoning behind a record: what a check protects, or why the
-// obvious alternative is wrong. An agent's display drops it unless verbose.
+// obvious alternative is wrong. A quiet display (-q, -s) drops it unless verbose.
 func Why(text string) slog.Attr { return slog.String(WhyKey, text) }
 
 // Elapsed marks a record as a progress note for a wait that has lasted d, as a
-// duration value. An agent's display drops the record while d is under a minute.
+// duration value. A quiet display drops the record while d is under a minute.
 func Elapsed(d time.Duration) slog.Attr { return slog.Duration(ElapsedKey, d) }

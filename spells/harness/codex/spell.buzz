@@ -166,15 +166,15 @@ fun codex_mcp() > {str: any} {
     // header rather than a dotted key: pasted after [mcp_servers.magus], a dotted key
     // would land inside that table.
     final hint = "Paste into ~/.codex/config.toml. The first table registers the MCP server; "
-        + "the second sets MAGUS_LOG_AUDIENCE=agent on every shell command Codex runs, "
-        + "so magus prints its agent display there:\n\n"
+        + "the second sets MAGUS_LOG_SILENT=true on every shell command Codex runs, "
+        + "so magus prints its quiet output there:\n\n"
         + "[mcp_servers.magus]\n"
         + "command = \"./magus\"\n"
         + "args = [\"mcp\"]\n"
         + "enabled = true\n"
         + "\n"
         + "[shell_environment_policy.set]\n"
-        + "MAGUS_LOG_AUDIENCE = \"agent\"\n";
+        + "MAGUS_LOG_SILENT = \"true\"\n";
     return {
         "hint": hint,
         "docs": "docs/guides/integrations/mcp.md",
@@ -407,9 +407,9 @@ test "harness_mcp is a stdio paste hint for Codex user config.toml" {
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
 }
 
-test "harness_mcp's paste tells magus an agent reads Codex's shell commands" {
+test "harness_mcp's paste makes Codex's shell commands quiet" {
     final hint = "{codex_mcp()["hint"]}";
-    assert\isTrue(hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_AUDIENCE = \"agent\"\n") != null,
+    assert\isTrue(hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_SILENT = \"true\"\n") != null,
         "Codex's own environment table, as a header so a paste after the MCP table stays out of it");
     assert\isTrue((hint.indexOf("[mcp_servers.magus]") ?? -1) < (hint.indexOf("[shell_environment_policy.set]") ?? -1),
         "the MCP table keeps its place at the top of the paste");

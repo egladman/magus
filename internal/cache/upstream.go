@@ -90,8 +90,8 @@ func (b *upstreamRuns) waitForUpstreams(ctx context.Context, s Step) error {
 }
 
 // waitForUpstream blocks on done, logging who waits on whom at the first beat and then
-// at each doubling of the elapsed time. Each record carries [attr.Elapsed], so an
-// agent's display holds back the waits under a minute.
+// at each doubling of the elapsed time. Each record carries [attr.Elapsed], so a quiet
+// display holds back the waits under a minute.
 //
 // Unlike the keyed lock and the machine gate it does not beat the invocation heartbeat:
 // the upstream is a step of this run and beats for itself, and beating here would keep

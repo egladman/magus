@@ -1,6 +1,6 @@
 {
   "env": {
-    "MAGUS_LOG_AUDIENCE": "agent"
+    "MAGUS_LOG_SILENT": "true"
   },
   "hooks": {
     "PostToolUse": [

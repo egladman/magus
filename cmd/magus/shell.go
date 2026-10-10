@@ -146,7 +146,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	}
 	// --transport is how installed glue says a host called; a person typing this names none.
 	if sf.Transport != "" {
-		forceAgentAudience()
+		forceQuietDisplay()
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {

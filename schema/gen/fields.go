@@ -365,14 +365,6 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_LOG_STREAM: Stream shows every target's subprocess output live and interleaved, instead of withholding a passing target's output ...",
 	},
 	{
-		GoPath:   "Log.Audience",
-		YamlPath: "log.audience",
-		EnvVar:   "MAGUS_LOG_AUDIENCE",
-		Flag:     fieldtype.FlagNames{Long: "log-audience"},
-		Kind:     fieldtype.KindString,
-		Usage:    "MAGUS_LOG_AUDIENCE: Audience is who reads the log display: human|agent.",
-	},
-	{
 		GoPath:   "Hints.Enabled",
 		YamlPath: "hints.enabled",
 		EnvVar:   "MAGUS_HINTS_ENABLED",
