@@ -492,7 +492,8 @@ figure can only understate coverage, never overstate it.
 ## Pull requests
 
 Pull requests are squash merged, so the title becomes the commit subject main
-records. `.github/workflows/pr.yaml` checks two things about every pull request:
+records. `.github/workflows/pr.yaml` runs three checks on every pull request, and one
+push reports all three:
 
 - The title is a conventional commit subject, `<type>(<scope>): <description>`,
   with the scope and a `!` optional. The types are `build`, `chore`, `ci`, `docs`,
@@ -500,6 +501,14 @@ records. `.github/workflows/pr.yaml` checks two things about every pull request:
   the lowercase imperative this repository writes, with no trailing period, in 100
   bytes at most. `feat(git): install version-controlled buzz hooks` passes;
   `Add git hooks.` does not. Check one with `magus run pr-title . -- "<title>"`.
+- The title and description follow the prose rules (`pr-description`). The description
+  opens with a paragraph saying what a reader can now do and how the work came up,
+  keeps its claims next to their evidence, and describes the situation rather than a
+  person or the earlier code. The guard's `pull-request-text` rule runs the same judge
+  when a description is posted. The shape, the claim and tone rules, and the
+  decisions they take are in [Writing rules](docs/conventions.md#writing-rules), and
+  each rule has a [page](docs/reference/prose/index.md). Check a draft with
+  `magus run pr-description . -- "--title=<title>" "--body=<body>"`.
 - A `feat`, `fix` or `perf` change to shipped code adds a changelog
   fragment, as does any title marked breaking with `!`. Every other type
   passes without one, and so do changes that touch only docs, tests, workflows,
