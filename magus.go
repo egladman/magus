@@ -2040,7 +2040,7 @@ func (m *Magus) Close() error {
 		}
 	}
 	if err := m.closeBroker(); err != nil {
-		errs = append(errs, fmt.Errorf("magus: hang up the broker: %w", err))
+		errs = append(errs, fmt.Errorf("hang up the broker: %w", err))
 	}
 	return errors.Join(errs...)
 }

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -124,7 +126,8 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// usage error: the flags are fine and the caller is not a person.
 		// 2 rather than 1: the flags are fine and the caller is not who this is for, which
 		// the documented taxonomy separates from a 1 (the changeset could not be read).
-		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
+		slog.ErrorContext(ctx, "diff --ack records that a person read this, so it needs an interactive terminal",
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 	opts, err := outputOptionsOrDefault()
@@ -520,7 +523,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		fmt.Println()
 	}
-	hintSinceLastReview(os.Stderr, rev, src)
+	hintSinceLastReview(ctx, rev, src)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
 
@@ -539,7 +542,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
 // working-tree review that names no revision, or an earlier pass at the revision already in front
 // of them all print nothing.
-func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
+func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 	if !interactive.HintsEnabled() || src.kind != inputRevRange {
 		return
 	}
@@ -547,7 +550,7 @@ func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
 	if covered == 0 || at.Revision == src.base {
 		return
 	}
-	interactive.Emit(w, fmt.Sprintf(
+	interactive.Hint(ctx, fmt.Sprintf(
 		"you last reviewed %d of these %d files at %s: `"+hint.Diff.With("--rev", "%s...%s")+"` shows only what changed since",
 		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
 }

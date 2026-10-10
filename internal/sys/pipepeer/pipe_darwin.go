@@ -99,7 +99,7 @@ func Sample(pid int) (Activity, error) {
 	buf := make([]byte, taskInfoSize)
 	n, err := procInfo(procInfoCallPIDInfo, pid, procPIDTaskInfo, 0, buf)
 	if err != nil {
-		return Activity{}, fmt.Errorf("pipepeer: task info of %d: %w", pid, err)
+		return Activity{}, fmt.Errorf("task info of %d: %w", pid, err)
 	}
 	if n < taskInfoSize {
 		return Activity{}, fmt.Errorf("pipepeer: short task info for %d", pid)
@@ -109,7 +109,7 @@ func Sample(pid int) (Activity, error) {
 	kids := make([]byte, 64*4)
 	n, err = procInfo(procInfoCallListPIDs, procPPIDOnly, pid, 0, kids)
 	if err != nil {
-		return Activity{}, fmt.Errorf("pipepeer: children of %d: %w", pid, err)
+		return Activity{}, fmt.Errorf("children of %d: %w", pid, err)
 	}
 	parent := false
 	for off := 0; off+4 <= n; off += 4 {
@@ -196,7 +196,7 @@ func executable(pid int) (os.FileInfo, error) {
 	// The kernel returns 0 here rather than a length; libproc's proc_pidpath measures the
 	// NUL-terminated result itself.
 	if _, err := procInfo(procInfoCallPIDInfo, pid, procPIDPathInfo, 0, buf); err != nil {
-		return nil, fmt.Errorf("pipepeer: path of %d: %w", pid, err)
+		return nil, fmt.Errorf("path of %d: %w", pid, err)
 	}
 	path := buf
 	if i := bytes.IndexByte(path, 0); i >= 0 {
@@ -242,12 +242,12 @@ func pipeFDs(pid int) []int {
 func userPIDs() ([]int, error) {
 	need, err := procInfo(procInfoCallListPIDs, procUIDOnly, os.Getuid(), 0, nil)
 	if err != nil {
-		return nil, fmt.Errorf("pipepeer: list pids: %w", err)
+		return nil, fmt.Errorf("list pids: %w", err)
 	}
 	buf := make([]byte, need+64*4)
 	n, err := procInfo(procInfoCallListPIDs, procUIDOnly, os.Getuid(), 0, buf)
 	if err != nil {
-		return nil, fmt.Errorf("pipepeer: list pids: %w", err)
+		return nil, fmt.Errorf("list pids: %w", err)
 	}
 	var pids []int
 	for off := 0; off+4 <= n; off += 4 {

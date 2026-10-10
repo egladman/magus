@@ -215,8 +215,10 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 			// around it is invisible to exactly the reader it is for: someone reading a
 			// CI failure after the fact. It also keeps the advice attributed and ordered
 			// with the target's own output when several projects run at once.
-			_, stderr := run.OutputWriters(ctx)
-			interactive.Emit(stderr, advice)
+			if _, ok := interactive.TakeHint(slog.LevelInfo, advice); ok {
+				_, stderr := run.OutputWriters(ctx)
+				_, _ = fmt.Fprintf(stderr, "%s: %s\n", attr.HintLabel, advice)
+			}
 		}
 	}
 	return res, err
@@ -278,7 +280,7 @@ func resolveRunnerRefs(opName, bin string, args []string, refs map[string]string
 		if opName != "" {
 			where = fmt.Sprintf("op %q: ", opName)
 		}
-		return "", fmt.Errorf("spell: %s%q is not a value the runner provides", where, tok)
+		return "", fmt.Errorf("%s%q is not a value the runner provides", where, tok)
 	}
 	rbin, err := resolve(bin)
 	if err != nil {

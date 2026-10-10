@@ -414,7 +414,7 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 			// the not-found failure of a shell-shaped command (proc.exec stays the
 			// right, faster default for a plain program).
 			if label == `proc\exec` && looksLikeShellCommand(cmd) {
-				interactive.Emit(os.Stderr, fmt.Sprintf(
+				interactive.Hint(ctx, fmt.Sprintf(
 					"%q looks like a shell command line, but proc\\exec runs a single program directly with no shell; "+
 						"use proc\\shell for pipes, redirection, globs, && / ||, or variable expansion", cmd))
 			}

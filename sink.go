@@ -10,7 +10,6 @@ import (
 	"os"
 	"reflect"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
@@ -324,6 +323,8 @@ func sameWriter(a, b io.Writer) bool {
 type terminal interface {
 	WantsColor() bool
 	Print(ctx context.Context, text string) error
+	// Handle renders a log record the way the display renders every other one.
+	Handle(ctx context.Context, r slog.Record) error
 	BeginRun()
 	EndRun(ctx context.Context, footer string) error
 }
@@ -346,11 +347,21 @@ func (m *Magus) textSink() *Sink {
 
 // plainTerminal writes uncolored lines to w.
 type plainTerminal struct {
-	mu sync.Mutex
-	w  io.Writer
+	mu      sync.Mutex
+	w       io.Writer
+	records *cache.PrettyHandler
 }
 
 func (t *plainTerminal) WantsColor() bool { return false }
+
+func (t *plainTerminal) Handle(ctx context.Context, r slog.Record) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.records == nil {
+		t.records = cache.NewPlainHandler(t.w, slog.LevelDebug)
+	}
+	return t.records.Handle(ctx, r)
+}
 
 func (t *plainTerminal) Print(ctx context.Context, text string) error {
 	t.mu.Lock()
@@ -540,10 +551,8 @@ func (t textEncoder) notice(ctx context.Context, e report.Notice) {
 	if e.Code != "" {
 		msg = "[" + e.Code + "] " + msg
 	}
-	var b strings.Builder
-	interactive.Emit(&b, msg)
-	if b.Len() > 0 {
-		_ = t.term.Print(ctx, b.String())
+	if r, ok := interactive.TakeHint(e.Level, msg); ok {
+		_ = t.term.Handle(ctx, r)
 	}
 }
 

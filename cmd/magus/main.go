@@ -74,6 +74,7 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -103,6 +104,7 @@ func runCLI() int {
 			return mapExitCode(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
+			// No display yet: the logger is built after this check.
 			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 			return 1
 		}
@@ -190,7 +192,7 @@ func runCLI() int {
 	// just told magus to stop is both unwanted and the way to get stuck there.
 	if res.rootCtx.Err() == nil {
 		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
-			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+			slog.ErrorContext(res.rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		}
 	}
 	// Only a stage that succeeded settles: one that failed reports its own failure,
@@ -695,6 +697,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// advertises global flags as working "before or after the subcommand", so
 		// bind the display flags here to make that true for these profiles too.
 		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
+			// The display flags are what failed to parse, so no display was installed.
 			fmt.Fprintln(os.Stderr, err)
 			return startupResult{cleanup: cleanup}, exitUsage
 		}
@@ -875,7 +878,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	bindGlobalsAfterSubcommand(rest)
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
-		fmt.Fprintf(os.Stderr, "magus: invalid configuration from flags: %v\n", err)
+		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
@@ -923,7 +926,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopBroker := trace.phase("startup.broker")
 		pid := ensureBroker(rootCtx)
 		stopBroker()
-		announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+		noticeBroker(rootCtx, pid)
 	}
 
 	runsServer := sub == "server" && isServerRun(subArgs)
@@ -1088,14 +1091,18 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "buzz":
 		return buzzCmd(ctx, root, subArgs)
 	default:
-		fmt.Fprintf(os.Stderr, "magus: unknown subcommand %q\n", sub)
+		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice(""), attr.Component("magus"))
 		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {
-			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", suggestion))
+			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", suggestion))
 		}
-		fmt.Fprintln(os.Stderr, "")
-		usage()
+		unknownSubcommandUsage()
 		return errSilent{exitCode: 2}
 	}
+}
+
+func unknownSubcommandUsage() {
+	fmt.Fprintln(os.Stderr, "")
+	usage()
 }
 
 func usage() {

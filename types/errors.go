@@ -7,17 +7,17 @@ import (
 )
 
 // ErrNotFound is the canonical "miss" sentinel for I/O-backed lookups.
-var ErrNotFound = errors.New("magus: not found")
+var ErrNotFound = errors.New("not found")
 
 // ErrSpellNotRegistered is returned by magus.WithSpell when the named spell is not registered.
-var ErrSpellNotRegistered = errors.New("magus: spell not registered")
+var ErrSpellNotRegistered = errors.New("spell not registered")
 
 // ErrSpellNameRequired is returned by magus.WithSpell when called with an empty name.
-var ErrSpellNameRequired = errors.New("magus: spell name required")
+var ErrSpellNameRequired = errors.New("spell name required")
 
 // ErrUnregisteredDep is returned by (*Workspace).Graph when a declared
 // dependency path has not been registered.
-var ErrUnregisteredDep = errors.New("magus: dependency not registered")
+var ErrUnregisteredDep = errors.New("dependency not registered")
 
 // UnregisteredDep is one missing-dep observation found while building the graph.
 type UnregisteredDep struct {
@@ -34,7 +34,7 @@ type UnregisteredDepError struct {
 // Error returns an end-user-readable description of every missing dependency.
 func (e *UnregisteredDepError) Error() string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "magus: dependency not registered (%d unresolved)\n", len(e.Missing))
+	fmt.Fprintf(&sb, "dependency not registered (%d unresolved)\n", len(e.Missing))
 	for _, m := range e.Missing {
 		if m.DidYouMean != "" {
 			fmt.Fprintf(&sb, "  - %s -> %s   (did you mean: %s)\n", m.Consumer, m.Dep, m.DidYouMean)

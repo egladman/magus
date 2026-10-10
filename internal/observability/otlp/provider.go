@@ -39,7 +39,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	// External export requires an endpoint; local-only collection (the server's dashboard
 	// feed) does not.
 	if cfg.Enabled && cfg.Endpoint == "" {
-		return nil, errors.New("observability: telemetry.enabled is true but telemetry.endpoint is empty")
+		return nil, errors.New("telemetry.enabled is true but telemetry.endpoint is empty")
 	}
 
 	resAttrs := []attribute.KeyValue{
@@ -56,7 +56,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 		resource.WithHost(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("observability: build resource: %w", err)
+		return nil, fmt.Errorf("build resource: %w", err)
 	}
 
 	// The meter provider always carries a capturing reader (for on-demand OTLP snapshots the
@@ -84,164 +84,42 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 
 	meter := mp.Meter("github.com/egladman/magus/internal/observability")
 
-	hits, err := meter.Int64Counter(
-		"magus.cache.hits",
-		metric.WithDescription("Number of magus cache hits."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.hits counter: %w", err)
-	}
-	misses, err := meter.Int64Counter(
-		"magus.cache.misses",
-		metric.WithDescription("Number of magus cache misses."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.misses counter: %w", err)
-	}
-	errs, err := meter.Int64Counter(
-		"magus.cache.errors",
-		metric.WithDescription("Number of target runs that failed."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.errors counter: %w", err)
-	}
-	dur, err := meter.Float64Histogram(
-		"magus.cache.duration",
-		metric.WithDescription("Wall-clock duration of a single Cache.Run, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.duration histogram: %w", err)
-	}
+	r := reg{m: meter}
+	hits := r.i64c("magus.cache.hits", "Number of magus cache hits.", "{call}")
+	misses := r.i64c("magus.cache.misses", "Number of magus cache misses.", "{call}")
+	errs := r.i64c("magus.cache.errors", "Number of target runs that failed.", "{call}")
+	dur := r.f64h("magus.cache.duration", "Wall-clock duration of a single Cache.Run, in seconds.")
 	// The savings lens: magus.cache.duration says what a hit COST, this says what it AVOIDED.
 	// One observation per hit, so the histogram's sum is the wall-clock the cache has saved and
 	// its distribution says which hits are worth having. It is the exported half of
 	// cache.Stats.SavedMs, which until now only ever reached an end-of-run footer.
-	saved, err := meter.Float64Histogram(
-		"magus.cache.saved.duration",
-		metric.WithDescription("Wall-clock duration a cache hit replayed instead of running, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.saved.duration histogram: %w", err)
-	}
-	graphQueryDur, err := meter.Float64Histogram(
-		"magus.graph.query.duration",
-		metric.WithDescription("Wall-clock duration of a single graph query, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: graph.query.duration histogram: %w", err)
-	}
-	graphQueryCount, err := meter.Int64Counter(
-		"magus.graph.queries",
-		metric.WithDescription("Number of graph query operations."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: graph.queries counter: %w", err)
-	}
+	saved := r.f64h("magus.cache.saved.duration", "Wall-clock duration a cache hit replayed instead of running, in seconds.")
+	graphQueryDur := r.f64h("magus.graph.query.duration", "Wall-clock duration of a single graph query, in seconds.")
+	graphQueryCount := r.i64c("magus.graph.queries", "Number of graph query operations.", "{call}")
 
-	targetRuns, err := meter.Int64Counter(
-		"magus.target.runs",
-		metric.WithDescription("Number of target executions, including cache replays."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: target.runs counter: %w", err)
-	}
-	targetDur, err := meter.Float64Histogram(
-		"magus.target.duration",
-		metric.WithDescription("Wall-clock duration of a single target execution, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: target.duration histogram: %w", err)
-	}
+	targetRuns := r.i64c("magus.target.runs", "Number of target executions, including cache replays.", "{call}")
+	targetDur := r.f64h("magus.target.duration", "Wall-clock duration of a single target execution, in seconds.")
 
-	poolWait, err := meter.Float64Histogram(
-		"magus.pool.wait.duration",
-		metric.WithDescription("Time a target spent waiting to acquire a concurrency slot, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: pool.wait.duration histogram: %w", err)
-	}
-	poolRunning, err := meter.Int64UpDownCounter(
-		"magus.pool.slots.running",
-		metric.WithDescription("Number of concurrency slots currently running."),
-		metric.WithUnit("{slot}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: pool.slots.running counter: %w", err)
-	}
-	poolQueued, err := meter.Int64UpDownCounter(
-		"magus.pool.slots.queued",
-		metric.WithDescription("Number of callers currently queued to acquire a concurrency slot."),
-		metric.WithUnit("{slot}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: pool.slots.queued counter: %w", err)
-	}
+	poolWait := r.f64h("magus.pool.wait.duration", "Time a target spent waiting to acquire a concurrency slot, in seconds.")
+	poolRunning := r.i64ud("magus.pool.slots.running", "Number of concurrency slots currently running.", "{slot}")
+	poolQueued := r.i64ud("magus.pool.slots.queued", "Number of callers currently queued to acquire a concurrency slot.", "{slot}")
 
 	// Remote cache backend (S3, GitHub Actions, ...). These mirror the local
 	// magus.cache.{hits,misses,errors,duration} vocabulary under a .remote prefix
 	// so a remote hit is never conflated with a local one — they live in different
 	// counters. magus.cache.remote.io.size is the dimension local caching lacks:
 	// bytes moved over the network, which maps to egress cost.
-	remoteHits, err := meter.Int64Counter(
-		"magus.cache.remote.hits",
-		metric.WithDescription("Number of remote cache hits (get returned an entry)."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.hits counter: %w", err)
-	}
-	remoteMisses, err := meter.Int64Counter(
-		"magus.cache.remote.misses",
-		metric.WithDescription("Number of remote cache misses (get found no entry)."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.misses counter: %w", err)
-	}
-	remoteErrs, err := meter.Int64Counter(
-		"magus.cache.remote.errors",
-		metric.WithDescription("Number of failed remote cache operations."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.errors counter: %w", err)
-	}
-	remoteDur, err := meter.Float64Histogram(
-		"magus.cache.remote.duration",
-		metric.WithDescription("Wall-clock duration of a single remote cache operation, in seconds."),
-		metric.WithUnit("s"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.duration histogram: %w", err)
-	}
-	remoteBytes, err := meter.Int64Histogram(
-		"magus.cache.remote.io.size",
-		metric.WithDescription("Bytes transferred by a single remote cache get or put."),
-		metric.WithUnit("By"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.io.size histogram: %w", err)
-	}
+	remoteHits := r.i64c("magus.cache.remote.hits", "Number of remote cache hits (get returned an entry).", "{call}")
+	remoteMisses := r.i64c("magus.cache.remote.misses", "Number of remote cache misses (get found no entry).", "{call}")
+	remoteErrs := r.i64c("magus.cache.remote.errors", "Number of failed remote cache operations.", "{call}")
+	remoteDur := r.f64h("magus.cache.remote.duration", "Wall-clock duration of a single remote cache operation, in seconds.")
+	remoteBytes := r.i64h("magus.cache.remote.io.size", "Bytes transferred by a single remote cache get or put.", "By")
 	// A successful put reports outcome "stored" (see remote.go); it is neither a hit nor a
 	// miss, so it needs its own tally. Without this counter a put's outcome vanishes from the
 	// OTLP export even though its duration and bytes were recorded.
-	remoteStores, err := meter.Int64Counter(
-		"magus.cache.remote.stores",
-		metric.WithDescription("Number of remote cache puts that stored an entry."),
-		metric.WithUnit("{call}"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("observability: cache.remote.stores counter: %w", err)
+	remoteStores := r.i64c("magus.cache.remote.stores", "Number of remote cache puts that stored an entry.", "{call}")
+	if r.err != nil {
+		return nil, r.err
 	}
 
 	mcp, err := newMCPInstruments(meter)
@@ -511,7 +389,7 @@ func newTracerProvider(ctx context.Context, cfg observability.Config, res *resou
 		exp, err = otlptracegrpc.New(ctx, opts...)
 	}
 	if err != nil {
-		return nil, nil, fmt.Errorf("observability: trace exporter: %w", err)
+		return nil, nil, fmt.Errorf("trace exporter: %w", err)
 	}
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(res),
@@ -526,7 +404,7 @@ func newMeterProvider(ctx context.Context, cfg observability.Config, res *resour
 	// dashboard without a network hop (see collector.go). ForceFlush drives it.
 	capReader, capT, err := newCaptureReader(ctx)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("observability: capture reader: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("capture reader: %w", err)
 	}
 	// The manual reader backs Derived: an in-process Collect of metricdata (histogram buckets
 	// and counters) with no exporter hop, which the dashboard aggregation reads on demand.
@@ -557,7 +435,7 @@ func newMeterProvider(ctx context.Context, cfg observability.Config, res *resour
 			exp, err = otlpmetricgrpc.New(ctx, gopts...)
 		}
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("observability: metric exporter: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("metric exporter: %w", err)
 		}
 		opts = append(opts, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(30*time.Second))))
 	}

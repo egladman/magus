@@ -1612,7 +1612,7 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 	}
 	a, ok := ws.(types.InsightAnalyzer)
 	if !ok {
-		return nil, errors.New("insight: this workspace cannot analyze history")
+		return nil, errors.New("this workspace cannot analyze history")
 	}
 	return a, nil
 }
@@ -1640,16 +1640,16 @@ func insightOptions(opts map[string]any) (types.InsightOptions, error) {
 			case int:
 				out.Commits = n
 			default:
-				return types.InsightOptions{}, fmt.Errorf("insight: commits must be a number, got %T", v)
+				return types.InsightOptions{}, fmt.Errorf("commits must be a number, got %T", v)
 			}
 		case "since":
 			s, ok := v.(string)
 			if !ok {
-				return types.InsightOptions{}, fmt.Errorf("insight: since must be a string like \"90d\", got %T", v)
+				return types.InsightOptions{}, fmt.Errorf("since must be a string like \"90d\", got %T", v)
 			}
 			out.Since = s
 		default:
-			return types.InsightOptions{}, fmt.Errorf("insight: unknown option %q (want commits, since)", k)
+			return types.InsightOptions{}, fmt.Errorf("unknown option %q (want commits, since)", k)
 		}
 	}
 	return out, nil

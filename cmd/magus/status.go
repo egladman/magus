@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -140,10 +142,10 @@ func awaitBudget(ctx context.Context, rootOverride string) error {
 	waited := false
 	err := cache.AwaitMachine(ctx, queryCapacity, pipedRunClaims(ctx, rootOverride), func(msg string) {
 		waited = true
-		fmt.Fprintln(os.Stderr, "magus: "+msg)
+		slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus"), attr.Elapsed(time.Since(start)))
 	})
 	if err == nil && waited {
-		fmt.Fprintf(os.Stderr, "magus: the build budget can seat it now, after %s\n", time.Since(start).Round(time.Second))
+		slog.InfoContext(ctx, fmt.Sprintf("the build budget can seat it now, after %s", time.Since(start).Round(time.Second)), attr.Notice(""), attr.Component("magus"))
 	}
 	return err
 }

@@ -61,6 +61,7 @@ func maybeBootstrapExec(argv []string) {
 	if !ok {
 		return
 	}
+	// Before log setup: the exec replaces this process ahead of any display.
 	fmt.Fprintf(os.Stderr, "magus: using this workspace's own binary at %s instead of %s\n", target, self)
 	env := append(os.Environ(), bootstrapExecSentinelVar+"=1")
 	bootstrapExecInto(target, argv, env)

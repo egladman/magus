@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -55,9 +56,9 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	if len(pos) == 0 {
 		if rf.Text {
-			fmt.Fprintln(os.Stderr, "magus refs --text: requires a search pattern")
+			slog.ErrorContext(ctx, "requires a search pattern", attr.Notice("magus refs --text"))
 		} else {
-			fmt.Fprintln(os.Stderr, "magus refs: requires a symbol ID or name")
+			slog.ErrorContext(ctx, "requires a symbol ID or name", attr.Notice("magus refs"))
 		}
 		return errSilent{exitCode: 2}
 	}
@@ -105,7 +106,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		res = lookupRefs(ctx, ws, globalCfg, g, read)
 	}
 	if len(res.Ambiguous) > 0 {
-		return refuseAmbiguous(os.Stderr, pos[0], res.Ambiguous)
+		return refuseAmbiguous(noticeLines{ctx: ctx, level: slog.LevelError}, pos[0], res.Ambiguous)
 	}
 	out := res.Out
 	if !res.Found {
@@ -138,10 +139,11 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if ans.Text != nil {
 			miss.notes = textPresenceNotes(skipped, generated, ans.Text.Files, classifiedFiles, noGenerated)
 		}
-		if err := reportRefsMiss(os.Stderr, opts, miss); err != nil {
+		missLines := noticeLines{ctx: ctx, level: slog.LevelError}
+		if err := reportRefsMiss(missLines, opts, miss); err != nil {
 			return err
 		}
-		emitNearest(os.Stderr, res.Nearest)
+		emitNearest(ctx, res.Nearest)
 		return exitForVerdict(ans.Verdict)
 	}
 
@@ -155,7 +157,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		defs.Answer = knowledge.Answer(pos[0], len(defs.Definitions) > 0, res.coverage)
 		defs.Answer.IndexCause = out.Answer.IndexCause
 		checkDefinitions(resolveRootOrEmpty(root), defs.Label, defs.Definitions, symbolIndexTimes(ctx, root), rf.Source)
-		return emitDefinitions(os.Stdout, opts, defs)
+		return emitDefinitions(ctx, os.Stdout, opts, defs)
 	}
 
 	switch opts.Format {
@@ -165,7 +167,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		}
 		// stderr, because the record on stdout must stay parseable; the exit status is
 		// what a script reads, and it is the only channel a structured caller has.
-		return reportIndexStaleness(os.Stderr, out.Answer)
+		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	case outputName:
 		names := make([]string, 0, len(out.Refs))
 		for _, r := range out.Refs {
@@ -174,7 +176,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if err := emitNames(names); err != nil {
 			return err
 		}
-		return reportIndexStaleness(os.Stderr, out.Answer)
+		return reportIndexStaleness(noticeLines{ctx: ctx, level: slog.LevelError}, out.Answer)
 	}
 
 	fmt.Printf("symbol: %s", out.Symbol)
@@ -367,14 +369,14 @@ func lookupRefs(ctx context.Context, ws types.WorkspaceRepository, cfg config.Co
 func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, noGenerated bool, limit int, classify classifyFunc) error {
 	searchRoot := resolveRootOrEmpty(root)
 	if searchRoot == "" {
-		fmt.Fprintln(os.Stderr, "magus refs --text: cannot resolve a workspace root to search")
+		slog.ErrorContext(ctx, "cannot resolve a workspace root to search", attr.Notice("magus refs --text"))
 		return errSilent{exitCode: 2}
 	}
 	scopes, err := resolveSearchScopes(searchRoot, scopeArgs)
 	if err != nil {
 		// Exit 2, never 1: a scope magus could not resolve is a search that never ran,
 		// and reporting it as "no match" would answer a question nobody asked.
-		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
+		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 	// A root that cannot be listed at all (missing, not a directory, permission
@@ -383,13 +385,13 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	// mid-walk (a live checkout's ordinary churn); this is the coarser check that
 	// the walk never had anything to do in the first place.
 	if _, err := os.ReadDir(searchRoot); err != nil {
-		fmt.Fprintf(os.Stderr, "magus refs --text: cannot search %s: %v\n", searchRoot, err)
+		slog.ErrorContext(ctx, "cannot search "+searchRoot, attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 
 	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, scopes, noGenerated, classify)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus refs --text: %v\n", err)
+		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 
@@ -413,15 +415,15 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 		matchedFiles[m.Path] = true
 	}
 	if len(shown) < len(matches) {
-		fmt.Fprintf(os.Stderr, "magus refs --text: showing %d of %d matches (--limit); raise --limit or pass 0 for all\n",
-			len(shown), len(matches))
+		slog.InfoContext(ctx, fmt.Sprintf("showing %d of %d matches (--limit); raise --limit or pass 0 for all",
+			len(shown), len(matches)), attr.Notice("magus refs --text"))
 	}
 	// Same accounting textPresence prints beside a symbol miss, on stderr so stdout
 	// stays exactly the match stream a pipe or xargs expects: any filtering must be
 	// counted and said out loud, because a silent under-report is the one failure
 	// that makes this worse than the grep it replaces.
 	if notes := textPresenceNotes(skipped, generated, len(matchedFiles), classified, noGenerated); len(notes) > 0 {
-		fmt.Fprintf(os.Stderr, "magus refs --text: %s\n", strings.Join(notes, "; "))
+		slog.InfoContext(ctx, strings.Join(notes, "; "), attr.Notice("magus refs --text"))
 	}
 
 	if len(matches) == 0 {
@@ -443,7 +445,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		// The probe itself failed, so magus cannot say where the symbol appears. Reporting
 		// an empty list here would read as "nowhere", which is the one answer it has no
 		// basis for.
-		fmt.Fprintln(os.Stderr, "magus refs: cannot read the symbol indexes")
+		slog.ErrorContext(ctx, "cannot read the symbol indexes", attr.Notice("magus refs"))
 		return errSilent{exitCode: 1}
 	}
 	read := *occurrences
@@ -493,7 +495,7 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		// point at the symbol. The notice rides stderr, where it cannot corrupt the
 		// record, and the exit status matches the two arms below.
 		if out.VerifiedCount < out.OccurrenceCount {
-			fmt.Fprint(os.Stderr, unverifiedNotice(out))
+			slog.ErrorContext(ctx, strings.TrimSuffix(unverifiedNotice(out), "\n"), attr.Notice(""))
 			return errSilent{exitCode: 1}
 		}
 		return nil
@@ -518,8 +520,8 @@ func emitOccurrences(ctx context.Context, root string, opts OutputOptions, refs 
 		// occurrences at all. This is the format a script reads, so the difference has to
 		// live in the exit status, which is the only channel it has left.
 		if out.VerifiedCount < out.OccurrenceCount {
-			fmt.Fprintf(os.Stderr, "magus refs: %d of %d site(s) did not verify and were not listed; refresh with `%s`\n",
-				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount, hint.GraphBuild)
+			slog.ErrorContext(ctx, fmt.Sprintf("%d of %d site(s) did not verify and were not listed; refresh with `%s`",
+				out.OccurrenceCount-out.VerifiedCount, out.OccurrenceCount, hint.GraphBuild), attr.Notice("magus refs"))
 			return errSilent{exitCode: 1}
 		}
 		// Deliberately NOT exitForVerdict here. The coverage verdict is `unknown` whenever any
@@ -694,7 +696,7 @@ func definitionRange(s types.KnowledgeDefinitionSite) string {
 // emitDefinitions renders `magus refs <symbol> --definition`. It exits 1 when a range no
 // longer holds what was indexed or cannot be read: the lines printed for it are not the
 // symbol's, and a caller editing by them would edit the wrong text.
-func emitDefinitions(w io.Writer, opts OutputOptions, out types.KnowledgeDefinitionsOutput) error {
+func emitDefinitions(ctx context.Context, w io.Writer, opts OutputOptions, out types.KnowledgeDefinitionsOutput) error {
 	var stale, verified int
 	for _, s := range out.Definitions {
 		switch s.Status {
@@ -732,9 +734,9 @@ func emitDefinitions(w io.Writer, opts OutputOptions, out types.KnowledgeDefinit
 			return err
 		}
 		if stale > 0 {
-			fmt.Fprintf(os.Stderr, "magus refs: %d definition(s) changed since indexing; refresh with `%s`\n", stale, hint.GraphBuild)
+			slog.ErrorContext(ctx, fmt.Sprintf("%d definition(s) changed since indexing; refresh with `%s`", stale, hint.GraphBuild), attr.Notice("magus refs"))
 		}
-		return settle(os.Stderr)
+		return settle(noticeLines{ctx: ctx, level: slog.LevelError})
 	case outputName:
 		var names []string
 		for _, s := range out.Definitions {
@@ -746,7 +748,7 @@ func emitDefinitions(w io.Writer, opts OutputOptions, out types.KnowledgeDefinit
 			return err
 		}
 		if stale > 0 {
-			fmt.Fprintf(os.Stderr, "magus refs: %d definition(s) changed since indexing and were not listed; refresh with `%s`\n", stale, hint.GraphBuild)
+			slog.ErrorContext(ctx, fmt.Sprintf("%d definition(s) changed since indexing and were not listed; refresh with `%s`", stale, hint.GraphBuild), attr.Notice("magus refs"))
 		}
 		return staleErr()
 	}
@@ -815,10 +817,11 @@ func refsRenameCmd(ctx context.Context, root string, opts OutputOptions, g *know
 				return err
 			}
 		}
-		fmt.Fprintln(os.Stderr, "magus refs: rename refused, nothing written")
+		var reasons strings.Builder
 		for _, r := range refused {
-			fmt.Fprintln(os.Stderr, "  "+edit.FormatRefusal(r))
+			reasons.WriteString("\n  " + edit.FormatRefusal(r))
 		}
+		slog.ErrorContext(ctx, "rename refused, nothing written"+reasons.String(), attr.Notice("magus refs"))
 		return errSilent{exitCode: 1}
 	}
 

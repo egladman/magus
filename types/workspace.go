@@ -12,10 +12,10 @@ import (
 
 // ErrUnknownProject is returned (wrapped) by WorkspaceRepository.ExpandPath
 // when a caller refers to a project path that does not exist.
-var ErrUnknownProject = errors.New("magus: unknown project")
+var ErrUnknownProject = errors.New("unknown project")
 
 // ErrNoCache is returned by cache operations on a cache-free (Inspect) workspace.
-var ErrNoCache = errors.New("magus: no cache available")
+var ErrNoCache = errors.New("no cache available")
 
 // Workspace is the discovered set of projects under a root directory.
 type Workspace struct {

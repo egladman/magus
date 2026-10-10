@@ -1252,7 +1252,7 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 }
 
 func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
-	err := errors.New("server: load config /repo: magus.yaml: unknown key")
+	err := errors.New("load config /repo: magus.yaml: unknown key")
 	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
 }
 

@@ -24,6 +24,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -1358,4 +1359,32 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
 			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
 	}
+}
+
+// useTextLogger makes the logger a command builds from its flags a text handler on
+// whatever os.Stderr is then, so captureStderr sees its records. The pretty handler is
+// one per terminal and stays on the real stderr, past the swap.
+func useTextLogger(t *testing.T) {
+	t.Helper()
+	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
+	prevQuiet, prevSilent := global.quiet, global.silent
+	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
+	global.quiet, global.silent = false, false
+	t.Cleanup(func() {
+		slog.SetDefault(prevLog)
+		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
+		global.quiet, global.silent = prevQuiet, prevSilent
+	})
+}
+
+// noticesFrom returns what the pretty display prints for the records fn logs through
+// the default logger, the way a notice reaches a person now that it is a record.
+func noticesFrom(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(cache.NewPrettyHandler(&buf, slog.LevelDebug)))
+	defer slog.SetDefault(prev)
+	fn()
+	return buf.String()
 }

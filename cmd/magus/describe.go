@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/spells"
 	"io/fs"
+	"log/slog"
 	"os"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -66,7 +68,7 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 	case "workspace":
 		return describeWorkspaces(ctx, root, rest)
 	case "module":
-		return describeModules(rest)
+		return describeModules(ctx, rest)
 	case "mcp-tool":
 		return describeMCPTools(rest)
 	case "file":
@@ -76,28 +78,33 @@ func describeCmd(ctx context.Context, root string, args []string) error {
 	case "job":
 		return describeJob(ctx, root, rest)
 	case "rule":
-		return describeRules(rest)
+		return describeRules(ctx, rest)
 	case "harness":
 		return describeHarness(ctx, root, rest)
 	default:
 		if noun == "knowledge" {
 			// Removed noun: the knowledge-graph export moved to the graph home.
-			fmt.Fprintf(os.Stderr, "magus describe: `describe knowledge` moved to `%s`\n", hint.GraphExport)
+			slog.ErrorContext(ctx, fmt.Sprintf("`describe knowledge` moved to `%s`", hint.GraphExport),
+				attr.Notice(""), attr.Component("magus describe"))
 			return errSilent{exitCode: 2}
 		}
-		fmt.Fprintf(os.Stderr, "magus describe: unknown noun %q\n", noun)
+		slog.ErrorContext(ctx, fmt.Sprintf("unknown noun %q", noun), attr.Notice(""), attr.Component("magus describe"))
 		spellings := make([]string, 0, len(describeAlias)) // every accepted spelling, sorted for a stable suggestion
 		for k := range describeAlias {
 			spellings = append(spellings, k)
 		}
 		slices.Sort(spellings)
 		if sug := hint.Nearest(noun, spellings); sug != "" {
-			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", sug))
+			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
-		fmt.Fprintln(os.Stderr, "")
-		describeUsage()
+		describeUnknownNounUsage()
 		return errSilent{exitCode: 2}
 	}
+}
+
+func describeUnknownNounUsage() {
+	fmt.Fprintln(os.Stderr, "")
+	describeUsage()
 }
 
 func describeUsage() {
@@ -280,11 +287,11 @@ func collectNames[T any](items []T, nameOf func(T) string) []string {
 // unknownEntity prints a "no such <kind>" message (with a nearest-match hint) and
 // returns the already-printed sentinel.
 func unknownEntity(kind, name string, all []string) error {
-	msg := fmt.Sprintf("magus describe %s: unknown %s %q", kind, kind, name)
+	msg := fmt.Sprintf("unknown %s %q", kind, name)
 	if sug := hint.Nearest(name, all); sug != "" {
 		msg += fmt.Sprintf("; did you mean %q?", sug)
 	}
-	fmt.Fprintln(os.Stderr, msg)
+	slog.ErrorContext(context.Background(), msg, attr.Notice(""), attr.Component("magus describe "+kind))
 	return errSilent{exitCode: 2}
 }
 
@@ -652,17 +659,18 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 		if tf.Explain {
 			// --explain traces argv, --cache keys inputs: two different questions, and
 			// silently answering one would misread as the other having no output.
-			fmt.Fprintln(os.Stderr, "magus describe target: --explain traces the rendered command and --cache keys the inputs; run them separately")
+			slog.ErrorContext(ctx, "--explain traces the rendered command and --cache keys the inputs; run them separately",
+				attr.Notice(""), attr.Component("magus describe target"))
 			return errSilent{exitCode: 2}
 		}
 		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms, tf.Inputs)
 	}
 	if tf.NoDefaultCharms {
-		fmt.Fprintln(os.Stderr, "magus describe target: --no-default-charms applies only to --cache")
+		slog.ErrorContext(ctx, "--no-default-charms applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
 		return errSilent{exitCode: 2}
 	}
 	if tf.Inputs {
-		fmt.Fprintln(os.Stderr, "magus describe target: --inputs applies only to --cache")
+		slog.ErrorContext(ctx, "--inputs applies only to --cache", attr.Notice(""), attr.Component("magus describe target"))
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 {
@@ -732,11 +740,11 @@ type targetCacheLastRun struct {
 // print different refs for one target; this names the line that disagrees.
 func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms, showInputs bool) error {
 	if len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, "magus describe target --cache: requires a <target> [project] argument")
+		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target --cache"))
 		return errSilent{exitCode: 2}
 	}
 	t, err := types.ParseTarget(pos[0])
-	hintCanonicalSpelling(t)
+	hintCanonicalSpelling(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -756,12 +764,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return err
 	}
 	if len(evaluated) == 0 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: no project matches %q\n", pos[0])
+		slog.ErrorContext(ctx, fmt.Sprintf("no project matches %q", pos[0]), attr.Notice(""), attr.Component("magus describe target --cache"))
 		return errSilent{exitCode: 2}
 	}
 	if against != "" && len(evaluated) > 1 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)\n",
-			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against))
+		slog.ErrorContext(ctx, fmt.Sprintf("%q resolves to %d projects; --against compares ONE step; name the project (e.g. `%s`)",
+			pos[0], len(evaluated), hint.DescribeTarget.With(pos[0], evaluated[0].Project, "--cache", "--against", against)),
+			attr.Notice(""), attr.Component("magus describe target --cache"))
 		return errSilent{exitCode: 2}
 	}
 
@@ -784,7 +793,8 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		storedLines, err = m.OutputKeyInputs(against)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			fmt.Fprintf(os.Stderr, "magus describe target --cache: ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them\n", storedRef)
+			slog.ErrorContext(ctx, fmt.Sprintf("ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them", storedRef),
+				attr.Notice(""), attr.Component("magus describe target --cache"))
 			return errSilent{exitCode: 1}
 		case err != nil:
 			return fmt.Errorf("magus describe target --cache: read stored key inputs for %s: %w", storedRef, err)
@@ -1243,12 +1253,12 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 // are already parsed and applied by the caller.
 func describeTarget(ctx context.Context, root string, pos []string, explain bool) error {
 	if len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, "magus describe target: requires a <target> [project] argument")
+		slog.ErrorContext(ctx, "requires a <target> [project] argument", attr.Notice(""), attr.Component("magus describe target"))
 		return errSilent{exitCode: 2}
 	}
 
 	t, err := types.ParseTarget(pos[0])
-	hintCanonicalSpelling(t)
+	hintCanonicalSpelling(ctx, t)
 	if err != nil {
 		return err
 	}
@@ -1576,7 +1586,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, "magus describe file: requires at least one <path> argument")
+		slog.ErrorContext(ctx, "requires at least one <path> argument", attr.Notice(""), attr.Component("magus describe file"))
 		return errSilent{exitCode: 2}
 	}
 

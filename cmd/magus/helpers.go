@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"runtime/debug"
@@ -407,18 +406,14 @@ func splitOnDashDash(args []string) (before, after []string) {
 // this is presentation only: types.ParseTarget stays a pure function and the
 // server and MCP paths get the same information without inheriting stderr output.
 //
-// Silent on canonical input, and deduped by interactive.Emit, so it teaches once
+// Silent on canonical input, and deduped by interactive.Hint, so it teaches once
 // rather than nagging.
-func hintCanonicalSpelling(t types.Target) { hintCanonicalSpellingTo(os.Stderr, t) }
-
-// hintCanonicalSpellingTo is hintCanonicalSpelling with the destination named, so a test
-// can read what a run would print without capturing the process's stderr.
-func hintCanonicalSpellingTo(w io.Writer, t types.Target) {
+func hintCanonicalSpelling(ctx context.Context, t types.Target) {
 	if t.Declared != "" {
-		interactive.Emit(w, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
+		interactive.Hint(ctx, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
 	}
 	for _, c := range t.DeclaredCharms {
-		interactive.Emit(w, fmt.Sprintf("charm %q is canonically %q", c, types.NormalizeCharm(c)))
+		interactive.Hint(ctx, fmt.Sprintf("charm %q is canonically %q", c, types.NormalizeCharm(c)))
 	}
 }
 

@@ -889,7 +889,7 @@ func (s *Store) decode(raw []byte, f *jobsFile) error {
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	if err := foldStoredNames(f.Jobs); err != nil {
-		return fmt.Errorf("job: %s: %w", s.path, err)
+		return fmt.Errorf("%s: %w", s.path, err)
 	}
 	return nil
 }

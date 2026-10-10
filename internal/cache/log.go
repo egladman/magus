@@ -1,7 +1,9 @@
 package cache
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -552,6 +554,20 @@ func (h *PrettyHandler) setLevel(level slog.Level) {
 	h.level = level
 }
 
+// NewPlainHandler returns a handler rendering records as the pretty display does, onto w
+// as plain lines: no color, no band, and never the terminal's shared handler, even when w
+// is standard error.
+func NewPlainHandler(w io.Writer, level slog.Level) *PrettyHandler {
+	return newPrettyHandler(w, level, notTerminal{})
+}
+
+// notTerminal answers every descriptor as a pipe.
+type notTerminal struct{}
+
+func (notTerminal) IsTerminal(uintptr) bool { return false }
+
+func (notTerminal) Size(uintptr) (int, int, error) { return 0, 0, errors.New("not a terminal") }
+
 // newPrettyHandler is the probe-injecting form. Tests use it to render
 // terminal output into a buffer without opening a pty.
 func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
@@ -902,7 +918,8 @@ func Glyph(colorize bool, label string, color tty.SGR) string {
 
 // handleGeneric renders any non-cache slog record (the 76-odd general diagnostics
 // across the codebase) in the same compact style: a level glyph, the message, and any
-// attrs trailing dimmed. No timestamp or level= boilerplate. The "dir" attr that the
+// attrs trailing dimmed, or for an [attr.Notice] no glyph. No timestamp or level=
+// boilerplate. The "dir" attr that the
 // process-wide handler stamps on every context-aware record is suppressed above debug
 // level, since it is a correlation aid, not something a reader needs on each line.
 func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
@@ -915,17 +932,72 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	case r.Level >= slog.LevelInfo:
 		label, color = "info", colDim
 	}
-	attrs := formatAttrs(r)
+	component := recordStr(r, attr.ComponentKey)
+	notice, isNotice := recordAttr(r, attr.NoticeKey)
+	var attrs string
+	if isNotice {
+		attrs = formatAttrs(r, attr.ErrorKey)
+	} else {
+		attrs = formatAttrs(r)
+	}
 	if colorize && attrs != "" {
 		attrs = tty.Colorize(attrs, colDim)
 	}
+	if isNotice {
+		label := cmp.Or(notice.String(), component)
+		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordStr(r, attr.ErrorKey)), attrs)
+		h.printWhy(colorize, "  ", recordStr(r, attr.WhyKey))
+		h.printNext(recordStr(r, attr.NextKey))
+		return
+	}
 	msg := r.Message
-	if c := recordStr(r, attr.ComponentKey); c != "" {
-		msg = c + ": " + msg
+	if component != "" {
+		msg = component + ": " + msg
 	}
 	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
 	// Under the message, past the glyph and its space.
 	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordStr(r, attr.WhyKey))
+	h.printNext(recordStr(r, attr.NextKey))
+}
+
+// noticeText joins a notice's message and its [attr.Error]. An error that originated in
+// the label's own package opens with the label, which the line already prints.
+func noticeText(label, msg, err string) string {
+	if err == "" {
+		return msg
+	}
+	if label != "" {
+		err = strings.TrimPrefix(err, label+": ")
+	}
+	if msg == "" {
+		return err
+	}
+	return msg + ": " + err
+}
+
+// printNotice puts the label before the message, colored above info, with no glyph: a
+// line addressed to a person carries no log level.
+func (h *PrettyHandler) printNotice(colorize bool, color tty.SGR, label, msg, attrs string) {
+	if label == "" {
+		h.printf("%s%s\n", msg, attrs)
+		return
+	}
+	label += ":"
+	if colorize && color != colDim {
+		label = tty.Colorize(label, color)
+	}
+	h.printf("%s %s%s\n", label, msg, attrs)
+}
+
+// printNext lays out an [attr.Next] the way [hint.Render] lays out a result's
+// breadcrumbs, so a command reads the same under a result and under a notice.
+func (h *PrettyHandler) printNext(cmd string) {
+	if cmd == "" {
+		return
+	}
+	noWhy := func(hint.Next) string { return "" }
+	block := hint.Render([]hint.Next{{Run: cmd}}, noWhy)
+	h.printf("%s", strings.TrimPrefix(block, "\n"))
 }
 
 // causeIndent starts a line that continues a failure's cause.
@@ -947,13 +1019,16 @@ func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the
 // component (handleGeneric prints it ahead of the message), the why (printed on its own
-// line under it), the elapsed time (a wait's message already states it) and the noisy
-// "dir" correlation attr unless the record is at debug level or below.
-func formatAttrs(r slog.Record) string {
+// line under it), the elapsed time (a wait's message already states it), the keys in
+// skip, and the noisy "dir" correlation attr unless the record is at debug level or below.
+func formatAttrs(r slog.Record, skip ...string) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
 		switch a.Key {
-		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey:
+		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey, attr.NextKey, attr.NoticeKey:
+			return true
+		}
+		if slices.Contains(skip, a.Key) {
 			return true
 		}
 		if a.Key == "dir" && r.Level > slog.LevelDebug {
@@ -1470,15 +1545,26 @@ func (h *PrettyHandler) printRefLegend(colorize bool) {
 }
 
 func recordStr(r slog.Record, key string) string {
-	var v string
+	v, ok := recordAttr(r, key)
+	if !ok {
+		return ""
+	}
+	return v.String()
+}
+
+// recordAttr is the value of r's key attr, and whether r has one, for an attr whose
+// presence means something even when empty.
+func recordAttr(r slog.Record, key string) (slog.Value, bool) {
+	var v slog.Value
+	found := false
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Key == key {
-			v = a.Value.String()
+			v, found = a.Value, true
 			return false
 		}
 		return true
 	})
-	return v
+	return v, found
 }
 
 // recordStrs extracts a []string attr (e.g. a command's args) from a record.

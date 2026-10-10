@@ -127,7 +127,7 @@ const jjDiffEntryTemplate = `if(status == "renamed", "F" ++ source.path() ++ "\0
 func (v jjVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
 	revs := "::@"
 	if q.FirstParent {
@@ -353,7 +353,7 @@ func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
 	args := append([]string{"diff", "--name-only", "--from", "heads(::" + base + " & ::" + head + ")", "--to", head},
 		jjRootPaths(paths)...)

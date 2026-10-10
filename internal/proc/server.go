@@ -424,7 +424,7 @@ func (s *Server) Start() error {
 	if err := writeToken(s.ep.Addr, s.token); err != nil {
 		_ = ln.Close()
 		s.cancel()
-		return fmt.Errorf("proc: %w", err)
+		return err
 	}
 	s.mu.Lock()
 	s.listener = ln

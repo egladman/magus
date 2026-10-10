@@ -96,7 +96,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 		return nil
 	}
 	notice = strings.Join(lines, "\n")
-	fmt.Fprintln(os.Stderr, notice)
+	slog.WarnContext(ctx, notice, attr.Notice(""))
 	noteJobDesktop(ctx, job.NameCheckDrift, notice)
 	return nil
 }

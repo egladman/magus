@@ -90,7 +90,7 @@ const settledTreeFile = "magus-settled-tree"
 func HookRecordSettledTree(ctx context.Context, root string, op HookOperation) error {
 	tree, err := gitOutput(ctx, root, op.gitOpts(gitOpts{}), "write-tree")
 	if err != nil {
-		return fmt.Errorf("vcs: git write-tree: %w", err)
+		return fmt.Errorf("git write-tree: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(op.gitDir, settledTreeFile), []byte(tree+"\n"), 0o644); err != nil {
 		return fmt.Errorf("vcs: write %s: %w", settledTreeFile, err)
@@ -111,7 +111,7 @@ func HookTreeSettled(ctx context.Context, root string, op HookOperation) (bool, 
 	}
 	tree, err := gitOutput(ctx, root, op.gitOpts(gitOpts{}), "write-tree")
 	if err != nil {
-		return false, fmt.Errorf("vcs: git write-tree: %w", err)
+		return false, fmt.Errorf("git write-tree: %w", err)
 	}
 	return tree == recorded, nil
 }
@@ -124,7 +124,7 @@ func HookTreeSettled(ctx context.Context, root string, op HookOperation) (bool, 
 func GitHookOperation(ctx context.Context, root string, ev HookEvent) (HookOperation, bool, error) {
 	gitDir, err := gitOutput(ctx, root, gitOpts{}, "rev-parse", "--absolute-git-dir")
 	if err != nil {
-		return HookOperation{}, false, fmt.Errorf("vcs: git rev-parse: %w", err)
+		return HookOperation{}, false, fmt.Errorf("git rev-parse: %w", err)
 	}
 	state := func(name string) bool {
 		_, err := os.Stat(filepath.Join(gitDir, name))
@@ -219,7 +219,7 @@ func hookChangedFiles(ctx context.Context, root, gitDir string, op HookOperation
 	}
 	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{}), args...)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: git %s: %w", strings.Join(args[:2], " "), err)
+		return nil, fmt.Errorf("git %s: %w", strings.Join(args[:2], " "), err)
 	}
 	return splitLines([]byte(out)), nil
 }
@@ -232,7 +232,7 @@ func hookChangedFiles(ctx context.Context, root, gitDir string, op HookOperation
 func HookDirtyFiles(ctx context.Context, root string, op HookOperation) ([]string, error) {
 	out, err := gitOutput(ctx, root, op.gitOpts(gitOpts{KeepLeadingSpace: true}), "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
-		return nil, fmt.Errorf("vcs: git status: %w", err)
+		return nil, fmt.Errorf("git status: %w", err)
 	}
 	lines := slices.DeleteFunc(splitStatusLines(out), func(line string) bool {
 		return len(line) < 2 || line[1] == ' '
@@ -246,7 +246,7 @@ func HookStage(ctx context.Context, root string, op HookOperation, paths []strin
 	for _, chunk := range gitPathChunks(paths) {
 		argv := slices.Concat([]string{"add", "--"}, chunk)
 		if _, err := gitOutput(ctx, root, op.gitOpts(gitOpts{Literal: true}), argv...); err != nil {
-			return fmt.Errorf("vcs: git add: %w", err)
+			return fmt.Errorf("git add: %w", err)
 		}
 	}
 	return nil

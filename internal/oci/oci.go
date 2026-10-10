@@ -109,7 +109,7 @@ func parseName(s string) (Reference, error) {
 	if colon := strings.LastIndex(name, ":"); colon >= 0 && colon > strings.LastIndex(name, "/") {
 		name, tag = name[:colon], name[colon+1:]
 		if err := ValidateTag(tag); err != nil {
-			return Reference{}, fmt.Errorf("oci: %q: %w", s, err)
+			return Reference{}, fmt.Errorf("%q: %w", s, err)
 		}
 	}
 	host, repo, ok := strings.Cut(name, "/")
@@ -434,7 +434,7 @@ func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreT
 	tags := []string{ref.Tag}
 	for _, t := range moreTags {
 		if err := ValidateTag(t); err != nil {
-			return "", fmt.Errorf("oci: push %s: %w", ref, err)
+			return "", fmt.Errorf("push %s: %w", ref, err)
 		}
 		if !slices.Contains(tags, t) {
 			tags = append(tags, t)
@@ -442,7 +442,7 @@ func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreT
 	}
 	raw, d, err := content.Manifest()
 	if err != nil {
-		return "", fmt.Errorf("oci: push %s: %w", ref, err)
+		return "", fmt.Errorf("push %s: %w", ref, err)
 	}
 	auth, err := c.authorize(ctx, ref, "push,pull")
 	if err != nil {
@@ -493,7 +493,7 @@ func (c *Client) Tags(ctx context.Context, repo Reference) ([]string, error) {
 		var more bool
 		next, more, err = nextPage(next, link)
 		if err != nil {
-			return nil, fmt.Errorf("oci: list %s: %w", repo, err)
+			return nil, fmt.Errorf("list %s: %w", repo, err)
 		}
 		if !more {
 			return tags, nil

@@ -68,14 +68,14 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 		if slices.Contains(paths, StreamAllSentinel) {
 			ts, err := m.ExpandPath(types.Target{Name: target})
 			if err != nil {
-				errFn(fmt.Errorf("magus: stream: expand all: %w", err))
+				errFn(fmt.Errorf("stream: expand all: %w", err))
 				return
 			}
 			batchTargets = ts
 		} else {
 			res, err := m.AffectedFromPaths(ctx, paths)
 			if err != nil {
-				errFn(fmt.Errorf("magus: stream: compute affected: %w", err))
+				errFn(fmt.Errorf("stream: compute affected: %w", err))
 				return
 			}
 			if len(res.Affected) == 0 {
@@ -88,7 +88,7 @@ func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn fu
 		}
 		projects := m.targetProjects(batchTargets)
 		if err := m.executeOnProjects(ctx, projects, target, "stream", applyRunOpts(so.run), handler); err != nil {
-			errFn(fmt.Errorf("magus: stream: %s: %w", target, err))
+			errFn(fmt.Errorf("stream: %s: %w", target, err))
 		}
 	}
 

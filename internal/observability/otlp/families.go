@@ -10,10 +10,8 @@ import (
 	"github.com/egladman/magus/internal/observability"
 )
 
-// reg is a small registration helper that threads the first instrument-creation error through
-// a family constructor, so each constructor reads as a flat list of instrument declarations
-// instead of repeating the create-and-check dance for every one. The core provider instruments
-// (cache/target/pool/remote) predate this helper and keep their explicit per-instrument checks.
+// reg threads the first instrument-creation error through a constructor, so each one reads as
+// a flat list of instrument declarations instead of repeating the create-and-check dance.
 type reg struct {
 	m   metric.Meter
 	err error
@@ -21,7 +19,7 @@ type reg struct {
 
 func (r *reg) join(name string, err error) {
 	if err != nil && r.err == nil {
-		r.err = fmt.Errorf("observability: %s: %w", name, err)
+		r.err = fmt.Errorf("instrument %s: %w", name, err)
 	}
 }
 

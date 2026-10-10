@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	interactivepkg "github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -67,7 +66,7 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 	if !interactive {
 		timeout = budgets.Unattended
 	}
-	interactivepkg.Emit(os.Stderr, fmt.Sprintf("secret: waiting on %s for %q (timeout %s)",
+	interactivepkg.Hint(ctx, fmt.Sprintf("secret: waiting on %s for %q (timeout %s)",
 		p.name, ref, timeout))
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)

@@ -2128,7 +2128,7 @@ func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadClos
 // a single artifact. The store treats this the way it treats any remote failure: the local
 // shard write already succeeded.
 func (p *publishedShards) PutShard(context.Context, string, io.Reader) error {
-	return errors.New("knowledge: a published graph is republished whole by `magus graph push`, never one shard at a time")
+	return errors.New("a published graph is republished whole by `magus graph push`, never one shard at a time")
 }
 
 // UsePublishedShards installs a read-only shard source on ws, consulted whenever the

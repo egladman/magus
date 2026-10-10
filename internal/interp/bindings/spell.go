@@ -526,7 +526,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	// a half-merged index where ingestion reads.
 	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), "."+filepath.Base(indexPath)+"-envs-")
 	if err != nil {
-		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return nil, fmt.Errorf("prepare symbol index dir: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 	dests := make([]string, len(envs))
@@ -613,7 +613,7 @@ func formatEnv(env map[string]string) string {
 func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]string) (map[string]string, error) {
 	resolver := secret.ResolverFromContext(ctx)
 	if resolver == nil {
-		return nil, fmt.Errorf("spell: op %q declares secrets but no secret resolver is on this run", opName)
+		return nil, fmt.Errorf("op %q declares secrets but no secret resolver is on this run", opName)
 	}
 	env := make(map[string]string, len(base)+len(refs))
 	maps.Copy(env, base)
@@ -624,11 +624,11 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 	slices.Sort(names)
 	for _, name := range names {
 		if _, exists := env[name]; exists {
-			return nil, fmt.Errorf("spell: op %q secret env %q collides with env already set for this op", opName, name)
+			return nil, fmt.Errorf("op %q secret env %q collides with env already set for this op", opName, name)
 		}
 		v, err := resolver.Read(ctx, refs[name])
 		if err != nil {
-			return nil, fmt.Errorf("spell: op %q secret %q: %w", opName, name, err)
+			return nil, fmt.Errorf("op %q secret %q: %w", opName, name, err)
 		}
 		// Reveal where the credential crosses into a child process's environment, which
 		// is the boundary Command.secrets declared it for.
@@ -653,19 +653,19 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
-		return "", fmt.Errorf("spell: a symbol indexer must run as a magus target so its index lands in the cache")
+		return "", fmt.Errorf("a symbol indexer must run as a magus target so its index lands in the cache")
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			return "", fmt.Errorf("spell: resolve symbol index dir: %w", err)
+			return "", fmt.Errorf("resolve symbol index dir: %w", err)
 		}
 		abs = filepath.Join(cwd, abs)
 	}
 	path := symbols.IndexPath(c.Dir(), abs, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return "", fmt.Errorf("prepare symbol index dir: %w", err)
 	}
 	return path, nil
 }

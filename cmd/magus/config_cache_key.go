@@ -4,14 +4,16 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 const signingKeyEnv = "MAGUS_CACHE_SIGNING_KEY"
 
-func configCacheKey(_ context.Context, _ string, args []string) error {
+func configCacheKey(ctx context.Context, _ string, args []string) error {
 	fs := flag.NewFlagSet("config cache key", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
@@ -34,7 +36,7 @@ func configCacheKey(_ context.Context, _ string, args []string) error {
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
 	case "generate", "gen":
-		return configCacheKeyGenerate(subArgs)
+		return configCacheKeyGenerate(ctx, subArgs)
 	case "id":
 		return configCacheKeyID(subArgs)
 	case "-h", "--help", "help":
@@ -66,7 +68,7 @@ type signingKeyOutput struct {
 // model: pipe the seed into a secret store and never see it at all. In that mode
 // the warnings go to stderr, because a pipe reader wants exactly the secret and
 // nothing else on stdout.
-func configCacheKeyGenerate(args []string) error {
+func configCacheKeyGenerate(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("config cache key generate", flag.ContinueOnError)
 	bindDisplayFlags(fs)
 	fs.Usage = func() {
@@ -110,16 +112,16 @@ func configCacheKeyGenerate(args []string) error {
 	// than a broken one (the key exists, and only its identity was asked for), so it says
 	// on stderr that the seed went nowhere, since it cannot be recovered afterwards.
 	if opts.Format == outputName {
-		fmt.Fprintln(os.Stderr, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.")
+		slog.WarnContext(ctx, "-o name prints the keyid only; this key's seed was NOT emitted and cannot be recovered. Rerun with -o json or -o template='{{.seed}}' to capture one.", attr.Notice(""))
 		return emitNames([]string{km.KeyID})
 	}
 	if opts.Format != outputText {
 		// Warnings to stderr so a pipe gets only the requested field. Printed BEFORE
 		// the value: on a terminal the caller should read them, and on a pipe they
 		// are out of the way either way.
-		fmt.Fprintf(os.Stderr, "keyid: %s\n", km.KeyID)
-		fmt.Fprintf(os.Stderr, "public key (not secret; add to cache.remote.trusted_keys in magus.yaml):\n  %s\n", km.PubB64)
-		fmt.Fprintln(os.Stderr, "the seed is on stdout and is shown ONCE; it is not written to disk.")
+		slog.WarnContext(ctx, km.KeyID, attr.Notice("keyid"))
+		slog.WarnContext(ctx, "public key (not secret; add to cache.remote.trusted_keys in magus.yaml):\n  "+km.PubB64, attr.Notice(""))
+		slog.WarnContext(ctx, "the seed is on stdout and is shown ONCE; it is not written to disk.", attr.Notice(""))
 		return emitFormatted(opts, signingKeyOutput{KeyID: km.KeyID, Seed: km.SeedB64, PubKey: km.PubB64})
 	}
 

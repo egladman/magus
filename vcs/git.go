@@ -1714,7 +1714,7 @@ func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	spans, err := managedSpans(text, generatedMarkers)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: %s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	have := map[string]bool{}
 	for _, s := range spans {
@@ -2201,7 +2201,7 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 	text := string(data)
 	spans, err := managedSpans(text, refreshMarkers)
 	if err != nil {
-		return GitRefreshHook{}, false, fmt.Errorf("vcs: %s: %w", path, err)
+		return GitRefreshHook{}, false, fmt.Errorf("%s: %w", path, err)
 	}
 	for _, s := range spans {
 		for line := range strings.Lines(text[s.start:s.end]) {
@@ -2212,7 +2212,7 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 			}
 			top, err := gitVCS{}.Root(ctx, root)
 			if err != nil {
-				return GitRefreshHook{}, false, fmt.Errorf("vcs: top level of %s: %w", root, err)
+				return GitRefreshHook{}, false, fmt.Errorf("top level of %s: %w", root, err)
 			}
 			return GitRefreshHook{Command: cmd, Top: top}, true, nil
 		}

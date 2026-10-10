@@ -82,7 +82,6 @@ She declares a job per half, from her main checkout:
 ```console
 $ magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 ```sh
@@ -103,16 +102,15 @@ refactor/pricing  -       declared  -      1      alone  magus run test .
 refactor/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 HOLDER names the worktree a job was taken in, `-` until somebody takes it; `server`
 marks magus's own housekeeping. `declared` means nobody has taken it yet, and
 `job exec` moves it to `running`. PROOF is what the fork could prove
 about the write paths in that checkout: `alone`, `disjoint` or `overlapping`. The
-`in flight` line is about open pull requests, which this repository never fetched,
-and the `console` line says where to watch a job in a browser once
-`magus server start` is running.
+`in flight` line is about open pull requests, which this repository never fetched.
+Every job verb also prints a `console` line on stderr, which says where to watch a
+job in a browser once `magus server start` is running.
 
 In `../shop-pricing` she takes the first job:
 
@@ -151,7 +149,6 @@ magus run test .
 refactor/pricing: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 The other half's file is listed as somebody else's, and the check is unmet because
@@ -208,7 +205,6 @@ its holder reports it ran magus run test .
 goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 `wait` reopened the run the ref names in the worktree that took the job, confirmed it
@@ -227,7 +223,6 @@ refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
 refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 ## Two people, one file
@@ -247,7 +242,6 @@ Ben's change needs `format.sh` too, and he declares it anyway:
 ```console
 $ magus job fork currency --criteria 'prices carry a currency code' --write-paths pricing/format.sh,checkout/tax.sh --check 'test .'
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 The store accepted the claim and recorded the overlap. For a file with a diff driver,
@@ -290,7 +284,6 @@ overlaps
     footprints: disjoint
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 `footprints: disjoint` means neither of them has changed a line the other has. They
@@ -308,7 +301,6 @@ $ magus job apply -f - <<'EOF'
 EOF
 updated cents, still running:
   write_paths -pricing/format.sh
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 `magus job fork --schema` prints every field a record takes, and `--dry-run` prints
@@ -325,7 +317,6 @@ cents     ana     running  -      1      alone  magus run test .
 currency  ben     running  -      2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 and Ben's terms now list only `total.sh` as Ana's:
@@ -355,7 +346,6 @@ magus run test .
 currency: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 ## CI checks the merged work
@@ -423,7 +413,6 @@ release/pricing  -       declared  -      1      alone  magus run test .
 release/tax      -       declared  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 When the merge breaks the totals, the same step fails the build:

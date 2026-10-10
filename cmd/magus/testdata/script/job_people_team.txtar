@@ -85,7 +85,6 @@ tax() { echo $(( $1 / 10 )); }
  "check": {"target": "test", "project": "."}}
 -- fork.out --
 forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- shell.out --
 advise
 -- ls-overlap.out --
@@ -100,18 +99,15 @@ overlaps
     footprints: disjoint
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- apply.out --
 updated cents, still running:
   write_paths -pricing/format.sh
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-handed.out --
 JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
 cents     ana     running  -      1      alone  magus run test .
 currency  ben     running  -      2      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- describe.out --
 job: currency
 
@@ -134,4 +130,3 @@ magus run test .
 currency: 0 of 1 goal(s) met
   [unmet] check
       carries no output_ref, so there is no run to reopen
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

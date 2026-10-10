@@ -1,7 +1,6 @@
 package workspace
 
 import (
-	"errors"
 	"fmt"
 	"maps"
 	"path"
@@ -45,7 +44,7 @@ func WithOutputs(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
 		globs, err := types.ParseGlobs(paths)
 		if err != nil {
-			return fmt.Errorf("magus: project %q: outputs: %w", p.Path, err)
+			return fmt.Errorf("project %q: outputs: %w", p.Path, err)
 		}
 		p.Outputs = append(p.Outputs, globs...)
 		return nil
@@ -80,12 +79,12 @@ func WithSources(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
 		globs, err := types.ParseGlobs(paths)
 		if err != nil {
-			return fmt.Errorf("magus: project %q: sources: %w", p.Path, err)
+			return fmt.Errorf("project %q: sources: %w", p.Path, err)
 		}
 		clean := func(glob string) (string, error) {
 			glob = path.Clean(glob)
 			if rooted := types.RootGlob(p.Path, glob); rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return "", fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q), "+
+				return "", fmt.Errorf("project %q: source glob %q escapes the workspace root (it resolves to %q), "+
 					"a path outside the workspace can never key a cache entry", p.Path, glob, rooted)
 			}
 			return glob, nil
@@ -137,7 +136,7 @@ func WithReviewRequired(globs ...string) ProjectOption {
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return fmt.Errorf("magus: project %q: review_required glob %q escapes the workspace root "+
+				return fmt.Errorf("project %q: review_required glob %q escapes the workspace root "+
 					"(it resolves to %q), it would match nothing and silently mark no paths at all", p.Path, raw, rooted)
 			}
 			cleaned = append(cleaned, glob)
@@ -162,7 +161,7 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return fmt.Errorf("magus: project %q: gate_low_risk glob %q escapes the workspace root "+
+				return fmt.Errorf("project %q: gate_low_risk glob %q escapes the workspace root "+
 					"(it resolves to %q), it would classify nothing at all", p.Path, raw, rooted)
 			}
 			cleaned = append(cleaned, glob)
@@ -185,7 +184,7 @@ func WithMergeLowRisk(globs ...string) ProjectOption {
 			glob := path.Clean(raw)
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return fmt.Errorf("magus: project %q: merge_low_risk glob %q escapes the workspace root "+
+				return fmt.Errorf("project %q: merge_low_risk glob %q escapes the workspace root "+
 					"(it resolves to %q), it would opt nothing in", p.Path, raw, rooted)
 			}
 			p.MergeLowRisk = append(p.MergeLowRisk, glob)
@@ -198,7 +197,7 @@ func WithMergeLowRisk(globs ...string) ProjectOption {
 // a literal name it would match nothing while the author believes it carves one out.
 func refuseExclusion(p *types.Project, key, raw string) error {
 	if strings.HasPrefix(raw, "!") {
-		return fmt.Errorf("magus: project %q: %s takes no exclusions, so %q would match nothing (a literal leading ! is written \\!)",
+		return fmt.Errorf("project %q: %s takes no exclusions, so %q would match nothing (a literal leading ! is written \\!)",
 			p.Path, key, raw)
 	}
 	return nil
@@ -229,7 +228,7 @@ func WithWatchIgnore(patterns ...types.IgnorePattern) ProjectOption {
 	return func(p *types.Project) error {
 		for _, pat := range patterns {
 			if err := watch.ValidatePattern(pat); err != nil {
-				return fmt.Errorf("magus: WithWatchIgnore on %q: %w", p.Path, err)
+				return fmt.Errorf("WithWatchIgnore on %q: %w", p.Path, err)
 			}
 		}
 		p.WatchIgnores = append(p.WatchIgnores, patterns...)
@@ -252,7 +251,7 @@ func WithToolBounds(bounds map[string]spells.VersionBounds) ProjectOption {
 					continue
 				}
 				if _, err := semver.NewVersion(f.value); err != nil {
-					return fmt.Errorf("magus: project %q: tools[%q].%s %q is not a valid version",
+					return fmt.Errorf("project %q: tools[%q].%s %q is not a valid version",
 						p.Path, bin, f.field, f.value)
 				}
 			}
@@ -284,11 +283,11 @@ func WithTarget(name string, opts ...TargetOption) ProjectOption {
 func WithRegisteredSpell(name string, opts ...BindingOption) ProjectOption {
 	return func(p *types.Project) error {
 		if name == "" {
-			return errors.New("magus: spell name required")
+			return types.ErrSpellNameRequired
 		}
 		l, ok := project.DefaultSpellRegistry().Lookup(name)
 		if !ok {
-			return fmt.Errorf("magus: spell %q not registered", name)
+			return fmt.Errorf("%w: %q", types.ErrSpellNotRegistered, name)
 		}
 		b := &types.Binding{Name: name}
 		for _, opt := range opts {
@@ -304,7 +303,7 @@ func WithRegisteredSpell(name string, opts ...BindingOption) ProjectOption {
 		}
 		sources, outputs, err := types.SpellGlobs(l)
 		if err != nil {
-			return fmt.Errorf("magus: project %q: %w", p.Path, err)
+			return fmt.Errorf("project %q: %w", p.Path, err)
 		}
 		p.Spells = append(p.Spells, name)
 		p.Bindings = append(p.Bindings, b)

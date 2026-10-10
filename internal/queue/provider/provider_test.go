@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -769,4 +771,24 @@ func TestReviewsReadsEveryPage(t *testing.T) {
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []types.Review{{ID: "12", Reviewer: "ann", Commit: strings.Repeat("d", 40)}, {ID: "13", Reviewer: "cy", Commit: strings.Repeat("e", 40)}}, got.Approving)
 	assert.Equal(t, map[string]int{"POST /graphql reviews": 2}, counts)
+}
+
+// A script's print reaches the log display as a notice record, not a raw stderr write.
+func TestPrintRecordsLogsOneNoticePerPrint(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	n, err := printRecords{ctx: context.Background()}.Write([]byte("checking #12\n"))
+	require.NoError(t, err)
+	assert.Equal(t, len("checking #12\n"), n)
+	assert.Equal(t, "level=INFO msg=\"checking #12\" notice=\"\"\n", buf.String())
 }

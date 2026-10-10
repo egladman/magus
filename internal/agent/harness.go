@@ -193,7 +193,7 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 		}
 		if ok {
 			if verr := validateHarnessDescriptor(d); verr != nil {
-				err = fmt.Errorf("agent: invalid harness spell %q: %w", id, verr)
+				err = fmt.Errorf("invalid harness spell %q: %w", id, verr)
 				return
 			}
 			descriptor, source = d, src

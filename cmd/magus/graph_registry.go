@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/types"
 )
@@ -162,7 +163,7 @@ func graphPush(ctx context.Context, root string, args []string) error {
 	if _, err := client.Push(ctx, dest, oci.Content{ArtifactType: graphArtifactType, Layers: layers}); err != nil {
 		return fmt.Errorf("graph push: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "pushed %s (%d shards, %d bytes)\n", dest, len(layers)-1, size)
+	slog.InfoContext(ctx, fmt.Sprintf("pushed %s (%d shards, %d bytes)", dest, len(layers)-1, size), attr.Notice(""))
 	return nil
 }
 
@@ -222,7 +223,7 @@ func graphLayers(ctx context.Context, root string, refresh bool) ([]oci.Layer, e
 //
 // Does nothing unless knowledge.published_ref names an artifact. Opt-in per repository,
 // because reading a graph decides what magus answers about this tree.
-func seedFromPublishedGraph(ws types.Inspector) {
+func seedFromPublishedGraph(ctx context.Context, ws types.Inspector) {
 	ref := globalCfg.Knowledge.PublishedRef
 	if ref == "" {
 		return
@@ -232,11 +233,12 @@ func seedFromPublishedGraph(ws types.Inspector) {
 		// A ref nobody can parse is a misconfiguration, not a quiet miss: the user asked
 		// for this pull by writing the key, so the key being wrong is worth their
 		// attention even though the build carries on without it.
-		interactive.Emit(os.Stderr, fmt.Sprintf("knowledge.published_ref %q does not parse, so no graph was pulled: %v", ref, err))
+		interactive.Hint(ctx, fmt.Sprintf("knowledge.published_ref %q does not parse, so no graph was pulled: %v", ref, err))
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "magus: fetching the published knowledge graph from %s (knowledge.published_ref; unset it to build locally)\n", src.Registry)
+	slog.InfoContext(ctx, fmt.Sprintf("fetching the published knowledge graph from %s (knowledge.published_ref; unset it to build locally)", src.Registry),
+		attr.Notice(""), attr.Component("magus"))
 	// The timeout rides on the HTTP client rather than a ctx bounded here, because the
 	// requests happen later, inside the build, and a deadline started now would expire
 	// against whatever else that build has to do first.
@@ -291,7 +293,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 	if err := os.WriteFile(out, raw, 0o644); err != nil {
 		return fmt.Errorf("graph pull: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "pulled %s into %s (%d bytes)\n", src, out, len(raw))
+	slog.InfoContext(ctx, fmt.Sprintf("pulled %s into %s (%d bytes)", src, out, len(raw)), attr.Notice(""))
 	return nil
 }
 

@@ -118,11 +118,11 @@ func newUpstreamCaller(sess *buzz.Session) *upstreamCaller {
 	} {
 		name := upstreamTrampolineNames[n]
 		if _, err := sess.Eval(context.Background(), fmt.Sprintf(src, name)); err != nil {
-			c.err = fmt.Errorf("magus: stdlib guard: %w", err)
+			c.err = fmt.Errorf("stdlib guard: %w", err)
 			return c
 		}
 		if c.trampolines[n] = sess.GetGlobal(name); !c.trampolines[n].IsFun() {
-			c.err = fmt.Errorf("magus: stdlib guard: %s did not bind", name)
+			c.err = fmt.Errorf("stdlib guard: %s did not bind", name)
 			return c
 		}
 	}
