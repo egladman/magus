@@ -416,8 +416,8 @@ export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > 
     }
     final longest = longestAddedCssComment(before, after: after);
     if (longest > denyFactor * cssFileBudget) {
-        return magus\guard.deny("Refused. " + cssStyle + "\n\n{path}: a comment of {longest} lines against a budget of at most "
-            + "{cssFileBudget}.\n\nCut it to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
+        return magus\guard.deny("a CSS comment runs {longest} lines against a budget of at most {cssFileBudget}: {path}\n"
+            + cssStyle + "\n\nCut it to the why the CSS cannot show; a design record belongs in the commit message or the docs.");
     }
     final found = judge(after);
     if (found != null) {
@@ -646,8 +646,8 @@ test "a stylesheet write is judged by the prose judge on the lines it adds" {
 test "a stylesheet comment over twice the largest budget is refused" {
     final v = decideWrite("a.css", before: "", after: cssComment(17) + ".a \{ color: red; }\n", once: spent(), judge: noJudge());
     std\assert(v.decision == "deny", message: v.decision);
-    std\assert(v.reason.startsWith("Refused."), message: v.reason);
-    std\assert(v.reason.indexOf("a.css: a comment of 17 lines") != null, message: v.reason);
+    std\assert(v.reason.startsWith("a CSS comment runs 17 lines against a budget of at most "), message: v.reason);
+    std\assert(v.reason.split("\n")[0].endsWith(": a.css"), message: v.reason);
     std\assert(decideWrite("a.css", before: "", after: cssComment(16) + ".a \{ color: red; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "16 lines");
     final old = cssComment(30) + ".a \{ color: red; }\n";
     std\assert(decideWrite("a.css", before: old, after: old + ".b \{ color: blue; }\n", once: spent(), judge: noJudge()).decision == "allow", message: "an old long comment is not the write's");

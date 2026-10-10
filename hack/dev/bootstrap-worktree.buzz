@@ -192,11 +192,11 @@ fun checkRepository(root: str) > str !> any {
     }
     final gomod = fs\readFile("{root}/go.mod") catch "";
     if (!gomod.startsWith(MODULE + "\n")) {
-        throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script builds magus itself";
+        throw "bootstrap-worktree: {root} is not a checkout of magus ({MODULE}); this script places magus's own binary";
     }
     final main = mainWorktree(vcs\cmd(["worktree", "list", "--porcelain"], opts: {"dir": root, "quiet": true}).stdout);
     if (path\clean(main) == path\clean(root)) {
-        throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and building here replaces "
+        throw "bootstrap-worktree: {root} is the main checkout; a worker gets its own worktree, and placing here replaces "
             + "the ./magus every other session in this checkout runs";
     }
     return main;
