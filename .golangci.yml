@@ -292,6 +292,20 @@ linters:
             - {file: internal/cache/machine_gate.go, reason: staged}
             - {file: internal/cache/mutation.go, reason: staged}
             - {file: internal/cache/order.go, reason: staged}
+            # Advisories: shown whole once per session with no ref to hold a reason yet.
+            # Every deny in these files already opens with its verdict.
+            - {file: internal/guard/bootstrap.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/dir.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/drift.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/focus.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/guard.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/lease.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/magus_timeout.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/read.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/shell.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/shell.go, rule: message-commands, reason: advisory}
+            - {file: internal/guard/wiring.go, rule: message-length, reason: advisory}
+            - {file: internal/guard/write.go, rule: message-length, reason: advisory}
             - {file: internal/handler/token/service.go, reason: staged}
             - {file: internal/hint/schema.go, reason: staged}
             - {file: internal/interp/bindings/buzz.go, reason: staged}
