@@ -94,8 +94,8 @@ final sentenceEnd = $"[.!?]+(\s|$)";
 final sourceLine = $":([0-9]+)$";
 final outputRef = $"\bout[0-9a-f]{6,}\b";
 final maxCitedRefs = 10;
-// unknownRef is what magus\output raises for a ref this checkout's output store lacks.
-final unknownRef = "no stored output for ref";
+// unknownRef is the code magus\output raises for a ref this checkout's output store lacks.
+final unknownRef = "MGS8001";
 
 // TextCommand is one forge command that posts text to a pull request: the program and the
 // words naming the command, the kind of text it writes, and the flags carrying it. title,
@@ -1049,24 +1049,28 @@ export fun citedRun(ref: str) > Citation {
     try {
         return Citation{ problem = runProblem(ref, run: magus\output(ref)) };
     } catch (e) {
-        return lookupFailed(ref, message: thrownText(e));
+        return lookupFailed(ref, code: thrownField(e, name: "code"), message: thrownField(e, name: "message"));
     }
 }
 
-// lookupFailed is citedRun's verdict when looking ref up raised message.
-fun lookupFailed(ref: str, message: str) > Citation {
-    if (message.indexOf(unknownRef) != null) {
+// lookupFailed is citedRun's verdict when looking ref up raised code and message.
+fun lookupFailed(ref: str, code: str, message: str) > Citation {
+    if (code == unknownRef) {
         return Citation{ problem = runProblem(ref, run: null) };
     }
     return Citation{ note = "`{ref}` went unchecked, since its run could not be looked up: {message}" };
 }
 
-// thrownText is a caught host error's message: a magus\* call throws a map, not a str.
-fun thrownText(e: any) > str {
+// thrownField is one field of a caught host error: a magus\* call throws a map of code,
+// message and url, not a str. A thrown str has only a message.
+fun thrownField(e: any, name: str) > str {
     if (e is {str: str}) {
-        return (e as? {str: str})!["message"] ?? "{e}";
+        return (e as? {str: str})![name] ?? "";
     }
-    return "{e}";
+    if (name == "message") {
+        return "{e}";
+    }
+    return "";
 }
 
 // runProblem is citedRun's verdict over run, the record ref resolved to or null.
@@ -1422,12 +1426,12 @@ test "a cited ref that names a passing run passes" {
 }
 
 test "a cited ref the store lacks is denied and a lookup that failed is advised" {
-    final missing = lookupFailed("out1a2b3c4d5e6f", message: "magus\\output: no stored output for ref \"out1a2b3c4d5e6f\" in this checkout");
+    final missing = lookupFailed("out1a2b3c4d5e6f", code: "MGS8001", message: "magus\\output: no stored output for ref \"out1a2b3c4d5e6f\" in this checkout");
     std\assert(missing.problem.indexOf("holds no record of") != null and missing.note == "", message: "{missing.problem} {missing.note}");
-    final broken = lookupFailed("out1a2b3c4d5e6f", message: "magus\\output: open outputs: permission denied");
+    final broken = lookupFailed("out1a2b3c4d5e6f", code: "", message: "magus\\output: open outputs: permission denied");
     std\assert(broken.problem == "", message: broken.problem);
     std\assert(broken.note.indexOf("`out1a2b3c4d5e6f` went unchecked") != null and broken.note.indexOf("permission denied") != null, message: broken.note);
-    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: fun (ref: str) > Citation => lookupFailed(ref, message: "magus\\output: open outputs: permission denied"));
+    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: fun (ref: str) > Citation => lookupFailed(ref, code: "", message: "magus\\output: open outputs: permission denied"));
     std\assert(v.decision == "advise" and v.reason.indexOf("went unchecked") != null, message: "{v.decision}: {v.reason}");
 }
 

@@ -643,7 +643,7 @@ func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	}
 	data, desc, err := cache.NewOutputStore(cacheDir).ByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
-		return types.OutputRecord{}, fmt.Errorf("magus\\output: no stored output for ref %q in this checkout", ref)
+		return types.OutputRecord{}, types.DiagnosticErrorf(types.OutputRefMissing, "magus\\output: no stored output for ref %q in this checkout", ref)
 	}
 	if err != nil {
 		return types.OutputRecord{}, fmt.Errorf("magus\\output: %w", err)
