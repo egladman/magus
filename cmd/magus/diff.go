@@ -620,9 +620,9 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 func threadLookupError(err error, reason string, comments int) error {
 	switch {
 	case reason != "":
-		return fmt.Errorf("%w (the review was only partly read: %s)", err, reason)
+		return fmt.Errorf("%w: the review was only partly read: %s", err, reason)
 	case comments == 0:
-		return fmt.Errorf("%w (no comments were found: is a review open for this branch?)", err)
+		return fmt.Errorf("%w: no comments were found, is a review open for this branch?", err)
 	}
 	return err
 }
@@ -933,7 +933,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 			return fmt.Errorf("magus diff: %w", threadLookupError(terr, reason, len(comments)))
 		}
 		if !slices.ContainsFunc(files, func(f difftui.File) bool { return f.Path == thread.Head.Path }) {
-			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change; `%s` prints it",
+			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change: `%s` prints it",
 				thread.ID(), thread.Head.Path, req.label, hint.Diff.With("--thread", thread.ID(), "--no-tui"))
 		}
 		start = types.DiffCursor{Path: thread.Head.Path, Hunk: thread.Head.Hunk}

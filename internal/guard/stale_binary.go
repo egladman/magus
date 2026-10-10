@@ -303,7 +303,7 @@ func commandCall(in commandRuleInput) unloadedCall {
 // cannot load the tree's guard policy.
 func staleBinaryReason(call unloadedCall, cause string, failures []string, own bool, root string) string {
 	var b strings.Builder
-	b.WriteString("magus workspace: " + call.what + " is denied because the magus judging it cannot load this workspace, so its guard policy is not running and nothing could say the call is safe.")
+	b.WriteString("magus workspace: " + call.what + " is denied: the magus judging it cannot load this workspace, so its guard policy is not running.")
 	switch cause {
 	case causeStale:
 		b.WriteString(" That magus is older than the tree.")

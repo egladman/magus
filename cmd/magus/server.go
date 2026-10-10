@@ -1203,7 +1203,7 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 // ignores the mark it read, so a failed clear costs one more look on the next tick and nothing else.
 func dropReading(ctx context.Context, store *changeset.Store, mark changeset.ReadingMark) {
 	if _, err := store.ClearReadingIf(ctx, mark); err != nil {
-		slog.WarnContext(ctx, "server: could not clear a stale reading mark", slog.String("err", err.Error()))
+		slog.With(attr.Component("server")).WarnContext(ctx, "could not clear a stale reading mark", slog.String("err", err.Error()))
 	}
 }
 
@@ -1221,6 +1221,6 @@ func shutdownOneShotTelemetry(ctx context.Context, tel observability.Provider) {
 	flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := tel.Shutdown(flushCtx); err != nil {
-		slog.WarnContext(ctx, "server: could not flush telemetry before exit", slog.String("err", err.Error()))
+		slog.With(attr.Component("server")).WarnContext(ctx, "could not flush telemetry before exit", slog.String("err", err.Error()))
 	}
 }

@@ -202,7 +202,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 			Hunks:      st.Hunks,
 		}, nil
 	default:
-		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, or patch; one thread is op=thread)", projection)
+		return nil, fmt.Errorf("mcp: unknown projection %q, use full, summary, conversation or patch (one thread is op=thread)", projection)
 	}
 }
 
@@ -432,7 +432,7 @@ func (t *diffTool) thread(ctx context.Context, id string) (types.DiffThread, err
 	}
 	rec, err := review.ReadThread(in, id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return types.DiffThread{}, fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
+		return types.DiffThread{}, fmt.Errorf("%w: read op=state's threads for the ids on this review", err)
 	}
 	return rec, err
 }
@@ -446,7 +446,7 @@ func (t *diffTool) threadID(ctx context.Context, id string) (string, error) {
 	}
 	thread, err := changeset.FindThread(t.reviewComments(ctx), id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return "", fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
+		return "", fmt.Errorf("%w: read op=state's threads for the ids on this review", err)
 	}
 	return thread.ID(), err
 }

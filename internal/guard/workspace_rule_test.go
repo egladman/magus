@@ -111,7 +111,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 	assert.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      "deny",
-		Reason: "magus workspace: `git push` is denied because the magus judging it cannot load this workspace, so its guard policy is not running and nothing could say the call is safe. " +
+		Reason: "magus workspace: `git push` is denied: the magus judging it cannot load this workspace, so its guard policy is not running. " +
 			"That magus is older than the tree.\n" +
 			"  worktree: the magusfile failed to load: " + errStaleLoad.Error() + "\n" +
 			"  approved: the rule could not be resolved: approved magusfile: " + errStaleLoad.Error() + "\n" +

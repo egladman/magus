@@ -11,9 +11,9 @@ import (
 )
 
 // ErrOutline marks an outline refused as more than a few pointers. The contract is on
-// [types.DiffOutline]; a message built on it says why and that the reply is the person's to type,
-// because the agent that reads it is the one who tried to write more.
-var ErrOutline = errors.New("an outline is not a reply")
+// [types.DiffOutline]; its text says that the reply is the person's to type, because the agent
+// that reads it is the one who tried to write more. A refusal names what broke, then wraps it.
+var ErrOutline = errors.New("an outline is not a reply: the person types the reply, so an outline is only a few short pointers that they read")
 
 // ErrNoSession reports that no review session is attached to the workspace, so there is nothing
 // for an outline to be held with.
@@ -28,30 +28,29 @@ var ErrNoSession = errors.New("no review session is attached")
 // overrides and every other format (Cf) rune are refused, since a renderer obeys them and a
 // reader cannot see them.
 func NormalizeOutline(o types.DiffOutline) (types.DiffOutline, error) {
-	const typed = "the person types the reply, so an outline is only a few short pointers that they read"
 	o.Thread = strings.TrimSpace(o.Thread)
 	if o.Thread == "" {
-		return types.DiffOutline{}, fmt.Errorf("%w: it names no thread; %s", ErrOutline, typed)
+		return types.DiffOutline{}, fmt.Errorf("it names no thread: %w", ErrOutline)
 	}
 	if len(o.Topics) == 0 {
-		return types.DiffOutline{}, fmt.Errorf("%w: it has no topics; %s", ErrOutline, typed)
+		return types.DiffOutline{}, fmt.Errorf("it has no topics: %w", ErrOutline)
 	}
 	if len(o.Topics) > types.DiffOutlineMaxTopics {
-		return types.DiffOutline{}, fmt.Errorf("%w: %d topics is more than %d; %s",
-			ErrOutline, len(o.Topics), types.DiffOutlineMaxTopics, typed)
+		return types.DiffOutline{}, fmt.Errorf("%d topics is more than %d: %w",
+			len(o.Topics), types.DiffOutlineMaxTopics, ErrOutline)
 	}
 	topics := make([]string, 0, len(o.Topics))
 	for i, topic := range o.Topics {
 		topic = strings.TrimSpace(topic)
 		switch n := utf8.RuneCountInString(topic); {
 		case topic == "":
-			return types.DiffOutline{}, fmt.Errorf("%w: topic %d is empty; %s", ErrOutline, i+1, typed)
+			return types.DiffOutline{}, fmt.Errorf("topic %d is empty: %w", i+1, ErrOutline)
 		case n > types.DiffOutlineMaxTopicRunes:
-			return types.DiffOutline{}, fmt.Errorf("%w: topic %d is %d characters, more than %d; %s",
-				ErrOutline, i+1, n, types.DiffOutlineMaxTopicRunes, typed)
+			return types.DiffOutline{}, fmt.Errorf("topic %d is %d characters, more than %d: %w",
+				i+1, n, types.DiffOutlineMaxTopicRunes, ErrOutline)
 		case !visibleLine(topic):
-			return types.DiffOutline{}, fmt.Errorf("%w: topic %d spans lines or holds a character a reader cannot see; %s",
-				ErrOutline, i+1, typed)
+			return types.DiffOutline{}, fmt.Errorf("topic %d spans lines or holds a character a reader cannot see: %w",
+				i+1, ErrOutline)
 		}
 		topics = append(topics, topic)
 	}
@@ -60,11 +59,11 @@ func NormalizeOutline(o types.DiffOutline) (types.DiffOutline, error) {
 	o.AgentName = strings.TrimSpace(o.AgentName)
 	switch n := utf8.RuneCountInString(o.AgentName); {
 	case n > types.DiffOutlineMaxAgentNameRunes:
-		return types.DiffOutline{}, fmt.Errorf("%w: agent_name is %d characters, more than %d; %s",
-			ErrOutline, n, types.DiffOutlineMaxAgentNameRunes, typed)
+		return types.DiffOutline{}, fmt.Errorf("agent_name is %d characters, more than %d: %w",
+			n, types.DiffOutlineMaxAgentNameRunes, ErrOutline)
 	case !visibleLine(o.AgentName):
-		return types.DiffOutline{}, fmt.Errorf("%w: agent_name spans lines or holds a character a reader cannot see; %s",
-			ErrOutline, typed)
+		return types.DiffOutline{}, fmt.Errorf("agent_name spans lines or holds a character a reader cannot see: %w",
+			ErrOutline)
 	}
 	return o, nil
 }
