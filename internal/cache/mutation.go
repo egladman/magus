@@ -60,16 +60,19 @@ func mutatedSources(before, after sourceFingerprint, updates, ownedOutputs []typ
 	return out
 }
 
-// movedInputs names every hashed input that changed while the step ran, whoever changed it.
-// It exempts only ctx.modifiesExistingFiles, whose key is computed from the pre-edit bytes
-// by declaration.
+// movedInputs names every hashed input that changed while the step ran, whoever changed it,
+// declared updates included.
 //
-// The exemptions must NOT be shared with [mutatedSources], which answers "did this target
-// misbehave" and so ignores every declared output to keep MGS4007 from accusing a target of
-// writing a generated file. This answers "does the key still describe the tree it was
-// computed from", where a peer rewriting a generated file mid-hash is the whole danger.
-func movedInputs(before, after sourceFingerprint, updates []types.Glob) []string {
-	return mutatedSources(before, after, updates, nil)
+// It must NOT share the exemptions of [mutatedSources], which answers "did this target
+// misbehave" and so ignores every declared update and output. This answers "does the key
+// still describe the tree it was computed from", where a peer rewriting a generated file
+// mid-hash is the whole danger. A declared update counts too: updates are never snapshotted
+// or replayed, so an entry filed under the pre-run bytes would, once the file returned to
+// them, hit and leave it as the run would not. Only a fixed point records, so a formatter
+// caches from its first run that changes nothing and an updater that rewrites its file on
+// every run never caches.
+func movedInputs(before, after sourceFingerprint) []string {
+	return mutatedSources(before, after, nil, nil)
 }
 
 // checkSourceMutation reports MGS4007 when a target rewrote its own declared sources
@@ -117,8 +120,25 @@ func (c *Cache) keyStillDescribesInputs(ctx context.Context, s *Step, before sou
 			fmt.Sprintf("key staleness check skipped for %s: %v", s.ProjectPath, err)))
 		return nil, true
 	}
-	moved := movedInputs(before, after, s.Updates)
+	moved := movedInputs(before, after)
 	return moved, len(moved) == 0
+}
+
+// reportUnrecorded says why a run was not recorded. A moved declared update is the step
+// doing its job short of a fixed point, which every run that changes a file does, so alone
+// it is logged at debug; any other moved input gets [movedInputsNotice].
+func (c *Cache) reportUnrecorded(ctx context.Context, s Step, hash string, moved []string) {
+	updates := compileGlobs(s.Updates)
+	others := slices.DeleteFunc(slices.Clone(moved), func(rel string) bool {
+		return slices.ContainsFunc(updates, func(g compiledGlob) bool { return g.Match(rel) })
+	})
+	if len(others) > 0 {
+		c.log.WarnContext(ctx, movedInputsNotice(s, hash, others))
+		return
+	}
+	c.log.DebugContext(ctx, "cache.debug", slog.String("msg", fmt.Sprintf(
+		"not recording %s:%s under %s: it rewrote %s it declares as updates, and a hit leaves them as they are: %s",
+		s.ProjectPath, s.Target, shortHash(hash), pluralFiles(len(moved)), joinCapped(moved, 5))))
 }
 
 // movedInputsNotice explains why the run was not cached. A moved input matching a declared

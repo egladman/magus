@@ -44,6 +44,9 @@ func TestRunAllowsDeclaredSourceMutation(t *testing.T) {
 	_, err := c.Run(t.Context(), step, rewriteMain(t, root, "package main // receive"))
 
 	require.NoError(t, err, "a declared in-place edit is the API working, not a finding")
+	got, err := os.ReadFile(filepath.Join(root, "test", "pkg", "main.go"))
+	require.NoError(t, err)
+	assert.Equal(t, "package main // receive", string(got), "the declared edit stands")
 }
 
 // A target that leaves its sources alone must stay silent, or every passing run in the
@@ -194,6 +197,69 @@ func TestRunDoesNotRecordAnEntryWhoseInputsMovedWhileItRan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, runs,
 		"the second run replayed an entry recorded under a key whose inputs had already moved")
+}
+
+// formatterStep is a step that rewrites pkg/enum.go in place and declares it, the way
+// ctx.modifiesExistingFiles does: the update glob is also a source.
+func formatterStep(t *testing.T) (root string, c *Cache, step Step) {
+	t.Helper()
+	root, c = openCache(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	return root, c, Step{
+		ProjectPath:   ".",
+		WorkspaceRoot: root,
+		Target:        "format",
+		Sources:       types.MustParseGlobs("pkg/*.go"),
+		Updates:       types.MustParseGlobs("pkg/*.go"),
+	}
+}
+
+// Updates are never snapshotted or replayed, so an entry recorded under the pre-run key
+// of a run that moved its update file is a hit that leaves the file unformatted.
+// Proven by putting the file back to those pre-run bytes and running again.
+func TestRunDoesNotRecordAnEntryWhoseDeclaredUpdateMoved(t *testing.T) {
+	root, c, step := formatterStep(t)
+	src := filepath.Join(root, "pkg", "enum.go")
+	require.NoError(t, os.WriteFile(src, []byte("unformatted"), 0o644))
+
+	runs := 0
+	format := func(context.Context) error {
+		runs++
+		return os.WriteFile(src, []byte("formatted"), 0o644)
+	}
+
+	_, err := c.Run(t.Context(), step, format)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(src, []byte("unformatted"), 0o644))
+	_, err = c.Run(t.Context(), step, format)
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, runs, "a hit under the pre-run key skipped the formatter")
+	got, err := os.ReadFile(src)
+	require.NoError(t, err)
+	assert.Equal(t, "formatted", string(got))
+}
+
+// The other half of the rule: a run that leaves its update file as it found it is a
+// fixed point, and its entry is recorded.
+func TestRunRecordsAnEntryWhoseDeclaredUpdateStayedPut(t *testing.T) {
+	root, c, step := formatterStep(t)
+	src := filepath.Join(root, "pkg", "enum.go")
+	require.NoError(t, os.WriteFile(src, []byte("formatted"), 0o644))
+
+	runs := 0
+	format := func(context.Context) error {
+		runs++
+		return os.WriteFile(src, []byte("formatted"), 0o644)
+	}
+
+	for range 2 {
+		_, err := c.Run(t.Context(), step, format)
+		require.NoError(t, err)
+	}
+
+	assert.Equal(t, 1, runs, "a fixed point must cache")
 }
 
 // The predicate itself, isolated from Run's wiring.

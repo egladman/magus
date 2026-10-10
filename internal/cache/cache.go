@@ -171,6 +171,8 @@ type Step struct {
 	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
 	// Outputs, and hashing either would change every existing key. They exist so
 	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
+	// Updates are never snapshotted, so a run records an entry only when every update
+	// file ended it with the bytes the key saw.
 	Updates []types.Glob // ctx.modifiesExistingFiles globs
 	// OwnedOutputs spans EVERY target in EVERY project, not the running one, because
 	// ctx.needs puts a chained target's writes inside this step's window and a workspace
@@ -856,7 +858,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	if storable {
 		if moved, fresh := c.keyStillDescribesInputs(ctx, rc.step, preSources); !fresh {
 			storable = false
-			c.log.WarnContext(ctx, movedInputsNotice(*rc.step, hash, moved))
+			c.reportUnrecorded(ctx, *rc.step, hash, moved)
 		}
 	}
 
