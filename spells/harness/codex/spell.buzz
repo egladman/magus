@@ -239,6 +239,7 @@ fun codex_agent(agent: {str: any}) > {str: any} {
     return {
         "path": ".codex/agents/{name}.toml",
         "content": content,
+        "hint": "{name} runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
     };
 }
 

@@ -54,6 +54,7 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 			Path: ".codex/agents/magus-scout.toml",
 			Content: "name = \"magus-scout\"\ndescription = " + quoted + "\n" +
 				"developer_instructions = '''\n" + instructions + "'''\n",
+			Hint: "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
 		{"cursor", agent.HarnessAgentFile{
 			Path: ".cursor/agents/magus-scout.md",

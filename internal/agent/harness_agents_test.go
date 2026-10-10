@@ -53,6 +53,26 @@ func TestPlanHarnessWritesAgentFilesOnceAndThenNothing(t *testing.T) {
 	assert.Empty(t, after.AgentReason)
 }
 
+// A spell that leaves an agent's model to the host names the person's setting once, however
+// many agents share it.
+func TestPlanHarnessCarriesEachAgentHintOnce(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "scribe", `{
+  "schema_version": 2,
+  "id": "scribe",
+  "display": {"name": "Scribe"},
+  "skills": {"paths": [".agents/skills"], "form": "both"},
+  "agents": [
+    {"path": ".scribe/agents/a.md", "content": "a\n", "hint": "set scribe.default_model"},
+    {"path": ".scribe/agents/b.md", "content": "b\n", "hint": "set scribe.default_model"},
+    {"path": ".scribe/agents/c.md", "content": "c\n"}
+  ]
+}`)
+	plan, err := PlanHarness(context.Background(), root, "scribe")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"set scribe.default_model"}, plan.AgentHints)
+}
+
 // TestPlanHarnessRewritesAnEditedAgentFile pins that the descriptor owns the whole file, so a
 // local edit is replaced rather than merged.
 func TestPlanHarnessRewritesAnEditedAgentFile(t *testing.T) {

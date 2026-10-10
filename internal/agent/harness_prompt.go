@@ -53,6 +53,10 @@ func validateHarnessPrompt(p HarnessPrompt) error {
 type HarnessAgentFile struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	// Hint is the person-owned setting that picks this agent's model, printed with the plan
+	// when the spell could not pick one itself. Editing the file instead would be undone by
+	// the next plan, which rewrites any byte that differs.
+	Hint string `json:"hint,omitempty"`
 }
 
 func validateHarnessAgentFile(f HarnessAgentFile) error {

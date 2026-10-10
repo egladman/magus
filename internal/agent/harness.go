@@ -340,6 +340,9 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 		if err := addPlanFile(&plan, a.Path, file); err != nil {
 			return plan, err
 		}
+		if a.Hint != "" && !slices.Contains(plan.AgentHints, a.Hint) {
+			plan.AgentHints = append(plan.AgentHints, a.Hint)
+		}
 	}
 	hint, err := harnessMCPHint(d)
 	if err != nil {
