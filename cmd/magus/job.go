@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/audience"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
@@ -118,14 +119,23 @@ func consoleJobLine(id string) string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
+	// An agent relays the console to a person, so it gets the one command that opens it,
+	// and nothing when there is nothing to open (ADR 0007).
+	agent := invocationAudience() == audience.Agent
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
+		if agent {
+			return ""
+		}
 		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
 	}
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
 		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
+	}
+	if agent {
+		return "console: " + console.OpenCommand(link)
 	}
 	line := "console: " + link + "\n  " + authHint(link)
 	if skew := consoleSkew(serverVersion, version); skew != "" {
