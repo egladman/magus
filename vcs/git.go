@@ -1435,8 +1435,8 @@ var gitRefreshHooks = []string{"post-checkout", "post-merge", "post-rewrite"}
 
 // gitDriftHooks fire around the two events that can leave generated output stale in
 // committed history: the commit itself, and the push that publishes it. Neither hook may
-// block (see types.DriftHookInstaller): both bodies are the same fail-open one-liner as
-// gitRefreshHooks, just addressed to a different job.
+// block (see types.DriftHookInstaller): each body is a fail-open one-liner like
+// gitRefreshHooks', naming its own hook (gitDriftHookBody).
 var gitDriftHooks = []string{"post-commit", "pre-push"}
 
 // InstallMergeDriver writes .gitattributes entries and registers the magus merge driver
@@ -2221,8 +2221,9 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 }
 
 // InstallDriftHook implements types.DriftHookInstaller: after it returns, a commit and
-// the push that follows it (gitDriftHooks) both run command, fail-open, so the server
-// checks for stale generated output in the background. Its section coexists with the
+// the push that follows it (gitDriftHooks) both run command with the hook's name appended,
+// fail-open, so the server checks for stale generated output in the background, and for a
+// push counts the unread hunks it sends. Its section coexists with the
 // refresh section and any hand-written body in the same hook. It returns the hooks it
 // changed, none when all were current. A root outside any git repository installs
 // nothing and is not an error; a hook written for an interpreter other than sh, or
@@ -2230,9 +2231,20 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 func (v gitVCS) InstallDriftHook(ctx context.Context, root, command string) ([]string, error) {
 	// Neither hook needs a guard: post-commit fires only on a real commit, and pre-push
 	// fires only on a real push, unlike post-checkout's dual meaning.
-	return installGitHookSections(ctx, root, gitDriftHooks, driftMarkers, func(string) string {
-		return command + " >/dev/null 2>&1 || true\n"
+	return installGitHookSections(ctx, root, gitDriftHooks, driftMarkers, func(name string) string {
+		return gitDriftHookBody(name, command)
 	})
+}
+
+// gitDriftHookBody is the shell one drift hook runs: command with the hook's name appended,
+// so the job can tell a push from a commit. pre-push also passes its remote and url, and the
+// command inherits the hook's stdin, where git writes the refs it pushes.
+func gitDriftHookBody(name, command string) string {
+	run := command + " " + name
+	if name == "pre-push" {
+		run += ` "$@"`
+	}
+	return run + gitHookSuffix + "\n"
 }
 
 // InstallRegenHook implements types.RegenHookInstaller: after it returns, each of

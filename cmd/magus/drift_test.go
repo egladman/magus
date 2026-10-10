@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -342,23 +344,110 @@ func TestUnreadRangeLineCountsWhatNoMarkCovers(t *testing.T) {
 		unreadRangeLine("@{upstream}...HEAD", driftRangePatch, nil, errors.New("permission denied")))
 }
 
-// TestPushRangeUnreadReadsTheRangeAgainstTheUpstream runs against a real repository: the range is
-// what HEAD holds that its upstream does not, and a branch with no remote has no range to read.
-func TestPushRangeUnreadReadsTheRangeAgainstTheUpstream(t *testing.T) {
+// TestPushedUnreadReadsExactlyThePushedRange runs against a real repository: the range is what
+// the push sends against what the remote held, a commit made after the push started is not in
+// it, a ref the remote does not have yet reads against the remote's default branch, and a
+// range that cannot be read adds no line.
+func TestPushedUnreadReadsExactlyThePushedRange(t *testing.T) {
 	dir := initGitRepo(t)
 	writeAndCommit(t, dir, "a.txt", "a\n", "first")
 	res, err := vcs.Resolve(context.Background(), dir, "", types.VCSOptions{})
 	require.NoError(t, err)
 	cache := t.TempDir()
-
-	assert.Empty(t, pushRangeUnread(context.Background(), res, dir, cache, ""), "no upstream and no remote: no range")
-
 	remote := t.TempDir()
 	runGit(t, remote, "init", "--bare")
 	runGit(t, dir, "remote", "add", "origin", remote)
+	rev := func(args ...string) string {
+		out, err := exec.Command("git", append([]string{"-C", dir, "rev-parse"}, args...)...).Output()
+		require.NoError(t, err)
+		return strings.TrimSpace(string(out))
+	}
 	runGit(t, dir, "push", "-u", "origin", "HEAD")
+	runGit(t, dir, "remote", "set-head", "origin", rev("--abbrev-ref", "HEAD"))
+	held := rev("HEAD")
 	writeAndCommit(t, dir, "a.txt", "a\nb\n", "second")
+	sent := rev("HEAD")
+	writeAndCommit(t, dir, "b.txt", "b\n", "third, made while the push ran")
+	zero := strings.Repeat("0", 40)
 
-	assert.Contains(t, pushRangeUnread(context.Background(), res, dir, cache, "origin"),
-		"1 of 1 hunks of this range (@{upstream}...HEAD) unread")
+	got := pushedUnread(context.Background(), res, dir, cache, "origin", []job.DriftPush{
+		{Remote: held, Local: sent},
+		{Remote: zero, Local: sent},
+		{Remote: strings.Repeat("e", 40), Local: sent},
+	})
+	assert.Equal(t, []string{
+		"1 of 1 hunks of this range (" + held[:12] + "..." + sent[:12] + ") unread; read them with " +
+			hint.Diff.With("--unread", "--rev", held[:12]+"..."+sent[:12]),
+		"1 of 1 hunks of this range (origin/HEAD..." + sent[:12] + ") unread; read them with " +
+			hint.Diff.With("--unread", "--rev", "origin/HEAD..."+sent[:12]),
+	}, got)
+	assert.Nil(t, pushedUnread(context.Background(), res, dir, cache, "origin", nil), "a commit's run sends no range")
+}
+
+// TestCheckDriftJobArgvHandsTheServerThePushedRefs pins what `job run check-drift <hook>` submits:
+// a commit names its hook and nothing else, a push names its remote and every ref git says it
+// sends except a deletion, and every argv it builds is one the server's job dispatch admits.
+func TestCheckDriftJobArgvHandsTheServerThePushedRefs(t *testing.T) {
+	a, b, zero := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("0", 40)
+	stdin := "refs/heads/topic " + a + " refs/heads/topic " + b + "\n" +
+		"refs/heads/new " + a + " refs/heads/new " + zero + "\n" +
+		"(delete) " + zero + " refs/heads/gone " + b + "\n"
+
+	cases := []struct {
+		name  string
+		args  []string
+		stdin string
+		want  []string
+	}{
+		{"no hook", nil, "", []string{"server", "check-drift"}},
+		{"commit", []string{"post-commit"}, "", []string{"server", "check-drift", "--hook=post-commit"}},
+		{"push", []string{"pre-push", "origin", "git@example.com:o/r.git"}, stdin, []string{
+			"server", "check-drift", "--hook=pre-push", "--remote=origin",
+			"--push=" + b + ":" + a, "--push=" + zero + ":" + a,
+		}},
+		{"push to a url", []string{"pre-push", "git@example.com:o/r.git", "git@example.com:o/r.git"}, stdin, []string{
+			"server", "check-drift", "--hook=pre-push",
+			"--push=" + b + ":" + a, "--push=" + zero + ":" + a,
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := checkDriftJobArgv(tc.args, strings.NewReader(tc.stdin))
+			assert.Equal(t, tc.want, got)
+			assert.True(t, job.IsWorkerArgv(got), "the server must admit %v", got)
+		})
+	}
+}
+
+// TestParseCheckDriftArgsReadsWhatTheJobSubmits pins that the worker reads back exactly the hook
+// the submitter wrote, and that a run with no flags, the one an older drift section starts, is a
+// commit's.
+func TestParseCheckDriftArgsReadsWhatTheJobSubmits(t *testing.T) {
+	want := job.DriftHook{Hook: job.DriftHookPrePush, Remote: "origin", Pushes: []job.DriftPush{
+		{Remote: strings.Repeat("b", 40), Local: strings.Repeat("a", 40)},
+	}}
+	got, err := parseCheckDriftArgs(want.Argv()[2:])
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+
+	plain, err := parseCheckDriftArgs(nil)
+	require.NoError(t, err)
+	assert.Equal(t, job.DriftHook{Hook: job.DriftHookPostCommit}, plain)
+}
+
+// TestIsWorkerArgvRefusesCheckDriftArgumentsItDidNotWrite pins the admission rule a JobRequest
+// meets: check-drift's flags are allowed, but nothing else rides along with them.
+func TestIsWorkerArgvRefusesCheckDriftArgumentsItDidNotWrite(t *testing.T) {
+	a := strings.Repeat("a", 40)
+	for _, rest := range [][]string{
+		{"--hook=post-merge"},
+		{"--remote=origin"},
+		{"--hook=pre-push", "--remote=-upload-pack=x"},
+		{"--hook=pre-push", "--remote=git@example.com:o/r.git"},
+		{"--hook=pre-push", "--push=HEAD:" + a},
+		{"--hook=pre-push", "--push=" + a},
+		{"--hook=pre-push", "--other"},
+	} {
+		assert.False(t, job.IsWorkerArgv(append([]string{"server", "check-drift"}, rest...)), "%v", rest)
+	}
 }
