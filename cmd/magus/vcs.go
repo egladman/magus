@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
@@ -562,7 +563,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	if err != nil {
 		return settleFailed(hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
 	}
-	run := func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }
+	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
 	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
 	if err != nil {
 		return settleFailed(hook, op, out, err)
