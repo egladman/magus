@@ -303,6 +303,24 @@ func TestNamedWorkspaceDenyIsShortenedOnRepeat(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// A named rule's reasons differ call to call, so a different denial from it is not a
+// repeat: shortening it to the first line would drop the findings a reader needs.
+func TestNamedWorkspaceDenySpeaksInFullForADifferentReason(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &commandRuleProbe{answer: types.GuardVerdict{
+		Decision: types.GuardDeny, Reason: "This review reply breaks the reply rules:\n  - No, [reply-opener]", Rule: "pull-request-text",
+	}}
+	judge := func() Verdict {
+		return Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+	}
+
+	judge()
+	probe.answer.Reason = "This review reply breaks the reply rules:\n  - As I said [reply-opener]"
+	other := judge()
+	assert.Contains(t, other.Reason, "As I said [reply-opener]")
+	assert.False(t, strings.HasPrefix(other.Reason, "denied again"), other.Reason)
+}
+
 // An unnamed workspace deny is worded exactly as the rule wrote it, every time.
 func TestUnnamedWorkspaceDenyIsUntouched(t *testing.T) {
 	ctx, _ := spawnFixture(t)

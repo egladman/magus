@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -58,9 +60,12 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string
 	if (!catalogued && !namedWorkspaceRule(rule)) || advisoryRule()[rule] {
 		return reason, "", nil
 	}
-	see, catches := "", firstLine(reason)
+	// A catalogued rule's Catches summarizes every denial it makes. A named workspace rule
+	// has no such line and its reasons differ call to call, so only the same reason
+	// repeating is a repeat: a different denial from the same rule speaks in full.
+	see, catches, marker := "", firstLine(reason), denyMarker(rule+"-"+reasonDigest(reason))
 	if catalogued {
-		see, catches = "\nsee: "+ruleDocsBase+rule+"/", doc.Catches
+		see, catches, marker = "\nsee: "+ruleDocsBase+rule+"/", doc.Catches, denyMarker(rule)
 	}
 	block := strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n")
 	body := reason
@@ -69,7 +74,7 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string
 	}
 	body += block
 	full := body + see
-	first := !markers.MarkFired(denyMarker(rule))
+	first := !markers.MarkFired(marker)
 	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
 	if ref == "" {
 		hint.AppendServedNext(markers.CacheDir(), remedy)
@@ -90,6 +95,13 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string
 func namedWorkspaceRule(rule string) bool {
 	name, ok := strings.CutPrefix(rule, workspaceShellPrefix)
 	return ok && name != "" && rule != workspaceCommandRule && rule != workspaceWriteRule && rule != workspaceSpawnRule
+}
+
+// reasonDigest names a reason in a marker kind: short, filename-safe, and the same for
+// the same text.
+func reasonDigest(reason string) string {
+	sum := sha256.Sum256([]byte(reason))
+	return hex.EncodeToString(sum[:6])
 }
 
 // firstLine is s up to its first newline, trimmed.

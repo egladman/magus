@@ -511,7 +511,7 @@ announcements standing where the point should be (`signpost`, `closer`), weight 
 with nothing named (`vague`), words chosen to sound significant (`buzzword`, with
 `buzzword-weak` advising on those that have an ordinary sense), throat-clearing and
 filler (`filler`, `wordy`), a claim made by denying its opposite (`contrast`), runs of
-very short sentences (`staccato`) and a participle clause that claims significance
+sentences of six words or fewer (`staccato`) and a participle clause that claims significance
 (`ing-tail`). What stays in a skill is the judgment no rule sees: a claim with no
 specific behind it, and padding.
 
