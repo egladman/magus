@@ -114,8 +114,8 @@ func TestQueryHelpPrintsUsage(t *testing.T) {
 }
 
 // TestReportRefLookupError_NoDoubledConsulted guards the RefNotFoundError rendering
-// bug: Error() already reads `...; consulted: local cache`, so the wrapper must not
-// append a second "(consulted: ...)". m is nil here on purpose: this branch exercises
+// bug: Error() already names the stores it consulted, so the wrapper must not append a
+// second list. m is nil here on purpose: this branch exercises
 // the not-exist rendering in isolation, and a nil Magus must skip the suggestion rather
 // than panic (the txtar coverage exercises the suggestion with a real workspace).
 func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
@@ -127,8 +127,7 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 	})
 
 	assert.Contains(t, out, `no stored output for ref "outdeadbeef0000", consulted local cache`)
-	assert.NotContains(t, out, "consulted: local cache (consulted", "consulted: ... must render exactly once")
-	assert.Equal(t, 1, strings.Count(out, "consulted:"), "consulted: must appear exactly once: %q", out)
+	assert.Equal(t, 1, strings.Count(out, "consulted"), "consulted must appear exactly once: %q", out)
 }
 
 // newQueryTestWorkspace opens a real (cache-backed) single-project workspace bound to a

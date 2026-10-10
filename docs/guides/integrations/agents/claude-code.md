@@ -28,7 +28,7 @@ event.
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
-| quiet output     | `env.MAGUS_LOG_SILENT` in `.claude/settings.json`: `true`  |
+| quiet output     | `env.MAGUS_LOG_SILENT` in `.claude/settings.json`: `true`     |
 
 ## Skills
 

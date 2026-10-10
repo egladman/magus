@@ -286,10 +286,10 @@ func RefuseUnscoped(row types.Job) error {
 	if row.ReadOnly || len(row.WritePaths) > 0 {
 		return nil
 	}
-	return fmt.Errorf("job: %s names no write paths and is not read-only, so nothing bounds what its holder writes."+
-		" A job that only reads is \"read_only\" (--read-only); a job that writes names its files with --write-paths."+
-		` A read-only job passes only with a script check, {"check": {"script": "<probe>.buzz"}}, whose result cites`+
-		" the ref `%s` prints; without one its holder ends it with `%s`",
+	return fmt.Errorf("job: %s names no write paths and is not read-only, so nothing bounds what its holder writes:"+
+		" fork a job that only reads with --read-only and one that writes with --write-paths,"+
+		` and a read-only job passes only with a script check, {"check": {"script": "<probe>.buzz"}}, whose result cites`+
+		" the ref `%s` prints, or its holder ends it with `%s`",
 		row.ID, hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID))
 }
 

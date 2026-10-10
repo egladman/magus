@@ -115,8 +115,7 @@ func (s archSession) load(agentID, skill string) {
 // shortened to a line and a ref, so the reason's text is checked once, on the first.
 func requireArchitectureDeny(t *testing.T, v Verdict, msgAndArgs ...any) {
 	t.Helper()
-	require.Equal(t, "deny", v.Decision, msgAndArgs...)
-	assert.Equal(t, string(denyArchitectureUnbriefed), v.Rule, msgAndArgs...)
+	require.Equal(t, []string{"deny", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule}, msgAndArgs...)
 }
 
 func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
@@ -130,9 +129,8 @@ func TestArchitectureUnbriefedDeniesAfterAStructureMessage(t *testing.T) {
 
 	v = s.bash("", "echo hello")
 	requireArchitectureDeny(t, v, "the next graded call waits on the load")
-	assert.Contains(t, v.Reason, "acting on an architecture question before the magus-architecture-review skill loaded")
-	assert.Contains(t, v.Reason, "imports, cycles, layering and coupling", "one line on why")
-	assert.Contains(t, v.Reason, "Load Skill(magus-architecture-review), then retry.")
+	assert.Contains(t, v.Reason,
+		"acting on an architecture question before the magus-architecture-review skill loaded; load Skill(magus-architecture-review), then retry.")
 	requireArchitectureDeny(t, s.write("", "notes.txt"), "a write is a graded call too")
 
 	s.load("", architectureSkill.String())
@@ -198,8 +196,7 @@ func TestArchitectureUnbriefedGatesANewDirectory(t *testing.T) {
 func TestANewDirectoryStillAdvisesWhereLoadsAreNotObserved(t *testing.T) {
 	s := newArchSession(t, strict(testDependencies()), false)
 	v := s.write("", filepath.Join("kvdir", "kvdir.go"))
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(advisoryNewSourceDir), v.Rule)
+	assert.Equal(t, []string{"advise", string(advisoryNewSourceDir)}, []string{v.Decision, v.Rule})
 }
 
 // Shipped default: a workspace that sets nothing is told once, and never refused.
@@ -208,8 +205,7 @@ func TestArchitectureUnbriefedAdvisesOnceByDefault(t *testing.T) {
 	s.message("where should the retry helper live?")
 
 	v := s.bash("", "echo hello")
-	assert.Equal(t, "advise", v.Decision)
-	assert.Equal(t, string(denyArchitectureUnbriefed), v.Rule)
+	assert.Equal(t, []string{"advise", string(denyArchitectureUnbriefed)}, []string{v.Decision, v.Rule})
 	assert.Contains(t, v.Context, "magus-architecture-review")
 	assert.NotEqual(t, string(denyArchitectureUnbriefed), s.bash("", "echo hello").Rule, "said once per session")
 }

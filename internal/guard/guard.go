@@ -897,7 +897,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// kind anyway, because the kind is also the NAME a verdict reports.
 		//
 		// Quiet for an agent whose host reported it loaded the skill this text sends it to.
-		if verdict.Decision == "pass" && !spoken && !(req.ReportsSkills && skillLoaded(skills, architectureSkill)) {
+		if verdict.Decision == "pass" && !spoken && (!req.ReportsSkills || !skillLoaded(skills, architectureSkill)) {
 			if a := adviseNewSourceDir(input); a.Say != "" {
 				said, adviceKind = a.Say, advisoryNewSourceDir
 				whys[a.Say] = a.Why

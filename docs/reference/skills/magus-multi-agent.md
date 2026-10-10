@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26780
-skill_short_bytes: 20070
+skill_full_bytes: 25822
+skill_short_bytes: 19549
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `117` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `34706da3dd98` |
+| `skill-content` | `ac96774e28ff` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -233,8 +233,7 @@ To prove something, brute-force it at economy. Many economy workers finish about
 fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
-  Give each a script check whose recorded run proves the claim, so `magus job wait`
-  can pass it.
+  Give each a script check, so `magus job wait` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref.
 - The principal tier only reconciles the claims where workers disagree.
@@ -410,18 +409,8 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
-- Only a row with a check or a goal can pass. A read-only scout passes only through a
-  script check, below; a check-less one ends no_return by design.
-
-A scout that only reads is forked `--read-only`. `magus job fork` refuses a row
-naming no write paths otherwise.
-
-- To make its claim gradeable, fork it with `--stdin` and a check naming a probe script:
-  `"check": {"script": "<probe>.buzz"}`.
-- It runs `magus buzz --record <probe>.buzz` after the fork and cites the printed ref
-  as its result's `output_ref`.
-- A scout whose output is prose gets no check. The root ends it with
-  `magus job exit <job>`, recorded no_return, which is its expected end.
+- Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
+  through a script check (reference.md), and a prose scout ends no_return by design.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.
@@ -569,22 +558,15 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-Graph engineering is a natural evolution of loop engineering. The
-human supplies a goal and constraints; the root agent turns them into explicit
-acceptance criteria, uses the knowledge graph to partition the work, hands out
-bounded prompts, observes results, evaluates them against the criteria, and
-course-corrects until the integrated goal is satisfied. The graph improves the
-loop's partition and collision decisions; it does not replace the loop.
-
-Run this control loop:
+Graph engineering is a natural evolution of loop engineering: the graph improves
+the loop's partition and collision decisions, and does not replace the loop. Run it:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
 3. Give every job its own criteria, ownership boundary, and goals.
 4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
-6. Evaluate evidence, revise ownership or ordering when assumptions change, and
-   repeat until the criteria pass.
+6. Evaluate evidence and revise ownership or ordering until the criteria pass.
 7. Integrate centrally and run the release gate.
 
 Acceptance evidence is an output ref the root reopens (`magus query output <ref>`),
@@ -732,8 +714,7 @@ To prove something, brute-force it at economy. Many economy workers finish about
 fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
-  Give each a script check whose recorded run proves the claim, so `magus job wait`
-  can pass it.
+  Give each a script check, so `magus job wait` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
 - The principal tier only reconciles the claims where workers disagree.
@@ -873,8 +854,6 @@ declaration in a shared file and forking from a leased worker.
 Read the `regenerated outside the write paths` block fork prints: declared outputs a target
 rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
 regenerate itself, or leave them out and regenerate them after integration.
-A worker that regenerates one outside its paths has its result refused by
-`magus job wait`.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -935,18 +914,8 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
-- Only a row with a check or a goal can pass. A read-only scout passes only through a
-  script check, below; a check-less one ends no_return by design.
-
-A scout that only reads is forked `--read-only`. `magus job fork` refuses a row
-naming no write paths otherwise.
-
-- To make its claim gradeable, fork it with `--stdin` and a check naming a probe script:
-  `"check": {"script": "<probe>.buzz"}`.
-- It runs `magus buzz --record <probe>.buzz` after the fork and cites the printed ref
-  as its result's `output_ref`.
-- A scout whose output is prose gets no check. The root ends it with
-  `magus job exit <job>`, recorded no_return, which is its expected end.
+- Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
+  through a script check (reference.md), and a prose scout ends no_return by design.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `magus job wait` checks.

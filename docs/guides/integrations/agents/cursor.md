@@ -15,7 +15,7 @@ integration is a single download.
 | --------------- | -------------------------------------------------------------------------- |
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
 | guard wiring    | `.cursor/hooks.json`                                                       |
-| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself  |
+| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself     |
 | shell commands  | deny and advise both reach the model                                       |
 | file writes     | deny and advise both reach the model                                       |
 | MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
