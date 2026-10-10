@@ -22,11 +22,22 @@ const fillerWords = `Note that|Please note|It should be noted|It is worth noting
 	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say`
 
 // writtenFillerWords widen fillerWords for Markdown and pull requests with
-// adverbs and selling words, which are filler wherever they sit, so they match
-// in either case like the adverbs. Doc comments keep the narrower list until a
-// sweep clears the wider one from them.
-const writtenFillerWords = `[Jj]ust|[Rr]eally|[Vv]ery|[Aa]ctually|[Rr]obust(?:ly)?|` +
-	`[Cc]omprehensive(?:ly)?|[Ss]eamless(?:ly)?|[Ll]everag(?:e|es|ed|ing)|[Uu]tiliz(?:e|es|ed|ing)`
+// adverbs, selling words and stock sentence openers, which are filler wherever
+// they sit, so they match in either case like the adverbs. Doc comments keep
+// the narrower list until a sweep clears the wider one from them.
+//
+// The selling words are the one list this repository holds a commit message to
+// as well. "genuinely", "literally", "honestly" and "inherently" are left out:
+// each also states a contrast ("paths stage literally").
+const writtenFillerWords = `[Jj]ust|[Rr]eally|[Vv]ery|[Aa]ctually|[Ll]everag(?:e|es|ed|ing)|[Uu]tiliz(?:e|es|ed|ing)|` +
+	`(?i:robust(?:ly)?|comprehensive(?:ly)?|seamless(?:ly)?|powerful(?:ly)?|elegant(?:ly)?|cutting-edge|` +
+	`state-of-the-art|world-class|effortless(?:ly)?|` +
+	`truly|deeply|fundamentally|inevitably|interestingly|importantly|crucially|` +
+	`at (?:its|their) core|at the end of the day|when it comes to|in a world where|in today'?s|` +
+	`the reality is|in reality|the real (?:question|issue|problem) is|what (?:really|truly) matters|` +
+	`the deeper (?:issue|problem|question)|the heart of the matter|` +
+	`(?:important|critical|crucial|essential|vital) to (?:note|remember|recognize|keep in mind)|` +
+	`worth noting|may vary)`
 
 var (
 	fillerPattern        = regexp.MustCompile(`\b(?:` + fillerWords + `)\b`)

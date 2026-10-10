@@ -63,22 +63,47 @@ var wordyPhrases = []struct{ phrase, want string }{
 	{"along with", "'with'"},
 }
 
-// wordyPattern matches any of wordyPhrases, the longest first where two
-// start at one word.
-var wordyPattern = func() *regexp.Regexp {
-	alts := make([]string, len(wordyPhrases))
-	for i, w := range wordyPhrases {
-		alts[i] = strings.ReplaceAll(regexp.QuoteMeta(w.phrase), " ", `\s+`)
+// skillOnlyWordy are the wordyPhrases only a skill refuses. Each has a sense
+// the shorter phrase lacks: "whether or not" is correct English, "at the
+// moment" can name a point in time, "the fact that" can have "fact" as its
+// noun, and "in order for" can mean in sequence. A skill pays for every word in
+// every session that loads it, so it gives those up anyway.
+var skillOnlyWordy = wordSet(
+	"in order for", "be able to", "the fact that", "make sure", "whether or not", "at this point",
+	"at the moment", "there is no need to", "a lot of", "as well as", "along with",
+)
+
+var (
+	// wordyPattern matches every one of wordyPhrases.
+	wordyPattern = compileWordy(func(string) bool { return true })
+	// writtenWordyPattern matches the phrases outside skillOnlyWordy.
+	writtenWordyPattern = compileWordy(func(phrase string) bool { return !skillOnlyWordy[phrase] })
+)
+
+// compileWordy matches each of wordyPhrases that keep admits, the longest
+// first where two start at one word.
+func compileWordy(keep func(phrase string) bool) *regexp.Regexp {
+	var alts []string
+
+	for _, w := range wordyPhrases {
+		if keep(w.phrase) {
+			alts = append(alts, strings.ReplaceAll(regexp.QuoteMeta(w.phrase), " ", `\s+`))
+		}
 	}
 
 	return regexp.MustCompile(`(?i)\b(?:` + strings.Join(alts, "|") + `)\b`)
-}()
+}
 
 func wordy(in input) []Finding {
+	pattern := writtenWordyPattern
+	if in.kind == KindSkill {
+		pattern = wordyPattern
+	}
+
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		for _, at := range wordyPattern.FindAllStringIndex(para.text, -1) {
+		for _, at := range pattern.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Write %s, not '%s'.", wordyWant(m), m), Match: m, Line: para.lineAt(at[0]),

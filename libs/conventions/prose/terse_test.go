@@ -2,6 +2,7 @@ package prose
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -125,13 +126,66 @@ func TestWordyPhrasesEachNameAShorterPhrase(t *testing.T) {
 }
 
 func TestTerseRulesJudgeOnlyASkill(t *testing.T) {
-	text := longSentence(26) + "\n\nRun it in order to replay.\n"
-
 	for _, s := range []Kind{KindMarkdown, KindPullRequest} {
-		for _, f := range JudgeText(text, s) {
-			if f.Rule == RuleTerseSentence || f.Rule == RuleWordy {
+		for _, f := range JudgeText(longSentence(26), s) {
+			if f.Rule == RuleTerseSentence {
 				t.Errorf("%s: %s judged it", s, f.Rule)
 			}
+		}
+	}
+}
+
+// wordyIn judges text of kind by wordy alone, whichever kinds the rule's entry
+// in checks gives it.
+func wordyIn(text string, kind Kind) []string {
+	lines := markdownProse(strings.Split(text, "\n"), true)
+
+	var out []string
+
+	for _, f := range wordy(input{kind: kind, prose: readProse(lines, true), lines: lines}) {
+		out = append(out, f.Match)
+	}
+
+	return out
+}
+
+// A skill refuses every wordy phrase; other writing refuses those with no
+// sense the shorter phrase lacks.
+func TestWordyKeepsAFewPhrasesForASkill(t *testing.T) {
+	cases := []struct {
+		name, text string
+		kind       Kind
+		want       []string
+	}{
+		{"in order to, written", "Sort the inputs in order to make the key stable.", KindMarkdown, []string{"in order to"}},
+		{"due to the fact that, in a pull request", "- Skips the walk due to the fact that the dir is pruned.",
+			KindPullRequest, []string{"due to the fact that"}},
+		{"the reason why", "The reason why the key sorts is replay.", KindGuide, []string{"The reason why"}},
+		{"a wrapped phrase", "Sort the inputs in order\nto make the key stable.", KindMarkdown, []string{"in order to"}},
+		{"the same phrase, in a skill", "Sort the inputs in order to make the key stable.", KindSkill, []string{"in order to"}},
+		{"to make", "Sort the inputs to make the key stable.", KindMarkdown, nil},
+		{"whether or not is English", "Check whether or not the lock is held.", KindMarkdown, nil},
+		{"whether or not, in a skill", "Check whether or not the lock is held.", KindSkill, []string{"whether or not"}},
+		{"the fact is a noun", "The fact is recorded in the journal.", KindMarkdown, nil},
+		{"in order is a sequence", "Run walks the tiers in order for lookups and stores.", KindMarkdown, nil},
+		{"in order for, in a skill", "Run walks the tiers in order for lookups and stores.", KindSkill, []string{"in order for"}},
+		{"a moment in time", "Read the CA at the moment it was written.", KindMarkdown, nil},
+		{"a quoted phrase", "Write \"to\", not \"in order to\".", KindMarkdown, nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := wordyIn(tc.text, tc.kind); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("wordy matched %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWordyKeepsSkillPhrasesInTheFullList(t *testing.T) {
+	for _, w := range wordyPhrases {
+		if got := writtenWordyPattern.FindString(w.phrase) == w.phrase; got == skillOnlyWordy[w.phrase] {
+			t.Errorf("%q: found by the written pattern = %v, skill only = %v", w.phrase, got, skillOnlyWordy[w.phrase])
 		}
 	}
 }
