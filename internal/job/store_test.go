@@ -490,19 +490,19 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 	check := types.LeaseCheck{Target: "go-test", Project: "."}
 	for _, tc := range []struct {
 		name  string
-		fork  func(t *testing.T, s *Store) (types.Job, error)
+		fork  func(t *testing.T, s *Store, checkpoint string) (types.Job, error)
 		proof types.JobWriteProof
 	}{
-		{name: "job fork --stdin", fork: func(t *testing.T, s *Store) (types.Job, error) {
+		{name: "job fork --stdin", fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			row, err := DecodeDeclaration(strings.NewReader(fmt.Sprintf(
-				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":"abc123","write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
-				types.JobSchemaVersion)))
+				`{"schema_version":%d,"id":"a","criteria":"goal","checkpoint":%q,"write_paths":["a.go"],"check":{"target":"go-test","project":"."}}`,
+				types.JobSchemaVersion, checkpoint)))
 			require.NoError(t, err)
 			return s.Update(t.Context(), row.ID, Declare(row, 0))
 		}},
-		{name: "magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store) (types.Job, error) {
+		{name: "magus\\job.put", proof: types.WriteProofAlone, fork: func(t *testing.T, s *Store, checkpoint string) (types.Job, error) {
 			merge, err := ParseMerge(map[string]any{
-				"criteria": "goal", "checkpoint": "abc123", "write_paths": []any{"a.go"}, "check": "go-test .",
+				"criteria": "goal", "checkpoint": checkpoint, "write_paths": []any{"a.go"}, "check": "go-test .",
 			})
 			require.NoError(t, err)
 			return ForkMerge(t.Context(), s, "a", merge, config.Jobs{}, nil)
@@ -511,13 +511,15 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			stored, err := tc.fork(t, tmpStore(t, t.TempDir()))
+			root := t.TempDir()
+			head := commitAll(t, root)
+			stored, err := tc.fork(t, tmpStore(t, root), head)
 			require.NoError(t, err)
 			assert.Equal(t, types.Job{
 				Schema:       types.Schema{Version: types.JobSchemaVersion},
 				ID:           "a",
 				Criteria:     "goal",
-				Checkpoint:   "abc123",
+				Checkpoint:   head,
 				WritePaths:   []string{"a.go"},
 				Check:        &check,
 				Validation:   check.String(),

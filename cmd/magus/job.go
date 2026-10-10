@@ -960,6 +960,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseForkLimits(plan, row.ID, row.Parent, globalCfg.Jobs); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
+	if row.Checkpoint, err = store.DeclaredCheckpoint(ctx, plan, row.ID, row.Checkpoint); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	// The reader loads the graph only when a gate names a symbol.
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)

@@ -47,6 +47,9 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 	if err != nil {
 		return types.Job{}, err
 	}
+	if merge, err = store.declaredMerge(ctx, rows, id, merge); err != nil {
+		return types.Job{}, err
+	}
 	proof, err := refuseMerge(ctx, store, rows, id, merge, limits, read)
 	if err != nil {
 		return types.Job{}, err
@@ -171,6 +174,9 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 			if prev.State.Terminal() {
 				return nil, fmt.Errorf("job: %s already ended %s, and apply changes a live job; fork a new one", rec.ID, prev.State)
 			}
+		}
+		if rec.Checkpoint, err = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint); err != nil {
+			return nil, err
 		}
 		merge := specMerge(rec, i < 0, checkpoint)
 		proof, err := refuseMerge(ctx, store, rows, rec.ID, merge, limits, read)
