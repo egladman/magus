@@ -37,11 +37,34 @@ import (
 // It judges by the built-in rules alone: these tests run inside magus's own checkout, whose
 // Buzz policy is not what they are about. The cases that load a workspace's rules stand up
 // their own checkout.
+//
+// It judges with only the flags in args. The display flags are process-global and parse
+// with their current values as defaults, so a -q that another test's command left set
+// would discard the verdict and leave nothing but the exit status.
 func shellStdin(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
-	saved := guardRoot
+	savedRoot, savedFlags := guardRoot, global
 	guardRoot = func(string) (string, error) { return "", errors.New("no workspace rules in this test") }
-	defer func() { guardRoot = saved }()
+	global = globalFlags{}
+	defer func() { guardRoot, global = savedRoot, savedFlags }()
 	return shellCmdWithErrorWriter(ctx, in, out, os.Stderr, args)
+}
+
+// A -q that an earlier in-process command left in the process-global flags made a hook
+// case print "" for a deny, in a run narrowed so that no reset ran between them.
+func TestShellStdinJudgesWithOnlyTheFlagsItIsGiven(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	saved := global
+	t.Cleanup(func() { global = saved })
+	global.quiet = true
+	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
+
+	var out bytes.Buffer
+	err := shellStdin(ctx, strings.NewReader("git stash"), &out, []string{"-o", "name"})
+
+	var silent errSilent
+	require.ErrorAs(t, err, &silent)
+	assert.Equal(t, "deny\n", out.String())
+	assert.True(t, global.quiet, "the caller's flags are back once the call returns")
 }
 
 // verdictDecisionRe finds every decision literal the guard assigns, in either
