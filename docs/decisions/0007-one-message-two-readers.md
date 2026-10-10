@@ -83,7 +83,7 @@ policy lives in one place instead of at two hundred call sites:
 | waits        | from the first beat, then at each doubling | silent until a minute, then at each doubling |
 | repeats      | folded into one footer line with a count | the same                                    |
 | decoration   | color and glyphs                       | none                                          |
-| component    | a leading `name: `                     | the same                                      |
+| component    | the name before the message            | the same                                      |
 
 `-o json` and `-o jsonl` carry every part as fields for both readers, since a parser
 selects what it shows. `-v` at the agent audience prints `why` inline: asking for more
@@ -91,14 +91,15 @@ is the signal.
 
 ### What this branch already does
 
-- _In progress._ Guard denials print the verdict, one command and the ref, and the
-  rationale moves into the stored verdict. Only agents receive guard denials, so no
-  person loses text.
+- _Done._ Guard denials print the verdict, one command and the ref, and the rationale
+  moves into the stored verdict. A search denial keeps the graph's answer inline. Only
+  agents receive guard denials, so no person loses text. Advisories still print whole,
+  since they have no ref to hold a reason yet.
 - _Done._ A nested diagnostic prints one `see:` link and names the inner code inline.
 - _Done._ A diagnostic repeated across steps prints once, then one footer line with the
   count.
-- _In progress._ slog messages carry a `component` attribute instead of a `name: `
-  prefix.
+- _Done._ slog messages carry a `component` attribute instead of a name tag in their
+  text, and the pretty display still prints the name before the message.
 - _Done._ Lock and upstream waits log at their own cadence, each note carrying
   `attr.Elapsed`; only the agent display holds back the notes under a minute.
 - _Done._ MGS3035, MGS4007 and MGS7003 keep their short verdicts and carry their reasons

@@ -41,11 +41,11 @@ func TestConfigLogAudienceValues(t *testing.T) {
 	for _, v := range []string{"", "human", "agent"} {
 		cfg := Defaults()
 		cfg.Log.Audience = v
-		assert.NoError(t, Validate(cfg), "log.audience %q", v)
+		require.NoError(t, Validate(cfg), "log.audience %q", v)
 	}
 	cfg := Defaults()
 	cfg.Log.Audience = "robot"
-	assert.Error(t, Validate(cfg))
+	require.Error(t, Validate(cfg))
 }
 
 func TestCacheIncludeExplicit(t *testing.T) {
