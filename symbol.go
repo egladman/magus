@@ -688,7 +688,7 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			}
 		}
 		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-			"the cache that records whether a symbol index is current could not be opened, so the index of %s cannot be vouched for",
+			"symbol index not current for %s: the cache would not open; make the cache directory writable, then rerun",
 			strings.Join(projects, ", "))
 	}
 	// The step each probe keyed, so a rebuild inside a run is keyed exactly as the probe
@@ -784,7 +784,7 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	var built []projectIndex
 	for _, idx := range stale {
 		if err := build(idx); err != nil {
-			problems = append(problems, symbolRunError(idx.projectRef(), idx.language, err).Error())
+			problems = append(problems, types.InlineDiagnostic(symbolRunError(idx.projectRef(), idx.language, err)))
 			continue
 		}
 		built = append(built, idx)
@@ -795,9 +795,9 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 			if after[idx.ref()] {
 				continue
 			}
-			why := "the cache recorded no run to vouch for the index it wrote"
+			why := "the cache recorded no run for the index it wrote"
 			if !writable {
-				why = "cache writes are off (cache.write.enabled: false), so the cache recorded no run to vouch for the index it wrote; enable them for this run, which publishes nothing without a signing key"
+				why = "cache writes are off (cache.write.enabled: false); enable them for this run"
 			}
 			problems = append(problems, idx.projectRef().Display()+": "+why)
 		}
@@ -805,9 +805,12 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	if len(problems) == 0 {
 		return nil
 	}
+	fix := "fix it"
+	if len(problems) > 1 {
+		fix = "fix each"
+	}
 	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-		"the symbol index could not be brought current, so the conformance checks did not run: %s; fix that, then `magus graph build`",
-		strings.Join(problems, "; "))
+		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix)
 }
 
 // uncoveredProjects names each project with a changed file, other than a declared output, that
@@ -842,10 +845,11 @@ func toDiagnostic(err error) types.Diagnostic {
 //
 // A run refused because another magus holds the lock or the machine budget never reached the
 // indexer, so it gets no install hint: the fix is to rerun once the holder the error names
-// finishes. A refusal by the run this one is nested inside (MGS3007) never reached it either,
-// and rerunning does not help, so it gets no hint of either kind: the diagnostic says what to do.
+// finishes. A refusal by the run this one is nested inside (MGS3007), or over a tool that
+// reports no version (MGS3035), never reached it either, and rerunning does not help, so it
+// gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
-	if errors.Is(err, types.ProjectLockHeldByAncestor) {
+	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) {
 		return fmt.Errorf("%s: %w", project.Display(), err)
 	}
 	var busy interface{ ExitCode() int }

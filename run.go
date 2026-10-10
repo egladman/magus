@@ -1348,7 +1348,7 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 			return toolReading{token: unprobedToken}, nil //nolint:nilerr // the cancellation is the caller's to report
 		default:
 			return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
-				"%s:%s runs in %s but cannot say which build it is, so no cache key could tell its upgrades apart: %v",
+				"%s:%s reports no version in %s: %v; fix the tool or its probe",
 				s.Name(), tool, dir, err)
 		}
 	}

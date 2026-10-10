@@ -1005,6 +1005,20 @@ func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
 	assert.Contains(t, err.Error(), symbols.InstallHint("go"), "the cause comes with its fix")
 }
 
+// A coded cause reads inline inside MGS7003, so the reader gets one link, the outer one,
+// and no install hint for an indexer the refusal never reached.
+func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
+	idxs := freshenProjects()
+	unprobeable := types.DiagnosticErrorf(types.ToolUnprobeable, "go:go reports no version in /ws: exit status 1")
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, buildErr: unprobeable}
+
+	err := freshenIndexes(idxs, w.probe, w.build, true)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
+		"fix it, then `magus graph build`\n  see: "+types.CodeURL(types.SymbolIndexNotCurrent), err.Error())
+}
+
 // Another magus holding the project's lock refuses the refresh at once; the review says so,
 // with the holder named, rather than reporting a missing indexer or reading the stale index.
 func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {

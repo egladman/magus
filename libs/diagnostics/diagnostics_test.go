@@ -3,6 +3,8 @@ package diagnostics
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +85,39 @@ func TestWrapfChainsCause(t *testing.T) {
 	// Unwrap is nil for a plain Errorf.
 	if plain := d.Errorf(Code("TST0002"), "x"); plain.Unwrap() != nil {
 		t.Error("a non-wrapping Errorf must Unwrap to nil")
+	}
+}
+
+// A coded error formatted into another names its code inline, and the result carries one see:
+// line, the outer one, even through a plain fmt wrapper between the two.
+func TestNestedCodeRendersOneSeeLine(t *testing.T) {
+	d := New(testURL)
+	inner := d.Errorf(Code("TST0002"), "go reports no version")
+	wrapped := fmt.Errorf("pkg: %w; install it", inner)
+
+	got := d.Errorf(Code("TST0001"), "index not current for %v; fix it", wrapped).Error()
+
+	want := "[TST0001] index not current for pkg: go reports no version (TST0002); install it; fix it\n" +
+		"  see: https://example/docs/TST0001.md"
+	if got != want {
+		t.Errorf("nested render = %q, want %q", got, want)
+	}
+	if n := strings.Count(got, "see:"); n != 1 {
+		t.Errorf("rendered %d see: lines, want 1", n)
+	}
+}
+
+func TestInline(t *testing.T) {
+	d := New(testURL)
+	if got := Inline(d.Errorf(Code("TST0003"), "boom")); got != "boom (TST0003)" {
+		t.Errorf("Inline(coded) = %q", got)
+	}
+	if got := Inline(errors.New("plain")); got != "plain" {
+		t.Errorf("Inline(plain) = %q", got)
+	}
+	joined := errors.Join(errors.New("a"), d.Errorf(Code("TST0004"), "b"))
+	if got := Inline(joined); got != "a\nb (TST0004)" {
+		t.Errorf("Inline(joined) = %q", got)
 	}
 }
 

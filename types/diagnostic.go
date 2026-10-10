@@ -780,6 +780,12 @@ func WrapDiagnostic(c DiagnosticCode, cause error, format string, args ...any) *
 	return mgs.Wrapf(c, cause, format, args...)
 }
 
+// InlineDiagnostic renders err for splicing into another message: each MGS code in its chain
+// reads "msg (MGS####)" with no see: line, so the message it joins keeps the only link.
+func InlineDiagnostic(err error) string {
+	return diagnostics.Inline(err)
+}
+
 // WithDiagnosticSink returns ctx carrying s, so a deep emission site can reach the
 // sink without threading it through every signature.
 func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
