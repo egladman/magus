@@ -137,6 +137,13 @@ func TestAttributionReportsCreditAndNarrativeButNotTheSubject(t *testing.T) {
 		{"the harness and its paths in a pull request", KindChangeDescription,
 			pr("- Wires the Claude Code hooks under `.claude/` and spells/harness/claude-code."), nil},
 		{"a subagent and a prompt", KindChangeDescription, pr("- Hands the subagent its prompt through the hook."), nil},
+		// #577's title and lead name the product as a slug.
+		{"a product slug and its files in a pull request", KindChangeDescription,
+			"feat: add an opt-in claude-code-mod harness\n\nAdds the claude-code mod and reads CLAUDE.md beside it.", nil},
+		{"a tool name in a review reply", KindReviewReply, "Claude found the race in the map writes.", []string{"1:Claude"}},
+		{"the agent as the worker in a review reply", KindReviewReply, "The agent found it while testing.",
+			[]string{"1:The agent found"}},
+		{"the product in a review reply", KindReviewReply, "The claude-code harness reads it from the Claude Code hooks.", nil},
 	})
 }
 

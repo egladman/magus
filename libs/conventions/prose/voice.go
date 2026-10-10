@@ -354,13 +354,15 @@ func attribution(in input) []Finding {
 		})
 	}
 
-	// A reply belongs to the conversation it answers, so only credit to a tool
-	// is reported there.
+	// A reply and a description are both posted to a review, so a tool or an
+	// agent credited in either is the story of the work.
 	patterns := []*regexp.Regexp{credit}
+	teammate := in.kind == KindChangeDescription || in.kind == KindReviewReply
 
-	switch in.kind {
-	case KindReviewReply:
-	case KindChangeDescription:
+	switch {
+	case in.kind == KindReviewReply:
+		patterns = append(patterns, workNarrative)
+	case teammate:
 		patterns = append(patterns, narrative, workNarrative)
 	default:
 		patterns = append(patterns, narrative)
@@ -372,9 +374,9 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if in.kind == KindChangeDescription {
+		if teammate {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
-				if !strings.HasPrefix(strings.ToLower(para.text[at[2]:]), "claude code") && !within(at[2], spans) {
+				if !namesProduct(para.text, at[2], at[3]) && !within(at[2], spans) {
 					spans = append(spans, at[2:4])
 				}
 			}
@@ -388,6 +390,23 @@ func attribution(in input) []Finding {
 	}
 
 	return out
+}
+
+// namesProduct reports whether the tool name at text[start:end] is part of a
+// product's own name rather than credit: the Claude Code harness, or a slug,
+// file or path that runs on from it (`claude-code`, `CLAUDE.md`, `claude/`).
+func namesProduct(text string, start, end int) bool {
+	if strings.HasPrefix(strings.ToLower(text[start:]), "claude code") {
+		return true
+	}
+
+	rest := text[end:]
+
+	return len(rest) > 1 && strings.ContainsRune("-./", rune(rest[0])) && isWordByte(rest[1])
+}
+
+func isWordByte(b byte) bool {
+	return b == '_' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z'
 }
 
 // leadLine returns the line of a pull request's first block of description,
