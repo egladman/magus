@@ -3,6 +3,7 @@ package prose
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -205,29 +206,66 @@ func numberedLists(prose []proseLine) [][]proseLine {
 	return out
 }
 
-// condescending tells the reader how hard a step should feel, which reads as
-// their failure when it is not. Each matches in either case.
-var condescending = regexp.MustCompile(`(?i)\b(?:easy|easily|simple|simply|obviously|of course|clearly|` +
-	`just|please)\b`)
+var (
+	// condescending tells the reader how hard a step should feel, which reads
+	// as their failure when it is not. Each matches in either case.
+	condescending = regexp.MustCompile(`(?i)\b(?:easy|easily|simple|simply|obviously|of course|clearly|` +
+		`just|please|(?:as )?everyone knows|it goes without saying)\b`)
 
-// condescension reports a word that tells the reader a step is easy. A word
-// filler already reports (`simply`, `just` meaning merely, `Please note`) is
-// left to it, so one word gives one finding.
+	// presuming tells the reader what they should already know. A guide's list
+	// holds it; other text is held to it alone, since "easy to miss", "a simple
+	// step" and "please open an issue" carry meaning on a page or in a reply.
+	presuming = regexp.MustCompile(`(?i)\b(?:of course|(?:as )?everyone knows|it goes without saying)\b`)
+
+	// booster opens a sentence by asserting it is beyond question.
+	booster = regexp.MustCompile(`^(?:Obviously|Clearly)\b`)
+
+	// obviously is a booster anywhere in text written to a teammate. On a page
+	// it also describes how something looks ("looked obviously correct") or
+	// denies it ("none is obviously the mistake"), so there only the opener
+	// counts.
+	obviously = regexp.MustCompile(`(?i)\bobviously\b`)
+)
+
+// condescension reports a word that tells the reader a step is easy or that
+// they should already know a fact. A word filler already reports (`simply`,
+// `just` meaning merely, `Please note`) is left to it, so one word gives one
+// finding.
 func condescension(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
 		taken := fillerSpans(para.text, writtenFillerPattern)
 
-		for _, at := range condescending.FindAllStringIndex(para.text, -1) {
+		var spans [][]int
+
+		switch in.kind {
+		case KindGuide:
+			spans = condescending.FindAllStringIndex(para.text, -1)
+		default:
+			spans = presuming.FindAllStringIndex(para.text, -1)
+			if slices.Contains(teammate, in.kind) {
+				spans = append(spans, obviously.FindAllStringIndex(para.text, -1)...)
+			}
+
+			for _, start := range sentenceStarts(para.text) {
+				if at := booster.FindStringIndex(para.text[start:]); at != nil && !within(start, spans) {
+					spans = append(spans, []int{start + at[0], start + at[1]})
+				}
+			}
+
+			slices.SortFunc(spans, func(a, b []int) int { return a[0] - b[0] })
+		}
+
+		for _, at := range spans {
 			if within(at[0], taken) || condescensionExempt(para.text, at) {
 				continue
 			}
 
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
-				Message: fmt.Sprintf("Drop '%s': it tells the reader how hard the step should feel; "+
-					"state the step.", m),
+				Message: fmt.Sprintf("Drop '%s': it tells the reader how hard a step should feel or what they "+
+					"should already know; state the step or the fact, as in 'Run `magus init`.'", m),
 				Match: m, Line: para.lineAt(at[0]),
 			})
 		}

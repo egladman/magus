@@ -66,8 +66,10 @@ const (
 	// RuleStepVerb reports a step of a numbered procedure in a guide that does
 	// not open with its imperative verb.
 	RuleStepVerb Rule = "step-verb"
-	// RuleCondescension reports a word in a guide that tells the reader how
-	// hard a step should feel: easy, simple, obviously, just, please.
+	// RuleCondescension reports a word that tells the reader how hard a step
+	// should feel or what they should already know: in a guide easy, simple,
+	// obviously, just, please; in other written text and in a reply the words
+	// that presume ("of course", "everyone knows").
 	RuleCondescension Rule = "condescension"
 )
 
@@ -125,9 +127,13 @@ const (
 	ProfileCollaborative Profile = "collaborative"
 )
 
-// profileSkips lists the rules a profile leaves out.
+// profileSkips lists the rules a profile leaves out. Each rule
+// ProfileCollaborative skips encodes this repository rather than writing a
+// teammate reads: terms is its glossary, tense its voice (the present tense,
+// and no author in a description, where a team writes "we" and "I"), and
+// bare-rule its own meaning of "rule".
 var profileSkips = map[Profile][]Rule{
-	ProfileCollaborative: {RuleTerms},
+	ProfileCollaborative: {RuleTerms, RuleTense, RuleBareRule},
 }
 
 var (
@@ -136,6 +142,9 @@ var (
 	all     = []Kind{KindDoc, KindMarkdown, KindGuide, KindPullRequest, KindSkill}
 	skill   = []Kind{KindSkill}
 	guide   = []Kind{KindGuide}
+	// teammate is text written to the people working on the change, where a
+	// sentence about past work or a teammate is about someone the reader knows.
+	teammate = []Kind{KindPullRequest, KindReply}
 )
 
 // check is one rule: the kinds it judges, the kinds where its findings are
@@ -160,24 +169,24 @@ var checks = slices.Concat(coreChecks, toneChecks, slopChecks, []check{
 var coreChecks = []check{
 	{rule: RuleCommentBlock, on: docOnly, judge: commentBlock},
 	{rule: RuleCommentSentence, on: docOnly, judge: commentSentence},
-	{rule: RuleFiller, on: all, judge: filler},
-	{rule: RuleTerms, on: all, judge: terms},
+	{rule: RuleFiller, on: everywhere, judge: filler},
+	{rule: RuleTerms, on: everywhere, judge: terms},
 	{rule: RuleNameSuffix, on: docOnly, judge: nameSuffix},
 	{rule: RuleAside, on: docOnly, judge: aside},
 	{rule: RuleHistory, on: docOnly, judge: history},
 	{rule: RuleDocStub, on: docOnly, judge: docStub},
 	{rule: RuleLeadContext, on: []Kind{KindPullRequest}, judge: leadContext},
-	{rule: RuleReplyVoice, on: written, judge: replyVoice},
+	{rule: RuleReplyVoice, on: withReply, judge: replyVoice},
 	{rule: RuleTense, on: written, judge: tense},
 	{rule: RuleHedge, on: written, judge: hedge},
-	{rule: RuleAttribution, on: written, judge: attribution},
+	{rule: RuleAttribution, on: withReply, judge: attribution},
 	{rule: RuleTerseSentence, on: skill, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: skill, judge: terseParagraph},
 	{rule: RuleWordy, on: skill, judge: wordy},
 	{rule: RuleBareRule, on: skill, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
-	{rule: RuleCondescension, on: guide, judge: condescension},
+	{rule: RuleCondescension, on: withReply, judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.
@@ -216,12 +225,13 @@ type Finding struct {
 	// comment's budget. [Judge] leaves it 0: a doc comment's lines are not its
 	// source file's, and the index places the symbol.
 	Line int
-	// Severity is set by the rule's entry for the kind judged, never by the
-	// rule itself.
+	// Severity is set by the rule's entry for the kind judged, unless the rule
+	// marked the finding [SeverityAdvisory] itself: a rule whose words are sure
+	// in one reading and a guess in another reports the guess that way.
 	Severity Severity
 }
 
-// Option tunes one [JudgeText] call.
+// Option tunes one [Judge] or [JudgeText] call.
 type Option func(*options)
 
 type options struct {
@@ -253,15 +263,20 @@ type input struct {
 	// still in place, for a rule that asks what a block is rather than what it
 	// says.
 	lines []string
-	opts  options
+	// source are the judged text's lines as written, link targets and URLs
+	// still in them, for a rule that asks whether a sentence cites something.
+	source []string
+	opts   options
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty, and
 // [RuleNameSuffix] judges only a callable. Findings come in [Rules] order,
 // then in the order their text appears in Doc.
-func Judge(s Symbol) []Finding {
+func Judge(s Symbol, opts ...Option) []Finding {
 	lines := strings.Split(s.Doc, "\n")
-	out := run(input{symbol: s, kind: KindDoc, prose: readProse(lines, false), lines: lines})
+	out := run(input{
+		symbol: s, kind: KindDoc, prose: readProse(lines, false), lines: lines, source: lines, opts: collect(opts),
+	})
 
 	for i := range out {
 		out[i].Line = 0
@@ -290,12 +305,25 @@ func run(in input) []Finding {
 		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
 
 		for _, f := range found {
-			f.Rule, f.Severity = c.rule, severity
+			f.Rule = c.rule
+			if f.Severity == "" {
+				f.Severity = severity
+			}
+
 			out = append(out, f)
 		}
 	}
 
 	return out
+}
+
+func collect(opts []Option) options {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	return o
 }
 
 func (o options) keeps(r Rule) bool {

@@ -72,51 +72,83 @@ string loops).
 
 ## prose
 
-`prose` is not an analyzer, and golangci-lint never loads it. It judges four
+`prose` is not an analyzer, and golangci-lint never loads it. It judges five
 kinds of text: one symbol from a SCIP index (the doc comment, and the name of a
-function or method), a hand-written Markdown file, a skill, and a pull
-request's title and description. Its rules are this repository's policy, not magus's: the magus
+function or method), a hand-written Markdown file, a skill, a pull
+request's title and description, and a reply in a review. Its rules are this repository's policy, not magus's: the magus
 module never imports `libs/conventions`. `cmd/judge-docs` runs them. With no
 flag it reads the symbols of `magus\symbols()` as JSON on stdin, fed by
 `hack/lint/symbol-docs-follow-prose-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. With
-`-kind markdown` it judges the files its arguments name, and with
-`-kind pull-request` a pull request on stdin, the title on the first line;
-each finding names its file and line. `-kind skill` judges a SKILL.md an
+`-kind markdown` it judges the files its arguments name, with
+`-kind pull-request` a pull request on stdin, the title on the first line,
+and with `-kind reply` a review comment or a reply in a thread on stdin;
+each finding names its file, or `pull-request` or `reply`, and its line. `-kind skill` judges a SKILL.md an
 agent loads as written, and `-kind skill-source` a skill body
 `internal/agent` renders with `text/template`: what its short form shows meets
 the skill rules, and what only its full form shows meets the Markdown ones and
 `bare-rule`. `-kind guide` judges a procedural page (anything under `docs/guides/`) on the
 Markdown rules and the guide rules.
-It writes the findings as JSON on stdout.
+It writes the findings as JSON on stdout, each with its `severity`.
 A Go symbol and a TypeScript one meet the same rules. `prose` imports only the
 standard library.
 
-| Rule               | Kinds        | Reports                                                        |
-| ------------------ | ------------ | -------------------------------------------------------------- |
-| `comment-block`    | doc          | a doc over 250 words                                           |
-| `comment-sentence` | doc          | a doc sentence over 60 words                                   |
-| `filler`           | all          | throat-clearing ("Note that") and filler adverbs ("simply")    |
-| `terms`            | all          | a spelling the glossary replaces ("sub-agent")                 |
-| `name-suffix`      | doc          | a function or method name whose last word is Of or For         |
-| `aside`            | doc          | a spaced hyphen spelling an em-dash, inline or ending a line   |
-| `history`          | doc          | a phrase narrating the change rather than the code ("used to") |
-| `docstub`          | doc          | a one-line doc that only repeats the symbol's name             |
-| `lead-context`     | pull request | a description that does not open with a paragraph of its goal  |
-| `reply-voice`      | Markdown, PR | a reply opener, a conversation, a bold-label list item         |
-| `tense`            | Markdown, PR | the future tense, and the author as the actor of a change      |
-| `hedge`            | Markdown, PR | a softener on a claim ("might fix", "probably")                |
-| `attribution`      | Markdown, PR | credit to a tool, or an account of how the work was made       |
-| `terse-sentence`   | skill        | a sentence over 25 words                                       |
-| `terse-paragraph`  | skill        | a paragraph or list item over 60 words                         |
-| `wordy`            | skill        | a phrase with a shorter equivalent ("in order to")             |
-| `bare-rule`        | skill        | "rule" with no mechanism named, in either form of a skill      |
-| `second-person`    | guide        | we, us, our or ours where a guide addresses you                |
-| `step-verb`        | guide        | a numbered step that opens with no verb ("1. The target...")   |
-| `condescension`    | guide        | a word telling the reader a step is easy ("easy", "simple")    |
-| `template`         | skill source | a body that does not render, so neither form can be judged     |
+A finding is an `error`, which a gate refuses, or an `advisory`, which a gate
+reports and lets through: its rule's words also have senses the rule cannot
+tell apart from the one it means. `-severity error` writes only the errors.
+A profile selects the rules: `-profile plain`, the default, is every rule;
+`-profile collaborative` leaves out this repository's house style (`terms`,
+`tense` and `bare-rule`), for text a team writes elsewhere. `-only` and `-skip`
+take comma-separated rule names, and an unknown name exits 1.
+`-thread-length N` tells `long-thread` how many replies the author already
+posted in the thread.
+
+| Rule               | Kinds               | Severity                     | Reports                                                                          |
+| ------------------ | ------------------- | ---------------------------- | -------------------------------------------------------------------------------- |
+| `comment-block`    | doc                 | error                        | a doc over 250 words                                                             |
+| `comment-sentence` | doc                 | error                        | a doc sentence over 60 words                                                     |
+| `filler`           | all                 | error                        | throat-clearing ("Note that") and filler adverbs ("simply")                      |
+| `terms`            | all                 | error                        | a spelling the glossary replaces ("sub-agent")                                   |
+| `name-suffix`      | doc                 | error                        | a function or method name whose last word is Of or For                           |
+| `aside`            | doc                 | error                        | a spaced hyphen spelling an em-dash, inline or ending a line                     |
+| `history`          | doc                 | error                        | a phrase narrating the change rather than the code ("used to")                   |
+| `docstub`          | doc                 | error                        | a one-line doc that only repeats the symbol's name                               |
+| `lead-context`     | pull request        | error; advisory for a defect | a lead that is not a paragraph saying what a reader can now do                   |
+| `reply-voice`      | Markdown, PR, reply | error                        | a reply opener, a conversation, a bold-label item, a stock label or heading      |
+| `tense`            | Markdown, PR        | error                        | the future tense, and the author as the actor of a change                        |
+| `hedge`            | Markdown, PR        | error                        | a softener on a claim ("might fix", "could potentially")                         |
+| `attribution`      | Markdown, PR, reply | error                        | credit to a tool, or an account of how the work was made                         |
+| `terse-sentence`   | skill               | error                        | a sentence over 25 words                                                         |
+| `terse-paragraph`  | skill               | error                        | a paragraph or list item over 60 words                                           |
+| `wordy`            | skill               | error                        | a phrase with a shorter equivalent ("in order to")                               |
+| `bare-rule`        | skill               | error                        | "rule" with no mechanism named, in either form of a skill                        |
+| `second-person`    | guide               | error                        | we, us, our or ours where a guide addresses you                                  |
+| `step-verb`        | guide               | error                        | a numbered step that opens with no verb ("1. The target...")                     |
+| `condescension`    | Markdown, PR, reply | error                        | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
+| `blame`            | PR, reply           | error                        | a person or a pull request as the subject of a fault; contempt ("sloppy")        |
+| `verdict`          | PR, reply           | advisory                     | a judgment in place of the behavior ("was broken", "a mess")                     |
+| `absolute`         | PR, reply           | advisory                     | never, nobody or nothing about the past ("has never fired")                      |
+| `intent`           | PR, reply           | advisory                     | a motive given to a tool or a person ("guessed", "pretends")                     |
+| `credit`           | pull request        | advisory                     | a removal or replacement that says nothing of what the old design was for        |
+| `claim`            | PR, reply           | advisory                     | a measurement, comparison or completion with no evidence in its sentence or item |
+| `reply-opener`     | reply               | error                        | a sentence that opens by contradicting ("No,", "As I said")                      |
+| `judgment-as-fact` | reply               | advisory                     | a recommendation with no reason ("This should be a map.")                        |
+| `stacked-hedge`    | reply               | advisory                     | two softeners in a sentence, or an apology before the point                      |
+| `long-thread`      | reply               | advisory                     | the author's fourth or later reply in a thread, given `-thread-length`           |
+| `template`         | skill source        | error                        | a body that does not render, so neither form can be judged                       |
 
 A skill and a guide take every Markdown and pull request rule but `lead-context`.
+A reply takes `filler`, `terms`, `reply-voice` without its openers and
+conversations, `attribution`'s credit to a tool, `condescension`, the tone rules
+and its own four; it speaks in the first person, so `tense` and `hedge` do not
+run on it. `blame`, `verdict`, `absolute`, `intent` and `claim` judge only text
+written to teammates: a page names its reader's possible mistakes and states
+contracts ("never returns nil"). `hedge` and `claim` leave alone a sentence that
+states a limit: one under a heading such as "Not verified" or "Limits", or one
+opening with "Not measured", "Not tested", "Not verified" or "Untested". A claim's
+evidence is a code span, a link, an issue or pull request, a commit, or a magus
+output ref. A pull request may carry headings past its lead, such as "What
+changes" or "Not verified", but not a stock label such as "Summary".
 A numbered list is a procedure, and `step-verb` judges it, only when one of its
 items opens with an imperative; a recap, a precedence order or a list of reasons
 is left alone. `condescension` leaves a word `filler` reports to it, and a

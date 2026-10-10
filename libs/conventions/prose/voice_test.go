@@ -64,8 +64,17 @@ func TestReplyVoiceReportsTextAnsweringAnUnseenPrompt(t *testing.T) {
 		{"a changelog headline", KindMarkdown, "- **Breaking: the `exclusive` option, with no replacement.** Delete the key.", nil},
 		{"bold mid-item", KindMarkdown, "- Run it **twice**: once cold.", nil},
 		{"a heading on a page", KindMarkdown, "# Cache\n\n## Overview\n\nThe cache stores blobs.", nil},
-		{"a heading in a pull request", KindPullRequest, pr("## Testing\n\nRan the suite."), []string{"4:Testing"}},
+		{"a stock heading in a pull request", KindPullRequest, pr("## Testing\n\nRan the suite."), []string{"4:Testing"}},
+		{"stock headings", KindPullRequest, pr("## Summary\n\n## Background\n\n## Description:"),
+			[]string{"4:Summary", "6:Background", "8:Description:"}},
+		// docs/decisions/0007-writing-a-teammate-reads.md names a description's sections.
+		{"named sections in a pull request", KindPullRequest,
+			pr("## What changes\n\n## Why this approach\n\n## Evidence\n\n## How we got here\n\n## Not verified\n\n## Reading guide"), nil},
+		{"a stock heading in a reply", KindReply, "## Summary\n\nThe map races.", []string{"1:Summary"}},
 		{"a stock label", KindPullRequest, pr("**Test plan**\n\n- Ran the suite."), []string{"4:**Test plan**"}},
+		{"a stock label opening a reply", KindReply, "**Summary**\n\nThe map races.", []string{"1:**Summary**"}},
+		{"a bold label in a reply", KindReply, "- **Cache:** sorted", []string{"1:**Cache:**"}},
+		{"a reply's own voice", KindReply, "I've pushed a fix, as discussed. Here's the trace.", nil},
 		{"a quoted opener", KindMarkdown, `The rule refuses "This PR adds" and ` + "`Here's`.", nil},
 	})
 }
@@ -99,6 +108,14 @@ func TestHedgeReportsASoftenerAndLeavesPermissionAlone(t *testing.T) {
 		// docs/reference/codes/sandbox/MGS3013.md states a possibility a caller relies on.
 		{"might stating a contract", KindMarkdown, "A wait that might still end is never refused.", nil},
 		{"may in a permission that names a benefit", KindMarkdown, "Nothing else may make it on your behalf.", nil},
+		{"a modal before potentially", KindMarkdown, "This could potentially fix the flake.", []string{"1:could potentially"}},
+		{"conceivably", KindPullRequest, pr("- The key can conceivably collide."), []string{"4:can conceivably"}},
+		{"a sentence stating a limit", KindPullRequest, pr("- Not measured on Linux, where it might help."), nil},
+		{"untested", KindPullRequest, pr("- Untested on Windows; probably fine."), nil},
+		{"a limit section", KindPullRequest, pr("## Not verified\n\n- It might help a slow runner.\n\n## Evidence\n\n- It might help."),
+			[]string{"10:might help"}},
+		{"a limits heading", KindMarkdown, "## Known limits\n\nIt probably holds.", nil},
+		{"a limit opener only exempts its sentence", KindMarkdown, "Not tested on Linux. It probably holds.", []string{"1:probably"}},
 	})
 }
 
@@ -150,6 +167,30 @@ func TestLeadContextReportsADescriptionWithoutAReasonFirst(t *testing.T) {
 		{"no description", KindPullRequest, "fix: x\n\n", []string{"0:"}},
 		{"a page has no lead", KindMarkdown, "# Cache\n\n- one", nil},
 	})
+}
+
+func TestLeadContextAdvisesALeadThatOpensOnADefect(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want []Finding
+	}{
+		// #570 before and after its rewrite.
+		{"a defect", "perf: x\nThe server's warm caches lagged behind edits, so the first query rebuilt the graph inline.", []Finding{{
+			Rule: RuleLeadContext, Severity: SeverityAdvisory, Match: "lagged", Line: 2,
+			Message: "The lead opens on the defect 'lagged': open with what a reader can now do and give the defect " +
+				"as the reason, as in " + leadExample,
+		}}},
+		{"an outcome", "perf: x\nThe first query after an edit now answers from a graph that is already current.", nil},
+		{"a defect named as the reason", "perf: x\nThe first query answers from a current graph, which no longer " +
+			"rebuilds inline. Until now it failed under load.", nil},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFindings(t, JudgeText(tc.text, KindPullRequest, WithOnly(RuleLeadContext)), tc.want)
+		})
+	}
 }
 
 func TestLeadContextOwnsTheLeadsOpenerAndHeading(t *testing.T) {

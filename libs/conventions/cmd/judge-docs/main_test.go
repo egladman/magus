@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const nameSuffix = `{"node":"n","source":"","language":"","rule":"name-suffix","message":"Rename 'configFor': no function or method name ends in the word Of or For.","match":"configFor"}`
+const nameSuffix = `{"node":"n","source":"","language":"","rule":"name-suffix","severity":"error","message":"Rename 'configFor': no function or method name ends in the word Of or For.","match":"configFor"}`
 
 func runJudge(t *testing.T, stdin string) (code int, stdout, stderr string) {
 	t.Helper()
@@ -30,9 +30,22 @@ func assertRun(t *testing.T, stdin string, wantCode int, wantStdout, wantStderr 
 	}
 }
 
+// assertArgs runs judge-docs with args over stdin and wants exit 0 with want
+// on stdout.
+func assertArgs(t *testing.T, args []string, stdin, want string) {
+	t.Helper()
+
+	var out, errOut bytes.Buffer
+
+	code := run(args, strings.NewReader(stdin), &out, &errOut)
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
 	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve simply returns the path."}]`
-	want := `[{"node":"n1","source":"a.go","language":"go","rule":"filler","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
+	want := `[{"node":"n1","source":"a.go","language":"go","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
 
 	assertRun(t, in, 0, want, "")
 }
@@ -52,9 +65,9 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 		`{"node":"b","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."},` +
 		`{"node":"a","name":"Open","kind":"function","doc":"Open simply opens."}]`
 	want := `[` +
-		`{"node":"b","source":"","language":"","rule":"filler","message":"Drop 'simply': state the fact.","match":"simply"},` +
-		`{"node":"b","source":"","language":"","rule":"terms","message":"Write 'subagent', not 'sub-agent'.","match":"sub-agent"},` +
-		`{"node":"a","source":"","language":"","rule":"filler","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
+		`{"node":"b","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"},` +
+		`{"node":"b","source":"","language":"","rule":"terms","severity":"error","message":"Write 'subagent', not 'sub-agent'.","match":"sub-agent"},` +
+		`{"node":"a","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
 
 	assertRun(t, in, 0, want, "")
 }
@@ -91,16 +104,11 @@ func TestRunJudgesMarkdownFilesInArgumentOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var out, errOut bytes.Buffer
-
-	code := run([]string{"-kind", "markdown", b, a}, strings.NewReader(""), &out, &errOut)
-
 	want := `[` +
-		`{"node":"` + b + `","source":"` + b + `:1","language":"markdown","rule":"reply-voice","message":"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.","match":"**Cache:**"},` +
-		`{"node":"` + a + `","source":"` + a + `:3","language":"markdown","rule":"filler","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
-	if code != 0 || out.String() != want || errOut.String() != "" {
-		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
-	}
+		`{"node":"` + b + `","source":"` + b + `:1","language":"markdown","rule":"reply-voice","severity":"error","message":"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.","match":"**Cache:**"},` +
+		`{"node":"` + a + `","source":"` + a + `:3","language":"markdown","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
+
+	assertArgs(t, []string{"-kind", "markdown", b, a}, "", want)
 }
 
 func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
@@ -111,15 +119,10 @@ func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var out, errOut bytes.Buffer
-
-	code := run([]string{"-kind", "skill-source", path}, strings.NewReader(""), &out, &errOut)
-
-	want := `[{"node":"` + path + `","source":"` + path + `:7","language":"skill-source","rule":"wordy",` +
+	want := `[{"node":"` + path + `","source":"` + path + `:7","language":"skill-source","rule":"wordy","severity":"error",` +
 		`"message":"Write 'to', not 'in order to'.","match":"in order to"}]` + "\n"
-	if code != 0 || out.String() != want || errOut.String() != "" {
-		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
-	}
+
+	assertArgs(t, []string{"-kind", "skill-source", path}, "", want)
 }
 
 func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
@@ -129,29 +132,54 @@ func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var out, errOut bytes.Buffer
-
-	code := run([]string{"-kind", "guide", path}, strings.NewReader(""), &out, &errOut)
-
-	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"guide","rule":"second-person",` +
+	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"guide","rule":"second-person","severity":"error",` +
 		`"message":"Address the reader as you, not 'we': a guide speaks to the person following it, ` +
 		`and names magus or the project where it means them.","match":"we"}]` + "\n"
-	if code != 0 || out.String() != want || errOut.String() != "" {
-		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
-	}
+
+	assertArgs(t, []string{"-kind", "guide", path}, "", want)
 }
 
 func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
-	var out, errOut bytes.Buffer
-
-	code := run([]string{"-kind", "pull-request"}, strings.NewReader("fix: pin the key\n## Summary\n"), &out, &errOut)
-
 	want := `[{"node":"pull-request","source":"pull-request:2","language":"pull-request","rule":"lead-context",` +
-		`"message":"It opens with a heading: open the description with a paragraph naming the goal behind the change ` +
-		`and why this code stands in its way, then the bullets.","match":"## Summary"}]` + "\n"
-	if code != 0 || out.String() != want || errOut.String() != "" {
-		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
-	}
+		`"severity":"error","message":"It opens with a heading: open the description with what a reader can now do ` +
+		`or no longer has to do, then how the work came up and why it mattered, then the changes, as in 'The first ` +
+		`query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that ` +
+		`query.'","match":"## Summary"}]` + "\n"
+
+	assertArgs(t, []string{"-kind", "pull-request"}, "fix: pin the key\n## Summary\n", want)
+}
+
+func TestRunJudgesAReplyFromStdin(t *testing.T) {
+	want := `[{"node":"reply","source":"reply:1","language":"reply","rule":"reply-opener","severity":"error",` +
+		`"message":"Drop 'No,' and open with the fact and its evidence, as in 'This needs a lock: the map is ` +
+		`written from two goroutines.'","match":"No,"}]` + "\n"
+
+	assertArgs(t, []string{"-kind", "reply"}, "No, the map is shared by the two workers.", want)
+}
+
+// A reply that is its author's fourth in the thread draws one advisory, which
+// -severity error leaves out.
+func TestRunSelectsFindingsBySeverityAndThreadLength(t *testing.T) {
+	const reply = "The map is shared by the two workers."
+
+	advisory := `[{"node":"reply","source":"reply:0","language":"reply","rule":"long-thread","severity":"advisory",` +
+		`"message":"This is reply 4 from you in the thread: offer a call to settle it, as in 'Want to talk this ` +
+		`through for ten minutes?'","match":""}]` + "\n"
+
+	assertArgs(t, []string{"-kind", "reply", "-thread-length", "2"}, reply, "[]\n")
+	assertArgs(t, []string{"-kind", "reply", "-thread-length", "3"}, reply, advisory)
+	assertArgs(t, []string{"-kind", "reply", "-thread-length", "3", "-severity", "error"}, reply, "[]\n")
+}
+
+func TestRunSelectsRulesByProfileOnlyAndSkip(t *testing.T) {
+	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."}]`
+
+	filler := `{"node":"n","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}`
+	terms := `{"node":"n","source":"","language":"","rule":"terms","severity":"error","message":"Write 'subagent', not 'sub-agent'.","match":"sub-agent"}`
+
+	assertArgs(t, []string{"-only", "terms, comment-block"}, doc, "["+terms+"]\n")
+	assertArgs(t, []string{"-skip", "terms"}, doc, "["+filler+"]\n")
+	assertArgs(t, []string{"-profile", "collaborative"}, doc, "["+filler+"]\n")
 }
 
 func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
@@ -160,10 +188,14 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
-		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
+		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source, pull-request or reply\n"},
 		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -kind markdown\n"},
-		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
+		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull-request is read from stdin, not from a path\n"},
 		{"a missing file", []string{"-kind", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
+		{"unknown profile", []string{"-profile", "loose"}, "judge-docs: unknown profile \"loose\": want plain or collaborative\n"},
+		{"unknown severity", []string{"-severity", "advisory"}, "judge-docs: unknown severity \"advisory\": want all or error\n"},
+		{"unknown rule to keep", []string{"-only", "filler,fillers"}, "judge-docs: unknown rule \"fillers\"\n"},
+		{"unknown rule to skip", []string{"-skip", "tone"}, "judge-docs: unknown rule \"tone\"\n"},
 	}
 
 	for _, tc := range cases {

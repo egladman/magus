@@ -1,6 +1,7 @@
 package prose
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -86,6 +87,37 @@ func TestJudgeTextOnADocMatchesJudge(t *testing.T) {
 	}
 
 	assertFindings(t, Judge(Symbol{Name: "Resolve", Doc: doc}), want)
+}
+
+// changes/unreleased/on-actions.md wraps a command's code span across a line
+// ending, which CommonMark reads as one span.
+func TestJudgeTextReadsACodeSpanWrappedAcrossLines(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want []int
+	}{
+		{"two lines of a list item", "- Run `magus simply\n  runs -- ci` and it simply works.", []int{2}},
+		{"three lines", "Run `magus\nsimply\nruns` now.", nil},
+		{"a line that only closes the span", "Run `magus simply\n` and it simply works.", []int{2}},
+		{"a span left open at the paragraph's end", "A stray ` here\n\nIt simply works.", []int{3}},
+		{"a list item ends the paragraph", "- Run `magus\n- It simply works.`", []int{2}},
+		{"a fence is not a span", "```\nsimply `\n```\nIt simply works.", []int{4}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got []int
+
+			for _, f := range JudgeText(tc.text, KindMarkdown, WithOnly(RuleFiller)) {
+				got = append(got, f.Line)
+			}
+
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("filler lines: got %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestHeadingMarker(t *testing.T) {

@@ -18,20 +18,23 @@ import (
 // finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
+	o := collect(opts)
 
 	switch kind {
 	case KindDoc:
-		return run(input{symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, opts: o})
+		return run(input{
+			symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, source: raw, opts: o,
+		})
 	case KindSkillSource:
-		return judgeSkillSource(strings.Join(raw, "\n"))
+		// The two forms are judged without the options, so the rules they name
+		// are applied to what comes back.
+		return slices.DeleteFunc(judgeSkillSource(strings.Join(raw, "\n")), func(f Finding) bool {
+			return !o.keeps(f.Rule)
+		})
 	}
 
 	lines := markdownProse(raw, kind != KindPullRequest && kind != KindReply)
+	wrapCodeSpans(lines)
 	prose := readProse(lines, true)
 
 	if kind == KindPullRequest {
@@ -46,7 +49,7 @@ func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 		}
 	}
 
-	return run(input{kind: kind, prose: prose, lines: lines, opts: o})
+	return run(input{kind: kind, prose: prose, lines: lines, source: raw, opts: o})
 }
 
 var (
@@ -88,6 +91,64 @@ func markdownProse(raw []string, frontMatter bool) []string {
 	}
 
 	return lines
+}
+
+// wrapCodeSpans carries a code span that wraps across a line ending onto the
+// lines it continues on, as CommonMark reads one, so the per-line mask that
+// blanks a span blanks all of it. Each continued line opens with a backtick in
+// place of its first character, which is code, and a line that only closes the
+// span loses that backtick, so its tail reads as prose. A span still open at
+// the end of its paragraph is left to the per-line mask.
+func wrapCodeSpans(lines []string) {
+	fenced := unfenced(lines)
+
+	for i := 0; i < len(fenced); i++ {
+		if !endsInSpan(fenced[i], false) {
+			continue
+		}
+
+		end := spanEnd(fenced, i)
+		if end < 0 {
+			continue
+		}
+
+		for j := i + 1; j <= end; j++ {
+			body := strings.TrimLeft(lines[j], " \t")
+			at := len(lines[j]) - len(body)
+
+			mark := "`"
+			if body[0] == '`' {
+				mark = "#"
+			}
+
+			lines[j] = lines[j][:at] + mark + lines[j][at+1:]
+		}
+
+		i = end
+	}
+}
+
+// spanEnd returns the line after open that closes the span open leaves open,
+// or -1 when its paragraph, list item or heading ends first.
+func spanEnd(lines []string, open int) int {
+	for j := open + 1; j < len(lines); j++ {
+		body := strings.TrimLeft(lines[j], " \t")
+		if body == "" || listMarker(body) > 0 || headingMarker(body) > 0 {
+			return -1
+		}
+
+		if !endsInSpan(body, true) {
+			return j
+		}
+	}
+
+	return -1
+}
+
+// endsInSpan reports whether line, read from inside a span or not, ends
+// inside one.
+func endsInSpan(line string, inside bool) bool {
+	return inside != (strings.Count(line, "`")%2 == 1)
 }
 
 // blankFrontMatter blanks a YAML block opening the file, all but the value of

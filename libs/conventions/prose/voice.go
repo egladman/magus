@@ -39,36 +39,43 @@ var (
 	// that ends in a period, as a changelog fragment opens, is a sentence.
 	boldLabel = regexp.MustCompile(`^(?:\*\*|__)[^*_]{1,80}?(?::(?:\*\*|__)|(?:\*\*|__)\s*:)`)
 
-	// stockLabel is a section label standing alone on a line.
+	// stockLabel is a section label a reply generator emits, standing alone on
+	// a line or as a heading.
 	stockLabel = regexp.MustCompile(`(?i)^(?:\*\*|__)?(?:summary|changes|test plan|testing|overview|motivation|` +
-		`what changed|why)(?:\*\*|__)?:?(?:\*\*|__)?$`)
+		`description|context|background|what changed|why)(?:\*\*|__)?:?(?:\*\*|__)?$`)
 )
 
 // replyVoice reports text that answers a prompt the reader never saw: a reply
 // opener, a reference to a conversation, and a list item that opens with a bold
-// label, which turns a sentence into a form to fill in. A pull request also
-// may not carry a heading or a stock section label: its description is a lead
-// paragraph and bullets. The lead's own opener and heading are lead-context's
-// to report.
+// label, which turns a sentence into a form to fill in. A pull request or a
+// reply also may not carry a stock section label, alone on a line or as a
+// heading; a heading that names its section ("What changes", "Not verified")
+// is allowed past a description's lead. The lead's own opener and heading are
+// lead-context's to report.
+//
+// A reply is one person answering another in a thread they share, so its
+// openers ("I've pushed") and its references to that thread are left alone.
 func replyVoice(in input) []Finding {
 	lead := 0
 	if in.kind == KindPullRequest {
 		lead = leadLine(in.lines)
 	}
 
+	sectioned := in.kind == KindPullRequest || in.kind == KindReply
+
 	var out []Finding
 
 	for _, ln := range in.prose {
 		switch body := strings.TrimSpace(ln.body()); {
 		case ln.heading:
-			if in.kind == KindPullRequest && ln.line != lead {
+			if sectioned && ln.line != lead && stockLabel.MatchString(body) {
 				out = append(out, Finding{
-					Message: fmt.Sprintf("Drop the heading '%s': a description is a lead paragraph and bullets, "+
-						"with no sections.", body),
+					Message: fmt.Sprintf("Rename the heading '%s': a stock label answers a prompt the reader never "+
+						"saw; name the section's subject in sentence case, as in 'What changes' or 'Not verified'.", body),
 					Match: body, Line: ln.line,
 				})
 			}
-		case in.kind == KindPullRequest && ln.line > 1 && stockLabel.MatchString(body):
+		case sectioned && (in.kind == KindReply || ln.line > 1) && stockLabel.MatchString(body):
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
@@ -82,6 +89,10 @@ func replyVoice(in input) []Finding {
 				})
 			}
 		}
+	}
+
+	if in.kind == KindReply {
+		return out
 	}
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
@@ -216,17 +227,77 @@ func within(offset int, spans [][]int) bool {
 // hedging softens a claim. A modal alone is left out: "a workspace may
 // declare" grants permission, and "the value may be empty" or "a wait that
 // might still end" states a contract a caller relies on. Only a modal before a
-// verb of benefit hedges: "might fix" claims a fix without making it.
+// verb of benefit hedges: "might fix" claims a fix without making it. A modal
+// before potentially, conceivably or theoretically hedges whatever follows.
 var hedging = regexp.MustCompile(`\b(?:(?:[Mm]ay|[Mm]ight|[Cc]ould) (?:help|improve|reduce|speed up|fix|solve|` +
 	`prevent|avoid|be worth)|[Ss]hould probably|[Pp]robably|[Aa]ims? to|[Tt]ries to|[Hh]opefully|[Aa]rguably|` +
-	`[Pp]erhaps|[Ss]eems? to|[Ii]t seems)\b`)
+	`[Pp]erhaps|[Ss]eems? to|[Ii]t seems|(?:[Cc]ould|[Mm]ight|[Mm]ay|[Ww]ould|[Cc]an) ` +
+	`(?:potentially|conceivably|theoretically)|[Pp]otentially possibly|[Cc]onceivably)\b`)
 
-// hedge reports a softener qualifying a claim.
+var (
+	// limitHeading names a section that states what was not checked.
+	limitHeading = regexp.MustCompile(`(?i)\b(?:not (?:verified|measured|tested)|untested|limits)\b`)
+
+	// limitOpener opens a sentence that states what was not checked.
+	limitOpener = regexp.MustCompile(`(?i)^(?:not (?:measured|tested|verified)|untested)\b`)
+)
+
+// limitSections returns, for each paragraph, whether it sits in a section
+// whose heading names what was not checked ("Not verified", "Limits").
+func limitSections(paras []paragraph) []bool {
+	out := make([]bool, len(paras))
+	in := false
+
+	for i, para := range paras {
+		if para.head.heading {
+			in = limitHeading.MatchString(para.text)
+
+			continue
+		}
+
+		out[i] = in
+	}
+
+	return out
+}
+
+// statesLimit reports whether the sentence of para that holds offset says what
+// was not checked, by its opener or by the section it sits in. Such a sentence
+// scopes a claim, which is what hedge and claim ask a writer to do.
+func statesLimit(para paragraph, inLimits bool, offset int) bool {
+	return inLimits || limitOpener.MatchString(strings.TrimLeft(para.text[sentenceAt(para.text, offset):], "*_("))
+}
+
+// sentenceAt returns the offset of the sentence of text that holds offset.
+func sentenceAt(text string, offset int) int {
+	start := 0
+
+	for _, s := range sentenceStarts(text) {
+		if s > offset {
+			break
+		}
+
+		start = s
+	}
+
+	return start
+}
+
+// hedge reports a softener qualifying a claim. A sentence that states a limit
+// ("Not measured on Linux") is exempt: it scopes the claim rather than
+// softening it.
 func hedge(in input) []Finding {
 	var out []Finding
 
-	for _, para := range paragraphs(in.prose, mentionsMasked) {
+	paras := paragraphs(in.prose, mentionsMasked)
+	limits := limitSections(paras)
+
+	for i, para := range paras {
 		for _, at := range hedging.FindAllStringIndex(para.text, -1) {
+			if statesLimit(para, limits[i], at[0]) {
+				continue
+			}
+
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop '%s': state the claim, or the condition under which it holds.", m),
@@ -283,9 +354,16 @@ func attribution(in input) []Finding {
 		})
 	}
 
-	patterns := []*regexp.Regexp{credit, narrative}
-	if in.kind == KindPullRequest {
-		patterns = append(patterns, workNarrative)
+	// A reply belongs to the conversation it answers, so only credit to a tool
+	// is reported there.
+	patterns := []*regexp.Regexp{credit}
+
+	switch in.kind {
+	case KindReply:
+	case KindPullRequest:
+		patterns = append(patterns, narrative, workNarrative)
+	default:
+		patterns = append(patterns, narrative)
 	}
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
@@ -324,13 +402,32 @@ func leadLine(lines []string) int {
 	return 0
 }
 
+var (
+	// defect states what went wrong. Present-tense negations ("does not
+	// block") are left out: they describe the new behavior as often as the old.
+	defect = regexp.MustCompile(`(?i)\b(?:fail(?:s|ed)|broke|breaks|lag(?:s|ged)|could not|couldn't|did not|` +
+		`didn't|never|(?:was|were|is|are) missing|(?:stayed|went) stale|(?:is|was|were|are) red|died|dies|` +
+		`panicked|crashed)\b`)
+
+	// outcome names what a reader can do after the change.
+	outcome = regexp.MustCompile(`(?i)\b(?:now|no longer|lets?|allows?)\b|\bcan\s`)
+)
+
+// leadExample is a lead in the order lead-context asks for, from #570.
+const leadExample = "'The first query after an edit answers from a graph that is already current. " +
+	"Until now the graph rebuilt inline on that query.'"
+
 // leadContext reports a pull request whose description does not open with a
-// paragraph that names the goal behind the change and why this code stands
-// in its way. A reviewer's first question is what drives the change; a list,
-// a heading or a reply opener in that place answers a different one.
+// paragraph that says what a reader can now do, then how the work came up and
+// why it mattered. A reviewer's first question is what the change is for; a
+// list, a heading or a reply opener in that place answers a different one.
+//
+// A lead whose first sentence states a defect and names no outcome is
+// reported as advisory: the outcome may be phrased in words no list holds.
+// Measured over the 190 leads of the last 200 merged pull requests, 60 did.
 func leadContext(in input) []Finding {
-	const ask = "open the description with a paragraph naming the goal behind the change and why this code " +
-		"stands in its way, then the bullets."
+	const ask = "open the description with what a reader can now do or no longer has to do, then how the work " +
+		"came up and why it mattered, then the changes, as in " + leadExample
 
 	line := leadLine(in.lines)
 	if line == 0 {
@@ -369,6 +466,21 @@ func leadContext(in input) []Finding {
 				Message: fmt.Sprintf("Its lead holds %d words, too few to carry a reason (at least %d): %s",
 					n, leadFloor, ask),
 				Line: line,
+			}}
+		}
+
+		first := para.text
+		if starts := sentenceStarts(first); len(starts) > 1 {
+			first = first[:starts[1]]
+		}
+
+		if at := defect.FindStringIndex(first); at != nil && !outcome.MatchString(first) {
+			m := first[at[0]:at[1]]
+
+			return []Finding{{
+				Message: fmt.Sprintf("The lead opens on the defect '%s': open with what a reader can now do and "+
+					"give the defect as the reason, as in %s", m, leadExample),
+				Match: m, Line: para.lineAt(at[0]), Severity: SeverityAdvisory,
 			}}
 		}
 	}
