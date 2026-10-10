@@ -193,13 +193,13 @@ func checkVersion(raw []byte, what string, ledger types.SchemaLedger) error {
 	supported := ledger.Version
 	switch v := envelope.Version; {
 	case v <= 0:
-		return fmt.Errorf("job: the %s carries no schema_version; this magus accepts versions 1 through %d", what, supported)
+		return fmt.Errorf("job: the %s carries no schema_version, this magus accepts versions 1 through %d", what, supported)
 	case v > supported:
-		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d."+
-			" A newer record is not readable by an older magus; update magus, or send version %d", what, v, supported, supported)
+		return fmt.Errorf("job: the %s is schema_version %d and this magus accepts versions 1 through %d:"+
+			" a newer record is not readable by an older magus, update magus or send version %d", what, v, supported, supported)
 	}
 	if lacks := envelope.Unmet(ledger.Features()); lacks != nil {
-		return fmt.Errorf("job: the %s requires %s, which this magus (schema %d) lacks; update magus",
+		return fmt.Errorf("job: the %s requires %s, which this magus (schema %d) lacks, update magus",
 			what, quoteAll(lacks), supported)
 	}
 	return nil

@@ -75,7 +75,7 @@ const providerDeadline = 2 * time.Minute
 func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells.ProvidedProject, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(spellName)
 	if !ok {
-		return nil, fmt.Errorf("spell %q is not registered; import it before wiring it as a workspace provider", spellName)
+		return nil, fmt.Errorf("spell %q is not registered, import it before wiring it as a workspace provider", spellName)
 	}
 	ctx, cancel := context.WithTimeout(ctx, providerDeadline)
 	defer cancel()
@@ -100,7 +100,7 @@ func runWorkspaceProvider(ctx context.Context, spellName, root string) ([]spells
 	// exported one that returned null. A provider was wired to supply projects, so
 	// neither case is benign, and the message names both.
 	if resp.Data == nil {
-		return nil, fmt.Errorf("spell %q is wired as a workspace provider but its %s(target, cb) returned nothing; it must be exported and must return a list of Project (an empty list if there are none)", spellName, spells.ListProjectsContract)
+		return nil, fmt.Errorf("spell %q is wired as a workspace provider but its %s(target, cb) returned nothing, it must be exported and must return a list of Project (an empty list if there are none)", spellName, spells.ListProjectsContract)
 	}
 	items, ok := resp.Data.([]any)
 	if !ok {

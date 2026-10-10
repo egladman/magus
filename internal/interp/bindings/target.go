@@ -358,11 +358,11 @@ func secretGrantArg(method string, args []vm.Value) (types.SecretGrant, error) {
 	// Length first: indexing args[0] to build the view before checking it exists
 	// panics on a no-argument call instead of reporting the error below.
 	if len(args) == 0 {
-		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	fields, viewOK := args[0].MapView()
 	if !viewOK {
-		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return types.SecretGrant{}, fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	var bad error
 	field := func(name string) string {
@@ -482,7 +482,7 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 		}
 		// The same silent no-op ctx.glob refuses, reached by an empty list or no argument.
 		if len(names) == 0 && external == 0 {
-			return vm.Null, errors.New("ctx.needs: names no target; pass a target function, a project import member, or a ctx.glob(...) that matches one")
+			return vm.Null, errors.New("ctx.needs: names no target, pass a target function, a project import member, or a ctx.glob(...) that matches one")
 		}
 		// Park instead of blocking, WHEN a driver is there to resume us. What that buys
 		// is the ceiling: a blocking wait runs under the body's deadline, so a declared
@@ -537,7 +537,7 @@ func resolveTargetFun(targets map[string]vm.Callable, exports map[string]vm.Valu
 	// The chunk compiler names an anonymous closure "<fun>"; a Go DirectValue can
 	// legitimately carry an empty name too.
 	if name == "" || name == "<fun>" {
-		return "", fmt.Errorf("anonymous function is not a target; pass an exported target function")
+		return "", fmt.Errorf("anonymous function is not a target, pass an exported target function")
 	}
 	key := types.Normalize(name)
 	if _, ok := targets[key]; !ok {
@@ -591,7 +591,7 @@ func buildBuzzUses(sess *buzz.Session) func(context.Context, []vm.Value) (vm.Val
 		}
 		resource, body := args[0], args[1]
 		if !vm.IsFiber(resource) {
-			return vm.Null, fmt.Errorf("ctx.uses: the resource must be a fiber (&resource()), not %s; a plain call cannot be released after the body", resource.Kind())
+			return vm.Null, fmt.Errorf("ctx.uses: the resource must be a fiber (&resource()), not %s: a plain call cannot be released after the body", resource.Kind())
 		}
 		if !body.IsFun() {
 			return vm.Null, fmt.Errorf("ctx.uses: the second argument is the body to run, and it must be a function")
@@ -679,7 +679,7 @@ func globMatchedNothing(exports map[string]vm.Value, patterns []string) error {
 			continue
 		}
 		if fn, ok := exports[types.Normalize(p)]; ok {
-			return fmt.Errorf("%s; a pattern without \"*\" means every target ending in \"-%s\", never %q itself, so pass the function: ctx.needs(%s)",
+			return fmt.Errorf("%s, a pattern without \"*\" means every target ending in \"-%s\", never %q itself, so pass the function: ctx.needs(%s)",
 				msg, p, p, fn.FunName())
 		}
 	}
@@ -933,7 +933,7 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 		for _, decl := range execRefusedMembers {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
-					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
+					"ctx.%s: magus\\Exec carries execution overrides only, declare on the magus\\Context the target received", decl)
 			}))
 		}
 		return e
@@ -956,7 +956,7 @@ func buildTargetContext(sess *buzz.Session, obs buzz.DirectObserver, targets map
 	} {
 		old, replacement := old, replacement
 		c.MapSet(old, directVal(obs, "ctx."+old, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-			return vm.Null, fmt.Errorf("ctx.%s was removed in v0.4; use ctx.%s instead", old, replacement)
+			return vm.Null, fmt.Errorf("ctx.%s was removed in v0.4, use ctx.%s instead", old, replacement)
 		}))
 	}
 	// env names variables whose PROCESS value folds into the key: the counterpart to

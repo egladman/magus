@@ -616,7 +616,7 @@ func TestStoreDegradesARowItCannotActOn(t *testing.T) {
 	_, err = s.Update(t.Context(), "future", func(u *types.Job) { u.State = types.StatePass })
 	require.Error(t, err)
 	assert.Equal(t, fmt.Sprintf(`job: future requires "never-implemented", which this magus (schema %d) lacks,`+
-		` so it will not write that row. Update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion), err.Error())
+		` so it will not write that row: update magus, or run the command with the magus that wrote it`, types.JobSchemaVersion), err.Error())
 	_, err = s.Delete(t.Context(), "future", true)
 	assert.ErrorContains(t, err, `requires "never-implemented"`, "a delete is a write to the row")
 
@@ -636,7 +636,7 @@ func TestStoreRefusesAFileItCannotActOn(t *testing.T) {
 	path := plantRaw(t, s, `{"schema_version":99,"requires":["jobs-v2"],"jobs":[]}`)
 
 	_, err := s.List()
-	assert.Equal(t, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks; update magus`,
+	assert.Equal(t, fmt.Sprintf(`job: %s requires "jobs-v2", which this magus (schema %d) lacks, update magus`,
 		path, types.JobSchemaVersion), err.Error())
 }
 

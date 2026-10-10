@@ -1132,7 +1132,7 @@ func TestVersionProberQuotesTheToolsReason(t *testing.T) {
 	require.Error(t, err)
 	var exit *exec.ExitError
 	assert.ErrorAs(t, err, &exit, "the exit stays reachable, so a caller can tell a refusal from a failed start")
-	assert.Contains(t, err.Error(), `exit status 254: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "tsc" not found`)
+	assert.Contains(t, err.Error(), `ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "tsc" not found: exit status 254`)
 }
 
 func TestCauseLinePrefersTheErrorOverTheFooter(t *testing.T) {

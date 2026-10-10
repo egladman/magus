@@ -72,7 +72,7 @@ func feedbackWindow(opts map[string]any, now time.Time) (trail.FeedbackWindow, e
 	known := []string{"session", "since", "until"}
 	for k := range opts {
 		if !slices.Contains(known, k) {
-			return trail.FeedbackWindow{}, fmt.Errorf("trail.read: unknown option %q; options are %s", k, strings.Join(known, ", "))
+			return trail.FeedbackWindow{}, fmt.Errorf("trail.read: unknown option %q, options are %s", k, strings.Join(known, ", "))
 		}
 	}
 	text := func(k string) (string, error) {

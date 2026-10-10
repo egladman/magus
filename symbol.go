@@ -867,10 +867,10 @@ func symbolRunError(project types.ProjectRef, language string, err error) error 
 	}
 	var busy interface{ ExitCode() int }
 	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
-		return fmt.Errorf("%s: %w; the indexer never ran, so rerun once that finishes", project.Display(), err)
+		return fmt.Errorf("%s: the indexer never ran, so rerun once that finishes: %w", project.Display(), err)
 	}
 	if hint := symbols.InstallHint(language); hint != "" {
-		return fmt.Errorf("%s: %w; %s", project.Display(), err, hint)
+		return fmt.Errorf("%s: %s: %w", project.Display(), hint, err)
 	}
 	return fmt.Errorf("%s: %w", project.Display(), err)
 }

@@ -180,7 +180,7 @@ func unknownParams(params map[string]any) error {
 		return nil
 	}
 	slices.Sort(unknown)
-	return fmt.Errorf("job: no field of a job row is named %s; a put carries %s",
+	return fmt.Errorf("job: no field of a job row is named %s, a put carries %s",
 		strings.Join(unknown, ", "), strings.Join(mergeFields, ", "))
 }
 

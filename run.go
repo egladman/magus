@@ -2070,7 +2070,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return audit.Replayed(ctx, m.Get(s.ProjectPath), s.Target, written, types.HasCharm(ctx, types.CharmReadWrite))
 	}))
 	if m.cache == nil {
-		return fmt.Errorf("magus: workspace was constructed with Inspect; use Open to enable Run")
+		return fmt.Errorf("magus: workspace was constructed with Inspect, use Open to enable Run")
 	}
 	// One service supervisor per run: a service op reached as a dependency is started
 	// and readiness-gated, deduped by fingerprint so N dependents share one instance,

@@ -38,7 +38,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 	}
 	if policy.Resolved() == types.BrokerOff {
 		if m.brokerGiven {
-			return nil, fmt.Errorf("magus: WithBroker passed a client, but %s is off, so it would never be used; drop one or the other", source)
+			return nil, fmt.Errorf("magus: WithBroker passed a client, but %s is off, so it would never be used, drop one or the other", source)
 		}
 		return nil, nil
 	}

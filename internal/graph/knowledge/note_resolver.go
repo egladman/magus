@@ -83,7 +83,7 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 	case notes.AnchorSymbol:
 		n, ok := r.node[r.NodeID(a)]
 		if !ok {
-			return "", fmt.Errorf("symbol %q is not in the graph; the symbol index may not be built", a.Target)
+			return "", fmt.Errorf("symbol %q is not in the graph, the symbol index may not be built", a.Target)
 		}
 		path, start, ok := splitSourceLine(n.Source)
 		if !ok {
@@ -93,7 +93,7 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 		if err != nil || end < start {
 			// No enclosing range from this indexer: the symbol's extent is unknown, and a
 			// guessed one would fingerprint the wrong lines.
-			return "", fmt.Errorf("symbol %q has no enclosing range; this indexer did not report one", a.Target)
+			return "", fmt.Errorf("symbol %q has no enclosing range, this indexer did not report one", a.Target)
 		}
 		src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(path)))
 		if err != nil {
@@ -125,7 +125,7 @@ func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, err
 	}
 	n, ok := r.node[r.NodeID(a)]
 	if !ok {
-		return "", fmt.Errorf("symbol %q is not in the graph; the symbol index may not be built", a.Target)
+		return "", fmt.Errorf("symbol %q is not in the graph, the symbol index may not be built", a.Target)
 	}
 	path, start, ok := splitSourceLine(n.Source)
 	if !ok {
@@ -133,7 +133,7 @@ func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, err
 	}
 	end, err := strconv.Atoi(n.Attrs[attrDefEndLine])
 	if err != nil || end < start {
-		return "", fmt.Errorf("symbol %q has no enclosing range; this indexer did not report one", a.Target)
+		return "", fmt.Errorf("symbol %q has no enclosing range, this indexer did not report one", a.Target)
 	}
 	src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(path)))
 	if err != nil {

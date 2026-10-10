@@ -1315,15 +1315,15 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 // wired or the wired one did not start.
 func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {
 	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
-	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired; "+
+	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired, "+
 		"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 
 	startErr := errors.New("ACTIONS_RUNTIME_TOKEN is unset")
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteUnavailable("github", startErr), WithRemoteWrite(true))
 	require.ErrorIs(t, err, startErr)
-	assert.EqualError(t, err, "magus/cache: remote writes are required but remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset; "+
-		"fix the backend, or set cache.remote.write.enabled false to run local-only")
+	assert.EqualError(t, err, "magus/cache: remote writes are required but the backend is down, "+
+		"fix it or set cache.remote.write.enabled false to run local-only: remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset")
 }
 
 // Undeclared or declared false, a backend that did not start leaves the cache local-only,

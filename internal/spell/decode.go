@@ -195,7 +195,7 @@ func synthesizeInstall(m *spells.Descriptor) error {
 	}
 	for _, name := range order {
 		if _, authored := m.Ops[name]; authored {
-			return fmt.Errorf("spell %q declares an op named %q and manifest installs; magus registers the installs under that name, so drop the op", m.Name, name)
+			return fmt.Errorf("spell %q declares an op named %q and manifest installs, magus registers the installs under that name, so drop the op", m.Name, name)
 		}
 	}
 	if m.Ops == nil {
@@ -307,7 +307,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 			canonical := types.Normalize(op)
 			if prior, dup := authored[canonical]; dup {
 				return spells.Descriptor{}, fmt.Errorf(
-					"spell %q declares ops %q and %q, which are the same op %q; rename one",
+					"spell %q declares ops %q and %q, which are the same op %q, rename one",
 					name, prior, op, canonical)
 			}
 			authored[canonical] = op
@@ -455,7 +455,7 @@ func Decode(src obj) (spells.Descriptor, error) {
 	// indexer declares for itself is refused for the same collision.
 	for _, reserved := range []string{spells.DefaultSymbolIndexOp, indexer.OpName()} {
 		if _, authored := m.Ops[reserved]; authored {
-			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer; move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
+			return spells.Descriptor{}, fmt.Errorf("spell %q declares an op named %q, which is magus's own name for a declared symbol indexer, move the command to `export fun mgs_getSymbolIndexer() > SymbolIndexer` and drop the op", name, reserved)
 		}
 	}
 	if indexer != nil {
@@ -498,7 +498,7 @@ func decodeModeArgs(m *spells.Descriptor, src obj) error {
 			return fmt.Errorf("spell %q mgs_getModeArgs names op %q, which the spell does not declare", m.Name, key)
 		}
 		if len(args) == 0 {
-			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args; drop the entry", m.Name, key)
+			return fmt.Errorf("spell %q mgs_getModeArgs[%q] names no args, drop the entry", m.Name, key)
 		}
 		for _, a := range args {
 			if !slices.Contains(op.Args, a) {
@@ -584,7 +584,7 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 		// mutates-external and typed it wrong would otherwise decode as ExternalNone
 		// and be silently exempt from the very check it was declaring itself into.
 		if !c.External.Valid() {
-			return spells.Command{}, fmt.Errorf("%scommand: external is %s; want one of %s",
+			return spells.Command{}, fmt.Errorf("%scommand: external is %s, want one of %s",
 				where, c.External, strings.Join(c.External.Values(), ", "))
 		}
 	}
@@ -704,18 +704,18 @@ func validateTools(m spells.Descriptor) error {
 			// loads fine and then fails every comparison as VerdictUnknown, which is
 			// the silent no-op the check exists to prevent.
 			if !spells.ValidBound(bound) {
-				return fmt.Errorf("spell %q: tools[%q].supported.%s %q is not a valid version; want a plain version like \"1.21\" or \"2.0.0\"",
+				return fmt.Errorf("spell %q: tools[%q].supported.%s %q is not a valid version, want a plain version like \"1.21\" or \"2.0.0\"",
 					m.Name, tool, field, bound)
 			}
 		}
 		if c := m.Tools[tool].Key.UpTo; !c.Valid() {
 			// The candidate list comes from the same registry that generates the enum,
 			// so adding a component cannot leave this message stale.
-			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s; want one of %s",
+			return fmt.Errorf("spell %q: tools[%q].key.upTo is %s, want one of %s",
 				m.Name, tool, c, strings.Join(c.Values(), ", "))
 		}
 		if d := m.Tools[tool].Diagnostics; !d.Valid() {
-			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s; want one of %s",
+			return fmt.Errorf("spell %q: tools[%q].diagnostics is %s, want one of %s",
 				m.Name, tool, d, strings.Join(d.Values(), ", "))
 		}
 	}
@@ -741,10 +741,10 @@ func decodeLanguage(src obj) (spells.Language, error) {
 	}
 	syn, err := decodeSyntax(rec)
 	if err != nil {
-		return spells.Language{}, fmt.Errorf("language.syntax.%w", err)
+		return spells.Language{}, fmt.Errorf("language.syntax: %w", err)
 	}
 	if syn != nil && syn.Comments != nil && len(exts) == 0 {
-		return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files; declare the extensions that are this language")
+		return spells.Language{}, fmt.Errorf("language: syntax.comments without extensions covers no files, declare the extensions that are this language")
 	}
 	return spells.Language{Name: name, Extensions: exts, Syntax: syn}, nil
 }
@@ -783,7 +783,7 @@ func decodeSymbolIndexer(spellName string, src obj) (*spells.SymbolIndexer, erro
 	format, _ := rec.Str("format")
 	f := spells.SymbolFormat(format)
 	if !f.Valid() || f == spells.SymbolFormatNone {
-		return nil, fmt.Errorf("symbol indexer: format is %s; want one of %s", f, strings.Join(f.Values(), ", "))
+		return nil, fmt.Errorf("symbol indexer: format is %s, want one of %s", f, strings.Join(f.Values(), ", "))
 	}
 	// Normalized like an authored op, since a request reaches it kebab-cased.
 	var op string
@@ -959,16 +959,16 @@ func decodeStubs(syntax obj) (*spells.StubSyntax, error) {
 		return nil, fmt.Errorf("stubs.kinds: %w", err)
 	}
 	if len(kinds) == 0 {
-		return nil, fmt.Errorf(`stubs.kinds is empty; name the SCIP symbol kinds a stub may replace, like "Function" and "Method"`)
+		return nil, fmt.Errorf(`stubs.kinds is empty, name the SCIP symbol kinds a stub may replace, like "Function" and "Method"`)
 	}
 	for _, k := range kinds {
 		if v, known := scip.SymbolInformation_Kind_value[k]; !known || v == int32(scip.SymbolInformation_UnspecifiedKind) {
-			return nil, fmt.Errorf(`stubs.kinds: %q is not a SCIP symbol kind; want a SymbolInformation.Kind name like "Function" or "Method"`, k)
+			return nil, fmt.Errorf(`stubs.kinds: %q is not a SCIP symbol kind, want a SymbolInformation.Kind name like "Function" or "Method"`, k)
 		}
 	}
 	style, _ := rec.Str("bodyStyle")
 	if style != spells.StubBodyBrace && style != spells.StubBodyIndent {
-		return nil, fmt.Errorf("stubs.bodyStyle is %q; want %q or %q", style, spells.StubBodyBrace, spells.StubBodyIndent)
+		return nil, fmt.Errorf("stubs.bodyStyle is %q, want %q or %q", style, spells.StubBodyBrace, spells.StubBodyIndent)
 	}
 	body, _ := rec.Str("body")
 	if body == "" {

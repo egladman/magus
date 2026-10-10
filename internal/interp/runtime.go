@@ -838,7 +838,7 @@ func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 // which makes the module read null on member access.
 func importTargetCollisionErr(name, importPath string) error {
 	return fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
-		"reads null; rename the target or alias the import", name, importPath, name)
+		"reads null, rename the target or alias the import", name, importPath, name)
 }
 
 // runBuzz executes src on a fresh Buzz session and invokes target.
@@ -953,7 +953,7 @@ func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
 // canonical key. Used by the Buzz registration path so the message
 // stays identical across engines.
 func targetCollisionErr(prev, cur, key string) error {
-	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q; "+
+	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q, "+
 		"target names are matched case- and delimiter-insensitively, so rename one", prev, cur, key)
 }
 

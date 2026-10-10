@@ -381,7 +381,7 @@ func (s *Store) removeExact(t Token) error {
 		return os.Remove(aside)
 	}
 	if err := os.Link(aside, path); err != nil {
-		return fmt.Errorf("%s changed while it was removed and could not be put back; it is at %s: %w", path, aside, err)
+		return fmt.Errorf("%s changed while it was removed and could not be put back, it is at %s: %w", path, aside, err)
 	}
 	if err := os.Remove(aside); err != nil {
 		return err

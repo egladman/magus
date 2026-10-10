@@ -68,7 +68,7 @@ var Flags = Module{
 func FlagsParse(_ context.Context, argv, switches, valued, required, repeated []string, command bool) (types.FlagParse, error) {
 	for _, name := range required {
 		if !slices.Contains(valued, name) && !slices.Contains(repeated, name) {
-			return types.FlagParse{}, fmt.Errorf("flags.parse: %s is required but not declared valued or repeated; a switch cannot be required", name)
+			return types.FlagParse{}, fmt.Errorf("flags.parse: %s is required but not declared valued or repeated, a switch cannot be required", name)
 		}
 	}
 	parsed, err := flagsParse(argv, switches, valued, repeated, command)

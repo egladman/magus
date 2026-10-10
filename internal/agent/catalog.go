@@ -1082,7 +1082,7 @@ func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 // mid-path lands a write, and the prune that follows it, outside the tree.
 func checkDestination(dir, dest string) error {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
-		return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
+		return fmt.Errorf("agent install: destination %q is outside the working tree, pass --global or use --tar | tar -xf - -C <dir>", dest)
 	}
 	joined := filepath.Clean(filepath.Join(dir, dest))
 	rel, err := filepath.Rel(dir, joined)
@@ -1175,8 +1175,8 @@ func (c *Catalog) checkInstalledNotNewer(path string) error {
 		return nil
 	}
 	return fmt.Errorf("agent install: %s was installed by a newer magus (agent-skill-version %d, knowledge-schema-version %d) than this binary "+
-		"(agent-skill-version %d, knowledge-schema-version %d), and replacing it would undo what the newer one wrote. "+
-		"Update this binary (`%s` for a release, or bring a checkout of magus up to date and rebuild it), "+
+		"(agent-skill-version %d, knowledge-schema-version %d), and replacing it would undo what the newer one wrote: "+
+		"update this binary (`%s` for a release, or bring a checkout of magus up to date and rebuild it), "+
 		"or rerun this command with a magus at least that new",
 		path, skillVersion, schemaVersion, SkillVersion, c.schemaVersion, hint.SelfUpdate)
 }
@@ -1971,5 +1971,5 @@ func unknownSkillError(name string, offered []types.Skill) error {
 	for i, n := range near {
 		names[i] = n.name
 	}
-	return fmt.Errorf("agent: no skill named %q; near matches: %s", name, strings.Join(names, ", "))
+	return fmt.Errorf("agent: no skill named %q, near matches: %s", name, strings.Join(names, ", "))
 }

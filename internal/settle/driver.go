@@ -51,7 +51,7 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 			slog.With(attr.Component("merge-driver")).InfoContext(ctx, "auto-resolved", slog.String("path", path), slog.String("verdict", report.line))
 			return nil
 		}
-		return f.leaveConflicted(fmt.Errorf("merge-driver: not auto-resolved: %s; resolve it by hand", report.line))
+		return f.leaveConflicted(fmt.Errorf("merge-driver: not auto-resolved: %s, resolve it by hand", report.line))
 	}
 
 	target, ok := rebuildTarget(p, absPath)
@@ -60,7 +60,7 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 		// With no target that writes this exact path there is no such run, so keeping one
 		// side would silently drop the other's change, and the VCS only invokes a driver
 		// when BOTH sides changed the file, so that change is never empty.
-		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
+		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge, resolve it by hand",
 			types.ProjectLabel(p.Path, p.Dir), path))
 	}
 	if f.Output != f.Ours {

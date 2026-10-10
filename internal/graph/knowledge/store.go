@@ -717,7 +717,7 @@ func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 		// A blank fingerprint would hash as a constant and pin the digest while the
 		// shard's content moved under it.
 		if meta.Fingerprint == "" {
-			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint; rebuild with `magus graph build`", name)
+			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint, rebuild with `magus graph build`", name)
 		}
 		fps[symbolsShardKey(name)] = meta.Fingerprint
 		if p := symbolsShardProject(name); !slices.Contains(out.Projects, p) {

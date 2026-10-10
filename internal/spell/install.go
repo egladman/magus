@@ -44,7 +44,7 @@ func ResolveInstall(spec *spells.InstallSpec, projectDir, stopDir string) (choic
 				}
 				in, ok := man.Installs[lock]
 				if !ok {
-					return choice, false, fmt.Errorf("spell %q declares no install for %s; install it with its own package manager", spec.Spell, path)
+					return choice, false, fmt.Errorf("spell %q declares no install for %s, install it with its own package manager", spec.Spell, path)
 				}
 				return spells.InstallChoice{Manifest: manifest, Lock: path, Install: in}, true, nil
 			}

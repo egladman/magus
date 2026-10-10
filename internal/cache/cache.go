@@ -372,7 +372,7 @@ func (c *Cache) buildTiers() error {
 	c.tiers = []tier{c.local}
 	declared := c.remoteWrite != nil
 	if declared && *c.remoteWrite && !c.localWrite {
-		return errors.New("magus/cache: remote writes are on but local writes are off; " +
+		return errors.New("magus/cache: remote writes are on but local writes are off, " +
 			"the remote tier is written from the local one, so enable local writes or turn remote writes off")
 	}
 	if c.backend == nil {
@@ -380,10 +380,10 @@ func (c *Cache) buildTiers() error {
 			return nil
 		}
 		if c.remoteDown != nil {
-			return fmt.Errorf("magus/cache: remote writes are required but %w; "+
-				"fix the backend, or set cache.remote.write.enabled false to run local-only", c.remoteDown)
+			return fmt.Errorf("magus/cache: remote writes are required but the backend is down, "+
+				"fix it or set cache.remote.write.enabled false to run local-only: %w", c.remoteDown)
 		}
-		return errors.New("magus/cache: remote writes are required but no remote backend is wired; " +
+		return errors.New("magus/cache: remote writes are required but no remote backend is wired, " +
 			"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 	}
 	r := &remoteTier{c: c, backend: c.backend}
@@ -394,7 +394,7 @@ func (c *Cache) buildTiers() error {
 		r.off = "remote writes are off"
 	case c.verifier != nil && c.signer == nil:
 		if declared {
-			return errors.New("magus/cache: remote writes are required but there is no signing key (MAGUS_CACHE_SIGNING_KEY); " +
+			return errors.New("magus/cache: remote writes are required but there is no signing key (MAGUS_CACHE_SIGNING_KEY), " +
 				"a trust set is declared, so every reader would refuse an unsigned entry")
 		}
 		r.off = "no signing key"
@@ -437,7 +437,7 @@ func (c *Cache) initSigning() error {
 	// own invariant rather than relying on a caller to. A remote backend with no
 	// verifier imports unsigned artifacts, so refuse it unless explicitly opted in.
 	if c.backend != nil && c.verifier == nil && !c.insecureRemote {
-		return errors.New("magus/cache: remote backend configured without a trust set; " +
+		return errors.New("magus/cache: remote backend configured without a trust set, " +
 			"pass WithTrustedKeys, or WithInsecureRemote to accept unsigned artifacts")
 	}
 	return nil

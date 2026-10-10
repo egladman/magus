@@ -100,7 +100,7 @@ func SelectLANIPv4() (netip.Addr, error) {
 	if a, ok := pickLANIPv4(ifaces); ok {
 		return a, nil
 	}
-	return netip.Addr{}, fmt.Errorf("share: no up, non-loopback, private-range IPv4 interface found; connect to a LAN or Wi-Fi network and try again")
+	return netip.Addr{}, fmt.Errorf("share: no up, non-loopback, private-range IPv4 interface found, connect to a LAN or Wi-Fi network and try again")
 }
 
 // Link is the public description of an active share link, returned to the console.

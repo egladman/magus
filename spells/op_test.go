@@ -83,8 +83,8 @@ func TestServiceValidate(t *testing.T) {
 	}{
 		{"command alone", Service{Command: cmd}, ""},
 		{"start with readiness and stop", Service{Start: start, Readiness: probe, Stop: stop}, ""},
-		{"neither", Service{Readiness: probe}, "service declares neither command nor start; set exactly one"},
-		{"both", Service{Command: cmd, Start: start, Readiness: probe, Stop: stop}, "service declares both command and start; set exactly one"},
+		{"neither", Service{Readiness: probe}, "service declares neither command nor start, set exactly one"},
+		{"both", Service{Command: cmd, Start: start, Readiness: probe, Stop: stop}, "service declares both command and start, set exactly one"},
 		{"start without readiness", Service{Start: start, Stop: stop}, "a start service needs readiness: it is how magus learns the service is up without holding its process"},
 		{"start without stop", Service{Start: start, Readiness: probe}, "a start service needs stop: magus holds no process to signal"},
 	}

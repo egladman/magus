@@ -123,7 +123,7 @@ func checkKernelVersion(major, minor int) error {
 		return fmt.Errorf("iouring: parse kernel version %q: %w", string(b), err)
 	}
 	if kmaj < major || (kmaj == major && kmin < minor) {
-		return fmt.Errorf("iouring: kernel %d.%d < required %d.%d; IORING_OP_READ unavailable",
+		return fmt.Errorf("iouring: kernel %d.%d < required %d.%d, IORING_OP_READ unavailable",
 			kmaj, kmin, major, minor)
 	}
 	return nil

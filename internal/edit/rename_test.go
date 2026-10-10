@@ -46,13 +46,13 @@ func TestResolveRenameSymbol(t *testing.T) {
 			name:    "a bare name two workspace symbols carry",
 			ref:     "parse",
 			matches: []types.KnowledgeMatch{match(other, "parse"), match(mine, "parse")},
-			err:     "\"parse\" names 2 symbols defined in this workspace; pass the id of one:\n  " + other + "\n  " + mine,
+			err:     "\"parse\" names 2 symbols defined in this workspace, pass the id of one: " + other + ", " + mine,
 		},
 		{
 			name:    "only a fuzzy match",
 			ref:     "pars",
 			matches: []types.KnowledgeMatch{match(mine, "parse"), {ID: "target:.:parse", Kind: types.KindTarget, Label: "pars"}},
-			err:     "no symbol defined in this workspace is named \"pars\"; `magus refs pars` lists the one it resolves to, and its id renames it",
+			err:     "no symbol defined in this workspace is named \"pars\", `magus refs pars` lists the one it resolves to, and its id renames it",
 		},
 		{
 			name:    "a dependency's symbol by id",

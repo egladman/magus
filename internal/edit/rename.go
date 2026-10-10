@@ -41,12 +41,12 @@ func ResolveRenameSymbol(ref string, matches []types.KnowledgeMatch, defined fun
 	}
 	switch len(named) {
 	case 0:
-		return "", fmt.Errorf("no symbol defined in this workspace is named %q; `%s` lists the one it resolves to, and its id renames it", ref, hint.Refs.With(ref))
+		return "", fmt.Errorf("no symbol defined in this workspace is named %q, `%s` lists the one it resolves to, and its id renames it", ref, hint.Refs.With(ref))
 	case 1:
 		return named[0], nil
 	}
 	slices.Sort(named)
-	return "", fmt.Errorf("%q names %d symbols defined in this workspace; pass the id of one:\n  %s", ref, len(named), strings.Join(named, "\n  "))
+	return "", fmt.Errorf("%q names %d symbols defined in this workspace, pass the id of one: %s", ref, len(named), strings.Join(named, ", "))
 }
 
 // RenameSites derives the sites that rename from to to from a symbol's verified

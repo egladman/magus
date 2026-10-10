@@ -35,12 +35,12 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 	real := hint.VCSCheckpoint.With("-o name")
 	rev, digest := types.ParseCheckpointToken(token)
 	if strings.Contains(token, "+") && !isCheckpointDigest(digest) {
-		return "", fmt.Errorf("job: checkpoint %q carries the digest %q where a checkpoint carries %d lowercase hex characters; `%s` prints a real one",
+		return "", fmt.Errorf("job: checkpoint %q carries the digest %q where a checkpoint carries %d lowercase hex characters, `%s` prints a real one",
 			token, digest, checkpointDigestLen, real)
 	}
 	full, err := s.fullRevision(ctx, rev)
 	if err != nil {
-		return "", fmt.Errorf("job: checkpoint %q names no revision this repository holds: %w; `%s` prints a real one", token, err, real)
+		return "", fmt.Errorf("job: checkpoint %q names no revision this repository holds, `%s` prints a real one: %w", token, real, err)
 	}
 	if digest == "" {
 		return full, nil

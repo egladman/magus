@@ -17,7 +17,7 @@ import (
 // of quiet wrong answer that costs an afternoon to track down.
 const ptySupported = false
 
-var errNoPTY = errors.New("tty: not supported on this platform (unix only; Windows ConPTY is unimplemented)")
+var errNoPTY = errors.New("tty: not supported on this platform (unix only, Windows ConPTY is unimplemented)")
 
 func openPTY(cols, rows int) (*os.File, *os.File, error) { return nil, nil, errNoPTY }
 

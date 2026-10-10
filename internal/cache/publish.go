@@ -82,10 +82,10 @@ func (c *Cache) PublishOutput(ctx context.Context, ref string) (string, error) {
 		return "", errors.New("cache: remote backend is not active in this environment")
 	}
 	if c.signer == nil {
-		return "", errors.New("cache: publishing needs a signing key (MAGUS_CACHE_SIGNING_KEY); an unsigned bundle would be refused on import")
+		return "", errors.New("cache: publishing needs a signing key (MAGUS_CACHE_SIGNING_KEY), an unsigned bundle would be refused on import")
 	}
 	if c.outputs == nil {
-		return "", errors.New("cache: no output store; Cache must be built via cache.Open (this is a magus bug, not a workspace problem - file an issue)")
+		return "", errors.New("cache: no output store, Cache must be built via cache.Open (this is a magus bug, not a workspace problem, file an issue)")
 	}
 	data, desc, err := c.outputs.ByRef(ref)
 	if err != nil {
@@ -203,12 +203,12 @@ func (c *Cache) readSignedPair(r io.Reader, domain, metaName, payloadName string
 	}
 	if c.verifier == nil {
 		if requireTrust {
-			return nil, nil, errors.New("no trust set configured; refusing to read an unauthenticated object")
+			return nil, nil, errors.New("no trust set configured, refusing to read an unauthenticated object")
 		}
 		return meta, payload, nil
 	}
 	if sigBytes == nil {
-		return nil, nil, errors.New("unsigned; refusing an unauthenticated object - ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
+		return nil, nil, errors.New("unsigned, refusing an unauthenticated object, ask the publisher to set MAGUS_CACHE_SIGNING_KEY and republish")
 	}
 	sum := sha256.Sum256(payload)
 	if err := c.verifier.verify(domain, sigBytes, meta, map[string]string{payloadName: hex.EncodeToString(sum[:])}); err != nil {

@@ -641,7 +641,7 @@ func (s *Server) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, err
 	// A non-loopback bind (MAGUS_MCP_ADDRESS=0.0.0.0 for k8s health probes, say) serves every
 	// bearer token over plaintext HTTP, so it is an explicit opt-in, never a warning.
 	if !addr.Addr().IsLoopback() && !s.opts.Config.MCP.InsecureBind {
-		return nil, addr, fmt.Errorf("server: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext; front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
+		return nil, addr, fmt.Errorf("server: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext, front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
 	}
 
 	// Fail closed: without an operator token the server never serves. Every guard checks the

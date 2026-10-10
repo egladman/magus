@@ -28,7 +28,7 @@ stderr '\[error\] magus vcs merge-driver: expected 5 arguments \(ancestor result
 # location, and leaves conflict markers (git keeps a failed driver's file as it stands)
 # rather than silently picking a side of a hand-merged file.
 ! exec magus vcs merge-driver base.txt local.txt other.txt 0 local.txt
-stderr '\[error\] merge-driver: not auto-resolved: local.txt: not settled; resolve it by hand'
+stderr '\[error\] merge-driver: not auto-resolved: local.txt: not settled, resolve it by hand'
 grep '^<<<<<<< ours$' local.txt
 
 -- magus.yaml --

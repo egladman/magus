@@ -405,7 +405,7 @@ func CheckDeclaration(sb spells.Sandbox) error {
 			errs = append(errs, fmt.Errorf("allow[%d]: %w", i, err))
 		}
 		if strings.Contains(a.Path, "$") {
-			errs = append(errs, fmt.Errorf("allow[%d]: path %q names a variable; name it in env, or use a $VAR base", i, a.Path))
+			errs = append(errs, fmt.Errorf("allow[%d]: path %q names a variable, name it in env, or use a $VAR base", i, a.Path))
 		}
 	}
 	if _, err := env.Parse(sb.Env.Passthrough); err != nil {

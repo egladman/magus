@@ -27,7 +27,7 @@ func init() {
 func openSpellSecretProvider(_ context.Context, name string) (secret.Provider, error) {
 	drv, ok := project.DefaultSpellRegistry().Lookup(name)
 	if !ok {
-		return nil, fmt.Errorf("spell %q is not registered; import it in the magusfile before selecting it", name)
+		return nil, fmt.Errorf("spell %q is not registered, import it in the magusfile before selecting it", name)
 	}
 	return spellSecretProvider{drv: drv, name: name}, nil
 }
@@ -90,12 +90,12 @@ func (p spellSecretProvider) Fetch(ctx context.Context, ref string) (secret.Valu
 			// The distinction worth drawing for the reader: it did not "time out", it had
 			// nobody to ask. Naming that is the difference between re-running it and
 			// wiring a service token.
-			return secret.Value{}, fmt.Errorf("provider %q needed %s and there is no terminal to prompt on; "+
+			return secret.Value{}, fmt.Errorf("provider %q needed %s and there is no terminal to prompt on, "+
 				"configure an unattended credential for it (a service-account token) or run this interactively",
 				p.name, timeout)
 		}
 		if ctx.Err() != nil {
-			return secret.Value{}, fmt.Errorf("provider %q did not answer within %s; it may be waiting on an "+
+			return secret.Value{}, fmt.Errorf("provider %q did not answer within %s, it may be waiting on an "+
 				"unlock nobody completed", p.name, timeout)
 		}
 		return secret.Value{}, err

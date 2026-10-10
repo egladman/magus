@@ -220,7 +220,7 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("config.path must be a workspace-relative path")
 		}
 		if strings.EqualFold(filepath.Base(d.Config.Path), "mcp.json") {
-			return fmt.Errorf("config.path %q looks like host MCP client config; Magus does not write MCP registration (use harness_mcp setup guidance instead)", d.Config.Path)
+			return fmt.Errorf("config.path %q looks like host MCP client config, Magus does not write MCP registration, use harness_mcp setup guidance instead", d.Config.Path)
 		}
 	} else if len(d.ManagedEntries) > 0 {
 		return fmt.Errorf("config.path is required when managed_entries is set")
@@ -274,7 +274,7 @@ func validateHarnessEntries(group HarnessEntries) error {
 		}
 		if !ownedByMagus(entry) {
 			matcher, cmds := EntryCommands(entry)
-			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it; end its command with %q",
+			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it, end its command with %q",
 				i, matcher, cmds, " "+types.HarnessOwnedMarker)
 		}
 		collectCommands(entry, &commands)

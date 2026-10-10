@@ -140,7 +140,7 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 			tail = causeLine(res.Stdout)
 		}
 		if tail != "" {
-			return "", fmt.Errorf("version probe %s %v in %s: %w: %s", probe.Bin, probe.Args, dir, err, tail)
+			return "", fmt.Errorf("version probe %s %v in %s: %s: %w", probe.Bin, probe.Args, dir, tail, err)
 		}
 		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
 	}
@@ -576,7 +576,7 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 	// spec.SymbolIndexer in step with op.Kind, which only Decode guarantees.
 	switch _, err := os.Stat(dest); {
 	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
+		return fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s, it must write to the path magus passes in %s",
 			spellName, op.Bin, dest, symbols.IndexEnvVar)
 	case err != nil:
 		return fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spellName, op.Bin, err)
@@ -854,9 +854,9 @@ func unknownSpellMessage(name string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no spell %q to import as \"magus/spell/%s\"", name, name)
 	if s := suggestSpellName(name); s != "" {
-		fmt.Fprintf(&b, "; did you mean %q (import \"magus/spell/%s\")", s, s)
+		fmt.Fprintf(&b, ", did you mean %q (import \"magus/spell/%s\")", s, s)
 	}
-	fmt.Fprintf(&b, "\nbuilt-in spells: %s", strings.Join(builtinSpellHandles(), ", "))
+	fmt.Fprintf(&b, " (built-in spells: %s)", strings.Join(builtinSpellHandles(), ", "))
 	return b.String()
 }
 

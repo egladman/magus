@@ -664,7 +664,7 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 			}
 			msg := fmt.Sprintf("magus: project %q: per-target policy names unknown target %q", p.Path, name)
 			if sug := hint.Nearest(name, declared); sug != "" {
-				msg += fmt.Sprintf("; did you mean %q?", sug)
+				msg += fmt.Sprintf(", did you mean %q", sug)
 			}
 			if len(declared) > 0 {
 				msg += fmt.Sprintf(" (declared targets: %s)", strings.Join(declared, ", "))
@@ -728,9 +728,9 @@ func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason s
 		return []cache.Option{cache.WithInsecureRemote()}, nil
 	}
 	if len(trustedB64) == 0 {
-		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared; " +
+		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared, " +
 			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts (or set " +
-			"cache.remote.insecure with cache.remote.insecure_reason to accept unsigned artifacts) - " +
+			"cache.remote.insecure with cache.remote.insecure_reason to accept unsigned artifacts): " +
 			"a shared cache with no signature verification is a supply-chain hazard and is not allowed by default")
 	}
 	pubkeys := make([][]byte, 0, len(trustedB64))
@@ -1890,7 +1890,7 @@ func (m *Magus) lastPassedBase(ctx context.Context, res types.VCSResolution) (st
 	// for, which is the failure this base ref exists to prevent. Naming the switch that
 	// caused it beats a warning nobody reads under a green check.
 	if !m.cfg.CI.RecordRuns {
-		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off; set it true or pass an explicit --base", BaseLastPassed)
+		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off, set it true or pass an explicit --base", BaseLastPassed)
 	}
 	if res.VCS == nil || res.Source == types.VCSSourceDisabled {
 		return "", fmt.Errorf("base %q needs a VCS to resolve against, and none is active", BaseLastPassed)
@@ -2086,9 +2086,9 @@ func (m *Magus) ExpandPath(t types.Target) ([]types.Target, error) {
 	}
 	if m.Get(path) == nil {
 		if hint := m.suggestProjectPath(path); hint != "" {
-			return nil, fmt.Errorf("magus: expand: %w: %q; did you mean %q?", types.ErrUnknownProject, path, hint)
+			return nil, fmt.Errorf("magus: expand: %q, did you mean %q: %w", path, hint, types.ErrUnknownProject)
 		}
-		return nil, fmt.Errorf("magus: expand: %w: %q", types.ErrUnknownProject, path)
+		return nil, fmt.Errorf("magus: expand: %q: %w", path, types.ErrUnknownProject)
 	}
 	return []types.Target{{Path: path, Name: t.Name}}, nil
 }

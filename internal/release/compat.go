@@ -139,8 +139,8 @@ func (r CompatReport) Judge(b Bump, announced []diagnostics.Code) error {
 	if len(bad) == 0 {
 		return nil
 	}
-	return fmt.Errorf("release: a %s release must load %s, but it fails:\n  %s",
-		b, r.Base, strings.Join(bad, "\n  "))
+	return fmt.Errorf("release: a %s release must load %s, but it fails: %s",
+		b, r.Base, strings.Join(bad, ", "))
 }
 
 // countCodes renders codes as "CODE xN", one line per distinct code in code order.

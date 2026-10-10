@@ -164,7 +164,7 @@ type Command struct {
 // Capture is an error: the output would stream nowhere and return nowhere.
 func (c Command) Validate() error {
 	if c.Quiet && !c.Capture {
-		return errors.New("quiet without capture discards the output; set capture = true or drop quiet")
+		return errors.New("quiet without capture discards the output, set capture = true or drop quiet")
 	}
 	return nil
 }
@@ -281,9 +281,9 @@ type Service struct {
 func (s Service) Validate() error {
 	switch {
 	case s.Command.Bin == "" && s.Start.Bin == "":
-		return errors.New("service declares neither command nor start; set exactly one")
+		return errors.New("service declares neither command nor start, set exactly one")
 	case s.Command.Bin != "" && s.Start.Bin != "":
-		return errors.New("service declares both command and start; set exactly one")
+		return errors.New("service declares both command and start, set exactly one")
 	case s.Start.Bin == "":
 		return nil
 	case s.Readiness.Bin == "":

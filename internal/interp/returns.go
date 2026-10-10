@@ -44,13 +44,13 @@ func buzzReturnToGo(v vm.Value) (any, error) {
 		out := make([]string, 0, len(items))
 		for i, it := range items {
 			if !it.IsStr() {
-				return nil, fmt.Errorf("a returned list must hold only str; item %d is %s", i, buzzReturnKind(it))
+				return nil, fmt.Errorf("a returned list must hold only str, item %d is %s", i, buzzReturnKind(it))
 			}
 			out = append(out, it.AsString())
 		}
 		return out, nil
 	}
-	return nil, fmt.Errorf("a target may return str, [str], or nothing; got %s", buzzReturnKind(v))
+	return nil, fmt.Errorf("a target may return str, [str], or nothing, got %s", buzzReturnKind(v))
 }
 
 // buzzReturnKind names a rejected type for the errors above. It exists so the

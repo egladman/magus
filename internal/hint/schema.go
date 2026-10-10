@@ -30,7 +30,7 @@ func CheckKeys(present, known []string, removed map[string]string, where string)
 			return ignored, types.DiagnosticErrorf(types.RemovedOption, "%s: option %q was %s", where, k, why)
 		}
 		if sug := Nearest(k, known); sug != "" {
-			return ignored, fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
+			return ignored, fmt.Errorf("%s: unknown option %q, did you mean %q (known options: %s)",
 				where, k, sug, strings.Join(slices.Sorted(slices.Values(known)), ", "))
 		}
 		ignored = append(ignored, k)
@@ -57,7 +57,7 @@ func RejectUnknownKeys(present, known []string, where string) error {
 		}
 		sorted := strings.Join(slices.Sorted(slices.Values(known)), ", ")
 		if sug := Nearest(k, known); sug != "" {
-			return fmt.Errorf("%s: unknown option %q; did you mean %q? (known options: %s)",
+			return fmt.Errorf("%s: unknown option %q, did you mean %q (known options: %s)",
 				where, k, sug, sorted)
 		}
 		return fmt.Errorf("%s: unknown option %q (known options: %s)", where, k, sorted)

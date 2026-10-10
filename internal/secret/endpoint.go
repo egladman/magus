@@ -176,7 +176,7 @@ func (r *Resolver) OpenEndpoint(ctx context.Context, g types.SecretGrant) (strin
 	// belongs inside a target body.
 	invocation := InvocationIDFromContext(ctx)
 	if invocation == "" {
-		return "", fmt.Errorf("secret grant %q: an endpoint belongs to a run, and this call is outside one - open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it", g.Ref)
+		return "", fmt.Errorf("secret grant %q: an endpoint belongs to a run, and this call is outside one, open it inside a target body rather than at the magusfile's top level, where it would outlive every run that could use it", g.Ref)
 	}
 	key := newEndpointKey(invocation, g)
 
