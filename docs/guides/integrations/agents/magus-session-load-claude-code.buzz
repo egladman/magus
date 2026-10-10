@@ -46,7 +46,7 @@
 // by the session-parity gate, which fails the build when an adapter drops a
 // dimension or the guide's table disagrees with it. A host that supplies less
 // declares less; the report then says unobservable rather than zero.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
 // EVERY call that can fail is caught. A failure is a transcript this run does not

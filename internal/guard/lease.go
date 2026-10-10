@@ -1001,7 +1001,9 @@ type childFork struct {
 	readOnly   bool
 	writePaths bool
 	// bounded is any declaration beyond the lineage, the prose and read_only: paths, a
-	// check, gates, a state. Each is something the store grades against the parent.
+	// target check, gates, a state. Each is something the store grades against the parent.
+	// A check naming only a script is not one: it grants nothing, and it is the one way a
+	// read-only scout's claim can pass `job wait`.
 	bounded bool
 }
 
@@ -1013,7 +1015,7 @@ type childFork struct {
 // authorizeChild), but only when it writes AS that lease, which it learns from this
 // checkout's record. A worker the hook identified in a checkout bound to nobody writes to
 // an unbound store that grades nothing, so there only a read-only child declaring no
-// boundary passes: it can widen nothing.
+// boundary, at most a script check, passes: it can widen nothing.
 //
 // A child that is neither read-only nor handed write paths is refused on both paths: an
 // empty write set scopes nothing (gradeAgainstOwnLease), and the store's subset test
@@ -1037,7 +1039,7 @@ func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 		return rebind{problem: "would " + verb + " that can write anywhere", fix: "fork it --read-only or with --write-paths inside your own.",
 			why: "A child that is not read-only and names no write paths is scoped by nothing."}
 	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
-		return rebind{problem: "would " + verb + " nothing would grade", fix: "fork it --read-only, declaring no paths, check or gates.",
+		return rebind{problem: "would " + verb + " nothing would grade", fix: "fork it --read-only, declaring no paths or gates, and at most a script check.",
 			why: fmt.Sprintf("This checkout's job store writes as %q, not as %s, so it checks no child against your row.", h.storeLease(), h.id)}
 	}
 	return rebind{}
@@ -1061,10 +1063,11 @@ func cliFork(args []string, stdin string) childFork {
 		if err != nil {
 			return childFork{}
 		}
+		scriptOnly := row.Check != nil && row.Check.Target == "" && row.Check.Script != ""
 		return childFork{
 			id: row.ID, parent: row.Parent, readOnly: row.ReadOnly, writePaths: len(row.WritePaths) > 0,
 			bounded: len(row.WritePaths)+len(row.ReadPaths)+len(row.DenyPaths)+len(row.Goals) > 0 ||
-				row.Check != nil || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
+				(row.Check != nil && !scriptOnly) || row.Validation != "" || (row.State != "" && row.State != types.StateDeclared),
 		}
 	}
 	f := childFork{parent: flags["parent"], writePaths: flags["write-paths"] != ""}

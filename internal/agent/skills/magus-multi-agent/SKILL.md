@@ -71,22 +71,15 @@ Apply these four in the order they bite:
 Prove it before you plan it. A claim a plan or brief rests on cites the output ref of
 a run that settled it. A guess nobody ran stays out of the plan.
 
-{{if .Full}}Graph engineering is a natural evolution of loop engineering. The
-human supplies a goal and constraints; the root agent turns them into explicit
-acceptance criteria, uses the knowledge graph to partition the work, hands out
-bounded prompts, observes results, evaluates them against the criteria, and
-course-corrects until the integrated goal is satisfied. The graph improves the
-loop's partition and collision decisions; it does not replace the loop.
-
-Run this control loop:
+{{if .Full}}Graph engineering is a natural evolution of loop engineering: the graph improves
+the loop's partition and collision decisions, and does not replace the loop. Run it:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
 2. Map the affected graph and propose collision-resistant edit jobs.
 3. Give every job its own criteria, ownership boundary, and goals.
 4. Hand out work, within any cap the user set.
 5. Observe agents and Magus processes through their separate control planes.
-6. Evaluate evidence, revise ownership or ordering when assumptions change, and
-   repeat until the criteria pass.
+6. Evaluate evidence and revise ownership or ordering until the criteria pass.
 7. Integrate centrally and run the release gate.
 
 Acceptance evidence is an output ref the root reopens (`{{cmd "query output"}} <ref>`),
@@ -240,6 +233,7 @@ To prove something, brute-force it at economy. Many economy workers finish about
 fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
+  Give each a script check, so `{{cmd "job wait"}}` can pass it.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}.
 - The principal tier only reconciles the claims where workers disagree.
@@ -376,6 +370,10 @@ Write paths name FILES or file globs, never a directory. The check is `<target>
 <project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
 declaration in a shared file and forking from a leased worker.
 
+Read the `regenerated outside the write paths` block fork prints: declared outputs a target
+rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
+regenerate itself, or leave them out and regenerate them after integration.
+
 Render the prompt FROM the row; never type it. `{{cmd "describe job"}} <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
 down{{if .Full}}: the projects the write paths reach, the declared
@@ -436,6 +434,8 @@ After the spawn, the row carries the job:
 - A denied worker coordinates and never works around.
 - Every row ends in pass, fail, or NO-RETURN, and the root writes which: silence is
   not a pass.
+- Only a row with a check or a goal can pass. Fork a scout `--read-only`; it passes only
+  through a script check (reference.md), and a prose scout ends no_return by design.
 
 [reference.md](reference.md) covers bases, read paths, releasing a path, moving a live
 job's boundary, how magus ends abandoned jobs, and what `{{cmd "job wait"}}` checks.

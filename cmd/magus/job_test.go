@@ -473,6 +473,32 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	assert.Equal(t, []any{"accepted", []string{"run.go#A"}}, []any{rows[0].ID, rows[0].DenyPaths})
 }
 
+// A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
+// refuses it even with a check, and the refusal teaches the script check a scout passes by.
+func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	resetWorkspaceMemo(t)
+	root, cacheDir := execFixture(t)
+	fork := func(args ...string) error { return jobFork(t.Context(), root, args) }
+
+	err := fork("scout", "--criteria", "find the callers", "--check", "test .")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "scout names no write paths and is not read-only")
+	assert.Contains(t, err.Error(), "--read-only")
+	assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`)
+	assert.Contains(t, err.Error(), "`"+hint.Buzz.With("--record", "<probe>.buzz")+"`")
+
+	require.NoError(t, fork("reader", "--read-only", "--criteria", "find the callers"))
+	require.NoError(t, fork("writer", "--write-paths", "run.go", "--check", "test ."))
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	got := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		got[r.ID] = r.ReadOnly
+	}
+	assert.Equal(t, map[string]bool{"reader": true, "writer": false}, got, "a refused fork writes no row")
+}
+
 // A fork resolves the checkpoint it is handed: a full-length revision the repository
 // never held is refused and writes no row, and a real abbreviated one is stored in full.
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {

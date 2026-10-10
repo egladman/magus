@@ -68,7 +68,7 @@ argv, after `--`:
   guessed host's dialect, because a reply shaped for the wrong host can let a call
   through.
 - `magus shell` flags an entry declares about itself, such as
-  `-- --agent-name claude-code --observes-skill-loads`. The template parses them
+  `-- --agent-name claude-code --reports-skills`. The template parses them
   against the flags it publishes in `SUPPORTED_FLAGS`. An argument it does not know is
   named on stderr and left out, and the call is judged anyway; your host shows that
   line as a hook error. Nothing is dropped quietly: a guard running with flags nobody
@@ -155,7 +155,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
-//                    `-- --observes-skill-loads`, and rules that require a skill load
+//                    `-- --reports-skills`, and rules that require a skill load
 //                    stand down where it is absent. An argument this file does not know
 //                    is REPORTED on stderr and left out, and the call is judged anyway:
 //                    a misconfigured entry must not block work, and must not be silent
@@ -170,6 +170,12 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //                    subagent's command is graded under the job it was spawned for
 //                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_MESSAGE_PATH  dot-path to the text of a message the person typed (default
+//                    prompt, the key Claude Code's envelope uses). An event that names no
+//                    tool and carries a string there is a message rather than a call: it
+//                    goes to `magus shell --message`, which records the topics it raises,
+//                    and this file prints NOTHING for it. A message hook's output reaches
+//                    the model, and recording one is not something to tell the model about
 //   HOST_CWD_PATH    dot-path to the directory the call runs in. The ./magus beside the
 //                    nearest magus.yaml above it judges the call, so a call from a
 //                    subdirectory with its own magusfile.buzz (console/, docs/) still
@@ -234,7 +240,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -333,7 +339,7 @@ final ENVELOPE_PREFIX = "\{";
 // cannot state for itself, which today is one thing, whether the config also matches its
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
-final SUPPORTED_FLAGS = ["--observes-skill-loads"];
+final SUPPORTED_FLAGS = ["--reports-skills"];
 
 // The host this entry is wired into. Valued, and read by this file rather than forwarded
 // as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
@@ -466,9 +472,9 @@ object Guard {
 }
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
-// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
+// drops them too. Keeping them there meant a binary too old for `--reports-skills`
 // failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
-// binary too old to accept the flag cannot observe a skill load to begin with.
+// binary too old to accept the flag cannot report a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
@@ -479,6 +485,21 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
         "allow_failure": true,
         "stdin": guard.payload,
     });
+}
+
+// recordMessage hands a message the person typed to `magus shell --message` and reads
+// nothing back. Every failure is silence: a binary missing, or too old for --message, costs
+// the record and never the message, and nothing printed here could be anything but noise in
+// the model's context. `attribution` is the same argv the judged calls carry.
+fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
+    if (bin == "") { return; }
+    final args = mut ["shell", "--message"];
+    foreach (word in attribution) { args.append(word); }
+    proc\exec(bin, args: args, dir: dir, opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": message,
+    }) catch void;
 }
 
 // failureNotice states WHICH binary went silent, what version it is, and what it
@@ -657,6 +678,18 @@ fun main(args: [str]) > void {
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
+
+    // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
+    // availability notice, which a message hook would hand the model as context.
+    final message = hook\dig(event, dotPath: hook\envOr("HOST_MESSAGE_PATH", fallback: "prompt")) as? str;
+    if (toolName == "" and message != null) {
+        recordMessage(bin, message: message!, dir: cwd, attribution: [
+            "--agent-name", agentName, "--transport", "buzz", "--session", session,
+            "--agent", agent, "--transcript", transcript, "--event", eventName,
+        ]);
+        return;
+    }
+
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(session, family: "unavailable-{toolName}", file: "magus-command.buzz")) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",
@@ -782,7 +815,8 @@ wasteful, not destructive.
 //
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
-// attribution recorded on the activity event, never an input to the verdict.
+// attribution recorded on the activity event, never an input to the verdict. So does
+// `-- --reports-skills`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -809,7 +843,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -874,30 +908,45 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this hook takes; see
-// AGENT_NAME_FLAG in magus-command.buzz.
+// The host this entry is wired into; see AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// readAgentName reads the host off this script's argv, "" when the entry names none, and
-// reports every other argument. Empty is not defaulted: `magus shell` refuses installed
+// The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
+// a config that also matches its host's skill tool says so, and a rule that wants a skill
+// read before a write can then hold the write.
+final SUPPORTED_FLAGS = ["--reports-skills"];
+
+// EntryArgs is what this script's argv says: the host, and the supported flags it named.
+object EntryArgs {
+    agentName: str,
+    flags: [str],
+}
+
+// readEntryArgs reads the host and the supported flags off this script's argv, and reports
+// every other argument. An empty host is not defaulted: `magus shell` refuses installed
 // glue that names no host (MGS3024).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
-    if (parsed == null) { return ""; }
+fun readEntryArgs(args: [str]) > EntryArgs {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return EntryArgs{ agentName = "", flags = [<str>] }; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts {AGENT_NAME_FLAG} and {SUPPORTED_FLAGS.join(", ")}. "
             + "Fix the hook command in your host config.");
     }
-    return parsed!.values[AGENT_NAME_FLAG] ?? "";
+    final named = mut [<str>];
+    foreach (name in SUPPORTED_FLAGS) {
+        if (parsed!.values[name] != null) { named.append(name); }
+    }
+    return EntryArgs{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", flags = named };
 }
 
 fun main(args: [str]) > void {
-    final agentName = readAgentName(args);
+    final entry = readEntryArgs(args);
+    final agentName = entry.agentName;
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
@@ -963,7 +1012,14 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
+    //
+    // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
+    // binary too old for one cannot report a skill load either.
+    final attributed = mut [<str>];
+    foreach (flag in entry.flags) { attributed.append(flag); }
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
+        attributed.append(word);
+    }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
@@ -1040,7 +1096,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 21
+// magus-guard-template: 22
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1242,7 +1298,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 21
+// magus-guard-template: 22
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1390,7 +1446,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 21
+// magus-guard-template: 22
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1530,7 +1586,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 21
+// magus-guard-template: 22
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";

@@ -30,9 +30,18 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // the decision is made. Measured: a directory was added for a helper with two
 // callers that belonged in an existing one, with the skill installed and never read.
 func adviseNewSourceDir(path string) advice {
+	if dir := newSourceDir(path); dir != "" {
+		return newSourceDirAdvice(dir)
+	}
+	return advice{}
+}
+
+// newSourceDir is the workspace-relative directory a write to path would create, or ""
+// when it creates none. architecture-unbriefed gates the same act this advises on.
+func newSourceDir(path string) string {
 	dir, ok := workspaceRelativeDir(path)
 	if !ok {
-		return advice{}
+		return ""
 	}
 	for _, seg := range strings.Split(dir, "/") {
 		if seg == "" || seg == "." {
@@ -40,7 +49,7 @@ func adviseNewSourceDir(path string) advice {
 		}
 		// Pruned, hidden, and fixture trees: nobody is choosing a boundary there.
 		if project.IsIgnoreDir(seg) || slices.Contains(fixtureDirs, seg) {
-			return advice{}
+			return ""
 		}
 	}
 	// Anything already here means the directory is not new: a sibling file, or a
@@ -51,12 +60,12 @@ func adviseNewSourceDir(path string) advice {
 	// already had it.
 	if entries, err := os.ReadDir(filepath.FromSlash(dir)); err == nil {
 		if len(entries) > 0 {
-			return advice{}
+			return ""
 		}
 	} else if !os.IsNotExist(err) {
-		return advice{} // unreadable: say nothing rather than guess
+		return "" // unreadable: say nothing rather than guess
 	}
-	return newSourceDirAdvice(dir)
+	return dir
 }
 
 // workspaceRelativeDir returns the slash-separated directory of path relative to the

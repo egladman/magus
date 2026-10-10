@@ -33,7 +33,8 @@
 //
 // `-- --agent-name <host>` and HOST_SESSION_PATH work exactly as they do in
 // magus-command.buzz: the host name is REQUIRED on this script's argv, and both are
-// attribution recorded on the activity event, never an input to the verdict.
+// attribution recorded on the activity event, never an input to the verdict. So does
+// `-- --reports-skills`, the one capability an entry here may declare.
 //
 // Every knob this file reads, each meaning what its magus-command.buzz twin means:
 //
@@ -60,7 +61,7 @@
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -125,30 +126,45 @@ fun warn(message: str) > void {
     io\stderr.write("magus-path.buzz: {message}\n") catch void;
 }
 
-// The host this entry is wired into, the one argument this hook takes; see
-// AGENT_NAME_FLAG in magus-command.buzz.
+// The host this entry is wired into; see AGENT_NAME_FLAG in magus-command.buzz.
 final AGENT_NAME_FLAG = "--agent-name";
 
-// readAgentName reads the host off this script's argv, "" when the entry names none, and
-// reports every other argument. Empty is not defaulted: `magus shell` refuses installed
+// The `magus shell` flags an entry may declare, as in magus-command.buzz's SUPPORTED_FLAGS:
+// a config that also matches its host's skill tool says so, and a rule that wants a skill
+// read before a write can then hold the write.
+final SUPPORTED_FLAGS = ["--reports-skills"];
+
+// EntryArgs is what this script's argv says: the host, and the supported flags it named.
+object EntryArgs {
+    agentName: str,
+    flags: [str],
+}
+
+// readEntryArgs reads the host and the supported flags off this script's argv, and reports
+// every other argument. An empty host is not defaulted: `magus shell` refuses installed
 // glue that names no host (MGS3024).
 //
 // An argument that arrives here means the wiring meant something by it, and reading none
 // at all accepted that in silence. Reported and then ignored, which is the same policy
 // every other arm of this file takes: a misconfigured entry must not block work, and must
 // not be invisible either.
-fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME_FLAG]) catch null;
-    if (parsed == null) { return ""; }
+fun readEntryArgs(args: [str]) > EntryArgs {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    if (parsed == null) { return EntryArgs{ agentName = "", flags = [<str>] }; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_NAME_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts {AGENT_NAME_FLAG} and {SUPPORTED_FLAGS.join(", ")}. "
             + "Fix the hook command in your host config.");
     }
-    return parsed!.values[AGENT_NAME_FLAG] ?? "";
+    final named = mut [<str>];
+    foreach (name in SUPPORTED_FLAGS) {
+        if (parsed!.values[name] != null) { named.append(name); }
+    }
+    return EntryArgs{ agentName = parsed!.values[AGENT_NAME_FLAG] ?? "", flags = named };
 }
 
 fun main(args: [str]) > void {
-    final agentName = readAgentName(args);
+    final entry = readEntryArgs(args);
+    final agentName = entry.agentName;
     final eventPath = hook\envOr("HOST_EVENT_PATH", fallback: "tool_input.file_path");
     final sessionPath = hook\envOr("HOST_SESSION_PATH", fallback: "session_id");
     final agentPath = hook\envOr("HOST_AGENT_PATH", fallback: "agent_id");
@@ -214,7 +230,14 @@ fun main(args: [str]) > void {
     // The retry tests status AND emptiness together, for the same reason as the command
     // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
     // on stdout, so retrying on status alone would judge every blocked write twice.
-    final attributed = mut ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript];
+    //
+    // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
+    // binary too old for one cannot report a skill load either.
+    final attributed = mut [<str>];
+    foreach (flag in entry.flags) { attributed.append(flag); }
+    foreach (word in ["--agent-name", agentName, "--transport", "buzz", "--session", session, "--agent", agent, "--transcript", transcript]) {
+        attributed.append(word);
+    }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {

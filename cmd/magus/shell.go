@@ -156,8 +156,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 
 	// Answered as a deny, never as the exit a startup refusal would be: a hook reads a
 	// failed guard as no verdict and fails open, so an environment magus knows is wrong
-	// would disarm every rule for the session. --observe carries no verdict to deny.
-	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe {
+	// would disarm every rule for the session. --observe and --message carry no verdict to
+	// deny.
+	if refusal, _ := ctx.Value(envRefusalKey{}).(error); refusal != nil && !sf.Observe && !sf.Message {
 		verdict := guard.Verdict{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -177,10 +178,10 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// A failed read is not an empty input, and collapsing the two cleared every
 	// command whose payload arrived truncated. Answered as a deny so the exit is 2,
 	// which is what the manpage promises: deny and unreadable input share the code,
-	// so a host that blocks on 2 fails closed in both cases. --observe is exempt
-	// because it carries no verdict: there is nothing to fail closed about, and the
-	// documented contract is that it always exits 0.
-	if readErr != nil && !sf.Observe {
+	// so a host that blocks on 2 fails closed in both cases. --observe and --message are
+	// exempt because they carry no verdict: there is nothing to fail closed about, and
+	// the documented contract is that they always exit 0.
+	if readErr != nil && !sf.Observe && !sf.Message {
 		verdict := guard.Verdict{
 			SchemaVersion: agent.GuardSchemaVersion,
 			Decision:      "deny",
@@ -208,6 +209,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Input:      input,
 		IsPath:     sf.Path,
 		Observe:    sf.Observe,
+		Message:    sf.Message,
 		Lease:      sf.Lease,
 		Host:       sf.AgentName,
 		Form:       sf.Transport,
@@ -216,9 +218,9 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		Window:     window,
 		Transcript: sf.Transcript,
 		Event:      sf.Event,
-		// Declared by the wiring, because only a host that observes skill loads can
+		// Declared by the wiring, because only a host that reports skill loads can
 		// honestly say it does. See guard.denySpawnWithoutBrief.
-		ObservesSkillLoads: sf.ObservesSkillLoads,
+		ReportsSkills: sf.ReportsSkills,
 		// Declared by the wiring for the same reason: only a glue that renders the host's
 		// approval prompt can say so, and one that predates ask renders it as an allow.
 		RendersAsk: sf.RendersAsk,

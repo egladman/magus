@@ -348,7 +348,13 @@ import (
 // magus-upstream-source is new: the last-resort read of magus's code at the binary's
 // commit, which `magus version -o json` now reports in full.
 // 116: economy-first spawns, the magus-scout agent, reference.md files and contents lists.
-const SkillVersion = 116
+//
+// 117: magus-architecture-review gathers its evidence from the graph: one command per
+// architecture question, a cited command behind every structural claim, an import-cycle
+// script over magus\importGraph, and the lenses that only look like answers.
+// magus-multi-agent forks a scout --read-only, passes one only through a script check,
+// and reads the outputs a fork says are regenerated outside its write paths.
+const SkillVersion = 117
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -773,7 +779,7 @@ func MustSkill(name string) SkillRef {
 
 var skillSources = []skillSource{
 	{name: "magus-workspace-rules", description: "Adapt magus's installed agent integration to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace instruction should graduate upstream as a pull request or an issue. Workspace-specific instructions belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md"},
-	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md"},
+	{name: "magus-architecture-review", description: "Gather architecture evidence from the magus knowledge graph (package imports, layers, symbol callers, churn, ownership) instead of reading files. Use when discussing architecture, seams, boundaries, layering, coupling and cohesion, or domains; when checking imports or import cycles (circular dependencies); when proposing a package or directory layout or a new package; when deciding where code belongs, or whether to fold, extract or move code; when sizing the blast radius of a change or reviewing sprawl; and when judging whether a change fits or respects the existing architecture or patterns. Do NOT use to choose test boundaries (magus-test-design) or to consume magus as a Go library (magus-sdk).", bodyPath: "skills/magus-architecture-review/SKILL.md"},
 	{name: "magus-test-design", description: "Choose unit, integration, or end-to-end test boundaries from the magus graph and runtime behavior. Use when designing, writing, or reviewing tests that require a real/fake/stub decision, complete observable assertions, or a coverage-gap assessment. Do not use merely to execute or diagnose tests (magus-run), or to choose package seams (magus-architecture-review).", bodyPath: "skills/magus-test-design/SKILL.md"},
 	{name: "magus-buzz-lang", description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts. Use BEFORE writing or editing any .buzz file or a `magus buzz -e` snippet; when a Buzz check or run fails (a BZZ code, `expected '=', got ':'`, `argument 2 must be labeled`, `not allowed at the top level`, `null is not callable`); and for any one-off script in a magus workspace, since Buzz is already installed with the host modules (fs, json, yaml, http, template, vcs). Carries the syntax that differs from TypeScript, Go and Python, every built-in method, a reference script, and the check-fix-run loop. Do NOT use to review existing Buzz (magus-buzz-review).", bodyPath: "skills/magus-buzz-lang/SKILL.md"},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-lang for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},

@@ -31,7 +31,7 @@
 //   -- <flags>       `magus shell` flags this entry declares, one argv word each, parsed
 //                    against SUPPORTED_FLAGS below. Capabilities, not policy: a config
 //                    that also matches its host's skill tool passes
-//                    `-- --observes-skill-loads`, and rules that require a skill load
+//                    `-- --reports-skills`, and rules that require a skill load
 //                    stand down where it is absent. An argument this file does not know
 //                    is REPORTED on stderr and left out, and the call is judged anyway:
 //                    a misconfigured entry must not block work, and must not be silent
@@ -46,6 +46,12 @@
 //                    subagent's command is graded under the job it was spawned for
 //                    rather than as its parent
 //   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+//   HOST_MESSAGE_PATH  dot-path to the text of a message the person typed (default
+//                    prompt, the key Claude Code's envelope uses). An event that names no
+//                    tool and carries a string there is a message rather than a call: it
+//                    goes to `magus shell --message`, which records the topics it raises,
+//                    and this file prints NOTHING for it. A message hook's output reaches
+//                    the model, and recording one is not something to tell the model about
 //   HOST_CWD_PATH    dot-path to the directory the call runs in. The ./magus beside the
 //                    nearest magus.yaml above it judges the call, so a call from a
 //                    subdirectory with its own magusfile.buzz (console/, docs/) still
@@ -110,7 +116,7 @@
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -209,7 +215,7 @@ final ENVELOPE_PREFIX = "\{";
 // cannot state for itself, which today is one thing, whether the config also matches its
 // host's skill tool. Policy stays in the workspace's own rules, where a reader can see it
 // and magus can change it without every installed config being edited.
-final SUPPORTED_FLAGS = ["--observes-skill-loads"];
+final SUPPORTED_FLAGS = ["--reports-skills"];
 
 // The host this entry is wired into. Valued, and read by this file rather than forwarded
 // as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
@@ -342,9 +348,9 @@ object Guard {
 }
 
 // The entry's own flags ride in `extra` with everything else, so the unattributed retry
-// drops them too. Keeping them there meant a binary too old for `--observes-skill-loads`
+// drops them too. Keeping them there meant a binary too old for `--reports-skills`
 // failed BOTH attempts and the spawn entry could never recover where the Bash entry did, and a
-// binary too old to accept the flag cannot observe a skill load to begin with.
+// binary too old to accept the flag cannot report a skill load to begin with.
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     final args = mut ["shell"];
     foreach (arg in extra) { args.append(arg); }
@@ -355,6 +361,21 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
         "allow_failure": true,
         "stdin": guard.payload,
     });
+}
+
+// recordMessage hands a message the person typed to `magus shell --message` and reads
+// nothing back. Every failure is silence: a binary missing, or too old for --message, costs
+// the record and never the message, and nothing printed here could be anything but noise in
+// the model's context. `attribution` is the same argv the judged calls carry.
+fun recordMessage(bin: str, message: str, dir: str, attribution: [str]) > void {
+    if (bin == "") { return; }
+    final args = mut ["shell", "--message"];
+    foreach (word in attribution) { args.append(word); }
+    proc\exec(bin, args: args, dir: dir, opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": message,
+    }) catch void;
 }
 
 // failureNotice states WHICH binary went silent, what version it is, and what it
@@ -533,6 +554,18 @@ fun main(args: [str]) > void {
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
     final bin = hook\resolveBin(cwd: cwd);
+
+    // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
+    // availability notice, which a message hook would hand the model as context.
+    final message = hook\dig(event, dotPath: hook\envOr("HOST_MESSAGE_PATH", fallback: "prompt")) as? str;
+    if (toolName == "" and message != null) {
+        recordMessage(bin, message: message!, dir: cwd, attribution: [
+            "--agent-name", agentName, "--transport", "buzz", "--session", session,
+            "--agent", agent, "--transcript", transcript, "--event", eventName,
+        ]);
+        return;
+    }
+
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(session, family: "unavailable-{toolName}", file: "magus-command.buzz")) {
             io\stdout.write(hook\envOr("__MAGUS_UNAVAILABLE_RESPONSE",

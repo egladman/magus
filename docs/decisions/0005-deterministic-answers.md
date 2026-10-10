@@ -153,7 +153,7 @@ Measured during the pass:
 | `magus agent harness apply` and `remove` are removed; `magus describe harness` prints the plan and the one merge command                                                                                                                                                                                            | done    |
 | Codex reaches magus MCP through the per-checkout stdio `./magus mcp`                                                                                                                                                                                                                                                | done    |
 | Shell hook glue is retired: every `docs/guides/integrations/agents/*.sh` is deleted, the three session-load scripts without a Buzz twin are ported, and every reference follows                                                                                                                                     | planned |
-| Load the Buzz authoring skill when an agent writes a `.buzz` file. The rule (`buzz-unbriefed`) already exists but never fires on Claude Code (0 verdicts over 1,950 Buzz writes): the path and Bash hook entries must declare that they observe skill loads, and a skill load must count per agent, not per session | planned |
+| Load the Buzz authoring skill when an agent writes a `.buzz` file. The rule (`buzz-unbriefed`) already exists but never fires on Claude Code (0 verdicts over 1,950 Buzz writes): the path and Bash hook entries must declare that they observe skill loads, and a skill load must count per agent, not per session | done    |
 
 ### 7. Scripts in `hack/`
 

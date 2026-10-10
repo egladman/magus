@@ -868,10 +868,19 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
 			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobWait.String()+"` grades them. `--schema` prints the record. A job that")
-			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal; a read-only one is exempt.")
+			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal, and one naming no write paths must")
+			fmt.Fprintln(os.Stderr, "be --read-only. A read-only job passes only by a script check, `\"check\":")
+			fmt.Fprintln(os.Stderr, "{\"script\": \"<probe>.buzz\"}` in a --stdin record, whose result cites the ref")
+			fmt.Fprintln(os.Stderr, "`"+hint.Buzz.With("--record", "<probe>.buzz")+"` prints; without one its holder ends it with")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`, recorded "+string(types.StateNoReturn)+".")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A writing job's fork lists the declared outputs a target regenerates from sources")
+			fmt.Fprintln(os.Stderr, "inside its write paths that sit outside them, each with its target: widen the")
+			fmt.Fprintln(os.Stderr, "paths, or regenerate them yourself after integration. It reads declarations only,")
+			fmt.Fprintln(os.Stderr, "so a coupling none records (a version constant a test pins) is not listed.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
 			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
@@ -924,6 +933,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	var probe types.Job
 	row.Apply(&probe)
 	probe.ID = row.ID
+	if err := job.RefuseUnscoped(probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	if err := job.RefuseUngraded(probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -983,10 +995,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
+		job.RenderRegenerated(os.Stdout, jobRegenerated(ctx, root, []types.Job{stored})[stored.ID])
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
-		return emitFormatted(opts, stored)
+		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: jobRegenerated(ctx, root, []types.Job{stored})[stored.ID]})
 	}
 }
 
@@ -1694,9 +1707,10 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	return job.TermsFacts{
-		Projects:         affected.Affected,
-		DerivedDenyPaths: derived,
-		Affinity:         leaseAffinity(ctx, m, affected.Seed),
+		Projects:           affected.Affected,
+		DerivedDenyPaths:   derived,
+		RegeneratedOutside: regeneratedIn(ctx, m, row),
+		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 	}
 }
 
@@ -2163,7 +2177,8 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
 			fmt.Fprintln(os.Stderr, "adds. It prints what changed per job; the global --dry-run prints it and writes")
-			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record.")
+			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record. A job whose write")
+			fmt.Fprintln(os.Stderr, "or deny paths changed also gets fork's list of outputs regenerated outside them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Example:")
 			fmt.Fprintln(os.Stderr, "  magus job apply -f jobs.jsonl --dry-run")
@@ -2218,26 +2233,32 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	switch opts.Format {
-	case outputName:
+	if opts.Format == outputName {
 		ids := make([]string, len(applied))
 		for i, a := range applied {
 			ids[i] = a.Next.ID
 		}
 		return emitNames(ids)
-	case outputText:
-		printJobApply(os.Stdout, applied, globalCfg.DryRun)
+	}
+	var reshaped []types.Job
+	for _, a := range applied {
+		if a.Created || slices.Contains(a.Changed, "write_paths") || slices.Contains(a.Changed, "deny_paths") {
+			reshaped = append(reshaped, a.Next)
+		}
+	}
+	regenerated := jobRegenerated(ctx, root, reshaped)
+	if opts.Format == outputText {
+		printJobApply(os.Stdout, applied, regenerated, globalCfg.DryRun)
 		if len(applied) == 1 && !globalCfg.DryRun {
 			pointAtConsole(ctx, applied[0].Next.ID)
 		}
 		return nil
-	default:
-		report := applyReport{DryRun: globalCfg.DryRun}
-		for _, a := range applied {
-			report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed})
-		}
-		return emitFormatted(opts, report)
 	}
+	report := applyReport{DryRun: globalCfg.DryRun}
+	for _, a := range applied {
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: regenerated[a.Next.ID]})
+	}
+	return emitFormatted(opts, report)
 }
 
 // applyReport is `job apply`'s structured output: each row as written, or as it would be.
@@ -2250,9 +2271,12 @@ type applyEntry struct {
 	Job     types.Job `json:"job"     yaml:"job"`
 	Created bool      `json:"created" yaml:"created"`
 	Changed []string  `json:"changed" yaml:"changed"`
+	// RegeneratedOutside is computed for a row whose write or deny paths the apply set.
+	RegeneratedOutside []job.RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
 }
 
-func printJobApply(out io.Writer, applied []job.Applied, dryRun bool) {
+// printJobApply prints each row's change, then what regenerated holds for it.
+func printJobApply(out io.Writer, applied []job.Applied, regenerated map[string][]job.RegeneratedOutput, dryRun bool) {
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
@@ -2271,6 +2295,7 @@ func printJobApply(out io.Writer, applied []job.Applied, dryRun bool) {
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
 		}
+		job.RenderRegenerated(out, regenerated[a.Next.ID])
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
