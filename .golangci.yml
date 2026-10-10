@@ -329,6 +329,8 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
+          # `magus run` is the command its errors name, not internal/run.
+          operations: [run]
           allow:
             - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
 

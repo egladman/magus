@@ -17,10 +17,13 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/parser"
 	"go/token"
 	"go/types"
+	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
@@ -41,16 +44,26 @@ const (
 	RuleSentences Rule = "error-sentences"
 	// RuleWrap reports a %w anywhere but a closing ": %w".
 	RuleWrap Rule = "error-wrap"
+	// RuleOrigin reports a leading "name: " naming another package of the
+	// module: the error that originates a failure names its own origin. It
+	// needs [Options.Module] to know the module's packages.
+	RuleOrigin Rule = "error-origin"
+	// RuleStutter reports a wrap opening with its own package's "name: "
+	// around a variable last assigned from a call into that package, whose
+	// error already names it.
+	RuleStutter Rule = "error-stutter"
 )
 
 // Rules lists every rule in report order.
-var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap}
+var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap, RuleOrigin, RuleStutter}
 
 var messages = map[Rule]string{
 	RuleJoin:      `a clause joined by %q: chain context with ": " or use a comma`,
 	RuleNewline:   `a newline in an error string: keep it one line and chain context with ": "`,
 	RuleSentences: `a second sentence in an error string: write a fragment and chain context with ": "`,
 	RuleWrap:      `%w only opens the format as "%w: " or closes it as ": %w"`,
+	RuleOrigin:    `a %q prefix names another package of this module: name the operation, and let the origin name itself`,
+	RuleStutter:   `a %q prefix on an error this package already returned: say what this call was doing`,
 }
 
 // Options configures the analyzer returned by [New].
@@ -69,6 +82,12 @@ type Options struct {
 	// Allow exempts a file from one rule, or from every rule when Rule is
 	// empty.
 	Allow []AllowEntry `json:"allow"`
+
+	// Operations are leading names error-origin passes although a package of
+	// the module shares them, because error text uses them for an operation,
+	// as in "run: ". Each must name a package: one that does not exempts
+	// nothing.
+	Operations []string `json:"operations"`
 
 	// Hint is appended to every diagnostic: the repository's own remedy.
 	Hint string `json:"hint"`
@@ -110,22 +129,60 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if err := allowed.Validate("errmsg"); err != nil {
 		return nil, err
 	}
+	var packages map[string]bool
 	if err := source.InModule("errmsg", opts.Module, func(root string) error {
 		if err := opts.Files.RequireMatches("errmsg", "files", root); err != nil {
 			return err
 		}
-		return allowed.RequireMatches("errmsg", "allow", root)
+		if err := allowed.RequireMatches("errmsg", "allow", root); err != nil {
+			return err
+		}
+		var err error
+		if packages, err = packageNames(root); err != nil {
+			return err
+		}
+		for _, op := range opts.Operations {
+			if !packages[op] {
+				return fmt.Errorf("errmsg: operation %q names no package under %s: it exempts nothing, fix the setting", op, root)
+			}
+			delete(packages, op)
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
 	return &analysis.Analyzer{
 		Name: "errmsg",
 		Doc:  "judge error text (errors.New, fmt.Errorf, Error methods) as a fragment chained with \": \"",
-		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts) },
+		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts, packages) },
 	}, nil
 }
 
-func run(pass *analysis.Pass, opts Options) error {
+// packageNames returns the name of every package under root but main, nested
+// modules included, read from the package clause of each non-test file: a
+// build-ignored script in a directory can declare a package of its own.
+func packageNames(root string) (map[string]bool, error) {
+	files, err := source.GoFiles(root)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]bool{}
+	for _, rel := range files {
+		if strings.HasSuffix(rel, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(root, filepath.FromSlash(rel)), nil, parser.PackageClauseOnly)
+		if err != nil {
+			return nil, fmt.Errorf("errmsg: %w", err)
+		}
+		if f.Name.Name != "main" {
+			names[f.Name.Name] = true
+		}
+	}
+	return names, nil
+}
+
+func run(pass *analysis.Pass, opts Options, packages map[string]bool) error {
 	files, err := source.Files(pass)
 	if err != nil {
 		return err
@@ -135,12 +192,8 @@ func run(pass *analysis.Pass, opts Options) error {
 		if !ok || source.IsTest(pass, f) || (len(opts.Files) > 0 && !opts.Files.Match(rel)) {
 			continue
 		}
-		report := func(e ast.Expr, format bool) {
-			text, pos, ok := resolve(pass, e)
-			if !ok {
-				return
-			}
-			for _, rule := range Judge(text, format) {
+		emit := func(pos token.Pos, findings []Finding) {
+			for _, rule := range findings {
 				if (len(opts.Rules) == 0 || slices.Contains(opts.Rules, rule.Rule)) && !allowed(opts, rel, rule.Rule) {
 					pass.Report(analysis.Diagnostic{
 						Pos:      pos,
@@ -150,6 +203,18 @@ func run(pass *analysis.Pass, opts Options) error {
 				}
 			}
 		}
+		report := func(e ast.Expr, format bool) {
+			text, pos, ok := resolve(pass, e)
+			if !ok {
+				return
+			}
+			findings := Judge(text, format)
+			if name := prefix(text); name != "" && name != pass.Pkg.Name() && packages[name] {
+				findings = append(findings, Finding{RuleOrigin, fmt.Sprintf(messages[RuleOrigin], name+": ")})
+			}
+			emit(pos, findings)
+		}
+		var body *ast.BlockStmt
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.CallExpr:
@@ -158,8 +223,12 @@ func run(pass *analysis.Pass, opts Options) error {
 					report(n.Args[0], false)
 				case "fmt.Errorf":
 					report(n.Args[0], true)
+					if body != nil && stutters(pass, body, n) {
+						emit(n.Args[0].Pos(), []Finding{{RuleStutter, fmt.Sprintf(messages[RuleStutter], pass.Pkg.Name()+": ")}})
+					}
 				}
 			case *ast.FuncDecl:
+				body = n.Body
 				if errorMethod(pass, n) {
 					judgeReturns(pass, n.Body, report)
 				}
@@ -217,6 +286,110 @@ func judgeReturns(pass *analysis.Pass, body *ast.BlockStmt, report func(ast.Expr
 		}
 		return true
 	})
+}
+
+// leading matches the "name: " an error opens with to say where it came from.
+var leading = regexp.MustCompile(`^([a-z][a-z0-9_]*): `)
+
+// prefix is the name text opens with, or "".
+func prefix(text string) string {
+	if m := leading.FindStringSubmatch(text); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// stutters reports whether call, a fmt.Errorf inside body, opens with its own
+// package's name while its %w operand is a variable last assigned from a call
+// into that package. A call written as the operand itself is not followed: it
+// is usually a helper that annotates an error from elsewhere, such as one
+// adding a subprocess's stderr.
+func stutters(pass *analysis.Pass, body *ast.BlockStmt, call *ast.CallExpr) bool {
+	text, _, ok := resolve(pass, call.Args[0])
+	if !ok || prefix(text) != pass.Pkg.Name() {
+		return false
+	}
+	id, ok := wrapOperand(text, call.Args[1:]).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	obj := pass.TypesInfo.ObjectOf(id)
+	if obj == nil {
+		return false
+	}
+	inner, ok := ast.Unparen(lastAssigned(pass, body, obj, call.Pos())).(*ast.CallExpr)
+	return ok && samePackage(pass, inner)
+}
+
+// wrapOperand returns the argument the last %w of format consumes, or nil
+// when a "*" width or precision leaves the count to run time.
+func wrapOperand(format string, args []ast.Expr) ast.Expr {
+	var wrapped ast.Expr
+	next := 0
+	for _, v := range verb.FindAllString(format, -1) {
+		if v == "%%" {
+			continue
+		}
+		if strings.Contains(v, "*") {
+			return nil
+		}
+		if m := argIndex.FindStringSubmatch(v); m != nil {
+			n, _ := strconv.Atoi(m[1])
+			next = n - 1
+		}
+		if strings.HasSuffix(v, "w") && next >= 0 && next < len(args) {
+			wrapped = ast.Unparen(args[next])
+		}
+		next++
+	}
+	return wrapped
+}
+
+// argIndex matches the explicit argument index of a verb such as "%[2]w".
+var argIndex = regexp.MustCompile(`\[(\d+)\][a-zA-Z]$`)
+
+// lastAssigned returns the expression last assigned to obj in body before
+// pos, or nil.
+func lastAssigned(pass *analysis.Pass, body *ast.BlockStmt, obj types.Object, pos token.Pos) ast.Expr {
+	var last ast.Expr
+	var at token.Pos
+	assign := func(lhs []*ast.Ident, rhs []ast.Expr, stmt token.Pos) {
+		if stmt >= pos || stmt < at {
+			return
+		}
+		for i, id := range lhs {
+			if id == nil || pass.TypesInfo.ObjectOf(id) != obj {
+				continue
+			}
+			switch {
+			case len(rhs) == len(lhs):
+				last, at = rhs[i], stmt
+			case len(rhs) == 1:
+				last, at = rhs[0], stmt
+			}
+		}
+	}
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.AssignStmt:
+			ids := make([]*ast.Ident, len(n.Lhs))
+			for i, e := range n.Lhs {
+				ids[i], _ = e.(*ast.Ident)
+			}
+			assign(ids, n.Rhs, n.Pos())
+		case *ast.ValueSpec:
+			assign(n.Names, n.Values, n.Pos())
+		}
+		return true
+	})
+	return last
+}
+
+// samePackage reports whether call statically invokes a function or concrete
+// method of the package under analysis.
+func samePackage(pass *analysis.Pass, call *ast.CallExpr) bool {
+	fn := typeutil.StaticCallee(pass.TypesInfo, call)
+	return fn != nil && fn.Pkg() == pass.Pkg
 }
 
 func allowed(opts Options, rel string, rule Rule) bool {

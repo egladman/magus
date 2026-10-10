@@ -1,6 +1,7 @@
 package errmsg
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -29,6 +30,31 @@ func TestAnalyzerReportsOnlyTheRulesNamedOutsideAllowedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	analysistest.Run(t, analysistest.TestData(), analyzer, "quiet")
+}
+
+func TestAnalyzerJudgesPrefixesAgainstTheModulesPackages(t *testing.T) {
+	dir, err := filepath.Abs(filepath.Join("testdata", "origin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(dir)
+	analyzer, err := New(Options{
+		Module:     "example.com/m",
+		Rules:      []Rule{RuleOrigin, RuleStutter},
+		Operations: []string{"run"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, dir, analyzer, "example.com/m/...")
+}
+
+func TestNewRejectsAnOperationNamingNoPackage(t *testing.T) {
+	sourcetest.Module(t, "example.com/m", "run/run.go")
+	_, err := New(Options{Module: "example.com/m", Operations: []string{"run", "usage"}})
+	if err == nil || !strings.Contains(err.Error(), `errmsg: operation "usage" names no package`) {
+		t.Fatalf("want an error naming the dead operation, got %v", err)
+	}
 }
 
 // TestNewRejectsDeadScope fails at load when a file it names has moved.
