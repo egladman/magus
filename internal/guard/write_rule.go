@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceWriteRule is the Verdict.Rule a magus\guard.write answer carries.
+// workspaceWriteRule is the Verdict.Rule an unnamed magus\guard.write answer carries.
 const workspaceWriteRule = workspaceShellPrefix + "write"
 
 // advisoryWriteRuleFailed names the notice that a workspace write rule judged nothing.

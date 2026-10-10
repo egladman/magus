@@ -1,7 +1,9 @@
 package types
 
 import (
+	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -118,11 +120,41 @@ type GuardVerdict struct {
 	Decision GuardDecision
 	// Reason is shown to the agent: the refusal for a deny, the context for an advise.
 	Reason string
+	// Rule is the name the verdict reports under, as workspace:<rule>, so the trail, a
+	// repeated deny and doctor can tell one workspace rule from another. "" reports under
+	// the seam that asked, such as workspace:command. See ValidateGuardRuleName.
+	Rule string
 }
 
-// StricterGuardVerdict merges two verdicts on one call, keeping the stricter decision:
-// deny over advise over allow. When both carry the same decision their reasons are both
-// kept, once each, so two rules that agree on a deny still explain themselves.
+// reservedGuardRuleNames are the seams an unnamed verdict reports under; a rule named
+// after one would read as an unnamed answer.
+var reservedGuardRuleNames = []string{"command", "spawn", "write"}
+
+// guardRuleName is a rule's name as written: lowercase words of letters and digits joined
+// by single hyphens. It is a label, never resolved through Normalize, so "rule2" stands as
+// written.
+var guardRuleName = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+
+// ValidateGuardRuleName refuses a GuardVerdict rule name that is not lowercase words
+// joined by hyphens, or that names a seam.
+func ValidateGuardRuleName(name string) error {
+	if name == "" {
+		return errors.New("guard rule name is empty")
+	}
+	if !guardRuleName.MatchString(name) {
+		return fmt.Errorf("guard rule name %q is not lowercase letters and digits joined by single hyphens; write %q", name, Normalize(name))
+	}
+	if slices.Contains(reservedGuardRuleNames, name) {
+		return fmt.Errorf("guard rule name %q is reserved: an unnamed %s rule reports under it", name, name)
+	}
+	return nil
+}
+
+// StricterGuardVerdict merges two verdicts on one call, keeping the stricter decision and
+// its rule: deny over advise over allow. When both carry the same decision their reasons
+// are both kept, once each, so two rules that agree on a deny still explain themselves;
+// the merge reports under a's rule, or b's when a names none, since one verdict reports
+// under one rule.
 func StricterGuardVerdict(a, b GuardVerdict) GuardVerdict {
 	switch {
 	case a.Decision.rank() > b.Decision.rank():
@@ -136,7 +168,11 @@ func StricterGuardVerdict(a, b GuardVerdict) GuardVerdict {
 			reasons = append(reasons, r)
 		}
 	}
-	return GuardVerdict{Decision: a.Decision, Reason: strings.Join(reasons, "\n\n")}
+	rule := a.Rule
+	if rule == "" {
+		rule = b.Rule
+	}
+	return GuardVerdict{Decision: a.Decision, Reason: strings.Join(reasons, "\n\n"), Rule: rule}
 }
 
 // CommandRequest is what a magus\guard.command rule is handed: one shell command an agent

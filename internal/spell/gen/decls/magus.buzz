@@ -659,6 +659,7 @@ export object SymbolIndexDigest {
 export object GuardVerdict {
     decision: str = "",
     reason: str = "",
+    rule: str = "",
 }
 
 export object GuardBinary {
@@ -1509,13 +1510,13 @@ export object ci {
 
 // Agent-guard rules for this workspace: additive shell, spawn, command and write rules, and the decision each compiled built-in takes.
 export object guard {
-    static extern fun advise(text: str) > GuardVerdict;
+    static extern fun advise(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun allow() > GuardVerdict;
     static extern fun binary() > GuardBinary;
     static extern fun builtins(rules: {str: any}) > void;
     static extern fun command(rule: fun (req: CommandRequest) > GuardVerdict !> any) > void;
     static extern fun count(key: str) > int;
-    static extern fun deny(text: str) > GuardVerdict;
+    static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;

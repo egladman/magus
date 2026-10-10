@@ -80,10 +80,18 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 	for _, decision := range []types.GuardDecision{types.GuardAdvise, types.GuardDeny} {
 		member := string(decision)
 		guardMap.MapSet(member, directVal(obs, "magus.guard."+member, func(_ context.Context, args []vm.Value) (vm.Value, error) {
-			if len(args) != 1 || !args[0].IsStr() || strings.TrimSpace(args[0].AsString()) == "" {
-				return vm.Null, fmt.Errorf(`magus\guard.%s: expected the text the agent is shown, a non-empty string`, member)
+			if len(args) < 1 || len(args) > 2 || !args[0].IsStr() || strings.TrimSpace(args[0].AsString()) == "" {
+				return vm.Null, fmt.Errorf(`magus\guard.%s: expected the text the agent is shown, a non-empty string, and an optional {rule: str}`, member)
 			}
-			return bindinggen.ObjectGuardVerdict(types.GuardVerdict{Decision: decision, Reason: args[0].AsString()}), nil
+			verdict := types.GuardVerdict{Decision: decision, Reason: args[0].AsString()}
+			if len(args) == 2 {
+				rule, err := verdictRuleOpt(member, args[1])
+				if err != nil {
+					return vm.Null, err
+				}
+				verdict.Rule = rule
+			}
+			return bindinggen.ObjectGuardVerdict(verdict), nil
 		}))
 	}
 	guardMap.MapSet("once", directVal(obs, "magus.guard.once", func(callCtx context.Context, args []vm.Value) (vm.Value, error) {
@@ -106,6 +114,42 @@ func registerVerdictMembers(obs buzz.DirectObserver, guardMap vm.Value) {
 		}
 		return bindinggen.ObjectGuardBinary(guardBinary()), nil
 	}))
+}
+
+// verdictRuleOpt reads deny's and advise's opts record. No opts, a null one or one with
+// no rule leaves the verdict unnamed; a name that cannot report as workspace:<name> is
+// MGS1045, like every other guard misdeclaration.
+func verdictRuleOpt(member string, arg vm.Value) (string, error) {
+	if arg.IsNull() {
+		return "", nil
+	}
+	opts, ok := arg.MapView()
+	if !ok {
+		return "", fmt.Errorf(`magus\guard.%s: opts must be a {rule: str} record, got %s`, member, arg.Kind())
+	}
+	if _, named := opts.MapGet("rule"); !named {
+		if keys := opts.MapKeys(); len(keys) > 0 {
+			return "", fmt.Errorf(`magus\guard.%s: unknown opts field %q`, member, keys[0])
+		}
+		return "", nil
+	}
+	rule := ""
+	for _, k := range opts.MapKeys() {
+		v, _ := opts.MapGet(k)
+		switch k {
+		case "rule":
+			if !v.IsStr() {
+				return "", fmt.Errorf(`magus\guard.%s: "rule" must be a string`, member)
+			}
+			rule = v.AsString()
+		default:
+			return "", fmt.Errorf(`magus\guard.%s: unknown opts field %q`, member, k)
+		}
+	}
+	if err := types.ValidateGuardRuleName(rule); err != nil {
+		return "", types.DiagnosticErrorf(types.GuardRuleMisdeclared, `magus\guard.%s: %v`, member, err)
+	}
+	return rule, nil
 }
 
 // buildStamp is set by the linker and left empty by every build that sets nothing:
@@ -186,6 +230,17 @@ func decodeGuardVerdict(name string, v vm.Value) (types.GuardVerdict, error) {
 			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's reason is %s, not a str`, name, r.Kind())
 		}
 		out.Reason = strings.TrimSpace(r.AsString())
+	}
+	if r, ok := fields.MapGet("rule"); ok && !r.IsNull() {
+		if !r.IsStr() {
+			return types.GuardVerdict{}, fmt.Errorf(`%s: the verdict's rule is %s, not a str`, name, r.Kind())
+		}
+		// A literal GuardVerdict skips deny's check, and an empty rule is the unnamed default.
+		if out.Rule = r.AsString(); out.Rule != "" {
+			if err := types.ValidateGuardRuleName(out.Rule); err != nil {
+				return types.GuardVerdict{}, types.DiagnosticErrorf(types.GuardRuleMisdeclared, `%s: %v`, name, err)
+			}
+		}
 	}
 	if (out.Decision == types.GuardDeny || out.Decision == types.GuardAdvise) && out.Reason == "" {
 		return types.GuardVerdict{}, fmt.Errorf(`%s: the rule returned %s with no reason, which tells the agent nothing`, name, out.Decision)

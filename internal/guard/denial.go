@@ -29,9 +29,10 @@ const ruleDocsBase = "https://eli.gladman.cc/magus/reference/rules/"
 const verdictRefPrefix = "grd"
 
 // denyMarker keys a rule's first firing in the advisory gate. Prefixed so a deny can never
-// share a marker with an advisory kind of the same name.
+// share a marker with an advisory kind of the same name. A workspace rule's colon becomes
+// a dash, since the kind is a filename component and Windows refuses a colon in one.
 func denyMarker(rule string) hint.MarkerKind {
-	return hint.MarkerKind("deny-" + rule)
+	return hint.MarkerKind("deny-" + strings.ReplaceAll(rule, ":", "-"))
 }
 
 // shapeDeny words a deny from rule for this session, returning the reason to show and the
@@ -39,8 +40,10 @@ func denyMarker(rule string) hint.MarkerKind {
 // included, so a reader can reopen any refusal it was shown, not only a repeated one.
 //
 // note is the nothing-ran line for the command, appended to the full form when the rule
-// that refused did not already carry it. An advisory rule, or one the catalog does not
-// list, keeps its reason untouched: it has no page to cite and no one-line summary to repeat.
+// that refused did not already carry it. An advisory rule, or one neither the catalog
+// lists nor a workspace named, keeps its reason untouched: it has no one-line summary to
+// repeat. A named workspace rule (workspace:<name>) has no generated page, so it cites
+// none, and its repeat summarizes it by its reason's first line.
 //
 // Every failure speaks in full. A repeat that cannot store the verdict it points at would
 // cite a ref that resolves to nothing, and a long reason beats a dead end.
@@ -51,11 +54,14 @@ func denyMarker(rule string) hint.MarkerKind {
 func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string, remedy []hint.Next) (shown, ref string, served []hint.Next) {
 	// The tier, not the compiled default: a recoverable rule a workspace sets to deny
 	// refuses with its page and remedy like any other deny.
-	doc, ok := Rule(rule)
-	if !ok || advisoryRule()[rule] {
+	doc, catalogued := Rule(rule)
+	if (!catalogued && !namedWorkspaceRule(rule)) || advisoryRule()[rule] {
 		return reason, "", nil
 	}
-	see := "\nsee: " + ruleDocsBase + rule + "/"
+	see, catches := "", firstLine(reason)
+	if catalogued {
+		see, catches = "\nsee: "+ruleDocsBase+rule+"/", doc.Catches
+	}
 	block := strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n")
 	body := reason
 	if note != "" && !strings.Contains(body, note) {
@@ -76,5 +82,18 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string
 	}
 	// The remedy's why was spent on the first firing, so a repeat shows its command alone.
 	brief := strings.TrimSuffix(hint.Render(remedy, func(hint.Next) string { return "" }), "\n")
-	return "denied again [" + rule + "]: " + doc.Catches + note + brief + "\nfull verdict: " + next.Run + see, ref, remedy
+	return "denied again [" + rule + "]: " + catches + note + brief + "\nfull verdict: " + next.Run + see, ref, remedy
+}
+
+// namedWorkspaceRule reports whether rule is a workspace rule's own name rather than the
+// seam an unnamed magus\guard.command, write or spawn answer reports under.
+func namedWorkspaceRule(rule string) bool {
+	name, ok := strings.CutPrefix(rule, workspaceShellPrefix)
+	return ok && name != "" && rule != workspaceCommandRule && rule != workspaceWriteRule && rule != workspaceSpawnRule
+}
+
+// firstLine is s up to its first newline, trimmed.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(line)
 }

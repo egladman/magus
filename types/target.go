@@ -51,8 +51,12 @@ func kebabCase(s string) string {
 
 // Normalize canonicalizes any magus entity name (a target, a charm, a spell, a
 // spell op) to kebab-case, so go_build, goBuild and go-build all name the same
-// thing. Applied at BOTH registration and lookup; a name normalized on only one
-// side is a silent miss, not an error.
+// thing, and it splits a letter from a digit: build2 is build-2. TestNormalize
+// pins every case as the table docs/concepts/targets.md publishes. It is not a
+// validator: Normalize(x) == x refuses names a reader takes for kebab-case, so a
+// label that is never looked up by Normalize checks its own pattern instead.
+// Applied at BOTH registration and lookup; a name normalized on only one side is
+// a silent miss, not an error.
 //
 // One function rather than the TargetNameNormalizer interface it replaces. That
 // interface had a single implementation, and its injection seam

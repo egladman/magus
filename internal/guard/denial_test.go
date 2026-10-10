@@ -118,7 +118,7 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 
 	gate := hint.NewGate(t.TempDir(), "s1")
 	remedy := []hint.Next{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
-	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate)} {
+	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate), workspaceCommandRule, workspaceWriteRule, workspaceSpawnRule} {
 		for range 2 {
 			got, ref, served := shapeDeny(t.Context(), gate, rule, "why", note, remedy)
 			assert.Equal(t, "why", got, "%s is not a catalogued deny, so its reason is untouched", rule)

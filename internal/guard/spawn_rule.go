@@ -26,7 +26,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceSpawnRule is the Verdict.Rule a magus\guard.spawn answer carries, in the
+// workspaceSpawnRule is the Verdict.Rule an unnamed magus\guard.spawn answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceSpawnRule = workspaceShellPrefix + "spawn"
 

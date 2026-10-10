@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceCommandRule is the Verdict.Rule a magus\guard.command answer carries, in the
+// workspaceCommandRule is the Verdict.Rule an unnamed magus\guard.command answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceCommandRule = workspaceShellPrefix + "command"
 

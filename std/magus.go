@@ -571,15 +571,18 @@ var Magus = Module{
 				},
 				{
 					Name:    "advise",
-					Doc:     "The verdict a spawn, command or write rule returns to let the call through with text for the agent.",
-					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Doc: "The verdict a spawn, command or write rule returns to let the call through with text for the agent. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
+					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
 					Name:    "deny",
-					Doc:     "The verdict a spawn, command or write rule returns to block the call, with text saying why.",
-					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Doc: "The verdict a spawn, command or write rule returns to block the call, with text saying why. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
+						"and a repeat in the same session shortens to its first line.",
+					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},

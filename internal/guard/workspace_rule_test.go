@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
@@ -246,4 +247,68 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 			"Only the built-in rules and the approved magus\\guard.command rule applied to this command.",
 		Rule: workspaceCommandRule,
 	}, v)
+}
+
+// A named answer reports under its own name; an unnamed one keeps the seam's.
+func TestApplyWorkspaceAnswerReportsANamedRule(t *testing.T) {
+	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	named := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no", Rule: "pull-request-text"}, by: decidedByWorktree}
+	v, by := applyWorkspaceAnswer(pass, "", named, workspaceCommandRule)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "no", Rule: "workspace:pull-request-text"}, v)
+	assert.Equal(t, decidedByWorktree, by)
+
+	named.answer.Decision = types.GuardAdvise
+	v, _ = applyWorkspaceAnswer(pass, "", named, workspaceWriteRule)
+	assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: "no", Rule: "workspace:pull-request-text"}, v)
+
+	unnamed := rulesAnswer{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no"}, by: decidedByWorktree}
+	v, _ = applyWorkspaceAnswer(pass, "", unnamed, workspaceCommandRule)
+	assert.Equal(t, workspaceCommandRule, v.Rule)
+}
+
+// A named workspace deny is held to what a catalogued one is: the first firing is in full
+// and stores its verdict, and a repeat is one line led by the reason's first line. It has
+// no generated page, so neither cites one.
+func TestNamedWorkspaceDenyIsShortenedOnRepeat(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	probe := &commandRuleProbe{answer: types.GuardVerdict{
+		Decision: types.GuardDeny,
+		Reason:   "Lead the description with the outcome.\nThe first line says what changed for a reader.",
+		Rule:     "pull-request-text",
+	}}
+	judge := func() Verdict {
+		return Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+	}
+	ref := func(reason string) string {
+		_, run, ok := strings.Cut(reason, "\nfull verdict: ")
+		require.True(t, ok, reason)
+		fields := strings.Fields(run)
+		return fields[len(fields)-1]
+	}
+
+	first := judge()
+	assert.Equal(t, "workspace:pull-request-text", first.Rule)
+	assert.True(t, strings.HasPrefix(first.Reason, probe.answer.Reason), first.Reason)
+	assert.NotContains(t, first.Reason, "see: ")
+	stored, err := trail.ReadBlob(cacheDir, ref(first.Reason))
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(string(stored), probe.answer.Reason), string(stored))
+
+	again := judge()
+	assert.Equal(t, "workspace:pull-request-text", again.Rule)
+	assert.True(t, strings.HasPrefix(again.Reason, "denied again [workspace:pull-request-text]: Lead the description with the outcome.\n"), again.Reason)
+	assert.NotContains(t, again.Reason, "The first line says")
+	assert.NotContains(t, again.Reason, "see: ")
+	_, err = trail.ReadBlob(cacheDir, ref(again.Reason))
+	require.NoError(t, err)
+}
+
+// An unnamed workspace deny is worded exactly as the rule wrote it, every time.
+func TestUnnamedWorkspaceDenyIsUntouched(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	probe := &commandRuleProbe{answer: types.GuardVerdict{Decision: types.GuardDeny, Reason: "no listing"}}
+	for range 2 {
+		v := Judge(ctx, Dependencies{CommandRule: probe.rule()}, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+		assert.Equal(t, Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "no listing", Rule: workspaceCommandRule}, v)
+	}
 }

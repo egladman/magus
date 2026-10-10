@@ -102,6 +102,27 @@ and the stricter answer stands, as for
 [`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval). An agent's edit
 can tighten the policy that grades it and cannot loosen it.
 
+## Naming a rule
+
+`deny` and `advise` take an optional `{rule: str}` record naming the rule that answered:
+
+```buzz
+return magus\guard.deny("Lead the description with the outcome.", {"rule": "pull-request-text"});
+```
+
+A named verdict reports as `workspace:pull-request-text`, the id a
+`magus\guard.shell` rule carries, so the activity trail, `magus doctor` and a reader
+tell it apart from every other workspace rule. An unnamed one reports as
+`workspace:command`, `workspace:write` or `workspace:spawn`. A named command or write
+deny stores its full text under a `grd` ref, as a built-in deny does, and a repeat in
+the same session is one line: `denied
+again [workspace:pull-request-text]:` and the reason's first line, with the ref.
+Unlike a built-in rule, a workspace rule has no generated page, so neither form links
+to one. The name is kebab-case and is none of `command`, `write` or `spawn`; any other
+name raises [MGS1045](codes/magusfile/MGS1045.md) where the rule calls `deny` or
+`advise`, so that rule judges nothing. When the approved and the working-tree rule
+answer the same decision, the merged verdict keeps the first named rule.
+
 ## What it costs
 
 The guard reads its rules from the root magusfile alone, not the whole workspace, and

@@ -184,8 +184,15 @@ func gatedCalls(seam functionSeam) string {
 // decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
 // fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
 // on a built-in ask is dropped, as every notice is on an ask.
-func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, rule string) (Verdict, string) {
+//
+// seamRule is what an unnamed answer reports under; a named one reports as
+// workspace:<name>, the id magus\guard.shell rules already carry.
+func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, seamRule string) (Verdict, string) {
 	answer := asked.answer
+	rule := seamRule
+	if answer.Rule != "" {
+		rule = workspaceShellPrefix + answer.Rule
+	}
 	switch {
 	case answer.Decision == types.GuardDeny:
 		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by

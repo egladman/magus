@@ -71,3 +71,27 @@ func TestStricterGuardVerdict(t *testing.T) {
 		assert.Equal(t, tc.want, StricterGuardVerdict(tc.a, tc.b), tc.name)
 	}
 }
+
+// A merge reports under one rule: the stricter verdict's, or on a tie the first that
+// names one, while both reasons still reach the reader.
+func TestStricterGuardVerdictKeepsOneRule(t *testing.T) {
+	named := GuardVerdict{Decision: GuardDeny, Reason: "no outcome line", Rule: "pull-request-text"}
+	other := GuardVerdict{Decision: GuardDeny, Reason: "no test plan", Rule: "pull-request-tests"}
+	advise := GuardVerdict{Decision: GuardAdvise, Reason: "name a model", Rule: "spawn-model"}
+	unnamed := GuardVerdict{Decision: GuardDeny, Reason: "unnamed model"}
+
+	assert.Equal(t, named, StricterGuardVerdict(advise, named))
+	assert.Equal(t, named, StricterGuardVerdict(named, advise))
+	assert.Equal(t, GuardVerdict{Decision: GuardDeny, Reason: "no outcome line\n\nno test plan", Rule: "pull-request-text"}, StricterGuardVerdict(named, other))
+	assert.Equal(t, GuardVerdict{Decision: GuardDeny, Reason: "unnamed model\n\nno outcome line", Rule: "pull-request-text"}, StricterGuardVerdict(unnamed, named))
+}
+
+func TestValidateGuardRuleName(t *testing.T) {
+	for _, name := range []string{"pull-request-text", "no-curl", "rule-2", "rule2", "h1-heading"} {
+		require.NoError(t, ValidateGuardRuleName(name), name)
+	}
+	require.EqualError(t, ValidateGuardRuleName("pullRequestText"), `guard rule name "pullRequestText" is not lowercase letters and digits joined by single hyphens; write "pull-request-text"`)
+	require.EqualError(t, ValidateGuardRuleName("pull_request"), `guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens; write "pull-request"`)
+	require.EqualError(t, ValidateGuardRuleName(""), `guard rule name is empty`)
+	require.EqualError(t, ValidateGuardRuleName("command"), `guard rule name "command" is reserved: an unnamed command rule reports under it`)
+}

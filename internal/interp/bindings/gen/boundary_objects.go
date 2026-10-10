@@ -3213,6 +3213,7 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("rule", vm.StrValue(v.Rule))
 	return out
 }
 
