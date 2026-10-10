@@ -16,17 +16,22 @@ import (
 // KindDoc reads text as a doc comment, by the rules [Judge] applies to one.
 // KindSkillSource renders text in both of a skill's forms first, and each
 // finding's line is its line in the source.
-func JudgeText(text string, kind Kind) []Finding {
+func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 
 	switch kind {
 	case KindDoc:
-		return run(input{symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw})
+		return run(input{symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, opts: o})
 	case KindSkillSource:
 		return judgeSkillSource(strings.Join(raw, "\n"))
 	}
 
-	lines := markdownProse(raw, kind != KindPullRequest)
+	lines := markdownProse(raw, kind != KindPullRequest && kind != KindReply)
 	prose := readProse(lines, true)
 
 	if kind == KindPullRequest {
@@ -41,7 +46,7 @@ func JudgeText(text string, kind Kind) []Finding {
 		}
 	}
 
-	return run(input{kind: kind, prose: prose, lines: lines})
+	return run(input{kind: kind, prose: prose, lines: lines, opts: o})
 }
 
 var (

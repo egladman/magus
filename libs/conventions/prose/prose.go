@@ -96,7 +96,39 @@ const (
 	// in the second person, its numbered steps imperative and its words free
 	// of condescension.
 	KindGuide Kind = "guide"
+	// KindReply is a review comment, a review's body or a reply in a review
+	// thread: Markdown with no title line.
+	KindReply Kind = "reply"
 )
+
+// Severity is what a finding costs the caller that reads it.
+type Severity string
+
+const (
+	// SeverityError is a finding a gate refuses.
+	SeverityError Severity = "error"
+	// SeverityAdvisory is a finding a gate reports and lets through: its rule's
+	// words also have senses the rule cannot tell apart from the one it means.
+	SeverityAdvisory Severity = "advisory"
+)
+
+// Profile names a set of rules a writer is held to. The zero value is
+// [ProfilePlain].
+type Profile string
+
+const (
+	// ProfilePlain is every rule, this repository's own house style included.
+	ProfilePlain Profile = "plain"
+	// ProfileCollaborative leaves out the rules that encode this repository's
+	// house style, so text written for a team elsewhere is judged for tone,
+	// claims and generated-writing tells alone.
+	ProfileCollaborative Profile = "collaborative"
+)
+
+// profileSkips lists the rules a profile leaves out.
+var profileSkips = map[Profile][]Rule{
+	ProfileCollaborative: {RuleTerms},
+}
 
 var (
 	docOnly = []Kind{KindDoc}
@@ -106,38 +138,46 @@ var (
 	guide   = []Kind{KindGuide}
 )
 
+// check is one rule: the kinds it judges, the kinds where its findings are
+// [SeverityAdvisory] rather than [SeverityError], and the judge itself.
+type check struct {
+	rule     Rule
+	on       []Kind
+	advisory []Kind
+	judge    func(in input) []Finding
+}
+
 // checks run in this order, which is the order [Judge] and [JudgeText] report
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = []struct {
-	rule  Rule
-	on    []Kind
-	judge func(in input) []Finding
-}{
-	{RuleCommentBlock, docOnly, commentBlock},
-	{RuleCommentSentence, docOnly, commentSentence},
-	{RuleFiller, all, filler},
-	{RuleTerms, all, terms},
-	{RuleNameSuffix, docOnly, nameSuffix},
-	{RuleAside, docOnly, aside},
-	{RuleHistory, docOnly, history},
-	{RuleDocStub, docOnly, docStub},
-	{RuleLeadContext, []Kind{KindPullRequest}, leadContext},
-	{RuleReplyVoice, written, replyVoice},
-	{RuleTense, written, tense},
-	{RuleHedge, written, hedge},
-	{RuleAttribution, written, attribution},
-	{RuleTerseSentence, skill, terseSentence},
-	{RuleTerseParagraph, skill, terseParagraph},
-	{RuleWordy, skill, wordy},
-	{RuleBareRule, skill, bareRule},
-	{RuleSecondPerson, guide, secondPerson},
-	{RuleStepVerb, guide, stepVerb},
-	{RuleCondescension, guide, condescension},
+var checks = slices.Concat(coreChecks, toneChecks, slopChecks, []check{
 	// A skill body that does not render is reported before any rule runs; the
 	// entry gives the rule its place in [Rules].
-	{RuleTemplate, nil, nil},
+	{rule: RuleTemplate},
+})
+
+var coreChecks = []check{
+	{rule: RuleCommentBlock, on: docOnly, judge: commentBlock},
+	{rule: RuleCommentSentence, on: docOnly, judge: commentSentence},
+	{rule: RuleFiller, on: all, judge: filler},
+	{rule: RuleTerms, on: all, judge: terms},
+	{rule: RuleNameSuffix, on: docOnly, judge: nameSuffix},
+	{rule: RuleAside, on: docOnly, judge: aside},
+	{rule: RuleHistory, on: docOnly, judge: history},
+	{rule: RuleDocStub, on: docOnly, judge: docStub},
+	{rule: RuleLeadContext, on: []Kind{KindPullRequest}, judge: leadContext},
+	{rule: RuleReplyVoice, on: written, judge: replyVoice},
+	{rule: RuleTense, on: written, judge: tense},
+	{rule: RuleHedge, on: written, judge: hedge},
+	{rule: RuleAttribution, on: written, judge: attribution},
+	{rule: RuleTerseSentence, on: skill, judge: terseSentence},
+	{rule: RuleTerseParagraph, on: skill, judge: terseParagraph},
+	{rule: RuleWordy, on: skill, judge: wordy},
+	{rule: RuleBareRule, on: skill, judge: bareRule},
+	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
+	{rule: RuleStepVerb, on: guide, judge: stepVerb},
+	{rule: RuleCondescension, on: guide, judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.
@@ -176,7 +216,33 @@ type Finding struct {
 	// comment's budget. [Judge] leaves it 0: a doc comment's lines are not its
 	// source file's, and the index places the symbol.
 	Line int
+	// Severity is set by the rule's entry for the kind judged, never by the
+	// rule itself.
+	Severity Severity
 }
+
+// Option tunes one [JudgeText] call.
+type Option func(*options)
+
+type options struct {
+	profile      Profile
+	only, skip   []Rule
+	threadLength int
+}
+
+// WithProfile judges by the rules profile p keeps.
+func WithProfile(p Profile) Option { return func(o *options) { o.profile = p } }
+
+// WithOnly judges by the named rules alone. A named rule that does not apply
+// to the kind judged still does not run.
+func WithOnly(rules ...Rule) Option { return func(o *options) { o.only = append(o.only, rules...) } }
+
+// WithSkip leaves the named rules out.
+func WithSkip(rules ...Rule) Option { return func(o *options) { o.skip = append(o.skip, rules...) } }
+
+// WithThreadLength tells the [KindReply] rules how many replies the author
+// already posted in the thread the judged reply joins.
+func WithThreadLength(n int) Option { return func(o *options) { o.threadLength = n } }
 
 // input is what a rule reads.
 type input struct {
@@ -187,6 +253,7 @@ type input struct {
 	// still in place, for a rule that asks what a block is rather than what it
 	// says.
 	lines []string
+	opts  options
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty, and
@@ -207,8 +274,13 @@ func run(in input) []Finding {
 	var out []Finding
 
 	for _, c := range checks {
-		if !slices.Contains(c.on, in.kind) {
+		if !in.opts.keeps(c.rule) || !slices.Contains(c.on, in.kind) {
 			continue
+		}
+
+		severity := SeverityError
+		if slices.Contains(c.advisory, in.kind) {
+			severity = SeverityAdvisory
 		}
 
 		// A rule may scan its lines and its paragraphs in separate passes, so
@@ -218,12 +290,23 @@ func run(in input) []Finding {
 		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
 
 		for _, f := range found {
-			f.Rule = c.rule
+			f.Rule, f.Severity = c.rule, severity
 			out = append(out, f)
 		}
 	}
 
 	return out
+}
+
+func (o options) keeps(r Rule) bool {
+	switch {
+	case len(o.only) > 0 && !slices.Contains(o.only, r):
+		return false
+	case slices.Contains(o.skip, r):
+		return false
+	default:
+		return !slices.Contains(profileSkips[o.profile], r)
+	}
 }
 
 // proseLine is a line of a doc that renders as prose.

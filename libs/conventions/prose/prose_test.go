@@ -2,6 +2,7 @@ package prose
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -23,8 +24,17 @@ func runJudgeCases(t *testing.T, cases []judgeCase) {
 	}
 }
 
+// assertFindings reads a want with no Severity as [SeverityError], so a case
+// names a severity only where it is advisory.
 func assertFindings(t *testing.T, got, want []Finding) {
 	t.Helper()
+
+	want = slices.Clone(want)
+	for i := range want {
+		if want[i].Severity == "" {
+			want[i].Severity = SeverityError
+		}
+	}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("findings:\n got %#v\nwant %#v", got, want)
@@ -42,6 +52,30 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Rules() = %q, want %q", got, want)
+	}
+}
+
+func TestJudgeTextOptionsChooseTheRules(t *testing.T) {
+	const text = "Simply ask the sub-agent.\n"
+
+	filler := Finding{Rule: RuleFiller, Message: "Drop 'Simply': state the fact.", Match: "Simply", Line: 1}
+	terms := Finding{Rule: RuleTerms, Message: "Write 'subagent', not 'sub-agent'.", Match: "sub-agent", Line: 1}
+
+	cases := []struct {
+		name string
+		opts []Option
+		want []Finding
+	}{
+		{"every rule by default", nil, []Finding{filler, terms}},
+		{"only", []Option{WithOnly(RuleTerms)}, []Finding{terms}},
+		{"skip", []Option{WithSkip(RuleTerms)}, []Finding{filler}},
+		{"the collaborative profile leaves the glossary out", []Option{WithProfile(ProfileCollaborative)}, []Finding{filler}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertFindings(t, JudgeText(text, KindMarkdown, tc.opts...), tc.want)
+		})
 	}
 }
 
