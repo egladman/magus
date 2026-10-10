@@ -312,12 +312,14 @@ both already run the same judge.
 | Unit | Write set | State |
 | --- | --- | --- |
 | U1 judge: the review-reply kind, shape and heading rules, the ported AI-writing rules, the tone rules, the claim rule, one selling-word list | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, `libs/conventions/readme.md` | done |
-| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRF` codes, the catalog, purpose-named kinds, the findings contract | the same | in progress |
+| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRF` codes, the catalog, purpose-named kinds, the findings contract | the same | done |
+| U1c the judge is named `proofread`, with a subcommand per kind plus `rules` and `explain` | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, every caller | done |
 | U2 diff stat for every backend | `vcs/*.go`, `types/vcs.go`, `std/vcs.go` | done |
-| U2b a workspace guard rule names itself | `types/guard.go`, `internal/interp/bindings/guard_rule.go`, `internal/guard/workspace_rule.go` | in progress |
-| U3 guard and CI: this repository's decisions table, the command table, replies, outside judges, output-ref check, lead exempt from the budget, denials that teach the shape with one example, CI running the same checks as the guard | `hack/policy/*.buzz`, `hack/lint/markdown-prose.buzz`, `magusfile.buzz` (`pr-title`, `pr-description`), `.github/workflows/pr.yaml` | planned |
-| U4 docs: writing rules, a page per proofread rule rendered from the catalog, CONTRIBUTING's PR checks | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/proofread/`, `CONTRIBUTING.md`, `changes/unreleased/` | planned |
-| U5 outside this tree: the portable skill and hook | `~/.claude/skills/`, `~/.dotfiles/claude/.claude/hooks/idiomatic-hooks` | in progress |
+| U2b a workspace guard rule names itself, and repeats only an identical reason in short | `types/guard.go`, `internal/interp/bindings/guard_rule.go`, `internal/guard/workspace_rule.go`, `internal/guard/denial.go` | done |
+| U3 guard and CI: this repository's decisions table, the command table, replies, outside judges, lead exempt from the budget, denials that teach the shape with one example, CI running the same checks as the guard | `hack/policy/*.buzz`, `hack/lint/markdown-proofread.buzz`, `magusfile.buzz` (`pr-title`, `pr-description`), `.github/workflows/pr.yaml` | done |
+| U4 docs: writing rules, a page per proofread rule rendered from the catalog, CONTRIBUTING's PR checks | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/proofread/`, `CONTRIBUTING.md`, `changes/unreleased/` | done |
+| U5 outside this tree: the portable skill and the hook that runs `proofread` | `~/.claude/skills/`, `~/.dotfiles/claude/.claude/hooks/idiomatic-hooks` | done (the hook binary installs once this merges) |
+| U6 `proofread` ships as a signed release archive beside magus | `magusfile.buzz`, `hack/magusfile/releases.buzz`, `.github/workflows/release.yaml` | done |
 
 U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
 

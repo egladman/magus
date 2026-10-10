@@ -669,15 +669,16 @@ func isReleaseAsset(name string) bool {
 	return false
 }
 
-// platformFromName infers the platform string from a tarball filename.
-// For example, "magus_v0.2.0_linux_amd64.tar.gz" becomes "linux/amd64".
+// platformFromName infers the platform string from a tarball filename of any tool a
+// release ships. For example, "magus_v0.2.0_linux_amd64.tar.gz" and
+// "proofread_v0.2.0_linux_amd64_static.tar.gz" both become "linux/amd64".
 func platformFromName(name, version string) string {
-	// Strip "magus_<version>_" prefix and ".tar.gz" suffix.
-	prefix := "magus_" + version + "_"
-	if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, ".tar.gz") {
+	// Strip the "<tool>_<version>_" prefix and ".tar.gz" suffix.
+	tool, rest, found := strings.Cut(name, "_"+version+"_")
+	if !found || tool == "" || strings.Contains(tool, "_") || !strings.HasSuffix(rest, ".tar.gz") {
 		return ""
 	}
-	mid := name[len(prefix) : len(name)-len(".tar.gz")]
+	mid := strings.TrimSuffix(rest, ".tar.gz")
 	// mid is e.g. "linux_amd64", or "linux_amd64_static" for the marked variant. Strip a
 	// trailing variant token first: both variants describe the SAME platform, and without
 	// this the SplitN below yields "linux/amd64_static" as the platform string.

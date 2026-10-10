@@ -172,8 +172,9 @@ where the number gets chosen.
 ### The post-tag state, simulated
 
 The release checks compute the version `release-build` would stamp once these tags
-sit on HEAD, then computes every asset name that version produces and checks each
-one against the glob `release.yaml` uploads with.
+sit on HEAD, then computes every asset name that version produces, for magus and for
+`proofread`, and checks each one against the glob `release.yaml` uploads that tool's
+archives with.
 
 That is the v0.4.0 failure, caught a step earlier. Tagging the root and three
 libraries on one commit left `git describe` choosing among four tags; it chose
@@ -200,8 +201,11 @@ refuses on two things the release checks can see now:
 `release.yaml`'s tag trigger is stated in `magusfile.buzz` as `RELEASE_TAG_REFSPEC`, and
 the release checks confirm the workflow still contains it. Edit one side alone and the
 rehearsal names it. They also confirm the root tag matches the trigger and that no module
-tag does, so a library bump cannot start a release run. The upload needs no such check:
-`release-publish` uploads what `RELEASE_ASSET_GLOB` matches itself.
+tag does, so a library bump cannot start a release run. Every `upload-artifact` step in
+`release.yaml` must list each tool's archive glob (`TOOLS` in
+`hack/magusfile/releases.buzz`), and the checks name a step that misses one.
+`release-publish` then refuses a release where a static magus archive has no `proofread`
+archive beside it.
 
 ## Pushing
 
@@ -276,10 +280,10 @@ release.
 
 Nothing in `release.yaml` checks the asset names, and that is deliberate: the
 target already refuses to write one the upload could not collect. `release-build`
-matches every name it is about to write against `RELEASE_ASSET_GLOB` and throws
-before the first byte, and the release checks confirm that same constant still appears in
-`release.yaml`. The two links compose, so a step re-checking the built files
-against the glob would restate a conclusion already reached twice.
+matches every name it is about to write against its tool's glob and throws before the
+first byte, and the release checks confirm each glob still appears in every upload step of
+`release.yaml`. The two links compose, so a step re-checking the built files against the
+globs would restate a conclusion already reached twice.
 
 There is also nothing left for such a step to find. Every asset in one job shares
 one version, and `<goos>`, `<goarch>` and the variant suffix are fixed tokens with
@@ -287,7 +291,7 @@ no separator in them, so the glob selects all of a job's archives or none of the
 A partial match is not reachable.
 
 One gap is left open on purpose. Tagging by hand skips the release checks, so it also
-skips the check that `RELEASE_ASSET_GLOB` still matches the workflow. Tagging by
+skips the check that each tool's glob still matches the workflow. Tagging by
 hand equally skips the version-legality, existing-tag, changelog and manifest
 checks, so the answer is to cut releases with `magus run release` rather than to
 reproduce one of its checks somewhere else.
