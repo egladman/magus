@@ -174,7 +174,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 			checked = filepath.Join(opts.Dir, checked)
 		}
 		if err := policy.CheckExec(ctx, checked); err != nil {
-			sandbox.EmitDenyHint(policy, filesystem.Exec, resolved)
+			sandbox.EmitDenyHint(ctx, policy, filesystem.Exec, resolved)
 			return ExecResult{Code: -1}, types.DiagnosticErrorf(types.ExecDenied, "exec denied: %s", resolved)
 		}
 	}
@@ -193,7 +193,7 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 		c.ExtraFiles = append(c.ExtraFiles, js.files()...)
 	}
 	sandbox.RecordEnvDropped(ctx, policy, name)
-	sandbox.EmitShimHint(policy, name)
+	sandbox.EmitShimHint(ctx, policy, name)
 	if len(withheld) > 0 {
 		slog.DebugContext(ctx, types.FormatDiagnostic(types.ProcSocketWithheld,
 			"withheld magus socket pointer(s) from op subprocess (done regardless of sandbox.mode)"),

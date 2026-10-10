@@ -7,14 +7,10 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 )
 
-// emitMagusHint prints msg through the shared hint channel, honoring the user
-// hints preference. Advisory only, never fatal. No dedup — it would mean
-// process-global state that leaks across runs in the server.
-func emitMagusHint(msg string) {
-	if !interactive.HintsEnabled() {
-		return
-	}
-	interactive.Hint(context.Background(), msg)
+// emitMagusHint prints a script's msg through the shared hint channel. Advisory only,
+// never fatal.
+func emitMagusHint(ctx context.Context, msg string) {
+	interactive.Hint(ctx, msg)
 }
 
 // emitMagusLog writes msg at level into the process logger with optional fields.

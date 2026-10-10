@@ -58,12 +58,12 @@ func denyHint(lease string, access filesystem.Access, target string) string {
 // sandbox denial site, before returning the diagnostic error, while target is still
 // typed and in scope: it doesn't survive being raised across a script VM, so a
 // central handler could not reconstruct it.
-func EmitDenyHint(p *Policy, access filesystem.Access, target string) {
+func EmitDenyHint(ctx context.Context, p *Policy, access filesystem.Access, target string) {
 	lease := ""
 	if p != nil {
 		lease = p.Lease
 	}
-	interactive.Hint(context.Background(), denyHint(lease, access, target))
+	interactive.Hint(ctx, denyHint(lease, access, target))
 }
 
 // shimMarker pairs a PATH-shim runtime manager with the env var it reads at
@@ -117,10 +117,10 @@ func shimHint(cmd, manager, envVar string) string {
 // asdf) lost the var it needs while its shim directory is still on PATH (a no-op
 // when nothing matches, or hints are disabled). Call it at the same site
 // RecordEnvDropped runs, while cmd is still in scope.
-func EmitShimHint(p *Policy, cmd string) {
+func EmitShimHint(ctx context.Context, p *Policy, cmd string) {
 	manager, envVar, ok := detectShimSuspect(p)
 	if !ok {
 		return
 	}
-	interactive.Hint(context.Background(), shimHint(cmd, manager, envVar))
+	interactive.Hint(ctx, shimHint(cmd, manager, envVar))
 }

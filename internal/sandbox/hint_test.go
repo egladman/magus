@@ -51,7 +51,7 @@ func captureStderr(t *testing.T, fn func()) string {
 func TestEmitDenyHint(t *testing.T) {
 	interactive.SetHintsEnabled(true)
 	defer interactive.SetHintsEnabled(true)
-	emit := func() { EmitDenyHint(nil, filesystem.Exec, "/usr/bin/curl") }
+	emit := func() { EmitDenyHint(t.Context(), nil, filesystem.Exec, "/usr/bin/curl") }
 
 	got := captureStderr(t, emit)
 	assert.Contains(t, got, "notice=hint")
@@ -114,14 +114,14 @@ func TestEmitShimHint(t *testing.T) {
 		BaseEnv:    []string{"PATH=/home/u/.local/share/mise/shims:/usr/bin"},
 		EnvDropped: []string{"MISE_DATA_DIR"},
 	}
-	got := captureStderr(t, func() { EmitShimHint(suspect, "go") })
+	got := captureStderr(t, func() { EmitShimHint(t.Context(), suspect, "go") })
 	assert.Contains(t, got, "notice=hint")
 	assert.Contains(t, got, "MGS2006")
 	assert.Contains(t, got, "cmd=go missing_var=MISE_DATA_DIR")
 
-	assert.Empty(t, captureStderr(t, func() { EmitShimHint(nil, "go") }), "silent with sandbox off")
-	assert.Empty(t, captureStderr(t, func() { EmitShimHint(&Policy{}, "go") }), "silent when nothing is suspect")
+	assert.Empty(t, captureStderr(t, func() { EmitShimHint(t.Context(), nil, "go") }), "silent with sandbox off")
+	assert.Empty(t, captureStderr(t, func() { EmitShimHint(t.Context(), &Policy{}, "go") }), "silent when nothing is suspect")
 
 	interactive.SetHintsEnabled(false)
-	assert.Empty(t, captureStderr(t, func() { EmitShimHint(suspect, "go") }), "silent when hints are disabled")
+	assert.Empty(t, captureStderr(t, func() { EmitShimHint(t.Context(), suspect, "go") }), "silent when hints are disabled")
 }
