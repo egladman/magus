@@ -165,7 +165,9 @@ count how often that happens and what it cost. See [Review](../concepts/review.m
 ## One thread at a time
 
 A review thread on the host shows with its replies under the hunk it started on, and the
-report names it there as `thread <id>`. To read one:
+report names it there as `thread <id>`. The report takes those ids from the running server
+and never asks the host itself, so with no server it lists no threads and names
+`magus server start`. To read one:
 
 ```sh
 magus diff --thread 2193847561

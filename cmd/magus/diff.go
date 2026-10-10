@@ -447,10 +447,14 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 	}
 	// The threads are named on the report so a person can find the id --thread takes. A patch
-	// somebody handed over belongs to no review this branch has open.
+	// somebody handed over belongs to no review this branch has open. Only a running server's
+	// session names them: a plain report never reaches the network.
 	if src.addressable() && opts.Format != outputName {
-		comments, _ := reviewComments(ctx, m)
-		review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
+		if comments, _, served := serverReviewComments(ctx); served {
+			review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
+		} else {
+			fmt.Fprintf(os.Stderr, "magus diff: review threads are listed only while the server runs; `%s` starts it\n", hint.ServerStart)
+		}
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)

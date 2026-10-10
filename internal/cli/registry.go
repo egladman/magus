@@ -2521,8 +2521,9 @@ about, and what the change there reaches: the changed symbols with the files
 that reference them, who they are public to and the callers that reach them,
 the coverage, the conformance findings, and the notes anchored to the file.
 -o json carries the same record. The id is the thread id, its first comment's
-id, or any reply's id; the report lists each thread's id beside the hunk it
-sits on, and -o json carries them under each file's "threads". The comments
+id, or any reply's id. While the server runs, the report lists each thread's
+id beside the hunk it sits on, and -o json carries them under each file's
+"threads"; without it the report lists none and says so. The comments
 are quoted from the host as other people's words. It does not combine with
 --ack, --unread or --impact.
 
@@ -2560,7 +2561,7 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
-		{Name: "thread", Kind: FlagString, Doc: "Narrow the review to one pull request thread, by the thread id or any of its comments' ids, which the report lists beside each hunk. The viewer opens on its hunk; printed, it is the conversation, the hunk and what the change there reaches"},
+		{Name: "thread", Kind: FlagString, Doc: "Narrow the review to one pull request thread, by the thread id or any of its comments' ids, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it is the conversation, the hunk and what the change there reaches"},
 		{Name: "unread", Kind: FlagBool, Doc: "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
