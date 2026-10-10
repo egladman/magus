@@ -296,6 +296,48 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 	require.NoError(t, runErr, "captured buzz target")
 }
 
+func TestBuzzSpellQuietCaptureReturnsObject(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
+export fun mgs_getName() > str { return "quietbuzzwidget"; }
+fun modJSON(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "printf abc123"], capture = true, quiet = true};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} {
+    return {"mod-json": modJSON};
+}
+`)
+	writeFile(t, dir, "magusfile.buzz", `import "magus";
+import "spells/widget";
+export fun build(ctx: magus\Context, args: [str]) > void !> any {
+    final r = widget["mod-json"](ctx);
+    if (r.stdout != "abc123") { throw "stdout mismatch: " + r.stdout; }
+}`)
+
+	_, runErr := interp.RunDir(context.Background(), dir, "build", nil)
+	require.NoError(t, runErr, "quiet captured buzz target")
+}
+
+// Quiet without capture would neither stream nor return the output, so the spell
+// fails to load, naming the op.
+func TestBuzzSpellQuietWithoutCaptureFailsToLoad(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "quietnocapturewidget"; }
+export fun mgs_listTargets() > any {
+    return {"mod-json": {"bin": "go", "args": ["mod", "edit", "-json"], "quiet": true}};
+}
+`)
+
+	_, err := loadSpellFile(t.Context(), filepath.Join(dir, "spells", "widget.buzz"))
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `op "mod-json"`)
+	assert.ErrorContains(t, err, "quiet without capture")
+}
+
 // TestBuzzSpellPipeStdin verifies pipe-style chaining: a captured target's stdout
 // is fed as the stdin of the next target via opts.stdin — the Unix-pipe primitive.
 func TestBuzzSpellPipeStdin(t *testing.T) {

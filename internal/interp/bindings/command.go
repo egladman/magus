@@ -184,7 +184,7 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	}
 	var res run.ExecResult
 	if len(tgt.Sources) == 0 {
-		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture)
+		res, err = execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, tgt.Quiet)
 	} else {
 		res, err = runSourcedCommand(ctx, tgt, bin, dir, args, opts)
 	}
@@ -192,7 +192,19 @@ func runCommand(ctx context.Context, tgt spells.Op, opts commandOpts) (run.ExecR
 	// it. run.Exec joins ctx.Err() into its error, so gating on err alone would advise a
 	// user who pressed Ctrl-C to go and authenticate, diagnosing a failure that never
 	// happened.
-	if outTail != nil && res.Started && res.Code != 0 && ctx.Err() == nil {
+	failed := res.Started && res.Code != 0 && ctx.Err() == nil
+	if failed && tgt.Quiet {
+		// A quiet op streamed nothing, so the captured stderr is the only copy of the
+		// tool's diagnosis. Writing it through the step's stderr puts it in the log and,
+		// through the tee, in front of the hints; stdout feeds its tail directly so it
+		// stays out of the log.
+		_, stderr := run.OutputWriters(ctx)
+		_, _ = io.WriteString(stderr, res.Stderr)
+		if outTail != nil {
+			_, _ = io.WriteString(outTail, res.Stdout)
+		}
+	}
+	if outTail != nil && failed {
 		// Each stream is matched on its own; see the tee comment above. res.Stdout/Stderr
 		// are deliberately NOT consulted: a capturing op streams through these same tees
 		// (run.Exec buffers on top of the writers rather than instead of them), so reading
@@ -414,7 +426,7 @@ var directMagusBinaryWarnOnce sync.Once
 // execCommand runs cmd with args in dir, inheriting stdio and sandbox policy. When
 // env is non-empty it overlays the base environment (the sandbox baseline when
 // present, else the process env); later entries win per Go's exec duplicate-key rule.
-func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture bool) (run.ExecResult, error) {
+func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture, quiet bool) (run.ExecResult, error) {
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "command spell target called with 'magus' binary",
@@ -436,7 +448,7 @@ func execCommand(ctx context.Context, dir, cmd string, args []string, env map[st
 			overrides = append(overrides, k+"="+env[k])
 		}
 	}
-	res, err := run.Exec(ctx, cmd, args, run.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture})
+	res, err := run.Exec(ctx, cmd, args, run.ExecOptions{Dir: dir, Env: overrides, Stdin: stdin, Capture: capture, Quiet: quiet})
 	if err != nil && errors.Is(err, types.ExecDenied) {
 		return res, err // sandbox exec denial: surface the diagnostic verbatim
 	}
@@ -509,7 +521,7 @@ func runSourcedCommand(ctx context.Context, tgt spells.Op, bin, dir string, base
 	var firstErr error
 	for _, batch := range sourceBatches(files, tgt.SourcesEach) {
 		args := append(append([]string(nil), baseArgs...), batch...)
-		res, err := execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture)
+		res, err := execCommand(ctx, dir, bin, args, opts.env, opts.stdin, tgt.Capture, tgt.Quiet)
 		combined.Started = combined.Started || res.Started
 		if res.MaxRSSBytes > combined.MaxRSSBytes {
 			combined.MaxRSSBytes = res.MaxRSSBytes

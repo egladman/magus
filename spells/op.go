@@ -118,6 +118,12 @@ type Command struct {
 	// belongs on Command because it is declared by a Command-returning handler;
 	// Op carries the resolved copy that dispatch reads.
 	Capture bool `json:"capture,omitempty"`
+	// Quiet keeps a captured command's output out of the step's log: it reaches the
+	// caller as the return value and nowhere else. It is for an op whose output exists
+	// only to be parsed, such as a JSON document, where streaming it buries the line a
+	// person needs. A failure still writes the captured stderr into the log, so the
+	// tool's own diagnosis is never lost. Quiet requires Capture (see [Command.Validate]).
+	Quiet bool `json:"quiet,omitempty"`
 	// Secrets declares the environment this command needs, as env var name -> provider
 	// reference: {"NPM_TOKEN": "NPM_TOKEN"} sets $NPM_TOKEN in the child from whatever
 	// the workspace's secret provider resolves that reference to.
@@ -152,6 +158,15 @@ type Command struct {
 	// project. Doc is excluded for the same reason. JSON is not used to transport an
 	// Op; the only marshal of the registry is the hash itself.
 	Hints []Hint `json:"-"`
+}
+
+// Validate rejects a Command whose fields contradict each other. Quiet without
+// Capture is an error: the output would stream nowhere and return nowhere.
+func (c Command) Validate() error {
+	if c.Quiet && !c.Capture {
+		return errors.New("quiet without capture discards the output; set capture = true or drop quiet")
+	}
+	return nil
 }
 
 // SourcesPlaceholder renders Sources as a single human-readable argv token, for a

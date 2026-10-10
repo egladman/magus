@@ -565,8 +565,12 @@ func decodeCommand(spellName, opName string, o obj) (spells.Command, error) {
 		DefaultArgs:  defaultArgs,
 		TrailingArgs: trailingArgs,
 		Capture:      o.Bool("capture"),
+		Quiet:        o.Bool("quiet"),
 		Sources:      sources,
 		SourcesEach:  o.Bool("sourcesEach"),
+	}
+	if err := c.Validate(); err != nil {
+		return spells.Command{}, fmt.Errorf("%scommand: %w", where, err)
 	}
 	if bin, ok := o.Str("bin"); ok {
 		c.Bin = bin

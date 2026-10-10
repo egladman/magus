@@ -61,6 +61,13 @@ func TestCommandSecretsOmittedWhenEmpty(t *testing.T) {
 	assert.NotContains(t, string(b), "secrets", "an op with no declared secrets must not carry the key at all")
 }
 
+func TestCommandValidateQuiet(t *testing.T) {
+	require.NoError(t, Command{Bin: "go"}.Validate())
+	require.NoError(t, Command{Bin: "go", Capture: true}.Validate())
+	require.NoError(t, Command{Bin: "go", Capture: true, Quiet: true}.Validate())
+	require.ErrorContains(t, Command{Bin: "go", Quiet: true}.Validate(), "quiet without capture")
+}
+
 // TestServiceValidate pins the shape rules a Service is resolved against: exactly one
 // of Command or Start, and a Start service declares both how to tell it is up and how
 // to stop it, since the supervisor holds none of its processes.
