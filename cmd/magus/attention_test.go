@@ -494,6 +494,7 @@ func TestAttentionSourceLabelsTheProducer(t *testing.T) {
 // an empty queue is the good state and must not read as a fault.
 func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 	root := attentionTestRoot(t)
+	t.Cleanup(snapshotGlobals())
 
 	global.quiet = true
 	out := captureStdout(t, func() {
