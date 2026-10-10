@@ -84,7 +84,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		}
 	}
 	if len(c.vocabulary) == 0 {
-		return nil, fmt.Errorf("filenames: no Go files under %s; the rule would report nothing", root)
+		return nil, fmt.Errorf("filenames: no Go files under %s, so the rule would report nothing", root)
 	}
 	return &analysis.Analyzer{
 		Name: "filenames",

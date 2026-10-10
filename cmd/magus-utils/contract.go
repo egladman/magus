@@ -181,7 +181,7 @@ func contractFieldType(expr ast.Expr, imports map[string]string) (reflect.Type, 
 		return reflect.PointerTo(elem), nil
 	case *ast.ArrayType:
 		if x.Len != nil {
-			return nil, fmt.Errorf("an array has no Buzz type; use a slice")
+			return nil, fmt.Errorf("an array has no Buzz type, use a slice")
 		}
 		elem, err := contractFieldType(x.Elt, imports)
 		if err != nil {
@@ -269,7 +269,7 @@ func renderContractTable(funcs []contractFunc) ([]byte, error) {
 	fmt.Fprintln(&b, "}")
 	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		return nil, gofmtError(err, b.String())
 	}
 	return out, nil
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -47,10 +48,10 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 		case err != nil:
 			return fmt.Errorf("merge-driver: %s: %w", path, err)
 		case report.settled:
-			slog.InfoContext(ctx, "merge-driver: auto-resolved", slog.String("path", path), slog.String("verdict", report.line))
+			slog.With(attr.Component("merge-driver")).InfoContext(ctx, "auto-resolved", slog.String("path", path), slog.String("verdict", report.line))
 			return nil
 		}
-		return f.leaveConflicted(fmt.Errorf("merge-driver: not auto-resolved: %s; resolve it by hand", report.line))
+		return f.leaveConflicted(fmt.Errorf("merge-driver: not auto-resolved: %s, resolve it by hand", report.line))
 	}
 
 	target, ok := rebuildTarget(p, absPath)
@@ -59,7 +60,7 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 		// With no target that writes this exact path there is no such run, so keeping one
 		// side would silently drop the other's change, and the VCS only invokes a driver
 		// when BOTH sides changed the file, so that change is never empty.
-		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge; resolve it by hand",
+		return f.leaveConflicted(fmt.Errorf("merge-driver: no target in %s rebuilds %q, so magus cannot settle it after the merge, resolve it by hand",
 			types.ProjectLabel(p.Path, p.Dir), path))
 	}
 	if f.Output != f.Ours {
@@ -85,14 +86,14 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 	case err != nil:
 		// Failing here would turn a settled file back into conflict markers over a
 		// bookkeeping write, so the merge proceeds and the person gets the command.
-		slog.WarnContext(ctx, "merge-driver: kept the current version of a generated file but could not record its regeneration; regenerate before committing",
+		slog.With(attr.Component("merge-driver")).WarnContext(ctx, "kept the current version of a generated file but could not record its regeneration; regenerate before committing",
 			slog.String("path", path), slog.String("regenerate", regenerate), slog.String("error", err.Error()))
 	case !recorded:
 		// No git dir, so no settle hook; hg, Sapling and jj regenerate by hand.
-		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; regenerate before committing",
+		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "kept the current version of a generated file; regenerate before committing",
 			slog.String("path", path), slog.String("regenerate", regenerate))
 	default:
-		slog.InfoContext(ctx, "merge-driver: kept the current version of a generated file; the settle hook regenerates it once the merge has the whole tree",
+		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "kept the current version of a generated file; the settle hook regenerates it once the merge has the whole tree",
 			slog.String("path", path), slog.String("regenerate", regenerate))
 	}
 	return nil

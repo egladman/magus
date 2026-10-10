@@ -225,7 +225,7 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("config.path must be a workspace-relative path")
 		}
 		if strings.EqualFold(filepath.Base(d.Config.Path), "mcp.json") {
-			return fmt.Errorf("config.path %q looks like host MCP client config; Magus does not write MCP registration (use harness_mcp setup guidance instead)", d.Config.Path)
+			return fmt.Errorf("config.path %q looks like host MCP client config, Magus does not write MCP registration, use harness_mcp setup guidance instead", d.Config.Path)
 		}
 	} else if len(d.ManagedEntries) > 0 {
 		return fmt.Errorf("config.path is required when managed_entries is set")
@@ -284,7 +284,7 @@ func validateHarnessEntries(group HarnessEntries) error {
 		}
 		if !ownedByMagus(entry) {
 			matcher, cmds := EntryCommands(entry)
-			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it; end its command with %q",
+			return fmt.Errorf("entries[%d] (matcher %q, commands %q) runs no shipped template and carries no ownership marker, so a merge would take it for the person's own and never retire it, end its command with %q",
 				i, matcher, cmds, " "+types.HarnessOwnedMarker)
 		}
 		collectCommands(entry, &commands)
@@ -388,13 +388,7 @@ func planHarnessConfig(root string, d HarnessDescriptor) (types.HarnessFile, err
 		return file, fmt.Errorf("agent: read harness config %s: %w", path, err)
 	}
 	fragment := map[string]any{}
-	for _, key := range slices.Sorted(maps.Keys(d.ConfigDefaults)) {
-		if _, present := config[key]; present {
-			continue
-		}
-		fragment[key] = d.ConfigDefaults[key]
-		file.Changes = append(file.Changes, types.HarnessChange{Op: types.HarnessSet, Key: key, Value: d.ConfigDefaults[key]})
-	}
+	fillConfigDefaults(config, d.ConfigDefaults, fragment, nil, &file.Changes)
 	for _, group := range d.ManagedEntries {
 		entries, changes, err := mergeManagedGroup(config, group)
 		if err != nil {
@@ -417,6 +411,36 @@ func planHarnessConfig(root string, d HarnessDescriptor) (types.HarnessFile, err
 		return file, fmt.Errorf("%s does not invoke magus", d.Config.Path)
 	}
 	return file, nil
+}
+
+// fillConfigDefaults sets into fragment each default config lacks. An object default
+// descends into the object config holds under the same key, so one variable in a host's
+// env object is set beside the person's own. Any value already present stays: it was
+// someone's choice, and a default never overrides one.
+func fillConfigDefaults(config, defaults, fragment map[string]any, prefix []string, changes *[]types.HarnessChange) {
+	for _, key := range slices.Sorted(maps.Keys(defaults)) {
+		want := defaults[key]
+		path := append(slices.Clone(prefix), key)
+		have, present := config[key]
+		if !present {
+			fragment[key] = want
+			*changes = append(*changes, types.HarnessChange{Op: types.HarnessSet, Key: strings.Join(path, "."), Value: want})
+			continue
+		}
+		wantObject, ok := want.(map[string]any)
+		if !ok {
+			continue
+		}
+		haveObject, ok := have.(map[string]any)
+		if !ok {
+			continue
+		}
+		inner := map[string]any{}
+		fillConfigDefaults(haveObject, wantObject, inner, path, changes)
+		if len(inner) > 0 {
+			fragment[key] = inner
+		}
+	}
 }
 
 // addPlanFile records in p what path needs, folding it into what another source of the

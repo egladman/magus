@@ -65,7 +65,9 @@ func TestJudgeRoutesNativeSearchTools(t *testing.T) {
 	globShape := verdictWithRule("deny", string(denyRuleSearchTranslation))
 	globShape.Next = glob.Next
 	assert.Equal(t, globShape, unworded(glob))
-	assert.Contains(t, glob.Reason, "file:internal/api/gen/handler.go")
+	assert.Contains(t, glob.Reason, "answers this search exactly")
+	assert.Contains(t, storedVerdict(t, ctx.Value(locationKey{}).(location).cacheDir, glob.Reason), "file:internal/api/gen/handler.go",
+		"the answer itself is in the stored verdict")
 
 	text := Judge(ctx, deps, Request{Input: envelope("Grep", map[string]any{"pattern": "serves one request", "path": "internal"})})
 	assert.NotEqual(t, "deny", text.Decision, text.Reason)

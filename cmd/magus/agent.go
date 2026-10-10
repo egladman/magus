@@ -147,7 +147,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	if !af.Global {
 		for _, d := range dests {
 			if filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
-				return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global, or use --tar | tar -xf - -C %q instead", d, d)
+				return fmt.Errorf("agent install: destination %q is outside the working tree, pass --global or use `--tar | tar -xf - -C %q` instead", d, d)
 			}
 		}
 	}

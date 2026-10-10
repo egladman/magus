@@ -108,7 +108,7 @@ func TestDecodeRefusesAnUnmetRequirement(t *testing.T) {
 	t.Parallel()
 
 	_, err := DecodeDeclaration(declaration(`"requires":["never-implemented"]`, `"id":"adj/store"`))
-	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (schema %d) lacks; update magus`,
+	assert.Equal(t, fmt.Sprintf(`job: the job requires "never-implemented", which this magus (schema %d) lacks, update magus`,
 		types.JobSchemaVersion), err.Error())
 
 	row, err := DecodeDeclaration(declaration(`"requires":["claim-declarations"]`, `"id":"adj/store"`))

@@ -237,7 +237,7 @@ func TestSigningKeyRejectsABadKey(t *testing.T) {
 
 	_, err := CryptoSign(ctx, SignEd25519, "payload", "  ")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "key is empty; read it with magus\\secret.read")
+	assert.Contains(t, err.Error(), "key is empty, read it with magus\\secret.read")
 
 	const notHex = "zzzz-not-hex-zzzz"
 	_, err = CryptoSign(ctx, SignEd25519, "payload", notHex)

@@ -99,14 +99,30 @@ func TestRankOwnBuild(t *testing.T) {
 				assert.Empty(t, v.Deny)
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Context, "bootstrap allowed")
-				assert.Contains(t, v.Context, tt.says)
+				assert.Contains(t, v.Context+"\n"+v.Why, tt.says)
 			case tt.deny:
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
-				assert.Contains(t, v.Deny, tt.says)
+				assert.Contains(t, v.Deny+hint.Render(v.Next, func(hint.Next) string { return "" }), tt.says,
+					"the verdict or the one command served with it")
 			default:
 				assert.Empty(t, v.Deny)
 			}
 		})
+	}
+}
+
+// A bootstrap refused only for sharing its line names what to drop, each part with the
+// operator that joins it, and serves the bootstrap alone.
+func TestRankOwnBuildNamesWhatToDropBesideTheBootstrap(t *testing.T) {
+	fresh := checkoutFixture(t, ownModule, false)
+	for command, drop := range map[string]string{
+		bootstrapCommand + " | tail -5; ls -la magus": "drop `| tail -5` and `; ls -la magus`.",
+		"cd x && " + bootstrapCommand:                 "drop `cd x &&`.",
+	} {
+		v := judgeOwnBuild(fresh, command)
+		assert.Equal(t, "magus workspace: the bootstrap runs only alone on its line; "+drop, v.Deny, command)
+		require.Len(t, v.Next, 1, command)
+		assert.Equal(t, bootstrapCommand, v.Next[0].Run, command)
 	}
 }
 
@@ -139,7 +155,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "Use ./magus from then on")
+	assert.Contains(t, v.Context, "use ./magus from then on")
 }
 
 // The forms recoversMagus admits, each alone on its line.
@@ -234,7 +250,9 @@ func TestRankOwnBuildDeniesRecoveryWhenTheWorkspaceLoads(t *testing.T) {
 			assert.NotContains(t, v.Context, "recovery allowed", name+": "+command)
 
 			v = judgeOwnBuildWith(loadingAs(loadErr, &loads), fresh, command)
-			assert.Contains(t, v.Deny, bootstrapCommand, name+" without a binary: "+command)
+			assert.Contains(t, v.Deny, "has no magus binary yet", name+" without a binary: "+command)
+			require.Len(t, v.Next, 1, name+" without a binary: "+command)
+			assert.Equal(t, bootstrapCommand, v.Next[0].Run, name+" without a binary: "+command)
 		}
 	}
 }

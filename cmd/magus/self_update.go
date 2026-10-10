@@ -147,7 +147,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Override with MAGUS_UPDATE_URL to use a private update channel.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	// -y and --yes are one switch, which the registry expresses with AliasOf.
 	uf := gen.BindSelfUpdate(fs)
@@ -192,8 +192,8 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		// explicit choice instead of guessing.
 		if !uf.Force && uf.Version == "" {
 			return fmt.Errorf(
-				"running build is unversioned (dev build): refusing to auto-select a release\n"+
-					"  use --%s to install a specific release, or --%s to proceed anyway",
+				"running build is unversioned (dev build): refusing to auto-select a release, "+
+					"use --%s to install a specific release, or --%s to proceed anyway",
 				gen.FlagSelfUpdateVersion, gen.FlagSelfUpdateForce,
 			)
 		}
@@ -206,16 +206,16 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 				// Auto-latest is below running: refuse unconditionally unless forced.
 				if _, stable := types.ParseVersion(version); !stable {
 					return fmt.Errorf(
-						"you are running prerelease %s and automatic updates follow stable releases only; "+
-							"the newest stable release is %s\n"+
-							"  name a later prerelease with --%s, or use --%s %s --%s to return to stable",
+						"you are running prerelease %s and automatic updates follow stable releases only, "+
+							"the newest stable release is %s, "+
+							"name a later prerelease with --%s, or use --%s %s --%s to return to stable",
 						version, rel.Version, gen.FlagSelfUpdateVersion,
 						gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
 					)
 				}
 				return fmt.Errorf(
-					"index advertises %s but you are running %s - refusing downgrade\n"+
-						"  use --%s %s to install a specific older release, or --%s to override",
+					"index advertises %s but you are running %s: refusing downgrade, "+
+						"use --%s %s to install a specific older release, or --%s to override",
 					rel.Version, version, gen.FlagSelfUpdateVersion, rel.Version, gen.FlagSelfUpdateForce,
 				)
 			}
@@ -242,7 +242,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		// trustworthy under the SHA256SUMS that was signed for that same
 		// version. A mismatch means a stale or tampered index/manifest pair.
 		return fmt.Errorf(
-			"release index advertises %s but the signed SHA256SUMS manifest is for %s - refusing to install",
+			"release index advertises %s but the signed SHA256SUMS manifest is for %s: refusing to install",
 			rel.Version, manifest.Version,
 		)
 	}

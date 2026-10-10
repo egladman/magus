@@ -45,7 +45,7 @@ func runCompletions(args []string) error {
 		return err
 	}
 	if len(subs) == 0 {
-		return fmt.Errorf("completions: no subcommands found in %s; the parse is wrong, not the table", *subcommandsPath)
+		return fmt.Errorf("completions: no subcommands found in %s, the parse is wrong, not the table", *subcommandsPath)
 	}
 
 	renderers := map[string]func([]subcommandDoc) string{

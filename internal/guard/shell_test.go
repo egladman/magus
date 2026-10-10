@@ -419,7 +419,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// record `-o` shapes, so the deny still fires without --text.
 		{command: "magus refs TODO --text | grep -n fixme"},
 		{command: "magus refs TODO --text > /tmp/hits.txt"},
-		{command: "magus refs Open | grep -n Open", context: "magus answers this without the pipe"},
+		{command: "magus refs Open | grep -n Open", context: "needs no pipe: "},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -522,7 +522,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		if tt.context == "" {
 			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
 		} else {
-			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
+			assert.Contains(t, advised(v), tt.context, "%q context names the skill", tt.command)
 		}
 	}
 }
@@ -741,6 +741,9 @@ func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
 }
 
+// advised is v's whole advisory: the line shown inline and the rationale stored behind it.
+func advised(v ShellVerdict) string { return advice{Say: v.Context, Why: v.Why}.full() }
+
 // TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
 // suggestion, not a drop-in replacement. grep is textual and refs/query are semantic, so they
 // agree only when the pattern is a real symbol. The advisory hands back the exact command AND
@@ -748,7 +751,7 @@ func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), `grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
-	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
+	assert.Contains(t, advised(v), "grep is right", "and hedges rather than promising equivalence")
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the
@@ -885,16 +888,15 @@ func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
-	assert.Contains(t, verdict.Deny, "magus describe targets")
-	assert.Contains(t, verdict.Deny, "magus run go::go-test")
-	assert.Contains(t, verdict.Deny, "-- <tool-args>")
-	assert.NotContains(t, verdict.Deny, "mise exec")
+	assert.Equal(t, "magus guard denied `go test ./... -run TestFocused`; run it through magus: `magus run <target> <project>`.", verdict.Deny)
+	assert.Contains(t, verdict.Why, "magus describe targets")
+	assert.Contains(t, verdict.Why, "magus run go::go-test")
+	assert.Contains(t, verdict.Why, "-- <tool-args>")
+	assert.NotContains(t, verdict.Deny+verdict.Why, "mise exec")
 
 	// The op form must not lead: it is the exception, and a verdict that opens
 	// with it teaches the dispreferred spelling to every reader.
-	assert.Less(t, strings.Index(verdict.Deny, "magus run <target>"), strings.Index(verdict.Deny, "magus run go::go-test"),
-		"the target form must precede the spell-op form")
+	assert.NotContains(t, verdict.Deny, "magus run go::go-test", "the target form is the verdict; the spell-op form is the rationale's")
 }
 
 // TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
@@ -1322,7 +1324,8 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
-	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
+	assert.Contains(t, Evaluate(strict(testDependencies()), "magus ls targets . | grep build").Why, "exit status",
+		"a pipe replaces the exit status; that is why it is denied, not advised")
 
 	// Discarding and KEEPING are different intents, so they get different corrections.
 	// Both name where the log already is, because `affected ci` mints one.
@@ -1335,7 +1338,7 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	kept := Evaluate(strict(testDependencies()), "magus affected ci > run.log").Deny
 	require.NotEmpty(t, kept)
 	assert.Contains(t, kept, "--tee", "keeping output is what --tee is for")
-	assert.Contains(t, kept, "never console text",
+	assert.Contains(t, kept, "keeps the STRUCTURED output",
 		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
 
 	// A verb that mints no ref must not be sent after one: `magus ls` has no run log and
@@ -1446,8 +1449,8 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
 		case "advise":
 			assert.Empty(t, v.Deny, tc.command)
-			assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
-			assert.Contains(t, v.Context, "magus answers this without the pipe", tc.command)
+			assert.Equal(t, ShellVerdict{Context: v.Context, Why: pipeExitNote, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
+			assert.Contains(t, v.Context, "needs no pipe: ", tc.command)
 		default:
 			assert.Empty(t, v.Deny, tc.command)
 			assert.NotEqual(t, advisoryGraphPipe, v.Kind, tc.command)
@@ -1477,9 +1480,9 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, hint.VCSAdd.String())
-	assert.Contains(t, verdict.Deny, hint.VCSAdd.With("--dry-run"))
-	assert.Contains(t, verdict.Deny, "git add -- <paths>")
+	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `"+hint.VCSAdd.String()+"`.")
+	assert.Contains(t, verdict.Why, hint.VCSAdd.With("--dry-run"))
+	assert.Contains(t, verdict.Why, "git add -- <paths>")
 	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
 }
 
@@ -1573,6 +1576,8 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	tidy := Evaluate(strict(testDependencies()), "go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
 	assert.Contains(t, tidy.Deny, ":update")
+	assert.Contains(t, Evaluate(strict(testDependencies()), "go test ./... && npm update").Why, ":update",
+		"a rewrite later on the line is named in the stored verdict")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
 	// dependency at all. Firing here would put an advisory on the most routine
@@ -1844,8 +1849,8 @@ func TestScriptedRewriteLeavesPathsOutsideTheWorkspace(t *testing.T) {
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()
 	v := Evaluate(strict(testDependencies()), `grep -rn "someFunc" .`)
-	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
-	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
+	assert.Contains(t, advised(v), "magus graph build", "a cold index must name the command that fixes it")
+	assert.Contains(t, advised(v), "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
 
 // TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
@@ -1871,7 +1876,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "can record either")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt")
 	}
 }
 
@@ -1895,8 +1900,8 @@ func TestGuardDeniesSessionDispose(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "can record either")
-		assert.Contains(t, v.Deny, "session dispose")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt or dispose an attention request")
+		assert.Contains(t, v.Why, "session dispose")
 	}
 }
 
@@ -1945,8 +1950,9 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		// Argv and Why are the remedy's stage-split form and its prose, which this test does not pin.
 		assert.Equal(t, hint.Next{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
 		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
-		assert.Contains(t, v.Lead, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
-		assert.Contains(t, v.Lead, "exits red", tc.command)
+		assert.Equal(t, "magus runs chained with `&&` or `;` run one at a time; pipe them instead.", v.Lead, tc.command)
+		assert.Contains(t, v.Why, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
+		assert.Contains(t, v.Why, "exits red", tc.command)
 
 		served := Evaluate(strict(testDependencies()), tc.pipe)
 		assert.Empty(t, served.Deny, "the served pipe passes the guard: %s", tc.pipe)
@@ -1977,7 +1983,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
 		require.Len(t, v.Next, 1)
 		assert.Equal(t, tc.pipe, v.Next[0].Run)
-		assert.Contains(t, v.Lead, "when their order does not matter: `"+tc.combined+"`")
+		assert.Contains(t, v.Why, "when their order does not matter: `"+tc.combined+"`")
 		assert.Empty(t, Evaluate(strict(testDependencies()), tc.combined).Deny)
 	}
 
@@ -1985,7 +1991,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), "magus run lint . && magus run lint:rw docs")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, "magus run lint . | magus run lint:rw docs", v.Next[0].Run)
-	assert.NotContains(t, v.Lead, "when their order does not matter")
+	assert.NotContains(t, v.Why, "when their order does not matter")
 }
 
 // Every chain a pipe would change keeps the advisory, and says what the pipe would do.
@@ -2012,8 +2018,8 @@ func TestChainedRunAdvisesWherePipingChangesTheChain(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), tc.command)
 		assert.Empty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
-		assert.Contains(t, v.Context, "\nNot refused, because ", tc.command)
-		assert.Contains(t, v.Context, tc.why, tc.command)
+		assert.Contains(t, v.Why, "Not refused, because ", tc.command)
+		assert.Contains(t, v.Why, tc.why, tc.command)
 	}
 
 	// A line that does not parse is read by its shape and only advised on.
@@ -2030,7 +2036,7 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 
 	v := Evaluate(strict(testDependencies()), "magus run generate . && magus run lint .")
 	assert.Empty(t, v.Deny)
-	assert.Contains(t, v.Context, "cannot prove a pipe's upstream")
+	assert.Contains(t, v.Why, "cannot prove a pipe's upstream")
 }
 
 // In magus's own checkout go-build and build relink ./magus. Every pipe stage starts at
@@ -2050,7 +2056,7 @@ func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	} {
 		v := Evaluate(deps, cmd)
 		assert.Empty(t, v.Deny, cmd)
-		assert.Contains(t, v.Context, "relinks ./magus", cmd)
+		assert.Contains(t, v.Why, "relinks ./magus", cmd)
 	}
 	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
 		"a relink in the LAST stage replaces nothing a later stage runs")
@@ -2115,7 +2121,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "holds your tool slot for its whole wait", cmd)
+		assert.Contains(t, v.Deny, "holds your tool slot for the whole wait on a process you did not start", cmd)
 		assert.NotContains(t, v.Deny, "you are told when it finishes", cmd)
 	}
 	own := Evaluate(strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
@@ -2273,7 +2279,7 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
-		assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
+		assert.Equal(t, ShellVerdict{Context: v.Context, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
 	}
 
 	// A deny elsewhere on the line still outranks the advice.
@@ -2290,11 +2296,11 @@ func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
-		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs")
+		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs, said inline")
 	}
-	assert.Contains(t, v.Context, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
 	assert.Contains(t, v.Context, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
-	assert.Contains(t, v.Context, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+	assert.Contains(t, v.Why, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Why, "sed -n '1,200p'", "a range print is a filter too, and the stored advice says so")
 }
 
 // The rule is about the CAPTURE, not about text filters. Reading the file whole, and
@@ -2343,8 +2349,8 @@ func TestGuardDeniesBacktickSubstitution(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRule{Name: denyRuleBacktickSubstitution}, v.Rule, cmd)
 		assert.Contains(t, v.Deny, "`$(...)`", "the substitution spelling that cannot pair: %s", cmd)
-		assert.Contains(t, v.Deny, "single quotes", "where a literal backtick belongs: %s", cmd)
-		assert.Contains(t, v.Deny, "Inside double quotes a backtick RUNS a command", cmd)
+		assert.Contains(t, v.Deny, "a backtick inside double quotes runs a command", cmd)
+		assert.Contains(t, v.Why, "single quotes", "where a literal backtick belongs: %s", cmd)
 	}
 }
 
@@ -2488,7 +2494,8 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleCredentialVerb, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names what a person runs: %s", cmd)
+		assert.Contains(t, v.Deny, "use the token you were given", cmd)
+		assert.Contains(t, v.Why, "config mcp connector create", "the rationale names what a person runs: %s", cmd)
 	}
 	for _, cmd := range []string{
 		"magus config token status",

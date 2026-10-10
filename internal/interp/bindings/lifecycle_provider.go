@@ -35,7 +35,7 @@ func runLifecycleProvider(ctx context.Context, spellName, root string, keys []st
 	}
 	drv, ok := project.DefaultSpellRegistry().Lookup(spellName)
 	if !ok {
-		return nil, fmt.Errorf("spell %q is not registered; import it before wiring it as the lifecycle provider", spellName)
+		return nil, fmt.Errorf("spell %q is not registered, import it before wiring it as the lifecycle provider", spellName)
 	}
 	ctx, cancel := context.WithTimeout(ctx, lifecycleDeadline)
 	defer cancel()
@@ -50,7 +50,7 @@ func runLifecycleProvider(ctx context.Context, spellName, root string, keys []st
 		return nil, fmt.Errorf("%w: spell %q: %s: %w", workspace.ErrLifecycleUnreached, spellName, spells.ListLifecyclesContract, err)
 	}
 	if resp.Data == nil {
-		return nil, fmt.Errorf("spell %q is wired as the lifecycle provider but its %s(target, cb) returned nothing; it must be exported and must return a list of Lifecycle (an empty list if it knows none of the keys)",
+		return nil, fmt.Errorf("spell %q is wired as the lifecycle provider but its %s(target, cb) returned nothing, it must be exported and must return a list of Lifecycle (an empty list if it knows none of the keys)",
 			spellName, spells.ListLifecyclesContract)
 	}
 	items, ok := resp.Data.([]any)
@@ -93,7 +93,7 @@ func decodeLifecycle(spellName string, keys []string, index int, item any) (spel
 		return spells.Lifecycle{}, err
 	}
 	if l.Source == "" {
-		return spells.Lifecycle{}, fmt.Errorf("%s: field \"source\" is empty; name the URL the answer was read from", where)
+		return spells.Lifecycle{}, fmt.Errorf("%s: field \"source\" is empty, name the URL the answer was read from", where)
 	}
 	if l.AsOf, err = strField(m, "asOf", where); err != nil {
 		return spells.Lifecycle{}, err

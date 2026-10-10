@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -37,7 +38,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Use --cache to also drop the magus cache entries, forcing a full rebuild.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -57,7 +58,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 	// Empty lists, never null, so -o json has the same shape whatever was selected.
 	report := types.CleanReport{Removed: []string{}, Tracked: []string{}, DryRun: dryRun}
 	if len(targets) == 0 {
-		slog.InfoContext(ctx, "clean: no projects selected")
+		slog.With(attr.Component("clean")).InfoContext(ctx, "no projects selected")
 	} else {
 		projects := m.ResolveProjects(targets)
 		cleaned, err := m.CleanOutputs(ctx, projects, dryRun)
@@ -68,7 +69,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 			if err := m.CleanCache(ctx, projects...); err != nil {
 				return fmt.Errorf("clean --cache: %w", err)
 			}
-			slog.InfoContext(ctx, "clean: invalidated cache", slog.Int("projects", len(projects)))
+			slog.With(attr.Component("clean")).InfoContext(ctx, "invalidated cache", slog.Int("projects", len(projects)))
 		}
 		report.Removed = append(report.Removed, cleaned.Removed...)
 		report.Tracked = append(report.Tracked, cleaned.Tracked...)
@@ -98,7 +99,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if len(report.Tracked) > 0 {
-		slog.InfoContext(ctx, "clean: kept outputs the VCS tracks", slog.Int("files", len(report.Tracked)))
+		slog.With(attr.Component("clean")).InfoContext(ctx, "kept outputs the VCS tracks", slog.Int("files", len(report.Tracked)))
 	}
 	return nil
 }

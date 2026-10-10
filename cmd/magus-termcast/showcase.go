@@ -122,7 +122,7 @@ func showcaseFrames(capture string) []string {
 func renderShowcase(capture string, theme screen.Theme) (string, error) {
 	frames := showcaseFrames(capture)
 	if len(frames) < 2 {
-		return "", fmt.Errorf("showcase capture has %d frames; expected the script's several", len(frames))
+		return "", fmt.Errorf("showcase capture has %d frames, expected the script's several", len(frames))
 	}
 	s := screen.New(showCols, showRows)
 	shots := make([]*screen.Screen, 0, len(frames))

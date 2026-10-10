@@ -377,7 +377,8 @@ func usagef(format string, a ...any) error {
 // non-zero via errSilent rather than reprinting the same text as a "[error] ..." line.
 func reportedRunErr(err error) bool {
 	var se *types.SpellErrors
-	return errors.As(err, &se)
+	var logged cache.ReportedError
+	return errors.As(err, &se) || errors.As(err, &logged)
 }
 
 // canonicalTarget expands short target aliases at the CLI edge.

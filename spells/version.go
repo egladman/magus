@@ -111,7 +111,7 @@ func (c VersionComponent) KeyFunc() (VersionKeyFunc, error) {
 			return strings.TrimSuffix(semver.Canonical(v), semver.Prerelease(v))
 		}, nil
 	default:
-		return nil, fmt.Errorf("unknown version component %s; want one of %s",
+		return nil, fmt.Errorf("unknown version component %s, want one of %s",
 			c, strings.Join(c.Values(), ", "))
 	}
 }

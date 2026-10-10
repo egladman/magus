@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var ErrNoMagusfile = errors.New("magusfile: not found (no magusfile.buzz or magusfiles/*.buzz in this project); run `magus init` to add one")
+var ErrNoMagusfile = errors.New("magusfile: not found (no magusfile.buzz or magusfiles/*.buzz in this project), run `magus init` to add one")
 var ErrUnknownTarget = errors.New("magusfile: unknown target")
 
 // scriptExts are the magusfile glob patterns, and enginePriority the engine
@@ -85,7 +85,7 @@ func FindAll(dir string) ([]*Source, error) {
 			slices.Sort(entries)
 			// Guard against mixing single-file and directory forms.
 			if _, err2 := os.Stat(filepath.Join(dir, "magusfile.buzz")); err2 == nil {
-				return nil, errors.New("interp: both magusfile.buzz and magusfiles/ exist; remove one")
+				return nil, errors.New("interp: both magusfile.buzz and magusfiles/ exist, remove one")
 			}
 			return groupByEngine(dir, entries), nil
 		}

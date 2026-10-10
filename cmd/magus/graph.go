@@ -124,7 +124,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			fmt.Fprintln(os.Stderr, "switch, or when the server is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -307,7 +307,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`"+hint.Affected.With("<target>", "--graph")+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -358,7 +358,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -387,7 +387,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
 	// unreadable, so it requires a --select neighborhood to scope down.
 	if opts.Format == outputDot && ef.Select == "" {
-		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
+		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export, the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
 	// The whole-graph export stays domain-only unless --symbols asks; a --select neighborhood
@@ -514,7 +514,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		sf = gen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

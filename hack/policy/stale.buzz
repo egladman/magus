@@ -274,35 +274,37 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
         if (hook.stamped) {
             why = "it was built before {movedList(hook)}";
         }
-        return magus\guard.deny("`magus {verb}` writes state other checkouts and other magus versions read, "
-            + "and the magus answering this hook ({hook.path}) is stale against {hook.workspace}: {why}. "
-            + "That is the hook's binary, judged against its own checkout, not the one this command names. "
-            + "It would stamp that state with a build its checkout has moved past, and can undo what a "
-            + "newer magus wrote. Rebuild it from its own sources with `{hook.path} --root {hook.workspace} "
-            + "run go-build .`, then rerun.");
+        return magus\guard.deny("the magus answering this hook ({hook.path}) is stale against {hook.workspace}; "
+            + "rebuild it from its own sources: `{hook.path} --root {hook.workspace} run go-build .`.\n"
+            + "`magus {verb}` writes state other checkouts and other magus versions read, and that binary is "
+            + "stale: {why}. That is the hook's binary, judged against its own checkout, not the one this "
+            + "command names. It would stamp that state with a build its checkout has moved past, and can "
+            + "undo what a newer magus wrote. Rerun once it is rebuilt.");
     }
     if (!w!.shared or !hook.ours) {
         return magus\guard.allow();
     }
     if (hook.commit == "") {
-        return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and "
-            + "./magus names no commit to check against the base branch: it was built before go-build "
-            + "stamped one. Rebuild it with `./magus run go-build .`, then rerun.");
+        return magus\guard.deny("./magus names no commit to check against the base branch; rebuild it: "
+            + "`./magus run go-build .`.\n"
+            + "`magus {verb}` writes state every checkout of this repository shares, and ./magus was built "
+            + "before go-build stamped a commit. Rerun once it is rebuilt.");
     }
     final check = onBase(hook.commit);
     if (check.unreadable != "") {
-        return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and "
-            + "{check.unreadable}, so nothing can say whether ./magus was built from the base branch. "
-            + "Fix the workspace's version control, then rerun.");
+        return magus\guard.deny("nothing can say whether ./magus was built from the base branch: "
+            + "{check.unreadable}; fix the workspace's version control, then rerun.\n"
+            + "`magus {verb}` writes state every checkout of this repository shares.");
     }
     if (!check.known or check.contained) {
         return magus\guard.allow();
     }
-    return magus\guard.deny("`magus {verb}` writes state every checkout of this repository shares, and ./magus "
-        + "was built from {hook.commit}, which is not on {check.base}. A branch's build stamps that state "
-        + "newer than every build from {check.base}, which then refuse it, and one behind {check.base} can "
-        + "undo what a newer magus wrote. Run it from a checkout at {check.base} with that checkout's own "
-        + "./magus, rebuilt with `./magus run go-build .`.");
+    return magus\guard.deny("./magus was built from {hook.commit}, not on {check.base}; run this from a "
+        + "checkout at {check.base} with that checkout's own ./magus.\n"
+        + "`magus {verb}` writes state every checkout of this repository shares. A branch's build stamps "
+        + "that state newer than every build from {check.base}, which then refuse it, and one behind "
+        + "{check.base} can undo what a newer magus wrote. Rebuild that checkout's ./magus with "
+        + "`./magus run go-build .`.");
 }
 
 // deadlockEscape is the way out for a binary that cannot load the tree and so cannot
@@ -462,7 +464,7 @@ test "a build off the base branch is denied shared writes and allowed its own ch
     foreach (argv in stateWriters) {
         final v = writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"]));
         std\assert(v.decision == "deny", message: argv.join(" "));
-        std\assert(v.reason.indexOf("built from f00d, which is not on origin/main") != null, message: v.reason);
+        std\assert(v.reason.indexOf("./magus was built from f00d, not on origin/main") == 0, message: v.reason);
         std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == "allow", message: "on the base: " + argv.join(" "));
     }
     foreach (argv in [

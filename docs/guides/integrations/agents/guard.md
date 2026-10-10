@@ -543,23 +543,42 @@ identical paragraph teaches nothing, and this page's standard says why that
 matters: a check that is red by default is a check people learn to ignore,
 taking the real failures with it.
 
-Denials are never silenced. A refusal explains itself every time it refuses; it
-is the one verdict the caller cannot see past. What changes is the length: the
-first time a rule denies in a session you get its whole reason, then
-`nothing ran (N commands)` when the line held several, then `see:` and the
-rule's page. Each later deny from that rule is one line naming the rule and what
-it catches, the same `nothing ran` line, and a ref to the full verdict:
+Denials are never silenced, and never long. Every deny prints its verdict, one
+sentence naming the problem, then `nothing ran (N commands)` when the line held
+several, at most one command to run instead, and a ref to the full verdict. The
+rationale, every remedy and the rule's page live behind that ref:
+
+```text
+lease harness/typo is not declared; `magus ls jobs` lists the ids.
+full verdict: magus query output grd1a2b3c4d5e6f7a8b
+```
+
+Each later deny from that rule in the session swaps the verdict for one line
+naming the rule and what it catches:
 
 ```text
 denied again [whole-tree]: a whole-tree VCS reset, checkout, restore or clean, which cannot be undone
 nothing ran (2 commands)
 full verdict: magus query output grd1a2b3c4d5e6f7a8b
-see: https://eli.gladman.cc/magus/reference/rules/whole-tree/
 ```
 
 The ref is stored in the activity trail under the `grd` prefix, and the line is
 a breadcrumb with the id `deny-verdict`, so `magus session hints` counts how
 often it is read.
+
+An advisory has the same shape. Its first firing prints one sentence naming
+what to do and why, with at most one command, then a ref to the full advice:
+the rationale and the rule's page.
+
+```text
+magus workspace: run `magus affected ci` before publishing if you have not since your last change.
+full advice: magus query output grd2b3c4d5e6f7a8b9c
+```
+
+That line is a breadcrumb with the id `advice-verdict`. A brief repeat has no
+rationale to store, so it prints alone. An advisory whose text is the answer
+it exists to deliver, such as the commands a search routes to or the files a
+new one is named against, keeps that answer inline.
 
 The advisories that correct the command itself (a `time` wrapper, a chained
 run) are exempt too, because a second firing reports a

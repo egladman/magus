@@ -281,6 +281,63 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	requireCurrent(t, root, "flat")
 }
 
+// An object default reaches inside the person's object: the variable lands beside their
+// own, and a value they set for it is the one the host keeps.
+func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
+	descriptor := `{
+  "schema_version": 2,
+  "id": "envhost",
+  "display": {"name": "Env Host"},
+  "config": {"path": "envhost/settings.json"},
+  "config_defaults": {"env": {"MAGUS_LOG_SILENT": "true"}},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [
+    {"path": ["hooks"], "entries": [{"command": "magus buzz -s magus-command.buzz"}]}
+  ]
+}`
+	for _, tc := range []struct {
+		name, existing string
+		changes        []types.HarnessChange
+		env            map[string]any
+	}{
+		{
+			name:     "no env object",
+			existing: `{"hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env", Value: map[string]any{"MAGUS_LOG_SILENT": "true"}}},
+			env:      map[string]any{"MAGUS_LOG_SILENT": "true"},
+		},
+		{
+			name:     "env without the variable",
+			existing: `{"env": {"FOO": "1"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env.MAGUS_LOG_SILENT", Value: "true"}},
+			env:      map[string]any{"FOO": "1", "MAGUS_LOG_SILENT": "true"},
+		},
+		{
+			name:     "the person chose human",
+			existing: `{"env": {"MAGUS_LOG_SILENT": "false"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			env:      map[string]any{"MAGUS_LOG_SILENT": "false"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			registerHarnessSpell(t, "envhost", descriptor)
+			path := filepath.Join(root, "envhost", "settings.json")
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(tc.existing), 0o644))
+
+			plan := mergeHarness(t, root, "envhost")
+			assert.Equal(t, tc.changes, normalizeFiles(t, plan.Files)["envhost/settings.json"].Changes)
+
+			body, err := os.ReadFile(path)
+			require.NoError(t, err)
+			doc := map[string]any{}
+			require.NoError(t, decodeHarnessJSON(body, &doc))
+			assert.Equal(t, tc.env, doc["env"])
+			requireCurrent(t, root, "envhost")
+		})
+	}
+}
+
 func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "managed", `{

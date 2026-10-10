@@ -221,6 +221,6 @@ func parseBoolEnv(v string) (bool, error) {
 	case "false", "0", "no":
 		return false, nil
 	}
-	return false, fmt.Errorf("%q is not a boolean; use true or false", v)
+	return false, fmt.Errorf("%q is not a boolean, use true or false", v)
 }
 `))

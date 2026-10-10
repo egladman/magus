@@ -18,7 +18,7 @@ The machine and this process: platform triple, CPU count, hostname, the running 
 
 Add env vars to subprocesses `proc\exec` / `proc\shell` start inside callback. Never touches the process's own environment - a lookup like os\env inside callback does not see them.
 
-**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L532)
+**Signature:** `os\withEnv(env, callback)` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L537)
 
 | Parameter  | Type                                                                        | Optional | Description |
 | ---------- | --------------------------------------------------------------------------- | -------- | ----------- |
@@ -81,7 +81,7 @@ Return the absolute path of the running magus binary. Pair it with fs\stat insid
 
 Call fn up to max times, retrying on error with exponential backoff; returns fn's value on success. opts: {backoff_ms:float (default 500), max_backoff_ms:float (default 30000)}.
 
-**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L548)
+**Signature:** `os\retry(max, fn, [opts]) -> any` - [source](https://github.com/egladman/magus/blob/main/std/os.go#L553)
 
 | Parameter | Type                                                                        | Optional | Description |
 | --------- | --------------------------------------------------------------------------- | -------- | ----------- |

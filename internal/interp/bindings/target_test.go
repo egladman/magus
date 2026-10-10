@@ -358,6 +358,29 @@ func TestNeedsNamingNoTargetRaises(t *testing.T) {
 	}
 }
 
+// A dependency's failure reads the same whether ctx.needs ran it inline or parked the
+// body for the driver: the ctx.needs marker is how the reporter tells a dependent
+// restating that failure from a target failing on its own.
+func TestNeedsMarksADependencyFailureParkedOrInline(t *testing.T) {
+	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, stubErr{} }
+	targets := map[string]vm.Callable{"types-generate": failing}
+	handle := vm.DirectValue("types_generate", failing)
+	needs := buildBuzzNeeds(targets, map[string]vm.Value{"types-generate": handle}, &externalHandles{})
+
+	_, inline := needs(context.Background(), []vm.Value{handle})
+	require.Error(t, inline)
+
+	ctx := types.WithDependencyWait(context.Background())
+	_, suspended := needs(ctx, []vm.Value{handle})
+	require.Error(t, suspended, "the body parks")
+	did, parked := types.DependencyWaitFromContext(ctx).Do(ctx)
+	require.True(t, did)
+	require.Error(t, parked)
+
+	assert.True(t, strings.HasPrefix(inline.Error(), "ctx.needs: types-generate: "), inline.Error())
+	assert.Equal(t, inline.Error(), parked.Error())
+}
+
 func TestBuildCache(t *testing.T) {
 	t.Run("valid spell handle records the remote backend", func(t *testing.T) {
 		reg := workspace.NewWorkspaceRegistry()

@@ -135,7 +135,7 @@ func Open(ctx context.Context, spec string) (*Script, error) {
 	}
 	src, err := os.ReadFile(spec)
 	if err != nil {
-		return nil, fmt.Errorf("provider %q: not built in, and %w", spec, err)
+		return nil, fmt.Errorf("provider %q: not built in: %w", spec, err)
 	}
 	return newScript(ctx, strings.TrimSuffix(filepath.Base(spec), ".buzz"), string(src))
 }

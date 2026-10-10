@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -254,7 +255,7 @@ func New(opts Options) (*Server, error) {
 	// its own socket). Surfacing the value turns an opaque "already adopted" (which reads as a
 	// mystery to anyone whose environment merely inherited the var) into an actionable one.
 	if sock := os.Getenv(SocketEnv); sock != "" {
-		return nil, fmt.Errorf("%w (%s=%s)", ErrAlreadyAdopted, SocketEnv, sock)
+		return nil, fmt.Errorf("%w: %s=%s", ErrAlreadyAdopted, SocketEnv, sock)
 	}
 
 	var ep endpoint.Endpoint
@@ -755,7 +756,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 			s.onJobDone(ctx, req.Args, time.Since(jobStart), err)
 		}
 		if err != nil {
-			slog.WarnContext(ctx, "proc: background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
+			slog.With(attr.Component("proc")).WarnContext(ctx, "background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
 		}
 	}()
 	return nil

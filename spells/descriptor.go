@@ -78,7 +78,7 @@ func ValidatePatch(ops []PatchOp) error {
 			return fmt.Errorf("magus/spell: op %d: unknown JSON Patch op %q", i, op.Op)
 		}
 		if op.Path == "" {
-			return fmt.Errorf("magus/spell: op %d (%s): empty path targets the whole argv; charms edit elements, not the whole argv", i, op.Op)
+			return fmt.Errorf("magus/spell: op %d (%s): empty path targets the whole argv, charms edit elements, not the whole argv", i, op.Op)
 		}
 		if op.Path[0] != '/' {
 			return fmt.Errorf("magus/spell: op %d (%s): path %q must begin with %q", i, op.Op, op.Path, "/")
@@ -370,7 +370,7 @@ func ValidateScriptRunners(runners []Command) error {
 		}
 		if len(r.DefaultArgs)+len(r.TrailingArgs)+len(r.Charms)+len(r.Sources)+len(r.Secrets)+len(r.EnvKeys)+len(r.Hints) > 0 || r.NeedsArgs != "" ||
 			r.External != ExternalNone || r.SourcesEach || r.Capture {
-			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): a runner is an argv prefix; set only bin and args", i, r.Bin)
+			return fmt.Errorf("mgs_listScriptRunners[%d] (%s): a runner is an argv prefix, set only bin and args", i, r.Bin)
 		}
 	}
 	return nil

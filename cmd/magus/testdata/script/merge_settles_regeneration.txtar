@@ -45,6 +45,10 @@ exec git commit -m notes
 ! exec git merge --no-edit input-only
 stderr 'magus: this merge changed generator inputs; ran magus run generate:rw \.; staged 1 regenerated file\(s\) into the merge'
 stderr 'use .git commit. to complete the merge'
+# The regeneration itself prints nothing: its steps' pass lines and refs repeat the line above.
+! stderr '\[pass\]'
+! stdout '\[pass\]'
+! stderr 'ref  out'
 exists .git/MERGE_HEAD
 exec git diff --cached --name-only
 stdout '^OUT\.txt$'

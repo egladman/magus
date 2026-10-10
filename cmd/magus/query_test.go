@@ -126,7 +126,7 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 		require.Error(t, got)
 	})
 
-	assert.Contains(t, out, `no stored output for ref "outdeadbeef0000"; consulted: local cache`)
+	assert.Contains(t, out, `no stored output for ref "outdeadbeef0000", consulted local cache`)
 	assert.NotContains(t, out, "consulted: local cache (consulted", "consulted: ... must render exactly once")
 	assert.Equal(t, 1, strings.Count(out, "consulted:"), "consulted: must appear exactly once: %q", out)
 }

@@ -77,7 +77,7 @@ func ParseReference(s string) (Reference, error) {
 		return Reference{}, err
 	}
 	if ref.Tag == "" && ref.Digest == "" {
-		return Reference{}, fmt.Errorf("oci: %q names no tag; write <registry>/<repository>:<tag> or @sha256:<digest>", s)
+		return Reference{}, fmt.Errorf("oci: %q names no tag, write <registry>/<repository>:<tag> or @sha256:<digest>", s)
 	}
 	return ref, nil
 }
@@ -91,7 +91,7 @@ func ParseRepository(s string) (Reference, error) {
 		return Reference{}, err
 	}
 	if ref.Tag != "" || ref.Digest != "" {
-		return Reference{}, fmt.Errorf("oci: %q names a tag or digest; a repository is <registry>/<repository>", s)
+		return Reference{}, fmt.Errorf("oci: %q names a tag or digest, a repository is <registry>/<repository>", s)
 	}
 	return ref, nil
 }
@@ -114,7 +114,7 @@ func parseName(s string) (Reference, error) {
 	}
 	host, repo, ok := strings.Cut(name, "/")
 	if !ok || host == "" || repo == "" || !isRegistryHost(host) {
-		return Reference{}, fmt.Errorf("oci: %q names no registry host; write <registry>/<repository>:<tag>", s)
+		return Reference{}, fmt.Errorf("oci: %q names no registry host, write <registry>/<repository>:<tag>", s)
 	}
 	return Reference{Registry: host, Repository: repo, Tag: tag, Digest: d}, nil
 }
@@ -254,7 +254,7 @@ func (a *Artifact) Find(name string) (ocispec.Descriptor, bool) {
 func (a *Artifact) Layer(ctx context.Context, name string) ([]byte, error) {
 	d, ok := a.Find(name)
 	if !ok {
-		return nil, fmt.Errorf("%w: %q in %s", ErrLayerMiss, name, a.ref)
+		return nil, fmt.Errorf("%q in %s: %w", name, a.ref, ErrLayerMiss)
 	}
 	return a.Blob(ctx, d)
 }
@@ -280,7 +280,7 @@ func (a *Artifact) Blob(ctx context.Context, desc ocispec.Descriptor) ([]byte, e
 		return nil, fmt.Errorf("oci: verify %s layer: %w", a.ref, err)
 	}
 	if !verifier.Verified() {
-		return nil, fmt.Errorf("%w: %s (%s)", ErrBlobDigest, a.ref, desc.Digest)
+		return nil, fmt.Errorf("%s (%s): %w", a.ref, desc.Digest, ErrBlobDigest)
 	}
 	return blob, nil
 }
@@ -311,7 +311,7 @@ func (c *Client) manifest(ctx context.Context, ref Reference, auth string) (ocis
 			return ocispec.Manifest{}, nil, fmt.Errorf("oci: %s: %w", ref, err)
 		}
 		if got := ref.Digest.Algorithm().FromBytes(raw); got != ref.Digest {
-			return ocispec.Manifest{}, nil, fmt.Errorf("%w: %s served %s", ErrManifestDigest, ref, got)
+			return ocispec.Manifest{}, nil, fmt.Errorf("%s served %s: %w", ref, got, ErrManifestDigest)
 		}
 	}
 	var m ocispec.Manifest
@@ -389,7 +389,7 @@ type Content struct {
 // instead of, pushing.
 func (c Content) Manifest() ([]byte, digest.Digest, error) {
 	if len(c.Layers) == 0 {
-		return nil, "", errors.New("oci: no layers; a manifest with none is not a valid artifact")
+		return nil, "", errors.New("oci: no layers, a manifest with none is not a valid artifact")
 	}
 	descs := make([]ocispec.Descriptor, 0, len(c.Layers))
 	for _, l := range c.Layers {
@@ -429,7 +429,7 @@ func (c Content) Manifest() ([]byte, digest.Digest, error) {
 // is why the caller, not this package, decides which tags to write.
 func (c *Client) Push(ctx context.Context, ref Reference, content Content, moreTags ...string) (digest.Digest, error) {
 	if ref.Tag == "" || ref.Digest != "" {
-		return "", fmt.Errorf("oci: push %s: name a tag and no digest; a push writes a tag, and a digest is what it returns", ref)
+		return "", fmt.Errorf("oci: push %s: name a tag and no digest, a push writes a tag, and a digest is what it returns", ref)
 	}
 	tags := []string{ref.Tag}
 	for _, t := range moreTags {

@@ -492,6 +492,9 @@ func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
 // Strict mode refuses a raising call at the top level, and the refusal names the form
 // that runs one, which an -e snippet takes as well as a file does.
 func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
+	// -s sets the process-global silent flag, which later tests in the package read.
+	saved := global
+	t.Cleanup(func() { global = saved })
 	var runErr error
 	captureStdout(t, func() {
 		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})

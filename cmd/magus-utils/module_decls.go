@@ -205,7 +205,7 @@ func externDecl(m std.Method) (string, error) {
 		}
 		if a.Func != "" {
 			if a.Type != std.TypeFunc {
-				return "", fmt.Errorf("arg %s: Func is set on a %v argument; it types only a TypeFunc", a.Name, a.Type)
+				return "", fmt.Errorf("arg %s: Func is set on a %v argument, it types only a TypeFunc", a.Name, a.Type)
 			}
 			typ = a.Func
 		}
@@ -440,7 +440,7 @@ func collectMirrors(mod std.Module) ([]string, error) {
 		seen[name] = true // before descending, so a self-referential type terminates
 		for _, dep := range referencedObjects(entry.Type) {
 			if err := visit(dep); err != nil {
-				return fmt.Errorf("%s -> %w", name, err)
+				return fmt.Errorf("%s: %w", name, err)
 			}
 		}
 		order = append(order, name) // after its dependencies: declare-before-use

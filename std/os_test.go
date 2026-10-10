@@ -553,6 +553,15 @@ func TestExecSignalKilledNamesTheSignal(t *testing.T) {
 	assert.NotContains(t, err.Error(), "exit -1")
 }
 
+// allow_failure hands back the result instead of raising, and a signal leaves no status
+// and no stderr, so the signal goes in Stderr or the caller reads a bare -1.
+func TestExecAllowFailureNamesTheSignal(t *testing.T) {
+	res, err := OsExec(context.Background(), "sh", []string{"-c", "kill -9 $$"}, ".", map[string]any{"allow_failure": true})
+	require.NoError(t, err)
+	assert.Equal(t, -1, res.Code)
+	assert.Contains(t, res.Stderr, "signal: killed")
+}
+
 // quiet is read in runResult, the one path proc.exec, proc.shell, and vcs.cmd share, so
 // the three cannot drift into offering different option sets. Capture stays on
 // regardless: a quiet call is still consuming the value, just not echoing it.

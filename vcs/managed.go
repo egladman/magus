@@ -177,7 +177,7 @@ func managedSpans(text string, m managedMarkers) ([]span, error) {
 		endAt := indexAtLine(text, m.end, afterBegin)
 		nextBegin := indexAtLine(text, m.begin, afterBegin)
 		if endAt < 0 || (nextBegin >= 0 && nextBegin < endAt) {
-			return nil, fmt.Errorf("line %d: %q has no %q before the next begin marker or the end of the file; delete the torn section by hand and rerun",
+			return nil, fmt.Errorf("line %d: %q has no %q before the next begin marker or the end of the file, delete the torn section by hand and rerun",
 				strings.Count(text[:start], "\n")+1, m.begin, m.end)
 		}
 		stop := nextLineStart(text, endAt)
@@ -407,7 +407,7 @@ func ensureShShebang(path, text string) (string, error) {
 	}
 	line, _, _ := strings.Cut(text, "\n")
 	if !slices.Contains(shInterpreters, shebangInterpreter(line)) {
-		return "", fmt.Errorf("vcs: hook %s runs %q, not a POSIX shell, and magus appends sh to its hooks; call that script from a sh hook instead", path, line)
+		return "", fmt.Errorf("vcs: hook %s runs %q, not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead", path, line)
 	}
 	return text, nil
 }

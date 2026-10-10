@@ -93,8 +93,9 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 		return nil
 	}
 	return types.DiagnosticErrorf(types.UndeclaredSourceModified,
-		"%s:%s modified %s it declared as sources; declare them with ctx.modifiesExistingFiles(...) or stop writing them: %s",
-		s.ProjectPath, s.Target, pluralFiles(len(changed)), joinCapped(changed, 5))
+		"%s:%s modified its declared sources %s; declare them with ctx.modifiesExistingFiles(...)",
+		s.ProjectPath, s.Target, joinCapped(changed, 5)).
+		WithWhy("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them.")
 }
 
 // keyStillDescribesInputs reports whether this step's hashed inputs are unchanged, and names

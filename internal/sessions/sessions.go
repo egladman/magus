@@ -201,7 +201,7 @@ const fileExt = ".jsonl"
 func Dir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {
-		return "", fmt.Errorf("sessions: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+		return "", fmt.Errorf("sessions: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 	}
 	dir, err := vcs.StateDir(base, "sessions", root)
 	if err != nil {
@@ -237,7 +237,7 @@ type Writer struct {
 // An id that already has a file is RESUMED rather than restarted: see [Writer.resume].
 func Open(dir, invocation string, start InvocationStart) (*Writer, error) {
 	if !ValidFileID(invocation) {
-		return nil, fmt.Errorf("sessions: invocation id %q must be alphanumeric with - and _ (it names the invocation's file); mint one with journal.NewInvocationID", invocation)
+		return nil, fmt.Errorf("sessions: invocation id %q must be alphanumeric with hyphen and underscore (it names the invocation's file), mint one with journal.NewInvocationID", invocation)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("sessions: create store %s: %w", dir, err)

@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/vcs"
 )
@@ -43,7 +44,7 @@ func ResolveInstall(spec *spells.InstallSpec, projectDir, stopDir string) (choic
 				}
 				in, ok := man.Installs[lock]
 				if !ok {
-					return choice, false, fmt.Errorf("spell %q declares no install for %s; install it with its own package manager", spec.Spell, path)
+					return choice, false, fmt.Errorf("spell %q declares no install for %s, install it with its own package manager", spec.Spell, path)
 				}
 				return spells.InstallChoice{Manifest: manifest, Lock: path, Install: in}, true, nil
 			}
@@ -185,7 +186,7 @@ func removeAbandonedSeeds(ctx context.Context, dst string) {
 			continue
 		}
 		if err := os.RemoveAll(m); err != nil {
-			slog.DebugContext(ctx, "spell: could not remove an abandoned seed", "path", m, "err", err)
+			slog.With(attr.Component("spell")).DebugContext(ctx, "could not remove an abandoned seed", "path", m, "err", err)
 			continue
 		}
 		_ = os.Remove(m + seedLockSuffix)

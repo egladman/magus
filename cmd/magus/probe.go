@@ -236,7 +236,7 @@ type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
 // errNotServer is a health probe that reached a per-process proc server. It answers a
 // socket and loads no workspace, so reporting its empty workspace list as "no
 // workspaces loaded" would be a misleading readiness verdict.
-var errNotServer = errors.New("a per-process pool answered, not the server; the probes ask `" + hint.ServerStart.String() + "`")
+var errNotServer = errors.New("a per-process pool answered, not the server, the probes ask `" + hint.ServerStart.String() + "`")
 
 // serverSnapshot asks the server for a live status snapshot: at socket when one is named,
 // otherwise at the server's own address (resolveServerAddr).

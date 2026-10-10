@@ -14,6 +14,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"strings"
 )
 
 // Code is a stable diagnostic identifier, e.g. "MGS1001" or "BZZ0003". Its prefix and numbering are a
@@ -29,10 +31,32 @@ func (c Code) Error() string { return string(c) }
 // Error is a coded diagnostic error: a Code, a human message, and (when built through a Domain) the docs
 // URL to render. A bare literal &Error{Code: X} carries no URL and is meant only as an errors.Is target.
 type Error struct {
-	Code  Code
-	Msg   string
+	Code Code
+	Msg  string
+	// Why is the reasoning behind the diagnostic, for a reader who wants it: what the check
+	// protects, or why the obvious alternative is wrong. It is never part of the rendered
+	// error; a display that has room for it asks [Rationale].
+	Why   string
 	url   string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
 	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
+}
+
+// WithWhy sets e's [Error.Why] and returns e, so it chains off Errorf and Wrapf.
+func (e *Error) WithWhy(why string) *Error {
+	e.Why = why
+	return e
+}
+
+// Rationale returns the Why of the outermost *Error in err's chain that carries one, or ""
+// when none does. Outermost wins because the error closest to the caller knows the most
+// about what the caller was doing.
+func Rationale(err error) string {
+	for _, e := range codedChain(err) {
+		if e.Why != "" {
+			return e.Why
+		}
+	}
+	return ""
 }
 
 // BuzzError exposes this diagnostic to a Buzz `catch` as structured fields, satisfying
@@ -106,8 +130,75 @@ func New(urlFn func(Code) string) *Domain {
 func (d *Domain) URL(c Code) string { return d.urlFn(c) }
 
 // Errorf builds an *Error with c, a formatted message, and c's docs URL captured for rendering.
+// An error argument carrying a coded *Error is formatted as Inline renders it, so the message
+// names the inner code without the inner link and the result prints one see: line, its own.
 func (d *Domain) Errorf(c Code, format string, args ...any) *Error {
-	return &Error{Code: c, Msg: fmt.Sprintf(format, args...), url: d.urlFn(c)}
+	formatted := make([]any, len(args))
+	for i, a := range args {
+		formatted[i] = a
+		if err, ok := a.(error); ok && carriesCode(err) {
+			formatted[i] = inlined{err}
+		}
+	}
+	return &Error{Code: c, Msg: fmt.Sprintf(format, formatted...), url: d.urlFn(c)}
+}
+
+// Inline renders err for splicing into another message: each coded *Error in its chain reads
+// "msg (CODE)" and loses its see: line. Use it wherever a coded error becomes part of another
+// message's text, so a reader is sent to one page, the outermost.
+func Inline(err error) string {
+	if err == nil {
+		return ""
+	}
+	text := err.Error()
+	// Outermost first: an outer *Error's text contains its inner's, and once the outer is
+	// rewritten the inner's own rendering is what is left to find.
+	for _, e := range codedChain(err) {
+		text = strings.ReplaceAll(text, e.Error(), e.Msg+" ("+string(e.Code)+")")
+	}
+	return text
+}
+
+// codedChain is every *Error reachable from err through Unwrap, outermost first.
+func codedChain(err error) []*Error {
+	var out []*Error
+	queue := []error{err}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur == nil {
+			continue
+		}
+		if e, ok := cur.(*Error); ok {
+			out = append(out, e)
+		}
+		switch u := cur.(type) {
+		case interface{ Unwrap() error }:
+			queue = append(queue, u.Unwrap())
+		case interface{ Unwrap() []error }:
+			queue = append(queue, u.Unwrap()...)
+		}
+	}
+	return out
+}
+
+func carriesCode(err error) bool {
+	var e *Error
+	return errors.As(err, &e)
+}
+
+// inlined formats an error argument of Errorf as Inline renders it.
+type inlined struct{ err error }
+
+func (i inlined) Format(f fmt.State, verb rune) {
+	switch verb {
+	case 'v', 's':
+		_, _ = io.WriteString(f, Inline(i.err))
+	case 'q':
+		_, _ = fmt.Fprintf(f, "%q", Inline(i.err))
+	default:
+		_, _ = fmt.Fprintf(f, fmt.FormatString(f, verb), i.err)
+	}
 }
 
 // Wrapf builds a coded *Error over an existing cause: it renders "[code] msg / see: url" (cause is NOT

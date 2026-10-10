@@ -22,9 +22,9 @@ func TestValidateScriptRunners(t *testing.T) {
 		{name: "blank arg", runners: []Command{{Bin: "npm"}, {Bin: "pnpm", Args: []string{""}}},
 			wantErr: `mgs_listScriptRunners[1] (pnpm): args [""] holds a blank token`},
 		{name: "a field a prefix cannot honor", runners: []Command{{Bin: "npm", Args: []string{"run"}, DefaultArgs: []string{"build"}}},
-			wantErr: "mgs_listScriptRunners[0] (npm): a runner is an argv prefix; set only bin and args"},
+			wantErr: "mgs_listScriptRunners[0] (npm): a runner is an argv prefix, set only bin and args"},
 		{name: "capture", runners: []Command{{Bin: "npm", Capture: true}},
-			wantErr: "mgs_listScriptRunners[0] (npm): a runner is an argv prefix; set only bin and args"},
+			wantErr: "mgs_listScriptRunners[0] (npm): a runner is an argv prefix, set only bin and args"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

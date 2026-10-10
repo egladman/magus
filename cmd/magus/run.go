@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -111,7 +112,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -733,7 +734,7 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
 		}
 		if resolved == "" || resolved == "/" {
-			return nil, fmt.Errorf("run: --skip %s: name one project; there is no all-projects skip", arg)
+			return nil, fmt.Errorf("run: --skip %s: name one project, there is no all-projects skip", arg)
 		}
 		// ExpandPath is the existence check, and the same one a positional gets:
 		// an unknown project errors here with its did-you-mean.
@@ -753,7 +754,7 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 		}
 	}
 	if len(targets) > 0 && len(kept) == 0 {
-		return nil, errors.New("run: --skip removed every selected project; nothing would run")
+		return nil, errors.New("run: --skip removed every selected project, nothing would run")
 	}
 	return kept, nil
 }
@@ -792,7 +793,7 @@ func applyTargetFilter(targets []types.Target, targetName string, defines func(p
 		for _, t := range skipped {
 			names = append(names, label(t.Path))
 		}
-		slog.Warn("run: target not defined in some selected projects; skipping them",
+		slog.With(attr.Component("run")).Warn("target not defined in some selected projects; skipping them",
 			slog.String("target", targetName), slog.String("skipped", strings.Join(names, ", ")))
 	}
 	return served, nil

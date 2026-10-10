@@ -105,7 +105,7 @@ func validateHarnessMCP(m *HarnessMCP) error {
 	// TokenRef or URL cannot smuggle a resolved secret past the scanner.
 	rendered := renderMCPSetupHint(m, m.urlOrDefault(), ref)
 	if looksLikeEmbeddedMCPSecret(rendered) || looksLikeEmbeddedMCPSecret(m.urlOrDefault()) {
-		return fmt.Errorf("mcp: setup guidance must not embed a resolved bearer token; name secret ref %q instead", ref)
+		return fmt.Errorf("mcp: setup guidance must not embed a resolved bearer token, name secret ref %q instead", ref)
 	}
 	return nil
 }
@@ -115,7 +115,7 @@ func validateMCPTokenRefName(ref string) error {
 		return fmt.Errorf("mcp: token_ref is required")
 	}
 	if strings.HasPrefix(strings.ToLower(ref), "mgs_") {
-		return fmt.Errorf("mcp: token_ref %q looks like a resolved token; use an env/secret-provider name (e.g. %s)", ref, DefaultHarnessMCPTokenRef)
+		return fmt.Errorf("mcp: token_ref %q looks like a resolved token, use an env/secret-provider name such as %s", ref, DefaultHarnessMCPTokenRef)
 	}
 	for _, r := range ref {
 		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {

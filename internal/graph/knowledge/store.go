@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
@@ -155,7 +156,7 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Store{dir: StoreDir(cacheDir), immutable: immutable, maxBytes: maxBytes, remote: remote, log: log}
+	return &Store{dir: StoreDir(cacheDir), immutable: immutable, maxBytes: maxBytes, remote: remote, log: log.With(attr.Component("knowledge"))}
 }
 
 // Sync reconciles freshly-assembled shards against the persisted store and
@@ -296,7 +297,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		present[sh.Name] = true
 		fp := fps[sh.Name]
 		if sh.Dropped > 0 {
-			s.log.DebugContext(ctx, "knowledge: shard inputs resolved to no node",
+			s.log.DebugContext(ctx, "shard inputs resolved to no node",
 				slog.String("shard", sh.Name), slog.Int("dropped", sh.Dropped), slog.Int("nodes", len(sh.Nodes)))
 		}
 		newMan.Shards[sh.Name] = shardMeta{Fingerprint: fp, NodeCount: len(sh.Nodes), EdgeCount: len(sh.Edges)}
@@ -349,7 +350,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		// Warn only when a prior store exists and diverges: a first-ever run
 		// under immutable mode is uninitialized, not stale.
 		if old != nil && (changed || len(pruned) > 0) {
-			s.log.WarnContext(ctx, "magus: knowledge graph is stale but cache.write.enabled is false; serving a freshly assembled in-memory graph without persisting")
+			s.log.WarnContext(ctx, "graph is stale but cache.write.enabled is false; serving a freshly assembled in-memory graph without persisting")
 		}
 		return nil
 	}
@@ -371,7 +372,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		if key != newMan.Routing || (key != "" && (!fileExists(s.routingPath()) || !fileExists(s.namesPath()))) {
 			newMan.Routing = ""
 			if err := s.writeXref(shards, newMan); err != nil {
-				s.log.DebugContext(ctx, "knowledge: symbol xref routing write failed", slog.String("error", err.Error()))
+				s.log.DebugContext(ctx, "symbol xref routing write failed", slog.String("error", err.Error()))
 			} else {
 				newMan.Routing = key
 			}
@@ -516,7 +517,7 @@ func (s *Store) readClassShards(ctx context.Context, man *manifest, classes []Sh
 			}
 			sf, err := s.readVerifiedShard(egctx, man, name)
 			if err != nil {
-				s.log.DebugContext(egctx, "knowledge: stored shard unusable, reassembling its class",
+				s.log.DebugContext(egctx, "stored shard unusable, reassembling its class",
 					slog.String("shard", name), slog.String("error", err.Error()))
 				failed[i] = true
 				return nil
@@ -716,7 +717,7 @@ func (s *Store) SymbolIndexDigest() (types.SymbolIndexDigest, error) {
 		// A blank fingerprint would hash as a constant and pin the digest while the
 		// shard's content moved under it.
 		if meta.Fingerprint == "" {
-			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint; rebuild with `magus graph build`", name)
+			return types.SymbolIndexDigest{}, fmt.Errorf("knowledge: symbol shard %q has no fingerprint, rebuild with `magus graph build`", name)
 		}
 		fps[symbolsShardKey(name)] = meta.Fingerprint
 		if p := symbolsShardProject(name); !slices.Contains(out.Projects, p) {
@@ -760,7 +761,7 @@ func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, 
 	}
 	sf, err := s.readVerifiedShard(ctx, man, name)
 	if err != nil {
-		s.log.DebugContext(ctx, "knowledge: overlay merge failed",
+		s.log.DebugContext(ctx, "overlay merge failed",
 			slog.String("shard", name), slog.String("error", err.Error()))
 		return false
 	}
@@ -994,7 +995,7 @@ func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)
 	defer cancel()
 	if err := s.remote.PutShard(ctx, fp, bytes.NewReader(b)); err != nil {
-		s.log.DebugContext(ctx, "knowledge: remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
 	}
 }
 
@@ -1292,7 +1293,7 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 		err = file.WriteFileAtomic(s.pathIDsPath(), b, 0o644)
 	}
 	if err != nil {
-		s.log.DebugContext(ctx, "knowledge: path ID index write failed", slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "path ID index write failed", slog.String("error", err.Error()))
 	}
 }
 

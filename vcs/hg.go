@@ -587,7 +587,7 @@ func runHgBatched(ctx context.Context, root string, args []string, paths []strin
 		cmd := vcsExec(ctx, "hg", argv...)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("hg %s: %w\n%s", strings.Join(args, " "), err, out)
+			return fmt.Errorf("hg %s: %w", strings.Join(args, " "), withOutput(err, string(out)))
 		}
 	}
 	return nil
@@ -721,7 +721,7 @@ func (v hgVCS) KeepIncoming(ctx context.Context, root string, paths []string) er
 			continue
 		}
 		if err := runHgBatched(ctx, root, []string{"resolve", "--tool", ":local"}, []string{p}); err != nil {
-			return fmt.Errorf("hg resolve %q: the merge left content on neither side; resolve it by hand: %w", p, err)
+			return fmt.Errorf("hg resolve %q: the merge left content on neither side, resolve it by hand: %w", p, err)
 		}
 	}
 	return nil
@@ -991,7 +991,7 @@ func (v hgVCS) StartMerge(ctx context.Context, root, ref string, as types.Person
 	if underway, err := v.mergeInProgress(ctx, root); err != nil {
 		return err
 	} else if underway {
-		return fmt.Errorf("hg merge %s: a merge is already in progress; conclude or abandon it first", ref)
+		return fmt.Errorf("hg merge %s: a merge is already in progress, conclude or abandon it first", ref)
 	}
 	cmd := vcsExec(ctx, "hg", append(username, "--noninteractive", "merge", "--tool", "internal:merge", ref)...)
 	cmd.Dir = root
@@ -1004,7 +1004,7 @@ func (v hgVCS) StartMerge(ctx context.Context, root, ref string, as types.Person
 	if underway, uErr := v.mergeInProgress(ctx, root); uErr == nil && underway {
 		return nil
 	}
-	return fmt.Errorf("hg merge %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+	return fmt.Errorf("hg merge %s: %w", ref, withOutput(err, string(out)))
 }
 
 // mergeInProgress reports whether Mercurial has merge state recorded. `hg debugmergestate`
@@ -1039,7 +1039,7 @@ func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
 	cmd := vcsExec(ctx, "hg", "--noninteractive", "merge", "--abort")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("hg merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("hg merge --abort: %w", withOutput(err, string(out)))
 	}
 	return nil
 }
@@ -1067,7 +1067,7 @@ func (v hgVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		"shelve", "--keep", "--unknown", "--addremove", "--name", name, "--message", preserveMessage)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("hg preserve: shelve: %w: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("hg preserve: shelve: %w", withOutput(err, string(out)))
 	}
 	// The shelf EXISTS from here, so a failed restore reports the handle rather than
 	// discarding it, and NAMES the files so the state is actionable.
@@ -1123,7 +1123,7 @@ func (v hgVCS) PrunePreserved(ctx context.Context, dir string, before time.Time)
 		del := vcsExec(ctx, "hg", "--config", "extensions.shelve=", "shelve", "--delete", name)
 		del.Dir = dir
 		if delOut, err := del.CombinedOutput(); err != nil {
-			return dropped, fmt.Errorf("hg prune-preserved: shelve --delete %s: %w: %s", name, err, strings.TrimSpace(string(delOut)))
+			return dropped, fmt.Errorf("hg prune-preserved: shelve --delete %s: %w", name, withOutput(err, string(delOut)))
 		}
 		dropped = append(dropped, name)
 	}

@@ -88,7 +88,8 @@ func TestFocusReadOperands(t *testing.T) {
 func TestFocusVerdictAdvisesWithoutALease(t *testing.T) {
 	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"../libs/ui/theme.css"})
 	// The prose is checked by substring below, so it is copied across rather than spelled out.
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Brief: got.Brief}, got)
+	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Why: got.Why, Brief: got.Brief}, got)
+	assert.Contains(t, got.Why, "app, libs/core", "the rationale names the focus, behind the ref")
 	assert.Contains(t, got.Context, "belongs to project libs/ui")
 	assert.Contains(t, got.Context, "outside this session's focus")
 	assert.Contains(t, got.Context, "magus describe file libs/ui/theme.css")
@@ -115,10 +116,11 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 
 	got := focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"web/server.go"})
 	assert.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "read inside the focus lease lease-a was given (app)")
+	assert.Contains(t, got.Reason, "outside the focus lease lease-a was given (app)")
 	// The actor, not the tool: naming the tool reads as permission, and two personas
 	// widened their own row on it.
-	assert.Contains(t, got.Reason, "Your orchestrator can widen this focus; you cannot.")
+	assert.Contains(t, got.Reason, "ask your orchestrator to widen this focus.")
+	assert.Contains(t, got.Reason, "Report it as an unresolved risk and stop.")
 	assert.NotContains(t, got.Reason, "magus_job")
 	assert.Contains(t, got.Reason, "not inventing a rule")
 	assert.Empty(t, got.Context, "a deny carries its reason, never a context the host would inject alongside it")
@@ -158,7 +160,7 @@ func TestLeaseFocusReadPathsWidenTheWritePaths(t *testing.T) {
 
 func TestFocusVerdictReportsTheFirstOperandThatLeaves(t *testing.T) {
 	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Brief: got.Brief}, got,
+	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Why: got.Why, Brief: got.Brief}, got,
 		"one explanation per command, not one per operand")
 }
 

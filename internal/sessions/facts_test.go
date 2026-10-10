@@ -112,6 +112,47 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 
 // Everything that is not a target result must leave no trace, or the session store
 // becomes a second copy of the execution journal.
+// recordTap keeps the last record it handled.
+type recordTap struct{ last *slog.Record }
+
+func (recordTap) Enabled(context.Context, slog.Level) bool { return true }
+func (t recordTap) Handle(_ context.Context, r slog.Record) error {
+	*t.last = r
+	return nil
+}
+func (t recordTap) WithAttrs([]slog.Attr) slog.Handler { return t }
+func (t recordTap) WithGroup(string) slog.Handler      { return t }
+
+// TestFactHandlerWithAttrsCarriesAttrsIntoTheSameStore pins that a derived handler
+// hands its attrs to Handle, through a group too, and writes the original's store.
+// The result event rides in on WithAttrs, so a handler that dropped them records
+// nothing.
+func TestFactHandlerWithAttrsCarriesAttrsIntoTheSameStore(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	h := NewFactHandler(root, InvocationStart{Workspace: root, Command: "run build"})
+	require.NotNil(t, h)
+
+	var captured slog.Record
+	emitFact(t, recordTap{last: &captured}, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+	var attrs []slog.Attr
+	captured.Attrs(func(a slog.Attr) bool {
+		attrs = append(attrs, a)
+		return true
+	})
+
+	derived := h.WithAttrs(attrs).WithGroup("g")
+	require.NoError(t, derived.Handle(context.Background(), slog.NewRecord(captured.Time, slog.LevelInfo, "", 0)))
+
+	dir, err := Dir(root)
+	require.NoError(t, err)
+	fold, err := ReadAll(dir)
+	require.NoError(t, err)
+	summaries := Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, []TargetResult{{Target: "build", Outcome: OutcomePass}}, summaries[0].Targets)
+}
+
 func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()

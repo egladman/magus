@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -45,7 +46,7 @@ func withInvocationJournal(ctx context.Context, handlers []slog.Handler, root, v
 	// claim as if nothing outranked it.
 	lease, leaseFrom, err := checkoutLease(root, spawn.Lease)
 	if err != nil {
-		slog.WarnContext(ctx, "magus: this invocation records no lease", slog.String("error", err.Error()))
+		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", slog.String("error", err.Error()))
 		lease, leaseFrom = "", ""
 	}
 	h := sessions.NewFactHandler(root, sessions.InvocationStart{

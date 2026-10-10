@@ -158,7 +158,7 @@ func describeHarness(ctx context.Context, rootOverride string, args []string) er
 			fmt.Fprintln(os.Stderr, "that command reads back. Omit <id> for every wired harness.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

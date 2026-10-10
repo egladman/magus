@@ -23,7 +23,7 @@ func validateModule(m Module) error {
 	}
 	for _, ns := range m.Namespaces {
 		if len(ns.Methods) == 0 {
-			return fmt.Errorf("namespace %q declares no methods; it would render as an empty object", ns.Name)
+			return fmt.Errorf("namespace %q declares no methods, it would render as an empty object", ns.Name)
 		}
 		for _, meth := range ns.Methods {
 			// A namespace exists precisely because the RUNTIME assembles it, so there is
@@ -31,7 +31,7 @@ func validateModule(m Module) error {
 			// here keeps that from being an accident: a namespace method carrying an
 			// Impl would generate nothing and silently never be bound.
 			if !meth.Extern {
-				return fmt.Errorf("namespace %q method %q must be Extern; the runtime binds it", ns.Name, meth.Name)
+				return fmt.Errorf("namespace %q method %q must be Extern, the runtime binds it", ns.Name, meth.Name)
 			}
 			if err := validateMethod(meth); err != nil {
 				return fmt.Errorf("namespace %q method %q: %w", ns.Name, meth.Name, err)
@@ -54,7 +54,7 @@ func validateMCPTools(m Module) error {
 		}
 		seen[tool.Name] = true
 		if tool.Doc == "" {
-			return fmt.Errorf("mcp tool %q: empty Doc; the description is what an agent picks the tool by", tool.Name)
+			return fmt.Errorf("mcp tool %q: empty Doc, the description is what an agent picks the tool by", tool.Name)
 		}
 		params := map[string]bool{}
 		for _, p := range tool.Params {
@@ -109,7 +109,7 @@ func validateMethod(meth Method) error {
 		// what the generated declaration is built from), but nothing here can check them
 		// against a Go signature that does not exist.
 		if meth.Impl != nil {
-			return fmt.Errorf("method is Extern but carries an Impl; it is one or the other")
+			return fmt.Errorf("method is Extern but carries an Impl, it is one or the other")
 		}
 		return nil
 	}

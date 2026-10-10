@@ -132,7 +132,7 @@ func tscWorkspace(t *testing.T, probe func(dir string) (string, error)) (m *Magu
 	return m, p, calls
 }
 
-var errTscNotFound = errors.New(`version probe pnpm [exec tsc --version]: exit status 254: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "tsc" not found`)
+var errTscNotFound = errors.New(`version probe pnpm [exec tsc --version]: ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL Command "tsc" not found: exit status 254`)
 
 // The defect this pins: in a worktree with no node_modules, `pnpm exec tsc --version`
 // forked and warned on every magus invocation, because only a successful probe was ever

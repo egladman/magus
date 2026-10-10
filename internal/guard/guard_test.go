@@ -310,7 +310,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
 			worker: "root/feat footprint", decision: "deny", reason: "only the main session pushes or opens a pull request"},
 		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
-			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "branch-name: `Pin_Key` is not a name to publish"},
+			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "`Pin_Key` is not a branch name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
 			"description": "audit the store", "prompt": "Audit it.", "model": "sonnet",
 		}), decision: "deny", reason: "magus job fork <job> --model sonnet"},
@@ -332,8 +332,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
+			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
-		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "A directory named terminals is not a run"},
+		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
 	}
 
 	covered := map[string]bool{}
@@ -631,18 +633,38 @@ const verdictRefLine = "\nfull verdict: "
 // verdictRef matches the grd ref a deny cites.
 var verdictRef = regexp.MustCompile(verdictRefPrefix + `[0-9a-f]+`)
 
-// withoutVerdictRef is v as a dry run renders it: the call stores its verdict and cites
-// the ref, and a dry run stores nothing, so it has no ref to cite.
+// storedVerdict is the full verdict a deny's reason cites, read from cacheDir: where the
+// rationale and the rule's page live.
+func storedVerdict(t *testing.T, cacheDir, reason string) string {
+	t.Helper()
+	ref := verdictRef.FindString(reason)
+	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", reason)
+	stored, err := trail.ReadBlob(cacheDir, ref)
+	require.NoError(t, err)
+	return string(stored)
+}
+
+// adviceRefLine opens the line a stored advisory cites its grd ref on.
+const adviceRefLine = "\nfull advice: "
+
+// withoutVerdictRef is v as a dry run renders it: the call stores its verdict or advice
+// and cites the ref, and a dry run stores nothing, so it has no ref to cite.
 func withoutVerdictRef(v Verdict) Verdict {
-	head, rest, ok := strings.Cut(v.Reason, verdictRefLine)
+	v.Reason = withoutRefLine(v.Reason, verdictRefLine)
+	v.Context = withoutRefLine(v.Context, adviceRefLine)
+	return v
+}
+
+// withoutRefLine drops the line opening with line from text.
+func withoutRefLine(text, line string) string {
+	head, rest, ok := strings.Cut(text, line)
 	if !ok {
-		return v
+		return text
 	}
 	if _, tail, more := strings.Cut(rest, "\n"); more {
 		head += "\n" + tail
 	}
-	v.Reason = head
-	return v
+	return head
 }
 
 // treeState is every path under dirs with its bytes and modification time.
@@ -743,6 +765,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				real := Judge(ctx, deps, req)
 				if round == 0 {
 					assert.NotContains(t, preview.Reason, verdictRefLine, "a dry run stores no verdict, so it cites none")
+					assert.NotContains(t, preview.Context, adviceRefLine, "nor any advice")
 					assert.Equal(t, withoutVerdictRef(real), preview)
 					assert.NotEqual(t, before, treeState(t, dirs...), "the call itself records something")
 					got := Verdict{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
@@ -755,7 +778,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				if real.Decision == "deny" {
 					real.Reason, preview.Reason = "", ""
 				}
-				assert.Equal(t, real, preview, "round %d", round)
+				assert.Equal(t, withoutVerdictRef(real), preview, "round %d", round)
 			}
 		})
 	}
@@ -792,10 +815,9 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	require.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      "deny",
-		Reason: "`ls jobs >f`: console text is not a format anything should parse." +
-			"\nnext:\n  magus ls jobs -o json --tee f\n      " + want.Why +
-			verdictRefLine + "magus query output " + ref +
-			"\nsee: " + ruleDocsBase + "output-redirect/",
+		Reason: "`ls jobs >f` keeps console text, which is not a format anything should parse." +
+			"\nnext:\n  magus ls jobs -o json --tee f" +
+			verdictRefLine + "magus query output " + ref,
 		Rule:      string(denyRuleOutputRedirect),
 		Lease:     v.Lease, // follows the environment the test ran in
 		LeaseFrom: v.LeaseFrom,

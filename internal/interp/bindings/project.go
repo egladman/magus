@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -46,9 +47,9 @@ func magusfileNotASpellErr(what string) error {
 	return fmt.Errorf(
 		"[%s] magusfile is not a spell, so %s does nothing: magus binds it to every "+
 			"project automatically (it is what makes a magusfile's targets runnable, "+
-			"not a toolchain adapter).\nfix: delete the `import \"magus/spell/magusfile\"` "+
-			"line and drop `magusfile` from the project's \"spells\" list; a project with "+
-			"no toolchain spell needs no list at all.\nsee: %s",
+			"not a toolchain adapter), delete the `import \"magus/spell/magusfile\"` "+
+			"line and drop `magusfile` from the project's \"spells\" list, a project with "+
+			"no toolchain spell needs no list at all, see %s",
 		types.MagusfileIsNotASpell, what, types.CodeURL(types.MagusfileIsNotASpell))
 }
 
@@ -79,7 +80,7 @@ func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where str
 	}
 	ignored, err := hint.CheckKeys(m.MapKeys(), known, types.RemovedOptions, where)
 	for _, k := range ignored {
-		slog.WarnContext(ctx, "magusfile: ignoring an option this magus does not recognize",
+		slog.With(attr.Component("magusfile")).WarnContext(ctx, "ignoring an option this magus does not recognize",
 			slog.String("where", where), slog.String("option", k),
 			slog.String("advice", hint.IgnoredKeyAdvice()))
 	}
@@ -204,7 +205,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	// replaces the built-in markdown defaults rather than adding to them.
 	if gv, ok := v.MapGet("gate_low_risk"); ok {
 		if !gv.IsList() {
-			return nil, fmt.Errorf(`magus.project: "gate_low_risk" takes a list of globs the ci-gate redundancy check classifies as prose, e.g. ["**/*.md", "notes/**"]; [] disables the prose class`)
+			return nil, fmt.Errorf(`magus.project: "gate_low_risk" takes a list of globs the ci-gate redundancy check classifies as prose, e.g. ["**/*.md", "notes/**"], [] disables the prose class`)
 		}
 		var globs []string
 		for _, item := range gv.ListItems() {
@@ -239,7 +240,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 	// workspace that spells the default out from failing to load.
 	if iv, ok := v.MapGet("gate_inherit"); ok {
 		if !iv.IsBool() {
-			return nil, fmt.Errorf(`magus.project: "gate_inherit" takes a bool; false turns CI verdict inheritance off workspace-wide`)
+			return nil, fmt.Errorf(`magus.project: "gate_inherit" takes a bool, false turns CI verdict inheritance off workspace-wide`)
 		}
 		if !iv.AsBool() {
 			opts = append(opts, workspace.WithGateInheritOff())
@@ -385,8 +386,8 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				if reason == "" {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\". "+
-							"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", name)
+						"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\", "+
+							"if you only want a fresh run, use `--no-cache` instead, if the target simply produces no files, it caches correctly with no policy at all", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.SkipCache(reason)))
 			}
@@ -402,8 +403,8 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				if reason == "" {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].retry_on_volatile needs a reason string saying why this target fails without the code being wrong, e.g. \"integration suite talks to a shared broker that drops a connection under load\". "+
-							"If a failure means the code IS wrong, leave the policy off so the run reports it", name)
+						"magus.project: targets[%q].retry_on_volatile needs a reason string saying why this target fails without the code being wrong, e.g. \"integration suite talks to a shared broker that drops a connection under load\", "+
+							"if a failure means the code IS wrong, leave the policy off so the run reports it", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.RetryOnVolatile(reason)))
 			}
@@ -418,8 +419,8 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				}
 				if reason == "" {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].advisory needs a reason string saying why a failure here does not mean the change is wrong, e.g. \"renders from a hand-refreshed record, so a branch is stale by design\". "+
-							"If a failure should stop the gate, leave the policy off; running this target by name fails either way", name)
+						"magus.project: targets[%q].advisory needs a reason string saying why a failure here does not mean the change is wrong, e.g. \"renders from a hand-refreshed record, so a branch is stale by design\", "+
+							"if a failure should stop the gate, leave the policy off, running this target by name fails either way", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Advisory(reason)))
 			}
@@ -435,7 +436,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				policy := types.DriftPolicy(strings.TrimSpace(dv.AsString()))
 				if !types.ValidDriftPolicy(policy) {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].drift is %q; it takes \"fail\" (the default for a target that declares output), \"warn\" to report without failing, or \"off\"",
+						"magus.project: targets[%q].drift is %q, it takes \"fail\" (the default for a target that declares output), \"warn\" to report without failing, or \"off\"",
 						name, dv.AsString())
 				}
 				var reason string
@@ -447,7 +448,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				// abandoned workaround unless the claim is written down.
 				if policy == types.DriftOff && reason == "" {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].drift is \"off\" but drift_reason is empty; say why this target's output cannot be checked, e.g. \"writes a timestamped artifact no two runs can match\"", name)
+						"magus.project: targets[%q].drift is \"off\" but drift_reason is empty, say why this target's output cannot be checked, e.g. \"writes a timestamped artifact no two runs can match\"", name)
 				}
 				opts = append(opts, workspace.WithTarget(name, workspace.Drift(policy, reason)))
 			}
@@ -463,7 +464,7 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 				inc, ok := cv.MapGet("include")
 				if !ok {
 					return nil, fmt.Errorf(
-						"magus.project: targets[%q].cache has no `include`; the only cache key a target may set is cache.include.os/arch.enabled", name)
+						"magus.project: targets[%q].cache has no `include`, the only cache key a target may set is cache.include.os/arch.enabled", name)
 				}
 				for _, axis := range []string{"os", "arch"} {
 					av, ok := inc.MapGet(axis)

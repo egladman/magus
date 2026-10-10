@@ -173,7 +173,7 @@ func EnsureOperator(ctx context.Context, log *slog.Logger) (string, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	log.WarnContext(ctx, "[AGENT] generated a new operator token; retrieve it with `magus config token print`",
+	log.WarnContext(ctx, "generated a new operator token; retrieve it with `magus config token print`",
 		slog.String("path", path),
 	)
 	return tok, nil

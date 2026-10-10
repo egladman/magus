@@ -354,7 +354,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			source := concatSource(src)
 			if removed := describe.RemovedContextMethods(source); len(removed) > 0 {
 				first := removed[0]
-				return fmt.Errorf("%s: ctx.%s was removed in v0.4; use ctx.%s instead (line %d)",
+				return fmt.Errorf("%s: ctx.%s was removed in v0.4, use ctx.%s instead (line %d)",
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), first.Name, first.Replacement, first.Line)
 			}
 			nodes := describe.Extract(source)
@@ -391,7 +391,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// describe.flagDynamic, which splits those execution overrides off as
 				// DynamicExec instead.
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx: a computed value, or one reached through an alias (final c = ctx, then c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				if n.FootprintErr != nil {
 					return fmt.Errorf("%s: target %q: %w", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name, n.FootprintErr)

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"os"
 	"reflect"
 	"slices"
 	"time"
@@ -357,9 +358,17 @@ func (e *decodeEmitter) file() ([]byte, error) {
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		return nil, gofmtError(err, b.String())
 	}
 	return out, nil
+}
+
+// gofmtError wraps a format.Source failure. The unformatted source goes to stderr
+// rather than into the error, so the error stays one line and the offending text is
+// still there to read.
+func gofmtError(err error, source string) error {
+	fmt.Fprintf(os.Stderr, "--- source ---\n%s\n", source)
+	return fmt.Errorf("gofmt: %w", err)
 }
 
 // listFile renders the inbound type list the round-trip test iterates, each entry paired
@@ -413,7 +422,7 @@ func (e *decodeEmitter) listFile(entries []boundaryType) ([]byte, error) {
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		return nil, gofmtError(err, b.String())
 	}
 	return out, nil
 }

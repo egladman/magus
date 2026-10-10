@@ -238,6 +238,39 @@ export fun citedRule(text: str) > str {
     return "";
 }
 
+// ruleOf names the rule a reply cites. A first firing prints its verdict and the ref of
+// the stored full verdict, and the rule's page is only in that stored text.
+fun ruleOf(text: str) > str {
+    final cited = citedRule(text);
+    if (cited != "") {
+        return cited;
+    }
+    final ref = verdictRef(text);
+    if (ref == "") {
+        return "";
+    }
+    final stored = magus\cmd("query", args: ["output", ref], opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (stored == null) {
+        return "";
+    }
+    return citedRule(stored!.stdout);
+}
+
+// verdictRef is the grd ref a reply's `full verdict:` line names, "" when it names none.
+export fun verdictRef(text: str) > str {
+    foreach (word in text.replace("\n", with: " ").split(" ")) {
+        if (word.startsWith("grd")) {
+            return word.trim();
+        }
+    }
+    return "";
+}
+
+test "verdictRef reads the ref off the full verdict line" {
+    std\assert(verdictRef("lease x is not declared.\nfull verdict: ./magus query output grd12ab") == "grd12ab", message: "the ref");
+    std\assert(verdictRef("nothing here") == "", message: "no ref");
+}
+
 fun firstLine(s: str) > str {
     foreach (line in s.split("\n")) {
         if (line.trim() != "") {
@@ -255,7 +288,7 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
         return Observed{ verdict = "dead", rule = "", note = "ran past its timeout, so the host kills it and runs the call" };
     }
     if (code == 2) {
-        return Observed{ verdict = "deny", rule = citedRule(stderr), note = "exit 2" };
+        return Observed{ verdict = "deny", rule = ruleOf(stderr), note = "exit 2" };
     }
     if (code != 0) {
         final said = firstLine(stderr);
@@ -272,20 +305,20 @@ export fun classify(code: int, stdout: str, stderr: str, overran: bool) > Observ
     }
     if ((reply!["decision"] ?? "") == "block") {
         final why = reply!["reason"] ?? "";
-        return Observed{ verdict = "deny", rule = citedRule(why), note = "" };
+        return Observed{ verdict = "deny", rule = ruleOf(why), note = "" };
     }
     final specific = reply!["hookSpecificOutput"] ?? {<str: any>};
     final decision = specific["permissionDecision"] ?? "";
     final reason = specific["permissionDecisionReason"] ?? "";
     final context = specific["additionalContext"] ?? "";
     if (decision == "deny" or decision == "ask") {
-        return Observed{ verdict = decision, rule = citedRule(reason), note = "" };
+        return Observed{ verdict = decision, rule = ruleOf(reason), note = "" };
     }
     if (context.startsWith(DEAD_NOTICE)) {
         return Observed{ verdict = "dead", rule = "", note = firstLine(context) };
     }
     if (context != "") {
-        return Observed{ verdict = "advise", rule = citedRule(context), note = "" };
+        return Observed{ verdict = "advise", rule = ruleOf(context), note = "" };
     }
     if (specific["updatedInput"] != null) {
         return Observed{ verdict = "pass", rule = "", note = "rewritten, so magus judged it" };
@@ -318,7 +351,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
         return Observed{ verdict = "dead", rule = "", note = "{what}, which Cursor reads as a hook failure and runs the call{tail}" };
     }
     if (code == 2) {
-        return Observed{ verdict = "deny", rule = citedRule(stderr), note = "exit 2" };
+        return Observed{ verdict = "deny", rule = ruleOf(stderr), note = "exit 2" };
     }
     var permission = "";
     var reason = "";
@@ -331,7 +364,7 @@ export fun classifyCursor(code: int, stdout: str, stderr: str, overran: bool, fa
         reason = "{reply!["agent_message"] ?? (reply!["user_message"] ?? "")}";
     }
     if (permission == "deny" or permission == "ask") {
-        return Observed{ verdict = permission, rule = citedRule(reason), note = "" };
+        return Observed{ verdict = permission, rule = ruleOf(reason), note = "" };
     }
     final notice = deadNoticeIn(stderr);
     if (notice != "") {

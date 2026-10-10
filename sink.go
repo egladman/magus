@@ -147,7 +147,7 @@ func NewSink(format Format, stdout, stderr io.Writer, opts ...SinkOption) (*Sink
 		return sinkOver(enc), nil
 	}
 	if _, ok := enc.(recorder); ok {
-		return nil, fmt.Errorf("magus: output format %q already writes records; it takes no second record stream", format)
+		return nil, fmt.Errorf("magus: output format %q already writes records, it takes no second record stream", format)
 	}
 	recEnv := env
 	recEnv.stdout, recEnv.stderr = o.records, o.records

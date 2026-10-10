@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -100,7 +101,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -271,7 +272,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	tier, mode := m.CacheDescription()
 	sink.EmitCache(ctx, tier, mode)
 	if len(targets) == 0 {
-		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
+		slog.With(attr.Component("affected")).InfoContext(ctx, "no projects affected", slog.String("target", target))
 		return nil
 	}
 
@@ -690,7 +691,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if target == "" {
-		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
+		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`), run `%s` to list available targets",
 			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
@@ -712,7 +713,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Use --stdin for a one-shot plan of proposed repo-relative paths before editing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -799,13 +800,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// Advice, once, where a person reads it. Both facts are about runner spend and
 	// runner death, neither of which the shard table shows.
 	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
+		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+			"%d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
 			len(plan.Shards), n, n))
 	}
 	if len(plan.OverBudget) > 0 {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
+		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
 
@@ -1074,7 +1075,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "project's targets. Read-only - it runs nothing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -1566,7 +1567,7 @@ func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, onl
 	for _, name := range only {
 		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
 		if !known[clean] {
-			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, hint.Ls)
+			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace, run `%s` to list them", name, hint.Ls)
 		}
 		want[clean] = true
 	}

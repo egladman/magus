@@ -176,7 +176,7 @@ func Run(ctx context.Context, req Request) (Result, error) {
 	}
 	value, err := sess.CallValue(ctx, entry, []vm.Value{vm.ListValue(args)})
 	if err != nil {
-		return Result{}, wrapScriptErr(err, "main: ")
+		return Result{}, wrapScriptErr(err, "main")
 	}
 	if printed.exceeded {
 		return Result{}, fmt.Errorf("%s: printed output exceeds %d bytes", tool, MaxOutputBytes)
@@ -198,7 +198,10 @@ func wrapScriptErr(err error, stage string) error {
 	if errors.As(err, &diag) {
 		return diag
 	}
-	return fmt.Errorf("%s: %s%w", tool, stage, err)
+	if stage == "" {
+		return fmt.Errorf("%s: %w", tool, err)
+	}
+	return fmt.Errorf("%s: %s: %w", tool, stage, err)
 }
 
 // renameEntry renames the top-level `fun main` declaration to entryName and

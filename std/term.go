@@ -161,8 +161,8 @@ func TermPick(ctx context.Context, items []string, prompt, initialFilter string,
 	if !interactive {
 		// The message names the guard rather than just the condition: an author
 		// hitting this in CI needs to know what to write, not only what went wrong.
-		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals). " +
-			"Guard the call with term.isInteractive() and choose a default for unattended runs")
+		return -1, fmt.Errorf("term.pick: nothing to prompt on (standard input and standard error are not both terminals), " +
+			"guard the call with term.isInteractive() and choose a default for unattended runs")
 	}
 	idx, err := tty.Pick(ctx, os.Stdin, os.Stderr, tty.SystemProbe, items, tty.PickOptions{
 		Prompt:        prompt,

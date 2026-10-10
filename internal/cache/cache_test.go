@@ -1039,6 +1039,43 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.Equal(t, 3, calls)
 }
 
+// A step whose recorded failure only restates a dependency's gets no unchanged-inputs
+// line: the dependency's own key speaks for that failure, and a cascade of composites
+// would otherwise print one line per step for one cause.
+func TestRunHintsUnchangedFailureOnlyForItsOwnFailure(t *testing.T) {
+	const root = "[MGS4007] .:types-generate modified its declared sources a.md\n  see: https://example/MGS4007/"
+	for name, tc := range map[string]struct {
+		err  string
+		hint bool
+	}{
+		"its own coded failure":           {root, true},
+		"a restated dependency failure":   {"ctx.needs: types-generate: " + root, false},
+		"a restatement two hops down":     {"ctx.needs: job-generate: ctx.needs: types-generate: " + root, false},
+		"its own failure beside a needed": {"ctx.needs: types-generate: " + root + "\nmockery exited 1", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			step, c := hintCache(t, "package main // "+name)
+			boom := errors.New(tc.err)
+			fn := func(context.Context) error { return boom }
+			_, err := c.Run(context.Background(), step, fn)
+			require.ErrorIs(t, err, boom)
+
+			var res Result
+			out := captureStderr(t, func() {
+				res, err = c.Run(context.Background(), step, fn)
+				require.ErrorIs(t, err, boom)
+			})
+			if tc.hint {
+				assert.Contains(t, out, "inputs unchanged since")
+				assert.Equal(t, HintUnchangedFailure, res.HintID)
+				return
+			}
+			assert.NotContains(t, out, "inputs unchanged")
+			assert.Empty(t, res.HintID)
+		})
+	}
+}
+
 // TestRunEnvironmentalFailureRerunsToAPass pins that a failure never becomes the key's
 // verdict. The step fails once for a reason outside its inputs (a tool lock held by a
 // parallel process), then passes with the key unchanged: the second run executes, its
@@ -1278,15 +1315,15 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 // wired or the wired one did not start.
 func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {
 	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
-	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired; "+
+	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired, "+
 		"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 
 	startErr := errors.New("ACTIONS_RUNTIME_TOKEN is unset")
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteUnavailable("github", startErr), WithRemoteWrite(true))
 	require.ErrorIs(t, err, startErr)
-	assert.EqualError(t, err, "magus/cache: remote writes are required but remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset; "+
-		"fix the backend, or set cache.remote.write.enabled false to run local-only")
+	assert.EqualError(t, err, "magus/cache: remote writes are required but the backend is down, "+
+		"fix it or set cache.remote.write.enabled false to run local-only: remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset")
 }
 
 // Undeclared or declared false, a backend that did not start leaves the cache local-only,

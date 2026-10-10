@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/dropin"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -229,7 +230,7 @@ func (s *Store) read(st *dirState) error {
 		t, err := parseTokenRecord(f.name, path, f.info, now)
 		if err != nil {
 			st.skipped = append(st.skipped, err)
-			slog.WarnContext(context.Background(), "auth: skipped a token record", slog.String("path", path), slog.String("error", err.Error()))
+			slog.With(attr.Component("auth")).WarnContext(context.Background(), "skipped a token record", slog.String("path", path), slog.String("error", err.Error()))
 			continue
 		}
 		st.tokens = append(st.tokens, t)
@@ -347,9 +348,9 @@ func (s *Store) prune(st *dirState, now time.Time) {
 		switch err := s.removeExact(t); {
 		case err == nil, errors.Is(err, errReplaced):
 			changed = true
-			slog.DebugContext(context.Background(), "auth: removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
+			slog.With(attr.Component("auth")).DebugContext(context.Background(), "removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
 		default:
-			slog.WarnContext(context.Background(), "auth: could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
+			slog.With(attr.Component("auth")).WarnContext(context.Background(), "could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
 			kept = append(kept, t)
 		}
 	}
@@ -380,7 +381,7 @@ func (s *Store) removeExact(t Token) error {
 		return os.Remove(aside)
 	}
 	if err := os.Link(aside, path); err != nil {
-		return fmt.Errorf("%s changed while it was removed and could not be put back; it is at %s: %w", path, aside, err)
+		return fmt.Errorf("%s changed while it was removed and could not be put back, it is at %s: %w", path, aside, err)
 	}
 	if err := os.Remove(aside); err != nil {
 		return err

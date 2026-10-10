@@ -82,7 +82,7 @@ func configTokenGenerate(args []string) error {
 		fmt.Fprintln(os.Stderr, "server picks up a rotated token automatically - no restart needed.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -101,7 +101,7 @@ func configTokenGenerate(args []string) error {
 	} else {
 		path, err = auth.SaveNewOperator(tok)
 		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("magus config token generate: a token already exists; pass --force to rotate it")
+			return fmt.Errorf("magus config token generate: a token already exists, pass --force to rotate it")
 		}
 	}
 	if err != nil {

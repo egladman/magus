@@ -467,8 +467,8 @@ func receiverBefore(s string, dot int) string {
 // name a magus target: a refusal that does not hand back the verb it wanted is one the
 // reader routes around.
 func interpreterRewriteDenial(rel string) string {
-	return fmt.Sprintf("Use your editor tool on %s: it reads the file first and reports what it changed.\n"+
-		"Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
+	return fmt.Sprintf("a script rewrites %s, a file this tree carries; use your editor tool on it.\n"+
+		"Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `"+hint.Refs.With("<symbol>", "--occurrences")+"` gives column-precise sites.\n"+
 		"Scratch paths and scripts that CREATE a file are untouched.", rel)
 }
 

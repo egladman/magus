@@ -133,6 +133,19 @@ func TestFileHandler_WritesEventLinesOnly(t *testing.T) {
 	assert.Contains(t, buf.String(), `"text":"go"`)
 }
 
+// TestFileHandlerWithAttrsCarriesAttrsIntoTheSameFile pins that a derived handler
+// hands its attrs to Handle, through a group too, and writes into the original's
+// buffer: the event rides in on WithAttrs, so a handler that dropped them writes
+// nothing.
+func TestFileHandlerWithAttrsCarriesAttrsIntoTheSameFile(t *testing.T) {
+	var buf bytes.Buffer
+	h := NewFileHandler(&buf)
+	derived := h.WithAttrs([]slog.Attr{slog.Any(eventAttr, Event{Kind: KindStarted, Text: "from-with"})}).WithGroup("g")
+	require.NoError(t, derived.Handle(context.Background(), recordWith()))
+	h.Flush()
+	assert.Contains(t, buf.String(), `"text":"from-with"`)
+}
+
 func TestDiscardHandler_NeverEnabled(t *testing.T) {
 	var h slog.Handler = discardHandler{}
 	assert.False(t, h.Enabled(context.Background(), slog.LevelError))

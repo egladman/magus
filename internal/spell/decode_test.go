@@ -1035,7 +1035,7 @@ func TestDecode_StubsRefused(t *testing.T) {
 		value any
 		want  string
 	}{
-		{"unknown body style", "bodyStyle", "curly", `language.syntax.stubs.bodyStyle is "curly"; want "brace" or "indent"`},
+		{"unknown body style", "bodyStyle", "curly", `language.syntax: stubs.bodyStyle is "curly", want "brace" or "indent"`},
 		{"missing body style", "bodyStyle", "", `stubs.bodyStyle is ""`},
 		{"no kinds", "kinds", []string{}, "stubs.kinds is empty"},
 		{"lowercase kind", "kinds", []string{"function"}, `stubs.kinds: "function" is not a SCIP symbol kind`},

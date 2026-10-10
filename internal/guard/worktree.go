@@ -67,10 +67,16 @@ func denyWorktreeRemove(ctx context.Context, deps Dependencies, at location, cal
 	return ShellVerdict{}
 }
 
-// worktreeRemoveDenial lists every failed condition under the worktree it names.
+// worktreeRemoveDenial names the first failed condition in the verdict and lists every one
+// under the worktree it names in the rationale.
 func worktreeRemoveDenial(target string, failed []string) ShellVerdict {
+	more := ""
+	if len(failed) > 1 {
+		more = " (" + countNoun(len(failed)-1, "more condition") + " in the full verdict)"
+	}
 	return ShellVerdict{
-		Deny: "Removing " + target + " is refused until magus can prove it loses nothing:\n  - " +
+		Deny: "removing " + target + " may lose work: " + failed[0] + more + ".",
+		Why: "Removing " + target + " is refused until magus can prove it loses nothing:\n  - " +
 			strings.Join(failed, "\n  - ") + "\n" +
 			"A removal passes when the worktree is a linked worktree of this repository other than your own, clean, " +
 			"unlocked, taken by no live job, and every commit on it is published or filed by a finished job. " +

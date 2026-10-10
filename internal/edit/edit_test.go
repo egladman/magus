@@ -151,7 +151,7 @@ func TestEditRenameFailureRestoresEarlierFiles(t *testing.T) {
 
 	err := p.Apply()
 
-	require.EqualError(t, err, "edit: write b.go: injected; every file written before it was restored")
+	require.EqualError(t, err, "every file written before it was restored: edit: write b.go: injected")
 	assert.Equal(t, []string{"a.go=ONE\n", "a.go=one\n"}, landed, "a.go lands, then its original lands back")
 	for rel, body := range files {
 		assert.Equal(t, body, readFile(t, root, rel), rel)

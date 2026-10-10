@@ -74,14 +74,14 @@ func TestReplaceManagedSection(t *testing.T) {
 		{
 			name:    "a begin with no end is an error naming its line",
 			text:    "*.png binary\n" + tornBanner + "\ndangling\n",
-			wantErr: `line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file; delete the torn section by hand and rerun`,
+			wantErr: `line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`,
 		},
 		{
 			// Pairing the torn begin with the complete section's end would swallow the
 			// lines between them.
 			name:    "a begin whose end follows the next begin is an error",
 			text:    tornBanner + "\ndangling\n\n" + generatedMarkers.section("old.go merge=magus\n"),
-			wantErr: `line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file; delete the torn section by hand and rerun`,
+			wantErr: `line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`,
 		},
 		{
 			name: "mid-line begin is ignored so the section is appended",
@@ -139,7 +139,7 @@ func TestManagedSectionPresent(t *testing.T) {
 
 	torn := write("torn", tornBanner+"\n")
 	_, err = managedSectionPresent(torn, generatedMarkers)
-	require.EqualError(t, err, "vcs: "+torn+`: line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file; delete the torn section by hand and rerun`)
+	require.EqualError(t, err, "vcs: "+torn+`: line 1: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
 }
 
 func TestEnsureShShebang(t *testing.T) {
@@ -172,7 +172,7 @@ func TestEnsureShShebang(t *testing.T) {
 			got, err := ensureShShebang("hooks/pre-push", tt.text)
 			if tt.wantErr {
 				first, _, _ := strings.Cut(tt.text, "\n")
-				require.EqualError(t, err, `vcs: hook hooks/pre-push runs "`+first+`", not a POSIX shell, and magus appends sh to its hooks; call that script from a sh hook instead`)
+				require.EqualError(t, err, `vcs: hook hooks/pre-push runs "`+first+`", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`)
 				return
 			}
 			require.NoError(t, err)
@@ -269,7 +269,7 @@ func TestWriteManagedSectionRefusesATornSection(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(torn), 0o644))
 
 	changed, err := writeManagedSection(path, generatedMarkers, "gen/** merge=magus\n", configFile, stamp.Judge{})
-	require.EqualError(t, err, "vcs: "+path+`: line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file; delete the torn section by hand and rerun`)
+	require.EqualError(t, err, "vcs: "+path+`: line 2: "# BEGIN magus-generated" has no "# END magus-generated" before the next begin marker or the end of the file, delete the torn section by hand and rerun`)
 	assert.False(t, changed)
 	assertFile(t, path, torn, 0o644)
 }
@@ -280,7 +280,7 @@ func TestWriteManagedSectionRefusesANonShHook(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
 
 	changed, err := writeManagedSection(path, driftMarkers, "magus job run check-drift\n", hookFile, stamp.Judge{})
-	require.EqualError(t, err, `vcs: hook `+path+` runs "#!/usr/bin/env python3", not a POSIX shell, and magus appends sh to its hooks; call that script from a sh hook instead`)
+	require.EqualError(t, err, `vcs: hook `+path+` runs "#!/usr/bin/env python3", not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead`)
 	assert.False(t, changed)
 	assertFile(t, path, script, 0o755)
 }

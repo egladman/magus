@@ -299,6 +299,24 @@ func recordFlagSet(name string, fs *flag.FlagSet) {
 	flagRecord.byCommand[name] = flags
 }
 
+// printOwnDefaults prints the flags fs declares beyond the global ones. Every command
+// accepts the globals and `magus -h` lists them once; repeating them under each command
+// buried its few own flags in about a thousand lines of help.
+func printOwnDefaults(fs *flag.FlagSet) {
+	globals := globalFlagNames()
+	// nodisplayflags: this set only prints fs's own flags; fs is the set that parses.
+	own := flag.NewFlagSet(fs.Name(), flag.ContinueOnError)
+	own.SetOutput(fs.Output())
+	fs.VisitAll(func(f *flag.Flag) {
+		if globals[f.Name] {
+			return
+		}
+		own.Var(f.Value, f.Name, f.Usage)
+		own.Lookup(f.Name).DefValue = f.DefValue
+	})
+	own.PrintDefaults()
+}
+
 // globalFlagNames is the set every command gets for free: the config flags generated
 // from the config schema plus the display flags. The man page documents these once,
 // centrally, so they are subtracted from both sides of the comparison rather than

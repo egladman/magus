@@ -161,7 +161,7 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		wantStderr string
 	}{
 		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
-		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -kind markdown\n"},
+		{"a path for symbols", []string{"a.md"}, "judge-docs: a path needs -kind markdown, since symbols are read from stdin\n"},
 		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
 		{"a missing file", []string{"-kind", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
 	}
