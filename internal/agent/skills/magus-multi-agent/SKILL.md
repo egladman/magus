@@ -378,6 +378,12 @@ Write paths name FILES or file globs, never a directory. The check is `<target>
 <project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
 declaration in a shared file and forking from a leased worker.
 
+Read the `regenerated outside the write paths` block fork prints: declared outputs a target
+rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
+regenerate itself, or leave them out and regenerate them after integration.{{if .Full}}
+A worker that regenerates one outside its paths has its result refused by
+`{{cmd "job wait"}}`.{{end}}
+
 Render the prompt FROM the row; never type it. `{{cmd "describe job"}} <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
 down{{if .Full}}: the projects the write paths reach, the declared

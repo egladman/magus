@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 26432
-skill_short_bytes: 19814
+skill_full_bytes: 26780
+skill_short_bytes: 20070
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `117` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `c81888aef742` |
+| `skill-content` | `34706da3dd98` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -360,6 +360,10 @@ binds its child to nothing.
 Write paths name FILES or file globs, never a directory. The check is `<target>
 <project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
 declaration in a shared file and forking from a leased worker.
+
+Read the `regenerated outside the write paths` block fork prints: declared outputs a target
+rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
+regenerate itself, or leave them out and regenerate them after integration.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -865,6 +869,12 @@ an editor magus cannot attribute.
 Write paths name FILES or file globs, never a directory. The check is `<target>
 <project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
 declaration in a shared file and forking from a leased worker.
+
+Read the `regenerated outside the write paths` block fork prints: declared outputs a target
+rebuilds from sources the job may edit. Widen the paths to cover the ones the job must
+regenerate itself, or leave them out and regenerate them after integration.
+A worker that regenerates one outside its paths has its result refused by
+`magus job wait`.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote

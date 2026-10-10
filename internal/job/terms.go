@@ -49,6 +49,9 @@ type Terms struct {
 	// DerivedDenyPaths reads as "not asked". The row alone carries the criteria, the boundary
 	// and the check, and a worker in a tree whose magusfile is mid-edit still needs them.
 	WorkspaceCold bool `json:"workspace_cold,omitempty" yaml:"workspace_cold,omitempty"`
+	// RegeneratedOutside is what [RegeneratedOutside] finds for the row: outputs a target
+	// regenerates from sources the holder may edit, in files the holder may not write.
+	RegeneratedOutside []RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
 	// Affinity is the co-change evidence for the lease's projects against projects it
 	// does NOT own. A WARNING and never a boundary: the skill reads strong hidden
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
@@ -94,24 +97,26 @@ type TermsAffinity struct {
 // derive from the row alone, because it needs a knowledge graph and a loadable workspace.
 // The zero value is a brief rendered from the row and nothing else.
 type TermsFacts struct {
-	Evidence         []TermsEvidence
-	GraphCold        bool
-	WorkspaceCold    bool
-	Projects         []string
-	DerivedDenyPaths []TermsBoundary
-	Affinity         []TermsAffinity
+	Evidence           []TermsEvidence
+	GraphCold          bool
+	WorkspaceCold      bool
+	Projects           []string
+	DerivedDenyPaths   []TermsBoundary
+	RegeneratedOutside []RegeneratedOutput
+	Affinity           []TermsAffinity
 }
 
 // NewTerms renders one job's terms: the job itself, plus what the workspace contributed.
 func NewTerms(row types.Job, facts TermsFacts) Terms {
 	return Terms{
-		Lease:            row,
-		Evidence:         facts.Evidence,
-		GraphCold:        facts.GraphCold,
-		WorkspaceCold:    facts.WorkspaceCold,
-		Projects:         facts.Projects,
-		DerivedDenyPaths: facts.DerivedDenyPaths,
-		Affinity:         facts.Affinity,
+		Lease:              row,
+		Evidence:           facts.Evidence,
+		GraphCold:          facts.GraphCold,
+		WorkspaceCold:      facts.WorkspaceCold,
+		Projects:           facts.Projects,
+		DerivedDenyPaths:   facts.DerivedDenyPaths,
+		RegeneratedOutside: facts.RegeneratedOutside,
+		Affinity:           facts.Affinity,
 	}
 }
 
@@ -141,6 +146,7 @@ func (b Terms) String() string {
 		}
 		writeList(&s, "deny paths the workspace declares", lines)
 	}
+	writeList(&s, regeneratedHeading, regeneratedLines(b.RegeneratedOutside))
 
 	if len(b.Affinity) > 0 {
 		lines := make([]string, len(b.Affinity))

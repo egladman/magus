@@ -352,6 +352,8 @@ import (
 // 117: magus-architecture-review gathers its evidence from the graph: one command per
 // architecture question, a cited command behind every structural claim, an import-cycle
 // script over magus\importGraph, and the lenses that only look like answers.
+// magus-multi-agent forks a scout --read-only, passes one only through a script check,
+// and reads the outputs a fork says are regenerated outside its write paths.
 const SkillVersion = 117
 
 const skillLicense = "GPL-3.0-or-later"
