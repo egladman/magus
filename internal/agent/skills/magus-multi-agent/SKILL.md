@@ -238,7 +238,8 @@ where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 To prove something, brute-force it at economy. Fork one read-only job per claim,
-input, or variant, and run them all at once. Each reports its command and output
+input, or variant, and run them all at once. Spawn the `magus-scout` agent for each
+where your harness installed it. Each reports its command and output
 ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}. Many economy
 workers finish in about the time one principal worker takes, for far fewer tokens.
 The principal tier only reconciles the claims where workers disagree.

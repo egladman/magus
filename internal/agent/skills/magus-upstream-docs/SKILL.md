@@ -7,6 +7,9 @@ workspace graph cannot give{{if .Full}}: the docs are the source of truth for
 magus's own behavior, so read them rather than guessing{{else}}: the docs are the source of
 truth for magus's behavior{{end}}.
 
+A docs lookup you need only the answer to goes to the `magus-scout` agent where your
+harness installed it, or to a worker on your host's cheapest model.
+
 Two places serve the same pages:
 
 - In the magus repo (a `magusfile.buzz` at the root, a `docs/` tree): query the section

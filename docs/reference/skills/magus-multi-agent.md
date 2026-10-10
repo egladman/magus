@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25852
-skill_short_bytes: 19121
+skill_full_bytes: 25924
+skill_short_bytes: 19193
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `384a381c135b` |
+| `skill-content` | `b2879870e178` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -231,7 +231,8 @@ where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 To prove something, brute-force it at economy. Fork one read-only job per claim,
-input, or variant, and run them all at once. Each reports its command and output
+input, or variant, and run them all at once. Spawn the `magus-scout` agent for each
+where your harness installed it. Each reports its command and output
 ref. Many economy
 workers finish in about the time one principal worker takes, for far fewer tokens.
 The principal tier only reconciles the claims where workers disagree.
@@ -706,7 +707,8 @@ where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
 To prove something, brute-force it at economy. Fork one read-only job per claim,
-input, or variant, and run them all at once. Each reports its command and output
+input, or variant, and run them all at once. Spawn the `magus-scout` agent for each
+where your harness installed it. Each reports its command and output
 ref, so evidence settles the claim and not a worker's reading. Many economy
 workers finish in about the time one principal worker takes, for far fewer tokens.
 The principal tier only reconciles the claims where workers disagree.
