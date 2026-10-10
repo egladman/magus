@@ -224,7 +224,8 @@ func WriteTargetGraphMarkdown(w io.Writer, out types.TargetGraphOutput, routing 
 		writeTargetTable(&b, p)
 	}
 
-	_, err := b.WriteTo(w)
+	// The root index is reference reading an agent opens partway through a task.
+	_, err := io.WriteString(w, md.WithContents(string(b.Bytes())))
 	return err
 }
 

@@ -441,6 +441,24 @@ func TestEveryEmbeddedSkillHasBothForms(t *testing.T) {
 	}
 }
 
+// Anthropic's skill guidance caps a SKILL.md body at 500 lines, and gives a reference file
+// over 100 lines a contents list. The full form is that reference copy, so it carries one;
+// the short form is read whole and carries none.
+func TestEverySkillFitsTheSkillGuidance(t *testing.T) {
+	defs, err := agentSkills.EmbeddedSkills()
+	require.NoError(t, err)
+
+	for _, def := range defs {
+		for _, v := range []agent.Variant{agent.VariantShort, agent.VariantFull} {
+			r, err := agentSkills.Render(def, v)
+			require.NoError(t, err)
+			lines := strings.Count(r.Body, "\n") + 1
+			assert.LessOrEqual(t, lines, 500, "%s (%s) is %d lines; move enumeration and examples into its full-only arms, or split it", def.Name, v, lines)
+			assert.Equal(t, v == agent.VariantFull, strings.Contains(r.Body, "\n## Contents\n"), "%s (%s): only the full form carries a contents list", def.Name, v)
+		}
+	}
+}
+
 // TestShortInstallShipsAFullTwinForEverySkill pins FormBoth: the short body is a
 // bet the INSTALLING reader can re-derive what it drops, and a
 // delegated or smaller model that inherits it never made that bet. Every skill

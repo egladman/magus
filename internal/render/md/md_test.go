@@ -166,3 +166,17 @@ func TestInlineHelpers(t *testing.T) {
 		t.Fatalf("Link = %q", got)
 	}
 }
+
+func TestWithContents(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, in, want string }{
+		{"lists every section before the first", "# Title\n\nIntro.\n\n## First\n\n```md\n## Not a section\n```\n\n## Second\n",
+			"# Title\n\nIntro.\n\n## Contents\n\n- First\n- Second\n\n## First\n\n```md\n## Not a section\n```\n\n## Second\n"},
+		{"one section needs no list", "# Title\n\n## Only\n", "# Title\n\n## Only\n"},
+		{"no title is fine", "## A\n\n## B\n", "## Contents\n\n- A\n- B\n\n## A\n\n## B\n"},
+	} {
+		if got := WithContents(tc.in); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}

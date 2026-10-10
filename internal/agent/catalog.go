@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/docs"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/render/md"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
@@ -344,7 +345,9 @@ import (
 // magus's own rather than the workspace's, and says the published site follows main.
 // magus-upstream-source is new: the last-resort read of magus's code at the binary's
 // commit, which `magus version -o json` now reports in full.
-const SkillVersion = 115
+// 116: magus-multi-agent starts every spawn at the economy tier, proves claims with parallel
+// economy jobs, keeps them short-lived, and judges cost per completed job.
+const SkillVersion = 116
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -858,6 +861,11 @@ func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
 	rendered, err := applyVariant(def.Name, def.Body, v)
 	if err != nil {
 		return AgentSkill{}, err
+	}
+	// The full form is the reference copy a reader opens partway through a task; the short
+	// form is read whole.
+	if v == VariantFull {
+		rendered = md.WithContents(rendered)
 	}
 	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v}, nil
 }

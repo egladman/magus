@@ -199,11 +199,11 @@ definitive end without capping depth:
   the callers in no project belong to nobody. Every job passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the job, and SAY which one. The fit runs both ways. A
-mechanical rename does not need the strongest model. An ambiguous API boundary
-does not get the cheapest one because it looked like less work{{if .Full}}. Matching the model to the work is the only cost decision worth making here;
-past that, cost is not your call to agonize over, and a job done badly by an
-under-powered worker costs more than the model it saved{{end}}.
+START EVERY SPAWN AT THE ECONOMY TIER, and SAY which model you picked. Move a job up
+only for work the table below assigns higher. The fit still runs both ways: an
+ambiguous API boundary does not get the cheapest model because it looked like less
+work{{if .Full}}. Judge cost per COMPLETED job: a cheap worker that needs a rerun is not
+cheaper{{end}}.
 
 Naming it is the checkable half: every spawn names a model, or an agent definition
 that names one.
@@ -215,13 +215,14 @@ that names one.
   workers spawned in one session, every one inheriting the root's model, five of them
   mechanical work a cheaper model does as well{{end}}.
 
-ASK THE HUMAN when the right model is unclear, before spawning.{{if .Full}} There is no ordering to fall back on: "only ever spawn something
-weaker" was tried and withdrawn, because same-strength offload is legitimate. An
-unclear case is a question, not a default.{{end}}
+When the tier is unclear, start at economy. A job that fails its criteria there is
+re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn something
+weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
+is a starting point and not a ceiling.{{end}}
 
 Model NAMES belong to the host, never to magus. Name the model your host names, or an
-agent definition the user owns.{{if .Full}} Where the host has a default-subagent setting,
-setting it makes omission cheap instead of expensive.{{end}}
+agent definition the user owns. Where the host has a default-subagent setting, point
+it at its economy model, so an unnamed spawn is the cheap one.
 
 Map work to provider capabilities without assuming model names:
 
@@ -235,6 +236,20 @@ If the host cannot select models or reasoning effort, keep its default. Tool acc
 is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
+
+To prove something, brute-force it at economy. Fork one read-only job per claim,
+input, or variant, and run them all at once. Each reports its command and output
+ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}. Many economy
+workers finish in about the time one principal worker takes, for far fewer tokens.
+The principal tier only reconciles the claims where workers disagree.
+
+Keep economy jobs short-lived. The brief points at evidence (paths, output refs, the
+row) and carries no transcript. A worker resends its whole context every turn, and
+some providers raise a tier's price past a prompt size, so a long-lived cheap worker
+crosses it silently. Where the host's pricing has such a step, the brief names it, and
+the worker reports and stops before its context passes it.{{if .Full}} magus does not
+count tokens, so only the worker can honor the line, and the root forks a fresh job for
+the rest.{{end}}
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.

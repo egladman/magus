@@ -9,6 +9,14 @@ Default charms: rw (local runs write; CI strips them with `--no-default-charms`)
 
 A **target** is a named unit of work (build, test, lint, ...) declared as an `export fun` in a project's magusfile. This is a routing index: every target with a one-line summary, plus the commands that expand any one of them. It is extracted statically from the magusfile source, so it stays in lockstep with how the project actually builds.
 
+## Contents
+
+- Route by question
+- Quick start
+- Query first
+- Project: magus
+- Project: libs/figure
+
 ## Route by question
 
 | To find out                | Run                            |
