@@ -155,13 +155,14 @@ func TestRuleLookupIsExact(t *testing.T) {
 	}
 }
 
-// denyRuleNamesFromSource reads the denyRuleName constant values out of shell.go and
-// lease.go, where the lease-scoped rules declare theirs. advisory.go is left out: its
-// denyRuleName values are advisories, which advisoryNames covers.
+// denyRuleNamesFromSource reads the denyRuleName constant values out of shell.go, lease.go,
+// where the lease-scoped rules declare theirs, and stale_binary.go, where the unloaded
+// policy's do. advisory.go is left out: its denyRuleName values are advisories, which
+// advisoryNames covers.
 func denyRuleNamesFromSource(t *testing.T) []string {
 	t.Helper()
 	var names []string
-	for _, src := range []string{"shell.go", "lease.go"} {
+	for _, src := range []string{"shell.go", "lease.go", "stale_binary.go"} {
 		f, err := parser.ParseFile(token.NewFileSet(), src, nil, 0)
 		require.NoError(t, err, "parse %s", src)
 		ast.Inspect(f, func(n ast.Node) bool {

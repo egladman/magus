@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -33,24 +34,52 @@ func installBinary(t *testing.T, root string) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
 }
 
+// judgeUnloaded judges line in a session of its own, so each deny is a first firing.
 func judgeUnloaded(ctx context.Context, deps Dependencies, line string) Verdict {
-	return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"})
+	return Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line})
 }
+
+// shortDeny asserts the inline shape of a first firing under rule: the verdict opening
+// with say, nothing but the nothing-ran note between it and the ref, and no served next.
+// It returns the full verdict stored behind the ref.
+func shortDeny(t *testing.T, cacheDir string, v Verdict, rule denyRuleName, say string) string {
+	t.Helper()
+	assert.Equal(t, verdictWithRule("deny", string(rule)), unworded(v))
+	ref := verdictRef.FindString(v.Reason)
+	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", v.Reason)
+	shown, cited, ok := strings.Cut(v.Reason, "\nfull verdict: ")
+	require.True(t, ok, v.Reason)
+	assert.Equal(t, hint.NextForDenial(ref).Run, cited)
+	verdict, note, _ := strings.Cut(shown, "\n")
+	assert.Equal(t, say, verdict)
+	assert.NotContains(t, note, "\n", "only the nothing-ran line sits between the verdict and the ref")
+	stored, err := trail.ReadBlob(cacheDir, ref)
+	require.NoError(t, err)
+	return string(stored)
+}
+
+// The verdicts a stale-binary deny opens with, by cause and caller.
+const (
+	staleOwnSay       = "./magus is older than this workspace and cannot load its guard policy; rebuild ./magus with `./magus run go-build .`."
+	noBinaryOwnSay    = "this checkout has no ./magus to load its guard policy; bootstrap ./magus with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`."
+	staleWorkerSay    = "./magus is older than this workspace and cannot load its guard policy; ask the main session to place a ./magus that loads this workspace."
+	workerPlacementAt = "`<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a --from <main checkout>`"
+)
 
 // A fresh worktree has no ./magus and no recorded policy: the magusfile showing a guard
 // rule is the only evidence there is, and the judge is a PATH magus that cannot load it.
 // Writes are denied; reads and the bootstrap pass.
 func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
-	ctx, _ := spawnFixture(t)
+	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, false)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(errMissingMember)
 
 	for _, line := range []string{"touch notes.txt", "git commit -m x", "./magus agent install", "git push origin HEAD:topic"} {
-		v := judgeUnloaded(ctx, deps, line)
-		assert.Equal(t, "deny", v.Decision, line)
-		assert.Contains(t, v.Reason, "This checkout has no ./magus. Bootstrap one: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`.", line)
-		assert.Contains(t, v.Reason, "the magus judging it cannot load this workspace", line)
+		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, noBinaryOwnSay)
+		assert.Contains(t, stored, "changes state, and the guard policy that would judge it is not running:", line)
+		assert.Contains(t, stored, "\n  worktree: the magusfile failed to load: "+errMissingMember.Error(), line)
+		assert.Contains(t, stored, "see: "+ruleDocsBase+"stale-binary/", line)
 	}
 
 	for _, line := range []string{
@@ -65,20 +94,20 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(edit))
+	stored := shortDeny(t, cacheDir, edit, denyRuleStaleBinary, noBinaryOwnSay)
+	assert.True(t, strings.HasPrefix(stored, noBinaryOwnSay+"\nthis file write changes state"), stored)
 }
 
 // A failure that is not stale-shaped still denies in a checkout with no ./magus, and says
 // so rather than blaming the version.
 func TestUnloadedTreeWithoutABinaryNamesTheMissingBinary(t *testing.T) {
-	ctx, _ := spawnFixture(t)
+	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, false)
 	declareGuardRule(t, root)
 
 	v := judgeUnloaded(ctx, unloadedDepsFor(errors.New("magusfile.buzz:3:1: expected expression")), "touch notes.txt")
-	require.Equal(t, "deny", v.Decision)
-	assert.Contains(t, v.Reason, "This checkout has no ./magus, and the magus that answered cannot load its magusfile.")
-	assert.NotContains(t, v.Reason, "older than the tree")
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
+	assert.NotContains(t, stored, "older than")
 }
 
 // With no guard rule showing and none ever recorded there is no policy to have lost, so a
@@ -93,28 +122,25 @@ func TestUnloadedTreeWithoutAVisibleRuleDeniesNothing(t *testing.T) {
 // A ./magus older than the tree denies an edit, a spawn, a push and a state-writing magus
 // verb, and passes the reads and the rebuild.
 func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
-	ctx, _ := spawnFixture(t)
+	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
-		v := judgeUnloaded(ctx, deps, line)
-		assert.Equal(t, "deny", v.Decision, line)
-		assert.Contains(t, v.Reason, "That magus is older than the tree.", line)
-		assert.Contains(t, v.Reason, "Rebuild it: `./magus run go-build .`.", line)
+		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
+		assert.Contains(t, stored, "move the binary aside and bootstrap, one command at a time: `mv magus magus.old`", line)
 	}
 
 	spawn := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, "deny", spawn.Decision)
-	assert.Contains(t, spawn.Reason, "a subagent spawn is denied")
+	assert.Equal(t, verdictWithRule("deny", string(denyRuleStaleBinary)), unworded(spawn))
+	assert.True(t, strings.HasPrefix(spawn.Reason, staleOwnSay+"\na subagent spawn changes state"), spawn.Reason)
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "deny", edit.Decision)
-	assert.Contains(t, edit.Reason, "this file write is denied")
+	assert.Contains(t, shortDeny(t, cacheDir, edit, denyRuleStaleBinary, staleOwnSay), "\nthis file write changes state")
 
 	for _, line := range []string{
-		"ls", "git status", "git diff --stat", "./magus describe job x", "./magus run go-build .", "mv magus magus.old",
+		"ls", "git status", "git diff --stat", "./magus describe job x", "./magus affected --explain test", "./magus run go-build .", "mv magus magus.old",
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
@@ -122,37 +148,80 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 	}
 }
 
-// The remedy follows who is asking: the orchestrator or a person rebuilds, a leased worker
-// asks the orchestrator to place a binary, and neither the worker's deny nor its
-// bootstrap names a build.
-func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
-	ctx, _ := fleetFixture(t, fleetLeases()[0])
+// A repeat within a session shortens to the rule and what it catches, like every other
+// catalogued deny.
+func TestStaleBinaryRepeatNamesTheRule(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
-	root1 := judgeUnloaded(ctx, deps, "touch notes.txt")
-	assert.Contains(t, root1.Reason, "Rebuild it: `./magus run go-build .`")
+	first := Judge(ctx, deps, Request{Input: "touch a", Host: "claude-code", Session: "s1"})
+	shortDeny(t, cacheDir, first, denyRuleStaleBinary, staleOwnSay)
+	repeat := Judge(ctx, deps, Request{Input: "touch b", Host: "claude-code", Session: "s1"})
+	doc, ok := Rule(string(denyRuleStaleBinary))
+	require.True(t, ok)
+	assert.True(t, strings.HasPrefix(repeat.Reason, "denied again [stale-binary]: "+doc.Catches+"\n"), repeat.Reason)
+}
+
+// The remedy follows who is asking: the main session or a person rebuilds, a leased worker
+// asks the main session to place a binary, and neither the worker's deny nor its
+// bootstrap names a build.
+func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
+	ctx, _ := fleetFixture(t, fleetLeases()[0])
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+
+	shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, "touch notes.txt"), denyRuleStaleBinary, staleOwnSay)
 
 	worker := Judge(ctx, deps, Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	require.Equal(t, "deny", worker.Decision, worker.Reason)
-	assert.Contains(t, worker.Reason, "one per base, so a worker never builds one: ask it to run `magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a`, then retry.")
-	assert.NotContains(t, worker.Reason, "go-build")
+	stored := shortDeny(t, cacheDir, worker, denyRuleStaleBinary, staleWorkerSay)
+	assert.Contains(t, stored, "There is one binary per base, so a worker never builds one. The main session places it: "+workerPlacementAt+".")
+	assert.NotContains(t, stored, "go-build")
 
-	for _, line := range []string{
+	for i, line := range []string{
 		"./magus run go-build .",
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		"go build -o magus ./cmd/magus",
 	} {
-		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
+		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "w" + strconv.Itoa(i), Lease: "lease-a"})
 		assert.Equal(t, "deny", v.Decision, line)
-		assert.NotContains(t, v.Reason, "Rebuild it", line)
+		assert.NotContains(t, v.Reason, "rebuild ./magus", line)
 	}
 }
 
-// The raw bootstrap in a binary-less checkout is advised through for the orchestrator and
-// refused for a leased worker, who is told to ask for a placed binary.
-func TestBootstrapIsTheOrchestratorsNotAWorkers(t *testing.T) {
+// A read-only scout may still record its work while the binary is stale: `job exec`,
+// `job exit` and `buzz --record` pass for it, and stay denied for a lease that writes.
+func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
+	scout := types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
+	ctx, _ := fleetFixture(t, fleetLeases()[0], scout)
+	root := ownCheckout(t, ctx, true)
+	declareGuardRule(t, root)
+	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
+
+	for _, line := range []string{
+		"./magus job exec scout",
+		"./magus job exit scout --stdin <<'EOF'\n{}\nEOF",
+		"./magus buzz --record probe.buzz",
+		"export BAGGAGE=magus.lease=scout && ./magus job exit scout --stdin <<'EOF'\n{}\nEOF",
+	} {
+		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
+		assert.NotEqual(t, "deny", v.Decision, "%s: %s", line, v.Reason)
+
+		writer := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "writer " + line, Lease: "lease-a"})
+		assert.Equal(t, "deny", writer.Decision, line)
+	}
+	for _, line := range []string{"./magus buzz probe.buzz", "./magus job fork x --read-only", "./magus job exit scout > out.json"} {
+		v := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: line, Lease: "scout"})
+		assert.Equal(t, "deny", v.Decision, line)
+	}
+}
+
+// The raw bootstrap in a binary-less checkout is advised through for the main session and
+// refused for a leased worker, who is handed the command the main session places it with.
+func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()[0])
 	// The bootstrap rule reads the directory the call runs in, which the fleet fixture leaves unset.
 	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
@@ -165,8 +234,9 @@ func TestBootstrapIsTheOrchestratorsNotAWorkers(t *testing.T) {
 	assert.Equal(t, "advise", orchestrator.Decision, orchestrator.Reason)
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	require.Equal(t, "deny", worker.Decision)
-	assert.Contains(t, worker.Reason, "ask it to run `magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a`")
+	stored := shortDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleRawTool,
+		"a worker never builds magus; the main session places it: "+workerPlacementAt+".")
+	assert.Contains(t, stored, "There is one binary per base, so a worker never builds one.")
 }
 
 // Each hook row records the magus that judged the call and the directory the host said it
@@ -280,6 +350,10 @@ func TestReadOnlyLine(t *testing.T) {
 		"./magus query output out1":       true,
 		"./magus run go-build .":          false,
 		"./magus run test . --dry-run":    true,
+		"./magus affected --explain test": true,
+		"./magus affected test":           false,
+		"./magus job exit scout":          false,
+		"./magus buzz --record p.buzz":    false,
 		"./magus agent install":           false,
 		"./magus refs foo --rename bar":   false,
 		"magus --root . ls":               true,
@@ -339,7 +413,7 @@ func mcpEnvelope(t *testing.T, tool string, input map[string]any) string {
 // A magus MCP tool that changes state is denied while the binary cannot load the tree,
 // like the CLI verb it is the other door to; the tools that only read still answer.
 func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
-	ctx, _ := spawnFixture(t)
+	ctx, cacheDir := spawnFixture(t)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
@@ -354,11 +428,9 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 		"diff unknown op":   mcpEnvelope(t, "diff", map[string]any{"op": "frobnicate"}),
 		"client no content": mcpEnvelope(t, "client", map[string]any{}),
 	} {
-		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: "s1"})
-		assert.Equal(t, "deny", v.Decision, name)
-		assert.Contains(t, v.Reason, "That magus is older than the tree.", name)
-		assert.Contains(t, v.Reason, "Rebuild it: `./magus run go-build .`.", name)
-		assert.Contains(t, v.Reason, "this call to the magus "+strings.Fields(name)[0]+" tool is denied", name)
+		v := Judge(ctx, deps, Request{Input: call, Host: "claude-code", Session: name})
+		stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay)
+		assert.Contains(t, stored, "\nthis call to the magus "+strings.Fields(name)[0]+" tool changes state", name)
 	}
 
 	for name, call := range map[string]string{
@@ -375,7 +447,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 	}
 }
 
-// A leased worker is told to ask the orchestrator for a binary, never to build one.
+// A leased worker is told to ask the main session for a binary, never to build one.
 func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	ctx, _ := fleetFixture(t, fleetLeases()[0])
 	root := ownCheckout(t, ctx, true)
@@ -383,9 +455,9 @@ func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
 
 	worker := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "client", map[string]any{"script": "x"}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	require.Equal(t, "deny", worker.Decision, worker.Reason)
-	assert.Contains(t, worker.Reason, "ask it to run `magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a`")
-	assert.NotContains(t, worker.Reason, "go-build")
+	stored := shortDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleStaleBinary, staleWorkerSay)
+	assert.Contains(t, stored, workerPlacementAt)
+	assert.NotContains(t, stored, "go-build")
 
 	reads := Judge(ctx, deps, Request{Input: mcpEnvelope(t, "status", map[string]any{}), Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	assert.NotEqual(t, "deny", reads.Decision, reads.Reason)
