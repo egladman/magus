@@ -82,9 +82,9 @@ type Options struct {
 	Unavailable func() error
 }
 
-// ReviewAnchors joins the workspace's declared notes stores against a changeset, for a review
-// brief. The server's diff thread route and the diff tool share it so both name the same
-// anchors. The graph, with symbol shards, is loaded only when a store is declared, and a
+// ReviewAnchors joins the workspace's declared notes stores against a changeset, for the notes
+// a review thread's record lists. The server's diff thread route and the diff tool share it so
+// both name the same anchors. The graph, with symbol shards, is loaded only when a store is declared, and a
 // misdeclared store is returned as an error rather than as no anchors.
 func (o Options) ReviewAnchors() func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
 	notes := o.Config.Knowledge.Notes

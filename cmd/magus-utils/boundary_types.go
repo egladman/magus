@@ -379,6 +379,11 @@ var boundaryEnums = []boundaryEnum{
 		Cases: []enumCase{{"none", ""}, {"noIndexer", "no-indexer"}},
 	},
 	{
+		Name:  "DiffReadState",
+		Type:  reflect.TypeFor[types.DiffReadState](),
+		Cases: []enumCase{{"none", ""}, {"known", "known"}, {"unknown", "unknown"}},
+	},
+	{
 		Name: "DiffGroupKind",
 		Type: reflect.TypeFor[types.DiffGroupKind](),
 		Cases: []enumCase{{"none", ""}, {"connected", "connected"}, {"generated", "generated"},
