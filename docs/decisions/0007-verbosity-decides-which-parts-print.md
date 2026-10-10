@@ -61,13 +61,13 @@ lint.
 _Done._ No new setting decides this. `-q`, `-s` and `log.silent` (`MAGUS_LOG_SILENT`)
 already ask for less, and `quiet.Wrap` wraps the display whenever one of them is on:
 
-| part       | default                                    | `-q` / `-s`                                   |
-| ---------- | ------------------------------------------ | --------------------------------------------- |
-| `why`      | a dim second line                          | in the run log, reached through the ref       |
-| waits      | from the first beat, then at each doubling | quiet until a minute, then at each doubling   |
-| console    | the link, how to open it signed in         | the one command that opens it                 |
-| repeats    | folded into one footer line with a count   | the same                                      |
-| component  | the name before the message                | the same                                      |
+| part      | default                                    | `-q` / `-s`                                 |
+| --------- | ------------------------------------------ | ------------------------------------------- |
+| `why`     | a dim second line                          | in the run log, reached through the ref     |
+| waits     | from the first beat, then at each doubling | quiet until a minute, then at each doubling |
+| console   | the link, how to open it signed in         | the one command that opens it               |
+| repeats   | folded into one footer line with a count   | the same                                    |
+| component | the name before the message                | the same                                    |
 
 `-v` brings `why` back under `-q` or `-s`. `-o json` and `-o jsonl` carry every part as
 fields, since a parser selects what it shows. The run log keeps everything.
