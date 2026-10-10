@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -30,7 +32,7 @@ import (
 // the display set work after the noun exactly as they do on `describe targets`. A
 // hand-rolled loop here accepted the flags nowhere and made this the one noun that lied
 // about its flags.
-func describeRules(args []string) error {
+func describeRules(ctx context.Context, args []string) error {
 	names, err := cmdParse("describe rules", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe rule[s] [<name>] [flags]")
@@ -66,11 +68,11 @@ func describeRules(args []string) error {
 	if !ok {
 		// Names the nearest instead of only refusing: a reader typing this has a rule
 		// name off a verdict, and the ways to get it wrong are a typo and a plural.
-		fmt.Fprintf(os.Stderr, "magus describe rule: no rule named %q\n", names[0])
+		slog.ErrorContext(ctx, fmt.Sprintf("no rule named %q", names[0]), attr.Notice(""), attr.Component("magus describe rule"))
 		if near := hint.Nearest(names[0], ruleNames()); near != "" {
-			fmt.Fprintf(os.Stderr, "did you mean %q?\n", near)
+			slog.InfoContext(ctx, fmt.Sprintf("did you mean %q?", near), attr.Notice(""))
 		}
-		fmt.Fprintf(os.Stderr, "`%s` lists every rule this workspace enforces\n", hint.DescribeRules)
+		slog.InfoContext(ctx, fmt.Sprintf("`%s` lists every rule this workspace enforces", hint.DescribeRules), attr.Notice(""))
 		return errSilent{exitCode: 2}
 	}
 	doc.Workspace = workspaceSetting(declared, doc.Name)

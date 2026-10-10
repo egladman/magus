@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -49,17 +50,18 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// captureStderr redirects os.Stderr for the duration of fn and returns what it wrote.
-// reportRefLookupError and its suggestion helper write straight to os.Stderr (matching
-// every other CLI error path in this package), so a real fd swap is the only way to
-// observe them without changing that convention.
+// captureStderr redirects os.Stderr for the duration of fn and returns what it wrote,
+// with the default logger's records rendered as plain lines into the same stream, so a
+// notice reads as it does on a terminal.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
-	prev := os.Stderr
+	prev, prevLog := os.Stderr, slog.Default()
 	os.Stderr = w
+	slog.SetDefault(slog.New(cache.NewPlainHandler(w, slog.LevelInfo)))
 	fn()
+	slog.SetDefault(prevLog)
 	os.Stderr = prev
 	require.NoError(t, w.Close())
 	var buf bytes.Buffer
@@ -115,7 +117,7 @@ func TestQueryHelpPrintsUsage(t *testing.T) {
 
 // TestReportRefLookupError_NoDoubledConsulted guards the RefNotFoundError rendering
 // bug: Error() already names the stores it consulted, so the wrapper must not append a
-// second list. m is nil here on purpose: this branch exercises
+// second "(consulted: ...)". m is nil here on purpose: this branch exercises
 // the not-exist rendering in isolation, and a nil Magus must skip the suggestion rather
 // than panic (the txtar coverage exercises the suggestion with a real workspace).
 func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
@@ -127,7 +129,7 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 	})
 
 	assert.Contains(t, out, `no stored output for ref "outdeadbeef0000", consulted local cache`)
-	assert.Equal(t, 1, strings.Count(out, "consulted"), "consulted must appear exactly once: %q", out)
+	assert.Equal(t, 1, strings.Count(out, "consulted"), "the stores must be named exactly once: %q", out)
 }
 
 // newQueryTestWorkspace opens a real (cache-backed) single-project workspace bound to a
@@ -210,7 +212,7 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 	missing := "grd" + strings.Repeat("0", 16)
 	stderr := captureStderr(t, func() {
 		var silent errSilent
-		require.ErrorAs(t, queryCmd(ctx, "", []string{"output", missing}), &silent)
+		require.ErrorAs(t, queryTrailPayload(ctx, "", missing, OutputOptions{Format: FormatText}), &silent)
 	})
 	assert.Contains(t, stderr, `no stored payload for ref "`+missing+`"`)
 }

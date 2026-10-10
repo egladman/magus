@@ -2182,24 +2182,22 @@ func diffFiles(n int) types.Diff {
 // stops seeing by the third time, which is exactly when it starts to matter. Both halves are
 // the feature, so both are pinned.
 func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
-	var small, large strings.Builder
-	hintReviewPrompt(&small, diffFiles(promptHintFiles-1), &gen.DiffFlags{})
-	hintReviewPrompt(&large, diffFiles(promptHintFiles), &gen.DiffFlags{})
+	small := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles-1), &gen.DiffFlags{}) })
+	large := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles), &gen.DiffFlags{}) })
 
-	assert.Empty(t, small.String(), "an ordinary changeset gets no hint")
-	assert.Contains(t, large.String(), "--prompt")
+	assert.Empty(t, small, "an ordinary changeset gets no hint")
+	assert.Contains(t, large, "--prompt")
 	// The refusal travels with the offer: a reader must not have to wonder whether pressing
 	// this sends their code somewhere.
-	assert.Contains(t, large.String(), "calls no model and sends nothing")
+	assert.Contains(t, large, "calls no model and sends nothing")
 }
 
 // TestReviewPromptHintIsSilentWhenAlreadyAsked: suggesting a flag the reader just passed is
 // how a command teaches people to ignore its hints.
 func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
-	var out strings.Builder
-	hintReviewPrompt(&out, diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
+	out := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true}) })
 
-	assert.Empty(t, out.String())
+	assert.Empty(t, out)
 }
 
 func TestRevRangeFromFlag(t *testing.T) {
@@ -2306,32 +2304,32 @@ func TestHintSinceLastReview(t *testing.T) {
 	}
 
 	t.Run("an earlier pass names the revision and the command", func(t *testing.T) {
-		var out strings.Builder
-		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
-
-		got := out.String()
+		got := noticesFrom(t, func() {
+			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123", VCS: "git"}, 1), rangeSrc)
+		})
 		assert.Contains(t, got, "you last reviewed 1 of these 2 files")
 		assert.Contains(t, got, "0123456789ab", "the prose abbreviates")
 		assert.Contains(t, got, "--rev 0123456789abcdef0123...topic", "the command carries the full revision")
 	})
 
 	t.Run("nothing to subtract prints nothing", func(t *testing.T) {
-		var out strings.Builder
-		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{}, 0), rangeSrc)
-		assert.Empty(t, out.String(), "a first pass has no earlier one")
+		out := noticesFrom(t, func() { hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{}, 0), rangeSrc) })
+		assert.Empty(t, out, "a first pass has no earlier one")
 	})
 
 	t.Run("already looking at the reviewed revision prints nothing", func(t *testing.T) {
-		var out strings.Builder
-		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
-		assert.Empty(t, out.String(), "the reader is already seeing exactly the delta")
+		out := noticesFrom(t, func() {
+			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "main", VCS: "git"}, 1), rangeSrc)
+		})
+		assert.Empty(t, out, "the reader is already seeing exactly the delta")
 	})
 
 	t.Run("a working-tree review has no earlier revision to name", func(t *testing.T) {
-		var out strings.Builder
-		hintSinceLastReview(&out, reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
-			diffInput{kind: inputWorkingTree, label: "the working tree"})
-		assert.Empty(t, out.String())
+		out := noticesFrom(t, func() {
+			hintSinceLastReview(t.Context(), reviewed(types.VCSCheckpoint{Revision: "0123456789abcdef0123"}, 1),
+				diffInput{kind: inputWorkingTree, label: "the working tree"})
+		})
+		assert.Empty(t, out)
 	})
 }
 

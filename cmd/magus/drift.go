@@ -81,7 +81,7 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	if !ok {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, notice)
+	slog.WarnContext(ctx, notice, attr.Notice(""))
 	noteJobDesktop(ctx, job.NameCheckDrift, notice)
 	return nil
 }

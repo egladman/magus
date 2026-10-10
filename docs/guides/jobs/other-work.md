@@ -66,7 +66,6 @@ its holder reports it ran magus run test api
 goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   api/deps.txt:1-1
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 and the whole set is done when every row reads `pass`:
@@ -86,7 +85,6 @@ upgrade/api  ana     pass   -      1      alone  magus run test api
 upgrade/web  ben     pass   -      1      alone  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 A job holding `upgrade/api` that also changed web's `deps.txt` would not pass: wait
@@ -149,7 +147,6 @@ overlaps
     footprints: disjoint
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 When each exits, `magus job wait` places every changed line under the heading it
@@ -195,7 +192,6 @@ release-1.3/changelog  changelog  exited  -      1      alone  -
 release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 Coming back is not being done. The person cutting the release checks each item:
@@ -208,7 +204,6 @@ verified release-1.3/changelog, recorded pass
 goal changelog: verified
 footprint: where its diff since the checkpoint landed
   CHANGELOG.md:3-6
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 <!-- golden: job_people_release.txtar wait-notes.out -->
@@ -223,7 +218,6 @@ goal notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
   the notes need the final benchmark numbers
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 Exit 1, every unmet rule named, and the risk repeated where the person deciding
@@ -238,7 +232,6 @@ release-1.3/changelog  changelog  pass    -      1      alone  -
 release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 ```
 
 The release waits until every row reads `pass`. An item nobody finishes ends with

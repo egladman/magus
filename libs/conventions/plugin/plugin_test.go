@@ -33,6 +33,11 @@ func TestPluginsRegister(t *testing.T) {
 		"nameoutput":    map[string]any{"package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"stderrprint": map[string]any{
+			"module": "example.com/m", "usage-pattern": "(?i)usage$", "usage-fields": []any{"Usage"},
+			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},
+			"allow": []any{map[string]any{"file": "cmd/app/main.go", "reason": "the display"}},
+		},
 		"stutter":       map[string]any{"min-package-len": 3},
 		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}, "hint": "see docs"},
 	} {

@@ -44,7 +44,6 @@ regenerated outside the write paths, from sources inside them
   docs/manpage/*.md (docs:content-generate)
   cli/testdata/api.lock (.:man-generate)
   the root regenerates these after integration: never hand-edit them; if this job must regenerate them itself, ask the root to widen the write paths
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- widen.json --
 {"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
  "check": {"target": "test", "project": "."}}

@@ -58,6 +58,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -68,6 +69,7 @@ import (
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue/types"
 )
 
@@ -180,12 +182,22 @@ func (p *Script) ListsArtifacts() bool {
 // newSession is a session with the modules a provider script may import.
 func newSession(ctx context.Context) (*buzz.Session, error) {
 	sess := buzz.NewSession(ctx)
-	buzzstd.RegisterWithOutput(sess, os.Stderr)
-	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx, Out: os.Stderr}, hostModule); err != nil {
+	out := printRecords{ctx: ctx}
+	buzzstd.RegisterWithOutput(sess, out)
+	if err := sess.Provide(buzz.ModuleEnv{Ctx: ctx, Out: out}, hostModule); err != nil {
 		_ = sess.Close()
 		return nil, err
 	}
 	return sess, nil
+}
+
+// printRecords carries what a provider script prints onto the log display, one record
+// per print, so the verbosity flags and redaction reach it.
+type printRecords struct{ ctx context.Context }
+
+func (w printRecords) Write(p []byte) (int, error) {
+	slog.InfoContext(w.ctx, strings.TrimSuffix(string(p), "\n"), attr.Notice(""))
+	return len(p), nil
 }
 
 // Close releases the VM session.

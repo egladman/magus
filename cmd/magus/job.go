@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
@@ -104,43 +106,29 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
 
-// consoleJobLine is where to WATCH a job while it runs, printed under every verb that names
-// one. Somebody who wants to know how a worker is doing has two ways to find out, and only
-// one of them leaves the worker alone.
-//
-// An empty id asks for the Jobs view itself, which is what a listing wants.
-//
-// With no server running there is no origin to build a link against, so the line says how to
-// start one instead. Printing the URL anyway would hand a person a page that never loads,
-// and a browser error page cannot tell them that nothing is listening rather than that the
-// console is broken.
-func consoleJobLine(id string) string {
+// pointAtConsole names where to WATCH a job (the Jobs view for an empty id), the one way
+// to see how a worker is doing that leaves it alone. With no server it names no link: a
+// page that never loads cannot say whether nothing is listening or the console is broken,
+// and the record carries no next command, so a quiet display has nothing to print.
+func pointAtConsole(ctx context.Context, id string) {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
-		return ""
+		return
 	}
-	// A quiet display gets the one command that opens the console, and nothing when there
-	// is nothing to open (ADR 0007).
-	terse := quietDisplay()
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
-		if terse {
-			return ""
-		}
-		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
+		slog.InfoContext(ctx, "nothing is serving it; `"+hint.ServerStart.String()+"` to watch this job without interrupting its holder",
+			attr.Notice("console"))
+		return
 	}
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
 		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
 	}
-	if terse {
-		return "console: " + console.OpenCommand(link)
-	}
-	line := "console: " + link + "\n  " + authHint(link)
+	slog.LogAttrs(ctx, slog.LevelInfo, link, attr.Notice("console"), attr.Next(console.OpenCommand(link)))
 	if skew := consoleSkew(serverVersion, version); skew != "" {
-		line += "\n  " + skew
+		slog.WarnContext(ctx, skew, attr.Notice("console"))
 	}
-	return line
 }
 
 // consoleSkew names a server running a different build from this binary, or "" when they
@@ -152,14 +140,6 @@ func consoleSkew(serverVersion, cliVersion string) string {
 	}
 	return fmt.Sprintf("that console is from server %s, this binary is %s; `%s && %s` serves this build",
 		serverVersion, cliVersion, hint.ServerStop, hint.ServerStart)
-}
-
-// printConsoleJobLine writes that line, and nothing at all when the console is off: a
-// suppressed console has no address, and a bare "console:" is worse than silence.
-func printConsoleJobLine(out io.Writer, id string) {
-	if line := consoleJobLine(id); line != "" {
-		fmt.Fprintln(out, line)
-	}
 }
 
 // probeConsoleServer reports whether the server is up, and its version. A per-process
@@ -287,7 +267,7 @@ func lsJobs(root string, args []string) error {
 		printJobTree(os.Stdout, list)
 		fmt.Fprintln(os.Stdout)
 		printInflight(os.Stdout, list, all)
-		printConsoleJobLine(os.Stdout, "")
+		pointAtConsole(context.Background(), "")
 		return nil
 	default:
 		list.Changes = inflightScope(list.Changes, all)
@@ -734,7 +714,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		printJobChange(os.Stdout, joined.Changes, row.ID)
-		printConsoleJobLine(os.Stdout, row.ID)
+		pointAtConsole(ctx, row.ID)
 		return nil
 	default:
 		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
@@ -1016,7 +996,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
 		job.RenderRegenerated(os.Stdout, jobRegenerated(ctx, root, []types.Job{stored})[stored.ID])
-		printConsoleJobLine(os.Stdout, stored.ID)
+		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: jobRegenerated(ctx, root, []types.Job{stored})[stored.ID]})
@@ -1038,7 +1018,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 		return emitNames([]string{stored.ID})
 	case outputText:
 		fmt.Println(job.EntryAdvice(stored, rel))
-		printConsoleJobLine(os.Stdout, stored.ID)
+		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -1378,7 +1358,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitNames([]string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
-		printConsoleJobLine(os.Stdout, status.Job)
+		pointAtConsole(ctx, status.Job)
 	default:
 		err = emitFormatted(opts, status)
 	}
@@ -1482,7 +1462,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	}
 
 	out := os.Stdout
-	printConsoleJobLine(out, id)
+	pointAtConsole(ctx, id)
 	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
 
 	// The job plan is re-read per batch rather than captured: a holder releases paths as it
@@ -2269,6 +2249,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	regenerated := jobRegenerated(ctx, root, reshaped)
 	if opts.Format == outputText {
 		printJobApply(os.Stdout, applied, regenerated, globalCfg.DryRun)
+		if len(applied) == 1 && !globalCfg.DryRun {
+			pointAtConsole(ctx, applied[0].Next.ID)
+		}
 		return nil
 	}
 	report := applyReport{DryRun: globalCfg.DryRun}
@@ -2316,10 +2299,6 @@ func printJobApply(out io.Writer, applied []job.Applied, regenerated map[string]
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
-		return
-	}
-	if len(applied) == 1 {
-		printConsoleJobLine(out, applied[0].Next.ID)
 	}
 }
 

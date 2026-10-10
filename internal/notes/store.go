@@ -859,7 +859,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 		n.Name = name
 	}
 	if err := validateStored(n); err != nil {
-		return Note{}, true, fmt.Errorf("notes: %s: %w", filepath.Base(path), err)
+		return Note{}, true, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	return n, true, nil
 }
@@ -878,7 +878,7 @@ func marshalNote(path string, n Note) ([]byte, error) {
 	if err := setMagusNode(doc, notePayload{
 		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors, Source: n.Source,
 	}); err != nil {
-		return nil, fmt.Errorf("notes: render %s: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("render %s: %w", filepath.Base(path), err)
 	}
 	fm, err := yaml.Marshal(doc)
 	if err != nil {

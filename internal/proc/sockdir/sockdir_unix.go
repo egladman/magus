@@ -78,16 +78,16 @@ func verifySockDir(dir string) error {
 		return err
 	}
 	if fi.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("proc: %s is a symlink, not the socket directory magus expects, remove it and let magus recreate it", dir)
+		return fmt.Errorf("%s is a symlink, not the socket directory magus expects, remove it and let magus recreate it", dir)
 	}
 	if !fi.IsDir() {
-		return fmt.Errorf("proc: %s exists and is not a directory, remove it and let magus recreate it", dir)
+		return fmt.Errorf("%s exists and is not a directory, remove it and let magus recreate it", dir)
 	}
 	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return fmt.Errorf("proc: %s is group/other accessible (mode %04o), another local user could tamper with the socket, remove it (or chmod 700 it) and let magus recreate it", dir, perm)
+		return fmt.Errorf("%s is group/other accessible (mode %04o), another local user could tamper with the socket, remove it (or chmod 700 it) and let magus recreate it", dir, perm)
 	}
 	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Getuid() {
-		return fmt.Errorf("proc: %s is owned by uid %d, not the current user (uid %d), remove it and let magus recreate it", dir, st.Uid, os.Getuid())
+		return fmt.Errorf("%s is owned by uid %d, not the current user (uid %d), remove it and let magus recreate it", dir, st.Uid, os.Getuid())
 	}
 	return nil
 }

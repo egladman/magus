@@ -98,13 +98,13 @@ func (m *Magus) ServiceSession() *service.Session { return m.newServiceSession(c
 // closure) so it reflects what will actually run rather than the whole workspace;
 // that repo-wide view is the `magus doctor` audit. A run with fewer than two
 // near-duplicates emits nothing, so the warning stays a real signal.
-func (m *Magus) warnNearDuplicateServices(seeds []*types.Project, charms []string) {
+func (m *Magus) warnNearDuplicateServices(ctx context.Context, seeds []*types.Project, charms []string) {
 	clusters := serviceaudit.NearDuplicates(m.reachableProjects(seeds), charms)
 	msg := identity.FormatWarning(clusters)
 	if msg == "" {
 		return
 	}
-	interactive.Emit(os.Stderr, types.DiagnosticErrorf(types.NearDuplicateServices, "%s", msg).Error())
+	interactive.Hint(ctx, types.DiagnosticErrorf(types.NearDuplicateServices, "%s", msg).Error())
 }
 
 // reachableProjects returns seeds plus every project reachable from them through

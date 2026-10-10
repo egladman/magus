@@ -616,7 +616,7 @@ func (s *Store) readMergeShardKeeping(ctx context.Context, g *Graph, man *manife
 			sf, err = s.readShardKeeping(name, keep)
 		}
 		if err != nil {
-			return "", fmt.Errorf("knowledge: load shard %q: %w", name, err)
+			return "", fmt.Errorf("load shard %q: %w", name, err)
 		}
 	}
 	g.Merge(sf.Nodes, sf.Edges)
@@ -1318,7 +1318,7 @@ func (s *Store) storedPathIDs(ctx context.Context, man *manifest, skip []ShardCl
 		}
 		sf, err := s.readVerifiedShard(ctx, man, name)
 		if err != nil {
-			return nil, fmt.Errorf("knowledge: read shard %q for the overlay's node set: %w", name, err)
+			return nil, fmt.Errorf("read shard %q for the overlay's node set: %w", name, err)
 		}
 		for _, id := range collectPathIDs(sf.Nodes) {
 			out[id] = true

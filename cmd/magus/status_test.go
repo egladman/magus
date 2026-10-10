@@ -632,9 +632,10 @@ func TestRunProbesMCPOnly(t *testing.T) {
 
 func TestRenderProbeResults(t *testing.T) {
 	render := func(results []probeResult) (string, string, bool) {
-		var out, errb strings.Builder
-		ok := renderProbeResults(&out, &errb, results)
-		return out.String(), errb.String(), ok
+		var out strings.Builder
+		var ok bool
+		errb := noticesFrom(t, func() { ok = renderProbeResults(t.Context(), &out, results) })
+		return out.String(), errb, ok
 	}
 
 	t.Run("single-pass-no-label", func(t *testing.T) {

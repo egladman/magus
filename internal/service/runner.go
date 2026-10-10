@@ -127,7 +127,7 @@ func (r ExecRunner) Start(ctx context.Context, s spells.Service) (Handle, error)
 			// either; a caller that cancelled Start is not going to wait around for a
 			// graceful cleanup grace period.
 			stopProc(ctx, h)
-			return nil, fmt.Errorf("service: %q not ready: %w", s.Command.Bin, err)
+			return nil, fmt.Errorf("%q not ready: %w", s.Command.Bin, err)
 		}
 	}
 	return h, nil
@@ -171,7 +171,7 @@ func (r ExecRunner) bringUp(ctx context.Context, s spells.Service) (Handle, erro
 	h := &startedHandle{stop: s.Stop}
 	if err := r.waitReady(ctx, s.Readiness); err != nil {
 		runStopCommand(ctx, s.Stop, stopCommandTimeout)
-		return nil, fmt.Errorf("service: %q not ready: %w", s.Start.Bin, err)
+		return nil, fmt.Errorf("%q not ready: %w", s.Start.Bin, err)
 	}
 	return h, nil
 }

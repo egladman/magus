@@ -1935,7 +1935,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// MGS5001: warn when this run brings up services that look like near-duplicate
 	// copies of one shared service (same image and container port, subtly different).
 	// Scoped to the run's reachable projects so it fires at the moment of cost.
-	m.warnNearDuplicateServices(uniqueProjects, charmKey)
+	m.warnNearDuplicateServices(ctx, uniqueProjects, charmKey)
 
 	if opts.report != nil {
 		ctx = report.WithWriter(ctx, opts.report)

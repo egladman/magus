@@ -61,7 +61,7 @@ func (c *Client) authorize(ctx context.Context, ref Reference, actions string) (
 	}
 	tok, err := c.fetchToken(ctx, key)
 	if err != nil {
-		return "", fmt.Errorf("oci: token for %s: %w", ref.Repository, err)
+		return "", fmt.Errorf("token for %s: %w", ref.Repository, err)
 	}
 	auth := "Bearer " + tok
 	c.mu.Lock()
@@ -95,7 +95,7 @@ func (c *Client) challenge(ctx context.Context, host string) (challenge, error) 
 	case http.StatusOK:
 	case http.StatusUnauthorized:
 		if ch, err = readChallenge(resp.Header.Values("WWW-Authenticate")); err != nil {
-			return challenge{}, fmt.Errorf("oci: %s: %w", host, err)
+			return challenge{}, fmt.Errorf("%s: %w", host, err)
 		}
 	default:
 		return challenge{}, fmt.Errorf("oci: reach %s: %s", host, statusLine(resp))

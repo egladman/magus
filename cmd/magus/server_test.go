@@ -153,28 +153,16 @@ func trapBrokerSpawn(t *testing.T) *int {
 	return &calls
 }
 
-// TestAnnounceBrokerSaysWhatItLeftBehind pins the one line a run prints when it starts
-// the broker: the pid, that it opens no network listener, and when it goes away; nothing
-// under -q or -s, and a record rather than prose under a structured -o.
-func TestAnnounceBrokerSaysWhatItLeftBehind(t *testing.T) {
-	var text strings.Builder
-	announceBroker(&text, 4242, "", false)
-	assert.Contains(t, text.String(), "started a broker (pid 4242)")
-	assert.Contains(t, text.String(), "no network listener")
-	assert.Contains(t, text.String(), "10 minutes")
+// TestNoticeBrokerSaysWhatItLeftBehind pins the one line a run prints when it starts the
+// broker: the pid, that it opens no network listener, and when it goes away.
+func TestNoticeBrokerSaysWhatItLeftBehind(t *testing.T) {
+	text := noticesFrom(t, func() { noticeBroker(t.Context(), 4242) })
+	assert.True(t, strings.HasPrefix(text, "magus: started a broker (pid 4242)"), text)
+	assert.Contains(t, text, "no network listener")
+	assert.Contains(t, text, "10 minutes")
 
-	var quiet strings.Builder
-	announceBroker(&quiet, 4242, "", true)
-	assert.Empty(t, quiet.String(), "-q and -s drop it")
-
-	var none strings.Builder
-	announceBroker(&none, 0, "", false)
-	assert.Empty(t, none.String(), "a broker this run did not start is not announced")
-
-	var record strings.Builder
-	announceBroker(&record, 4242, "jsonl", false)
-	assert.True(t, strings.HasPrefix(record.String(), "{"), "a structured -o gets a record: %s", record.String())
-	assert.Contains(t, record.String(), `"pid":4242`)
+	none := noticesFrom(t, func() { noticeBroker(t.Context(), 0) })
+	assert.Empty(t, none, "a broker this run did not start is not announced")
 }
 
 // TestServerChildArgsDropsStart pins the detached server's argv: its role, with no

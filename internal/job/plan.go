@@ -214,7 +214,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 	for k := range plan {
 		stored, err := writeMerge(ctx, store, plan[k].Next.ID, merges[k], limits, proofs[k])
 		if err != nil {
-			return plan[:k], fmt.Errorf("job: wrote %d of %d record(s), then %s: %w", k, len(plan), plan[k].Next.ID, err)
+			return plan[:k], fmt.Errorf("wrote %d of %d record(s), then %s: %w", k, len(plan), plan[k].Next.ID, err)
 		}
 		plan[k].Next = stored
 	}

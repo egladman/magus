@@ -31,7 +31,7 @@ func TestNewPluginDecodesSettings(t *testing.T) {
 func TestNewPluginRejectsUnknownKey(t *testing.T) {
 	for _, key := range []string{"ignore-marker", "allow", "report-unpaired", "honor-marker", "pair-benchmarks"} {
 		_, err := newPlugin(map[string]any{key: true})
-		if err == nil || !strings.HasPrefix(err.Error(), "testlayout: settings: ") {
+		if err == nil || !strings.HasPrefix(err.Error(), "decode linters.settings.custom.testlayout.settings: ") {
 			t.Errorf("want %q to fail naming the linter, got %v", key, err)
 		}
 	}

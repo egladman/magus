@@ -39,9 +39,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
-		fmt.Fprintln(os.Stderr, "")
-		affectedUsage()
+		affectedMissingTargetUsage()
 		return errSilent{exitCode: 2}
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -82,7 +80,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	spellFilter, targetStr := parseTarget(rawTarget)
 	parsed, perr := types.ParseTarget(targetStr)
-	hintCanonicalSpelling(parsed)
+	hintCanonicalSpelling(ctx, parsed)
 	if perr != nil {
 		return perr
 	}
@@ -115,7 +113,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return fmt.Errorf("magus affected: --step and --stdin are mutually exclusive")
 	}
 	if af.Step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
+		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 	if af.Step {
@@ -291,7 +289,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// which is a verdict on the change rather than a deferral, so it exits 0.
 	sized := gate.size(ctx, af.Base, af.NoRedundancyCheck)
 	if sized != nil {
-		fmt.Fprint(os.Stderr, renderSizing(target, *sized))
+		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == types.RiskTrivial {
 			return nil
 		}
@@ -393,6 +391,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return emitProjectNames(m, targets)
 	}
 	return nil
+}
+
+func affectedMissingTargetUsage() {
+	fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
+	fmt.Fprintln(os.Stderr, "")
+	affectedUsage()
 }
 
 func affectedUsage() {
@@ -907,15 +911,15 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 // types.AffectedResult.UndeclaredBySeed for every other consumer.
 //
 // The message names the SEED PROJECTS and nothing per-changeset, which is what makes
-// it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
+// it dedupe: interactive.Hint keys on the whole text, so a file list would differ on
 // every request and churn a long-lived server's hint set instead of teaching once. The
 // files are already on screen where this is emitted (--impact and --explain both mark
 // each one), and `magus describe file` explains any of them in full.
-func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
+func noteUndeclaredSeeds(ctx context.Context, undeclaredBySeed map[string][]string) {
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	interactive.Emit(os.Stderr, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
+	interactive.Hint(ctx, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
 }
 
 // noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
@@ -1101,7 +1105,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			undeclared[p.Path] = p.UndeclaredFiles
 		}
 	}
-	noteUndeclaredSeeds(undeclared)
+	noteUndeclaredSeeds(ctx, undeclared)
 
 	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
 	// changed code). These read the heavier knowledge store (a prior symbol index and,
@@ -1361,7 +1365,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	if err != nil {
 		return err
 	}
-	noteUndeclaredSeeds(r.UndeclaredBySeed)
+	noteUndeclaredSeeds(ctx, r.UndeclaredBySeed)
 
 	g, err := ws.Graph()
 	if err != nil {

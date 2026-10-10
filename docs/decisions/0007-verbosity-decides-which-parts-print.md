@@ -61,13 +61,13 @@ lint.
 _Done._ No new setting decides this. `-q`, `-s` and `log.silent` (`MAGUS_LOG_SILENT`)
 already ask for less, and `quiet.Wrap` wraps the display whenever one of them is on:
 
-| part       | default                                    | `-q` / `-s`                                   |
-| ---------- | ------------------------------------------ | --------------------------------------------- |
-| `why`      | a dim second line                          | in the run log, reached through the ref       |
-| waits      | from the first beat, then at each doubling | quiet until a minute, then at each doubling   |
-| console    | the link, how to open it signed in         | the one command that opens it                 |
-| repeats    | folded into one footer line with a count   | the same                                      |
-| component  | the name before the message                | the same                                      |
+| part      | default                                    | `-q` / `-s`                                 |
+| --------- | ------------------------------------------ | ------------------------------------------- |
+| `why`     | a dim second line                          | in the run log, reached through the ref     |
+| waits     | from the first beat, then at each doubling | quiet until a minute, then at each doubling |
+| console   | the link, how to open it signed in         | the one command that opens it               |
+| repeats   | folded into one footer line with a count   | the same                                    |
+| component | the name before the message                | the same                                    |
 
 `-v` brings `why` back under `-q` or `-s`. `-o json` and `-o jsonl` carry every part as
 fields, since a parser selects what it shows. The run log keeps everything.
@@ -93,7 +93,27 @@ for it, which is `-s` on every command run there.
   as `why`: dim under the cause by default, a `why` field in `-o json`, and in the run
   log under `-q` and `-s`.
 
-## Not built
+### Every stderr line but help is a record
+
+_Done._ Output takes one of three channels. Results go to stdout through the output
+emitters. Help prints to stderr directly, and only when asked. Every other stderr line
+is a slog record the display renders, so the verbosity flags, `-o jsonl`, redaction and
+the component name reach it:
+
+- `attr.Notice(label)` marks a line addressed to a person. It prints as
+  `label: message` with no level glyph, so a notice keeps its words.
+- `attr.Next(cmd)` carries the one command, printed as a `next:` block. Under `-q` an
+  info record survives as that command alone; the console link after a job verb is one.
+- `attr.Error(err)` carries the error, never the message: the label names who is
+  speaking and the error names where it failed, and a shared origin prints once.
+- `interactive.Hint` logs a hint record, which `-q` and `-s` keep.
+
+The `stderrprint` linter reports a write to `os.Stderr` outside a usage function and
+the display, and errmsg's `error-notice` reports an error built into a notice's message.
+Each file still allowed to write stderr names why: it runs before the display exists,
+relays a child's bytes, speaks a hook protocol, or prompts a person who must answer.
+
+## Alternatives
 
 - **A setting naming who reads the output.** The verbosity flags already say how much a
   run wants, and a second knob would let the two disagree.
@@ -103,6 +123,19 @@ for it, which is `-s` on every command run there.
   the first time a site forgets it.
 - **A second catalog of short wording.** Two texts for one message drift apart, and
   nothing reports which one went stale.
+- **Dropping a repeated origin at render time.** The display could strip a leading
+  `name:` a message already carries, but a message is prose and the guess would cut
+  text that only looks like a prefix. A typed error attribute says which part is the
+  origin.
+
+## Consequences
+
+- `-q` and `-s` now hide every info notice, where a direct print used to show whatever
+  flag was passed. A notice that must survive them carries `attr.Next` or is a hint.
+- A notice rendered from a record moves from stdout to stderr where a command printed
+  it beside a result, such as the console line after a job verb.
+- A new stderr line has to be a record, help, or an allow entry with a reason, so the
+  three channels stay apart without review catching each one.
 
 ## Open questions
 

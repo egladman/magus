@@ -216,7 +216,7 @@ func TestParseBuzzProjectOpts_TargetSandboxRefusesACache(t *testing.T) {
 	pol.MapSet("sandbox", sb)
 	_, err := parseBuzzProjectOpts(context.Background(), targetsOpts("test", pol))
 	require.ErrorIs(t, err, types.AllowlistUnresolved)
-	assert.ErrorContains(t, err, `targets["test"].sandbox: sandbox: caches are a spell's declaration`)
+	assert.ErrorContains(t, err, `targets["test"].sandbox: caches are a spell's declaration`)
 }
 
 // TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth

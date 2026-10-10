@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -51,7 +52,7 @@ func mcpAddrString() string {
 
 // mcpCmd serves MCP over stdin and stdout for the agent host that launched it, against the
 // workspace it was launched in. It serves whoever runs it, a person at a terminal included:
-// the stderr line serveMCPStdio prints is what tells that person what they started.
+// the notice serveMCPStdio logs is what tells that person what they started.
 func mcpCmd(ctx context.Context, root string, args []string) error {
 	rest, err := cmdParse("mcp", args, func(fs *flag.FlagSet) {
 		fs.Usage = mcpUsage
@@ -66,7 +67,7 @@ func mcpCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	return serveMCPStdio(ctx, m, os.Stdin, os.Stdout, os.Stderr)
+	return serveMCPStdio(ctx, m, os.Stdin, os.Stdout)
 }
 
 // mcpUsage is `magus mcp --help`: the stdio registration a host needs, then the server's
@@ -112,25 +113,26 @@ func writeMCPUsage(w io.Writer, cfg config.MCP) {
 }
 
 // serveMCPStdio serves MCP for m with wire as the protocol's output. For as long as it
-// serves, os.Stdout points at diag, so a stray print or a child process handed os.Stdout
-// lands on stderr rather than between two frames a host is parsing.
+// serves, os.Stdout points at os.Stderr, so a stray print or a child process handed
+// os.Stdout lands on stderr rather than between two frames a host is parsing.
 //
 // It keeps m's graph and symbol indexes current while it serves, as the server does for
 // its own workspace: a session lives as long as the agent's, so graph reads answer warm.
-func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Writer, diag *os.File) error {
+func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Writer) error {
 	addr, err := mcpAddrPort()
 	if err != nil {
 		return fmt.Errorf("invalid mcp.address: %w", err)
 	}
 	stdout := os.Stdout
-	os.Stdout = diag
+	os.Stdout = os.Stderr
 	defer func() { os.Stdout = stdout }()
 
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	watchWorkspace(ctx, m)
 
-	fmt.Fprintf(diag, "magus: serving MCP over stdio for %s; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)\n", m.Root())
+	slog.InfoContext(ctx, fmt.Sprintf("serving MCP over stdio for %s; close stdin or press Ctrl+C to stop (magus mcp --help shows how to register it)", m.Root()),
+		attr.Notice(""), attr.Component("magus"))
 	return internalmcp.ServeStdio(ctx, internalmcp.Options{
 		Magus:    m,
 		Logger:   slog.Default(),

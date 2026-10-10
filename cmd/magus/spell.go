@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/opencontainers/go-digest"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
@@ -322,7 +324,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 		if err := emitPull(opts, res); err != nil {
 			return err
 		}
-		fmt.Fprint(os.Stderr, next)
+		slog.InfoContext(ctx, strings.TrimSuffix(next, "\n"), attr.Notice(""))
 		return nil
 	}
 	ref, err := pullReference(root, pos[0])

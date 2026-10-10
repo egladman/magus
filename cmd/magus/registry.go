@@ -58,7 +58,7 @@ func newEntry(root string, now time.Time) *wsEntry {
 func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := loadWorkspaceCfg(root)
 	if err != nil {
-		return nil, fmt.Errorf("server: load config %s: %w", root, err)
+		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
 	// Warm server workspaces record OTel metrics so the /dashboard can read live
 	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
@@ -85,7 +85,7 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	// context.Background(): workspace goroutines must outlive individual RPC contexts.
 	m, err := magus.Open(context.Background(), root, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("server: open workspace %s: %w", root, err)
+		return nil, fmt.Errorf("open workspace %s: %w", root, err)
 	}
 	return m, nil
 }

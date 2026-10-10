@@ -69,7 +69,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	spellFilter, targetStr := parseTarget(rawTarget)
 	parsedTarget, parseErr := types.ParseTarget(targetStr)
-	hintCanonicalSpelling(parsedTarget)
+	hintCanonicalSpelling(ctx, parsedTarget)
 	if parseErr != nil {
 		return parseErr
 	}
@@ -146,7 +146,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			rf.NShards = saved.Count
 		}
 		if globalCfg.DryRun {
-			return emitSavedPlanDryRun(*saved, rawTarget, shards)
+			return emitSavedPlanDryRun(ctx, *saved, rawTarget, shards)
 		}
 		projectArgs = planProjects(shards)
 		if len(projectArgs) == 0 {
@@ -186,13 +186,13 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		// normal thing to do, and every target that runs prints an output ref
 		// on the way past, so there is already an exact handle for anything
 		// worth reading afterwards.
-		interactive.Emit(os.Stderr, fmt.Sprintf(
+		interactive.Hint(ctx, fmt.Sprintf(
 			"running quietly; targets print an output ref as they finish, and `%s` reads one",
 			hint.QueryOutput.With("<ref>")))
 	}
 
 	if rf.Step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
+		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 
@@ -648,7 +648,7 @@ func planProjects(shards []planShard) []string {
 // emitSavedPlanDryRun answers `run --stdin --dry-run`, which runs nothing. Structured -o
 // renders the plan document as read, which is how a saved plan renders again without
 // being computed again; text names each shard's command.
-func emitSavedPlanDryRun(p planOutput, target string, shards []planShard) error {
+func emitSavedPlanDryRun(ctx context.Context, p planOutput, target string, shards []planShard) error {
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -656,10 +656,10 @@ func emitSavedPlanDryRun(p planOutput, target string, shards []planShard) error 
 	switch opts.Format {
 	case outputText:
 		if len(shards) == 0 {
-			fmt.Fprintln(os.Stderr, "[dry] the plan has no shards; nothing would run")
+			slog.InfoContext(ctx, "[dry] the plan has no shards; nothing would run", attr.Notice(""))
 		}
 		for _, s := range shards {
-			fmt.Fprintf(os.Stderr, "[dry] shard %s: magus run %s %s\n", s.Shard, target, s.Projects)
+			slog.InfoContext(ctx, fmt.Sprintf("[dry] shard %s: magus run %s %s", s.Shard, target, s.Projects), attr.Notice(""))
 		}
 		return nil
 	case outputName:

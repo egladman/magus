@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -62,7 +63,8 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	// there is nothing for it to do. A config key that claims otherwise only
 	// moves the failure later, into a redraw against a pipe.
 	if !isInteractiveTTY() {
-		fmt.Fprintf(os.Stderr, "magus: x requires an interactive terminal; use `%s` instead\n", hint.Run.With("<target>", "<project>"))
+		slog.ErrorContext(ctx, fmt.Sprintf("x requires an interactive terminal; use `%s` instead", hint.Run.With("<target>", "<project>")),
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 

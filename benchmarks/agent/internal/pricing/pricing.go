@@ -153,7 +153,7 @@ func parse(raw []byte, file string) (Table, error) {
 	for model, entry := range doc.Models {
 		rates, err := entry.rates()
 		if err != nil {
-			return Table{}, fmt.Errorf("pricing: table %s: model %s: %w", file, model, err)
+			return Table{}, fmt.Errorf("table %s: model %s: %w", file, model, err)
 		}
 		t.models[model] = rates
 	}

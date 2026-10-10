@@ -30,7 +30,7 @@ func init() {
 func newPlugin(raw any) (register.LinterPlugin, error) {
 	opts, err := register.DecodeSettings[testlayout.Options](raw)
 	if err != nil {
-		return nil, fmt.Errorf("testlayout: settings: %w", err)
+		return nil, fmt.Errorf("decode linters.settings.custom.testlayout.settings: %w", err)
 	}
 
 	return &linter{analyzer: testlayout.New(opts)}, nil

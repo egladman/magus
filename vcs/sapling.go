@@ -377,7 +377,7 @@ func (v saplingVCS) RangeFiles(ctx context.Context, dir, base, head string, path
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
 	return hgRangeFiles(ctx, "sl", root, base, head, paths)
 }
