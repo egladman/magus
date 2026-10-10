@@ -208,6 +208,61 @@ test "a windows-joined asset path matches the upload glob" {
     std\assert(toSlash("") == "", message: "the empty path");
 }
 
+// TOOLS are the binaries a release archives per platform, side by side in dist/ and under
+// one SHA256SUMS. proofread ships here because `go install` refuses its module: the
+// libs/conventions go.mod keeps a replace directive.
+export final TOOLS = ["magus", "proofread"];
+
+// assetName names tool's archive for one platform. The tool leads, so `magus self update`
+// and the installer, which ask for magus_<version>_<os>_<arch>_static.tar.gz, never
+// select another tool's archive.
+export fun assetName(tool: str, version: str, goos: str, goarch: str, suffix: str) > str {
+    return tool + "_" + version + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+}
+
+// assetGlob is the pattern release.yaml uploads tool's archives with and release-publish
+// collects them by.
+export fun assetGlob(tool: str) > str {
+    return "dist/" + tool + "_*.tar.gz";
+}
+
+// missingStaticTools names the archives a release lacks among names: every platform with a
+// static magus archive ships every tool's static archive beside it. A dynamic archive is
+// magus alone.
+export fun missingStaticTools(names: [str]) > [str] {
+    final missing = mut [<str>];
+    foreach (name in names) {
+        if (!name.startsWith("magus_") or !name.endsWith("_static.tar.gz")) { continue; }
+        final rest = name.sub("magus_".len());
+        foreach (tool in TOOLS) {
+            final want = tool + "_" + rest;
+            if (names.indexOf(want) == null) { missing.append(want); }
+        }
+    }
+    return missing;
+}
+
+test "a release ships proofread beside magus under names that never collide" {
+    std\assert(TOOLS.indexOf("magus") != null, message: "magus is released");
+    std\assert(TOOLS.indexOf("proofread") != null, message: "proofread is released");
+    final proofread = "dist/" + assetName("proofread", version: "v1.0.0", goos: "linux", goarch: "amd64", suffix: "_static");
+    final magus = "dist/" + assetName("magus", version: "v1.0.0", goos: "linux", goarch: "amd64", suffix: "_static");
+    assert\equal(proofread, want: "dist/proofread_v1.0.0_linux_amd64_static.tar.gz", message: "the proofread asset");
+    assert\equal(magus, want: "dist/magus_v1.0.0_linux_amd64_static.tar.gz", message: "the name self update asks for");
+    std\assert(matchesGlob(assetGlob("proofread"), proofread), message: "the upload collects proofread");
+    std\assert(!matchesGlob(assetGlob("magus"), proofread), message: "magus's glob never sees proofread");
+    std\assert(!matchesGlob(assetGlob("proofread"), magus), message: "proofread's glob never sees magus");
+}
+
+test "every static platform ships proofread" {
+    final linux = ["magus_v1.0.0_linux_amd64_static.tar.gz", "proofread_v1.0.0_linux_amd64_static.tar.gz"];
+    assert\equal(missingStaticTools(linux), want: [<str>], message: "complete");
+    assert\equal(missingStaticTools(linux + ["magus_v1.0.0_linux_amd64.tar.gz"]), want: [<str>],
+        message: "a dynamic archive is magus alone");
+    assert\equal(missingStaticTools(linux + ["magus_v1.0.0_darwin_arm64_static.tar.gz"]),
+        want: ["proofread_v1.0.0_darwin_arm64_static.tar.gz"], message: "an upload that dropped proofread");
+}
+
 // Publication is write-once. A unit is created when nothing is published under its name,
 // kept when something is, and replaced only when the run carries the mutable charm. Kept
 // is not skipped: the caller still verifies what is there and reads it from then on, so a

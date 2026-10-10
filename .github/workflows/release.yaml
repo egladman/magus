@@ -198,6 +198,7 @@ jobs:
           name: dist-linux-amd64
           path: |
             dist/magus_*.tar.gz
+            dist/proofread_*.tar.gz
             dist/*.sha256
           if-no-files-found: error
 
@@ -237,6 +238,7 @@ jobs:
           name: dist-linux-arm64
           path: |
             dist/magus_*.tar.gz
+            dist/proofread_*.tar.gz
             dist/*.sha256
           if-no-files-found: error
 
@@ -279,6 +281,7 @@ jobs:
           name: dist-darwin-arm64
           path: |
             dist/magus_*.tar.gz
+            dist/proofread_*.tar.gz
             dist/*.sha256
           if-no-files-found: error
 
@@ -331,6 +334,7 @@ jobs:
           name: dist-darwin-amd64
           path: |
             dist/magus_*.tar.gz
+            dist/proofread_*.tar.gz
             dist/*.sha256
           if-no-files-found: error
 
@@ -406,6 +410,7 @@ jobs:
           name: dist-windows
           path: |
             dist/magus_*.tar.gz
+            dist/proofread_*.tar.gz
             dist/*.sha256
           if-no-files-found: error
 

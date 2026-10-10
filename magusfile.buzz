@@ -45,6 +45,7 @@ import "lcov";
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
 import "./hack/magusfile/releases" as releases;
+import "./libs/conventions/proofread" as proofread;
 import "./hack/magusfile/mockassert" as mockassert;
 import "spells/golang/gomod";
 
@@ -1089,17 +1090,19 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }
 
-// Must match release.yaml; verify_release_workflow checks the workflow against it.
-// An asset outside this glob never uploads.
-final RELEASE_ASSET_GLOB = "dist/magus_*.tar.gz";
-
 // The `on.push.tags` filter. `*` stops at "/", so a per-module tag publishes nothing.
 final RELEASE_TAG_REFSPEC = "v*";
 
 final RELEASE_WORKFLOW = ".github/workflows/release.yaml";
 
-fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
-    return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+// Every release archive in dist/, one releases\assetGlob per tool, sorted by path.
+fun release_archives() > [str] !> any {
+    final archives = mut [<str>];
+    foreach (tool in releases\TOOLS) {
+        foreach (p in fs\glob(releases\assetGlob(tool))) { archives.append(p.value); }
+    }
+    archives.sort(fun (a: str, b: str) > bool => a < b);
+    return archives;
 }
 
 // Maps an asset arch token to its GOARM level, or "" for arches without one. ARMv7
@@ -1116,12 +1119,12 @@ fun goarm_level(goos: str, goarch: str) > str {
 
 // Reads the module list from the shipped binary, not go.mod: the two variants link
 // different modules.
-fun write_notices(stage: str, binary: str) > void !> any {
+fun write_notices(stage: str, tool: str, binary: str) > void !> any {
     final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
     final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
 
     var body = "THIRD-PARTY NOTICES\n\n"
-        + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
+        + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
         + "modules below, each under its own terms, reproduced here in full. This list is read\n"
         + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
         + "in general.\n\n";
@@ -1175,26 +1178,61 @@ fun escape_module_path(path: str) > str {
     return escaped;
 }
 
+// release_asset is tool's archive path in dist/, refused before any write when its upload
+// glob would miss it.
+fun release_asset(tool: str, v: str, goos: str, goarch: str, suffix: str) > str !> any {
+    final asset = fs\join("dist", releases\assetName(tool, version: v, goos: goos, goarch: goarch, suffix: suffix));
+    final glob = releases\assetGlob(tool);
+    // Against the upload glob, not the basename: a "/" in the version turns the name into
+    // a path the glob misses, and the build stays green.
+    if (!releases\matchesGlob(glob, releases\toSlash(asset))) {
+        throw "release-build: the asset would be `" + asset + "`, which `"
+            + glob + "` does not match, so the release upload would not find "
+            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
+            + "resolves.";
+    }
+    return asset;
+}
+
+fun exe_name(tool: str, goos: str) > str {
+    if (goos == "windows") { return tool + ".exe"; }
+    return tool;
+}
+
+// archive_release_stage puts the license texts, readme and BUILDINFO beside tool's binary
+// in stage, archives stage as asset, and writes the asset's digest beside it.
+fun archive_release_stage(stage: str, tool: str, binary: str, readme: str, asset: str, buildinfo: str) > void !> any {
+    // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
+    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
+    fs\copyFile(readme, fs\join(stage, "README.md"));
+    write_notices(stage, tool: tool, binary: binary);
+    fs\writeFile(fs\join(stage, "BUILDINFO"), buildinfo
+        + "\nRun `go version -m " + tool + "` for the full module list and build settings.\n");
+
+    archive\compress(stage, asset, {});
+    fs\removeAll(stage);
+
+    // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
+    final digest = crypto\sha256File(asset);
+    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+}
+
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void !> any {
     // Before any write, so a refused platform leaves no trace.
     // armv6/armv7 are asset names; they fold to GOARCH=arm plus GOARM.
     final goarm = goarm_level(goos, goarch);
 
     final v = version();
-    final name = release_asset_name(v, goos, goarch, suffix);
-    final asset = fs\join("dist", name);
-    // Against the upload glob, not the basename: a "/" in the version turns the name into
-    // a path the glob misses, and the build stays green.
-    if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
-        throw "release-build: the asset would be `" + asset + "`, which `"
-            + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
-            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
-            + "resolves.";
+    final asset = release_asset("magus", v: v, goos: goos, goarch: goarch, suffix: suffix);
+    // proofread links no C, so its static archive serves every host and a dynamic build
+    // would only duplicate it.
+    var proofreadAsset = "";
+    if (!cgo) {
+        proofreadAsset = release_asset("proofread", v: v, goos: goos, goarch: goarch, suffix: suffix);
     }
 
     fs\mkdirAll("dist");
-    var binary = "magus";
-    if (goos == "windows") { binary = "magus.exe"; }
+    final binary = exe_name("magus", goos: goos);
 
     final stage = fs\join("dist", goos + "-" + goarch + suffix);
     fs\mkdirAll(stage);
@@ -1225,30 +1263,31 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     build_args.append("./cmd/magus");
     go["go-build"](ctx.withEnv(env), {"args": build_args});
 
-    // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
-    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
-    fs\copyFile("README.md", fs\join(stage, "README.md"));
-    write_notices(stage, binary);
-
     // Readable when a dynamic build cannot start for want of a library.
     var variant = "static";
     if (cgo) { variant = "dynamic"; }
     var platform = goos + "/" + goarch;
     if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
-    fs\writeFile(fs\join(stage, "BUILDINFO"),
-        "magus " + v + "\n"
+    final info = " " + v + "\n"
         + "commit:   " + commit() + "\n"
         + "built:    " + build_date() + "\n"
         + "platform: " + platform + "\n"
-        + "variant:  " + variant + "\n"
-        + "\nRun `go version -m magus` for the full module list and build settings.\n");
+        + "variant:  " + variant + "\n";
+    archive_release_stage(stage, tool: "magus", binary: binary, readme: "README.md", asset: asset,
+        buildinfo: "magus" + info);
 
-    archive\compress(stage, asset, {});
-    fs\removeAll(stage);
-
-    // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
-    final digest = crypto\sha256File(asset);
-    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+    if (proofreadAsset == "") { return; }
+    final pbinary = exe_name("proofread", goos: goos);
+    final pstage = fs\join("dist", "proofread-" + goos + "-" + goarch + suffix);
+    fs\mkdirAll(pstage);
+    // -C runs the build inside proofread's own module, whose go.mod carries the replace
+    // directives `go install` refuses, so -o climbs back out to dist/. The flags are
+    // proofread-build's: proofread stamps no version, which BUILDINFO records instead.
+    final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
+    go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
+        "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
+    archive_release_stage(pstage, tool: "proofread", binary: pbinary,
+        readme: fs\join(proofread\home, "readme.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
 }
 
 fun release_target_platform(goos: str, goarch: str) > [str] !> any {
@@ -1371,8 +1410,8 @@ fun download_release(tag: str) > void !> any {
         problems.append("SHA256SUMS or its signature is missing");
     } else {
         final have = mut {<str: str>};
-        foreach (p in fs\glob(RELEASE_ASSET_GLOB)) {
-            have[fs\basename(p.value)] = crypto\sha256File(p.value);
+        foreach (a in release_archives()) {
+            have[fs\basename(a)] = crypto\sha256File(a);
         }
         problems = releases\sumsProblems(tag, sums: fs\readFile(sumsPath), have: have).cloneMutable();
     }
@@ -1396,12 +1435,15 @@ export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
         download_release(tag);
         return;
     }
-    final archives = mut [<str>];
-    foreach (p in fs\glob(RELEASE_ASSET_GLOB)) { archives.append(p.value); }
+    final archives = release_archives();
     if (archives.len() == 0) {
-        throw "release-publish: nothing matches {RELEASE_ASSET_GLOB}; the release-build jobs leave the archives there";
+        throw "release-publish: dist/ holds no release archive; the release-build jobs leave them there";
     }
-    archives.sort(fun (a: str, b: str) > bool => a < b);
+    final missing = releases\missingStaticTools(archives.map(fun (i: int, a: str) > str => fs\basename(a)));
+    if (missing.len() > 0) {
+        throw "release-publish: every static platform ships each of " + releases\TOOLS.join(", ")
+            + ", and dist/ lacks " + missing.join(", ") + "; check release.yaml's upload paths";
+    }
     final sums = mut [<str>];
     foreach (a in archives) { sums.append(fs\readFile(a + ".sha256")); }
     fs\writeFile(fs\join("dist", "SHA256SUMS"), content: sums.join(""));
@@ -1564,9 +1606,9 @@ fun local_branches() > [str] !> any {
     return names;
 }
 
-// The tag trigger does not derive from RELEASE_TAG_REFSPEC, so only this notices one side
-// edited alone. The upload glob needs no such check: release-publish uploads by
-// RELEASE_ASSET_GLOB itself.
+// Neither the tag trigger nor the build jobs' upload paths derive from RELEASE_TAG_REFSPEC
+// and releases\assetGlob, so only this notices one side edited alone. release-publish
+// globs dist/ by releases\assetGlob itself, but sees only what the build jobs uploaded.
 fun verify_release_workflow() > [Verdict] !> any {
     if (!fs\exists(RELEASE_WORKFLOW)) {
         return [failed("workflow", RELEASE_WORKFLOW + " is missing, so the tag trigger cannot be confirmed")];
@@ -1579,6 +1621,19 @@ fun verify_release_workflow() > [Verdict] !> any {
     } else {
         checks.append(passed("workflow tag trigger", "`" + RELEASE_TAG_REFSPEC + "` is what "
             + RELEASE_WORKFLOW + " triggers on"));
+    }
+    final uploads = body.split("actions/upload-artifact@").len() - 1;
+    var unlisted = mut [<str>];
+    foreach (tool in releases\TOOLS) {
+        if (body.split(releases\assetGlob(tool)).len() - 1 < uploads) { unlisted.append(releases\assetGlob(tool)); }
+    }
+    if (unlisted.len() > 0) {
+        checks.append(failed("workflow upload paths", "not every one of the " + "{uploads}"
+            + " upload-artifact steps in " + RELEASE_WORKFLOW + " lists " + unlisted.join(", ")
+            + ", so the release would publish without those archives"));
+    } else {
+        checks.append(passed("workflow upload paths", "every upload-artifact step in "
+            + RELEASE_WORKFLOW + " lists each tool's archives"));
     }
     return checks;
 }
@@ -1622,24 +1677,26 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             + ", and refuses when that carries a separator"));
     } else {
         var offenders = mut [<str>];
-        foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
-                       ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
-            foreach (suffix in ["_static", ""]) {
-                // toSlash: fs\join uses the rehearsing machine's separator.
-                final asset = fs\join("dist", release_asset_name(root, p[0], p[1], suffix));
-                if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
-                    offenders.append(asset);
+        foreach (tool in releases\TOOLS) {
+            foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
+                           ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
+                foreach (suffix in ["_static", ""]) {
+                    // toSlash: fs\join uses the rehearsing machine's separator.
+                    final asset = fs\join("dist", releases\assetName(tool, version: root, goos: p[0], goarch: p[1], suffix: suffix));
+                    if (!releases\matchesGlob(releases\assetGlob(tool), releases\toSlash(asset))) {
+                        offenders.append(asset);
+                    }
                 }
             }
         }
         if (offenders.len() > 0) {
             checks.append(failed("asset names", "HEAD would stamp version `" + root + "`, naming assets "
-                + "like `" + offenders[0] + "` that `" + RELEASE_ASSET_GLOB + "` cannot match. The "
+                + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
                 + "build would be green and the release would publish nothing. " + "{offenders.len()}"
                 + " of the assets release.yaml builds are affected."));
         } else {
-            checks.append(passed("asset names", "version `" + root + "` names assets `"
-                + RELEASE_ASSET_GLOB + "` matches on every platform release.yaml builds"));
+            checks.append(passed("asset names", "version `" + root + "` names assets each tool's "
+                + "upload glob matches on every platform release.yaml builds"));
         }
     }
 
