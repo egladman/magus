@@ -108,8 +108,8 @@ func TestWrapDropsInfoAtAnInfoLevel(t *testing.T) {
 	assert.Equal(t, "level=INFO msg=\"magus console open\" notice=console\n", buf.String())
 }
 
-// Info passes Enabled so a hint or a next command can reach Handle; debug stays the
-// inner handler's call.
+// Info passes Enabled so a hint or a next command can reach Handle; every other level
+// stays the inner handler's call.
 func TestWrapEnabledFloorsAtInfo(t *testing.T) {
 	var buf bytes.Buffer
 	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})
@@ -117,6 +117,7 @@ func TestWrapEnabledFloorsAtInfo(t *testing.T) {
 	ctx := context.Background()
 	require.False(t, h.Enabled(ctx, slog.LevelDebug))
 	require.True(t, h.Enabled(ctx, slog.LevelInfo))
+	require.False(t, h.Enabled(ctx, slog.LevelWarn))
 	require.True(t, h.WithAttrs(nil).WithGroup("g").Enabled(ctx, slog.LevelInfo))
 }
 

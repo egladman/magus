@@ -84,7 +84,8 @@ tax() { echo $(( $1 / 10 )); }
  "write_paths": ["pricing/total.sh"],
  "check": {"target": "test", "project": "."}}
 -- fork.out --
-forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`-- shell.out --
+forked currency, declared, with 2 write path(s). Its holder reads the terms with `magus describe job currency` and takes it with `magus job exec currency`
+-- shell.out --
 advise
 -- ls-overlap.out --
 JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
@@ -97,14 +98,17 @@ overlaps
     currency: pricing/format.sh
     footprints: disjoint
 
-in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes-- apply.out --
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+-- apply.out --
 updated cents, still running:
-  write_paths -pricing/format.sh-- ls-handed.out --
+  write_paths -pricing/format.sh
+-- ls-handed.out --
 JOB       HOLDER  STATE    MODEL  PATHS  PROOF  CHECK
 cents     ana     running  -      1      alone  magus run test .
 currency  ben     running  -      2      alone  magus run test .
 
-in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes-- describe.out --
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
+-- describe.out --
 job: currency
 
 criteria

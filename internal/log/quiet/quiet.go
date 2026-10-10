@@ -31,7 +31,7 @@ type handler struct {
 }
 
 func (h handler) Enabled(ctx context.Context, l slog.Level) bool {
-	return l >= slog.LevelInfo || h.next.Enabled(ctx, l)
+	return l == slog.LevelInfo || h.next.Enabled(ctx, l)
 }
 
 func (h handler) Handle(ctx context.Context, r slog.Record) error {

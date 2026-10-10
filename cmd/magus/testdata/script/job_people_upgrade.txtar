@@ -96,7 +96,8 @@ verified upgrade/api, recorded pass
 its holder reports it ran magus run test api
 goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
-  api/deps.txt:1-1-- ls-done.out --
+  api/deps.txt:1-1
+-- ls-done.out --
 JOB          HOLDER  STATE  MODEL  PATHS  PROOF  CHECK
 upgrade/api  ana     pass   -      1      alone  magus run test api
 upgrade/web  ben     pass   -      1      alone  magus run test web
