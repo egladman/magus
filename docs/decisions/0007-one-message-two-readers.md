@@ -46,11 +46,11 @@ _Proposed._ Every message magus prints is built from four parts:
 
 Each producer carries the parts as fields, never as one joined string:
 
-| producer             | verdict and next          | why                        |
-| -------------------- | ------------------------- | -------------------------- |
-| `diagnostics.Error`  | `Msg`                     | `Why`, set by `WithWhy`    |
-| guard `ShellVerdict` | `Deny`, `Next`            | `Why`                      |
-| slog record          | the message               | an `attr.Why(...)` attribute |
+| producer             | verdict and next | why                          |
+| -------------------- | ---------------- | ---------------------------- |
+| `diagnostics.Error`  | `Msg`            | `Why`, set by `WithWhy`      |
+| guard `ShellVerdict` | `Deny`, `Next`   | `Why`                        |
+| slog record          | the message      | an `attr.Why(...)` attribute |
 
 A wait or heartbeat record carries `attr.Elapsed(d)`, which is how the handler tells
 progress from news.
@@ -77,13 +77,13 @@ answers wins:
 _Done._ `audience.Wrap` wraps whichever handler `verbosity.go` installs, so each
 policy lives in one place instead of at two hundred call sites:
 
-| policy       | human                                  | agent                                         |
-| ------------ | -------------------------------------- | --------------------------------------------- |
-| `why`        | a dim second line                      | kept in the run log, reached through the ref  |
-| waits        | from the first beat, then at each doubling | silent until a minute, then at each doubling |
-| repeats      | folded into one footer line with a count | the same                                    |
-| decoration   | color and glyphs                       | none                                          |
-| component    | the name before the message            | the same                                      |
+| policy     | human                                      | agent                                        |
+| ---------- | ------------------------------------------ | -------------------------------------------- |
+| `why`      | a dim second line                          | kept in the run log, reached through the ref |
+| waits      | from the first beat, then at each doubling | silent until a minute, then at each doubling |
+| repeats    | folded into one footer line with a count   | the same                                     |
+| decoration | color and glyphs                           | none                                         |
+| component  | the name before the message                | the same                                     |
 
 `-o json` and `-o jsonl` carry every part as fields for both readers, since a parser
 selects what it shows. `-v` at the agent audience prints `why` inline: asking for more
