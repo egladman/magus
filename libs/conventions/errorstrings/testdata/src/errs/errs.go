@@ -44,9 +44,11 @@ func sentences(path string, err error) {
 func wrap(path string, err error) {
 	_ = fmt.Errorf("open %s: %w", path, err)
 	_ = fmt.Errorf("open %[1]s: %[2]w", path, err)
-	_ = fmt.Errorf("%w: open %s", err, path)          // want `error-wrap: %w only closes the format, as ": %w"`
-	_ = fmt.Errorf("open %s %w", path, err)           // want `error-wrap`
+	_ = fmt.Errorf("%w: open %s", err, path)
+	_ = fmt.Errorf("%w: %w", err, err)
+	_ = fmt.Errorf("open %s %w", path, err)           // want `error-wrap: %w only opens the format as "%w: " or closes it as ": %w"`
 	_ = fmt.Errorf("open %s: %w: %w", path, err, err) // want `error-wrap`
+	_ = fmt.Errorf("%w open %s", err, path)           // want `error-wrap`
 	_ = fmt.Errorf("100%% done: %w", err)
 	_ = errors.New("prints %w literally - as text") // want `error-join`
 }

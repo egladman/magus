@@ -2275,13 +2275,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         final root = magus\describe.project().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
             final dir = fs\dirname(mod.value);
-            var linters = "filenames,hostagnostic,stutter,testifylint,testlayout,testpair";
             // gopherbuzz's error text follows upstream Buzz, not Go's error-string idiom.
-            if (fs\basename(dir) != "gopherbuzz") {
-                linters = linters + ",errorstrings";
-            }
+            final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errorstrings" else "";
             proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", linters],
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings],
                       dir);
         }
     });

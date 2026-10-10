@@ -325,7 +325,7 @@ linters:
       # this linter; libs/gopherbuzz is excluded below.
       errorstrings:
         type: module
-        description: judges errors.New and fmt.Errorf text as a fragment chained with ": "
+        description: 'judges errors.New and fmt.Errorf text as a fragment chained with ": "'
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus

@@ -32,7 +32,7 @@ type Rule string
 
 // The rules, each reported once per message.
 const (
-	// RuleJoin reports a clause joined by "; ", " - " or an em dash.
+	// RuleJoin reports a clause joined by `"; "`, `" - "` or an em dash.
 	RuleJoin Rule = "error-join"
 	// RuleNewline reports a newline.
 	RuleNewline Rule = "error-newline"
@@ -49,7 +49,7 @@ var messages = map[Rule]string{
 	RuleJoin:      `a clause joined by %q: chain context with ": " or use a comma`,
 	RuleNewline:   `a newline in an error string: keep it one line and chain context with ": "`,
 	RuleSentences: `a second sentence in an error string: write a fragment and chain context with ": "`,
-	RuleWrap:      `%w only closes the format, as ": %w"`,
+	RuleWrap:      `%w only opens the format as "%w: " or closes it as ": %w"`,
 }
 
 // Options configures the analyzer returned by [New].
@@ -315,14 +315,17 @@ func wordByte(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
-// misplacedWrap reports a %w verb anywhere but the very end of format, right
-// after ": ".
+// misplacedWrap reports a %w verb anywhere but the two places Go puts one: the very
+// end of format right after ": " (the cause), or the very start right before ": "
+// (a sentinel the detail qualifies, as in "%w: %s").
 func misplacedWrap(format string) bool {
 	for _, loc := range verb.FindAllStringIndex(format, -1) {
 		if format[loc[1]-1] != 'w' {
 			continue
 		}
-		if loc[1] != len(format) || !strings.HasSuffix(format[:loc[0]], ": ") {
+		closes := loc[1] == len(format) && strings.HasSuffix(format[:loc[0]], ": ")
+		opens := loc[0] == 0 && strings.HasPrefix(format[loc[1]:], ": ")
+		if !closes && !opens {
 			return true
 		}
 	}

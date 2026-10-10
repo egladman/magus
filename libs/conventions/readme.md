@@ -65,9 +65,9 @@ a field, a test that named every field asserts only some, and only
 `report-partial` still reports it.
 
 `errorstrings` judges a plain Go error, which its callers extend with ": " as it
-wraps: `error-join` reports "; ", " - " or an em dash, `error-newline` a newline,
+wraps: `error-join` reports `"; "`, `" - "` or an em dash, `error-newline` a newline,
 `error-sentences` a period followed by more text outside quotes and
-abbreviations, and `error-wrap` a `%w` anywhere but a closing ": %w". A
+abbreviations, and `error-wrap` a `%w` anywhere but an opening `"%w: "` or a closing `": %w"`. A
 `fmt.Errorf` built only to wrap inside a coded diagnostic is still judged; the
 diagnostic's own constructor is `diagmsg`'s. Capitalization and trailing
 punctuation are staticcheck's ST1005.
