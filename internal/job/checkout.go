@@ -117,7 +117,7 @@ const tombstoneTag = "gone"
 type Binding struct {
 	// Job is the job the record names, "" when there is no record or it does not read.
 	Job string
-	// Gone marks a tombstone: the sweep found Job's checkout removed and ended the binding.
+	// Gone marks a tombstone: the sweep found Job's row or its checkout removed and ended the binding.
 	// The caller is not unbound, and the guard refuses its work until it binds again.
 	Gone bool
 	// swept is when the tombstone was written, in unix seconds.
@@ -217,6 +217,18 @@ func (s *Store) Bind(c Caller, id string) error {
 	return nil
 }
 
+// Release removes c's record if it still binds c to job id, so c is unbound from then on;
+// a record naming any other job, a tombstone included, stays. It reports nothing: a
+// record already gone or rebound is the outcome asked for.
+//
+// Only the guard calls it, when a caller ends its own job: a binding nothing released
+// graded the caller under a row it had finished with.
+func (s *Store) Release(c Caller, id string) {
+	if path := s.record(c); path != "" {
+		dropRecord(path, Binding{Job: id})
+	}
+}
+
 // Bound is the job c's own record binds it to, "" when none does or the record is a
 // tombstone. Exact: a subagent never reads its session's record, a session never reads a
 // subagent's, and an identified caller never reads the checkout's.
@@ -229,10 +241,13 @@ func (s *Store) Binding(c Caller) Binding {
 	return readBinding(s.record(c))
 }
 
-// sweepRecords turns each identified caller's record whose job was taken in a checkout w
-// proves gone into a tombstone, and removes each tombstone older than jobs.stale_after. A
-// record naming no row, or a row never taken, stays. Best effort: a read or write that
-// fails leaves the record as it was.
+// sweepRecords turns into a tombstone each identified caller's record whose row is gone
+// from rows, or whose job was taken in a checkout w proves gone, and removes each
+// tombstone older than jobs.stale_after. A record naming a row never taken stays. Best
+// effort: a read or write that fails leaves the record as it was.
+//
+// A caller that removes its own row is released by the guard before the sweep sees it, so
+// a record left naming a missing row is one whose row somebody else removed.
 //
 // A tombstone rather than a removal: the worker may still be running from the removed
 // checkout, and a caller with no record is graded as the orchestrator, which no lease
@@ -259,7 +274,7 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
 			continue
 		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == b.Job })
-		if b.Job == "" || i < 0 || !w.checkoutGone(rows[i].CheckoutRoot) {
+		if b.Job == "" || i >= 0 && !w.checkoutGone(rows[i].CheckoutRoot) {
 			continue
 		}
 		// Replaced in place, never moved aside first: while no record stands the caller

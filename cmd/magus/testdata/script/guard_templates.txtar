@@ -41,7 +41,7 @@ env HOST_NAME=testscript
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout '"permissionDecisionReason":"Verify in place'
+stdout '"permissionDecisionReason":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/advise
@@ -184,7 +184,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -371,7 +371,7 @@ cd $WORK
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout '"agent_message":"Verify in place'
+stdout '"agent_message":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/pass
@@ -464,7 +464,7 @@ stdout '"permission":"allow"'
 stdin $WORK/cursor-mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=

@@ -77,9 +77,10 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 
 func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {
 	return writeGrade{Decision: "deny", Rule: string(denyRuleClaimedDeclaration), Reason: fmt.Sprintf(
-		"magus workspace: edit inside the declarations you claim in %s (%s). "+leaseActorClause("re-partition the plan, or release "+rel+"#"+claim+" once lease "+owner.ID+" has finished with it")+"\n"+
+		"magus workspace: edit inside the declarations you claim in %s (%s); "+leaseActorClause("re-partition the plan, or release "+rel+"#"+claim+" once lease "+owner.ID+" has finished with it")+"\n"+
 			"This edit changes %s in %s, which lease %s (%s) claims as %s#%s and is %s right now, and you are lease %s. Two agents editing one declaration is the collision a claim exists to prevent; this guard is where it gets read.\n"+
-			"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.",
+			"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
+			leaseActorWhy,
 		rel, strings.Join(mine, ", "),
 		declaration, rel, owner.ID, criteriaLine(owner), rel, claim, owner.State, me.ID,
 		owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID))}

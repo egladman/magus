@@ -89,14 +89,16 @@ func gradeHookWiringWrite(actingLease string, agentAttributed bool, writePath st
 	switch {
 	case actingLease != "":
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: leave the host's wiring alone. "+leaseActorClause("rewire a host")+"\n"+
-				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no write paths anybody hands out include that switch.",
+			"magus workspace: leave the host's wiring alone; "+leaseActorClause("rewire a host")+"\n"+
+				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no write paths anybody hands out include that switch.\n"+
+				leaseActorWhy,
 			writePath, what, actingLease)}
 	case agentAttributed:
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: leave the host's wiring alone. "+leaseActorClause("rewire a host")+"\n"+
+			"magus workspace: leave the host's wiring alone; "+leaseActorClause("rewire a host")+"\n"+
 				"%s is %s: it is the guard's own installation, so an edit here decides whether every rule you are being graded by runs at all from the host's next session on. The host attributes this call to an agent, and no scope anybody hands out includes that switch, leased or not.\n"+
-				"Have a person make this edit instead. If you need the wiring itself, `magus agent harness verify` reports a descriptor's current state without writing anything: magus prints host config for a person to merge, it does not author it.",
+				"Have a person make this edit instead. If you need the wiring itself, `magus agent harness verify` reports a descriptor's current state without writing anything: magus prints host config for a person to merge, it does not author it.\n"+
+				leaseActorWhy,
 			writePath, what)}
 	default:
 		return writeGrade{Decision: "advise", Kind: advisoryHookWiring, Context: fmt.Sprintf(

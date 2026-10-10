@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -247,15 +248,15 @@ func gateRepeatBrief(runs int, spent time.Duration) string {
 // denyLeaseScopedGate is what a bound lease's magus runs meet: the gate refusal first, then
 // worker-check-only for every other target. One entry because roleScopedCommandRules lists
 // the rules it stands down by name.
-func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
-	if reason := denyLeaseGate(ctx, deps, actingLease, command); reason != "" {
-		return reason
+func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+	if d := denyLeaseGate(ctx, deps, actingLease, command); d.refused() {
+		return d
 	}
 	return denyWorkerCheckOnly(ctx, deps, actingLease, command)
 }
 
 // denyLeaseGate refuses the gate to a lease that was handed a narrower check, and
-// returns "" for everybody else.
+// refuses nothing for everybody else.
 //
 // The gate runs ONCE per branch, in the orchestrator's tree, after every unit lands. A
 // delegated worker's `validation` is the narrow target it was assigned, and until this
@@ -272,44 +273,52 @@ func denyLeaseScopedGate(ctx context.Context, deps Dependencies, actingLease, co
 // an empty field is an undeclared boundary, but a bound worker is a worker either way and
 // the gate is still the orchestrator's; the empty field says nobody wrote down what this
 // unit should run, which is a reason to ask rather than a licence to run everything.
-func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command string) string {
+func denyLeaseGate(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" || !commandRunsGate(command) {
-		return ""
+		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok || LeaseOwnsGate(me) {
-		return ""
+		return denial{}
 	}
-	if me.Validation == "" && me.Check == nil && len(me.Goals) == 0 {
-		return fmt.Sprintf(
-			"magus workspace: lease %s declares no check, so the `%s` gate is not yours to run. The orchestrator gates once, in its own tree, after every unit lands.\n"+
-				"Run the narrowest target covering your paths and report what it said. "+leaseActorClause("record a check on this row"),
-			me.ID, types.TargetCI)
+	const gated = "The orchestrator gates once, in its own tree, after every unit lands."
+	checks := rowChecks(me)
+	if len(checks) == 0 && me.Validation == "" {
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate, and lease %s declares no check; run the narrowest target covering your paths.",
+				elideCommand(command), me.ID),
+			Why: gated + " Report what that target said, and that this row names no check: " + leaseActorClause("record a check on this row") + "\n" + leaseActorWhy,
+		}
 	}
-	return fmt.Sprintf(
-		"magus workspace: run `%s` instead, which is the check lease %s was assigned. The orchestrator gates once, in its own tree, after every unit lands.\n"+
-			"`%s` runs the `%s` gate, and the validation field on lease %s's ledger row reads %q, which does not name it. "+leaseActorClause("widen that field"),
-		me.Validation, me.ID, command, types.TargetCI, me.ID, me.Validation)
+	check := me.Validation
+	if len(checks) > 0 {
+		check = checkCommand(checks[0])
+	}
+	return denial{
+		Say: fmt.Sprintf("magus workspace: `%s` is the orchestrator's gate; run your check: `%s`.", elideCommand(command), check),
+		Why: fmt.Sprintf("%s `%s` runs the `%s` gate, and the check on lease %s's row, %q, does not name it. If the unit needs the gate, %s\n%s",
+			gated, elideCommand(command), types.TargetCI, me.ID, check, leaseActorClause("widen that check"), leaseActorWhy),
+	}
 }
 
 // denyRuleWorkerCheckOnly names the refusal of any target but a bound row's own check.
 const denyRuleWorkerCheckOnly denyRuleName = "worker-check-only"
 
 // denyWorkerCheckOnly refuses a bound worker every `magus run` and `magus affected` but its
-// row's check and the targets declaring an output in its write paths, or returns "". Two
+// row's check and the targets declaring an output in its write paths, or refuses nothing. Two
 // worktrees share no cache key, so a second run of the same target only doubles the load.
 //
 // Silent where there is nothing to hold the run to: no lease, no live row, a row that owns
 // the gate (the orchestrator's), or a row declaring no check at all, which denyLeaseGate
 // already answers for the gate. Every other verb, and a run that only reports (--plan,
 // --dry-run, --graph, --help), passes.
-func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) string {
+func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
-		return ""
+		return denial{}
 	}
 	cmds, ok := ParseCommands(command)
 	if !ok {
-		return ""
+		return denial{}
 	}
 	var runs []targetRun
 	for _, c := range cmds {
@@ -318,15 +327,15 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		}
 	}
 	if len(runs) == 0 {
-		return ""
+		return denial{}
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
 	if !ok || LeaseOwnsGate(me) {
-		return ""
+		return denial{}
 	}
 	checks := rowChecks(me)
 	if len(checks) == 0 {
-		return ""
+		return denial{}
 	}
 	at := hookLocation(ctx, deps)
 	produces := sync.OnceValue(func() func(target, project string) bool {
@@ -336,20 +345,18 @@ func denyWorkerCheckOnly(ctx context.Context, deps Dependencies, actingLease, co
 		if r.allowed(checks, at.workspace != "" && ownSourceRoot(at.workspace), produces) {
 			continue
 		}
-		lines := make([]string, len(checks))
-		next := make([]hint.Next, len(checks))
+		commands := make([]string, len(checks))
 		for i, c := range checks {
-			lines[i] = "`" + c.String() + "`"
-			next[i] = hint.Next{ID: "deny-" + string(denyRuleWorkerCheckOnly), Run: checkCommand(c)}
+			commands[i] = "`" + checkCommand(c) + "`"
 		}
-		return fmt.Sprintf(
-			"magus workspace: run %s instead, the one check lease %s was assigned. The orchestrator runs every other target serially, in its own tree, after it integrates the units.\n"+
+		return denial{
+			Say: fmt.Sprintf("magus workspace: `%s` is not lease %s's check; run %s.", r.target, me.ID, commands[0]),
+			Why: fmt.Sprintf("Lease %s's checks: %s. The orchestrator runs every other target serially, in its own tree, after it integrates the units.\n"+
 				"`%s` runs `%s`, which is neither that check nor a target declaring an output in lease %s's write paths. Another worktree's run of it shares no cache key with this one, so it replays nothing here and holds the machine. Name the target in your result's unresolved risks if the unit needs it.",
-			strings.Join(lines, " or "), me.ID, elideCommand(command), r.target, me.ID) +
-			hint.Render(next, func(hint.Next) string { return "" }) +
-			"see: " + ruleDocsBase + string(denyRuleWorkerCheckOnly) + "/"
+				me.ID, strings.Join(commands, ", "), elideCommand(command), r.target, me.ID),
+		}
 	}
-	return ""
+	return denial{}
 }
 
 // targetRun is one `magus run` or `magus affected` a command line makes, read far enough to
@@ -608,7 +615,7 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 }
 
 // denyUndeclaredLease refuses to grade a call for an id this workspace's ledger does not
-// carry, and returns "" whenever it does carry one or cannot say.
+// carry, and refuses nothing whenever it does carry one or cannot say.
 //
 // An id that names no row buys SILENT un-enrolled treatment: every lease-scoped rule reads
 // it, finds nothing, and passes, so a worker whose orchestrator typo'd the id runs
@@ -625,25 +632,29 @@ func actingLeaseStanding(ctx context.Context, deps Dependencies, actingLease str
 // the bound worker could not read the plan, print a schema, or bind again, because each of
 // those is a command and every command was refused.
 //
-// A tombstoned binding is refused the same way, whatever the ledger holds: its job's
-// checkout is gone, and reading the caller as unbound would grade it as the orchestrator.
-func denyUndeclaredLease(standing leaseStanding, actingLease, command string) string {
+// A tombstoned binding is refused the same way, whatever the ledger holds: its job's row
+// or checkout is gone, and reading the caller as unbound would grade it as the orchestrator.
+func denyUndeclaredLease(standing leaseStanding, actingLease, command string) denial {
 	if standing.endedBinding == "" && (!standing.readable || standing.declared) {
-		return ""
+		return denial{}
 	}
 	if command != "" && undeclaredLeaseRepairs(command) {
-		return ""
+		return denial{}
 	}
 	if standing.endedBinding != "" {
-		return fmt.Sprintf("magus workspace: your binding to job %s ended when its checkout was removed; run `%s` from a checkout that exists to bind again.\n"+
-			"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
-			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.",
-			standing.endedBinding, hint.JobExec.With("<job>"))
+		return denial{
+			Say: fmt.Sprintf("magus workspace: your binding to job %s ended when its row or its checkout was removed; `%s` binds you again.",
+				standing.endedBinding, hint.JobExec.With("<job>")),
+			Why: "A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds. " +
+				"Bind from a checkout that exists.\n" +
+				"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run.",
+		}
 	}
-	return fmt.Sprintf("magus workspace: lease %s is not declared; run `%s` to see the plan.\n"+
-		"Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n"+
-		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
-		actingLease, hint.LsJobs.String())
+	return denial{
+		Say: fmt.Sprintf("magus workspace: lease %s is not declared; `%s` lists the ids.", actingLease, hint.LsJobs.String()),
+		Why: "Every lease-scoped rule reads that row, so a call naming a row this workspace's ledger does not carry is graded by nothing at all. That is the shape a typo'd id takes: an agent that believes it is inside a boundary, running outside every one.\n" +
+			"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run, so you can find the id you were handed and bind to it.",
+	}
 }
 
 // undeclaredLeaseRepairs reports a shell line that only looks at this checkout or repairs
@@ -661,14 +672,16 @@ func undeclaredLeaseRepairs(command string) bool {
 			return false
 		}
 	}
-	return true
+	// A reader whose output a redirect writes into a file is a writer.
+	return !slices.ContainsFunc(redirectTargets(command, 0, DialectBash), func(target string) bool { return target != os.DevNull })
 }
 
 // repairInvocation judges one invocation. magus answers for itself: a usage line or a
 // schema touches no store, and the verbs that read the plan or take a job are the remedy.
 // Everything else is the short reader set a person orients with, which is deliberately
 // narrower than cacheDirReaders (git and magus are wholesale readers there, and `git
-// commit` is not a way to find out what you are bound to).
+// commit` is not a way to find out what you are bound to). sed and find each have a
+// spelling that writes, so each is read past it.
 func repairInvocation(c hint.Invocation) bool {
 	if path.Base(c.Name) == "magus" {
 		if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
@@ -681,7 +694,56 @@ func repairInvocation(c hint.Invocation) bool {
 		g := parseGit(c.Args)
 		return g.alias == "" && gitReadVerbs[g.sub]
 	}
-	return undeclaredLeaseReaders[path.Base(c.Name)]
+	switch name := path.Base(c.Name); name {
+	case "sed":
+		return sedOnlyPrints(c.Args)
+	case "find":
+		return onlyReads(name, "", c.Args)
+	default:
+		return undeclaredLeaseReaders[name]
+	}
+}
+
+// sedPrintScript is a sed script that only prints by line number: `1,5p`, `$p`, `12q`,
+// `3=`, joined by `;`. It is the shape read-navigation hands out.
+var sedPrintScript = regexp.MustCompile(`^\s*(?:(?:\d+|\$)(?:\s*,\s*(?:\d+|\$))?\s*[pq=]\s*(?:;\s*|$))+$`)
+
+// sedOnlyPrints reports a sed that reads its files and only prints line ranges of them.
+// Anything it cannot read that far is refused: a script file, an in-place flag, an
+// unknown flag, and any script but a line-range print, since `w`, `W` and GNU's `e` write
+// files and run commands from inside the script.
+func sedOnlyPrints(args []string) bool {
+	var scripts []string
+	bare := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--expression" || len(a) > 1 && a[0] == '-' && a[len(a)-1] == 'e' && strings.Trim(a[1:len(a)-1], "nErsuz") == "":
+			if i+1 >= len(args) {
+				return false
+			}
+			i++
+			scripts = append(scripts, args[i])
+		case strings.HasPrefix(a, "--expression="):
+			scripts = append(scripts, strings.TrimPrefix(a, "--expression="))
+		case a == "--quiet" || a == "--silent" || a == "--regexp-extended" || a == "--separate":
+		case len(a) > 1 && a[0] == '-' && strings.Trim(a[1:], "nErsuz") == "":
+		case len(a) > 0 && a[0] == '-':
+			return false
+		case len(scripts) == 0 && !bare:
+			bare = true
+			scripts = append(scripts, a)
+		}
+	}
+	if len(scripts) == 0 {
+		return false
+	}
+	for _, s := range scripts {
+		if !sedPrintScript.MatchString(s) {
+			return false
+		}
+	}
+	return true
 }
 
 // The three sets repairInvocation reads. The magus verbs are the ones that answer "what am
@@ -698,7 +760,9 @@ var (
 	}
 	undeclaredLeaseReaders = map[string]bool{
 		"cat": true, "head": true, "tail": true, "ls": true, "grep": true, "rg": true,
-		"find": true, "stat": true, "wc": true, "pwd": true, "echo": true,
+		"stat": true, "wc": true, "pwd": true, "echo": true, "nl": true, "cut": true,
+		"diff": true, "cmp": true, "basename": true, "dirname": true, "realpath": true,
+		"readlink": true, "file": true, "du": true, "tree": true,
 	}
 )
 
@@ -765,13 +829,13 @@ func denyOverdueLease(me types.Job, now int64) string {
 //
 // A child of the caller's own lease, and `job wait` on one of its descendants, pass: the
 // store grades a child against its parent (see childForkRebind for when it cannot).
-func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, command string) string {
+func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
-		return ""
+		return denial{}
 	}
 	f, err := parseFile(command, DialectBash)
 	if err != nil {
-		return ""
+		return denial{}
 	}
 	h := holder{
 		id:       actingLease,
@@ -781,27 +845,50 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 			return lease
 		},
 	}
-	var what string
+	var what rebind
 	syntax.Walk(f, func(n syntax.Node) bool {
 		st, ok := n.(*syntax.Stmt)
-		if !ok || what != "" {
-			return what == ""
+		if !ok || what.refuses() {
+			return !what.refuses()
 		}
 		for _, c := range stmtCommands(st, DialectBash) {
-			if what = leaseRebind(c, stdinRecord(st), h); what != "" {
+			if what = leaseRebind(c, stdinRecord(st), h); what.refuses() {
 				return false
 			}
 		}
 		return true
 	})
-	if what != "" {
-		return fmt.Sprintf(
-			"magus workspace: leave your own job alone. "+leaseActorClause("change a job")+"\n"+
-				"`%s` would %s, and this call acts under lease %s. An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible.",
-			command, what, actingLease)
+	if !what.refuses() {
+		return denial{}
 	}
-	return ""
+	fix := what.fix
+	if fix == "" {
+		fix = leaseActorClause(what.ask)
+	}
+	why := "This call acts under lease " + actingLease + ". An agent that can move the rows it is graded against is graded against a boundary nobody handed it from the next call on, which is the one thing the ledger exists to make visible."
+	if what.why != "" {
+		why = what.why + "\n" + why
+	}
+	if what.fix == "" {
+		why += "\n" + leaseActorWhy
+	}
+	return denial{Say: "magus workspace: `" + elideCommand(command) + "` " + what.problem + "; " + fix, Why: why}
 }
+
+// rebind is what the rebind rule refuses a bound caller's command, worded as the verdict
+// it ends in: "`<command>` <problem>; <fix>".
+type rebind struct {
+	// problem names what the command would do to the ledger.
+	problem string
+	// ask is what the orchestrator would do instead, for leaseActorClause.
+	ask string
+	// fix is the caller's own correction, when there is one; it replaces the ask.
+	fix string
+	// why is the detail behind this case.
+	why string
+}
+
+func (r rebind) refuses() bool { return r.problem != "" }
 
 // denyLeaseScopedHarness refuses, under a lease, the command that rewrites a harness's
 // skill trees. The skills are what steers a worker, so a worker that could rewrite them
@@ -811,13 +898,13 @@ func denyLeaseScopedRebind(ctx context.Context, deps Dependencies, actingLease, 
 // `magus agent harness install` refuses itself too, but a CLI process knows only the
 // checkout's binding and its own BAGGAGE claim. The guard also knows the calling subagent
 // and the host session, so a worker attributed by either is refused here.
-func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, command string) string {
+func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, command string) denial {
 	if actingLease == "" {
-		return ""
+		return denial{}
 	}
 	cmds, ok := ParseCommands(command)
 	if !ok {
-		return ""
+		return denial{}
 	}
 	for _, c := range cmds {
 		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
@@ -825,13 +912,14 @@ func denyLeaseScopedHarness(_ context.Context, _ Dependencies, actingLease, comm
 		}
 		words := magusSubcommandWords(c.Args)
 		if hint.AgentHarnessInstall.MatchedBy(words) {
-			return fmt.Sprintf(
-				"magus workspace: leave the host harness alone. "+leaseActorClause("rewrite a harness's skills")+"\n"+
-					"`%s` would rewrite the skills that steer your calls, and this call acts under lease %s.",
-				command, actingLease)
+			return denial{
+				Say: fmt.Sprintf("magus workspace: `%s` would rewrite the skills that steer lease %s's calls; %s",
+					elideCommand(command), actingLease, leaseActorClause("rewrite a harness's skills")),
+				Why: leaseActorWhy,
+			}
 		}
 	}
-	return ""
+	return denial{}
 }
 
 // holder is what the rebind rule reads about the bound caller, each part fetched only on
@@ -844,35 +932,35 @@ type holder struct {
 }
 
 // leaseRebind names what a parsed command would do to the ledger when it is one a bound
-// caller may not do, or "" for everything else. stdin is the record the command's
+// caller may not do, or nothing for everything else. stdin is the record the command's
 // statement feeds it, "" when the line carries none the guard can read.
 //
 // A client script's magus\job write is graded here alongside the CLI ones because it is
 // the SAME write through a different transport, and a rule that held on one channel would
 // move the traffic rather than stop it.
-func leaseRebind(c hint.Invocation, stdin string, h holder) string {
+func leaseRebind(c hint.Invocation, stdin string, h holder) rebind {
 	if c.Name == hint.ToolClient.String() {
 		return jobToolRebind(mcpParams(c.Args), h)
 	}
 	if path.Base(c.Name) != "magus" {
-		return ""
+		return rebind{}
 	}
 	// A usage line and a schema are reads: neither reaches a store, and the rule below
 	// reads the subcommand without them, so `job wait --schema` was refused to the one
 	// caller who needs the shape of the result it has to file.
 	if slices.ContainsFunc(c.Args, func(a string) bool { return a == "--schema" || a == "--help" || a == "-h" }) {
-		return ""
+		return rebind{}
 	}
 	words := magusSubcommandWords(c.Args)
 	if len(words) < 2 {
-		return ""
+		return rebind{}
 	}
 	// A holder must always be able to READ the rubric it is graded against. These print the
 	// contract and touch no row, and the schema is the same for every row, so refusing them
 	// protects nothing and guarantees results written from memory of another vocabulary by
 	// the people most expected to file good ones.
 	if hasFlag(c.Args, 0, "schema") || hasFlag(c.Args, 0, "help") {
-		return ""
+		return rebind{}
 	}
 	switch {
 	// Taking the job the caller already holds is the bootstrap run twice, and records the
@@ -881,18 +969,18 @@ func leaseRebind(c hint.Invocation, stdin string, h holder) string {
 	// exec is how the caller moves on (see bindOnExec).
 	case hint.JobExec.MatchedBy(words) && len(words) > 2:
 		if held := h.standing(); !held.inFlight() || execOperand(c.Args) == held.row.ID {
-			return ""
+			return rebind{}
 		}
-		return "take the lease on another job"
+		return rebind{problem: "would take the lease on another job while lease " + h.id + " is in flight", ask: "hand that job out"}
 	case words[0] == hint.JobWait.Head() && words[1] == hint.JobWait.Leaf():
 		if len(words) > 2 && descendsFrom(h.standing(), words[2]) {
-			return ""
+			return rebind{}
 		}
-		return "verify a job"
+		return rebind{problem: "would verify a job outside lease " + h.id + "'s tree", ask: "verify it"}
 	case words[0] == hint.JobFork.Head() && words[1] == hint.JobFork.Leaf():
-		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job")
+		return childForkRebind(cliFork(c.Args, stdin), h, "declare a job", "fork it")
 	}
-	return ""
+	return rebind{}
 }
 
 // descendsFrom reports whether id sits below the held row in the parent chain.
@@ -912,7 +1000,8 @@ type childFork struct {
 }
 
 // childForkRebind names what a bound caller's fork would do when the guard refuses it, or
-// "" for a new child of its own lease that is left to the store. verb opens the refusal.
+// nothing for a new child of its own lease that is left to the store. verb names the
+// write in the refusal, and ask is what the orchestrator would do instead.
 //
 // The store grades the child's boundary against the parent's (internal/job/authorize.go
 // authorizeChild), but only when it writes AS that lease, which it learns from this
@@ -923,26 +1012,29 @@ type childFork struct {
 // A child that is neither read-only nor handed write paths is refused on both paths: an
 // empty write set scopes nothing (gradeAgainstOwnLease), and the store's subset test
 // passes it.
-func childForkRebind(f childFork, h holder, verb string) string {
+func childForkRebind(f childFork, h holder, verb, ask string) rebind {
 	held := h.standing()
 	switch {
 	case !held.declared || !held.state.Live():
-		return verb
+		return rebind{problem: "would " + verb + ", and lease " + h.id + " is not live to hand one out", ask: ask}
 	case f.id == "":
-		return fmt.Sprintf("%s the guard cannot read: give the child an id and --parent %s, or its record in a quoted heredoc", verb, h.id)
+		return rebind{problem: "would " + verb + " the guard cannot read", fix: "give the child an id and --parent " + h.id + ", or its record in a quoted heredoc."}
 	case f.id == h.id:
-		return "rewrite the job it holds"
+		return rebind{problem: "would rewrite the job it holds", ask: "change it"}
 	case f.parent != h.id:
-		return fmt.Sprintf("%s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q", verb, h.id, f.parent)
+		return rebind{problem: "is outside lease " + h.id + "'s tree", ask: ask,
+			why: fmt.Sprintf("It would %s outside its own tree: a row a worker creates must name %s as its parent, and this one names %q.", verb, h.id, f.parent)}
 	case slices.ContainsFunc(held.rows, func(r types.Job) bool { return r.ID == f.id }):
-		return fmt.Sprintf("%s over %s, which already exists: a worker writes no row but its own and the children it hands out", verb, f.id)
+		return rebind{problem: "would " + verb + " over " + f.id + ", which already exists", ask: "change it",
+			why: "A worker writes no row but its own and the children it hands out."}
 	case !f.readOnly && !f.writePaths && (held.row.ReadOnly || len(held.row.WritePaths) > 0):
-		return verb + " that can write anywhere: a child that is not read-only and names no write paths is scoped by nothing, so fork it --read-only or with --write-paths inside your own"
+		return rebind{problem: "would " + verb + " that can write anywhere", fix: "fork it --read-only or with --write-paths inside your own.",
+			why: "A child that is not read-only and names no write paths is scoped by nothing."}
 	case (!f.readOnly || f.bounded) && h.storeLease() != h.id:
-		return fmt.Sprintf("%s nothing would grade: this checkout's job store writes as %q, not as %s, so it checks no child against your row; only a --read-only child declaring no paths, check or gates passes here",
-			verb, h.storeLease(), h.id)
+		return rebind{problem: "would " + verb + " nothing would grade", fix: "fork it --read-only, declaring no paths, check or gates.",
+			why: fmt.Sprintf("This checkout's job store writes as %q, not as %s, so it checks no child against your row.", h.storeLease(), h.id)}
 	}
-	return ""
+	return rebind{}
 }
 
 // forkFlagsUnbounded are the `job fork` flags, and the magus\job.put opts, that declare no
@@ -1089,13 +1181,13 @@ func literalParts(parts []syntax.WordPart) bool {
 // Shrinking is verbatim membership, not glob containment: every declaration in the call
 // must already be one the job carries, and there must be fewer of them. A cleverer pattern
 // that happens to cover less is not something this rule will try to prove.
-func jobToolRebind(params map[string]string, h holder) string {
+func jobToolRebind(params map[string]string, h holder) rebind {
 	op, id := params["op"], params["id"]
 	if op == jobOpClear {
-		return "drop every job"
+		return rebind{problem: "would drop every job", ask: "clear the plan"}
 	}
 	if op != jobOpPut && op != jobOpRegister && op != jobOpUnread {
-		return ""
+		return rebind{}
 	}
 	standing := h.standing()
 	if !standing.readable || standing.terminal() {
@@ -1103,32 +1195,32 @@ func jobToolRebind(params map[string]string, h holder) string {
 		// keyed on it is inert. Naming somebody else's job here would be a reason the
 		// caller can check and find false, in the same verdict that tells them these
 		// rules are not running.
-		return ""
+		return rebind{}
 	}
 	if op == jobOpUnread {
-		return "run a client script the guard cannot read, which may write any job"
+		return rebind{problem: "would run a client script the guard cannot read, which may write any job", ask: "run it"}
 	}
 	if op == jobOpRegister && (id == standing.row.ID || !standing.inFlight()) {
-		return ""
+		return rebind{}
 	}
 	if _, entering := params["enter"]; entering && op == jobOpPut {
 		// The store refuses anything but an entry beside `enter`, and grades the rest.
 		if id != standing.row.ID && mayHandOut(standing.rows, standing.row.ID, id) {
-			return ""
+			return rebind{}
 		}
-		return "enter a job not forked beneath the one it holds"
+		return rebind{problem: "would enter a job not forked beneath the one it holds", ask: "enter it"}
 	}
 	if op == jobOpPut && id != standing.row.ID {
-		return childForkRebind(mcpFork(params), h, "write another job")
+		return childForkRebind(mcpFork(params), h, "write another job", "write it")
 	}
 	if id == "" || id != standing.row.ID {
-		return "write another job"
+		return rebind{problem: "would write another job", ask: "write it"}
 	}
 	row := standing.row
 	if shrinksWritePaths(params, row) {
-		return ""
+		return rebind{}
 	}
-	return "rewrite the job it holds"
+	return rebind{problem: "would rewrite the job it holds", ask: "change it"}
 }
 
 // mcpFork reads the child a magus\job.put declares.

@@ -69,7 +69,10 @@ import (
 // demoted marks an advisory that is a deny the workspace set to advise; see
 // Dependencies.grade.
 type ShellVerdict struct {
-	Deny    string
+	Deny string
+	// Why is a deny's rationale, kept only in the stored full verdict; Deny is the one
+	// sentence printed inline. See shapeDeny.
+	Why     string
 	Context string
 	Kind    hint.MarkerKind
 	Brief   string
@@ -1204,27 +1207,25 @@ func resolvedCommand(c hint.Invocation) string {
 	return strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
 }
 
-// explainDeny prefixes a rule's reason with the resolved command that tripped
-// it, and says so explicitly when that differs from what was typed, which is
-// the whole point of peeling wrappers, made visible instead of implied.
+// explainDeny opens a rule's verdict with the resolved command that tripped it, and says
+// so explicitly when that differs from what was typed, which is the whole point of peeling
+// wrappers, made visible instead of implied. verdict completes the sentence.
 //
-// It does not repeat that re-wrapping will not help: runGuardContext's tail
-// already says the guard reads the command being RUN, and this prefix is
-// prepended to it.
+// It does not repeat that re-wrapping will not help: runGuardContext already says the
+// guard reads the command being RUN, in the stored verdict.
 //
 // Both spellings are ELIDED, because the reader wrote the command and is looking at
 // it: the prefix identifies which one was judged, it does not quote it back. A line
 // carrying a heredoc replayed the whole body here, which made the refusal longer than
 // the script that tripped it.
-func explainDeny(typed string, c hint.Invocation, reason string) string {
+func explainDeny(typed string, c hint.Invocation, verdict string) string {
 	resolved := resolvedCommand(c)
 	var b strings.Builder
 	b.WriteString("magus guard denied `" + elideCommand(resolved) + "`")
 	if strings.TrimSpace(typed) != resolved {
 		b.WriteString(" (what `" + elideCommand(strings.TrimSpace(typed)) + "` resolves to)")
 	}
-	b.WriteString(".\n\n")
-	b.WriteString(reason)
+	b.WriteString("; " + verdict)
 	return b.String()
 }
 
@@ -1975,7 +1976,7 @@ var (
 
 // pipeDeny is pipeAnswer for a pipe known only by its verb and filter.
 func pipeDeny(verb, filter string) string {
-	return pipeAnswer(pipedMagus{verb: verb, filter: filter})
+	return pipeAnswer(pipedMagus{verb: verb, filter: filter}).Say
 }
 
 // pipeAnswer answers the question the filter was asking, about the command that was run.
@@ -1986,38 +1987,39 @@ func pipeDeny(verb, filter string) string {
 // every option offered was inapplicable, and a reader who tries one and gets nothing
 // learns the advice is noise. Three lines nobody reads are worse than one that lands.
 // Where the record the verb renders is known (pipeRewrite), the answer names its fields.
-func pipeAnswer(p pipedMagus) string {
+func pipeAnswer(p pipedMagus) denial {
 	// The verb is quoted WITHOUT the binary name: a compiled-in verdict that spells
 	// `magus run lint` reads as an instruction, and lint/test/build/generate are this
 	// repository's target names rather than magus vocabulary, so in most workspaces that
 	// instruction names nothing. Quoting the reader's own verb identifies the command
 	// without minting a command line to copy.
-	lead := "`" + p.verb + " | " + p.filter + "`: magus answers this without the pipe.\n"
+	lead := "`" + p.verb + " | " + p.filter + "` needs no pipe: "
 	if p.verb == "" {
-		lead = "magus answers this without the pipe.\n"
+		lead = "this needs no pipe: "
 	}
-	if rewrite, ok := pipeRewrite(p); ok {
-		return lead + rewrite + "\n" + pipeExitNote
+	answer, ok := pipeRewrite(p)
+	if !ok {
+		switch p.filter {
+		case "head", "tail", "less", "more":
+			// Fewer LINES. -s is the only lever every command has, because it suppresses
+			// progress rather than projecting a record the command may not have.
+			answer = "`-s` stays quiet until something fails, then prints the diagnostics and the log path."
+		case "wc":
+			answer = "`-o name` prints one id per line, which is what a count of them reads."
+		case "jq":
+			answer = "`-o json` IS the record, and `-o json --tee <file>` writes it where jq can read it."
+		case "grep", "egrep", "fgrep", "rg", "ag":
+			answer = "`-o name` for the ids alone, `-o json` for the whole record, `-o template='{{.field}}'` for one field; a bare `-o template` lists the fields this command has."
+		default:
+			answer = "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record; `-s` silences progress instead."
+		}
 	}
-	switch p.filter {
-	case "head", "tail", "less", "more":
-		// Fewer LINES. -s is the only lever every command has, because it suppresses
-		// progress rather than projecting a record the command may not have.
-		return lead + "`-s` stays quiet until something fails, then prints the diagnostics and the log path.\n" + pipeExitNote
-	case "wc":
-		return lead + "`-o name` prints one id per line, which is what a count of them reads.\n" + pipeExitNote
-	case "jq":
-		return lead + "`-o json` IS the record, and `-o json --tee <file>` writes it where jq can read it.\n" + pipeExitNote
-	case "grep", "egrep", "fgrep", "rg", "ag":
-		return lead + "`-o name` for the ids alone, `-o json` for the whole record, `-o template='{{.field}}'` for one field; a bare `-o template` lists the fields this command has.\n" + pipeExitNote
-	default:
-		return lead + "`-o name`, `-o json`, or `-o template='{{.field}}'` project the record; `-s` silences progress instead.\n" + pipeExitNote
-	}
+	return denial{Say: lead + answer, Why: pipeExitNote}
 }
 
 // graphPipeAdvice is pipeAnswer's answer, offered rather than imposed.
 func graphPipeAdvice(p pipedMagus) string {
-	return "magus workspace: " + pipeAnswer(p)
+	return "magus workspace: " + pipeAnswer(p).full()
 }
 
 const graphPipeBrief = "magus workspace: a graph read projects its own record: `-o name`, `-o json`, `-o template='{{.field}}'`."
@@ -2087,7 +2089,7 @@ func pipeRemedy(p pipedMagus) (string, []hint.Next) {
 	if p.bin == "" || magusOutputFormat(p.args) != "" {
 		return "", nil
 	}
-	lead := "`" + p.verb + " | " + p.filter + "`: magus answers this without the pipe, which also reads a failing magus as exit 0."
+	lead := "`" + p.verb + " | " + p.filter + "` needs no pipe, which would read a failing magus as exit 0."
 	var flags []string
 	var why string
 	words := magusSubcommandWords(p.args)
@@ -2173,7 +2175,7 @@ func rawToolRemedy(deps Dependencies, c hint.Invocation, match toolMatch) (strin
 	if !match.exact || match.rewrites || helpRequest(deps, c) {
 		return "", nil
 	}
-	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`: the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
+	lead := "magus guard denied `" + elideCommand(resolvedCommand(c)) + "`; the " + match.spell + " spell runs it cached, sandboxed and tracked by affected."
 	return lead, []hint.Next{hint.NextForDenyRemedy(string(denyRuleRawTool),
 		hint.Run.Argv(match.spell+"::"+match.operation),
 		"the op runs the same command in the project you are in.")}
@@ -2320,8 +2322,9 @@ var (
 // reason is also the rule's Arg, so the two cannot describe different commands.
 func denySharedStash(verb string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
-			"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree: the top entry is often another checkout's work, and " + verb + " applies or destroys it.",
+		Deny: "bare `git stash " + verb + "` acts on stash@{0}, which is often another checkout's; name yours: `git stash " + verb + " stash@{N}`.",
+		Why: "The stash stack belongs to the REPOSITORY rather than your worktree, and " + verb + " applies or destroys the top entry. " +
+			"`git stash list` names each entry's branch.",
 		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
 	}
 }
@@ -2330,8 +2333,9 @@ func denySharedStash(verb string) ShellVerdict {
 // one: in the reason and, for the same reason as above, in the rule.
 func denyWholeTree(op string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Verify in place. No magus run needs a clean tree: `" + hint.Run.With("<target>", "<project>") + "`, or `" + hint.Affected.With("ci") + "` for everything the diff reaches. If you truly need a pristine tree, use " + scratchCheckout(op) + ".\n" +
-			"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill.",
+		Deny: "whole-tree " + op + " destroys uncommitted work, a concurrent agent's included; verify in place: `" + hint.Run.With("<target>", "<project>") + "`.",
+		Why: "No magus run needs a clean tree, and `" + hint.Affected.With("ci") + "` covers everything the diff reaches. " +
+			"If you truly need a pristine tree, use " + scratchCheckout(op) + ". See the magus-vcs-hygiene skill.",
 		Rule: denyRule{Name: denyRuleWholeTree, Arg: op},
 	}
 }
@@ -2694,20 +2698,23 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	if rawToolDeny {
 		match, _ := rawToolMatch(deps, rawToolCmd)
-		reason := runGuardAdvice(match)
+		d := runGuardAdvice(match)
 		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
-		// The deny answers first, so it is the only text the reader gets, and
-		// routing into magus without naming the charm that makes the write legal
-		// sends them to a target that would refuse to do it.
+		// Routing into magus without naming the charm that makes the write legal sends
+		// the reader to a target that would refuse to do it.
 		//
 		// The WHOLE line is scanned, not just the denied command: `go test ./... &&
 		// npm update` denies on the first half, and the reader was never told the
-		// second half rewrites a lockfile: the deny is the only text they get.
+		// second half rewrites a lockfile.
+		if isDependencyMutation(rawToolCmd) {
+			d.Say = "run it with the update charm: `" + hint.Run.With("<target>:update", "<project>") + "`."
+		}
 		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(work, isDependencyMutation) {
-			reason += "\n" + updateAdvice
+			d.Why += "\n" + updateAdvice
 		}
 		v := ShellVerdict{
-			Deny: explainDeny(command, rawToolCmd, reason),
+			Deny: explainDeny(command, rawToolCmd, d.Say),
+			Why:  d.Why,
 			Rule: denyRule{Name: denyRuleRawTool, Arg: resolvedCommand(rawToolCmd)},
 		}
 		// Not for a dependency rewrite: its covering target carries the update charm,
@@ -2722,7 +2729,8 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	if piped.ok {
 		lead, next := pipeRemedy(piped)
-		if v, ok := held.ends(deps, ShellVerdict{Deny: pipeAnswer(piped), Rule: denyRule{Name: denyRuleOutputPipe}}.withRemedy(lead, next...)); ok {
+		answer := pipeAnswer(piped)
+		if v, ok := held.ends(deps, ShellVerdict{Deny: answer.Say, Why: answer.Why, Rule: denyRule{Name: denyRuleOutputPipe}}.withRemedy(lead, next...)); ok {
 			return v
 		}
 	}
@@ -2817,10 +2825,13 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 // a workspace calls its targets whatever it likes, so a literal `magus run test`
 // would be this repository's vocabulary asserted over someone else's. The op IS
 // named, since it resolved from the spell catalog rather than from a convention.
-func runGuardAdvice(match toolMatch) string {
-	return fmt.Sprintf("Run it through magus: `"+hint.Run.With("<target>"+charmSuffix(match), "<project>")+"`; `"+hint.DescribeTargets.With("-o", "name")+"` lists this workspace's targets.\n"+
-		"Tool flags go after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n%s",
-		match.spell, match.operation, runGuardContext)
+func runGuardAdvice(match toolMatch) denial {
+	return denial{
+		Say: "run it through magus: `" + hint.Run.With("<target>"+charmSuffix(match), "<project>") + "`.",
+		Why: fmt.Sprintf("`"+hint.DescribeTargets.With("-o", "name")+"` lists this workspace's targets. "+
+			"Tool flags go after `--`: `"+hint.Run.With("%s::%s", "[<project>]", "--", "<tool-args>")+"`.\n%s",
+			match.spell, match.operation, runGuardContext),
+	}
 }
 
 // charmSuffix spells the rewrite charm into the suggested target, because the same target

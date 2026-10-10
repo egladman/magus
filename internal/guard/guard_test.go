@@ -631,6 +631,17 @@ const verdictRefLine = "\nfull verdict: "
 // verdictRef matches the grd ref a deny cites.
 var verdictRef = regexp.MustCompile(verdictRefPrefix + `[0-9a-f]+`)
 
+// storedVerdict is the full verdict a deny's reason cites, read from cacheDir: where the
+// rationale and the rule's page live.
+func storedVerdict(t *testing.T, cacheDir, reason string) string {
+	t.Helper()
+	ref := verdictRef.FindString(reason)
+	require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", reason)
+	stored, err := trail.ReadBlob(cacheDir, ref)
+	require.NoError(t, err)
+	return string(stored)
+}
+
 // withoutVerdictRef is v as a dry run renders it: the call stores its verdict and cites
 // the ref, and a dry run stores nothing, so it has no ref to cite.
 func withoutVerdictRef(v Verdict) Verdict {
@@ -793,9 +804,8 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      "deny",
 		Reason: "`ls jobs >f`: console text is not a format anything should parse." +
-			"\nnext:\n  magus ls jobs -o json --tee f\n      " + want.Why +
-			verdictRefLine + "magus query output " + ref +
-			"\nsee: " + ruleDocsBase + "output-redirect/",
+			"\nnext:\n  magus ls jobs -o json --tee f" +
+			verdictRefLine + "magus query output " + ref,
 		Rule:      string(denyRuleOutputRedirect),
 		Lease:     v.Lease, // follows the environment the test ran in
 		LeaseFrom: v.LeaseFrom,

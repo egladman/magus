@@ -287,7 +287,7 @@ func (d Dependencies) grade(v ShellVerdict) ShellVerdict {
 		case !ok || s.Decision == builtin.Deny:
 			return v
 		case s.Decision == builtin.Advise:
-			return ShellVerdict{Context: v.Deny, Kind: hint.MarkerKind(v.Rule.Name), demoted: true}
+			return ShellVerdict{Context: denial{Say: v.Deny, Why: v.Why}.full(), Kind: hint.MarkerKind(v.Rule.Name), demoted: true}
 		}
 		return ShellVerdict{}
 	case v.Context != "":
@@ -689,19 +689,24 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// pending is the call's first deny the workspace demoted to advise. It is spoken only
 	// once every rule has had its turn, so a later deny still wins.
 	var pending heldAdvice
-	// refuse grades a compiled rule's would-be deny onto the verdict.
-	refuse := func(rule denyRuleName, reason string) {
-		if v, refused := pending.hold(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: rule}}); refused {
+	// whys holds the rationale a rule set beside each verdict it refused with, keyed on
+	// that verdict, so a later rule that rewords the reason never inherits it.
+	whys := map[string]string{}
+	// refuseWith grades a compiled rule's would-be deny onto the verdict.
+	refuseWith := func(rule denyRuleName, d denial) {
+		if v, refused := pending.hold(deps, ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: rule}}); refused {
 			verdict.Decision, verdict.Reason, verdict.Context = "deny", v.Deny, ""
 			verdict.Rule = string(rule)
+			whys[v.Deny] = v.Why
 		}
 	}
+	refuse := func(rule denyRuleName, reason string) { refuseWith(rule, denial{Say: reason}) }
 	denyUndeclared := func(command string) {
 		if req.Observe || verdict.Decision == "deny" {
 			return
 		}
-		if reason := denyUndeclaredLease(standing, actingLease, command); reason != "" {
-			refuse(denyRuleLeaseUndeclared, reason)
+		if d := denyUndeclaredLease(standing, actingLease, command); d.refused() {
+			refuseWith(denyRuleLeaseUndeclared, d)
 		}
 	}
 	// A served next is magus's own suggestion, and the guard does not argue with it: no
@@ -796,6 +801,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if verdict.Decision != "deny" {
 			if v, refused := pending.hold(deps, denyScriptWrite(deps, input, write)); refused {
 				verdict.Decision, verdict.Reason, verdict.Rule = "deny", v.Deny, v.RuleName()
+				whys[v.Deny] = v.Why
 			}
 		}
 		// The generated-output rule is definitive (it reads declared globs), so it
@@ -902,6 +908,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			verdict.Decision = "deny"
 			verdict.Reason = v.Deny
 			verdict.Rule = v.RuleName()
+			whys[v.Deny] = v.Why
 			if v.Rule.Name == denyRuleSiblingCheckout {
 				lead, next := siblingCheckoutRemedy(callDir, input, shellD)
 				v = v.withRemedy(lead, next...)
@@ -926,8 +933,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			if verdict.Decision == "deny" || preauth != "" {
 				break
 			}
-			if reason := rule.judge(ctx, deps, actingLease, input); reason != "" {
-				refuse(rule.name, reason)
+			if d := rule.judge(ctx, deps, actingLease, input); d.refused() {
+				refuseWith(rule.name, d)
 			}
 		}
 		// The focus rule. Its DENY outranks any advisory above it, because that one is
@@ -1034,6 +1041,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Last, so a line any rule refused or put to a person binds nobody.
 		if !req.DryRun && (verdict.Decision == "pass" || verdict.Decision == "advise") {
 			bindOnExec(ctx, location, who, input)
+			releaseOnEnd(location, who, input)
 		}
 	}
 	// The two notices about the acting lease ITSELF: a row that has finished and an id
@@ -1098,18 +1106,19 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		shapeGate := markers
 		if req.DryRun {
-			shapeGate = hint.Gate{} // spends and stores nothing, so the deny is worded in full
+			shapeGate = hint.Gate{} // spends and stores nothing
 		}
 		// Only while the deny that computed the remedy is still the one standing: a later
 		// rule's refusal is about something else.
 		var next []hint.Next
+		why := whys[verdict.Reason]
 		if len(remedy.Next) > 0 && verdict.Reason == remedy.Deny {
 			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
-				verdict.Reason = remedy.Lead
+				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
 		}
-		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, note, next)
+		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
 	// An observation is not a judgment, and the trail already knows the difference: an
 	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
@@ -1147,7 +1156,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 // refusal is recorded under.
 type roleScopedRule struct {
 	name  denyRuleName
-	judge func(context.Context, Dependencies, string, string) string
+	judge func(context.Context, Dependencies, string, string) denial
 }
 
 // roleScopedCommandRules are the command rules a served next stands down, so each is
@@ -1155,10 +1164,18 @@ type roleScopedRule struct {
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
 		{denyRuleLeaseGate, denyLeaseScopedGate},
-		{denyRuleLeaseVCS, denyLeaseScopedVCS},
+		{denyRuleLeaseVCS, oneString(denyLeaseScopedVCS)},
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},
-		{denyRuleLeaseWrite, denyWriteOutsideLease},
+		{denyRuleLeaseWrite, oneString(denyWriteOutsideLease)},
+	}
+}
+
+// oneString adapts a rule that words its refusal as one string, verdict on the first
+// line (see verdictParts).
+func oneString(rule func(context.Context, Dependencies, string, string) string) func(context.Context, Dependencies, string, string) denial {
+	return func(ctx context.Context, deps Dependencies, actingLease, command string) denial {
+		return denial{Say: rule(ctx, deps, actingLease, command)}
 	}
 }
 
@@ -1173,11 +1190,11 @@ func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir
 	d := effectiveDialect(deps.ShellDialect)
 	var kept []hint.Next
 	for _, n := range hint.ServableTo(role, writePaths, next) {
-		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run) != "" {
+		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run).refused() {
 			continue
 		}
 		refused := slices.ContainsFunc(roleScopedCommandRules(), func(rule roleScopedRule) bool {
-			return rule.judge(ctx, deps, actingLease, n.Run) != ""
+			return rule.judge(ctx, deps, actingLease, n.Run).refused()
 		})
 		if refused || gradeFocusRead(ctx, deps, actingLease, n.Run).Decision == "deny" {
 			continue

@@ -206,11 +206,13 @@ func TestReadNavigationDeniesWholeReads(t *testing.T) {
 		require.True(t, ok, tt.command)
 		assert.Equal(t, denyRuleReadNavigation, v.Rule.Name, tt.command)
 		assert.Empty(t, v.Context, tt.command)
+		assert.Regexp(t, `^magus workspace: \d+ lines; read one (declaration|heading): `+"`[^`]+`"+`\.$`, v.Deny,
+			"%s: the verdict is one line naming the one command", tt.command)
 		for _, want := range tt.answer {
-			assert.Contains(t, v.Deny, want, tt.command)
+			assert.Contains(t, v.Why, want, "%s: the map lands in the stored verdict", tt.command)
 		}
 		for _, not := range tt.absent {
-			assert.NotContains(t, v.Deny, not, tt.command)
+			assert.NotContains(t, v.Deny+v.Why, not, tt.command)
 		}
 	}
 }

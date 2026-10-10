@@ -102,7 +102,7 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 
 	v := judge(map[string]any{"file_path": run, "old_string": "a()", "new_string": "a2()"})
 	require.Equal(t, verdictWithRule("deny", string(denyRuleClaimedDeclaration)), unworded(v))
-	assert.Contains(t, v.Reason, "claims as run.go#A")
+	assert.Contains(t, storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason), "claims as run.go#A")
 
 	multi := judge(map[string]any{"file_path": run, "edits": []any{
 		map[string]any{"old_string": "b()", "new_string": "b2()"},

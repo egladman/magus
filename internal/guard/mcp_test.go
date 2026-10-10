@@ -206,7 +206,7 @@ func TestClientEntryReachesTheRebindRule(t *testing.T) {
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, entry))
 
 	stray := buildCall(hint.ToolClient.String(), clientScript(enterCall("harness/other", "a.go")), "")
-	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, stray), "enter a job not forked beneath")
+	assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, stray).Say, "enter a job not forked beneath")
 }
 
 // A holder's client script that writes another job reaches the rebind rule, through the
@@ -215,17 +215,17 @@ func TestClientJobWritesReachTheRebindRule(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 	me := narrowLease().ID
 	for script, what := range map[string]string{
-		`import "magus"; magus\job.put("harness/other", opts: {"write_paths": ["**"]});`:  "write another job",
+		`import "magus"; magus\job.put("harness/other", opts: {"write_paths": ["**"]});`:  "is outside lease",
 		`import "magus"; magus\job.put("` + me + `", opts: {"write_paths": ["**"]});`:     "rewrite the job it holds",
 		`import "magus"; magus\job.clear();`:                                              "drop every job",
 		`import "magus"; magus\job.register("harness/other", reported_base: "abc");`:      "write another job",
 		`import "magus"; magus\cmd("job", ["exec", "harness/other"]);`:                    "take the lease on another job",
 		`import "magus"; final j = magus\job; j.clear();`:                                 "cannot read",
-		`import "magus" as m; m\job.put("harness/other", opts: {"write_paths": ["**"]});`: "write another job",
-		`import "magus"; magus\job\put("harness/other", opts: {"write_paths": ["**"]});`:  "write another job",
-		`import "magus" as _; job.put("harness/other", opts: {"write_paths": ["**"]});`:   "write another job",
+		`import "magus" as m; m\job.put("harness/other", opts: {"write_paths": ["**"]});`: "is outside lease",
+		`import "magus"; magus\job\put("harness/other", opts: {"write_paths": ["**"]});`:  "is outside lease",
+		`import "magus" as _; job.put("harness/other", opts: {"write_paths": ["**"]});`:   "is outside lease",
 	} {
 		line := buildCall(hint.ToolClient.String(), clientScript(script), "")
-		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, line), what, "%q renders %q", script, line)
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, line).Say, what, "%q renders %q", script, line)
 	}
 }

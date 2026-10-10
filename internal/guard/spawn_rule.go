@@ -501,6 +501,43 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	}
 }
 
+// releaseOnEnd unbinds the caller from each job command ends, through `magus job exit`,
+// `job wait` or `job rm`, that its record names. Like bindOnExec it runs only on a command
+// the guard lets through.
+//
+// Released before the command runs, as bindOnExec binds: the hook sees no result. A
+// command that then fails leaves the caller unbound, which the orchestrator it now reads
+// as can undo with one `magus job exec`.
+func releaseOnEnd(at location, who hookAttribution, command string) {
+	if who.caller().Identified() && at.workspace == "" {
+		return
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return
+	}
+	var store *job.Store
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
+			continue
+		}
+		words := magusSubcommandWords(c.Args)
+		for _, verb := range []hint.Command{hint.JobExit, hint.JobWait, hint.JobRm} {
+			if !verb.MatchedBy(words) {
+				continue
+			}
+			operands, _ := verbArgv(c.Args, verb)
+			if len(operands) == 0 || !types.ValidJobID(operands[0]) {
+				continue
+			}
+			if store == nil {
+				store = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			}
+			store.Release(who.caller(), operands[0])
+		}
+	}
+}
+
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
 // job it was spawned for, as `magus job exec` would, when that job has reported none.
 // Reports whether it wrote, so the caller re-reads the rows it graded against.

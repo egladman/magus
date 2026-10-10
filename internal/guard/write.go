@@ -171,9 +171,9 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: if this belongs in the notes, say so and let the person run `"+hint.NotesEdit.String()+" %s`.\n"+
-		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
-		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
+	return fmt.Sprintf("magus workspace: %s is in the NOTES store, which only a person writes; ask them to run `"+hint.NotesEdit.String()+" %s`.\n"+
+		"A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
+		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", path, strings.TrimSuffix(filepath.Base(path), ".md"))
 }
 
 // resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
@@ -402,8 +402,9 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	// denying the write anyway would be two refusals for one mistake.
 	if me.ReadOnly {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: put what you found in your report instead of writing it. "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
-				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
+			"magus workspace: put what you found in your report instead of writing it; "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
+				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+				leaseActorWhy,
 			me.ID, criteriaLine(me), rel)}
 	}
 	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,
@@ -465,10 +466,11 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			return g
 		}
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own write paths. "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
+			"magus workspace: edit inside your own write paths; "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
 				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
 				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
-				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.",
+				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.\n"+
+				leaseActorWhy,
 			rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
 			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
 			enterCall(owner.ID, rel), job.MaxJobEntries)}
@@ -484,9 +486,10 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 			r.Path, me.ID, time.Unix(r.ReleasedAt, 0).UTC().Format(time.RFC3339))
 	}
 	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-		"magus workspace: write inside the paths lease %s was given (%s). "+leaseActorClause("widen these write paths")+"\n"+
+		"magus workspace: write inside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths")+"\n"+
 			"%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
-			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.",
+			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
+			leaseActorWhy,
 		me.ID, strings.Join(me.WritePaths, ", "), revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel)}
 }
 

@@ -419,7 +419,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// record `-o` shapes, so the deny still fires without --text.
 		{command: "magus refs TODO --text | grep -n fixme"},
 		{command: "magus refs TODO --text > /tmp/hits.txt"},
-		{command: "magus refs Open | grep -n Open", context: "magus answers this without the pipe"},
+		{command: "magus refs Open | grep -n Open", context: "needs no pipe: "},
 		// An input redirect FEEDS magus rather than hiding what it said.
 		{command: "magus buzz - < script.buzz"},
 		// magus must be the COMMAND, not a substring: these are paths and text.
@@ -885,16 +885,15 @@ func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
-	assert.Contains(t, verdict.Deny, "magus describe targets")
-	assert.Contains(t, verdict.Deny, "magus run go::go-test")
-	assert.Contains(t, verdict.Deny, "-- <tool-args>")
-	assert.NotContains(t, verdict.Deny, "mise exec")
+	assert.Equal(t, "magus guard denied `go test ./... -run TestFocused`; run it through magus: `magus run <target> <project>`.", verdict.Deny)
+	assert.Contains(t, verdict.Why, "magus describe targets")
+	assert.Contains(t, verdict.Why, "magus run go::go-test")
+	assert.Contains(t, verdict.Why, "-- <tool-args>")
+	assert.NotContains(t, verdict.Deny+verdict.Why, "mise exec")
 
 	// The op form must not lead: it is the exception, and a verdict that opens
 	// with it teaches the dispreferred spelling to every reader.
-	assert.Less(t, strings.Index(verdict.Deny, "magus run <target>"), strings.Index(verdict.Deny, "magus run go::go-test"),
-		"the target form must precede the spell-op form")
+	assert.NotContains(t, verdict.Deny, "magus run go::go-test", "the target form is the verdict; the spell-op form is the rationale's")
 }
 
 // TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
@@ -1322,7 +1321,8 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	require.NotEmpty(t, piped)
 	assert.Contains(t, piped, "-o name")
 	assert.Contains(t, piped, "-o template=")
-	assert.Contains(t, piped, "exit status", "a pipe replaces the exit status; that is why it is denied, not advised")
+	assert.Contains(t, Evaluate(strict(testDependencies()), "magus ls targets . | grep build").Why, "exit status",
+		"a pipe replaces the exit status; that is why it is denied, not advised")
 
 	// Discarding and KEEPING are different intents, so they get different corrections.
 	// Both name where the log already is, because `affected ci` mints one.
@@ -1447,7 +1447,7 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 		case "advise":
 			assert.Empty(t, v.Deny, tc.command)
 			assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
-			assert.Contains(t, v.Context, "magus answers this without the pipe", tc.command)
+			assert.Contains(t, v.Context, "needs no pipe: ", tc.command)
 		default:
 			assert.Empty(t, v.Deny, tc.command)
 			assert.NotEqual(t, advisoryGraphPipe, v.Kind, tc.command)
@@ -1573,6 +1573,8 @@ func TestGuardAdvisesUpdateOnDependencyMutations(t *testing.T) {
 	tidy := Evaluate(strict(testDependencies()), "go mod tidy")
 	require.NotEmpty(t, tidy.Deny)
 	assert.Contains(t, tidy.Deny, ":update")
+	assert.Contains(t, Evaluate(strict(testDependencies()), "go test ./... && npm update").Why, ":update",
+		"a rewrite later on the line is named in the stored verdict")
 
 	// Applying a lockfile is not re-resolving one, and installing a tool is not a
 	// dependency at all. Firing here would put an advisory on the most routine

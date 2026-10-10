@@ -589,7 +589,8 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			if nav.Lines > 0 && m.lines <= nav.Lines || generatedOutput(deps, rel) {
 				continue
 			}
-			if v := (ShellVerdict{Deny: denyReadNavigation(m), Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}); walk.settles(deps, v) {
+			d := denyReadNavigation(m)
+			if v := (ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}); walk.settles(deps, v) {
 				return v, true
 			}
 			continue
@@ -607,7 +608,16 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 	return walk.rest()
 }
 
-func denyReadNavigation(m fileMap) string {
+// denyReadNavigation refuses a whole read of a mapped file. The verdict names the one
+// command that reads a single declaration; the map of what the file holds is the
+// rationale, read from the stored verdict.
+func denyReadNavigation(m fileMap) denial {
+	byLines := "`sed -n <first>,<last>p " + shellWord(m.rel) + "`"
+	read := byLines
+	if m.indexed {
+		read = "`" + hint.Refs.With("<name>", "--definition", "--source") + "`"
+	}
+	say := "magus workspace: " + strconv.Itoa(m.lines) + " lines; read one " + m.noun + ": " + read + "."
 	var b strings.Builder
 	if m.list != "" {
 		b.WriteString("`" + m.list + "` maps this file, and the map is below: ")
@@ -615,14 +625,13 @@ func denyReadNavigation(m fileMap) string {
 		b.WriteString("The map below is parsed from the file itself: ")
 	}
 	b.WriteString(strconv.Itoa(m.lines) + " lines, " + countNoun(len(m.entries), m.noun) + ", each with its lines.\n")
-	byLines := "`sed -n <first>,<last>p " + shellWord(m.rel) + "`"
 	switch {
 	case m.indexed && slices.ContainsFunc(m.entries, func(e mapEntry) bool { return e.symbol == "" }):
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; `" + hint.Refs.With("<name>", "--definition", "--source") +
-			"` prints that one, numbered and checked against the index, and " + byLines + " prints a method by its lines.\n")
+		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + read +
+			" prints that one, numbered and checked against the index, and " + byLines + " prints a method by its lines.\n")
 	case m.indexed:
-		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; `" + hint.Refs.With("<name>", "--definition", "--source") +
-			"` prints that one, numbered and checked against the index.\n")
+		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + read +
+			" prints that one, numbered and checked against the index.\n")
 	default:
 		b.WriteString("A whole read spends " + strconv.Itoa(m.lines) + " lines to reach one of them; " + byLines + " prints that one by its lines.\n")
 	}
@@ -637,7 +646,7 @@ func denyReadNavigation(m fileMap) string {
 		}
 		b.WriteString("\n  " + strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + ": " + e.name)
 	}
-	return b.String()
+	return denial{Say: say, Why: b.String()}
 }
 
 func adviseReadSymbol(m fileMap, e mapEntry, first, last int) string {

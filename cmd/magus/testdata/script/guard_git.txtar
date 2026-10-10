@@ -20,12 +20,10 @@
 # exits 0 blocks nothing.
 stdin stash.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Verify in place'
+stdout 'deny \[[a-z-]+\]: whole-tree'
 stdout 'magus run <target> <project>'
-stdout 'magus affected ci'
-stdout 'throwaway .git worktree add'
-stdout 'whole-tree git stash destroys uncommitted and untracked work'
-stdout 'magus-vcs-hygiene'
+stdout 'whole-tree git stash destroys uncommitted work'
+stdout 'full verdict: '
 
 # An unqualified restore takes whatever sits at the top of a stack the whole repository
 # shares, so the routing is to READ the stack and name an entry.

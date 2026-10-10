@@ -110,31 +110,62 @@ func TestShapeDenyFallsBackToTheFullReason(t *testing.T) {
 
 	noStore := hint.NewGate("", "s1")
 	for range 2 {
-		got, ref, served := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "why", note, nil)
-		assert.Equal(t, "why"+note+see, got, "without a cache dir every firing is the first")
+		got, ref, served := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, false)
+		assert.Equal(t, "verdict."+note+"\nrationale."+see, got, "without a cache dir every firing speaks in full")
 		assert.Empty(t, ref)
 		assert.Nil(t, served)
 	}
+	got, ref, _ := shapeDeny(t.Context(), noStore, string(denyRuleWholeTree), "verdict.", "rationale.", note, nil, true)
+	assert.Equal(t, "verdict."+note, got, "a preview shows what the call would, less the ref it stores nothing under")
+	assert.Empty(t, ref)
 
 	gate := hint.NewGate(t.TempDir(), "s1")
 	remedy := []hint.Next{hint.NextForDenyRemedy("whole-tree", []string{"magus", "status"}, "reads it.")}
 	for _, rule := range []string{"a-workspace-rule", string(advisoryPushGate)} {
 		for range 2 {
-			got, ref, served := shapeDeny(t.Context(), gate, rule, "why", note, remedy)
-			assert.Equal(t, "why", got, "%s is not a catalogued deny, so its reason is untouched", rule)
+			got, ref, served := shapeDeny(t.Context(), gate, rule, "verdict.", "rationale.", note, remedy, false)
+			assert.Equal(t, "verdict.\nrationale.", got, "%s is not a catalogued deny, so its reason is untouched", rule)
 			assert.Empty(t, ref)
 			assert.Nil(t, served, "a rule with no page serves nothing")
 		}
 	}
 
-	got, ref, _ := shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "why"+note, note, nil)
+	got, ref, _ = shapeDeny(t.Context(), gate, string(denyRuleWholeTree), "verdict."+note, "", note, nil, false)
 	require.NotEmpty(t, ref)
-	assert.Equal(t, "why"+note+"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got, "a reason already carrying the note does not repeat it")
+	assert.Equal(t, "verdict."+note+"\nfull verdict: "+hint.NextForDenial(ref).Run, got, "a reason already carrying the note does not repeat it")
+}
+
+// TestShapeDenyKeepsTheRationaleInTheStoredVerdict pins the inline contract: the verdict,
+// the nothing-ran note, at most one next command and the ref. The rationale, every next
+// with its why, and the rule's page live only in the stored verdict. A reason worded as
+// one string is split at its first line.
+func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
+	const see = "\nsee: " + ruleDocsBase + "whole-tree/"
+	const note = "\nnothing ran (2 commands)"
+	cacheDir := t.TempDir()
+	remedy := []hint.Next{
+		hint.NextForDenyRemedy(string(denyRuleWholeTree), []string{"magus", "status"}, "reads it."),
+		hint.NextForDenyRemedy(string(denyRuleWholeTree), []string{"magus", "vcs", "add"}, "stages it."),
+	}
+
+	for _, tc := range []struct{ name, reason, why string }{
+		{"a Why field", "verdict.", "first reason.\nsecond reason."},
+		{"one string", "verdict.\nfirst reason.\nsecond reason.", ""},
+	} {
+		got, ref, served := shapeDeny(t.Context(), hint.NewGate(cacheDir, tc.name), string(denyRuleWholeTree), tc.reason, tc.why, note, remedy, false)
+		require.NotEmpty(t, ref, tc.name)
+		assert.Equal(t, "verdict."+note+"\nnext:\n  "+remedy[0].Run+"\nfull verdict: "+hint.NextForDenial(ref).Run, got, tc.name)
+		stored, err := trail.ReadBlob(cacheDir, ref)
+		require.NoError(t, err)
+		assert.Equal(t, "verdict."+note+"\nfirst reason.\nsecond reason."+
+			"\nnext:\n  "+remedy[0].Run+"\n      reads it.\n  "+remedy[1].Run+"\n      stages it."+see, string(stored), tc.name)
+		assert.Equal(t, remedy, served, "every next is served, so each is pre-authorized")
+	}
 }
 
 // TestShapeDenyServesTheRemedyOnEveryFiring pins the layout a remedy adds and that it is
-// journaled, which is what pre-authorizes it: in full with its why the first time, and as
-// the command alone on a repeat. Both firings cite the full-verdict ref, and it resolves.
+// journaled, which is what pre-authorizes it: its command inline on every firing, and its
+// why only in the stored verdict. Both firings cite the full-verdict ref, and it resolves.
 func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 	const see = "\nsee: " + ruleDocsBase + "output-pipe/"
 	cacheDir := t.TempDir()
@@ -143,20 +174,20 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 		[]string{"./magus", "run", "go-build", ".", "-s"}, "-s stays quiet until something fails.")}
 
 	full := "one line.\nnext:\n  ./magus run go-build . -s\n      -s stays quiet until something fails."
-	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", remedy)
+	got, ref, served := shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref, "the first firing stores its verdict too")
-	assert.Equal(t, full+"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got)
+	assert.Equal(t, "one line.\nnext:\n  ./magus run go-build . -s\nfull verdict: "+hint.NextForDenial(ref).Run, got)
 	stored, err := trail.ReadBlob(cacheDir, ref)
 	require.NoError(t, err)
 	assert.Equal(t, full+see, string(stored))
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-output-pipe", servedNextPreauthorizes(gate, "./magus run go-build . -s"))
 
-	got, ref, served = shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", remedy)
+	got, ref, served = shapeDeny(t.Context(), gate, string(denyRuleOutputPipe), "one line.", "", "", remedy, false)
 	require.NotEmpty(t, ref)
 	doc, _ := Rule(string(denyRuleOutputPipe))
 	assert.Equal(t, "denied again [output-pipe]: "+doc.Catches+"\nnext:\n  ./magus run go-build . -s"+
-		"\nfull verdict: "+hint.NextForDenial(ref).Run+see, got)
+		"\nfull verdict: "+hint.NextForDenial(ref).Run, got)
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
 }

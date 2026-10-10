@@ -152,7 +152,7 @@ func refuse(actor Actor, id, rule string) error {
 	}
 	return &RefusedError{
 		Lease: id, Actor: actor, Rule: rule,
-		Remedy: "Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
+		Remedy: "Ask your orchestrator to make this write",
 	}
 }
 

@@ -52,7 +52,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	assert.Contains(t, err.Error(), "adj/store is bound to this session")
 	assert.Contains(t, err.Error(), "SHRINK write_paths")
 	assert.Contains(t, err.Error(), "row adj/store is what this targeted")
-	assert.Contains(t, err.Error(), "report it as an unresolved risk and stop")
+	assert.Contains(t, err.Error(), "Ask your orchestrator to make this write")
 
 	after, err := NewStore(loc).List()
 	require.NoError(t, err)
