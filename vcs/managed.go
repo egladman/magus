@@ -71,7 +71,7 @@ func WriteJudge(ctx context.Context, root string) stamp.Judge {
 func sectionBanner(path, text string, m managedMarkers, body string, j stamp.Judge) (string, error) {
 	spans, err := managedSpans(text, m)
 	if err != nil {
-		return "", fmt.Errorf("vcs: %s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	if len(spans) == 1 {
 		head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
@@ -230,7 +230,7 @@ func removeManagedSection(path string, m managedMarkers, j stamp.Judge) (bool, e
 	text := string(data)
 	spans, err := managedSpans(text, m)
 	if err != nil {
-		return false, fmt.Errorf("vcs: %s: %w", path, err)
+		return false, fmt.Errorf("%s: %w", path, err)
 	}
 	if len(spans) == 0 {
 		return false, nil
@@ -269,7 +269,7 @@ func managedSectionPresent(path string, m managedMarkers) (bool, error) {
 	}
 	spans, err := managedSpans(string(data), m)
 	if err != nil {
-		return false, fmt.Errorf("vcs: %s: %w", path, err)
+		return false, fmt.Errorf("%s: %w", path, err)
 	}
 	return len(spans) > 0, nil
 }
@@ -385,7 +385,7 @@ func renderManagedFile(path, current string, m managedMarkers, body string, kind
 	}
 	next, err := replaceManagedSection(text, banner+body+m.end+"\n", m)
 	if err != nil {
-		return "", fmt.Errorf("vcs: %s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	if crlf {
 		next = strings.ReplaceAll(next, "\n", "\r\n")

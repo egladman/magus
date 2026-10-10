@@ -81,7 +81,7 @@ func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []
 		return nil
 	}
 	if providerRunner == nil {
-		return errors.New("magus: workspace provider wired but no runner registered in this binary")
+		return errors.New("workspace provider wired but no runner registered in this binary")
 	}
 	// Which provider claimed each path, so a collision reports the right cause: an
 	// earlier provider, or this same provider reporting one directory twice.
@@ -89,7 +89,7 @@ func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []
 	for _, spellName := range spellNames {
 		provided, err := providedProjects(ctx, cache, ws.Root, spellName)
 		if err != nil {
-			return fmt.Errorf("magus: workspace provider %q: %w", spellName, err)
+			return fmt.Errorf("workspace provider %q: %w", spellName, err)
 		}
 		if len(provided) == 0 {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "workspace provider reported no projects",
@@ -114,7 +114,7 @@ func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []
 			}
 			for _, opt := range projectOptions(pp) {
 				if err := opt(p); err != nil {
-					return fmt.Errorf("magus: workspace provider %q: project %q: %w", spellName, rel, err)
+					return fmt.Errorf("workspace provider %q: project %q: %w", spellName, rel, err)
 				}
 			}
 			ws.Projects[rel] = p

@@ -334,7 +334,7 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 	for path, opts := range r.projectOpts {
 		p := w.Get(path)
 		if p == nil {
-			errs = append(errs, fmt.Errorf("magus: register: %q in workspace %q, %s: %w",
+			errs = append(errs, fmt.Errorf("register: %q in workspace %q, %s: %w",
 				path, w.Root(), registerPathHint(w), types.ErrUnknownProject))
 			continue
 		}
@@ -354,7 +354,7 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 		for _, name := range p.Spells {
 			l, ok := project.DefaultSpellRegistry().Lookup(name)
 			if !ok {
-				errs = append(errs, fmt.Errorf("magus: register: project %q: spell %q not registered",
+				errs = append(errs, fmt.Errorf("register: project %q: spell %q not registered",
 					p.Path, name))
 				projectOK = false
 				continue

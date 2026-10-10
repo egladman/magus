@@ -79,7 +79,7 @@ func (rt *Runtime) Flush(ctx context.Context, w *report.Writer) error {
 	var errs []error
 
 	if err := rt.writeReport(findings); err != nil {
-		errs = append(errs, fmt.Errorf("race: write report: %w", err))
+		errs = append(errs, fmt.Errorf("write report: %w", err))
 	}
 
 	rt.logRaceSummary(ctx, findings)

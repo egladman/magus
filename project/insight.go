@@ -448,7 +448,7 @@ func parseSince(s string) (string, error) {
 	}
 	n, err := strconv.Atoi(s[:i])
 	if err != nil || i == len(s) {
-		return "", fmt.Errorf("insight: invalid --since %q (use e.g. 90d, 12w, 6mo, 1y)", s)
+		return "", fmt.Errorf("invalid --since%q (use e.g. 90d, 12w, 6mo, 1y)", s)
 	}
 	day := 24 * time.Hour
 	var unit time.Duration
@@ -462,7 +462,7 @@ func parseSince(s string) (string, error) {
 	case "y":
 		unit = 365 * day
 	default:
-		return "", fmt.Errorf("insight: invalid --since unit in %q (use d, w, mo, or y)", s)
+		return "", fmt.Errorf("invalid --sinceunit in %q (use d, w, mo, or y)", s)
 	}
 	return time.Now().Add(-time.Duration(n) * unit).Format(time.RFC3339), nil
 }

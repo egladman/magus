@@ -413,7 +413,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	}
 	callerRel, err := filepath.Rel(ws.Root(), src.Dir)
 	if err != nil {
-		return fmt.Errorf("magus: cross-project dependency: %w", err)
+		return fmt.Errorf("cross-project dependency: %w", err)
 	}
 	depPath, err := file.ResolveImport(ref.Project, filepath.ToSlash(callerRel))
 	if err != nil {
@@ -421,7 +421,7 @@ func dispatchBuzzExternal(ctx context.Context, ref externalTarget) error {
 	}
 	dep := ws.Get(depPath)
 	if dep == nil {
-		return fmt.Errorf("magus: cross-project dependency: unknown project %q", depPath)
+		return fmt.Errorf("cross-project dependency: unknown project %q", depPath)
 	}
 	// The real normalizer, not ToLower. Today's only producer of a cross ref already
 	// normalized it, so the two agree by luck; a producer that hands over a raw name

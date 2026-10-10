@@ -19,7 +19,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 | `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
-| `errmsg`        | an `errors.New` or `fmt.Errorf` text joining clauses, spanning lines or sentences, or with `%w` not last    |
+| `errmsg`        | an error text joining clauses, spanning lines or sentences, misplacing `%w`, or naming the wrong origin     |
 | `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 
 Every path, word list, host name, ceiling and exemption lives in the root
@@ -72,6 +72,13 @@ abbreviations, and `error-wrap` a `%w` anywhere but an opening `"%w: "` or a clo
 `fmt.Errorf` built only to wrap inside a coded diagnostic is still judged; the
 diagnostic's own constructor is `diagmsg`'s. Capitalization and trailing
 punctuation are staticcheck's ST1005.
+
+The error that originates a failure names its origin once, and a wrap adds what
+its own call was doing. `error-origin` reports a leading `"name: "` naming another
+package of the module, read from every package clause under `module`;
+`operations` lists the names that are also commands (`run`). `error-stutter`
+reports a wrap opening with its own package's `"name: "` around a variable last
+assigned from a call into that package, which already named it.
 
 ## Not here
 

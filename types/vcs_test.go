@@ -15,7 +15,7 @@ func TestUnsupportedErrorsMatchBothSentinels(t *testing.T) {
 	declined := &VCSUnsupportedError{VCS: "jj", Capability: CapBisector}
 	assert.ErrorIs(t, declined, ErrVCSUnsupported)
 	assert.ErrorIs(t, declined, errors.ErrUnsupported)
-	assert.EqualError(t, declined, "vcs: jj does not support Bisector")
+	assert.EqualError(t, declined, "jj does not support Bisector")
 }
 
 // TestCommitBuzzObject covers the Buzz boundary map, including the RFC3339 date

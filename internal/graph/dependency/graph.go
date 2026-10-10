@@ -17,7 +17,7 @@ type ID int32
 const NoID ID = -1
 
 // ErrCycle is returned by Builder.Build when the edge set forms a cycle.
-var ErrCycle = errors.New("graph: dependency cycle")
+var ErrCycle = errors.New("dependency cycle")
 
 // closureThreshold: below → BFS; at or above → build lazy bitset closure.
 const closureThreshold = 256
@@ -56,13 +56,13 @@ func (b *Builder) AddEdge(from, to ID) error {
 		if int(from) < len(b.builderPaths) {
 			path = b.builderPaths[from]
 		}
-		return fmt.Errorf("graph: self-loop on %q", path)
+		return fmt.Errorf("self-loop on %q", path)
 	}
 	if int(from) >= len(b.builderPaths) || from < 0 {
-		return fmt.Errorf("graph: from id %d out of range", from)
+		return fmt.Errorf("from id %d out of range", from)
 	}
 	if int(to) >= len(b.builderPaths) || to < 0 {
-		return fmt.Errorf("graph: to id %d out of range", to)
+		return fmt.Errorf("to id %d out of range", to)
 	}
 	key := [2]int32{int32(from), int32(to)}
 	if _, dup := b.edgeSeen[key]; dup {

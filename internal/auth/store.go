@@ -591,7 +591,7 @@ func (s *Store) Revoke(revoker types.Grant, q string) (Token, error) {
 	case errors.Is(err, errReplaced):
 		return Token{}, notFound
 	case err != nil:
-		return Token{}, fmt.Errorf("auth: revoke %s: %w", target.Name, err)
+		return Token{}, fmt.Errorf("revoke %s: %w", target.Name, err)
 	}
 	return target, nil
 }

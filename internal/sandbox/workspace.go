@@ -70,7 +70,7 @@ func buildFromConfig(root string, cfg config.SandboxConfig, spellGrants map[stri
 	var errs []error
 	for i, a := range cfg.Allow {
 		if err := checkAllow(a); err != nil {
-			errs = append(errs, fmt.Errorf("sandbox: allow[%d] %s: %w", i, a.Name, err))
+			errs = append(errs, fmt.Errorf("allow[%d] %s: %w", i, a.Name, err))
 			continue
 		}
 		// A literal path is resolved strictly here, where an unset $VAR or a missing home

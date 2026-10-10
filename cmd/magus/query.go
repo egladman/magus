@@ -1110,7 +1110,7 @@ func openWorkspaceForRead(ctx context.Context, root string) (types.WorkspaceRepo
 func asMagus(ws types.WorkspaceRepository) (*magus.Magus, error) {
 	m, ok := ws.(*magus.Magus)
 	if !ok {
-		return nil, fmt.Errorf("magus: the workspace handle is a %T, not a *magus.Magus", ws)
+		return nil, fmt.Errorf("the workspace handle is a %T, not a *magus.Magus", ws)
 	}
 	return m, nil
 }
@@ -1125,7 +1125,7 @@ func fullWorkspace(ctx context.Context, ws graphWorkspace) (types.WorkspaceRepos
 	case *magus.LazyWorkspace:
 		return w.Magus(ctx)
 	}
-	return nil, fmt.Errorf("magus: %T is not a workspace", ws)
+	return nil, fmt.Errorf("%T is not a workspace", ws)
 }
 
 // askServer has a running server answer verb into reply and reports whether it did. A
