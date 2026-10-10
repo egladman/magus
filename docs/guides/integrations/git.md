@@ -114,6 +114,15 @@ against the outputs they produce and runs `gofmt -l` over its changed, format-go
 files, then prints the fix and the command that folds it into the offending commit
 (MGS4006 stale output, MGS4009 stale formatting).
 
+The same job counts the hunks of the range a push would send that no read mark covers: what
+`HEAD` holds that its upstream does not, or that the remote's default branch does not for a
+branch with no upstream yet. When any are unread it adds one line, `N of M hunks of this range
+(@{upstream}...HEAD) unread`, with the `magus diff --unread --rev` command that opens them. If
+the read marks cannot be read, the line says the read state is unknown, never that every hunk
+is unread. The line rides with the drift notice when there is one and is otherwise the job's
+own output, so a commit does not raise a desktop alert for it. Nothing runs in the hook itself
+and nothing blocks the push.
+
 It never blocks and never writes to your tree. CI is the check; this is the earlier
 warning. A hook only runs where someone installed it and did not pass `--no-verify`, and
 jj has no hooks at all, so hooks catch three backends on a good day and CI catches

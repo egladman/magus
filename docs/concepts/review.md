@@ -209,8 +209,7 @@ you send with the batch in front of you or you do not send.
 
 Two things the console has that the terminal viewer does not yet: reading one hunk at a time
 (`f`), and the run control below. Both are read-side and nothing about a terminal prevents them;
-they are missing, not withheld, unlike publishing. `--prompt` needs neither: it is a flag on
-`magus diff` itself, and the viewer stands aside for it the way it does for `--impact`.
+they are missing, not withheld, unlike publishing.
 
 ### Where a remark lands
 
@@ -366,87 +365,31 @@ control on every file heading would answer it n times in a column.
 magus diff --unread --rev main...HEAD
 ```
 
-lists the hunks of that range that no read mark covers. A mark belongs to a hunk's content,
-context lines included, so a hunk you read and then edited is unread again. The command
-reports and exits 0 whatever it finds: a push held up by a read count would make the count
-the goal. Where the marks cannot be read it says the read state is unknown, and calls no
-hunk unread.
+narrows the review of that range to the hunks no read mark covers. A mark belongs to a hunk's
+content, context lines included, so a hunk you read and then edited is unread again. At a
+terminal the viewer opens on just those hunks; printed, it is the usual report, filtered, under
+every `-o`: `-o name` prints one `path:start-end` per unread hunk, and `-o json` is the same
+document with an `unread` record saying how many of how many were kept. It exits 0 whatever it
+finds: a push held up by a read count would make the count the goal. Where the marks cannot be
+read it says the read state is unknown, on stderr and as `"read_state": "unknown"`, and calls
+no hunk unread.
 
-`magus diff --print-hook` prints a `pre-push` script that runs the same listing on each
-range you push, writes it to stderr, and exits 0. Save it as `.git/hooks/pre-push` and make it
-executable if you want it. magus prints the script and never installs it, because what runs
-inside your repository is your decision.
+The push itself asks the same question without doing the work. The `pre-push` hook magus
+installs hands off to the `check-drift` job, and that job adds one line counting the unread
+hunks of the range being pushed; see [the drift
+notice](../guides/integrations/git.md#the-drift-notice). Nothing blocks the push.
 
-## Handing the change to your own model
-
-```sh
-magus diff --prompt
-```
-
-prints a review prompt to paste into whichever model you use. `--prompt --impact` adds the
-rationale behind each instruction, for a reader deciding whether to trust it.
-
-magus assembles it and stops. Nothing calls a model, holds a key, or sends anything anywhere:
-the clipboard is the airgap, and it is what keeps the review something you wrote. The prompt asks
-for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
-because generated text is the wrong thing to put in front of the colleague who asked.
+## The report
 
 It reads the working tree by default, and a patch file when you hand it one. Against a patch
 with a single changed file:
 
-<!-- example:diff-prompt -->
-
-```console
-$ magus diff --prompt --patch change.patch
-# Review this change
-
-Find what is worth commenting on. I will write the actual review comments myself, so
-give me findings - file, line, what is wrong - and flag the ones you are unsure of.
-Do not draft review prose or a summary I could paste.
-
-## What this is
-
-- compared against: change.patch
-- 1 changed file(s)
-- projects edited directly: .
-
-## Read in this order
-
-magus ranked these by what they can break, consequence first.
-
-- `main.go` - source; in .
-
-## Conformance
-
-Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.
-
-- not checked: `.` (no symbol indexer)
-
-## What magus could not measure
-
-Do not read any of these as evidence that there is nothing there.
-
-- no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)
-
-## Use what is already installed
-
-Load these rather than inferring from the diff alone:
-
-- `magus-query` - what references what, without guessing from a text search
-- `magus-architecture-review` - where code belongs, grounded in the graph
-
-Follow the conventions this workspace documents over generic ones.
-Before reporting a finding, look for the test that PINS the behavior you are about
-to call a bug. If you cannot find where a claim is verified, say it is unverified.
-```
+<!-- example:diff-report -->
 
 <!-- /example -->
 
-What it carries is the part no model can work out from a diff: the reading order magus ranked,
-which projects rebuild as a result, what could NOT be measured, and which other branches are
-changing the same files. What it does NOT carry is the durable half of a review briefing: it
-names the magus skills you already have rather than pasting copies of them, because a copy drifts
-from the installed one and spends your context on text your tools already loaded.
+Each thread on the pull request is named beside the hunk it sits on, as `thread <id>`, and
+`-o json` carries the same ids under each file's `threads`.
 
 ### One thread
 
@@ -454,26 +397,27 @@ from the installed one and spends your context on text your tools already loaded
 magus diff --thread 2193847561
 ```
 
-prints a brief for your model on one thread on the review. The id is the thread id, the id of
-its first comment, or any reply's. It prints the exchange oldest first, the hunk it is about (the host's copy when the
-comment is outdated), and what the symbol index knows about the symbols changed in that
-hunk: how many files reference them, which projects they are public to, the conformance
-findings, the coverage and the callers that cross a boundary. It adds the notes anchored to
-the file and one line on the change as a whole.
+narrows the review to one thread, the way a path narrows it to one file. The id is the thread
+id, the id of its first comment, or any reply's; the report above is where you find it. At a
+terminal the viewer opens on the thread's hunk. Printed, with `--no-tui` or into a pipe, it is
+the conversation oldest first, the hunk it is about (the host's copy when the comment is
+outdated), and what the change there reaches: the symbols changed in that hunk with how many
+files reference them, which projects they are public to and the callers that cross a boundary,
+the coverage, the conformance findings, the notes anchored to the file, and one line on the
+change as a whole. Whatever could not be measured is listed, so an empty answer is never read
+as a clean one. The comments are quoted as other people's words.
 
-The brief asks for findings and says the reply is yours to type. The comments in it are marked
-as other people's words, so a model reading it does not take them for instructions. magus
-sends the brief nowhere; carrying it to a model is your act. The console's
-`GET /api/v1/diff/thread?id=` route and the diff MCP tool's `state` op with
-`projection: "thread"` return the same text.
+`-o json` carries the same record. The console's `GET /api/v1/diff/thread?id=` route and the
+diff MCP tool's read-only `thread` op return it too.
 
 ### An outline from an agent
 
 An agent pairing over MCP can leave an outline beside a thread, with the diff tool's
 `outline` op: at most five topics of 60 characters, one line each. The console shows it
 beside the thread. It cannot be copied or pasted into the reply box, and it is held in
-memory for the session, never saved. A longer topic is refused with a message that you type
-the reply. The outline is something to think with while you write.
+memory for the session, never saved, and a second outline of the same thread replaces the
+first. A longer topic is refused with a message that you type the reply. The outline is
+something to think with while you write.
 
 ## What magus does not do
 
@@ -504,7 +448,7 @@ the reply. The outline is something to think with while you write.
 - [Secrets](secrets.md): how the token reaches the spell without being written down.
 - [Knowledge](knowledge.md): where a captured review conversation lives afterwards.
 - [Reviewing your changes](../guides/reviewing-changes.md): the commands for the reading
-  order, the unread list and the pre-push hook.
+  order, the unread filter and one thread.
 - [ADR 0006: the person drives review](../decisions/0006-the-person-drives-review.md): why a
   person types every reply, merges, and decides when a review is done.
 - [Telemetry](telemetry.md#agents-and-review): the metrics that count review time lost to a

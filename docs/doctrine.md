@@ -141,9 +141,9 @@ the secondary user of their own build tool.
 
 The floor under the ordering rule is an absent seam: magus never calls a
 model ([Scope](scope.md#where-others-drew-it) records the missing adapter as
-deliberate). The closest feature, `magus diff --prompt`, prints the context
-magus holds for you to paste into your own model, and never a drafted
-review. Every review capability is a person's to run with no agent
+deliberate), and no CLI flag exists to feed one: every command and its output
+are for the person who typed it, and what an agent reads it reads through the
+MCP tools. Every review capability is a person's to run with no agent
 anywhere in the loop; the agent integration is additive, never load-bearing.
 The installed skills are gitignored renderings of the binary, so nothing in
 CI can drift-gate them; `magus doctor`'s agent-skills check is what observes
