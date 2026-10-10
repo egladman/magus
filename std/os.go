@@ -438,6 +438,11 @@ func runResult(ctx context.Context, name string, args []string, dir, label, cmd 
 		}
 		return types.ExecResult{}, fmt.Errorf("%s %s: exit %d", label, cmd, res.Code)
 	}
+	// A process killed by a signal has no status and wrote nothing, so the reason lives
+	// only in err; an allow_failure caller would otherwise read a bare -1.
+	if res.Code == -1 && err != nil && strings.TrimSpace(res.Stderr) == "" {
+		res.Stderr = err.Error()
+	}
 	return types.ExecResult{
 		Stdout: strings.TrimSpace(res.Stdout),
 		Stderr: strings.TrimSpace(res.Stderr),
