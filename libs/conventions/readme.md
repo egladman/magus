@@ -106,6 +106,15 @@ and a TypeScript one meet the same rules. For an `agent-instructions-template`,
 what the short form shows meets the agent-instruction rules, and what only the
 full form shows meets the reference rules and `bare-rule`.
 
+### Install
+
+Each magus release ships `proofread_<version>_<os>_<arch>_static.tar.gz` beside
+the magus archives, under the same signed `SHA256SUMS`, so `proofread` runs where
+there is neither Go nor a magus checkout. `go install` cannot fetch it, because
+this module's `go.mod` keeps a `replace` directive. The
+[verify guide](https://eli.gladman.cc/magus/guides/setup/verify/) covers the
+download and both checks.
+
 ### Decisions
 
 Proofread speaks the decisions of a magus guard rule. Each rule ships a default

@@ -1,7 +1,7 @@
 ---
 title: Verify a release
 description: Verify a magus release against its Ed25519-signed SHA256SUMS manifest, by hand on first install or with the built-in verifier afterwards.
-tags: [verify, signature, ed25519, sha256, openssl, release, security]
+tags: [verify, signature, ed25519, sha256, openssl, release, security, proofread]
 aliases: [setup/verify]
 ---
 
@@ -58,6 +58,46 @@ tarball directly:
 <tr><td><code>magus-&lt;os&gt;-&lt;arch&gt;.tar.gz</code>: the artifact you downloaded</td><td></td></tr>
 </table>
 </figure>
+
+## Install proofread
+
+proofread, the [writing checker](../../reference/proofread/index.md) magus runs over pull
+request text and Markdown, ships in every release as its own static archive per platform,
+listed in the same `SHA256SUMS`. It needs no Go toolchain and no magus checkout.
+
+1. Download the archive for your platform with the manifest and its signature. `OS` is
+   `linux`, `darwin` or `windows`; `ARCH` is `amd64` or `arm64`.
+
+   ```sh
+   VERSION=__MAGUS_VERSION__
+   OS=linux
+   ARCH=amd64
+   ASSET="proofread_${VERSION}_${OS}_${ARCH}_static.tar.gz"
+   BASE="https://github.com/egladman/magus/releases/download/${VERSION}"
+   curl -fL -O "${BASE}/${ASSET}" -O "${BASE}/SHA256SUMS" -O "${BASE}/SHA256SUMS.sig"
+   ```
+
+2. Verify the signature, then the hash, exactly as for magus above:
+
+   ```sh
+   openssl pkeyutl -verify -pubin -inkey magus-release.pem \
+     -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
+   sha256sum --ignore-missing -c SHA256SUMS
+   ```
+
+3. Extract the binary onto your `PATH` (`proofread.exe` on Windows):
+
+   ```sh
+   tar -xzf "${ASSET}" proofread
+   mv proofread ~/.local/bin/
+   ```
+
+Judge a pull request description, its title on the first line, with
+`proofread change-description < pr.md`. `proofread rules` prints every rule as JSON, and
+`proofread explain blame` prints what one rule catches and why.
+
+`magus self update` never installs proofread: it asks for the archive named for magus and
+extracts only the `magus` binary.
 
 ## Release signing key (Ed25519)
 
