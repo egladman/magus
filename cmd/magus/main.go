@@ -1501,6 +1501,15 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
+// rationaleArgs returns err's rationale as an [attr.Why] log argument, or none when err
+// carries no rationale.
+func rationaleArgs(err error) []any {
+	if why := types.DiagnosticRationale(err); why != "" {
+		return []any{attr.Why(why)}
+	}
+	return nil
+}
+
 // mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
 func mapExitCode(err error) int {
 	if err == nil {
@@ -1516,7 +1525,7 @@ func mapExitCode(err error) int {
 	// A misuse of the command line exits 2, not 1: the work was never attempted.
 	var usage errUsage
 	if errors.As(err, &usage) {
-		slog.Error(err.Error())
+		slog.Error(err.Error(), rationaleArgs(err)...)
 		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
@@ -1531,7 +1540,7 @@ func mapExitCode(err error) int {
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
-	slog.Error(err.Error())
+	slog.Error(err.Error(), rationaleArgs(err)...)
 	// A failure that names its own status keeps it, the same question internal/proc's
 	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
 	// busy machine and not a broken build: a contended no-wait workspace lock, and a

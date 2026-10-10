@@ -61,7 +61,7 @@ lint.
 
 ### The invocation resolves one audience
 
-_Proposed._ Each invocation resolves `human` or `agent` once, from the first signal that
+_Done._ Each invocation resolves `human` or `agent` once, from the first signal that
 answers:
 
 1. `log.audience`, set in magus.yaml, as `--log-audience`, or as `MAGUS_LOG_AUDIENCE`,
@@ -75,13 +75,13 @@ answers:
 
 ### One handler renders for the audience
 
-_Proposed._ `audience.Wrap` wraps whichever handler `verbosity.go` installs, so each
+_Done._ `audience.Wrap` wraps whichever handler `verbosity.go` installs, so each
 policy lives in one place instead of at two hundred call sites:
 
 | policy       | human                                  | agent                                         |
 | ------------ | -------------------------------------- | --------------------------------------------- |
 | `why`        | a dim second line                      | kept in the run log, reached through the ref  |
-| waits        | from the first beat, as a live line on a terminal | silent until a minute, then at each doubling |
+| waits        | from the first beat, then at each doubling | silent until a minute, then at each doubling |
 | repeats      | folded into one footer line with a count | the same                                    |
 | decoration   | color and glyphs                       | none                                          |
 | component    | a leading `name: `                     | the same                                      |
@@ -100,10 +100,11 @@ is the signal.
   count.
 - _In progress._ slog messages carry a `component` attribute instead of a `name: `
   prefix.
-- _Done, to revise._ Lock and upstream waits are silent for the first minute for every
-  reader. Under this decision that becomes the agent policy only.
-- _Done, to revise._ MGS3035, MGS4007 and MGS7003 lost their reasons for every reader.
-  Under this decision the reasons return as `why`.
+- _Done._ Lock and upstream waits log at their own cadence, each note carrying
+  `attr.Elapsed`; only the agent display holds back the notes under a minute.
+- _Done._ MGS3035, MGS4007 and MGS7003 keep their short verdicts and carry their reasons
+  as `why`: dim under the cause for a person, a `why` field in `-o json`, and in the run
+  log for an agent.
 
 ## Not built
 

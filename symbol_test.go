@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
@@ -1017,6 +1018,7 @@ func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
 		"fix it, then `magus graph build`\n  see: "+types.CodeURL(types.SymbolIndexNotCurrent), err.Error())
+	assert.Equal(t, conformanceSkippedWhy, types.DiagnosticRationale(err), "with cache writes on, the why is the skipped checks alone")
 }
 
 // Another magus holding the project's lock refuses the refresh at once; the review says so,
@@ -1044,6 +1046,10 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "cache writes are off")
+	why := types.DiagnosticRationale(err)
+	assert.Contains(t, why, conformanceSkippedWhy)
+	assert.Contains(t, why, "publishes nothing without a signing key", "the reason enabling writes is safe rides as the why")
+	assert.NotContains(t, err.Error(), "signing key", "and stays out of the verdict")
 }
 
 // A missing scip-buzz must not cost the root project its review: while the Go index's
@@ -1085,6 +1091,16 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	assert.Equal(t, types.Diagnostic{Code: "MGS7003", Message: "stale", URL: d.URL}, d)
 	assert.NotEmpty(t, d.URL)
 	assert.Equal(t, types.Diagnostic{Message: "plain"}, toDiagnostic(errors.New("plain")))
+
+	reasoned := toDiagnostic(fmt.Errorf("diff: %w",
+		types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithWhy(conformanceSkippedWhy)))
+	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
+	encoded, err := json.Marshal(reasoned)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"why":"`+conformanceSkippedWhy+`"`)
+	encoded, err = json.Marshal(d)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
 }
 
 // The index lives in the cache dir, where no replay restores it, so an entry for sources

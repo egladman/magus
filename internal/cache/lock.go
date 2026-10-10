@@ -35,11 +35,6 @@ func newKeyedLock() *keyedLock { return &keyedLock{} }
 // A var, not a const, for the reason stated above about lock.go's wait timings.
 var lockWaitHeartbeat = 15 * time.Second
 
-// waitFirstNotice is how long a lock or upstream wait stays silent before it tells the
-// reader; the notice then repeats at each doubling of the elapsed time. Shorter waits are
-// routine contention between steps, and the reader can do nothing about them.
-var waitFirstNotice = time.Minute
-
 // acquireNamed takes the lock for key on waiter's behalf, recording waiter as the holder
 // so the next caller can name what it is waiting for. Returns an unlock func (call
 // exactly once on nil error) or ctx.Err() if cancelled while waiting.
@@ -101,14 +96,20 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 	default:
 	}
 
+	// Past here this caller is queued behind somebody. Report it once, by name. Every
+	// notice carries its elapsed time: an agent's display holds back the short ones.
+	holder := k.currentHolder(key)
 	if onBlock != nil {
-		done := onBlock(k.currentHolder(key))
+		done := onBlock(holder)
 		defer done()
 	}
+	log := slog.With(attr.Component("magus"))
+	log.InfoContext(ctx, fmt.Sprintf("%s is waiting for a cache lock held by %s",
+		displayLockParty(waiter), displayLockParty(holder)), attr.Elapsed(0))
 	beat := time.NewTicker(lockWaitHeartbeat)
 	defer beat.Stop()
 	started := time.Now()
-	next := waitFirstNotice
+	next := lockWaitHeartbeat
 	for {
 		select {
 		case e.sem <- struct{}{}:
@@ -120,8 +121,9 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 			ProgressFromContext(ctx).Beat()
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf("%s is waiting for a cache lock held by %s (%s so far)",
-					displayLockParty(waiter), displayLockParty(k.currentHolder(key)), elapsed.Round(time.Second)))
+				log.InfoContext(ctx, fmt.Sprintf("%s is still waiting for a cache lock held by %s (%s so far)",
+					displayLockParty(waiter), displayLockParty(k.currentHolder(key)), elapsed.Round(time.Second)),
+					attr.Elapsed(elapsed))
 			}
 		case <-ctx.Done():
 			abandon()

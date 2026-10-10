@@ -1350,7 +1350,8 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 		default:
 			return toolReading{}, types.DiagnosticErrorf(types.ToolUnprobeable,
 				"%s:%s reports no version in %s: %v; fix the tool or its probe",
-				s.Name(), tool, dir, err)
+				s.Name(), tool, dir, err).
+				WithWhy("No cache key could tell the tool's upgrades apart.")
 		}
 	}
 	token, note := spells.VersionToken(probed, t.Key)

@@ -11,7 +11,9 @@ import (
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/log/audience"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -241,6 +243,94 @@ func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
 
 	slog.New(h).With("k", "v").Info("cache.miss", "label", "api", "duration", time.Second)
 	assert.Equal(t, 1, h.status.passed, "the derived handler counts into the original's status line")
+}
+
+// A record's why is its own line under the message, never part of the attr dump; the
+// text and JSON handlers keep it as an ordinary attribute.
+func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
+	const why = "The conformance checks read the symbol index, so they did not run."
+	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "symbol index not current", 0)
+	rec.AddAttrs(attr.Component("magus"), attr.Why(why), slog.String("key", "val"))
+
+	var plain bytes.Buffer
+	require.NoError(t, newTestHandler(&plain).Handle(context.Background(), rec))
+	assert.Equal(t, "[warn] magus: symbol index not current key=val\n       "+why+"\n", plain.String())
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
+	var term ttyBuf
+	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
+	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+
+	var text bytes.Buffer
+	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
+	assert.Contains(t, text.String(), `why="`+why+`"`)
+}
+
+// failureWithReason is the cache.error record of a step that failed with a diagnostic
+// carrying a why.
+func failureWithReason() slog.Record {
+	r := slog.NewRecord(time.Now(), slog.LevelError, "cache.error", 0)
+	r.AddAttrs(
+		slog.String("project", "web"),
+		slog.String("target", "fmt"),
+		slog.Int64("duration", int64(time.Second)),
+		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)"),
+		attr.Why("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."),
+		slog.String("ref", "outbadcafe"),
+	)
+	return r
+}
+
+// One failure, two readers: a person reads the reason dim under the cause; an agent gets
+// the verdict and the ref, and the reason only when it asks with -v.
+func TestPrettyHandlerFailureWhyByAudience(t *testing.T) {
+	render := func(a audience.Audience, verbose bool) string {
+		var buf bytes.Buffer
+		require.NoError(t, audience.Wrap(newTestHandler(&buf), a, verbose).Handle(context.Background(), failureWithReason()))
+		return buf.String()
+	}
+	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
+	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)\n"
+
+	human := render(audience.Human, false)
+	assert.Contains(t, human, cause+"       "+why+"\n  output: outbadcafe\n")
+
+	agent := render(audience.Agent, false)
+	assert.Contains(t, agent, cause+"  output: outbadcafe\n")
+	assert.NotContains(t, agent, why)
+
+	assert.Contains(t, render(audience.Agent, true), cause+"       "+why+"\n", "-v is the agent asking for the reason")
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
+	var term ttyBuf
+	require.NoError(t, audience.Wrap(newTerminalHandler(&term), audience.Human, false).Handle(context.Background(), failureWithReason()))
+	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+}
+
+// A wait note reaches a person from the first beat; an agent hears of it only past a
+// minute. The lock and upstream waits stamp every note with attr.Elapsed for this filter.
+func TestPrettyHandlerWaitByAudience(t *testing.T) {
+	wait := func(elapsed time.Duration) slog.Record {
+		r := slog.NewRecord(time.Now(), slog.LevelInfo,
+			fmt.Sprintf(". coverage-badge is still waiting for a cache lock held by . generate (%s so far)", elapsed), 0)
+		r.AddAttrs(attr.Component("magus"), attr.Elapsed(elapsed))
+		return r
+	}
+	render := func(a audience.Audience) string {
+		var buf bytes.Buffer
+		h := audience.Wrap(newTestHandler(&buf), a, false)
+		require.NoError(t, h.Handle(context.Background(), wait(30*time.Second)))
+		require.NoError(t, h.Handle(context.Background(), wait(90*time.Second)))
+		return buf.String()
+	}
+	const (
+		short = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (30s so far)\n"
+		long  = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (1m30s so far)\n"
+	)
+	assert.Equal(t, short+long, render(audience.Human), "a person sees both, with no elapsed= dump")
+	assert.Equal(t, long, render(audience.Agent), "an agent sees only the wait past a minute")
 }
 
 // TestPrettyHandlerGenericLevels verifies the level-to-tag mapping for generic records.

@@ -1492,7 +1492,7 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 	case !indexed && len(m.symbolCapableIn(touched)) > 0:
 		d := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 			"no symbol index loaded for %s; run `magus graph build`",
-			strings.Join(m.symbolCapableIn(touched), ", ")))
+			strings.Join(m.symbolCapableIn(touched), ", ")).WithWhy(conformanceSkippedWhy))
 		out.ConformanceError = &d
 	case indexed:
 		m.conformance(ctx, &out, byPath, graph, cfg, in, patchErr)

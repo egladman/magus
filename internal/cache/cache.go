@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -803,19 +804,21 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
-			slog.String("project", s.ProjectPath),
-			slog.String("label", s.Label),
-			slog.String("target", reproTarget(s)),
-			slog.Int64("duration", int64(result.Duration)),
-			// The concise cause: this record already carries project and target as their
-			// own attrs, and the pretty handler prints both in the heading directly above
-			// the cause line.
-			slog.String("error", types.CauseText(err)),
-			slog.String("ref", ref),
-			// The captured log's path on disk, carried so the pretty handler can make the
-			// ref a real hyperlink without resolving anything: a file:// link needs no
-			// server running, so it cannot be dead.
-			slog.String("log", lp),
+			withWhy(err,
+				slog.String("project", s.ProjectPath),
+				slog.String("label", s.Label),
+				slog.String("target", reproTarget(s)),
+				slog.Int64("duration", int64(result.Duration)),
+				// The concise cause: this record already carries project and target as their
+				// own attrs, and the pretty handler prints both in the heading directly above
+				// the cause line.
+				slog.String("error", types.CauseText(err)),
+				slog.String("ref", ref),
+				// The captured log's path on disk, carried so the pretty handler can make the
+				// ref a real hyperlink without resolving anything: a file:// link needs no
+				// server running, so it cannot be dead.
+				slog.String("log", lp),
+			)...,
 		)
 		if rc.onError != nil {
 			rc.onError(err)
@@ -1136,13 +1139,28 @@ func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error
 	c.errs.Add(1)
 	c.log.ErrorContext(ctx,
 		"cache.error",
-		slog.String("project", s.ProjectPath),
-		slog.String("label", s.Label),
-		slog.String("target", reproTarget(s)),
-		slog.String("error", types.CauseText(err)),
-		slog.Bool("refused", true),
+		withWhy(err,
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.String("error", types.CauseText(err)),
+			slog.Bool("refused", true),
+		)...,
 	)
 	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+}
+
+// withWhy returns attrs as log arguments, followed by err's rationale as [attr.Why] when
+// err carries one.
+func withWhy(err error, attrs ...slog.Attr) []any {
+	args := make([]any, 0, len(attrs)+1)
+	for _, a := range attrs {
+		args = append(args, a)
+	}
+	if why := types.DiagnosticRationale(err); why != "" {
+		args = append(args, attr.Why(why))
+	}
+	return args
 }
 
 // admit takes the in-process seats a step needs before it executes and puts it on the

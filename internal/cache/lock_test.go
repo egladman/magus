@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // recordingHandler collects the log records a wait emits, so a test can assert on what a
@@ -60,6 +62,8 @@ func (w recordingWith) WithAttrs(attrs []slog.Attr) slog.Handler {
 func (w recordingWith) WithGroup(string) slog.Handler { return w }
 
 // lines renders each record as "message key=value ..." for a plain contains assertion.
+// It leaves out the elapsed attribute, whose value is the scheduler's; [recordingHandler.waits]
+// reads it instead.
 func (h *recordingHandler) lines() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -67,10 +71,31 @@ func (h *recordingHandler) lines() []string {
 	for _, r := range h.records {
 		line := r.Message
 		r.Attrs(func(a slog.Attr) bool {
-			line += " " + a.Key + "=" + a.Value.String()
+			if a.Key != attr.ElapsedKey {
+				line += " " + a.Key + "=" + a.Value.String()
+			}
 			return true
 		})
 		out = append(out, line)
+	}
+	return out
+}
+
+// waits returns each record's elapsed attribute, and -1 for a record without one as a
+// duration.
+func (h *recordingHandler) waits() []time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]time.Duration, 0, len(h.records))
+	for _, r := range h.records {
+		d := time.Duration(-1)
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == attr.ElapsedKey && a.Value.Kind() == slog.KindDuration {
+				d = a.Value.Duration()
+			}
+			return true
+		})
+		out = append(out, d)
 	}
 	return out
 }
@@ -86,18 +111,13 @@ func captureLogs(t *testing.T) *recordingHandler {
 	return h
 }
 
-// withShortHeartbeat shrinks both wait cadences and the first notice for one test, for
-// the reason the production comment gives: a beat nobody spends is a beat nobody covers.
+// withShortHeartbeat shrinks both wait cadences for one test, for the reason the
+// production comment gives: a beat nobody spends is a beat nobody covers.
 func withShortHeartbeat(t *testing.T, d time.Duration) {
 	t.Helper()
-	withWaitTimings(t, d, d)
-}
-
-func withWaitTimings(t *testing.T, beat, firstNotice time.Duration) {
-	t.Helper()
-	prevLock, prevUp, prevNotice := lockWaitHeartbeat, upstreamWaitHeartbeat, waitFirstNotice
-	lockWaitHeartbeat, upstreamWaitHeartbeat, waitFirstNotice = beat, beat, firstNotice
-	t.Cleanup(func() { lockWaitHeartbeat, upstreamWaitHeartbeat, waitFirstNotice = prevLock, prevUp, prevNotice })
+	prevLock, prevUp := lockWaitHeartbeat, upstreamWaitHeartbeat
+	lockWaitHeartbeat, upstreamWaitHeartbeat = d, d
+	t.Cleanup(func() { lockWaitHeartbeat, upstreamWaitHeartbeat = prevLock, prevUp })
 }
 
 func TestKeyedLockWaitBeatsAndNamesTheHolder(t *testing.T) {
@@ -133,40 +153,19 @@ func TestKeyedLockWaitBeatsAndNamesTheHolder(t *testing.T) {
 	<-done
 
 	assert.Equal(t, ". generate", blockedOn, "the mark names the holder, not just the key")
-	assert.Contains(t, logs.lines(),
-		". coverage-badge is waiting for a cache lock held by . generate (0s so far) component=magus")
-	assert.NotContains(t, logs.lines(),
-		". coverage-badge is waiting for a cache lock held by . generate component=magus",
-		"the moment of queueing is not news; only a wait past the first notice is")
-}
-
-// A wait shorter than the first notice says nothing, yet keeps beating: silence to the
-// reader must not become silence to the watchdog.
-func TestKeyedLockShortWaitBeatsWithoutANotice(t *testing.T) {
-	withWaitTimings(t, 20*time.Millisecond, time.Hour)
-	logs := captureLogs(t)
-
-	k := newKeyedLock()
-	unlock, err := k.acquireNamed(context.Background(), "hash1", ". generate", nil)
-	require.NoError(t, err)
-
-	prog := NewProgress()
-	prog.at.Store(time.Now().Add(-time.Hour).UnixNano())
-	ctx := ContextWithProgress(context.Background(), prog)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		second, err := k.acquireNamed(ctx, "hash1", ". coverage-badge", nil)
-		assert.NoError(t, err)
-		second()
-	}()
-	time.Sleep(80 * time.Millisecond)
-	assert.Less(t, prog.Idle(), time.Minute, "the beat keeps its own cadence while the notice waits")
-	unlock()
-	<-done
-
-	assert.Empty(t, logs.lines(), "a wait under the first notice has nothing to report")
+	lines := logs.lines()
+	require.NotEmpty(t, lines)
+	assert.Equal(t, ". coverage-badge is waiting for a cache lock held by . generate component=magus", lines[0],
+		"a person at a terminal hears about the queue the moment it forms")
+	assert.Contains(t, lines,
+		". coverage-badge is still waiting for a cache lock held by . generate (0s so far) component=magus")
+	// Every notice is stamped with how long the wait has run, the one fact an agent's
+	// display needs to hold the short ones back.
+	waits := logs.waits()
+	assert.Equal(t, time.Duration(0), waits[0], "the queueing notice is a wait of zero")
+	for i, d := range waits {
+		assert.GreaterOrEqual(t, d, time.Duration(0), "record %d carries no elapsed duration", i)
+	}
 }
 
 func TestKeyedLockUncontendedNeitherBeatsNorLogs(t *testing.T) {

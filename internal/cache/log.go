@@ -749,6 +749,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			target:  recordStr(r, "target"),
 			dur:     dur,
 			cause:   recordStr(r, "error"),
+			why:     recordStr(r, attr.WhyKey),
 			ref:     ref,
 			logPath: recordStr(r, "log"),
 			refused: recordBool(r, "refused"),
@@ -923,15 +924,39 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 		msg = c + ": " + msg
 	}
 	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
+	// Under the message, past the glyph and its space.
+	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordStr(r, attr.WhyKey))
+}
+
+// causeIndent starts a line that continues a failure's cause.
+const causeIndent = "       "
+
+// printWhy prints a record's [attr.Why] dim under the line it explains, each of its lines
+// at indent. An empty why prints nothing.
+func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
+	if why == "" {
+		return
+	}
+	for line := range strings.SplitSeq(why, "\n") {
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s%s\n", indent, line)
+	}
 }
 
 // formatAttrs renders a record's attrs as " key=value" pairs, skipping the
-// component (handleGeneric prints it ahead of the message) and the noisy "dir"
-// correlation attr unless the record is at debug level or below.
+// component (handleGeneric prints it ahead of the message), the why (printed on its own
+// line under it), the elapsed time (a wait's message already states it) and the noisy
+// "dir" correlation attr unless the record is at debug level or below.
 func formatAttrs(r slog.Record) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == attr.ComponentKey || (a.Key == "dir" && r.Level > slog.LevelDebug) {
+		switch a.Key {
+		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey:
+			return true
+		}
+		if a.Key == "dir" && r.Level > slog.LevelDebug {
 			return true
 		}
 		_, _ = fmt.Fprintf(&b, " %s=%s", a.Key, a.Value.String())
@@ -963,6 +988,8 @@ type failureReport struct {
 	target  string
 	dur     time.Duration
 	cause   string
+	// why is the cause's rationale, printed dim under it.
+	why     string
 	ref     string
 	logPath string
 	// refused is a step that never started, so "(ran, 0s)" would be false.
@@ -1043,9 +1070,10 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		h.printf("  cause: %s\n", causes[0])
 		// One line per independent failure; flattened, two read as one sentence.
 		for _, c := range causes[1:] {
-			h.printf("       %s\n", c)
+			h.printf("%s%s\n", causeIndent, c)
 		}
 	}
+	h.printWhy(colorize, causeIndent, f.why)
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
 		// The inspect hint prints EVERYWHERE, CI included. It used to be

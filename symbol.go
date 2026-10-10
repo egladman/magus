@@ -690,7 +690,8 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 		}
 		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
 			"symbol index not current for %s: the cache would not open; make the cache directory writable, then rerun",
-			strings.Join(projects, ", "))
+			strings.Join(projects, ", ")).
+			WithWhy(conformanceSkippedWhy + " The cache records whether an index is current, so without it nothing can vouch for the index.")
 	}
 	// The step each probe keyed, so a rebuild inside a run is keyed exactly as the probe
 	// after it reads it back.
@@ -783,6 +784,7 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	}
 	var problems []string
 	var built []projectIndex
+	writesOff := false
 	for _, idx := range stale {
 		if err := build(idx); err != nil {
 			problems = append(problems, types.InlineDiagnostic(symbolRunError(idx.projectRef(), idx.language, err)))
@@ -799,6 +801,7 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 			why := "the cache recorded no run for the index it wrote"
 			if !writable {
 				why = "cache writes are off (cache.write.enabled: false); enable them for this run"
+				writesOff = true
 			}
 			problems = append(problems, idx.projectRef().Display()+": "+why)
 		}
@@ -810,9 +813,18 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	if len(problems) > 1 {
 		fix = "fix each"
 	}
+	why := conformanceSkippedWhy
+	if writesOff {
+		why += " With cache writes off the cache records no run to vouch for the index it wrote;" +
+			" enabling them for this run publishes nothing without a signing key."
+	}
 	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix)
+		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix).
+		WithWhy(why)
 }
+
+// conformanceSkippedWhy is the rationale every MGS7003 carries.
+const conformanceSkippedWhy = "The conformance checks read the symbol index, so they did not run."
 
 // uncoveredProjects names each project with a changed file, other than a declared output, that
 // has no symbol indexer: the conformance checks cannot see it, so their silence says nothing
@@ -830,14 +842,14 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 }
 
 // toDiagnostic is err as a Diagnostic: its MGS code, message and docs link when err carries a
-// code, and the bare message otherwise.
+// code, and the bare message otherwise. Its Why is the chain's rationale either way.
 func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()
-		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"]}
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Why: types.DiagnosticRationale(err)}
 	}
-	return types.Diagnostic{Message: err.Error()}
+	return types.Diagnostic{Message: err.Error(), Why: types.DiagnosticRationale(err)}
 }
 
 // symbolRunError wraps a failed scip run with the project (by its display name, so the
