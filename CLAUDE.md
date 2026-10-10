@@ -17,7 +17,9 @@ diagnostic tells you. When a tool starts saying something, delete it here.
   until it does the hooks run whatever `magus` is on PATH, which may not load this
   tree; `hack/policy/guard.buzz` does not run at all then. Bootstrap before
   relying on the guard: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`
-  runs the real target (the magus cache cannot key it; Go's cache stays on).
+  runs the real target (the magus cache cannot key it; Go's cache stays on). Then
+  `./magus run install /` installs every project's dependencies (node_modules
+  included), which a fresh worktree also lacks.
 - Never keep running a renamed `./magus`. The hooks find the binary by that name,
   so a rename hands every session in the checkout to the PATH binary, and the guard
   recognizes magus by basename, so the renamed one escapes every magus rule.
