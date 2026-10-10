@@ -14,7 +14,13 @@ import (
 func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
-		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
+		"asciistrings": map[string]any{"files": []any{"types/*.go"}},
+		"diagmsg": map[string]any{
+			"max-runes": 160, "prefixes": []any{"magus workspace:"},
+			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},
+			"fields": []any{map[string]any{"type": "a.Verdict", "field": "Deny"}},
+			"allow":  []any{map[string]any{"file": "cmd/app/main.go", "rule": "message-length", "reason": "staged"}},
+		},
 		"fieldwise":     map[string]any{"report-partial": true},
 		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},

@@ -117,6 +117,7 @@ linters:
     - testisolation
     - providerio
     - fieldwise
+    - diagmsg
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -245,6 +246,91 @@ linters:
           files: [cmd/magus/shell.go]
           prefix: "magus workspace:"
           hint: the guard is internal/guard, and `magus session ls` replays its rules
+
+      # A message magus prints is a verdict, one next command and a ref for the
+      # rationale. The sites below build one; a rationale field beside a verdict
+      # (ShellVerdict's Why) is left out on purpose and never judged.
+      diagmsg:
+        type: module
+        description: judges the messages magus prints by the prose message rules
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          max-runes: 160
+          calls:
+            - {func: github.com/egladman/magus/types.DiagnosticErrorf, arg: 1, format: true}
+            - {func: github.com/egladman/magus/types.WrapDiagnostic, arg: 2, format: true}
+            - {func: github.com/egladman/magus/types.FormatDiagnostic, arg: 1}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Errorf", arg: 1, format: true}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Wrapf", arg: 2, format: true}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Format", arg: 1}
+            - {func: github.com/egladman/magus/internal/hint.breadcrumb, arg: 2}
+          fields:
+            - {type: github.com/egladman/magus/internal/hint.Next, field: Why}
+            - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Deny}
+            - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
+            - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
+          prefixes: ["magus workspace:"]
+          hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
+          # A RATCHET: every file holding a finding on 2026-10-09 (173 findings in 54
+          # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
+          # message-commands), exempt until the terse-output rewrites land. Delete an
+          # entry once its file is clean; never add one.
+          allow:
+            - {file: cmd/magus/gate_redundancy.go, reason: staged}
+            - {file: cmd/magus/spell.go, reason: staged}
+            - {file: cmd/magus/stale_index.go, reason: staged}
+            - {file: describe.go, reason: staged}
+            - {file: internal/auth/share.go, reason: staged}
+            - {file: internal/auth/store.go, reason: staged}
+            - {file: internal/auth/token.go, reason: staged}
+            - {file: internal/cache/deadlock.go, reason: staged}
+            - {file: internal/cache/machine_gate.go, reason: staged}
+            - {file: internal/cache/mutation.go, reason: staged}
+            - {file: internal/cache/order.go, reason: staged}
+            - {file: internal/guard/bootstrap.go, reason: staged}
+            - {file: internal/guard/brief.go, reason: staged}
+            - {file: internal/guard/claim.go, reason: staged}
+            - {file: internal/guard/dir.go, reason: staged}
+            - {file: internal/guard/drift.go, reason: staged}
+            - {file: internal/guard/focus.go, reason: staged}
+            - {file: internal/guard/guard.go, reason: staged}
+            - {file: internal/guard/lease.go, reason: staged}
+            - {file: internal/guard/magus_timeout.go, reason: staged}
+            - {file: internal/guard/read.go, reason: staged}
+            - {file: internal/guard/search.go, reason: staged}
+            - {file: internal/guard/shell.go, reason: staged}
+            - {file: internal/guard/vcs.go, reason: staged}
+            - {file: internal/guard/wiring.go, reason: staged}
+            - {file: internal/guard/workspace_rule.go, reason: staged}
+            - {file: internal/guard/worktree.go, reason: staged}
+            - {file: internal/guard/write.go, reason: staged}
+            - {file: internal/handler/token/service.go, reason: staged}
+            - {file: internal/hint/schema.go, reason: staged}
+            - {file: internal/interp/bindings/buzz.go, reason: staged}
+            - {file: internal/interp/bindings/guard.go, reason: staged}
+            - {file: internal/interp/bindings/guard_rule.go, reason: staged}
+            - {file: internal/interp/bindings/imports.go, reason: staged}
+            - {file: internal/interp/bindings/skills.go, reason: staged}
+            - {file: internal/interp/runtime.go, reason: staged}
+            - {file: internal/interp/transform/transform.go, reason: staged}
+            - {file: internal/job/checkout.go, reason: staged}
+            - {file: internal/job/claim.go, reason: staged}
+            - {file: internal/queue/apply.go, reason: staged}
+            - {file: internal/spell/remote/imports.go, reason: staged}
+            - {file: internal/ward/shadow.go, reason: staged}
+            - {file: internal/ward/version.go, reason: staged}
+            - {file: internal/ward/ward.go, reason: staged}
+            - {file: internal/workspace/provider.go, reason: staged}
+            - {file: lock.go, reason: staged}
+            - {file: magus.go, reason: staged}
+            - {file: pipe.go, reason: staged}
+            - {file: run.go, reason: staged}
+            - {file: std/fs.go, reason: staged}
+            - {file: std/magus.go, reason: staged}
+            - {file: symbol.go, reason: staged}
+            - {file: types/secret.go, reason: staged}
+            - {file: watchdog.go, reason: staged}
 
       asciistrings:
         type: module

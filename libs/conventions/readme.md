@@ -18,6 +18,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
+| `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
