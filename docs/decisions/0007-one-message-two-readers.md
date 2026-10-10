@@ -50,9 +50,9 @@ Each producer carries the parts as fields, never as one joined string:
 | -------------------- | ------------------------- | -------------------------- |
 | `diagnostics.Error`  | `Msg`                     | `Why`, set by `WithWhy`    |
 | guard `ShellVerdict` | `Deny`, `Next`            | `Why`                      |
-| slog record          | the message               | a `logattr.Why(...)` attribute |
+| slog record          | the message               | an `attr.Why(...)` attribute |
 
-A wait or heartbeat record carries `logattr.Elapsed(d)`, which is how the handler tells
+A wait or heartbeat record carries `attr.Elapsed(d)`, which is how the handler tells
 progress from news.
 
 The `diagmsg` analyzer judges the verdict alone: a length cap, one causal clause, one
@@ -75,7 +75,7 @@ answers:
 
 ### One handler renders for the audience
 
-_Proposed._ An `audienceHandler` wraps whichever handler `verbosity.go` installs, so each
+_Proposed._ `audience.Wrap` wraps whichever handler `verbosity.go` installs, so each
 policy lives in one place instead of at two hundred call sites:
 
 | policy       | human                                  | agent                                         |
