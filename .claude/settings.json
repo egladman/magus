@@ -1,4 +1,15 @@
 {
+  "enabledPlugins": {
+    "magus@magus": true
+  },
+  "extraKnownMarketplaces": {
+    "magus": {
+      "source": {
+        "repo": "egladman/magus",
+        "source": "github"
+      }
+    }
+  },
   "hooks": {
     "PostToolUse": [
       {
