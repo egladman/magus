@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -10,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/run"
 )
 
@@ -76,6 +78,8 @@ func newStepGate() run.StepGate {
 			return run.StepActionContinue
 		}
 		for {
+			// The prompt and its key echo stay direct writes: a run is blocked on the
+			// question, so -q must not hide it.
 			argv := append([]string{name}, args...)
 			fmt.Fprintf(os.Stderr, "\n-> %s  (cwd: %s)\n", strings.Join(argv, " "), dir)
 			fmt.Fprintf(os.Stderr, "  [s]tep  [c]ontinue  s[k]ip  [r]epl  [a]bort: ")
@@ -88,13 +92,13 @@ func newStepGate() run.StepGate {
 			restoreTTY, err := tty.MakeRaw(os.Stdin.Fd())
 			if err != nil {
 				// Can't go raw: fall back to step-always so the user still sees commands.
-				fmt.Fprintln(os.Stderr, "(terminal unavailable, stepping)")
+				slog.WarnContext(ctx, "(terminal unavailable, stepping)", attr.Notice(""))
 				return run.StepActionStep
 			}
 
 			restore := func() {
 				if err := restoreTTY(); err != nil {
-					fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+					slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("magus"))
 				}
 			}
 
@@ -136,10 +140,10 @@ func newStepGate() run.StepGate {
 			if wantRepl {
 				if replFn := run.StepReplFrom(ctx); replFn != nil {
 					if err := replFn(ctx, name, args, dir); err != nil {
-						fmt.Fprintf(os.Stderr, "repl: %v\n", err)
+						slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("repl"))
 					}
 				} else {
-					fmt.Fprintln(os.Stderr, "(no REPL available outside a magusfile run)")
+					slog.WarnContext(ctx, "(no REPL available outside a magusfile run)", attr.Notice(""))
 				}
 				continue
 			}

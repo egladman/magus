@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
@@ -156,9 +156,8 @@ func (g *gateRedundancy) evaluate(ctx context.Context, disabled bool) error {
 			"not running the %s gate for branch %s: it re-verifies a gate that already passed.\n%s\n  machine pool: %s\n  override: pass --no-redundancy-check to run it here anyway\n  alternative: push; the pull request runs the identical check",
 			g.target, g.ref, g.renderFinding(finding), pool)}
 	case internalci.GateAdvise:
-		fmt.Fprintf(os.Stderr,
-			"magus: this %s gate re-verifies one that already passed; running anyway.\n%s\n  machine pool: %s\n",
-			g.target, g.renderFinding(finding), pool)
+		slog.InfoContext(ctx, fmt.Sprintf("this %s gate re-verifies one that already passed; running anyway.\n%s\n  machine pool: %s",
+			g.target, g.renderFinding(finding), pool), attr.Notice(""), attr.Component("magus"))
 	}
 	return nil
 }
@@ -229,7 +228,7 @@ func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *ty
 // its override, every changed path with its tier, and the commands that run instead.
 func renderSizing(target string, rep types.RiskReport) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "magus: %s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
+	fmt.Fprintf(&b, "%s gate sized %s against %s; override: --no-redundancy-check\n", target, rep.Tier, shortCommit(rep.Base))
 	for _, line := range rep.Lines() {
 		b.WriteString("  " + line + "\n")
 	}
@@ -244,7 +243,7 @@ func renderSizing(target string, rep types.RiskReport) string {
 				s.Op, strings.Join(s.Projects, " "), s.Target, len(s.Packages), strings.Join(s.Packages, " "))
 		}
 	}
-	return b.String()
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // renderFinding prints every input a reader needs to reconstruct the decision:

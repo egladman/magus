@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -172,7 +173,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
 	reportRemovedSkills(os.Stdout, removed, af.DryRun)
-	printAgentInstallNextSteps(af.Dir, written, changed, form, af.DryRun)
+	printAgentInstallNextSteps(ctx, af.Dir, written, changed, form, af.DryRun)
 	return nil
 }
 
@@ -212,14 +213,14 @@ func installSkillTree(base, leaf string, force, dryRun bool, form agent.Form) (w
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, changed []string, form agent.Form, dryRun bool) {
+func printAgentInstallNextSteps(ctx context.Context, dir string, written, changed []string, form agent.Form, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
 	// A rehearsal that claims it installed something stops the reader looking for
 	// the real run.
 	if dryRun {
-		interactive.Emit(os.Stderr, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
+		interactive.Hint(ctx, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
 		return
 	}
 	// What the run DID, not how many files it touched. A --force reinstall rewrites every
@@ -228,24 +229,24 @@ func printAgentInstallNextSteps(dir string, written, changed []string, form agen
 	// sees it three times stops reading it, which is the run where it finally mattered.
 	switch {
 	case len(changed) == 0:
-		interactive.Emit(os.Stderr, fmt.Sprintf("%d skill file(s) were already current; nothing changed", len(written)))
+		interactive.Hint(ctx, fmt.Sprintf("%d skill file(s) were already current; nothing changed", len(written)))
 	case len(changed) == len(written):
-		interactive.Emit(os.Stderr, fmt.Sprintf("wrote all %d skill file(s); commit them so your team and agents share them", len(written)))
+		interactive.Hint(ctx, fmt.Sprintf("wrote all %d skill file(s); commit them so your team and agents share them", len(written)))
 	default:
-		interactive.Emit(os.Stderr, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
+		interactive.Hint(ctx, fmt.Sprintf("updated %d of %d skill file(s), the rest already current; commit them so your team and agents share them: %s",
 			len(changed), len(written), strings.Join(skillNames(changed), ", ")))
 	}
-	reportContextCost(dir, written)
+	reportContextCost(ctx, dir, written)
 	if form == agent.FormBoth {
-		interactive.Emit(os.Stderr, "both installs the short body under each skill's own name plus an always-full <name>-full reference; pass --skill-form=short or --skill-form=full when one body per skill is required")
+		interactive.Hint(ctx, "both installs the short body under each skill's own name plus an always-full <name>-full reference; pass --skill-form=short or --skill-form=full when one body per skill is required")
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  "+hint.DescribeGraph.With("-o", "markdown")+"  (the skills send agents to the live verbs: "+hint.DescribeTargets.String()+", "+hint.Ls.String()+")")
-	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
-	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
-	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
-	printAgentsBlockToPaste(dir)
+	interactive.Hint(ctx, "regenerate MAGUS.md for human readers:  "+hint.DescribeGraph.With("-o", "markdown")+"  (the skills send agents to the live verbs: "+hint.DescribeTargets.String()+", "+hint.Ls.String()+")")
+	interactive.Hint(ctx, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
+	interactive.Hint(ctx, "  \""+vcsSafetyRule+"\"")
+	interactive.Hint(ctx, "starter AGENTS.md you can own and tweak (prints, never writes):  "+hint.AgentStarter.String())
+	printAgentsBlockToPaste(ctx, dir)
 }
 
 // skillNames reduces <dest>-relative SKILL.md paths to the skill names a reader
@@ -263,12 +264,12 @@ func skillNames(paths []string) []string {
 // to paste. Silent when their file already carries a current one: 80 lines of
 // Markdown on every --force reinstall is how a reader learns to scroll past this
 // command's output, including the actionable parts.
-func printAgentsBlockToPaste(dir string) {
+func printAgentsBlockToPaste(ctx context.Context, dir string) {
 	verb := "add it to AGENTS.md at your repo root"
 	// No workspace is open at this point in `agent install` (dir is an explicit CLI
 	// argument, not a discovered root), so there is no wired harness list to pass; the
 	// AGENTS.md staleness check below does not need one anyway.
-	for _, s := range agentSkills.CheckStatuses(context.Background(), dir) {
+	for _, s := range agentSkills.CheckStatuses(ctx, dir) {
 		if s.Location != agent.AgentsFile {
 			continue
 		}
@@ -277,8 +278,8 @@ func printAgentsBlockToPaste(dir string) {
 		}
 		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
 	}
-	interactive.Emit(os.Stderr, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
-	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock(declaresRoutingIndex(context.Background(), dir))+"\n")
+	interactive.Hint(ctx, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
+	slog.InfoContext(ctx, "\n"+agentSkills.AgentsBlock(declaresRoutingIndex(ctx, dir)), attr.Notice(""))
 }
 
 // declaresRoutingIndex reports whether the workspace rooted at dir declares MAGUS.md as an
@@ -348,7 +349,7 @@ func agentStarterCmd(ctx context.Context, rootOverride string) error {
 // files are installed for whatever host the reader uses. Printed at all for
 // accountability: an install that never states its own cost has no pressure on
 // it to shrink.
-func reportContextCost(dir string, written []string) {
+func reportContextCost(ctx context.Context, dir string, written []string) {
 	// Twins are counted separately, not folded in: only the primary is
 	// always-loaded, and a twin is a reference copy fetched by name when a reader
 	// needs the long form. Summing them would report the always-loaded cost as
@@ -379,7 +380,7 @@ func reportContextCost(dir string, written []string) {
 	if twins > 0 {
 		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", byteSize(twins))
 	}
-	interactive.Emit(os.Stderr, msg)
+	interactive.Hint(ctx, msg)
 }
 
 // byteSize renders a size the way a reader compares it, not the way a machine

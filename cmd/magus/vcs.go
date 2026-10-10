@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
@@ -359,7 +361,8 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		if err := res.VCS.AbortMerge(ctx, root); err != nil {
 			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
 			// caller told "nothing was touched" would go on to do something else in it.
-			fmt.Fprintf(os.Stderr, "vcs resolve: could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v\n", err)
+			slog.ErrorContext(ctx, fmt.Sprintf("could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v", err),
+				attr.Notice(""), attr.Component("vcs resolve"))
 		}
 	}, nil
 }
@@ -540,11 +543,11 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	// most commits are not merge-shaped and load nothing.
 	wsRoot, err := magus.FindRoot(root)
 	if err != nil {
-		return settleFailed(hook, vcs.HookOperation{}, settle.Outcome{}, err)
+		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
 	}
 	op, ok, err := vcs.GitHookOperation(ctx, wsRoot, vcs.HookEvent{Hook: hook, Args: args, IndexFile: hookIndexFile()})
 	if err != nil {
-		return settleFailed(hook, op, settle.Outcome{}, err)
+		return settleFailed(ctx, hook, op, settle.Outcome{}, err)
 	}
 	if !ok || len(op.Changed) == 0 {
 		return nil
@@ -553,7 +556,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 		// The pre-merge-commit stop below leads to a `git commit` whose pre-commit hook
 		// lands here again with the very tree that was just settled.
 		if settled, err := vcs.HookTreeSettled(ctx, wsRoot, op); err != nil {
-			return settleFailed(hook, op, settle.Outcome{}, err)
+			return settleFailed(ctx, hook, op, settle.Outcome{}, err)
 		} else if settled {
 			return nil
 		}
@@ -561,17 +564,17 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 
 	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
 	if err != nil {
-		return settleFailed(hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
+		return settleFailed(ctx, hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
 	}
 	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
 	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
 	if err != nil {
-		return settleFailed(hook, op, out, err)
+		return settleFailed(ctx, hook, op, out, err)
 	}
 	if len(out.Ran) == 0 {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, out.Notice(hook, settle.FoldCommand(ctx, m)))
+	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
 	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
 		return errSilent{exitCode: 1}
 	}
@@ -631,17 +634,20 @@ func hookIndexFile() string {
 // settleFailed prints what did not happen and the command that does it, then fails
 // the hook. A commit git has not made yet is stopped by that failure; one it has made
 // carries stale output, and the line says so.
-func settleFailed(hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
+func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
 	regenerate := hint.VCSResolve.With("--hook", hook)
 	if len(out.Ran) > 0 {
 		regenerate = out.Command()
 	}
-	fmt.Fprintf(os.Stderr, "magus: could not regenerate after this %s: %v\n", cmp.Or(op.Kind, "operation"), err)
+	slog.ErrorContext(ctx, fmt.Sprintf("could not regenerate after this %s: %v", cmp.Or(op.Kind, "operation"), err),
+		attr.Notice(""), attr.Component("magus"))
 	switch {
 	case op.CommitPending:
-		fmt.Fprintf(os.Stderr, "magus: the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)\n", regenerate)
+		slog.ErrorContext(ctx, fmt.Sprintf("the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)", regenerate),
+			attr.Notice(""), attr.Component("magus"))
 	case op.Kind != "":
-		fmt.Fprintf(os.Stderr, "magus: HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`\n", regenerate)
+		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
+			attr.Notice(""), attr.Component("magus"))
 	}
 	return errSilent{exitCode: 1}
 }

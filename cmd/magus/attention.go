@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -205,7 +206,8 @@ func attentionDispose(root string, args []string) error {
 	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap
 	// --ack closed this way first (diff.go).
 	if !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: session dispose records that a person closed this request, so it needs an interactive terminal")
+		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 

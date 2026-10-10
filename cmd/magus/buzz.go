@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -210,7 +211,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		ctx = buzz.WithProfile(ctx, p)
 		defer func() {
 			if rep := p.Report(); rep != "" {
-				fmt.Fprint(os.Stderr, rep)
+				slog.InfoContext(ctx, strings.TrimSuffix(rep, "\n"), attr.Notice(""))
 			}
 		}()
 	}
@@ -323,7 +324,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 	if !global.quiet && !global.silent {
 		for _, w := range sess.Warnings() {
 			w.File = name
-			fmt.Fprintln(os.Stderr, w)
+			slog.WarnContext(ctx, w.String(), attr.Notice(""))
 		}
 	}
 	var testErr error
@@ -376,7 +377,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	}
 	dir, err := magus.ResolveCacheDir(root)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus buzz: --record: no output store here: %v\n", err)
+		slog.WarnContext(ctx, fmt.Sprintf("--record: no output store here: %v", err), attr.Notice(""), attr.Component("magus buzz"))
 		return
 	}
 	d := cache.OutputDescriptor{
@@ -391,10 +392,10 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	}
 	stored, err := cache.NewOutputStore(dir).Persist(ctx, buzzRunKey(name, code, args), out, d)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus buzz: --record: %v\n", err)
+		slog.WarnContext(ctx, fmt.Sprintf("--record: %v", err), attr.Notice(""), attr.Component("magus buzz"))
 		return
 	}
-	fmt.Fprintf(os.Stderr, "ref  %s\n", stored.Ref)
+	slog.InfoContext(ctx, "ref  "+stored.Ref, attr.Notice(""))
 }
 
 // buzzCoverPath returns a stable, slash-separated path for LCOV SF: records.
@@ -857,13 +858,15 @@ func buzzCheck(ctx context.Context, files []string, embedded bool) error {
 			return err
 		}
 		for _, d := range diags {
-			fmt.Fprintln(os.Stderr, d)
-			if !noted && buzzSpellImportUnresolved(d) {
-				fmt.Fprintln(os.Stderr, buzzSpellImportNote)
-				noted = true
-			}
+			level := slog.LevelWarn
 			if d.Severity != buzz.SeverityWarning {
+				level = slog.LevelError
 				failed++
+			}
+			slog.LogAttrs(ctx, level, d.String(), attr.Notice(""))
+			if !noted && buzzSpellImportUnresolved(d) {
+				slog.InfoContext(ctx, buzzSpellImportNote, attr.Notice("note"))
+				noted = true
 			}
 		}
 	}
@@ -949,7 +952,7 @@ func buzzSpellImportUnresolved(d buzz.Diagnostic) bool {
 // a magusfile and a target definition are the Buzz files that already had a check. The
 // ones that did not are the ones nothing loads: a standalone script, and hook glue
 // whose whole job is a side effect.
-const buzzSpellImportNote = "note: magus/spell/* is bound by the workspace loader, so --check cannot resolve it. " +
+const buzzSpellImportNote = "magus/spell/* is bound by the workspace loader, so --check cannot resolve it. " +
 	"A file that imports one (a magusfile, a target definition) is checked by loading it: " +
 	"any magus command reports its errors."
 
