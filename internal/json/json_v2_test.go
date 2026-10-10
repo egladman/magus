@@ -123,7 +123,8 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		"internal/handler/mcp/mcp_test.go": true,
 		// This repository's prose-rule runner lives in its own module, ships in no binary,
 		// and cannot import this one without the magus module depending on repo policy.
-		"libs/conventions/cmd/judge-docs/main.go": true,
+		"libs/conventions/cmd/judge-docs/main.go":      true,
+		"libs/conventions/cmd/judge-docs/main_test.go": true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
