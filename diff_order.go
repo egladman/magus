@@ -66,7 +66,7 @@ func attachHunks(files []types.DiffFile, patch string, placesByFile map[string]m
 // read as "nothing is related". Order stays nil then, and a Note names the cause.
 func (m *Magus) attachOrder(ctx context.Context, out *types.Diff, graph *knowledge.Graph, patch, skip string) {
 	if skip != "" {
-		out.Notes = append(out.Notes, "reading order skipped: "+skip+"; rebuild it with `"+hint.GraphBuild.String()+"`")
+		out.Notes = append(out.Notes, "reading order skipped: "+skip+"; rebuild with `"+hint.GraphBuild.String()+"`")
 		return
 	}
 	sites, note := m.orderSites(ctx, out.Files)
@@ -259,23 +259,19 @@ func (m *Magus) orderSites(ctx context.Context, files []types.DiffFile) ([]chang
 
 // partialOrderNote words why the use sites behind a reading order are incomplete, or returns ""
 // when they are not. A cancelled context explains every gap the reads recorded, so it stands
-// alone; otherwise each cause that applies is named.
+// alone; otherwise one cause is named, the failed listing before the unreadable indexes, since
+// without a listing the unreadable ones are not all known.
 func partialOrderNote(cancelled, listed bool, unreadable []string) string {
-	var causes []string
-	if cancelled {
-		causes = append(causes, "it was cancelled before every symbol index was read, so some uses of the changed symbols are missing")
-	} else {
-		if !listed {
-			causes = append(causes, "the symbol indexes could not be listed, so some uses of the changed symbols are missing")
-		}
-		if len(unreadable) > 0 {
-			causes = append(causes, "the symbol index of "+strings.Join(unreadable, ", ")+" could not be read; rebuild it with `"+hint.GraphBuild.String()+"`")
-		}
+	rebuild := "; rebuild with `" + hint.GraphBuild.String() + "`"
+	switch {
+	case cancelled:
+		return "reading order is partial: it was cancelled before every symbol index was read"
+	case !listed:
+		return "reading order is partial: the symbol indexes could not be listed" + rebuild
+	case len(unreadable) > 0:
+		return "reading order is partial: the symbol index of " + strings.Join(unreadable, ", ") + " could not be read" + rebuild
 	}
-	if len(causes) == 0 {
-		return ""
-	}
-	return "reading order is partial: " + strings.Join(causes, "; and ")
+	return ""
 }
 
 // orderLinks pairs the changed symbols with the changed interfaces they implement, from the

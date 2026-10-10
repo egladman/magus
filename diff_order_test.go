@@ -215,15 +215,18 @@ func TestDiffOrderIndexGap(t *testing.T) {
 	}
 }
 
-func TestDiffOrderPartialNoteNamesEveryCause(t *testing.T) {
+func TestDiffOrderPartialNoteNamesOneCauseAndOneCommand(t *testing.T) {
 	t.Parallel()
 
 	assert.Empty(t, partialOrderNote(false, true, nil))
 	assert.Equal(t,
-		"reading order is partial: the symbol indexes could not be listed, so some uses of the changed symbols are missing; and the symbol index of libs/a, libs/b could not be read; rebuild it with `magus graph build`",
-		partialOrderNote(false, false, []string{"libs/a", "libs/b"}))
+		"reading order is partial: the symbol indexes could not be listed; rebuild with `magus graph build`",
+		partialOrderNote(false, false, []string{"libs/a", "libs/b"}), "a failed listing outranks the indexes read without it")
 	assert.Equal(t,
-		"reading order is partial: it was cancelled before every symbol index was read, so some uses of the changed symbols are missing",
+		"reading order is partial: the symbol index of libs/a, libs/b could not be read; rebuild with `magus graph build`",
+		partialOrderNote(false, true, []string{"libs/a", "libs/b"}))
+	assert.Equal(t,
+		"reading order is partial: it was cancelled before every symbol index was read",
 		partialOrderNote(true, false, []string{"libs/a"}), "a cancelled review is reported as cancelled, not as unreadable indexes")
 }
 

@@ -111,7 +111,7 @@ func HunkNames(rev types.Diff) []string {
 func UnreadLine(u types.DiffUnread, source string) string {
 	switch {
 	case u.ReadState == types.DiffReadStateUnknown:
-		return "read state unknown for " + source + ": the read marks could not be read (" + u.Reason + "); no hunk is called unread"
+		return "read state unknown for " + source + "; no hunk is called unread"
 	case u.Unread == 0:
 		return fmt.Sprintf("every hunk of %s is marked read (%d %s)", source, u.Hunks, plural(u.Hunks, "hunk", "hunks"))
 	}

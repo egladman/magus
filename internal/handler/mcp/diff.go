@@ -432,7 +432,7 @@ func (t *diffTool) thread(ctx context.Context, id string) (types.DiffThread, err
 	}
 	rec, err := review.ReadThread(in, id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return types.DiffThread{}, fmt.Errorf("%w: read op=state's threads for the ids on this review", err)
+		return types.DiffThread{}, fmt.Errorf("op=state lists the thread ids on this review: %w", err)
 	}
 	return rec, err
 }
@@ -446,7 +446,7 @@ func (t *diffTool) threadID(ctx context.Context, id string) (string, error) {
 	}
 	thread, err := changeset.FindThread(t.reviewComments(ctx), id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return "", fmt.Errorf("%w: read op=state's threads for the ids on this review", err)
+		return "", fmt.Errorf("op=state lists the thread ids on this review: %w", err)
 	}
 	return thread.ID(), err
 }

@@ -69,7 +69,7 @@ func TestNormalizeOutlineRefusesAnythingThatIsMoreThanAPointer(t *testing.T) {
 			got, err := NormalizeOutline(o)
 
 			require.ErrorIs(t, err, ErrOutline)
-			assert.Contains(t, err.Error(), "the person types the reply")
+			assert.Contains(t, err.Error(), "not a reply")
 			assert.Equal(t, types.DiffOutline{}, got)
 		})
 	}

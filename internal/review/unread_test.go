@@ -83,6 +83,6 @@ func TestFilterUnreadCallsNoHunkUnreadWhenTheMarksCannotBeRead(t *testing.T) {
 	assert.Empty(t, got.Files)
 	assert.Nil(t, got.Order)
 	assert.Equal(t, &types.DiffUnread{ReadState: types.DiffReadStateUnknown, Reason: "read marks: permission denied", Hunks: 3}, got.Unread)
-	assert.Equal(t, "read state unknown for the working tree: the read marks could not be read (read marks: permission denied); no hunk is called unread",
+	assert.Equal(t, "read state unknown for the working tree; no hunk is called unread",
 		UnreadLine(*got.Unread, "the working tree"))
 }

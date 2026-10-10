@@ -11,9 +11,10 @@ import (
 )
 
 // ErrOutline marks an outline refused as more than a few pointers. The contract is on
-// [types.DiffOutline]; its text says that the reply is the person's to type, because the agent
-// that reads it is the one who tried to write more. A refusal names what broke, then wraps it.
-var ErrOutline = errors.New("an outline is not a reply: the person types the reply, so an outline is only a few short pointers that they read")
+// [types.DiffOutline]. The person types the reply, and the agent that reads this text is the one
+// who tried to write more, so the text says what an outline is. A refusal names what broke, then
+// wraps it.
+var ErrOutline = errors.New("an outline is a few short pointers the person reads, not a reply")
 
 // ErrNoSession reports that no review session is attached to the workspace, so there is nothing
 // for an outline to be held with.
