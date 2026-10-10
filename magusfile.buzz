@@ -269,6 +269,12 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
             "-o", "magus",
             "./cmd/magus"],
     });
+    // macOS assesses a new executable on its first exec, which can outlast a hook's
+    // budget; run it here so no hook pays for that.
+    final said = proc\exec("./magus", ["version"], ".", {}).stdout;
+    if (!said.startsWith("magus ")) {
+        throw "go-build: the built ./magus did not answer `version` with a `magus ` line: {said}";
+    }
 }
 
 // host is what login authenticates against and repository is where a push goes;
