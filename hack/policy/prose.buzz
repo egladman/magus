@@ -1,0 +1,118 @@
+namespace agentpolicy\prose;
+
+import "std";
+import "fs";
+import "path";
+import "encoding/json";
+
+// RULES is this repository's decisions table for libs/conventions/prose: the house style the
+// judge ships off, turned on here, each with what justified it. A rule left out keeps its
+// shipped default. history stays off: a doc that says what a symbol replaced is judged by a
+// reader, and the symbol-docs lint never held it.
+final RULES: {str: str} = {
+    // One spelling per glossary term (docs/conventions.md), so a search finds every use.
+    "terms": "deny",
+    // A page and a description state what the code does now; "will" and "I added" date it.
+    "tense": "deny",
+    // An em or en dash has a plain spelling everyone can type and grep for; a page mixing
+    // the two is searched with two patterns or not at all.
+    "dash": "deny",
+    // Curly quotes, the ellipsis character and emoji, for the same reason as dash.
+    "ascii": "deny",
+    // A commit, a pull request and a page in this repository credit no tool and no session.
+    "attribution": "deny",
+    // The doc-comment budgets the symbol-docs lint held every Go and TypeScript doc to.
+    "comment-block": "deny",
+    "comment-sentence": "deny",
+    "name-suffix": "deny",
+    "aside": "deny",
+    "docstub": "deny",
+    // An agent pays for every word of a skill on every load.
+    "terse-sentence": "deny",
+    "terse-paragraph": "deny",
+    // "rule" names only what magus enforces, so an agent can tell a check from a habit.
+    "bare-rule": "deny",
+    // A skill body that does not render cannot be judged, and silence would read as a pass.
+    "template": "deny",
+};
+
+// PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that
+// stops matching any file in the tree fails this file's test, so the list only shrinks.
+final PATHS: {str: {str: str}} = {
+    // A post is one author's account of what they did and think, in their own voice, so
+    // neither the reply and tense rules nor the generated-voice rules (signpost to
+    // staccato) hold it. Its adjectives are that voice too ("a powerful idea"), so filler
+    // only advises. Attribution and the glossary still deny.
+    "blog/**": {
+        "reply-voice": "off", "tense": "off", "hedge": "off", "signpost": "off", "buzzword": "off",
+        "buzzword-weak": "off", "contrast": "off", "vague": "off", "closer": "off", "ing-tail": "off",
+        "staccato": "off", "filler": "advise",
+    },
+};
+
+// table is the decisions file judge-docs reads, for a run over files: a PATHS entry joins
+// only when one of files matches it, since judge-docs refuses a glob matching no argument.
+// Text read from stdin has no files and takes RULES alone.
+export fun table(files: [str]) > {str: any} !> any {
+    final paths = mut {<str: any>};
+    foreach (glob, decisions in PATHS) {
+        foreach (file in files) {
+            if (path\matches(glob, path: file)) {
+                paths[glob] = decisions;
+                break;
+            }
+        }
+    }
+    final decisions = mut {<str: any>};
+    decisions["rules"] = RULES;
+    if (paths.len() > 0) {
+        decisions["paths"] = paths;
+    }
+    return decisions;
+}
+
+// writeDecisions writes table(files) to a new temp file and returns its path, for
+// `judge-docs -decisions`. The caller removes it; a checked-in copy could drift from RULES.
+export fun writeDecisions(files: [str]) > str !> any {
+    final file = fs\tempFile("prose-decisions");
+    fs\writeFile(file, content: json\stringify(table(files)));
+    return file;
+}
+
+// decide is the decision this repository gives a finding of rule that a judge outside
+// libs/conventions reported as given: RULES wins, as it does for judge-docs.
+export fun decide(rule: str, given: str) > str {
+    return RULES[rule] ?? given;
+}
+
+test "a path exemption joins only a run whose files it matches" {
+    final bare = table([<str>]) catch {<str: any>};
+    std\assert(bare["paths"] == null, message: "stdin text takes the rules alone");
+    std\assert(bare["rules"] != null, message: "the rules");
+    final docs = table(["docs/a.md"]) catch {<str: any>};
+    std\assert(docs["paths"] == null, message: "no file under blog/");
+    final posts = table(["docs/a.md", "blog/p.md"]) catch {<str: any>};
+    std\assert(posts["paths"] != null, message: "a post brings its exemption");
+}
+
+test "the decisions file is the table as JSON" {
+    final file = writeDecisions(["blog/p.md"]) catch "";
+    std\assert(file != "", message: "a file");
+    final read: {str: any} = json\parse(fs\readFile(file) catch "\{}") catch {<str: any>};
+    std\assert(read["rules"]?["tense"] == "deny", message: "{read}");
+    std\assert(read["paths"]?["blog/**"]?["tense"] == "off", message: "{read}");
+    fs\remove(file) catch void;
+}
+
+test "an outside judge's finding takes this repository's decision" {
+    std\assert(decide("attribution", given: "advise") == "deny", message: "the table wins");
+    std\assert(decide("my-rule", given: "advise") == "advise", message: "a rule the table leaves keeps its own");
+}
+
+test "every path exemption still matches a file in the tree" {
+    foreach (glob, decisions in PATHS) {
+        final found = fs\glob(glob) catch [<Path>];
+        std\assert(found.len() > 0, message: "{glob} matches no file: drop the exemption");
+        std\assert(decisions.len() > 0, message: "{glob} exempts nothing");
+    }
+}

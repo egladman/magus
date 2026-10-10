@@ -5,9 +5,10 @@ import "fs";
 import "crypto";
 
 // The prose judge as `magus run judge-build libs/conventions` leaves it, relative to
-// libs/conventions: the linked binary, and the digest of the sources it was linked from.
-// A hook runs the binary rather than `go run`, whose compile on a cold Go cache outlasts
-// the rule timeout.
+// home, the module it is built in: the linked binary, and the digest of the sources it was
+// linked from. A hook runs the binary rather than `go run`, whose compile on a cold Go cache
+// outlasts the rule timeout.
+export final home = "libs/conventions";
 export final binary = "gen/judge-docs";
 export final inputsFile = "gen/judge-docs.inputs";
 export final build = "magus run judge-build libs/conventions";

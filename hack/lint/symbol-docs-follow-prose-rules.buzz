@@ -2,14 +2,13 @@ namespace symbolprose;
 
 import "assert";
 import "std";
+import "fs";
 import "proc";
 import "encoding/json";
 import "magus";
 import "magus/lint";
-
-// RULES are the prose rules every doc comment and callable name is held to. history stays
-// off: a doc that says what a symbol replaced is judged by a reader, not a pattern.
-export final RULES = ["comment-block", "comment-sentence", "filler", "terms", "name-suffix", "aside", "docstub"];
+import "hack/policy/prose" as decisions;
+import "libs/conventions/judge_docs" as judgeDocs;
 
 // LANGUAGES are the indexes the rule judges. A language whose index judged no symbol is
 // reported, so an indexer that stops emitting docs cannot turn the rule into a pass.
@@ -27,27 +26,30 @@ final THIS = "hack/lint/symbol-docs-follow-prose-rules.buzz";
 // The prose rules are the Go of libs/conventions, so its module files key the rule too.
 export fun reads() > [str] {
     return ["**/*.go", "libs/conventions/go.mod", "libs/conventions/go.sum",
-        "libs/conventions/**/*.go", "libs/diagnostics/**/*.go",
+        "libs/conventions/**/*.go", "libs/conventions/judge_docs.buzz", "hack/policy/prose.buzz", "libs/diagnostics/**/*.go",
         "libs/figure/**/*.go", "libs/gopherbuzz/**/*.go", "libs/scipbuzz/**/*.go", "libs/testlayout/**/*.go",
         "console/**/*.ts", "docs/**/*.ts", "docs/guides/integrations/agents/**/*.ts",
         "libs/textsearch/**/*.ts"];
 }
 
-// check fails every prose finding that SANCTIONED does not name. magus\symbols supplies the
-// docs and the indexes; the prose rules are this repository's policy, so the judging runs in
-// libs/conventions/cmd/judge-docs, as lint-rules has judge-build link it. A missing or stale
-// index, a language that judged nothing and a runner that fails are findings, never a pass:
-// a rule reading nothing finds nothing.
+// check fails every prose finding the decisions table in hack/policy/prose.buzz denies and
+// SANCTIONED does not name. magus\symbols supplies the docs and the indexes; the judging runs
+// in libs/conventions/cmd/judge-docs, as lint-rules has judge-build link it. A missing or
+// stale index, a language that judged nothing and a runner that fails are findings, never a
+// pass: a rule reading nothing finds nothing.
 export fun check(files: [Path]) > [Finding] !> any {
     final data: {str: any} = magus\symbols();
     final symbols: [any] = data["symbols"] ?? [<any>];
     final indexes: [any] = data["indexes"] ?? [<any>];
-    final run = proc\exec("libs/conventions/gen/judge-docs",
+    final bin = "{judgeDocs\home}/{judgeDocs\binary}";
+    final table = decisions\writeDecisions([<str>]);
+    final run = proc\exec(bin, args: ["-kind", "doc-comment", "-decisions", table],
         opts: {"stdin": json\stringify(symbols), "quiet": true, "allow_failure": true});
+    fs\remove(table) catch void;
     if (run.code != 0) {
         return [Finding{ path = "libs/conventions/cmd/judge-docs",
             message = "the prose runner exited {run.code}, so no doc was judged: " + run.stderr.trim(),
-            fix = "Run `magus run judge-build libs/conventions`, then libs/conventions/gen/judge-docs, and read why it stopped." }];
+            fix = "Run `{judgeDocs\build}`, then {bin} -kind doc-comment, and read why it stopped." }];
     }
     final findings: [any] = json\parse(run.stdout);
     return judge(findings, judged: judgedCounts(symbols), indexes: indexes, sanctioned: SANCTIONED);
@@ -100,7 +102,7 @@ export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {s
     final flagged = mut {<str: bool>};
     foreach (f in rows) {
         final rule: str = f["rule"] ?? "";
-        if (RULES.indexOf(rule) == null) {
+        if ((f["decision"] ?? "") != "deny") {
             continue;
         }
         final node: str = f["node"] ?? "";
@@ -113,7 +115,7 @@ export fun judge(rows: [any], judged: {str: int}, indexes: [any], sanctioned: {s
         final said: str = f["message"] ?? "";
         final shown = if (matched == "") "" else ": {matched}";
         found.append(Finding{ path = at.path, line = at.line,
-            message = "{said}{shown} [{rule}]",
+            message = "{said}{shown} [{rule}]", url = f["url"] ?? "",
             fix = "Reword the doc or the name, or add the node {node} to SANCTIONED in " + THIS + " with the reason it stays." });
     }
     foreach (node, reason in sanctioned) {
@@ -156,8 +158,9 @@ fun counts() > {str: int} {
 }
 
 fun finding(rule: str, node: str, source: str) > {str: any} {
-    return {"node": node, "source": source, "language": "go", "rule": rule,
-        "message": "the doc opens with filler", "match": "simply"};
+    return {"node": node, "source": source, "kind": "doc-comment", "rule": rule, "code": "PRS4001",
+        "decision": "deny", "message": "the doc opens with filler", "match": "simply",
+        "url": "https://eli.gladman.cc/magus/reference/prose/{rule}/"};
 }
 
 fun symbol(language: str) > {str: any} {
@@ -172,6 +175,7 @@ test "a finding is reported at its declaration with the rule and the match" {
     assert\equal(got[0].path, want: "cmd/magus/run.go", message: "file");
     assert\equal(got[0].line, want: 41, message: "line");
     assert\equal(got[0].message, want: "the doc opens with filler: simply [filler]", message: got[0].message);
+    assert\equal(got[0].url, want: "https://eli.gladman.cc/magus/reference/prose/filler/", message: "the rule's page");
 }
 
 test "a sanctioned finding is skipped and a sanction that no longer applies fails" {
@@ -202,15 +206,24 @@ test "a language with no judged symbol is silence, not a pass" {
     assert\equal(zero.len(), want: 1, message: "go judged zero");
 }
 
-test "the history rule is ignored and every other rule is held" {
+test "a finding the decisions table denies is held and advice is not" {
     final rows = mut [<any>];
-    rows.append(finding("history", node: "symbol:x/Old().", source: "a/old.go:3"));
-    foreach (rule in RULES) {
+    final advised = finding("verdict", node: "symbol:x/Old().", source: "a/old.go:3").cloneMutable();
+    advised["decision"] = "advise";
+    rows.append(advised);
+    final held = ["comment-block", "comment-sentence", "filler", "terms", "name-suffix", "aside", "docstub"];
+    foreach (rule in held) {
         rows.append(finding(rule, node: "symbol:x/" + rule + ".", source: "a/" + rule + ".go:1"));
     }
     final got = judge(rows, judged: counts(), indexes: both(), sanctioned: {<str: str>});
-    assert\equal(got.len(), want: RULES.len(), message: "one per held rule, none for history");
-    assert\equal(RULES.indexOf("history") == null, want: true, message: "history is not a held rule");
+    assert\equal(got.len(), want: held.len(), message: "one per denied finding, none for advice");
+}
+
+test "the doc-comment budgets are denied and history stays off" {
+    foreach (rule in ["comment-block", "comment-sentence", "name-suffix", "aside", "docstub"]) {
+        assert\equal(decisions\decide(rule, given: "off"), want: "deny", message: rule);
+    }
+    assert\equal(decisions\decide("history", given: "off"), want: "off", message: "history keeps its shipped off");
 }
 
 test "symbols are counted per language" {
