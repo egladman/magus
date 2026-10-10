@@ -277,6 +277,7 @@ func TestOutputDstTeeWritesBoth(t *testing.T) {
 }
 
 func TestOutputDstTeeAppends(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	// Repeated calls to outputDst with the same tee path append (not overwrite).
 	dir := t.TempDir()
 	teeTarget := dir + "/out.json"

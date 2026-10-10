@@ -85,6 +85,7 @@ func TestEventFromStdinIsSilentForPlainText(t *testing.T) {
 }
 
 func TestNotifyCmd(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	// A waiting or permission event opens a real attention request, so the store is
 	// redirected here; without it these subtests would file requests into the
 	// developer's own queue.
@@ -142,6 +143,7 @@ func countToasts(t *testing.T) *int {
 // A block the queue cannot hold (no source id, no repository) has only the toast
 // to reach a person, so it raises one every time.
 func TestNotifyCmdToastsABlockWithNoQueueRow(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	toasts := countToasts(t)
 	run := func(root string) {
@@ -160,6 +162,7 @@ func TestNotifyCmdToastsABlockWithNoQueueRow(t *testing.T) {
 }
 
 func TestNotifyCmdDoesNotToastARefiredPermission(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	root := t.TempDir()
 	toasts := countToasts(t)

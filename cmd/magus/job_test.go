@@ -429,6 +429,7 @@ func TestRegisterPathFlagsTakeRepeatsAndCommas(t *testing.T) {
 // the one jobExec sees. Mirrors TestHookEnvelopeCwdLocatesTheWorkersCheckout's setup.
 func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	t.Helper()
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root = t.TempDir()

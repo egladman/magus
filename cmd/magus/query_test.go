@@ -597,6 +597,7 @@ func TestServerGraphReadsDeclineAnotherBuild(t *testing.T) {
 }
 
 func TestAskServerFallsBackWhenTheServerDeclines(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	f := newGraphReadFixture(t)
 	t.Setenv(proc.SocketEnv, f.addr)
 	globalCfg.Server.Enabled = true

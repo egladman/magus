@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/asciistrings"
 	"github.com/egladman/magus/libs/conventions/fieldwise"
 	"github.com/egladman/magus/libs/conventions/filenames"
+	"github.com/egladman/magus/libs/conventions/globalrestore"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
 	"github.com/egladman/magus/libs/conventions/hostvocab"
 	"github.com/egladman/magus/libs/conventions/importceiling"
@@ -28,6 +29,7 @@ func init() {
 	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
 	register.Plugin("fieldwise", plugin("fieldwise", fieldwise.New))
 	register.Plugin("filenames", plugin("filenames", filenames.New))
+	register.Plugin("globalrestore", plugin("globalrestore", globalrestore.New))
 	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))
 	register.Plugin("hostvocab", plugin("hostvocab", hostvocab.New))
 	register.Plugin("importceiling", plugin("importceiling", importceiling.New))

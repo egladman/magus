@@ -17,6 +17,7 @@ func TestPluginsRegister(t *testing.T) {
 		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
 		"fieldwise":     map[string]any{"report-partial": true},
 		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
+		"globalrestore": map[string]any{"package": "a", "vars": []any{"global"}, "hint": "see docs"},
 		"hostagnostic":  map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "hosts": []any{"acme"}, "hint": "see docs"},
 		"hostvocab":     map[string]any{"files": []any{"internal/guard/*.go"}, "words": []any{"Read"}, "hint": "see docs"},
 		"importceiling": map[string]any{"rules": []any{map[string]any{"package": "a", "prefix": "b/", "max": 1}}},

@@ -117,6 +117,7 @@ linters:
     - testisolation
     - providerio
     - fieldwise
+    - globalrestore
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -428,6 +429,18 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           report-partial: true
+
+      # Commands read global and globalCfg as flag defaults, so a test that sets one and
+      # leaves it changes whichever test a narrowed -run puts next.
+      globalrestore:
+        type: module
+        description: requires a test that assigns the command-line globals to restore them
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          package: github.com/egladman/magus/cmd/magus
+          vars: [global, globalCfg]
+          hint: add t.Cleanup(snapshotGlobals()) at the top of the test
 
     testifylint:
       disable-all: true

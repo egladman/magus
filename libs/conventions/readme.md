@@ -16,6 +16,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `filenames`     | a Go file name segment that splits into two segments the tree uses as file names                            |
 | `nameoutput`    | a `case outputName:` arm that does not render through an emitter                                            |
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
+| `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 
@@ -53,6 +54,13 @@ every package name of three bytes or more.
 `testisolation` carries reach as a package fact along imports, which needs type
 information; the rest load types only because golangci-lint leaves the package
 unset without them.
+
+`globalrestore` reads test files only. It reports the first assignment in a test
+function, a subtest closure or a helper taking a `*testing.T` to a configured
+variable, or to a field or element of one, unless that function (or an enclosing
+test) hands `t.Cleanup` or `defer` a closure assigning the variable or a package
+function that does, such as `t.Cleanup(snapshotGlobals())`. A configured `vars`
+name its package does not declare is a load error.
 
 `fieldwise` reads test files only. Its zero settings report a value whose
 assertions name every field its struct declares, which one comparison of the

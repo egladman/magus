@@ -122,6 +122,7 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 // a file this test wrote, which is the property the whole command rests on: a brief
 // that could be produced without the checkout would be a summary again.
 func TestSessionBriefReadsTheCheckout(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()
