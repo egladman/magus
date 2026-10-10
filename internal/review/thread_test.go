@@ -226,15 +226,34 @@ func TestReadThreadFallsBackToTheHostsHunkWhenTheCommentIsOutdated(t *testing.T)
 	got, err := ReadThread(in, "c1")
 	require.NoError(t, err)
 
-	assert.True(t, got.Outdated)
-	assert.Equal(t, types.DiffThreadHunk{
-		Index:  -1,
-		Source: "host",
-		Lines:  []string{"@@ -10,2 +10,2 @@ func (s *Store) Put", "-old line", "+older line"},
-		Note:   "the host's copy of the hunk, as it was when the comment was made",
-	}, got.Hunk)
-	assert.Empty(t, got.Symbols)
-	assert.Equal(t, "The comment's hunk is not in this changeset, so its symbols cannot be placed. The file's changed symbols are: `Store.Put`, `Store.Get`.", got.SymbolsNote)
+	reach := 14
+	assert.Equal(t, types.DiffThread{
+		ID:       "c1",
+		Path:     "internal/cache/cache.go",
+		Line:     11,
+		Outdated: true,
+		Comments: []types.ReviewComment{{
+			ID: "c1", Path: "internal/cache/cache.go", Line: 11, Hunk: -1, Outdated: true, Author: "ana", Body: "Why?",
+			DiffHunk: "@@ -10,2 +10,2 @@ func (s *Store) Put\n-old line\n+older line",
+		}},
+		Hunk: types.DiffThreadHunk{
+			Index:  -1,
+			Source: "host",
+			Lines:  []string{"@@ -10,2 +10,2 @@ func (s *Store) Put", "-old line", "+older line"},
+			Note:   "the host's copy of the hunk, as it was when the comment was made",
+		},
+		InChangeset: true,
+		Project:     "cache",
+		Role:        types.DiffRoleSource,
+		Reach:       &reach,
+		Coverage:    &types.ImpactCoverage{Ratio: 0.5, Covered: 20, Total: 40},
+		SymbolsNote: "The comment's hunk is not in this changeset, so its symbols cannot be placed. The file's changed symbols are: `Store.Put`, `Store.Get`.",
+		Notes: []string{
+			"note cache-pairs anchors file:internal/cache/cache.go",
+			"note put-idempotent anchors symbol:m internal/cache/Store#Put(). [ungraded]",
+		},
+		Change: "The change touches 2 file(s) in cache; 3 project(s) rebuild as a result.",
+	}, got)
 	assert.Equal(t, "thread c1 on internal/cache/cache.go:11 (outdated: the line no longer exists in the head)", ThreadLines(got)[0])
 }
 

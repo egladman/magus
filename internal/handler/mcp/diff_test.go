@@ -403,14 +403,30 @@ func TestThreadOpReturnsTheThreadRecordAndNoSession(t *testing.T) {
 
 	rec, ok := resp.Data.(types.DiffThread)
 	require.True(t, ok, "op=thread returns the thread record, got %T", resp.Data)
-	assert.Equal(t, "t1", rec.ID, "a reply's id answers with its thread id")
-	assert.Equal(t, "a.go", rec.Path)
-	assert.Equal(t, 9, rec.Line)
-	assert.Equal(t, []string{"priya", "marcus"}, []string{rec.Comments[0].Author, rec.Comments[1].Author})
-	assert.Equal(t, "patch", rec.Hunk.Source)
-	assert.Contains(t, rec.Hunk.Lines, "+added")
-	assert.True(t, rec.InChangeset)
-	assert.Contains(t, rec.Unmeasured, "note anchors: this server has no notes store wired, so none was joined")
+	assert.Equal(t, types.DiffThread{
+		ID:   "t1",
+		Path: "a.go",
+		Line: 9,
+		Comments: []types.ReviewComment{
+			{ID: "t1", Path: "a.go", Line: 9, Hunk: 1, Author: "priya", Body: "why added?"},
+			{ID: "t2", Root: "t1", Path: "a.go", Hunk: 1, Author: "marcus", Body: "for the cache"},
+		},
+		Hunk: types.DiffThreadHunk{
+			Index:  1,
+			Source: "patch",
+			Lines:  []string{"@@ -9,1 +9,2 @@", " keep", "+added"},
+			Note:   "hunk 1 of a.go, as it stands now",
+		},
+		InChangeset: true,
+		Role:        types.DiffRoleSource,
+		SymbolsNote: "No symbol index covers this file, so the symbols changed here are unknown. That is not a finding that there are none.",
+		Change:      "The change touches 1 file(s).",
+		Unmeasured: []string{
+			"note anchors: this server has no notes store wired, so none was joined",
+			"reach: no symbol index was loaded for this file",
+			"coverage: no coverage run has been observed for this file",
+		},
+	}, rec, "a reply's id answers with its thread id")
 }
 
 // op=thread only reads, so it answers before any session is open, as the console's route does.

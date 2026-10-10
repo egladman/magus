@@ -42,22 +42,25 @@ func unreadFixture() types.Diff {
 func TestFilterUnreadKeepsOnlyTheHunksNoMarkCovers(t *testing.T) {
 	got := FilterUnread(unreadFixture(), []string{"core0", "elsewhere"}, nil)
 
-	assert.Equal(t, []types.DiffFile{
-		{Path: "core.go", Hunks: []types.DiffHunk{{Index: 1, Digest: "core1", NewStart: 9, NewCount: 2}}},
-		{Path: "other.go", Hunks: []types.DiffHunk{{Index: 0, Digest: "other0", NewStart: 20, NewCount: 1}}},
-	}, got.Files)
-	assert.Equal(t, &types.DiffOrder{
-		Groups: []types.DiffGroup{
-			{Kind: types.DiffGroupConnected, Label: "F", HunkCount: 1, Steps: []types.DiffStep{
-				{Number: 2, Hunks: []types.DiffStepHunk{{Ref: types.DiffHunkRef{Path: "other.go", Index: 0}}}},
-			}},
-			{Kind: types.DiffGroupConnected, Label: "G", HunkCount: 1, Steps: []types.DiffStep{
-				{Number: 3, Hunks: []types.DiffStepHunk{{Ref: types.DiffHunkRef{Path: "core.go", Index: 1}}}},
-			}},
+	assert.Equal(t, types.Diff{
+		Base: "main",
+		Files: []types.DiffFile{
+			{Path: "core.go", Hunks: []types.DiffHunk{{Index: 1, Digest: "core1", NewStart: 9, NewCount: 2}}},
+			{Path: "other.go", Hunks: []types.DiffHunk{{Index: 0, Digest: "other0", NewStart: 20, NewCount: 1}}},
 		},
-		Count: types.DiffOrderCount{HunkCount: 2, Placed: 2, Complete: true},
-	}, got.Order)
-	assert.Equal(t, &types.DiffUnread{ReadState: types.DiffReadStateKnown, Hunks: 3, Unread: 2}, got.Unread)
+		Order: &types.DiffOrder{
+			Groups: []types.DiffGroup{
+				{Kind: types.DiffGroupConnected, Label: "F", HunkCount: 1, Steps: []types.DiffStep{
+					{Number: 2, Hunks: []types.DiffStepHunk{{Ref: types.DiffHunkRef{Path: "other.go", Index: 0}}}},
+				}},
+				{Kind: types.DiffGroupConnected, Label: "G", HunkCount: 1, Steps: []types.DiffStep{
+					{Number: 3, Hunks: []types.DiffStepHunk{{Ref: types.DiffHunkRef{Path: "core.go", Index: 1}}}},
+				}},
+			},
+			Count: types.DiffOrderCount{HunkCount: 2, Placed: 2, Complete: true},
+		},
+		Unread: &types.DiffUnread{ReadState: types.DiffReadStateKnown, Hunks: 3, Unread: 2},
+	}, got)
 	assert.Equal(t, []string{"core.go:9-10", "other.go:20"}, HunkNames(got))
 	assert.Equal(t, "2 of 3 hunks in the range main...HEAD are not marked read", UnreadLine(*got.Unread, "the range main...HEAD"))
 }
