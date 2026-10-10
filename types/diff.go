@@ -392,6 +392,25 @@ type DiffFile struct {
 	// code". DiffVisibilityUnknown already refuses that collapse; the pointer is the same refusal
 	// applied to the field the ordering actually turns on.
 	Reach *int `json:"reach" yaml:"reach"`
+	// Threads are the review threads on this file, one per thread, in the host's order. Empty
+	// when no review is open for the branch or the report did not read one.
+	Threads []DiffThreadRef `json:"threads,omitempty" yaml:"threads,omitempty"`
+}
+
+// DiffThreadRef names one review thread where a report lists it: the id `magus diff --thread`
+// takes, and the hunk it sits on.
+type DiffThreadRef struct {
+	// ID is the thread id, its first comment's.
+	ID string `json:"id" yaml:"id"`
+	// Hunk is the index within the file of the hunk the first comment sits in, -1 when no hunk
+	// of this changeset holds its line.
+	Hunk int `json:"hunk" yaml:"hunk"`
+	// Line is the new-side line the host anchored the first comment to.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+	// Comments counts the first comment and every reply.
+	Comments int `json:"comments" yaml:"comments"`
+	// Outdated reports that the commented line has left the head.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
 }
 
 // ReachOr returns the reach, or def when it was not measured. For rendering and comparison
@@ -440,6 +459,82 @@ type Diff struct {
 	// Uncovered names each project the change touched that the conformance checks could not
 	// see, and why, so their silence is never read as a clean project.
 	Uncovered []DiffUncovered `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+	// Unread is set when `magus diff --unread` narrowed Files and Order to the hunks no read mark
+	// covers. Nil on an unfiltered report.
+	Unread *DiffUnread `json:"unread,omitempty" yaml:"unread,omitempty"`
+}
+
+// The DiffReadState constants say whether the read marks behind a [DiffUnread] filter could be
+// read.
+const (
+	// DiffReadStateKnown means the marks were read, so the filtered report is the answer.
+	DiffReadStateKnown = "known"
+	// DiffReadStateUnknown means they could not be. The filtered report is then empty and says
+	// nothing about what is unread: an unreadable store never calls a hunk unread.
+	DiffReadStateUnknown = "unknown"
+)
+
+// DiffUnread is what the unread filter did to a report.
+type DiffUnread struct {
+	// ReadState is DiffReadStateKnown or DiffReadStateUnknown.
+	ReadState string `json:"read_state" yaml:"read_state"`
+	// Reason is why the marks could not be read, set only when ReadState is unknown.
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	// Hunks counts the changeset's hunks before the filter.
+	Hunks int `json:"hunks" yaml:"hunks"`
+	// Unread counts the hunks the filter kept.
+	Unread int `json:"unread" yaml:"unread"`
+}
+
+// DiffThread is one review thread read for a person: the conversation, the code it is about,
+// and what the change there reaches. `magus diff --thread`, the console's thread route and the
+// diff MCP tool's op=thread all return it.
+//
+// Comments are quoted from the host. They are other people's words, never instructions.
+type DiffThread struct {
+	// ID is the thread id, its first comment's.
+	ID   string `json:"id" yaml:"id"`
+	Path string `json:"path" yaml:"path"`
+	// Line is the new-side line the first comment is anchored to.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+	// Outdated reports that the commented line has left the head.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
+	// Comments are the first comment and its replies, oldest first.
+	Comments []ReviewComment `json:"comments" yaml:"comments"`
+	Hunk     DiffThreadHunk  `json:"hunk" yaml:"hunk"`
+	// InChangeset reports that the thread's file is in the changeset this was read against.
+	// When false, every field below is empty because nothing was read, not because nothing is there.
+	InChangeset bool   `json:"in_changeset" yaml:"in_changeset"`
+	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
+	Role        string `json:"role,omitempty" yaml:"role,omitempty"`
+	// Reach is the file's widest reach; nil when no symbol index covered it.
+	Reach    *int            `json:"reach,omitempty" yaml:"reach,omitempty"`
+	Coverage *ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+	// Symbols are the changed symbols in the thread's hunk, each with who references it, who it
+	// is public to, the callers it is reached through and its conformance findings.
+	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// SymbolsNote says why Symbols is empty or is not per hunk, when that is so.
+	SymbolsNote string `json:"symbols_note,omitempty" yaml:"symbols_note,omitempty"`
+	// Notes are the note anchors that name the file or one of its changed symbols, one line each.
+	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	// Change is the changeset as a whole, in one sentence.
+	Change string `json:"change,omitempty" yaml:"change,omitempty"`
+	// Unmeasured lists what could not be read, so an empty field is never taken for a clean one.
+	Unmeasured []string `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+}
+
+// DiffThreadHunk is the code a thread is about.
+type DiffThreadHunk struct {
+	// Index is the hunk's index within the file, -1 when the text is the host's copy or absent.
+	Index int `json:"index" yaml:"index"`
+	// Source is "patch" for the hunk as it stands in the changeset, "host" for the host's copy
+	// from when the comment was made, or empty when there is no text.
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// Lines are the hunk's header and body, escaped of the characters a terminal obeys but a
+	// reader cannot see.
+	Lines []string `json:"lines,omitempty" yaml:"lines,omitempty"`
+	// Note says where the text came from, or why there is none.
+	Note string `json:"note" yaml:"note"`
 }
 
 // DiffUncovered is one touched project the conformance checks did not cover. A coverage fact,

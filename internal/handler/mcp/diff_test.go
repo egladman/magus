@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -53,11 +52,11 @@ func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error
 	return types.Diff{Base: "working", Files: files}, nil
 }
 
-// DiffWith serves the brief path, which must set SkipOrder: a brief reads the code around one
+// DiffWith serves op=thread, which must set SkipOrder: a thread record reads the code around one
 // thread and must never pay for the reading order of the whole changeset.
 func (f *fakeDiffSrc) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
 	if !opts.SkipOrder {
-		return types.Diff{}, errors.New("the brief asked for the reading order")
+		return types.Diff{}, errors.New("the thread asked for the reading order")
 	}
 	return f.Diff(ctx, paths)
 }
@@ -387,47 +386,72 @@ func withReviewThreads(t *testing.T, threads []any) {
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 }
 
-var briefThreads = []any{
+var reviewThreads = []any{
 	map[string]any{"id": "t1", "path": "a.go", "line": float64(9), "author": "priya", "body": "why added?"},
 	map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "for the cache"},
 }
 
-// TestProjectionThreadReturnsTheBriefAndNoSession. The brief is the whole thread and the hunk it
-// sits in, and it is not the session: none of the session's bodies come with it.
-func TestProjectionThreadReturnsTheBriefAndNoSession(t *testing.T) {
-	withReviewThreads(t, briefThreads)
+// TestThreadOpReturnsTheThreadRecordAndNoSession. op=thread answers with the record
+// `magus diff --thread -o json` prints, keyed by the thread id whichever comment named it, and it
+// is not the session: none of the session's bodies come with it.
+func TestThreadOpReturnsTheThreadRecordAndNoSession(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
 
-	resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t2"})
+	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t2"})
 	require.NoError(t, err)
 
-	reply, ok := resp.Data.(review.ThreadBriefResult)
-	require.True(t, ok, "projection=thread returns {id, brief}, got %T", resp.Data)
-	assert.Equal(t, "t1", reply.ID, "a reply's id answers with its thread id")
-	assert.Contains(t, reply.Brief, "- priya:\n  > why added?\n- marcus:\n  > for the cache")
-	assert.Contains(t, reply.Brief, "- where: a.go:9")
-	assert.Contains(t, reply.Brief, "+added")
-	assert.Contains(t, reply.Brief, "I will type the reply")
-	assert.Contains(t, reply.Brief, "note anchors: this server has no notes store wired")
+	rec, ok := resp.Data.(types.DiffThread)
+	require.True(t, ok, "op=thread returns the thread record, got %T", resp.Data)
+	assert.Equal(t, "t1", rec.ID, "a reply's id answers with its thread id")
+	assert.Equal(t, "a.go", rec.Path)
+	assert.Equal(t, 9, rec.Line)
+	assert.Equal(t, []string{"priya", "marcus"}, []string{rec.Comments[0].Author, rec.Comments[1].Author})
+	assert.Equal(t, "patch", rec.Hunk.Source)
+	assert.Contains(t, rec.Hunk.Lines, "+added")
+	assert.True(t, rec.InChangeset)
+	assert.Contains(t, rec.Unmeasured, "note anchors: this server has no notes store wired, so none was joined")
 }
 
-func TestProjectionThreadRefusesWhatNamesNoThread(t *testing.T) {
-	withReviewThreads(t, briefThreads)
+// op=thread only reads, so it answers before any session is open, as the console's route does.
+func TestThreadOpNeedsNoSession(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	src := &fakeDiffSrc{patch: agentPatch, branch: "feat/x"}
+	tool := &diffTool{sessions: changeset.NewStore(t.TempDir()), workspaceRoot: "/w", src: src}
+
+	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t1"})
+	require.NoError(t, err)
+	assert.Equal(t, "t1", resp.Data.(types.DiffThread).ID)
+	assert.Nil(t, tool.sessions.Get("/w"), "reading a thread attaches nothing")
+}
+
+func TestThreadOpRefusesWhatNamesNoThread(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
 
-	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread"})
+	_, err := invoke(t, tool, map[string]any{"op": "thread"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "needs thread")
 
-	_, err = invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t404"})
+	_, err = invoke(t, tool, map[string]any{"op": "thread", "thread": "t404"})
 	require.ErrorIs(t, err, changeset.ErrNoThread)
 	assert.Contains(t, err.Error(), "op=state's threads")
+}
+
+// projection narrows the session and nothing else: one thread is op=thread's.
+func TestProjectionThreadIsNotAProjection(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "one thread is op=thread")
 }
 
 // TestOutlineIsHeldForThePersonKeyedByTheThreadId. An outline sent against a reply lands on the
 // thread, a second one replaces the first, and the session shows it to the person.
 func TestOutlineIsHeldForThePersonKeyedByTheThreadId(t *testing.T) {
-	withReviewThreads(t, briefThreads)
+	withReviewThreads(t, reviewThreads)
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
 
 	_, err := invoke(t, tool, map[string]any{
@@ -435,18 +459,22 @@ func TestOutlineIsHeldForThePersonKeyedByTheThreadId(t *testing.T) {
 		"agent_name": "scout",
 	})
 	require.NoError(t, err)
-	resp, err := invoke(t, tool, map[string]any{
-		"op": "outline", "thread": "t1", "topics": []any{"replaces the first"},
-	})
+	second := map[string]any{"op": "outline", "thread": "t1", "topics": []any{"replaces the first"}}
+	resp, err := invoke(t, tool, second)
 	require.NoError(t, err)
 
 	sess := resp.Data.(*types.DiffReview)
-	assert.Equal(t, []types.DiffOutline{{Thread: "t1", Topics: []string{"replaces the first"}}}, sess.Outlines)
+	want := []types.DiffOutline{{Thread: "t1", Topics: []string{"replaces the first"}}}
+	assert.Equal(t, want, sess.Outlines)
 	assert.Equal(t, sess.Outlines, tool.sessions.Get(tool.workspaceRoot).Outlines)
+
+	again, err := invoke(t, tool, second)
+	require.NoError(t, err)
+	assert.Equal(t, want, again.Data.(*types.DiffReview).Outlines, "sending the same outline twice is the same as once")
 }
 
 func TestOutlineRefusesWhatIsNotAPointer(t *testing.T) {
-	withReviewThreads(t, briefThreads)
+	withReviewThreads(t, reviewThreads)
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
 
 	cases := map[string]map[string]any{

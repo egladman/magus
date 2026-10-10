@@ -71,6 +71,22 @@ group 2 of 2: generated (1 hunk)
 `, orderText(orderTestDiff(), true))
 }
 
+// TestOrderLinesNameEachThreadBesideItsHunk. The report is where a person finds the id
+// `magus diff --thread` takes, so a thread sits under the hunk its first comment is on; one on no
+// hunk of the changeset is not drawn here.
+func TestOrderLinesNameEachThreadBesideItsHunk(t *testing.T) {
+	t.Parallel()
+	rev := orderTestDiff()
+	rev.Files[0].Threads = []types.DiffThreadRef{
+		{ID: "2193847561", Hunk: 1, Line: 9, Comments: 3},
+		{ID: "77", Hunk: -1, Line: 40, Comments: 1, Outdated: true},
+	}
+
+	assert.Contains(t, orderText(rev, true),
+		"    core.go:9-10  G\n        uses F, defined in step 1\n        thread 2193847561, 3 comments\n")
+	assert.NotContains(t, orderText(rev, true), "thread 77")
+}
+
 func TestOrderLinesFoldGeneratedHunksUnlessShown(t *testing.T) {
 	t.Parallel()
 

@@ -76,7 +76,11 @@ var mcpReadOnlyTools = map[hint.ToolName]func(input map[string]any) bool{
 	// defaults an op that is absent or not text to state.
 	hint.ToolDiff: func(input map[string]any) bool {
 		op, ok := input["op"].(string)
-		return !ok || strings.TrimSpace(op) == "state"
+		if !ok {
+			return true
+		}
+		op = strings.TrimSpace(op)
+		return op == "state" || op == "thread"
 	},
 	// A script can do anything the client host module can.
 	hint.ToolClient: func(map[string]any) bool { return false },

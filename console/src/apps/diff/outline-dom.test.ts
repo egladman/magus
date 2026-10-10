@@ -1,5 +1,5 @@
 // outline-dom.test.ts - the agent's outline as the person meets it: shown, not copyable, and
-// refused when pasted back into a reply. The Copy brief button and its toasts live here too,
+// refused when pasted back into a reply. The Copy thread button and its toasts live here too,
 // since a toast is a DOM event. document/window come from test-setup.mjs.
 
 import assert from "node:assert/strict";
@@ -8,7 +8,7 @@ import { NOTIFY_EVENT } from "../../lib/notifications";
 import { dispatchCommand } from "../../desktop/commands";
 import { activate } from "./main";
 import { guardOutline, guardReply, OUTLINE_PASTE_REFUSAL } from "./outline";
-import { copyThreadBrief } from "./thread-brief";
+import { copyThreadText } from "./thread-copy";
 
 const realFetch = globalThis.fetch;
 
@@ -122,9 +122,9 @@ test("#demo's reply box refuses an outline topic pasted into it", async () => {
   dispose.deactivate();
 });
 
-// The showcase has no server to build a brief from, so it withholds the button the way it
-// withholds Peek, rather than offering one that can only fail.
-test("#demo withholds Copy brief, and keeps Reply on the thread's root", async () => {
+// The showcase has no server to build the thread's text from, so it withholds the button the way
+// it withholds Peek, rather than offering one that can only fail.
+test("#demo withholds Copy thread, and keeps Reply on the thread's root", async () => {
   location.hash = "#demo";
   const dispose = activate(document.body);
   await settle();
@@ -138,16 +138,16 @@ test("#demo withholds Copy brief, and keeps Reply on the thread's root", async (
   dispose.deactivate();
 });
 
-test("Copy brief asks for the conversation by its root and copies the text it is given", async () => {
+test("Copy thread asks for the conversation by its root and copies the text it is given", async () => {
   let url = "";
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     url = String(input);
-    return new Response(JSON.stringify({ id: "t1", brief: "the brief\nbody" }));
+    return new Response(JSON.stringify({ id: "t1", text: "thread t1\nbody" }));
   }) as typeof fetch;
 
   let copied = "";
   const toasts = await toastsDuring(async () => {
-    const ok = await copyThreadBrief(
+    const ok = await copyThreadText(
       "127.0.0.1:7391",
       "t 1",
       new AbortController().signal,
@@ -158,11 +158,11 @@ test("Copy brief asks for the conversation by its root and copies the text it is
     assert.equal(ok, true);
   });
   assert.equal(url, "http://127.0.0.1:7391/api/v1/diff/thread?id=t+1");
-  assert.equal(copied, "the brief\nbody");
+  assert.equal(copied, "thread t1\nbody");
   assert.deepEqual(toasts, []);
 });
 
-test("Copy brief toasts the server's refusal and copies nothing", async () => {
+test("Copy thread toasts the server's refusal and copies nothing", async () => {
   globalThis.fetch = (async () =>
     new Response(
       JSON.stringify({
@@ -173,7 +173,7 @@ test("Copy brief toasts the server's refusal and copies nothing", async () => {
 
   let wrote = false;
   const toasts = await toastsDuring(async () => {
-    const ok = await copyThreadBrief(
+    const ok = await copyThreadText(
       "127.0.0.1:7391",
       "t1",
       new AbortController().signal,
@@ -187,27 +187,27 @@ test("Copy brief toasts the server's refusal and copies nothing", async () => {
   assert.equal(wrote, false);
 });
 
-test("Copy brief toasts an unreachable server and a clipboard that refuses", async () => {
+test("Copy thread toasts an unreachable server and a clipboard that refuses", async () => {
   globalThis.fetch = (async () => {
     throw new TypeError("Failed to fetch");
   }) as typeof fetch;
   const unreachable = await toastsDuring(async () => {
     assert.equal(
-      await copyThreadBrief("127.0.0.1:7391", "t1", new AbortController().signal, async () => {}),
+      await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {}),
       false,
     );
   });
   assert.equal(unreachable.length, 1, "an unreachable server is reported once");
 
   globalThis.fetch = (async () =>
-    new Response(JSON.stringify({ id: "t1", brief: "b" }))) as typeof fetch;
+    new Response(JSON.stringify({ id: "t1", text: "b" }))) as typeof fetch;
   const refused = await toastsDuring(async () => {
     assert.equal(
-      await copyThreadBrief("127.0.0.1:7391", "t1", new AbortController().signal, async () => {
+      await copyThreadText("127.0.0.1:7391", "t1", new AbortController().signal, async () => {
         throw new Error("denied");
       }),
       false,
     );
   });
-  assert.deepEqual(refused, ["Could not copy the brief: denied"]);
+  assert.deepEqual(refused, ["Could not copy the thread: denied"]);
 });

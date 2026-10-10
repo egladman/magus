@@ -68,6 +68,37 @@ func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
 	assert.Equal(t, at("a.go", 7), m.cursor(), "the second row is patch hunk 7, not hunk 1")
 }
 
+// TestStartOpensTheViewerOnAThreadHunk is how `magus diff --thread` opens on a thread's hunk: by
+// patch index, unfolding the file that holds it, and on the heading when no hunk is named. A
+// start no file holds leaves the cursor at the top rather than failing.
+func TestStartOpensTheViewerOnAThreadHunk(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		start      types.DiffCursor
+		want       types.DiffCursor
+		unfoldsGen bool
+	}{
+		"a hunk":                 {start: at("a.go", 1), want: at("a.go", 1)},
+		"a heading":              {start: at("b.go", -1), want: at("b.go", -1)},
+		"a folded file's hunk":   {start: at("gen/out.json", 0), want: at("gen/out.json", 0), unfoldsGen: true},
+		"no start":               {start: types.DiffCursor{Hunk: -1}, want: at("a.go", -1)},
+		"a path nothing carries": {start: at("gone.go", 0), want: at("a.go", -1)},
+		"a hunk the file lacks":  {start: at("b.go", 5), want: at("b.go", -1)},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := New(Input{Files: testFiles(), Start: tc.start})
+			m.resize(4)
+
+			assert.Equal(t, tc.want, m.cursor())
+			assert.Equal(t, tc.unfoldsGen, m.Unfolded())
+			require.GreaterOrEqual(t, m.CursorRow(), m.Top(), "the cursor row is on screen")
+			assert.Less(t, m.CursorRow(), m.Top()+m.Height())
+		})
+	}
+}
+
 func TestCursorMotionCrossesFileAndHunkBoundaries(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

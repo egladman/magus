@@ -58,8 +58,7 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 	"magus.yaml": "concurrency: 4\n",
 	// The changeset the review example describes, as a PATCH rather than a repository.
 	// `magus diff <patch-file>` is an input magus already documents, so the fixture needs no
-	// git init, no commit and no working-tree edit to have something to review. The patch's
-	// content never shows in the docs: the prompt names paths and annotations, not lines.
+	// git init, no commit and no working-tree edit to have something to review.
 	"change.patch": `diff --git a/main.go b/main.go
 --- a/main.go
 +++ b/main.go
@@ -100,14 +99,10 @@ var examples = []example{
 	{docs: knowledgeDoc, slug: "explain-tool-go", fixture: graphFixture, argv: []string{"explain", "tool:go"}},
 	{docs: knowledgeDoc, slug: "explain-target-test", fixture: graphFixture, argv: []string{"explain", "target:.:test"}},
 	{docs: knowledgeDoc, slug: "path-test-to-tool", fixture: graphFixture, argv: []string{"path", "target:.:test", "tool:go"}},
-	// The review prompt is captured rather than transcribed for the reason every example here is:
-	// it is prose magus assembles, so a hand-typed copy in the docs would describe a version
-	// nobody gets. It reads the fixture's patch file, so it needs no repository to review.
-	//
-	// --patch, not a positional: a positional narrows the changeset to a PATH, so the old spelling
-	// reviewed a clean working tree filtered to a file named change.patch and captured
+	// --patch, not a positional: a positional narrows the changeset to a PATH, so that spelling
+	// reviews a clean working tree filtered to a file named change.patch and captures
 	// "clean: every change is committed" into the docs.
-	{docs: reviewDoc, slug: "diff-prompt", fixture: reviewFixture, argv: []string{"diff", "--prompt", "--patch", "change.patch"}},
+	{docs: reviewDoc, slug: "diff-report", fixture: reviewFixture, argv: []string{"diff", "--no-tui", "--patch", "change.patch"}},
 }
 
 func main() {

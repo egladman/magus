@@ -88,6 +88,10 @@ type Input struct {
 	Unfolded bool
 	// Link decorates a path for display (an OSC 8 hyperlink). Nil renders it plain.
 	Link func(string) string
+	// Start is where the cursor opens: Hunk is the patch index (Hunk.Index), and -1 is the
+	// file's heading. An empty Path, or one no file carries, opens at the top. A start inside a
+	// folded file unfolds it, since the reader asked to see it.
+	Start types.DiffCursor
 }
 
 // RowKind says what one visible row is, so the renderer can mark the cursor and the tests
@@ -217,7 +221,42 @@ func New(in Input) *Model {
 		m.reviewAt[k] = append(m.reviewAt[k], c)
 	}
 	m.rebuild()
+	m.start(in.Start)
 	return m
+}
+
+// start moves the cursor to at. The viewer can split one path across several files (one per
+// reading-order step), so the file is the one holding that hunk, or the path's first for a
+// heading or a hunk no file holds.
+func (m *Model) start(at types.DiffCursor) {
+	if at.Path == "" {
+		return
+	}
+	file, hunk := -1, -1
+	for i, f := range m.files {
+		if f.Path != at.Path {
+			continue
+		}
+		if file < 0 {
+			file = i
+		}
+		if at.Hunk < 0 {
+			break
+		}
+		if hi := slices.IndexFunc(f.Hunks, func(h Hunk) bool { return h.Index == at.Hunk }); hi >= 0 {
+			file, hunk = i, hi
+			break
+		}
+	}
+	if file < 0 {
+		return
+	}
+	if !m.expanded(file) {
+		m.unfolded = m.unfolded || m.files[file].Generated
+		m.unsettled = m.unsettled || m.files[file].Settled
+		m.rebuild()
+	}
+	m.setCursor(file, hunk)
 }
 
 // Rows returns every visible row, cursor included. The renderer windows it.
