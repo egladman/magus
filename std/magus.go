@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -1759,15 +1760,17 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	jobs, err := store.List()
+	staleAfter, err := store.StaleAfter()
 	if err != nil {
 		return types.JobList{}, err
 	}
-	// The same footprints and join `magus ls jobs` makes, the join from the snapshot
-	// `magus queue ls` keeps; it never fetches.
+	list, err := store.Report(ctx, time.Now().Unix(), staleAfter)
+	if err != nil {
+		return types.JobList{}, err
+	}
+	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
+	// never fetches.
 	root := types.WorkspaceFromContext(ctx).Root()
-	list := types.NewJobList(jobs)
-	list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 

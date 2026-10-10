@@ -15,6 +15,7 @@ package magus.job.v1alpha1;
 import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "magus/activity/v1alpha1/activity.proto";
 
 // JobService is the server's control service for background maintenance jobs. Trigger RPCs
 // submit a job and return immediately; ListJobs reports every job's state. Reads stay on
@@ -115,6 +116,111 @@ message Job {
   // Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork
   // set no timeout.
   int64 deadline = 24;
+
+  // The facts the store computes about a delegated row, the same ones `magus ls jobs`
+  // prints. end_reason is why magus ended the row itself, empty when a holder or a person
+  // did. write_proof is alone, disjoint or overlapping, what fork could prove about the
+  // write paths. reported_base and base_verdict are the base the worker landed on and how
+  // it compares to checkpoint. checkout_root is the checkout that took the job.
+  string end_reason = 25;
+  string write_proof = 26;
+  string reported_base = 27;
+  string base_verdict = 28;
+  string checkout_root = 29;
+  int64 registered = 30;            // unix seconds the holder took the job, 0 while untaken
+  JobOrigin registered_by = 31;     // who declared the row
+  JobAttempt attempt = 32;          // the newest recorded run of the job's own check
+  repeated JobGateAttempt gate_attempts = 33;
+  repeated JobUnattributedWrite unattributed = 34;
+  repeated JobEntry entries = 35;
+  JobIntegration integration = 36;  // unset until the integrator verified the job
+  // The row's schema envelope: the newest store schema any writer of it used, and the
+  // features a reader must implement to act on it (see ListJobsResponse.read_only).
+  int32 schema_version = 38;
+  repeated string requires = 37;
+}
+
+// JobOrigin is who did something to a row, one field per channel, as the activity trail
+// records an action's origin.
+message JobOrigin {
+  string user = 1;
+  string uid = 2;
+  string entry_point = 3;
+  string host = 4;
+  string session = 5;
+  string agent = 6;
+  magus.activity.v1alpha1.Credential credential = 7;
+}
+
+// JobAttempt is a recorded run of a check, as `magus job wait` found it.
+message JobAttempt {
+  bool found = 1;
+  string ref = 2;
+  int64 timestamp_ms = 3;
+  string project = 4;
+  string target = 5;
+  string spell = 6;
+  bool failed = 7;
+}
+
+// JobGateAttempt is the newest recorded run of one goal's check.
+message JobGateAttempt {
+  string gate_id = 1;
+  JobAttempt attempt = 2;
+}
+
+// JobUnattributedWrite is a write inside the job's paths that no lease claimed.
+message JobUnattributedWrite {
+  string path = 1;
+  string digest = 2;
+  int64 at = 3; // unix seconds
+}
+
+// JobEntry is an acknowledged write into the job's paths by somebody other than its holder.
+message JobEntry {
+  string path = 1;
+  JobOrigin by = 2;
+  int64 at = 3;       // unix seconds
+  int64 consumed = 4; // unix seconds the entry was consumed, 0 while it stands
+}
+
+// JobIntegration is the integrator's verification of the job in its own checkout.
+message JobIntegration {
+  string checkout = 1;
+  int64 at = 2; // unix seconds
+  bool verified = 3;
+  repeated JobGateStatus gates = 4;
+}
+
+// JobGateStatus is one gate's verdict at integration.
+message JobGateStatus {
+  string id = 1;
+  bool verified = 2;
+  string output_ref = 3;
+  repeated string violations = 4;
+}
+
+// JobBlock is a live job waiting on a dependency that has not passed. state is empty when
+// no row declares the dependency.
+message JobBlock {
+  string job = 1;
+  string on = 2;
+  string state = 3;
+}
+
+// JobReadOnly is a row this binary can read but not write: the store features it lacks.
+message JobReadOnly {
+  string job = 1;
+  repeated string lacks = 2;
+}
+
+// JobOverlapFootprint is whether two overlapping jobs' diffs touch the same declaration.
+// verdict is disjoint, shared or unknown; shared lists the colliding locations; reason says
+// why when it is unknown.
+message JobOverlapFootprint {
+  string verdict = 1;
+  repeated string shared = 2;
+  string reason = 3;
 }
 
 // CompletionGate is one machine-verifiable condition a job's completion is checked against,
@@ -134,12 +240,20 @@ message CompletionGate {
 }
 
 // JobResult is what a holder filed when it exited: the paths it changed, the risks it left
-// unresolved, and the jobs it spawned. A projection of types.JobResult's console-facing half;
-// the schema version and per-gate evidence stay server-side, since nothing renders them yet.
+// unresolved, the jobs it spawned, and the runs it offered as evidence.
 message JobResult {
   repeated string changed_paths = 1;
   repeated string unresolved_risks = 2;
   repeated string descendants = 3;
+  string validation_command = 4;    // the command the holder ran as its check
+  string validation_output_ref = 5; // that run's output ref
+  repeated JobGateEvidence gate_evidence = 6;
+}
+
+// JobGateEvidence is the run a holder offered for one goal.
+message JobGateEvidence {
+  string gate_id = 1;
+  string output_ref = 2;
 }
 
 // JobRelease is a path a job gave up, and the version of it the next one inherits. The
@@ -163,6 +277,12 @@ message JobOverlap {
   string job_b = 2;
   repeated string paths_a = 3;
   repeated string paths_b = 4;
+  // claims is disjoint when the two sides claim different declarations of the files they
+  // share, shared when one covers a declaration the other holds, and empty when neither
+  // claims below the file. footprint compares what the two jobs have actually changed,
+  // unset when it could not be measured.
+  string claims = 5;
+  JobOverlapFootprint footprint = 6;
 }
 
 // JobRun is one completed execution of a job.
@@ -205,4 +325,11 @@ message ListJobsResponse {
   string next_page_token = 2; // empty while one page holds the registry
   // overlaps are the pairs of jobs claiming common ground, derived from jobs on every read.
   repeated JobOverlap overlaps = 3;
+  // The live rows the store flags on every read, by id: past their deadline, left with an
+  // ended ancestor, and untouched for longer than jobs.stale_after.
+  repeated string overdue = 4;
+  repeated string orphans = 5;
+  repeated string stale = 6;
+  repeated JobBlock blocked = 7;       // live jobs waiting on a dependency that has not passed
+  repeated JobReadOnly read_only = 8;  // rows this server's binary can read but not write
 }

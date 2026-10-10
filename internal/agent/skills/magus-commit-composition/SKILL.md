@@ -39,13 +39,13 @@ magus refs <symbol> --occurrences    # every site of a rename, uncapped
 Three signals, strongest first:
 
 - **Project ownership.** Changes in projects with no dependency edge between them
-  are separate commits. Read the edges from `magus describe project`{{if .Full}},
+  are separate commits. Read the edges from `{{cmd "describe project"}}`{{if .Full}},
   which frequently disagrees with what the directory layout suggests{{end}}.
 - **Blast radius.** Groups that reach disjoint project sets are separable; groups
   that reach the same set usually want one commit.
 - **Symbol coupling.** A rename's sites belong together, however many directories
-  they span{{if .Full}}. If refs reports a project not-indexed, run `magus graph
-  build` first: `unknown, not absent` is not an empty result{{end}}.
+  they span{{if .Full}}. If refs reports a project not-indexed, run
+  `{{cmd "graph build"}}` first: `unknown, not absent` is not an empty result{{end}}.
 
 ## Where this stops
 

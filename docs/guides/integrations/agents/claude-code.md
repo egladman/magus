@@ -505,6 +505,30 @@ rules live in, `CLAUDE.md` by default and `-- --rules <file>` when yours is
 somewhere else. Run `magus session --brief` yourself to see what a session
 is handed.
 
+## The magus mod
+
+The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
+whose source is `claude-code-mod/` beside this page. Install it once per person:
+
+```text
+/plugin install magus --marketplace egladman/magus
+```
+
+It adds three things to a session:
+
+- A status line entry and a band above the prompt that name a magus problem with the
+  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped server,
+  a server running another version, or an MCP endpoint that is not serving.
+- A pane, opened with `/magus`, of the job tree, recent runs, and the session's
+  subagents. It reads the server's Connect API over its unix socket, the same
+  services the console uses, so it needs `magus server start` and holds no token.
+- Prompt-cache warnings: a countdown before the cache expires, and a warning or a
+  held prompt when you submit after it has, priced from a rates table you can
+  replace through the mod's `ratesFile` setting.
+
+Every threshold is a setting in `/config`. The mod uses the early-access Claude
+Code plugin API, so a Claude Code update can change what it needs.
+
 ## Coverage and limits
 
 No transport gap in the guard contract: all three kinds of input are wired, `deny`

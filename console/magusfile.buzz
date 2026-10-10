@@ -29,7 +29,10 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint*.mjs",
                 "src/assets/**",
-                "src/apps/diff/demo.patch"],
+                "src/apps/diff/demo.patch",
+                // proto:generate writes src/gen/ from these, and console owns what lands in
+                // its tree, so without them `magus vcs add` calls a regenerated client MGS4005.
+                "../proto/magus/**/*.proto"],
     // Not src/gen/**: proto declares it, and a second claim is MGS4002.
     "outputs": ["gen/**"],
     "targets": {

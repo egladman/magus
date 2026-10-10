@@ -3,21 +3,21 @@
 magus is the task orchestrator, and its unit of work is the target. Targets declare
 their inputs, outputs and sandbox. magus caches results and computes what a change
 affects. A raw language tool bypasses all of that{{if .Full}}, so the cache goes stale, declared
-outputs drift, and `magus affected` can no longer vouch for your change{{else}}: the cache goes
-stale and `magus affected` cannot vouch for your change{{end}}.
+outputs drift, and `{{cmd "affected"}}` can no longer vouch for your change{{else}}: the cache goes
+stale and `{{cmd "affected"}}` cannot vouch for your change{{end}}.
 
 ## Which project a command hits
 
-{{if .Full}}magus is CWD-relative: a bare `magus run`/`ls`/`describe` acts on the project holding
+{{if .Full}}magus is CWD-relative: a bare `{{cmd "run"}}`/`ls`/`describe` acts on the project holding
 your current directory, or the whole workspace from the root. Do not assume the root.
-Scope explicitly so a command means the same anywhere: name the project (`magus run
-test web`), or let `magus affected` compute the set from the diff. `magus where <name>`
+Scope explicitly so a command means the same anywhere: name the project (`{{cmd "run"}}
+test web`), or let `{{cmd "affected"}}` compute the set from the diff. `{{cmd "where"}} <name>`
 resolves a name to its path; over MCP, `{{tool "client"}}` (`{{buzz "where"}}`, the project that contains a directory) ignores the CWD.{{else}}magus is CWD-relative, so never assume the root. Scope explicitly:
 
-- Name the project: `magus run test web`.
-- Or let `magus affected` compute the set from the diff.
+- Name the project: `{{cmd "run"}} test web`.
+- Or let `{{cmd "affected"}}` compute the set from the diff.
 
-`magus where <name>` resolves a name to its path. MCP tools ignore the CWD.{{end}}
+`{{cmd "where"}} <name>` resolves a name to its path. MCP tools ignore the CWD.{{end}}
 
 {{if .Full}}`--root <path>`, or `-C` after make's idiom, sets where that walk STARTS. Its argument
 is a plain path: any directory, holding one file or none, nested or not. It is not a
@@ -47,34 +47,34 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 1. Prefer the MCP tools{{if .Full}}; they return structured content with nothing to silence{{end}}.
    Call an exposed MCP tool directly. If it is missing or its call fails, use the
    CLI fallback below.
-   - Do not gate that choice on `magus status --probe=mcp`. It tests loopback HTTP,
+   - Do not gate that choice on `{{cmd "status"}} --probe=mcp`. It tests loopback HTTP,
      while a host may use stdio or the server's Unix socket.
-   - `magus status --probe=readiness` checks that this workspace is loaded on the
+   - `{{cmd "status"}} --probe=readiness` checks that this workspace is loaded on the
      server socket. It does not test the host's MCP registration.
    - Hosts manage their own connection; never start a server for an agent.{{if .Full}}
      Do not make the connection a prerequisite for completing the work.{{end}}
-   - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, with the same arguments as `magus run`{{if .Full}} (or the cwd
+   - `{{tool "client"}}` (`{{buzz "run"}}`): run named projects, with the same arguments as `{{cmd "run"}}`{{if .Full}} (or the cwd
      project). Use when you know which projects to run{{end}}.
    - `{{tool "client"}}` (`{{buzz "affected"}}`): the projects a VCS change touched. It
-     returns the set and does not run it{{if .Full}}. The gate is `magus affected ci`{{end}}.
+     returns the set and does not run it{{if .Full}}. The gate is `{{cmd "affected"}} ci`{{end}}.
 
    `{{tool "client"}}` is bounded at 10 minutes when called directly. A host that
    supports MCP tasks can run it as a task without that bound. Send a long run (a
    full `ci`, a gate) to the CLI unless your host runs `{{tool "client"}}` as a task.
 
-   If the MCP tool errors or is absent, run the CLI equivalent{{if .Full}}: `magus run
-   <target>`, `magus affected list` for the set, `magus affected <target>` to run
+   If the MCP tool errors or is absent, run the CLI equivalent{{if .Full}}: `{{cmd "run"}}
+   <target>`, `{{cmd "affected"}} list` for the set, `{{cmd "affected"}} <target>` to run
    it. Do not stop, and do not drop to a raw language tool. When you shell out,
    silence it (`-s`) so a
    passing run costs a few lines, not a scroll of progress.{{else}}:
-   - `magus run <target>` to run a target.
-   - `magus affected list` for the set; `magus affected <target>` to run it.
+   - `{{cmd "run"}} <target>` to run a target.
+   - `{{cmd "affected"}} list` for the set; `{{cmd "affected"}} <target>` to run it.
    - Silence it with `-s`. Do not stop, and do not drop to a raw language tool.{{end}}
 2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one target
    name magus enforces{{if .Full}}: the command that composes the pipeline
    (typically generate, lint, build, test) in the order the magusfile declares{{end}}.
-   - Run `magus run ci <project>` for the project you are working in.
-   - Run `magus affected ci` as the final gate once the change is done{{if .Full}}; it runs the
+   - Run `{{cmd "run"}} ci <project>` for the project you are working in.
+   - Run `{{cmd "affected"}} ci` as the final gate once the change is done{{if .Full}}; it runs the
      full pipeline over every project your change reaches, which is how you learn
      about ramifications in projects you never touched{{end}}.
    - Never hand-run lint, format, and test one at a time. That re-derives an order
@@ -87,7 +87,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
      work, and the tree is already what you want to verify{{end}}.
 3. Reach for an individual target only to iterate on a failure `ci` named.
    Rerunning one failing target is cheaper while you fix it; `ci` afterwards
-   proves the change. `magus describe targets` lists every target (`-o name` for
+   proves the change. `{{cmd "describe targets"}}` lists every target (`-o name` for
    bare names){{if .Full}} and classifies each as canonical, spell,
    or custom; `{{tool "client"}}` (`{{buzz "describe.target"}}`) is the MCP equivalent{{end}}. Ask the
    workspace; do not read `MAGUS.md`{{if .Full}}: that file is a generated index
@@ -95,7 +95,7 @@ still walks up from your cwd. Pass `--root` when you mean elsewhere.{{end}}
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...) for
    work a target covers. If no target covers it, say so; never silently go around
    magus.
-5. Rewriting DEPENDENCY state needs the `update` charm: `magus run
+5. Rewriting DEPENDENCY state needs the `update` charm: `{{cmd "run"}}
    <target>:update <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
    visible to affected tracking{{end}}. That covers `go get`, `go mod tidy`, `pnpm add`,
    `cargo update`, `uv lock` and `pip-compile`.
@@ -114,20 +114,20 @@ magus run test web                # iterate on the one failing target ci named
 magus affected test               # only projects affected by the VCS diff
 ```
 
-{{if .Full}}MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `magus run`.
+{{if .Full}}MCP equivalents: `{{tool "client"}}` (`{{buzz "run"}}`) with the arguments of `{{cmd "run"}}`.
 `{{buzz "affected"}}` returns the affected project set and does not run it. `{{buzz "impact"}}` is why each project is in that set. `{{buzz "where"}}` answers which project contains a directory.
 
 WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
-hand-sequencing `magus run lint`, `format`, `test` to check your own work.
-CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
+hand-sequencing `{{cmd "run"}} lint`, `format`, `test` to check your own work.
+CORRECT: `{{cmd "run"}} ci <project>` while working, `{{cmd "affected"}} ci` once the
 change is done, and a single narrower target only to iterate on a failure.
 
 To prove a command on Linux without opening a pull request, magus's own repository
-runs it on a GitHub Actions runner (`magus buzz hack/remote/on-actions.buzz --
-<command>`) or in a local Podman container (`magus buzz hack/remote/on-linux.buzz --
+runs it on a GitHub Actions runner (`{{cmd "buzz"}} hack/remote/on-actions.buzz --
+<command>`) or in a local Podman container (`{{cmd "buzz"}} hack/remote/on-linux.buzz --
 <command>`).{{else}}WRONG: `go test ./...` after editing Go. Also wrong: hand-sequencing
-`magus run lint`, `format`, `test` to check your own work.
-CORRECT: `magus run ci <project>` while working, and `magus affected ci` once done.{{end}}
+`{{cmd "run"}} lint`, `format`, `test` to check your own work.
+CORRECT: `{{cmd "run"}} ci <project>` while working, and `{{cmd "affected"}} ci` once done.{{end}}
 
 ## Output control: silence runs, read structure
 
@@ -156,7 +156,7 @@ truncating it after the fact:
 `wc`. Do NOT redirect it with `> file`, `>> file`, or `2>&1`.** The guard denies
 both.
 
-- A pipe REPLACES the exit status with the last stage's. `magus affected ci | tail`
+- A pipe REPLACES the exit status with the last stage's. `{{cmd "affected"}} ci | tail`
   reports tail's success, so a failing gate reads as exit 0.
 - You never need to capture the output. Every run persists its full log, and a
   failure prints that path with the output ref.{{if .Full}}
@@ -215,9 +215,9 @@ under the `cause:` you matched{{end}}. Background it as `-o jsonl --tee <file>` 
 contract you can `jq`; otherwise read the file whole.
 {{if .Full}}
 
-WRONG: `magus run test | head -50` (drops the failing tail that matters).
-WRONG: `magus query "kind=target" -o name | grep -c .` (use the JSON count).
-CORRECT: `magus run test -s`, then fetch the printed ref for full detail.
+WRONG: `{{cmd "run"}} test | head -50` (drops the failing tail that matters).
+WRONG: `{{cmd "query"}} "kind=target" -o name | grep -c .` (use the JSON count).
+CORRECT: `{{cmd "run"}} test -s`, then fetch the printed ref for full detail.
 
 The silent run plus ref-fetch IS the low-token failure loop: never re-run a
 target just to see its error again.
@@ -234,7 +234,7 @@ magus run go::go-test             # one op from the go spell
 magus run buf::buf-lint
 ```
 
-List the ops behind a target with `magus describe target <name>`{{if .Full}}: it prints the
+List the ops behind a target with `{{cmd "describe target"}} <name>`{{if .Full}}: it prints the
 fully-evaluated dispatch plan per project (sources, outputs, spells, policy){{end}}.
 Re-run the top-level target before you call the work done{{if .Full}}: ci runs the full
 composition, so the full composition is what has to pass{{end}}.
@@ -244,14 +244,14 @@ composition, so the full composition is what has to pass{{end}}.
 Each target's result line mints an output reference id (`out1a2b3c`).
 
 1. Fetch the exact captured output: `{{tool "client"}}` (`{{buzz "output"}}`) over MCP, or
-   `magus query output out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
+   `{{cmd "query output"}} out1a2b3c` on the CLI.{{if .Full}} Do this instead of re-running the
    target to see the error again.{{else}} Never re-run just to see the error again.{{end}}
-2. With no ref in hand, find it in the run that minted it. Every `magus run` prints
-   one per target. `magus session` lists recent invocations with the targets
+2. With no ref in hand, find it in the run that minted it. Every `{{cmd "run"}}` prints
+   one per target. `{{cmd "session"}}` lists recent invocations with the targets
    they ran{{if .Full}}. There is no tool that fetches "the latest log for a
    project", because a second door onto the same bytes only makes an agent holding a
    ref pick between two{{end}}.
-3. `magus doctor` validates the workspace itself (config, cache, tool availability,
+3. `{{cmd "doctor"}}` validates the workspace itself (config, cache, tool availability,
    cycles){{if .Full}} when failures look environmental rather than caused by
    your change{{end}}.
 
@@ -262,7 +262,7 @@ at once, naming the holder.
 
 - Never write `sleep`/`ps`/`pgrep` polling loops. The guard denies `pgrep`,
   `pidof`, and `ps` for this reason.
-- `magus status --watch=15s` reads that lock state continuously: holder PID,
+- `{{cmd "status"}} --watch=15s` reads that lock state continuously: holder PID,
   command, directory, and age. Re-run once the lock releases.
 - A long-running holder is not, by itself, evidence of a hang.
 
@@ -282,7 +282,7 @@ deciding how to proceed.
 ## Fetching current behavior
 
 {{if .Full}}Flags and target sets differ per workspace and magus version. Trust
-`magus describe targets`, `magus describe target <name>`, and `magus <verb> -h`
+`{{cmd "describe targets"}}`, `{{cmd "describe target"}} <name>`, and `magus <verb> -h`
 over anything remembered, and over `MAGUS.md`, which is generated output that
-lags the tree between regenerations.{{else}}Trust `magus describe targets`, `magus describe target <name>` and
+lags the tree between regenerations.{{else}}Trust `{{cmd "describe targets"}}`, `{{cmd "describe target"}} <name>` and
 `magus <verb> -h` over anything remembered, and over `MAGUS.md`.{{end}}

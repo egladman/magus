@@ -172,6 +172,77 @@ fun list_contains(hay: [str], needle: str) > bool {
     return false;
 }
 
+// cursor_yaml_quote renders text as a YAML double-quoted scalar, so a colon, a quote or a
+// newline in a description cannot change what the frontmatter means.
+fun cursor_yaml_quote(text: str) > str {
+    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+    return "\"" + escaped + "\"";
+}
+
+// cursor_agent renders one shipped agent as a Cursor subagent file. Cursor takes no model
+// per class, so every agent inherits the person's model; a read-only agent is marked so.
+fun cursor_agent(agent: {str: any}) > {str: any} {
+    final name = "{agent["name"]}";
+    var content = "---\nname: " + cursor_yaml_quote(name) + "\ndescription: " + cursor_yaml_quote("{agent["description"]}") + "\nmodel: inherit\n";
+    if (agent["read_only"] == true) {
+        content = content + "readonly: true\n";
+    }
+    content = content + "---\n\n" + "{agent["instructions"]}".trim() + "\n";
+    return {
+        "path": ".cursor/agents/{name}.md",
+        "content": content,
+    };
+}
+
+fun cursor_agents(agents: [any]) > [any] {
+    final files: mut [any] = mut [];
+    foreach (agent in agents) {
+        files.append(cursor_agent(agent as {str: any}));
+    }
+    return files;
+}
+
+// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
+export fun harness_agents(target: Target, cb: fun(any)) > [any] {
+    final req = {<str: any>};
+    cb(req);
+    final agents = req["agents"];
+    if (agents == null) { return []; }
+    return cursor_agents(agents as [any]);
+}
+
+fun cursor_scout_fixture(read_only: bool) > {str: any} {
+    return {
+        "name": "magus-scout",
+        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        "instructions": "First line.\n\nSecond line.\n",
+        "read_only": read_only,
+        "class": "economy",
+    };
+}
+
+test "harness_agents renders a read-only agent that inherits the model" {
+    final file = cursor_agent(cursor_scout_fixture(true));
+    assert\equal("{file["path"]}", ".cursor/agents/magus-scout.md", "Cursor reads .cursor/agents");
+    assert\equal(
+        "{file["content"]}",
+        "---\nname: \"magus-scout\"\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmodel: inherit\nreadonly: true\n---\n\nFirst line.\n\nSecond line.\n",
+        "frontmatter then the instructions",
+    );
+}
+
+test "harness_agents omits readonly for a writable agent" {
+    final content = "{cursor_agent(cursor_scout_fixture(false))["content"]}";
+    assert\isTrue(content.indexOf("readonly") == null, "no read-only mark");
+    assert\isTrue(content.indexOf("model: inherit") != null, "still inherits the model");
+}
+
+test "harness_agents renders nothing when the call carries no agents" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
+}
+
 test "mgs_getName is the harness id describe and verify look up" {
     assert\equal(mgs_getName(), "cursor", "id must match magus\\harness.provider wiring and --id");
 }

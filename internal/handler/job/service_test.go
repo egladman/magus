@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
 	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
 	"github.com/egladman/magus/types"
 )
@@ -315,4 +316,118 @@ func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
 	require.Len(t, resp.Msg.Jobs, len(jobstore.All()), "an unwritten store handed the listing a row")
 	require.NotNil(t, resp.Msg.Overlaps)
 	require.Empty(t, resp.Msg.Overlaps)
+}
+
+// TestDelegatedJob_CarriesEveryStoredFact pins that a delegated row reaches the wire whole:
+// the facts the store computes (why it ended, what fork could prove, the base the worker
+// landed on, who declared it, who wrote into it, the integrator's verdict) are what a
+// reader watching the plan needs, and `magus ls jobs` already prints every one.
+func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
+	by := types.Origin{
+		User: "eli", UID: "501", EntryPoint: types.EntryPointHook, Host: "mac", Session: "s1", Agent: "a1",
+		Credential: types.Credential{Kind: types.KindOperator, ID: "deadbeef", Grant: types.GrantOperator},
+	}
+	row := types.Job{
+		ID:           "api/store",
+		State:        types.StateNoReturn,
+		EndReason:    "its checkout no longer exists",
+		WriteProof:   types.WriteProofDisjoint,
+		ReportedBase: "94d434ac0",
+		BaseVerdict:  types.BaseDiverged,
+		CheckoutRoot: "/w/agent-1",
+		Registered:   1700000100,
+		RegisteredBy: by,
+		Attempt:      &types.JobAttempt{Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true},
+		GateAttempts: []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "out2"}}},
+		Unattributed: []types.JobUnattributedWrite{{Path: "api/store.go", Digest: "sha", At: 7}},
+		Entries:      []types.JobEntry{{Path: "api/new.go", By: by, At: 8, Consumed: 9}},
+		Integration: &types.JobIntegration{
+			Checkout: "/w", At: 10, Verified: true,
+			Gates: []types.GateStatus{{ID: "lint", Verified: false, OutputRef: "out3", Violations: []string{"red"}}},
+		},
+		Result: &types.JobResult{
+			Validation:   types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
+			GateEvidence: []types.GateEvidence{{GateID: "lint", OutputRef: "out2"}},
+		},
+	}
+	row.Version = 11
+	row.Requires = []string{"claims"}
+
+	got := delegatedJob(row)
+
+	require.Equal(t, "its checkout no longer exists", got.EndReason)
+	require.Equal(t, "disjoint", got.WriteProof)
+	require.Equal(t, "94d434ac0", got.ReportedBase)
+	require.Equal(t, "diverged", got.BaseVerdict)
+	require.Equal(t, "/w/agent-1", got.CheckoutRoot)
+	require.Equal(t, int64(1700000100), got.Registered)
+	require.Equal(t, int32(11), got.SchemaVersion)
+	require.Equal(t, []string{"claims"}, got.Requires)
+
+	wantBy := &jobv1.JobOrigin{
+		User: "eli", Uid: "501", EntryPoint: "hook", Host: "mac", Session: "s1", Agent: "a1",
+		Credential: &activityv1.Credential{Class: "operator", Id: "deadbeef", Grant: types.GrantOperator.String()},
+	}
+	require.True(t, proto.Equal(wantBy, got.RegisteredBy), "registered_by: %v", got.RegisteredBy)
+
+	require.True(t, proto.Equal(&jobv1.JobAttempt{Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true}, got.Attempt))
+	require.Len(t, got.GateAttempts, 1)
+	require.Equal(t, "lint", got.GateAttempts[0].GateId)
+	require.Equal(t, "out2", got.GateAttempts[0].Attempt.GetRef())
+	require.True(t, proto.Equal(&jobv1.JobUnattributedWrite{Path: "api/store.go", Digest: "sha", At: 7}, got.Unattributed[0]))
+	require.Len(t, got.Entries, 1)
+	require.Equal(t, int64(9), got.Entries[0].Consumed)
+	require.True(t, proto.Equal(wantBy, got.Entries[0].By))
+	require.True(t, proto.Equal(&jobv1.JobIntegration{
+		Checkout: "/w", At: 10, Verified: true,
+		Gates: []*jobv1.JobGateStatus{{Id: "lint", OutputRef: "out3", Violations: []string{"red"}}},
+	}, got.Integration))
+	require.Equal(t, "magus run go-test api", got.Result.ValidationCommand)
+	require.Equal(t, "out1", got.Result.ValidationOutputRef)
+	require.True(t, proto.Equal(&jobv1.JobGateEvidence{GateId: "lint", OutputRef: "out2"}, got.Result.GateEvidence[0]))
+
+	bare := delegatedJob(types.Job{ID: "old", State: types.StatePass})
+	require.Nil(t, bare.RegisteredBy, "a row from before origins were recorded has no origin to report")
+	require.Nil(t, bare.Attempt)
+	require.Nil(t, bare.Integration)
+}
+
+// TestListJobs_ServesTheStoresReport pins that the listing's flags are the ones the store's
+// report derives, the same report `magus ls jobs` prints, so the console and the CLI
+// cannot disagree about which jobs are overdue or blocked.
+func TestListJobs_ServesTheStoresReport(t *testing.T) {
+	dir := t.TempDir()
+	store := jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
+	for _, row := range []types.Job{
+		{ID: "late", State: types.StateRunning, Deadline: 1},
+		{ID: "waiter", State: types.StateDeclared, DependsOn: []string{"never-declared"}},
+		{ID: "a", State: types.StateRunning, WritePaths: []string{"run.go#RunCI"}},
+		{ID: "b", State: types.StateRunning, WritePaths: []string{"run.go#executeStages"}},
+	} {
+		_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) {
+			cur.State, cur.Deadline, cur.DependsOn, cur.WritePaths = row.State, row.Deadline, row.DependsOn, row.WritePaths
+		})
+		require.NoError(t, err)
+	}
+
+	s := newTestService(fakeWS{dir: dir}, nil,
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+	s.store = store
+
+	resp, err := s.ListJobs(t.Context(), connect.NewRequest(&jobv1.ListJobsRequest{}))
+	require.NoError(t, err)
+	staleAfter, err := store.StaleAfter()
+	require.NoError(t, err)
+	want, err := store.Report(t.Context(), time.Now().Unix(), staleAfter)
+	require.NoError(t, err)
+
+	require.Equal(t, []string{"late"}, resp.Msg.Overdue)
+	require.Equal(t, want.Overdue, resp.Msg.Overdue)
+	require.Equal(t, want.Orphans, resp.Msg.Orphans)
+	require.Equal(t, want.Stale, resp.Msg.Stale)
+	require.Len(t, resp.Msg.Blocked, 1)
+	require.True(t, proto.Equal(&jobv1.JobBlock{Job: "waiter", On: "never-declared"}, resp.Msg.Blocked[0]))
+	require.Len(t, resp.Msg.Overlaps, 1)
+	require.Equal(t, types.ClaimsDisjoint, resp.Msg.Overlaps[0].Claims, "different declarations of one file are disjoint claims")
+	require.Equal(t, want.Overlaps[0].Claims, resp.Msg.Overlaps[0].Claims)
 }

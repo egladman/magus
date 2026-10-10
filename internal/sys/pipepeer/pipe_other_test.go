@@ -23,7 +23,10 @@ func TestPipeProofUnsupported(t *testing.T) {
 	if _, err := (Pipe{}).Readers(); !errors.Is(err, ErrUnsupported) {
 		t.Errorf("Readers error = %v, want ErrUnsupported", err)
 	}
-	if (Pipe{}).WrittenBy(os.Getpid()) || (Pipe{}).ReadBy(os.Getpid()) || SameExecutable(os.Getpid()) || ExecPending(os.Getpid()) {
+	if (Pipe{}).WrittenBy(os.Getpid()) || (Pipe{}).ReadBy(os.Getpid()) || SameExecutable(os.Getpid()) || execPending(os.Getpid()) {
 		t.Errorf("an unsupported platform proved a peer")
+	}
+	if _, state := (Pipe{}).WriterExec(os.Getpid()); state != ExecOther {
+		t.Errorf("WriterExec on an unsupported platform = %d, want ExecOther", state)
 	}
 }

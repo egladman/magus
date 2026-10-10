@@ -5,8 +5,8 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
 
 ## Gather evidence
 
-1. Get the project map and target vocabulary from the workspace: `magus ls` and
-   `magus describe targets`. Do not read `MAGUS.md` for this{{if .Full}}: it is a generated index for human readers, and
+1. Get the project map and target vocabulary from the workspace: `{{cmd "ls"}}` and
+   `{{cmd "describe targets"}}`. Do not read `MAGUS.md` for this{{if .Full}}: it is a generated index for human readers, and
    a history brief that describes stale structure is worse than none{{else}}: a brief on stale structure is worse than none{{end}}.
 2. Establish the requested time boundary.{{if .Full}} On Git, inspect merge commits first:{{end}}
 
@@ -36,7 +36,7 @@ brief.{{if .Full}} The output is a decision aid, not a chronological commit dump
 5. Read affinity, ownership, or trend from `{{tool "client"}}` (`{{buzz "insight"}}`) only for
    context: hidden coupling, ownership risk, rising activity.{{if .Full}} They do not
    prove that a feature landed.{{end}} Insight has no CLI verb; without MCP, read one lens
-   through `magus buzz`:
+   through `{{cmd "buzz"}}`:
 
    ```sh
    magus buzz -e 'import "std"; import "encoding/json"; import "magus"; fun main(args: [str]) > void !> str { std\print(json\stringify(magus\insight().trend)); }'
@@ -105,7 +105,7 @@ Write each entry to this checkable list:
 - One entry per user-visible change, not per commit.{{if .Full}} Squash a fix-up into the entry
   for the thing it fixed up.{{end}}
 - `CHANGELOG.md` is a SOURCE file, not generated{{if .Full}}; confirm with
-  `magus describe file CHANGELOG.md` if unsure, and edit it directly{{end}}.
+  `{{cmd "describe file"}} CHANGELOG.md` if unsure, and edit it directly{{end}}.
 
 ## Answer a granular diff question
 
@@ -114,17 +114,17 @@ classify and relate, where a raw diff only shows text{{end}}.
 
 | question | command |
 | --- | --- |
-| what did this change do to the domain's shape | `magus graph diff --rev <base> -o markdown` |
-| is this changed file source or generated output | `magus describe file <paths...>` |
-| which projects does the change reach | `magus affected --impact` |
-| why is THIS project in the affected set | `magus affected --explain <project>` |
-| what does one node's neighborhood look like now | `magus explain <node>` |
-| where is this symbol defined and used | `magus refs <symbol>` |
-| what did a target actually output | `magus query output <ref>` |
+| what did this change do to the domain's shape | `{{cmd "graph diff"}} --rev <base> -o markdown` |
+| is this changed file source or generated output | `{{cmd "describe file"}} <paths...>` |
+| which projects does the change reach | `{{cmd "affected"}} --impact` |
+| why is THIS project in the affected set | `{{cmd "affected"}} --explain <project>` |
+| what does one node's neighborhood look like now | `{{cmd "explain"}} <node>` |
+| where is this symbol defined and used | `{{cmd "refs"}} <symbol>` |
+| what did a target actually output | `{{cmd "query output"}} <ref>` |
 
-Reach for `magus graph diff` first on a branch review{{if .Full}}: it reports the
+Reach for `{{cmd "graph diff"}}` first on a branch review{{if .Full}}: it reports the
 nodes and edges added, removed, or changed, which is blast radius as data rather
-than a file list to interpret{{end}}. Pair it with `magus describe file`, so a diff of 300
+than a file list to interpret{{end}}. Pair it with `{{cmd "describe file"}}`, so a diff of 300
 paths collapses to the few declared sources.
 
 {{if .Full}}Raw VCS commands answer what only the VCS knows: who committed, when, and in which
@@ -136,14 +136,14 @@ what a change affects is the work these verbs already did.{{else}}Raw VCS answer
 Answer "what changed since my last review, and what needs a look now" from three
 pieces:
 
-1. At review time: `magus vcs checkpoint -o name` prints the revision, or
+1. At review time: `{{cmd "vcs checkpoint"}} -o name` prints the revision, or
    `<revision>+<digest>` when the tree was dirty{{if .Full}} (the digest says
    which dirty tree was reviewed, since the revision alone reads the same
    for every dirty tree built on it){{end}}.
 2. Later: `git diff <revision> | magus diff -` gives the annotated delta: each
    changed file's reach, public API exposure, and referents{{if .Full}},
    the surrounding code worth a second look, not just the literal
-   hunks{{end}}. `magus diff` refuses a positional git ref on
+   hunks{{end}}. `{{cmd "diff"}}` refuses a positional git ref on
    purpose{{if .Full}}; a swallowed ref once printed the reader's own edits
    as the answer{{end}}; the pipe form is the sanctioned spelling.
 3. In a diff session, per-hunk viewed marks key off content digest, not position:
@@ -155,7 +155,7 @@ CORRECT: checkpoint at review time, pipe the delta later.
 
 ## Hand a change to a second reader
 
-`magus diff --prompt` prints a review prompt for a person to paste into any model;
+`{{cmd "diff"}} --prompt` prints a review prompt for a person to paste into any model;
 `--prompt --impact` adds the rationale behind each instruction.{{if .Full}} It carries the
 reading order, which projects rebuild, what could NOT be measured, and which other
 branches touch the same files: the

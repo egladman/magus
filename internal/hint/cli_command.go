@@ -167,6 +167,9 @@ var (
 	ConfigMCPConnectorLs     = cmd("config", "mcp", "connector", "ls")
 	ConfigMCPConnectorRevoke = cmd("config", "mcp", "connector", "revoke")
 
+	SpellPull = cmd("spell", "pull")
+	GraphDeps = cmd("graph", "deps")
+
 	SelfUpdate = cmd("self", "update")
 	Version    = cmd("version")
 )
@@ -208,5 +211,5 @@ var AllCommands = []Command{
 	ConfigView, ConfigSet, ConfigToken, ConfigTokenPrint, MCPTokenGenerate,
 	ConfigConsoleToken, ConfigConsoleTokenCreate, ConfigConsoleTokenRevoke,
 	ConfigMCPConnectorCreate, ConfigMCPConnectorLs, ConfigMCPConnectorRevoke,
-	SelfUpdate, Version,
+	SpellPull, GraphDeps, SelfUpdate, Version,
 }
