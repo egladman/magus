@@ -51,31 +51,31 @@ var (
 // reply also may not carry a stock section label, alone on a line or as a
 // heading; a heading that names its section ("What changes", "Not verified")
 // is allowed past a description's lead. The lead's own opener and heading are
-// lead-context's to report.
+// lead-context's to report wherever it runs.
 //
 // A reply is one person answering another in a thread they share, so its
 // openers ("I've pushed") and its references to that thread are left alone.
 func replyVoice(in input) []Finding {
-	lead := 0
-	if in.kind == KindPullRequest {
-		lead = leadLine(in.lines)
+	leadAt := 0
+	if in.kind == KindChangeDescription && in.reports(leadContextCheck) {
+		leadAt = leadLine(in.lines)
 	}
 
-	sectioned := in.kind == KindPullRequest || in.kind == KindReply
+	sectioned := in.kind == KindChangeDescription || in.kind == KindReviewReply
 
 	var out []Finding
 
 	for _, ln := range in.prose {
 		switch body := strings.TrimSpace(ln.body()); {
 		case ln.heading:
-			if sectioned && ln.line != lead && stockLabel.MatchString(body) {
+			if sectioned && ln.line != leadAt && stockLabel.MatchString(body) {
 				out = append(out, Finding{
 					Message: fmt.Sprintf("Rename the heading '%s': a stock label answers a prompt the reader never "+
 						"saw; name the section's subject in sentence case, as in 'What changes' or 'Not verified'.", body),
 					Match: body, Line: ln.line,
 				})
 			}
-		case sectioned && (in.kind == KindReply || ln.line > 1) && stockLabel.MatchString(body):
+		case sectioned && (in.kind == KindReviewReply || ln.line > 1) && stockLabel.MatchString(body):
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop the section label '%s': say the thing itself.", body),
 				Match:   body, Line: ln.line,
@@ -91,7 +91,7 @@ func replyVoice(in input) []Finding {
 		}
 	}
 
-	if in.kind == KindReply {
+	if in.kind == KindReviewReply {
 		return out
 	}
 
@@ -101,7 +101,7 @@ func replyVoice(in input) []Finding {
 			m := replyOpener.FindString(lead)
 
 			line := para.lineAt(start)
-			if m == "" || (in.kind == KindPullRequest && line == leadLine(in.lines)) {
+			if m == "" || line == leadAt {
 				continue
 			}
 
@@ -113,7 +113,7 @@ func replyVoice(in input) []Finding {
 		}
 
 		spans := conversation.FindAllStringIndex(para.text, -1)
-		if in.kind == KindPullRequest {
+		if in.kind == KindChangeDescription {
 			spans = append(spans, youAsked.FindAllStringIndex(para.text, -1)...)
 			slices.SortFunc(spans, func(a, b []int) int { return a[0] - b[0] })
 		}
@@ -193,7 +193,7 @@ func tense(in input) []Finding {
 			})
 		}
 
-		if in.kind != KindPullRequest {
+		if in.kind != KindChangeDescription {
 			continue
 		}
 
@@ -359,8 +359,8 @@ func attribution(in input) []Finding {
 	patterns := []*regexp.Regexp{credit}
 
 	switch in.kind {
-	case KindReply:
-	case KindPullRequest:
+	case KindReviewReply:
+	case KindChangeDescription:
 		patterns = append(patterns, narrative, workNarrative)
 	default:
 		patterns = append(patterns, narrative)
@@ -372,7 +372,7 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if in.kind == KindPullRequest {
+		if in.kind == KindChangeDescription {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
 				if !strings.HasPrefix(strings.ToLower(para.text[at[2]:]), "claude code") && !within(at[2], spans) {
 					spans = append(spans, at[2:4])
@@ -423,7 +423,7 @@ const leadExample = "'The first query after an edit answers from a graph that is
 // list, a heading or a reply opener in that place answers a different one.
 //
 // A lead whose first sentence states a defect and names no outcome is
-// reported as advisory: the outcome may be phrased in words no list holds.
+// reported to advise: the outcome may be phrased in words no list holds.
 // Measured over the 190 leads of the last 200 merged pull requests, 60 did.
 func leadContext(in input) []Finding {
 	const ask = "open the description with what a reader can now do or no longer has to do, then how the work " +
@@ -480,7 +480,7 @@ func leadContext(in input) []Finding {
 			return []Finding{{
 				Message: fmt.Sprintf("The lead opens on the defect '%s': open with what a reader can now do and "+
 					"give the defect as the reason, as in %s", m, leadExample),
-				Match: m, Line: para.lineAt(at[0]), Severity: SeverityAdvisory,
+				Match: m, Line: para.lineAt(at[0]), Decision: DecisionAdvise,
 			}}
 		}
 	}

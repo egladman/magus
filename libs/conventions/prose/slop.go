@@ -55,18 +55,18 @@ const (
 var (
 	// withReply is the written kinds and a review reply: the tells that apply
 	// to any text a person reads as another person's own words.
-	withReply = slices.Concat(written, []Kind{KindReply})
+	withReply = slices.Concat(written, []Kind{KindReviewReply})
 	// everywhere is every kind that holds prose, doc comments included.
-	everywhere = slices.Concat(all, []Kind{KindReply})
-	// notPullRequest is where a tell a pull request refuses outright is only
-	// advisory: a page may state a contrast on purpose.
-	notPullRequest = []Kind{KindMarkdown, KindGuide, KindSkill, KindReply}
+	everywhere = slices.Concat(all, []Kind{KindReviewReply})
+	// notPullRequest is where a tell a change description refuses outright
+	// only advises: a page may state a contrast on purpose.
+	notPullRequest = []Kind{KindReference, KindGuide, KindAgentInstructions, KindReviewReply}
 	// prosePages are the kinds written as running prose. A guide's steps and a
 	// skill's runbook are short imperatives by rule (step-verb, terse-sentence),
 	// so a run of short sentences there is the form, not a drumbeat.
-	prosePages = []Kind{KindMarkdown, KindPullRequest}
+	prosePages = []Kind{KindReference, KindChangeDescription}
 	// pageKinds are the kinds that hold headings.
-	pageKinds = []Kind{KindMarkdown, KindGuide, KindSkill}
+	pageKinds = []Kind{KindReference, KindGuide, KindAgentInstructions}
 )
 
 // slopChecks run after [toneChecks].
@@ -76,23 +76,23 @@ var slopChecks = []check{
 	{rule: RuleLeak, on: everywhere, judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...)},
 	{rule: RuleBuzzword, on: withReply, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
 	{
-		rule: RuleBuzzwordWeak, on: withReply, advisory: withReply,
+		rule: RuleBuzzwordWeak, on: withReply, advise: withReply,
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: written, advisory: notPullRequest,
+		rule: RuleContrast, on: written, advise: notPullRequest,
 		judge: tellJudge("State the positive claim directly: drop the negation in '%s'.", contrasts...),
 	},
 	{rule: RuleVague, on: withReply, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
 	{rule: RuleCloser, on: withReply, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
 	{
-		rule: RuleIngTail, on: written, advisory: written,
+		rule: RuleIngTail, on: written, advise: written,
 		judge: tellJudge("Make '%s' a sentence with a subject, or cut it.", ingTails...),
 	},
-	{rule: RuleStaccato, on: prosePages, advisory: []Kind{KindMarkdown}, judge: staccato},
-	{rule: RuleDash, on: withReply, judge: dash},
-	{rule: RuleASCII, on: withReply, judge: ascii},
-	{rule: RuleHeadingCase, on: pageKinds, advisory: pageKinds, judge: headingCase},
+	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: staccato},
+	{rule: RuleDash, on: withReply, house: true, judge: dash},
+	{rule: RuleASCII, on: withReply, house: true, judge: ascii},
+	{rule: RuleHeadingCase, on: pageKinds, advise: pageKinds, judge: headingCase},
 }
 
 // tell is one pattern of a rule. An opening tell is anchored to the start of
@@ -209,7 +209,7 @@ var chatbots = []tell{
 	// A salutation is no tell on a page (a letter is a legitimate subject), so
 	// the letter patterns judge only a pull request.
 	anywhere(`\bDear [A-Z][\w ]{2,40}[:,]|\bI am writing to\b|\bhope this (?:message|email|note) finds you\b|`+
-		`\bI understand (?:the |your )?concerns?\b`, KindPullRequest),
+		`\bI understand (?:the |your )?concerns?\b`, KindChangeDescription),
 }
 
 var leaks = []tell{

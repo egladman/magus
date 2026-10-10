@@ -1,6 +1,9 @@
 package prose
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestSecondPersonReportsTheProjectVoiceInAGuide(t *testing.T) {
 	runTextCases(t, RuleSecondPerson, []textCase{
@@ -8,13 +11,27 @@ func TestSecondPersonReportsTheProjectVoiceInAGuide(t *testing.T) {
 		{"us", KindGuide, "A codec per host would cost us upkeep.", []string{"1:us"}},
 		{"we, our and ours", KindGuide, "We keep our cache; the cost is ours.", []string{"1:We", "1:our", "1:ours"}},
 		{"let's", KindGuide, "Let's add a target.", []string{"1:Let's"}},
-		{"a concept page keeps the project voice", KindMarkdown, "We believe a cache is a contract.", nil},
+		{"a concept page keeps the project voice", KindReference, "We believe a cache is a contract.", nil},
 		{"US is a locale", KindGuide, "Set the locale to en-US.", nil},
 		{"code and quotes are mentions", KindGuide, "Pass `--ours`, or the side git calls \"ours\".", nil},
 		// tense reports these, so the guide does not report them again.
 		{"we as the actor of a change", KindGuide, "We added a flag.", nil},
 		{"we'll", KindGuide, "Next we'll add a target.", nil},
 	})
+}
+
+// With tense off, as it ships, nothing reports the "we" tense would have, so
+// second-person does.
+func TestSecondPersonReportsTheWeTenseWouldWhereTenseIsOff(t *testing.T) {
+	var got []string
+
+	for _, f := range JudgeText("We added a flag.", KindGuide) {
+		got = append(got, string(f.Rule)+":"+f.Match)
+	}
+
+	if want := []string{"second-person:We"}; !slices.Equal(got, want) {
+		t.Errorf("findings: got %q, want %q", got, want)
+	}
 }
 
 func TestStepVerbReportsAStepThatDoesNotOpenWithItsAction(t *testing.T) {
@@ -55,7 +72,7 @@ func TestStepVerbReportsAStepThatDoesNotOpenWithItsAction(t *testing.T) {
 			"1. Save the key.\n   1. The key is PEM.\n2. Verify it.", nil,
 		},
 		{"bullets are not steps", KindGuide, "- Run it.\n- The cache fills.", nil},
-		{"only a guide", KindMarkdown, "1. Run `magus init`.\n2. The target builds.", nil},
+		{"only a guide", KindReference, "1. Run `magus init`.\n2. The target builds.", nil},
 	})
 }
 
@@ -71,7 +88,7 @@ func TestCondescensionReportsWordsThatTellTheReaderAStepIsEasy(t *testing.T) {
 		// docs/guides/releasing.md, docs/guides/integrations/agents/skills.md.
 		{"an easy mistake and a denied ease", KindGuide,
 			"The order is easy to get\nwrong, and you cannot easily audit it.", nil},
-		{"only a guide", KindMarkdown, "It is easy.", nil},
+		{"only a guide", KindReference, "It is easy.", nil},
 		{"a quoted word is a mention", KindGuide, `The rule refuses "easy".`, nil},
 	})
 }

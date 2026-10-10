@@ -47,7 +47,7 @@ func TestJudgeTextSkipsWhatIsNotProse(t *testing.T) {
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 32},
 	}
 
-	assertFindings(t, JudgeText(markdownPage, KindMarkdown), want)
+	assertFindings(t, JudgeText(markdownPage, KindReference, houseOn), want)
 }
 
 // A page's description is the sentence a search result shows, so it is prose; every
@@ -56,13 +56,13 @@ func TestJudgeTextJudgesTheFrontMatterDescription(t *testing.T) {
 	page := "---\ntitle: Simply a page\ndescription: \"How the cache simply stores blobs: by key.\"\n" +
 		"tags: [simply]\n---\n\n# Cache\n"
 
-	assertFindings(t, JudgeText(page, KindMarkdown),
+	assertFindings(t, JudgeText(page, KindReference, houseOn),
 		[]Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3}})
 }
 
 func TestJudgeTextReadsAPullRequestTitleAsItsFirstLine(t *testing.T) {
 	got := JudgeText("fix: simply pin the key\nPinning the key keeps two racing workers from writing "+
-		"different blobs, so the cache now sorts its inputs.", KindPullRequest)
+		"different blobs, so the cache now sorts its inputs.", KindChangeDescription, houseOn)
 
 	assertFindings(t, got, []Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 1}})
 }
@@ -72,7 +72,7 @@ func TestJudgeTextReadsAPullRequestTitleAsItsFirstLine(t *testing.T) {
 func TestJudgeTextOnADocMatchesJudge(t *testing.T) {
 	doc := "Resolve returns the path.\n\nIt simply\nrereads a sub-agent - basically twice."
 
-	got := JudgeText(doc, KindDoc)
+	got := JudgeText(doc, KindDocComment, houseOn)
 	want := []Finding{
 		{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 3},
 		{Rule: RuleFiller, Message: "Drop 'basically': state the fact.", Match: "basically", Line: 4},
@@ -86,7 +86,7 @@ func TestJudgeTextOnADocMatchesJudge(t *testing.T) {
 		want[i].Line = 0
 	}
 
-	assertFindings(t, Judge(Symbol{Name: "Resolve", Doc: doc}), want)
+	assertFindings(t, Judge(Symbol{Name: "Resolve", Doc: doc}, houseOn), want)
 }
 
 // changes/unreleased/on-actions.md wraps a command's code span across a line
@@ -109,7 +109,7 @@ func TestJudgeTextReadsACodeSpanWrappedAcrossLines(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var got []int
 
-			for _, f := range JudgeText(tc.text, KindMarkdown, WithOnly(RuleFiller)) {
+			for _, f := range JudgeText(tc.text, KindReference, WithOnly(RuleFiller)) {
 				got = append(got, f.Line)
 			}
 

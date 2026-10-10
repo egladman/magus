@@ -144,7 +144,7 @@ func endsSentence(token string) bool {
 
 func filler(in input) []Finding {
 	pattern := fillerPattern
-	if in.kind != KindDoc {
+	if in.kind != KindDocComment {
 		pattern = writtenFillerPattern
 	}
 

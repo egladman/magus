@@ -47,26 +47,26 @@ const (
 )
 
 var (
-	pullRequestOnly = []Kind{KindPullRequest}
-	replyOnly       = []Kind{KindReply}
+	pullRequestOnly = []Kind{KindChangeDescription}
+	replyOnly       = []Kind{KindReviewReply}
 )
 
 // toneChecks are the rules for posture: blame, verdicts, absolutes, intent,
 // credit, claims without evidence and the review-reply rules. They run after
 // [coreChecks]. A rule whose words have senses it cannot tell apart from the
-// one it means is advisory: of these, only blame and reply-opener measured no
+// one it means advises: of these, only blame and reply-opener measured no
 // false positive over the last 200 merged pull requests.
 var toneChecks = []check{
 	{rule: RuleBlame, on: teammate, judge: blame},
-	{rule: RuleVerdict, on: teammate, advisory: teammate, judge: verdict},
-	{rule: RuleAbsolute, on: teammate, advisory: teammate, judge: absolute},
-	{rule: RuleIntent, on: teammate, advisory: teammate, judge: intent},
-	{rule: RuleCredit, on: pullRequestOnly, advisory: pullRequestOnly, judge: creditEarlier},
-	{rule: RuleClaim, on: teammate, advisory: teammate, judge: claim},
+	{rule: RuleVerdict, on: teammate, advise: teammate, judge: verdict},
+	{rule: RuleAbsolute, on: teammate, advise: teammate, judge: absolute},
+	{rule: RuleIntent, on: teammate, advise: teammate, judge: intent},
+	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
+	{rule: RuleClaim, on: teammate, advise: teammate, judge: claim},
 	{rule: RuleReplyOpener, on: replyOnly, judge: replyOpening},
-	{rule: RuleJudgmentAsFact, on: replyOnly, advisory: replyOnly, judge: judgmentAsFact},
-	{rule: RuleStackedHedge, on: replyOnly, advisory: replyOnly, judge: stackedHedge},
-	{rule: RuleLongThread, on: replyOnly, advisory: replyOnly, judge: longThread},
+	{rule: RuleJudgmentAsFact, on: replyOnly, advise: replyOnly, judge: judgmentAsFact},
+	{rule: RuleStackedHedge, on: replyOnly, advise: replyOnly, judge: stackedHedge},
+	{rule: RuleLongThread, on: replyOnly, advise: replyOnly, judge: longThread},
 }
 
 // matchFindings reports each span pattern finds in the prose of in, less those exempt
@@ -303,7 +303,7 @@ var (
 // issue or pull request, a commit or a magus output ref. A sentence that
 // states a limit ("Not measured on Linux") is exempt.
 //
-// It is advisory: over the last 200 merged pull requests it fired in 21, and
+// It advises: over the last 200 merged pull requests it fired in 21, and
 // about half of those state a setting ("a 300s bound") rather than measure.
 func claim(in input) []Finding {
 	const message = "Put the evidence for '%s' in the same sentence or bullet: the test or command in backticks, " +
@@ -317,7 +317,7 @@ func claim(in input) []Finding {
 	var out []Finding
 
 	for i, para := range masked {
-		if para.head.heading || limits[i] || (in.kind == KindPullRequest && para.head.line == 1) {
+		if para.head.heading || limits[i] || (in.kind == KindChangeDescription && para.head.line == 1) {
 			continue
 		}
 

@@ -331,7 +331,7 @@ func TestDocStubReportsADocThatOnlyRepeatsTheName(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(tc.sym), tc.want)
+			assertFindings(t, Judge(tc.sym, houseOn), tc.want)
 		})
 	}
 }
@@ -348,7 +348,7 @@ func TestDocStubSkipsATokenDoc(t *testing.T) {
 
 	for _, doc := range docs {
 		t.Run(doc, func(t *testing.T) {
-			assertFindings(t, Judge(Symbol{Name: "Op", Doc: doc}), nil)
+			assertFindings(t, Judge(Symbol{Name: "Op", Doc: doc}, houseOn), nil)
 		})
 	}
 }
@@ -387,7 +387,7 @@ func TestMarkersSilenceHistoryAndDocStub(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(tc.sym), tc.want)
+			assertFindings(t, Judge(tc.sym, houseOn), tc.want)
 		})
 	}
 }

@@ -13,31 +13,30 @@ import (
 // Findings come in [Rules] order, then in the order their text appears, each
 // with its line in text.
 //
-// KindDoc reads text as a doc comment, by the rules [Judge] applies to one.
-// KindSkillSource renders text in both of a skill's forms first, and each
-// finding's line is its line in the source.
+// KindDocComment reads text as a doc comment, by the rules [Judge] applies to
+// one. KindAgentInstructionsTemplate renders text in both of its forms first,
+// and each finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
+	return judgeText(text, kind, collect(opts))
+}
+
+func judgeText(text string, kind Kind, o options) []Finding {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	o := collect(opts)
 
 	switch kind {
-	case KindDoc:
+	case KindDocComment:
 		return run(input{
 			symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw, source: raw, opts: o,
 		})
-	case KindSkillSource:
-		// The two forms are judged without the options, so the rules they name
-		// are applied to what comes back.
-		return slices.DeleteFunc(judgeSkillSource(strings.Join(raw, "\n")), func(f Finding) bool {
-			return !o.keeps(f.Rule)
-		})
+	case KindAgentInstructionsTemplate:
+		return judgeSkillSource(strings.Join(raw, "\n"), o)
 	}
 
-	lines := markdownProse(raw, kind != KindPullRequest && kind != KindReply)
+	lines := markdownProse(raw, kind != KindChangeDescription && kind != KindReviewReply)
 	wrapCodeSpans(lines)
 	prose := readProse(lines, true)
 
-	if kind == KindPullRequest {
+	if kind == KindChangeDescription {
 		// The title is a paragraph of its own, however close the description
 		// starts below it.
 		for i := range prose {
@@ -285,7 +284,7 @@ func mentionsMasked(s string) string { return blankQuoted(blankBackticks(s)) }
 // text reads a quoted word as a mention; a doc comment keeps reading it as used,
 // as it always has.
 func mentions(kind Kind) func(string) string {
-	if kind == KindDoc {
+	if kind == KindDocComment {
 		return blankBackticks
 	}
 

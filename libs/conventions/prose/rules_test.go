@@ -212,13 +212,13 @@ func TestNameSuffixReportsACallableNameEndingInOfOrFor(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(Symbol{Name: tc.name, Callable: true}), tc.want)
+			assertFindings(t, Judge(Symbol{Name: tc.name, Callable: true}, houseOn), tc.want)
 		})
 	}
 }
 
 func TestNameSuffixSkipsANameThatIsNotCallable(t *testing.T) {
-	assertFindings(t, Judge(Symbol{Name: "valueOf"}), nil)
+	assertFindings(t, Judge(Symbol{Name: "valueOf"}, houseOn), nil)
 }
 
 func nameSuffixFinding(name string) Finding {

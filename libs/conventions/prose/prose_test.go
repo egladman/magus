@@ -19,21 +19,41 @@ func runJudgeCases(t *testing.T, cases []judgeCase) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, Judge(Symbol{Name: "Resolve", Callable: true, Doc: tc.doc}), tc.want)
+			assertFindings(t, Judge(Symbol{Name: "Resolve", Callable: true, Doc: tc.doc}, houseOn), tc.want)
 		})
 	}
 }
 
-// assertFindings reads a want with no Severity as [SeverityError], so a case
-// names a severity only where it is advisory.
+// houseOn turns every house rule on at [DecisionDeny], so a case judges by
+// every rule as this repository does.
+var houseOn = WithDecisions(houseDecisions(DecisionDeny))
+
+func houseDecisions(d Decision) map[Rule]Decision {
+	out := map[Rule]Decision{}
+
+	for _, c := range checks {
+		if c.house {
+			out[c.rule] = d
+		}
+	}
+
+	return out
+}
+
+// assertFindings reads a want with no Decision as [DecisionDeny], so a case
+// names a decision only where it advises, and fills in each want's code and
+// page from its rule.
 func assertFindings(t *testing.T, got, want []Finding) {
 	t.Helper()
 
 	want = slices.Clone(want)
 	for i := range want {
-		if want[i].Severity == "" {
-			want[i].Severity = SeverityError
+		if want[i].Decision == "" {
+			want[i].Decision = DecisionDeny
 		}
+
+		want[i].Code = ruleTexts[want[i].Rule].code
+		want[i].URL = ruleBase + string(want[i].Rule) + "/"
 	}
 
 	if !reflect.DeepEqual(got, want) {
@@ -72,21 +92,87 @@ func TestJudgeTextOptionsChooseTheRules(t *testing.T) {
 	filler := Finding{Rule: RuleFiller, Message: "Drop 'Simply': state the fact.", Match: "Simply", Line: 1}
 	terms := Finding{Rule: RuleTerms, Message: "Write 'subagent', not 'sub-agent'.", Match: "sub-agent", Line: 1}
 
+	advisedTerms := terms
+	advisedTerms.Decision = DecisionAdvise
+
 	cases := []struct {
 		name string
 		opts []Option
 		want []Finding
 	}{
-		{"every rule by default", nil, []Finding{filler, terms}},
-		{"only", []Option{WithOnly(RuleTerms)}, []Finding{terms}},
-		{"skip", []Option{WithSkip(RuleTerms)}, []Finding{filler}},
-		{"the collaborative profile leaves the glossary out", []Option{WithProfile(ProfileCollaborative)}, []Finding{filler}},
+		{"house style is off by default", nil, []Finding{filler}},
+		{"a table turns a house rule on", []Option{WithDecisions(map[Rule]Decision{RuleTerms: DecisionDeny})},
+			[]Finding{filler, terms}},
+		{"a table sets the decision", []Option{WithDecisions(map[Rule]Decision{RuleTerms: DecisionAdvise})},
+			[]Finding{filler, advisedTerms}},
+		{"a table turns a rule off", []Option{WithDecisions(map[Rule]Decision{RuleFiller: DecisionOff})}, nil},
+		{"only", []Option{houseOn, WithOnly(RuleTerms)}, []Finding{terms}},
+		{"only leaves an off rule off", []Option{WithOnly(RuleTerms)}, nil},
+		{"a later table adds to the first", []Option{
+			houseOn, WithDecisions(map[Rule]Decision{RuleTerms: DecisionOff}),
+		}, []Finding{filler}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertFindings(t, JudgeText(text, KindMarkdown, tc.opts...), tc.want)
+			assertFindings(t, JudgeText(text, KindReference, tc.opts...), tc.want)
 		})
+	}
+}
+
+// A table that names a rule sets every finding's decision, the ones the rule
+// marked to advise itself included; with no table, the rule's mark stands.
+func TestDecisionsOverrideWhatARuleMarked(t *testing.T) {
+	const text = "perf: x\nThe server's warm caches lagged behind edits, so the first query rebuilt the graph inline."
+
+	marked := func(opts ...Option) []Decision {
+		var out []Decision
+
+		for _, f := range JudgeText(text, KindChangeDescription, append(opts, WithOnly(RuleLeadContext))...) {
+			out = append(out, f.Decision)
+		}
+
+		return out
+	}
+
+	if got := marked(); !slices.Equal(got, []Decision{DecisionAdvise}) {
+		t.Errorf("with no table: got %q, want advise", got)
+	}
+
+	if got := marked(WithDecisions(map[Rule]Decision{RuleLeadContext: DecisionDeny})); !slices.Equal(got,
+		[]Decision{DecisionDeny}) {
+		t.Errorf("with deny in the table: got %q, want deny", got)
+	}
+}
+
+func TestCatalogDocumentsEveryRuleWithAUniqueCode(t *testing.T) {
+	codes := map[string]Rule{}
+
+	for _, doc := range Catalog() {
+		switch {
+		case doc.Catches == "" || doc.Why == "":
+			t.Errorf("%s: no catches or why", doc.Name)
+		case len(doc.Code) != 7 || doc.Code[:3] != "PRS":
+			t.Errorf("%s: code %q is not PRS and four digits", doc.Name, doc.Code)
+		case codes[string(doc.Code)] != "":
+			t.Errorf("%s: code %s is %s's", doc.Name, doc.Code, codes[string(doc.Code)])
+		}
+
+		codes[string(doc.Code)] = doc.Name
+
+		for _, k := range doc.Kinds {
+			if d := doc.Decisions[k]; doc.House && d != DecisionOff || !doc.House && d == DecisionOff {
+				t.Errorf("%s on %s: default %q, house %v", doc.Name, k, d, doc.House)
+			}
+		}
+
+		if got, want := prs.URL(doc.Code), ruleBase+string(doc.Name)+"/"; got != want {
+			t.Errorf("%s: url %q, want %q", doc.Name, got, want)
+		}
+	}
+
+	if len(codes) != len(Rules()) || len(ruleTexts) != len(Rules()) {
+		t.Errorf("%d codes and %d texts for %d rules", len(codes), len(ruleTexts), len(Rules()))
 	}
 }
 
@@ -111,7 +197,7 @@ func TestJudgeReportsInRuleOrderThenTextOrder(t *testing.T) {
 		},
 	}
 
-	assertFindings(t, Judge(s), want)
+	assertFindings(t, Judge(s, houseOn), want)
 }
 
 func TestJudgeFindsNothingInAnEmptyDoc(t *testing.T) {

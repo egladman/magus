@@ -96,7 +96,7 @@ func compileWordy(keep func(phrase string) bool) *regexp.Regexp {
 
 func wordy(in input) []Finding {
 	pattern := writtenWordyPattern
-	if in.kind == KindSkill {
+	if in.kind == KindAgentInstructions {
 		pattern = wordyPattern
 	}
 

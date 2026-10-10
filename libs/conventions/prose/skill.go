@@ -23,13 +23,23 @@ type skillForm struct {
 }
 
 // judgeSkillSource judges a skill body in both of its forms. The two share
-// most of their text, so a Markdown finding both report is reported once.
-func judgeSkillSource(text string) []Finding {
+// most of their text, so a Markdown finding both report is reported once. A
+// body that does not render is judged by [RuleTemplate] alone, and passes
+// where that rule is off.
+func judgeSkillSource(text string, o options) []Finding {
+	unrendered := func(message string) []Finding {
+		d := o.decide(templateCheck, KindAgentInstructionsTemplate)
+		if d == DecisionOff {
+			return nil
+		}
+
+		return []Finding{o.settle(templateCheck, Finding{Message: message}, d)}
+	}
+
 	tree, err := parseSkill(text)
 	if err != nil {
-		return []Finding{{Rule: RuleTemplate, Message: fmt.Sprintf(
-			"The skill body does not render: %v. Balance its {{if .Full}} arms the way internal/agent's "+
-				"template parser reads them.", err)}}
+		return unrendered(fmt.Sprintf("The skill body does not render: %v. Balance its {{if .Full}} arms the way "+
+			"internal/agent's template parser reads them.", err))
 	}
 
 	var forms [2]skillForm
@@ -37,17 +47,17 @@ func judgeSkillSource(text string) []Finding {
 	for i, full := range []bool{false, true} {
 		forms[i], err = renderSkill(text, tree, full)
 		if err != nil {
-			return []Finding{{Rule: RuleTemplate, Message: fmt.Sprintf(
-				"The skill body does not render: %v. A branch is .Full, .Short or .Is \"name\".", err)}}
+			return unrendered(fmt.Sprintf(
+				"The skill body does not render: %v. A branch is .Full, .Short or .Is \"name\".", err))
 		}
 	}
 
 	var found []Finding
 
 	seen := map[Finding]bool{}
-	judged := append(judgeForm(forms[0], KindSkill), judgeForm(forms[1], KindMarkdown)...)
+	judged := append(judgeForm(forms[0], KindAgentInstructions, o), judgeForm(forms[1], KindReference, o)...)
 
-	for _, f := range judgeForm(forms[1], KindSkill) {
+	for _, f := range judgeForm(forms[1], KindAgentInstructions, o) {
 		if f.Rule == RuleBareRule {
 			judged = append(judged, f)
 		}
@@ -74,8 +84,8 @@ func judgeSkillSource(text string) []Finding {
 
 // judgeForm runs kind's rules over a render and moves each finding to the
 // source line it came from.
-func judgeForm(form skillForm, kind Kind) []Finding {
-	found := JudgeText(form.text, kind)
+func judgeForm(form skillForm, kind Kind, o options) []Finding {
+	found := judgeText(form.text, kind, o)
 
 	for i := range found {
 		if l := found[i].Line; l > 0 && l <= len(form.lines) {

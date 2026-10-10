@@ -2,13 +2,54 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/egladman/magus/libs/conventions/prose"
 )
 
-const nameSuffix = `{"node":"n","source":"","language":"","rule":"name-suffix","severity":"error","message":"Rename 'configFor': no function or method name ends in the word Of or For.","match":"configFor"}`
+const (
+	fillerSimply = "Drop 'simply': state the fact."
+	termsMessage = "Write 'subagent', not 'sub-agent'."
+	nameSuffix   = "Rename 'configFor': no function or method name ends in the word Of or For."
+)
+
+// row is the finding judge-docs writes for rule, its code and page read from
+// the catalog.
+func row(node, source, kind string, rule prose.Rule, decision prose.Decision, message, match string) finding {
+	f := finding{
+		Node: node, Source: source, Kind: kind, Rule: string(rule), Decision: string(decision),
+		Message: message, Match: match,
+	}
+
+	for _, doc := range prose.Catalog() {
+		if doc.Name == rule {
+			f.Code = string(doc.Code)
+			f.URL = "https://eli.gladman.cc/magus/reference/prose/" + string(rule) + "/"
+		}
+	}
+
+	return f
+}
+
+// rows is fs as judge-docs encodes it.
+func rows(t *testing.T, fs ...finding) string {
+	t.Helper()
+
+	if fs == nil {
+		fs = []finding{}
+	}
+
+	var b bytes.Buffer
+	if err := json.NewEncoder(&b).Encode(fs); err != nil {
+		t.Fatal(err)
+	}
+
+	return b.String()
+}
 
 func runJudge(t *testing.T, stdin string) (code int, stdout, stderr string) {
 	t.Helper()
@@ -43,11 +84,38 @@ func assertArgs(t *testing.T, args []string, stdin, want string) {
 	}
 }
 
+// writeFile writes body to name in dir and returns its path.
+func writeFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+
+	p := filepath.Join(dir, name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	return p
+}
+
+// houseTable writes a decisions table turning the named house rules on.
+func houseTable(t *testing.T, rules ...prose.Rule) string {
+	t.Helper()
+
+	entries := make([]string, len(rules))
+	for i, r := range rules {
+		entries[i] = `"` + string(r) + `":"deny"`
+	}
+
+	return writeFile(t, t.TempDir(), "decisions.json", `{"rules":{`+strings.Join(entries, ",")+`}}`)
+}
+
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
 	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve simply returns the path."}]`
-	want := `[{"node":"n1","source":"a.go","language":"go","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
 
-	assertRun(t, in, 0, want, "")
+	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply")), "")
 }
 
 func TestRunWritesAnEmptyArrayWhenNothingIsFound(t *testing.T) {
@@ -64,21 +132,25 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 	in := `[` +
 		`{"node":"b","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."},` +
 		`{"node":"a","name":"Open","kind":"function","doc":"Open simply opens."}]`
-	want := `[` +
-		`{"node":"b","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"},` +
-		`{"node":"b","source":"","language":"","rule":"terms","severity":"error","message":"Write 'subagent', not 'sub-agent'.","match":"sub-agent"},` +
-		`{"node":"a","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
+	want := rows(t,
+		row("b", "", "doc-comment", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply"),
+		row("b", "", "doc-comment", prose.RuleTerms, prose.DecisionDeny, termsMessage, "sub-agent"),
+		row("a", "", "doc-comment", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply"),
+	)
 
-	assertRun(t, in, 0, want, "")
+	assertArgs(t, []string{"-decisions", houseTable(t, prose.RuleTerms)}, in, want)
 }
 
 func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
+	decisions := houseTable(t, prose.RuleNameSuffix)
+	found := rows(t, row("n", "", "doc-comment", prose.RuleNameSuffix, prose.DecisionDeny, nameSuffix, "configFor"))
+
 	cases := []struct {
 		kind string
 		want string
 	}{
-		{"function", "[" + nameSuffix + "]\n"},
-		{"method", "[" + nameSuffix + "]\n"},
+		{"function", found},
+		{"method", found},
 		{"type", "[]\n"},
 		{"", "[]\n"},
 	}
@@ -87,115 +159,169 @@ func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
 		t.Run("kind "+tc.kind, func(t *testing.T) {
 			in := `[{"node":"n","name":"configFor","kind":"` + tc.kind + `","doc":""}]`
 
-			assertRun(t, in, 0, tc.want, "")
+			assertArgs(t, []string{"-kind", "doc-comment", "-decisions", decisions}, in, tc.want)
 		})
 	}
 }
 
-func TestRunJudgesMarkdownFilesInArgumentOrder(t *testing.T) {
+func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 	dir := t.TempDir()
-	a, b := filepath.Join(dir, "a.md"), filepath.Join(dir, "b.md")
+	a := writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n")
+	b := writeFile(t, dir, "b.md", "- **Cache:** on\n")
 
-	if err := os.WriteFile(a, []byte("# A\n\nIt simply works.\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	want := rows(t,
+		row(b, b+":1", "reference", prose.RuleReplyVoice, prose.DecisionDeny,
+			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**"),
+		row(a, a+":3", "reference", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply"),
+	)
 
-	if err := os.WriteFile(b, []byte("- **Cache:** on\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	want := `[` +
-		`{"node":"` + b + `","source":"` + b + `:1","language":"markdown","rule":"reply-voice","severity":"error","message":"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.","match":"**Cache:**"},` +
-		`{"node":"` + a + `","source":"` + a + `:3","language":"markdown","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}]` + "\n"
-
-	assertArgs(t, []string{"-kind", "markdown", b, a}, "", want)
+	assertArgs(t, []string{"-kind", "reference", b, a}, "", want)
 }
 
-func TestRunJudgesASkillSourceAtItsSourceLine(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "SKILL.md")
-	body := "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n"
+func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n")
 
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	want := rows(t, row(path, path+":7", "agent-instructions-template", prose.RuleWordy, prose.DecisionDeny,
+		"Write 'to', not 'in order to'.", "in order to"))
 
-	want := `[{"node":"` + path + `","source":"` + path + `:7","language":"skill-source","rule":"wordy","severity":"error",` +
-		`"message":"Write 'to', not 'in order to'.","match":"in order to"}]` + "\n"
-
-	assertArgs(t, []string{"-kind", "skill-source", path}, "", want)
+	assertArgs(t, []string{"-kind", "agent-instructions-template", path}, "", want)
 }
 
 func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "guide.md")
+	path := writeFile(t, t.TempDir(), "guide.md", "# Guide\n\nThen we run it.\n")
 
-	if err := os.WriteFile(path, []byte("# Guide\n\nThen we run it.\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"guide","rule":"second-person","severity":"error",` +
-		`"message":"Address the reader as you, not 'we': a guide speaks to the person following it, ` +
-		`and names magus or the project where it means them.","match":"we"}]` + "\n"
+	want := rows(t, row(path, path+":3", "guide", prose.RuleSecondPerson, prose.DecisionDeny,
+		"Address the reader as you, not 'we': a guide speaks to the person following it, "+
+			"and names magus or the project where it means them.", "we"))
 
 	assertArgs(t, []string{"-kind", "guide", path}, "", want)
 }
 
-func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
-	want := `[{"node":"pull-request","source":"pull-request:2","language":"pull-request","rule":"lead-context",` +
-		`"severity":"error","message":"It opens with a heading: open the description with what a reader can now do ` +
-		`or no longer has to do, then how the work came up and why it mattered, then the changes, as in 'The first ` +
-		`query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that ` +
-		`query.'","match":"## Summary"}]` + "\n"
+func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
+	want := rows(t, row("change-description", "change-description:2", "change-description", prose.RuleLeadContext,
+		prose.DecisionDeny, "It opens with a heading: open the description with what a reader can now do "+
+			"or no longer has to do, then how the work came up and why it mattered, then the changes, as in 'The first "+
+			"query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that "+
+			"query.'", "## Summary"))
 
-	assertArgs(t, []string{"-kind", "pull-request"}, "fix: pin the key\n## Summary\n", want)
+	assertArgs(t, []string{"-kind", "change-description"}, "fix: pin the key\n## Summary\n", want)
 }
 
-func TestRunJudgesAReplyFromStdin(t *testing.T) {
-	want := `[{"node":"reply","source":"reply:1","language":"reply","rule":"reply-opener","severity":"error",` +
-		`"message":"Drop 'No,' and open with the fact and its evidence, as in 'This needs a lock: the map is ` +
-		`written from two goroutines.'","match":"No,"}]` + "\n"
+func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
+	want := rows(t, row("review-reply", "review-reply:1", "review-reply", prose.RuleReplyOpener, prose.DecisionDeny,
+		"Drop 'No,' and open with the fact and its evidence, as in 'This needs a lock: the map is "+
+			"written from two goroutines.'", "No,"))
 
-	assertArgs(t, []string{"-kind", "reply"}, "No, the map is shared by the two workers.", want)
+	assertArgs(t, []string{"-kind", "review-reply"}, "No, the map is shared by the two workers.", want)
 }
 
-// A reply that is its author's fourth in the thread draws one advisory, which
-// -severity error leaves out.
-func TestRunSelectsFindingsBySeverityAndThreadLength(t *testing.T) {
+// A reply that is its author's fourth in the thread draws one finding, which
+// advises unless a table says otherwise.
+func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 	const reply = "The map is shared by the two workers."
 
-	advisory := `[{"node":"reply","source":"reply:0","language":"reply","rule":"long-thread","severity":"advisory",` +
-		`"message":"This is reply 4 from you in the thread: offer a call to settle it, as in 'Want to talk this ` +
-		`through for ten minutes?'","match":""}]` + "\n"
+	message := "This is reply 4 from you in the thread: offer a call to settle it, as in 'Want to talk this " +
+		"through for ten minutes?'"
+	deny := writeFile(t, t.TempDir(), "d.json", `{"rules":{"long-thread":"deny"}}`)
+	off := writeFile(t, t.TempDir(), "d.json", `{"rules":{"long-thread":"off"}}`)
 
-	assertArgs(t, []string{"-kind", "reply", "-thread-length", "2"}, reply, "[]\n")
-	assertArgs(t, []string{"-kind", "reply", "-thread-length", "3"}, reply, advisory)
-	assertArgs(t, []string{"-kind", "reply", "-thread-length", "3", "-severity", "error"}, reply, "[]\n")
+	assertArgs(t, []string{"-kind", "review-reply", "-thread-length", "2"}, reply, "[]\n")
+	assertArgs(t, []string{"-kind", "review-reply", "-thread-length", "3"}, reply,
+		rows(t, row("review-reply", "review-reply:0", "review-reply", prose.RuleLongThread, prose.DecisionAdvise, message, "")))
+	assertArgs(t, []string{"-kind", "review-reply", "-thread-length", "3", "-decisions", deny}, reply,
+		rows(t, row("review-reply", "review-reply:0", "review-reply", prose.RuleLongThread, prose.DecisionDeny, message, "")))
+	assertArgs(t, []string{"-kind", "review-reply", "-thread-length", "3", "-decisions", off}, reply, "[]\n")
 }
 
-func TestRunSelectsRulesByProfileOnlyAndSkip(t *testing.T) {
+func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
 	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."}]`
 
-	filler := `{"node":"n","source":"","language":"","rule":"filler","severity":"error","message":"Drop 'simply': state the fact.","match":"simply"}`
-	terms := `{"node":"n","source":"","language":"","rule":"terms","severity":"error","message":"Write 'subagent', not 'sub-agent'.","match":"sub-agent"}`
+	filler := row("n", "", "doc-comment", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply")
+	terms := row("n", "", "doc-comment", prose.RuleTerms, prose.DecisionDeny, termsMessage, "sub-agent")
+	decisions := houseTable(t, prose.RuleTerms, prose.RuleCommentBlock)
 
-	assertArgs(t, []string{"-only", "terms, comment-block"}, doc, "["+terms+"]\n")
-	assertArgs(t, []string{"-skip", "terms"}, doc, "["+filler+"]\n")
-	assertArgs(t, []string{"-profile", "collaborative"}, doc, "["+filler+"]\n")
+	assertArgs(t, nil, doc, rows(t, filler))
+	assertArgs(t, []string{"-decisions", decisions}, doc, rows(t, filler, terms))
+	assertArgs(t, []string{"-decisions", decisions, "-only", "terms, comment-block"}, doc, rows(t, terms))
+}
+
+// A glob's entry overrides the table's rules for the files it matches, and a
+// later glob overrides an earlier one.
+func TestRunAppliesPathDecisionsToTheFilesTheyMatch(t *testing.T) {
+	dir := t.TempDir()
+	post := writeFile(t, dir, "blog/post.md", "It simply works.\n")
+	page := writeFile(t, dir, "docs/page.md", "It simply works.\n")
+	decisions := writeFile(t, t.TempDir(), "d.json", `{"rules":{"filler":"advise"},"paths":{`+
+		`"`+filepath.ToSlash(dir)+`/**":{"filler":"deny"},`+
+		`"`+filepath.ToSlash(dir)+`/blog/*.md":{"filler":"off"}}}`)
+
+	want := rows(t, row(page, page+":1", "reference", prose.RuleFiller, prose.DecisionDeny, fillerSimply, "simply"))
+
+	assertArgs(t, []string{"-kind", "reference", "-decisions", decisions, post, page}, "", want)
+}
+
+func TestRunReadsTheDecisionsFromStdinForFiles(t *testing.T) {
+	page := writeFile(t, t.TempDir(), "page.md", "It simply works.\n")
+
+	assertArgs(t, []string{"-kind", "reference", "-decisions", "-", page}, `{"rules":{"filler":"off"}}`, "[]\n")
+}
+
+func TestRunWritesTheCatalog(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	if code := run([]string{"-catalog"}, strings.NewReader(""), &out, &errOut); code != 0 {
+		t.Fatalf("run: code %d stderr %q", code, errOut.String())
+	}
+
+	var docs []prose.RuleDoc
+	if err := json.Unmarshal(out.Bytes(), &docs); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(docs) != len(prose.Rules()) || docs[0].Name != prose.Rules()[0] || docs[0].Code == "" {
+		t.Errorf("catalog: got %d rules, first %+v", len(docs), docs[0])
+	}
 }
 
 func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
+	dir := t.TempDir()
+	table := func(body string) string { return writeFile(t, t.TempDir(), "d.json", body) }
+	unknownRule := table(`{"rules":{"fillers":"deny"}}`)
+	badDecision := table(`{"rules":{"filler":"error"}}`)
+	unknownScopedRule := table(`{"paths":{"*.md":{"tone":"off"}}}`)
+	noMatch := table(`{"paths":{"blog/**":{"filler":"off"}}}`)
+	unknownField := table(`{"rule":{"filler":"off"}}`)
+	page := writeFile(t, dir, "page.md", "It works.\n")
+
 	cases := []struct {
 		name       string
 		args       []string
 		wantStderr string
 	}{
-		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source, pull-request or reply\n"},
-		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -kind markdown\n"},
-		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull-request is read from stdin, not from a path\n"},
-		{"a missing file", []string{"-kind", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},
-		{"unknown profile", []string{"-profile", "loose"}, "judge-docs: unknown profile \"loose\": want plain or collaborative\n"},
-		{"unknown severity", []string{"-severity", "advisory"}, "judge-docs: unknown severity \"advisory\": want all or error\n"},
+		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want doc-comment, reference, guide, " +
+			"agent-instructions, agent-instructions-template, change-description or review-reply\n"},
+		{"a path for symbols", []string{"a.md"}, "judge-docs: symbols are read from stdin; a path needs -kind reference\n"},
+		{"a path for a change description", []string{"-kind", "change-description", "a.md"},
+			"judge-docs: a change-description is read from stdin, not from a path\n"},
+		{"a missing file", []string{"-kind", "reference", "missing.md"},
+			"judge-docs: read missing.md: open missing.md: no such file or directory\n"},
 		{"unknown rule to keep", []string{"-only", "filler,fillers"}, "judge-docs: unknown rule \"fillers\"\n"},
-		{"unknown rule to skip", []string{"-skip", "tone"}, "judge-docs: unknown rule \"tone\"\n"},
+		{"an off rule to keep", []string{"-only", "terms"},
+			"judge-docs: -only names \"terms\", which is off: set it to advise or deny in -decisions\n"},
+		{"unknown rule in the table", []string{"-decisions", unknownRule},
+			"judge-docs: decisions " + unknownRule + ": unknown rule \"fillers\"\n"},
+		{"unknown decision", []string{"-decisions", badDecision},
+			"judge-docs: decisions " + badDecision + ": rule \"filler\": unknown decision \"error\": want off, advise or deny\n"},
+		{"unknown rule under a path", []string{"-kind", "reference", "-decisions", unknownScopedRule, page},
+			"judge-docs: decisions " + unknownScopedRule + ": path \"*.md\": unknown rule \"tone\"\n"},
+		{"a glob matching no argument", []string{"-kind", "reference", "-decisions", noMatch, page},
+			"judge-docs: decisions " + noMatch + ": path \"blog/**\" matches no file argument\n"},
+		{"an unknown field", []string{"-decisions", unknownField},
+			"judge-docs: decisions " + unknownField + ": json: unknown field \"rule\"\n"},
+		{"decisions on stdin beside the text", []string{"-kind", "review-reply", "-decisions", "-"},
+			"judge-docs: -decisions -: the review-reply itself is read from stdin; name the table's file\n"},
+		{"a missing table", []string{"-decisions", "missing.json"},
+			"judge-docs: read decisions missing.json: open missing.json: no such file or directory\n"},
 	}
 
 	for _, tc := range cases {

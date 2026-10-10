@@ -19,12 +19,15 @@ import (
 var projectVoice = regexp.MustCompile(`\b(?:[Ww]e|[Uu]s|[Oo]urs?|[Ll]et's)\b`)
 
 // secondPerson reports the project's voice in a guide. A "we" that tense
-// already reports, as the actor of a change or in "we'll", is left to it.
+// reports, as the actor of a change or in "we'll", is left to it.
 func secondPerson(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		taken := append(future.FindAllStringIndex(para.text, -1), changeActor.FindAllStringIndex(para.text, -1)...)
+		var taken [][]int
+		if in.reports(tenseCheck) {
+			taken = append(future.FindAllStringIndex(para.text, -1), changeActor.FindAllStringIndex(para.text, -1)...)
+		}
 
 		for _, at := range projectVoice.FindAllStringIndex(para.text, -1) {
 			if within(at[0], taken) {
@@ -228,14 +231,16 @@ var (
 )
 
 // condescension reports a word that tells the reader a step is easy or that
-// they should already know a fact. A word filler already reports (`simply`,
-// `just` meaning merely, `Please note`) is left to it, so one word gives one
-// finding.
+// they should already know a fact. A word filler reports (`simply`, `just`
+// meaning merely, `Please note`) is left to it, so one word gives one finding.
 func condescension(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		taken := fillerSpans(para.text, writtenFillerPattern)
+		var taken [][]int
+		if in.reports(fillerCheck) {
+			taken = fillerSpans(para.text, writtenFillerPattern)
+		}
 
 		var spans [][]int
 

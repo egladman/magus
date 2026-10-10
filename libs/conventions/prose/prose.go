@@ -10,12 +10,15 @@
 package prose
 
 import (
+	"maps"
 	"slices"
 	"strings"
+
+	"github.com/egladman/magus/libs/diagnostics"
 )
 
-// Rule names one check. It is a [Finding]'s Rule and what a caller lists to
-// leave a rule out of its report.
+// Rule names one check. It is a [Finding]'s Rule and what a decisions table
+// names to set the rule off, advise or deny.
 type Rule string
 
 const (
@@ -73,118 +76,127 @@ const (
 	RuleCondescension Rule = "condescension"
 )
 
-// Kind names the kind of text a rule judges.
+// Kind names what a judged text is for, which decides the rules it meets.
 type Kind string
 
 const (
-	// KindDoc is a symbol's doc comment.
-	KindDoc Kind = "doc"
-	// KindMarkdown is a hand-written Markdown file.
-	KindMarkdown Kind = "markdown"
-	// KindPullRequest is a pull request: its title on the first line, its
-	// description after it.
-	KindPullRequest Kind = "pull-request"
-	// KindSkill is a skill's SKILL.md as an agent loads it: Markdown held
-	// to the terse rules, since every word costs context in every session that
-	// loads it.
-	KindSkill Kind = "skill"
-	// KindSkillSource is a skill body internal/agent renders with
-	// text/template into a short and a full form. What the short form shows is
-	// judged as KindSkill; what only the full form shows, as
-	// KindMarkdown.
-	KindSkillSource Kind = "skill-source"
+	// KindDocComment is a symbol's doc comment.
+	KindDocComment Kind = "doc-comment"
+	// KindReference is a hand-written Markdown page a reader looks things up
+	// in.
+	KindReference Kind = "reference"
+	// KindChangeDescription is a pull request or merge request: its title on
+	// the first line, its description after it.
+	KindChangeDescription Kind = "change-description"
+	// KindAgentInstructions is Markdown an agent loads as written, such as a
+	// skill's SKILL.md: held to the terse rules, since every word costs context
+	// in every session that loads it.
+	KindAgentInstructions Kind = "agent-instructions"
+	// KindAgentInstructionsTemplate is agent instructions written as a
+	// text/template body that renders into a short and a full form, as
+	// internal/agent renders a skill. What the short form shows is judged as
+	// KindAgentInstructions; what only the full form shows, as KindReference.
+	KindAgentInstructionsTemplate Kind = "agent-instructions-template"
 	// KindGuide is a procedural page, one the reader follows with a
 	// terminal open: Markdown held to the guide rules as well, which keep it
 	// in the second person, its numbered steps imperative and its words free
 	// of condescension.
 	KindGuide Kind = "guide"
-	// KindReply is a review comment, a review's body or a reply in a review
-	// thread: Markdown with no title line.
-	KindReply Kind = "reply"
+	// KindReviewReply is a review comment, a review's body or a reply in a
+	// review thread: Markdown with no title line.
+	KindReviewReply Kind = "review-reply"
 )
 
-// Severity is what a finding costs the caller that reads it.
-type Severity string
+// Decision is what a finding costs the caller that reads it, in the words a
+// magus guard rule's decision uses. Each rule ships a default per kind, and a
+// decisions table ([WithDecisions]) overrides it per rule.
+type Decision string
 
 const (
-	// SeverityError is a finding a gate refuses.
-	SeverityError Severity = "error"
-	// SeverityAdvisory is a finding a gate reports and lets through: its rule's
-	// words also have senses the rule cannot tell apart from the one it means.
-	SeverityAdvisory Severity = "advisory"
+	// DecisionOff is a rule that does not run.
+	DecisionOff Decision = "off"
+	// DecisionAdvise is a finding a gate reports and lets through.
+	DecisionAdvise Decision = "advise"
+	// DecisionDeny is a finding a gate refuses.
+	DecisionDeny Decision = "deny"
 )
-
-// Profile names a set of rules a writer is held to. The zero value is
-// [ProfilePlain].
-type Profile string
-
-const (
-	// ProfilePlain is every rule, this repository's own house style included.
-	ProfilePlain Profile = "plain"
-	// ProfileCollaborative leaves out the rules that encode this repository's
-	// house style, so text written for a team elsewhere is judged for tone,
-	// claims and generated-writing tells alone.
-	ProfileCollaborative Profile = "collaborative"
-)
-
-// profileSkips lists the rules a profile leaves out. Each rule
-// ProfileCollaborative skips encodes this repository rather than writing a
-// teammate reads: terms is its glossary, tense its voice (the present tense,
-// and no author in a description, where a team writes "we" and "I"),
-// bare-rule its own meaning of "rule", and dash and ascii its plain-ASCII
-// typography.
-var profileSkips = map[Profile][]Rule{
-	ProfileCollaborative: {RuleTerms, RuleTense, RuleBareRule, RuleDash, RuleASCII},
-}
 
 var (
-	docOnly = []Kind{KindDoc}
-	written = []Kind{KindMarkdown, KindGuide, KindPullRequest, KindSkill}
-	all     = []Kind{KindDoc, KindMarkdown, KindGuide, KindPullRequest, KindSkill}
-	skill   = []Kind{KindSkill}
+	docOnly = []Kind{KindDocComment}
+	written = []Kind{KindReference, KindGuide, KindChangeDescription, KindAgentInstructions}
+	all     = []Kind{KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions}
+	skill   = []Kind{KindAgentInstructions}
 	guide   = []Kind{KindGuide}
 	// teammate is text written to the people working on the change, where a
 	// sentence about past work or a teammate is about someone the reader knows.
-	teammate = []Kind{KindPullRequest, KindReply}
+	teammate = []Kind{KindChangeDescription, KindReviewReply}
 )
 
-// check is one rule: the kinds it judges, the kinds where its findings are
-// [SeverityAdvisory] rather than [SeverityError], and the judge itself.
+// check is one rule: the kinds it judges, its default decision on each, and
+// the judge itself.
 type check struct {
-	rule     Rule
-	on       []Kind
-	advisory []Kind
-	judge    func(in input) []Finding
+	rule Rule
+	on   []Kind
+	// advise lists the kinds of on where the default is [DecisionAdvise]: the
+	// rule's words also have senses there it cannot tell apart from the one it
+	// means. On the rest of on the default is [DecisionDeny].
+	advise []Kind
+	// house marks a rule that encodes one repository's conventions rather than
+	// writing a teammate reads. It defaults to [DecisionOff] on every kind and
+	// runs only where a decisions table names it.
+	house bool
+	judge func(in input) []Finding
+}
+
+// defaultDecision is what c decides on kind when no decisions table names it.
+func (c check) defaultDecision(kind Kind) Decision {
+	switch {
+	case c.house || !slices.Contains(c.on, kind):
+		return DecisionOff
+	case slices.Contains(c.advise, kind):
+		return DecisionAdvise
+	default:
+		return DecisionDeny
+	}
 }
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, toneChecks, slopChecks, []check{
-	// A skill body that does not render is reported before any rule runs; the
-	// entry gives the rule its place in [Rules].
-	{rule: RuleTemplate},
-})
+var checks = slices.Concat(coreChecks, toneChecks, slopChecks, []check{templateCheck})
+
+// templateCheck has no judge: a template that does not render is reported
+// before any rule runs, and the entry gives the rule its decisions and its
+// place in [Rules].
+var templateCheck = check{rule: RuleTemplate, on: []Kind{KindAgentInstructionsTemplate}, house: true}
+
+// Another rule leaves a span to each of these where it reports the span
+// itself, so one span gives one finding; see [input.reports].
+var (
+	fillerCheck      = check{rule: RuleFiller, on: everywhere, judge: filler}
+	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
+	tenseCheck       = check{rule: RuleTense, on: written, house: true, judge: tense}
+)
 
 var coreChecks = []check{
-	{rule: RuleCommentBlock, on: docOnly, judge: commentBlock},
-	{rule: RuleCommentSentence, on: docOnly, judge: commentSentence},
-	{rule: RuleFiller, on: everywhere, judge: filler},
-	{rule: RuleTerms, on: everywhere, judge: terms},
-	{rule: RuleNameSuffix, on: docOnly, judge: nameSuffix},
-	{rule: RuleAside, on: docOnly, judge: aside},
-	{rule: RuleHistory, on: docOnly, judge: history},
-	{rule: RuleDocStub, on: docOnly, judge: docStub},
-	{rule: RuleLeadContext, on: []Kind{KindPullRequest}, judge: leadContext},
+	{rule: RuleCommentBlock, on: docOnly, house: true, judge: commentBlock},
+	{rule: RuleCommentSentence, on: docOnly, house: true, judge: commentSentence},
+	fillerCheck,
+	{rule: RuleTerms, on: everywhere, house: true, judge: terms},
+	{rule: RuleNameSuffix, on: docOnly, house: true, judge: nameSuffix},
+	{rule: RuleAside, on: docOnly, house: true, judge: aside},
+	{rule: RuleHistory, on: docOnly, house: true, judge: history},
+	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
+	leadContextCheck,
 	{rule: RuleReplyVoice, on: withReply, judge: replyVoice},
-	{rule: RuleTense, on: written, judge: tense},
+	tenseCheck,
 	{rule: RuleHedge, on: written, judge: hedge},
-	{rule: RuleAttribution, on: withReply, judge: attribution},
-	{rule: RuleTerseSentence, on: skill, judge: terseSentence},
-	{rule: RuleTerseParagraph, on: skill, judge: terseParagraph},
+	{rule: RuleAttribution, on: withReply, house: true, judge: attribution},
+	{rule: RuleTerseSentence, on: skill, house: true, judge: terseSentence},
+	{rule: RuleTerseParagraph, on: skill, house: true, judge: terseParagraph},
 	{rule: RuleWordy, on: written, judge: wordy},
-	{rule: RuleBareRule, on: skill, judge: bareRule},
+	{rule: RuleBareRule, on: skill, house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
 	{rule: RuleCondescension, on: withReply, judge: condescension},
@@ -226,33 +238,47 @@ type Finding struct {
 	// comment's budget. [Judge] leaves it 0: a doc comment's lines are not its
 	// source file's, and the index places the symbol.
 	Line int
-	// Severity is set by the rule's entry for the kind judged, unless the rule
-	// marked the finding [SeverityAdvisory] itself: a rule whose words are sure
-	// in one reading and a guess in another reports the guess that way.
-	Severity Severity
+	// Decision is the rule's default for the kind judged, unless a decisions
+	// table names the rule, or the rule marked the finding [DecisionAdvise]
+	// itself and no table names it: a rule whose words are sure in one reading
+	// and a guess in another reports the guess that way.
+	Decision Decision
+	// Code is the rule's PRS code, and URL the page that documents it.
+	Code diagnostics.Code
+	URL  string
 }
 
 // Option tunes one [Judge] or [JudgeText] call.
 type Option func(*options)
 
 type options struct {
-	profile      Profile
-	only, skip   []Rule
+	only         []Rule
+	decisions    map[Rule]Decision
 	threadLength int
 }
 
-// WithProfile judges by the rules profile p keeps.
-func WithProfile(p Profile) Option { return func(o *options) { o.profile = p } }
-
 // WithOnly judges by the named rules alone. A named rule that does not apply
-// to the kind judged still does not run.
+// to the kind judged, or that its decision sets off, still does not run.
 func WithOnly(rules ...Rule) Option { return func(o *options) { o.only = append(o.only, rules...) } }
 
-// WithSkip leaves the named rules out.
-func WithSkip(rules ...Rule) Option { return func(o *options) { o.skip = append(o.skip, rules...) } }
+// WithDecisions sets each named rule's decision on every kind it judges, in
+// place of its default: [DecisionOff] leaves it out, and [DecisionAdvise] or
+// [DecisionDeny] runs it, house style included, with every finding carrying
+// that decision. A rule the table does not name keeps its default. A name
+// that is no rule matches nothing, so a caller reading a table from a user
+// checks the names against [Rules] first. Later calls add to the table.
+func WithDecisions(table map[Rule]Decision) Option {
+	return func(o *options) {
+		if o.decisions == nil {
+			o.decisions = map[Rule]Decision{}
+		}
 
-// WithThreadLength tells the [KindReply] rules how many replies the author
-// already posted in the thread the judged reply joins.
+		maps.Copy(o.decisions, table)
+	}
+}
+
+// WithThreadLength tells the [KindReviewReply] rules how many replies the
+// author already posted in the thread the judged reply joins.
 func WithThreadLength(n int) Option { return func(o *options) { o.threadLength = n } }
 
 // input is what a rule reads.
@@ -276,7 +302,7 @@ type input struct {
 func Judge(s Symbol, opts ...Option) []Finding {
 	lines := strings.Split(s.Doc, "\n")
 	out := run(input{
-		symbol: s, kind: KindDoc, prose: readProse(lines, false), lines: lines, source: lines, opts: collect(opts),
+		symbol: s, kind: KindDocComment, prose: readProse(lines, false), lines: lines, source: lines, opts: collect(opts),
 	})
 
 	for i := range out {
@@ -290,13 +316,9 @@ func run(in input) []Finding {
 	var out []Finding
 
 	for _, c := range checks {
-		if !in.opts.keeps(c.rule) || !slices.Contains(c.on, in.kind) {
+		d := in.opts.decide(c, in.kind)
+		if d == DecisionOff || c.judge == nil {
 			continue
-		}
-
-		severity := SeverityError
-		if slices.Contains(c.advisory, in.kind) {
-			severity = SeverityAdvisory
 		}
 
 		// A rule may scan its lines and its paragraphs in separate passes, so
@@ -306,16 +328,43 @@ func run(in input) []Finding {
 		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
 
 		for _, f := range found {
-			f.Rule = c.rule
-			if f.Severity == "" {
-				f.Severity = severity
-			}
-
-			out = append(out, f)
+			out = append(out, in.opts.settle(c, f, d))
 		}
 	}
 
 	return out
+}
+
+// decide returns the decision c's findings on kind carry, or [DecisionOff]
+// when c does not run there.
+func (o options) decide(c check, kind Kind) Decision {
+	if !slices.Contains(c.on, kind) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) {
+		return DecisionOff
+	}
+
+	if d, ok := o.decisions[c.rule]; ok {
+		return d
+	}
+
+	return c.defaultDecision(kind)
+}
+
+// reports reports whether c runs on the text in holds. A rule that leaves a
+// span to c asks first, so the span is still reported where c is off.
+func (in input) reports(c check) bool { return in.opts.decide(c, in.kind) != DecisionOff }
+
+// settle gives f the rule, code and decision d of c. A decision the rule
+// marked on f itself stands only while no table names the rule.
+func (o options) settle(c check, f Finding, d Decision) Finding {
+	if _, named := o.decisions[c.rule]; named || f.Decision == "" {
+		f.Decision = d
+	}
+
+	f.Rule = c.rule
+	f.Code = ruleTexts[c.rule].code
+	f.URL = prs.URL(f.Code)
+
+	return f
 }
 
 func collect(opts []Option) options {
@@ -325,17 +374,6 @@ func collect(opts []Option) options {
 	}
 
 	return o
-}
-
-func (o options) keeps(r Rule) bool {
-	switch {
-	case len(o.only) > 0 && !slices.Contains(o.only, r):
-		return false
-	case slices.Contains(o.skip, r):
-		return false
-	default:
-		return !slices.Contains(profileSkips[o.profile], r)
-	}
 }
 
 // proseLine is a line of a doc that renders as prose.
