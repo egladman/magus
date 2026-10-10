@@ -843,6 +843,105 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 	}
 }
 
+// writeSettingsHarness registers a settings-only harness keeping two values in one shared
+// config: a marketplace to know and a plugin to enable.
+func writeSettingsHarness(t *testing.T) {
+	t.Helper()
+	registerHarnessSpell(t, "moder", `{
+  "schema_version": 2,
+  "id": "moder",
+  "display": {"name": "Moder"},
+  "skills": {"paths": [], "form": "both"},
+  "settings": [
+    {"path": ".claude/settings.json", "key": ["extraKnownMarketplaces", "magus"], "value": {"source": {"source": "github", "repo": "egladman/magus"}}},
+    {"path": ".claude/settings.json", "key": ["enabledPlugins", "magus@magus"], "value": true}
+  ]
+}`)
+}
+
+// TestPlanHarnessPlansSettings pins that the plan puts both settings in place in one file and
+// leaves the person's other keys alone, and that verify then reports them.
+func TestPlanHarnessPlansSettings(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	config := filepath.Join(root, ".claude", "settings.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
+	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "enabledPlugins": {"other@x": true}}`), 0o644))
+
+	before, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, before.SettingStatus)
+	assert.Contains(t, before.SettingReason, "extraKnownMarketplaces.magus")
+
+	plan := mergeHarness(t, root, "moder")
+	marketplace := map[string]any{"source": map[string]any{"source": "github", "repo": "egladman/magus"}}
+	assert.Equal(t, map[string]types.HarnessFile{
+		".claude/settings.json": {
+			Exists: true,
+			Fragment: map[string]any{
+				"extraKnownMarketplaces": map[string]any{"magus": marketplace},
+				"enabledPlugins":         map[string]any{"magus@magus": true},
+			},
+			Changes: []types.HarnessChange{
+				{Op: types.HarnessSet, Key: "extraKnownMarketplaces.magus", Value: marketplace},
+				{Op: types.HarnessSet, Key: "enabledPlugins.magus@magus", Value: true},
+			},
+		},
+	}, plan.Files)
+
+	var got map[string]any
+	body, err := os.ReadFile(config)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &got))
+	assert.Equal(t, map[string]any{
+		"model":                  "m",
+		"enabledPlugins":         map[string]any{"other@x": true, "magus@magus": true},
+		"extraKnownMarketplaces": map[string]any{"magus": marketplace},
+	}, got)
+
+	requireCurrent(t, root, "moder")
+
+	after, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, after.SettingStatus)
+	assert.Empty(t, after.SettingReason)
+}
+
+// TestPlanHarnessRefusesASettingThePersonChanged pins that no plan overwrites a value
+// someone set, and that it names the key: a person who turned the mod off meant it.
+func TestPlanHarnessRefusesASettingThePersonChanged(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	config := filepath.Join(root, ".claude", "settings.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
+	require.NoError(t, os.WriteFile(config, []byte(`{"enabledPlugins": {"magus@magus": false}}`), 0o644))
+
+	_, err := PlanHarness(context.Background(), root, "moder")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabledPlugins.magus@magus")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.SettingStatus)
+}
+
+// TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
+// inside a workspace file.
+func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: HarnessSkills{Form: "both"}}
+	for name, setting := range map[string]HarnessSetting{
+		"no path":   {Key: []string{"k"}, Value: true},
+		"escapes":   {Path: "../x", Key: []string{"k"}, Value: true},
+		"no key":    {Path: "x", Value: true},
+		"empty key": {Path: "x", Key: []string{"a", ""}, Value: true},
+		"no value":  {Path: "x", Key: []string{"k"}},
+	} {
+		d := base
+		d.Settings = []HarnessSetting{setting}
+		assert.Error(t, validateHarnessDescriptor(d), name)
+	}
+}
+
 // Conformance gates for the agent-host integration files, against the hosts' OWN
 // schemas where a host publishes one.
 //

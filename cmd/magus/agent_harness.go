@@ -305,6 +305,9 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if result.PromptStatus != "" && result.PromptStatus != agent.HarnessVerified && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s approval prompt for %s (%s)", result.PromptStatus, result.ID, result.PromptReason)
 		}
+		if result.SettingStatus != "" && result.SettingStatus != agent.HarnessVerified && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.SettingStatus, result.ID, result.SettingReason)
+		}
 	}
 	return firstFail
 }
@@ -356,6 +359,15 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 		_, err = fmt.Fprintf(w, "%s %s approval prompt", typed.PromptStatus, typed.ID)
 		if err == nil && typed.PromptReason != "" {
 			_, err = fmt.Fprintf(w, " (%s)", typed.PromptReason)
+		}
+		if err == nil {
+			_, err = fmt.Fprintln(w)
+		}
+	}
+	if err == nil && typed.SettingStatus != "" {
+		_, err = fmt.Fprintf(w, "%s %s settings", typed.SettingStatus, typed.ID)
+		if err == nil && typed.SettingReason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.SettingReason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)

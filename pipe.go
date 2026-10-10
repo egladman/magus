@@ -128,8 +128,8 @@ func (s *ProcessStdio) Records() (*report.Reader, int) {
 // It stops reading stdin. While a stage that may take locks still runs, it drains and
 // discards the pipe so that stage finishes as it would have; then it closes stdin, as
 // exiting would, so a read-only producer ends the way it does under a plain shell. A
-// stage that ends without leaving its status is reported on stderr as unknown and never
-// counted as a failure. ctx bounds the wait.
+// stage that ends without leaving its status is reported on stderr as unknown, as a
+// record under -o jsonl, and never counted as a failure. ctx bounds the wait.
 func (s *ProcessStdio) SettlePipeline(ctx context.Context, root string, cfg config.Config) error {
 	if s.pipeline == nil {
 		return nil
@@ -139,7 +139,7 @@ func (s *ProcessStdio) SettlePipeline(ctx context.Context, root string, cfg conf
 		// The record reader drains it; closing it under that reader is what exiting does.
 		stdin = nil
 	}
-	return s.pipeline.settle(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), os.Stderr)
+	return s.pipeline.settle(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), newPipeNotices(cfg))
 }
 
 // AwaitUpstream holds back a stage whose output another stage acts on, such as a shard
@@ -156,7 +156,7 @@ func (s *ProcessStdio) AwaitUpstream(ctx context.Context, root string, cfg confi
 	if s.readsRecords() {
 		stdin = nil
 	}
-	red, ok, err := s.pipeline.wait(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), os.Stderr)
+	red, ok, err := s.pipeline.wait(ctx, stdin, resolvePipeDir(resolveCacheDir(root, cfg), root), newPipeNotices(cfg))
 	if err != nil {
 		return err
 	}
@@ -227,13 +227,8 @@ func ReaderArgv(ctx context.Context, out *os.File) (argv []string, ok bool) {
 		return nil, false
 	}
 	ancestors := ancestorPIDs(ctx, self)
-	ok = pollPeers(ctx, p.Readers, func(pid int) bool { return pid == self || ancestors[pid] }, func(pid int) bool {
-		// Asked after SameExecutable: a fork listed as a reader that has since exec'd this
-		// executable closed its copy of the pipe on the way.
-		if !pipepeer.SameExecutable(pid) || !p.ReadBy(pid) {
-			return false
-		}
-		argv, _ = pipepeer.Args(pid)
+	ok = pollPeers(ctx, p.Readers, p.ReaderExec, func(pid int) bool { return pid == self || ancestors[pid] }, func(_ int, readerArgv []string) bool {
+		argv = readerArgv
 		return true
 	})
 	return argv, ok
@@ -261,11 +256,11 @@ func AwaitReaderProof(out *os.File, proves func(argv []string) bool, limit time.
 		return len(fds) == 1 && fds[0] == 0
 	}
 	pending := slices.DeleteFunc(readers, func(pid int) bool {
-		if pid == self || !unproven(pid) || !pipepeer.SameExecutable(pid) {
+		if pid == self || !unproven(pid) {
 			return true
 		}
-		argv, err := pipepeer.Args(pid)
-		return err != nil || !proves(argv)
+		argv, state := p.ReaderExec(pid)
+		return state != pipepeer.ExecSame || argv == nil || !proves(argv)
 	})
 	deadline := time.Now().Add(limit)
 	for len(pending) > 0 && time.Now().Before(deadline) {
@@ -289,12 +284,8 @@ func RecordUpstream(ctx context.Context, in *os.File, writes func(argv []string)
 	}
 	ancestors := ancestorPIDs(ctx, self)
 	found := 0
-	ok = pollPeers(ctx, p.Writers, func(w int) bool { return w == self || ancestors[w] }, func(w int) bool {
-		if !pipepeer.SameExecutable(w) {
-			return false
-		}
-		argv, err := pipepeer.Args(w)
-		if err != nil || !writes(argv) || !p.WrittenBy(w) {
+	ok = pollPeers(ctx, p.Writers, p.WriterExec, func(w int) bool { return w == self || ancestors[w] }, func(w int, argv []string) bool {
+		if argv == nil || !writes(argv) {
 			return false
 		}
 		found = w
@@ -398,9 +389,12 @@ const pipeExecWait = 3 * time.Second
 // fork's brief waits on the kernel before its exec.
 const pipeBlockedFor = 50 * time.Millisecond
 
-// pollPeers asks peers until one matches, skipping those skip names. It keeps asking
-// only while some peer is a fork that has not exec'd yet and is not sitting blocked.
-func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match func(pid int) bool) bool {
+// pollPeers asks peers until one running this executable matches, skipping those skip
+// names; exec reports what each has exec'd. It keeps asking only while some peer is a
+// fork that has not exec'd yet and is not sitting blocked.
+func pollPeers(ctx context.Context, peers func() ([]int, error), exec func(pid int) ([]string, pipepeer.ExecState),
+	skip func(pid int) bool, match func(pid int, argv []string) bool,
+) bool {
 	deadline := time.Now().Add(pipeExecWait)
 	blocked := map[int]blockedFork{}
 	for {
@@ -413,15 +407,15 @@ func pollPeers(ctx context.Context, peers func() ([]int, error), skip, match fun
 			if skip(pid) {
 				continue
 			}
-			// A fork runs its parent's executable until it execs, so it would match as
-			// this executable when its parent is one: a magus forking a target, a test
-			// binary forking the next command.
-			if pipepeer.ExecPending(pid) {
+			argv, state := exec(pid)
+			switch state {
+			case pipepeer.ExecPending:
 				pending = pending || !sitsBlocked(blocked, pid)
-				continue
-			}
-			if match(pid) {
-				return true
+			case pipepeer.ExecSame:
+				if match(pid, argv) {
+					return true
+				}
+			case pipepeer.ExecOther:
 			}
 		}
 		if !pending || time.Now().After(deadline) {
@@ -823,9 +817,11 @@ func walkUpstream(ctx context.Context, in pipepeer.Pipe, takesLocks func([]strin
 					continue
 				}
 				seen[w] = true
-				if pipepeer.SameExecutable(w) {
-					argv, aerr := pipepeer.Args(w)
-					takes := aerr != nil || takesLocks == nil || takesLocks(argv)
+				// A fork pending exec is never a stage, and unlike pollPeers the walk does
+				// not wait for it: it writes through a copy of its parent's descriptor, so
+				// the parent is a writer the walk weighs in its place.
+				if argv, state := p.WriterExec(w); state == pipepeer.ExecSame {
+					takes := argv == nil || takesLocks == nil || takesLocks(argv)
 					out = append(out, upstreamStage{pid: w, writes: p, argv: argv, takesLocks: takes, depth: depth, proved: time.Now()})
 				}
 				if wp, err := pipepeer.ReadEnd(w, 0); err == nil {
@@ -1113,9 +1109,41 @@ func (e *pipeUpstreamError) ExitCode() int { return e.status }
 
 func (e *pipeUpstreamError) Unwrap() error { return e.DiagnosticError }
 
-// settle is SettlePipeline once the pipe dir is known. Notices go to out.
-func (p *pipeline) settle(ctx context.Context, stdin *os.File, dir string, out io.Writer) error {
-	red, ok, err := p.wait(ctx, stdin, dir, out)
+// pipeNotices is where settling a pipeline reports a stage it could not judge: a line of
+// prose on out or, under -o jsonl, a record on records, since prose would be free text on
+// a stream a caller parses. Like the lock's decision lines they are written straight to
+// the stream, so -s/--silent cannot suppress them. The run's record writer has closed by
+// the time a stage settles, so a record goes to the notice stream on stderr.
+type pipeNotices struct {
+	out     io.Writer
+	records *report.LineEncoder
+}
+
+// newPipeNotices reports on stderr, as records when cfg asks for -o jsonl.
+func newPipeNotices(cfg config.Config) pipeNotices {
+	n := pipeNotices{out: os.Stderr}
+	if isJSONLLog(cfg.Log) {
+		n.records = report.NewLineEncoder(os.Stderr)
+	}
+	return n
+}
+
+// statusUnknown reports that u ended without leaving its exit status.
+func (n pipeNotices) statusUnknown(u upstreamStage) {
+	msg := fmt.Sprintf("magus: pid %d (%s), upstream of this run in a pipe, ended without leaving its exit status, so whether it failed is unknown.",
+		u.pid, u.command())
+	if n.records != nil {
+		_ = n.records.Encode(report.Notice{Level: slog.LevelWarn, Message: msg, Attrs: map[string]any{
+			"upstream_pid": u.pid, "upstream_command": u.command(),
+		}})
+		return
+	}
+	fmt.Fprintln(n.out, msg)
+}
+
+// settle is SettlePipeline once the pipe dir is known.
+func (p *pipeline) settle(ctx context.Context, stdin *os.File, dir string, notices pipeNotices) error {
+	red, ok, err := p.wait(ctx, stdin, dir, notices)
 	if err != nil || !ok {
 		return err
 	}
@@ -1128,8 +1156,8 @@ func (p *pipeline) settle(ctx context.Context, stdin *os.File, dir string, out i
 }
 
 // wait blocks until every proven upstream stage has ended, draining stdin meanwhile, and
-// returns the first failed one; ok is false when none failed. Notices go to out.
-func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, out io.Writer) (stageOutcome, bool, error) {
+// returns the failed one furthest upstream (see firstRed); ok is false when none failed.
+func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, notices pipeNotices) (stageOutcome, bool, error) {
 	pending := p.all()
 	if len(pending) == 0 {
 		return stageOutcome{}, false, nil
@@ -1154,8 +1182,7 @@ func (p *pipeline) wait(ctx context.Context, stdin *os.File, dir string, out io.
 				rec, ok = readExitRecord(dir, u)
 			}
 			if !ok {
-				fmt.Fprintf(out, "magus: pid %d (%s), upstream of this run in a pipe, ended without leaving its exit status, so whether it failed is unknown.\n",
-					u.pid, u.command())
+				notices.statusUnknown(u)
 				continue
 			}
 			ended = append(ended, stageOutcome{stage: u, rec: rec})

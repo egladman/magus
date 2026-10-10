@@ -72,6 +72,7 @@ type HarnessDescriptor struct {
 	MCP            *HarnessMCP        `json:"mcp,omitempty"`
 	Prompts        []HarnessPrompt    `json:"prompts,omitempty"`
 	Agents         []HarnessAgentFile `json:"agents,omitempty"`
+	Settings       []HarnessSetting   `json:"settings,omitempty"`
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -124,6 +125,10 @@ type HarnessVerification struct {
 	// when it renders none.
 	AgentStatus HarnessStatus `json:"agent_status,omitempty"`
 	AgentReason string        `json:"agent_reason,omitempty"`
+	// SettingStatus is whether the plain host settings the descriptor keeps are in place,
+	// empty when it keeps none.
+	SettingStatus HarnessStatus `json:"setting_status,omitempty"`
+	SettingReason string        `json:"setting_reason,omitempty"`
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -252,6 +257,11 @@ func validateHarnessDescriptor(d HarnessDescriptor) error {
 			return fmt.Errorf("agents[%d]: %w", i, err)
 		}
 	}
+	for i, s := range d.Settings {
+		if err := validateHarnessSetting(s); err != nil {
+			return fmt.Errorf("settings[%d]: %w", i, err)
+		}
+	}
 	return nil
 }
 
@@ -342,6 +352,15 @@ func PlanHarness(ctx context.Context, root, id string) (types.HarnessPlan, error
 		}
 		if a.Hint != "" && !slices.Contains(plan.AgentHints, a.Hint) {
 			plan.AgentHints = append(plan.AgentHints, a.Hint)
+		}
+	}
+	for _, s := range d.Settings {
+		file, err := planHarnessSetting(root, s)
+		if err != nil {
+			return plan, err
+		}
+		if err := addPlanFile(&plan, s.Path, file); err != nil {
+			return plan, err
 		}
 	}
 	hint, err := harnessMCPHint(d)
@@ -500,6 +519,7 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 	if err == nil {
 		verifyHarnessPrompts(root, d, &result)
 		verifyHarnessAgents(root, d, &result)
+		verifyHarnessSettings(root, d, &result)
 	}
 	return result, err
 }

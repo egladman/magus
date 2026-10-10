@@ -47,4 +47,10 @@ const (
 	// workspace-relative files the descriptor owns. How a class maps to a model is the
 	// spell's to decide, since only the host knows its own model names.
 	HarnessAgentsContract = "harness_agents"
+
+	// HarnessSettingsContract returns plain host settings a harness keeps in place:
+	// [{path, key, value}], each one value inside a JSON document the person also edits,
+	// such as a plugin to enable. Optional. A value someone set differently is left alone
+	// and named, never overwritten.
+	HarnessSettingsContract = "harness_settings"
 )

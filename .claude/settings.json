@@ -1,6 +1,17 @@
 {
+  "enabledPlugins": {
+    "magus@magus": true
+  },
   "env": {
     "MAGUS_LOG_SILENT": "true"
+  },
+  "extraKnownMarketplaces": {
+    "magus": {
+      "source": {
+        "repo": "egladman/magus",
+        "source": "github"
+      }
+    }
   },
   "hooks": {
     "PostToolUse": [

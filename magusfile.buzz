@@ -65,6 +65,7 @@ import "spells/github/actions" as github;
 import "spells/harness/cursor";
 import "spells/harness/codex";
 import "spells/harness/claude-code" as claude;
+import "spells/harness/claude-code-mod" as claudeMod;
 import "spells/harness/opencode";
 final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
@@ -88,6 +89,7 @@ magus\lifecycle.provider(eol);
 magus\harness.provider(cursor);
 magus\harness.provider(codex);
 magus\harness.provider(claude);
+magus\harness.provider(claudeMod);
 magus\harness.provider(opencode);
 
 // Outputs are declared per target with ctx.writesFiles: a project-wide set would let
