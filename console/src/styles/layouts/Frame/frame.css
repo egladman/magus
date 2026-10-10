@@ -1,24 +1,13 @@
-/* frame.css - the page frame the log viewer and the Activity trail share: the bordered panel, the
- * scrolling body, the foldable sections, the empty state, and the collapsible index panel docked down
- * the left. The leaf renderers (lines, badges, ANSI) are render.css, pulled in below.
- *
- * Per the console-<area> naming convention the shared render model is console-render-*
- * (.console-render-section, .console-render-line, .console-render-badge, ...); the index panel is
- * console-log-runs-*, named for its first user. Transient state rides data-* (data-collapsed,
- * data-status, data-highlight, data-drag-over, data-waterfall, data-dim), never a modifier class.
- *
- * Layout answers to the PANE, not the window: the console tiles apps, so every query below is a
- * container query on the panel or the split. */
-@import "./render.css";
+/* The page frame the log viewer and the Activity trail share: bordered panel, scrolling body, foldable
+   sections, empty state and the collapsible index panel. Layout answers to the pane, not the window,
+   so every query is a container query on the panel or the split. */
+@import "../../components/Render/render.css";
 
-/* The app gutter is the shell's, so a reader switching from Runs to the log viewer does not see the
-   content step in or out. Kept as a local name because it is the re-scaling seam the dashboard's
-   activity tile narrows for a preview. */
+/* The shared app gutter, so switching between Runs and the log viewer does not shift the content. */
 :root { --log-pad: var(--console-pad); }
 
-/* --- Panel -------------------------------------------------------------------------------
-   A bordered card that fills its console pane: a toolbar or header on top, a scrolling body beneath.
-   In the console the fill height is driven by console.css; the block-size is a standalone fallback. */
+/* A bordered card filling its pane. The console's fill height comes from the Shell layout; block-size
+   is the standalone fallback. */
 .console-render-panel {
   display: flex;
   flex-direction: column;
@@ -45,7 +34,6 @@
 }
 .console-render-btn__icon { inline-size: 1em; block-size: 1em; flex: 0 0 auto; }
 
-/* --- Scrolling body ------------------------------------------------------------------------ */
 .console-render-scroll {
   flex: 1 1 auto;
   min-block-size: 0;
@@ -54,24 +42,19 @@
 }
 .console-render-scroll:focus-visible { outline-offset: var(--console-focus-inset); }
 
-/* The rendered log body: a monospace grid of lines. Each line is its own row so line numbers and
-   folding attach per line without breaking wrapping. --log-zoom (set by applyZoom) scales the text
-   view with CSS zoom, which keeps the type on the token scale and re-wraps the lines; the waterfall
-   zooms its own SVG instead, below. */
+/* --log-zoom (applyZoom) scales the text view with CSS zoom, which keeps type on the token scale and
+   re-wraps the lines; the waterfall zooms its own SVG. */
 .console-render-body {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
   line-height: var(--pf-t--global--font--line-height--body);
   zoom: var(--log-zoom, 1);
-  /* No padding at the top: the body sits under its own header, and a gap there leaves the first row
-     floating below the header's hairline. The bottom keeps clearance from the pane edge. */
   padding-block: 0 var(--pf-t--global--spacer--sm);
 }
 .console-render-body[data-waterfall] { zoom: 1; }
 
-/* --- Foldable sections --------------------------------------------------------------------
-   The head is a row, not a button: it holds the fold toggle and, beside it, the section's actions,
-   and a button may not contain buttons. The accent is a border, so it needs no shadow token. */
+/* The head is a row, not a button: it holds the fold toggle and the section's actions, and a button
+   may not contain buttons. */
 .console-log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
 .console-render-section {
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
@@ -119,7 +102,7 @@
   text-overflow: ellipsis;
   color: var(--log-head-fg, var(--pf-t--global--text--color--regular));
 }
-/* CSS-drawn disclosure caret (points down when expanded); a clipped box keeps the source ASCII. */
+/* A clipped box draws the caret, which keeps the source ASCII. */
 .console-render-section__twist {
   flex: 0 0 auto;
   display: inline-block;
@@ -135,8 +118,8 @@
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
-/* The actions fade in for a pointer on the head or focus anywhere in it, and sit permanently on a
-   device with no hover. They stay in the tab order and the accessibility tree throughout. */
+/* Actions fade in on head hover or focus, stay in the tab order throughout, and sit permanently on a
+   device with no hover. */
 .console-render-section__actions {
   flex: 0 0 auto;
   display: inline-flex;
@@ -159,24 +142,18 @@
   .console-render-section__actions { transition: none; }
 }
 
-/* --- Empty state ----------------------------------------------------------------------------
-   Fills and centres within the scroll area. PF's EmptyState is display:flex, which beats the hidden
-   attribute, so the toggle needs its own rule. */
+/* PF's EmptyState is display:flex, which beats the hidden attribute, so the toggle needs its own rule. */
 .console-render-empty,
 #log-empty { min-block-size: 100%; }
 .console-render-empty[hidden],
 #log-empty[hidden] { display: none; }
 .console-render-empty { box-sizing: border-box; }
 
-/* --- Filter field --------------------------------------------------------------------------
-   The shared search input (render/filterField.ts). The count is a read-only badge inside the group. */
 .console-filter { inline-size: 100%; }
 .console-filter .console-filter__count { white-space: nowrap; }
 
-/* --- Collapsible split panel (mountCollapsiblePanel) ---------------------------------------
-   A collapsible aside down the left of a render app, below its toolbar: a tree of runs or events.
-   mountCollapsiblePanel reparents .console-render-scroll into .console-log-split, so no scaffold
-   markup changed; the split is the panel's flex:1 body row and the container its width queries ask. */
+/* mountCollapsiblePanel reparents .console-render-scroll into .console-log-split, so the scaffold
+   markup is unchanged; the split is the container the width queries ask. */
 .console-log-split {
   display: flex;
   flex: 1 1 auto;
@@ -185,9 +162,8 @@
   container: console-split / inline-size;
 }
 .console-log-split > .console-render-scroll { flex: 1 1 auto; min-inline-size: 0; }
-/* Proportional between bounds, not a flat width: a fixed 240px is a quarter of a 960px pane and would
-   squeeze the pane the panel navigates exactly when it is tight. min-inline-size:0 makes the basis
-   binding; a flex item otherwise floors at its min-content and one long label sets the width. */
+/* Proportional between bounds: a fixed 240px squeezes the pane the panel navigates exactly when it is
+   tight. min-inline-size:0 makes the basis binding, since a flex item floors at its min-content. */
 .console-log-runs {
   flex: 0 0 clamp(10rem, 26%, 19rem);
   display: flex;
@@ -195,14 +171,11 @@
   min-block-size: 0;
   min-inline-size: 0;
   border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  /* Chrome, so the chrome token: it sits against the navigation rail, and two planes there was the
-     seam most visible on this app. */
   background: var(--console-chrome);
 }
 .console-log-runs[hidden] { display: none; }
-/* The two column headers as one rule, so they cannot drift apart. The height is the shell's head
-   token as a floor, so injected chrome can still grow the row; the gutter is the one the output lines
-   below take, so a header label and the content it heads start on the same x. */
+/* One rule for both column headers so they cannot drift. The height is the shell head token as a
+   floor; the gutter matches the output lines, so a label and its content start on the same x. */
 .console-log-runs__head,
 .console-log-body__head {
   box-sizing: border-box;
@@ -236,7 +209,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* What the body is showing, to the right of its title: the reference id of the loaded output. */
 .console-log-body__meta {
   flex: 0 1 auto;
   min-inline-size: 0;
@@ -262,8 +234,7 @@
   padding-block: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   padding-inline: var(--pf-t--global--spacer--xs);
 }
-/* The panel's two controls STACK under the header: the aside is a rail, and PF's control scales only
-   disagree when two controls share a line. */
+/* The two controls stack: PF's control scales only disagree when two share a line. */
 .console-log-runs__controls {
   flex: 0 0 auto;
   display: flex;
@@ -280,7 +251,6 @@
   justify-content: center;
   padding-inline: var(--pf-t--global--spacer--xs);
 }
-/* How many top-level rows the tree shows: a readout, not a control. */
 .console-log-runs__count {
   font-size: var(--pf-t--global--font--size--body--sm);
   font-variant-numeric: tabular-nums;
@@ -296,10 +266,9 @@
 }
 .console-log-runs__empty > .pf-v6-c-button { margin-block-start: var(--pf-t--global--spacer--sm); }
 
-/* Tree rows. PF's compact tree lays a node out as a title over a text line; both truncate rather
-   than widen the rail, and min-inline-size:0 is what makes that binding (a flex item floors at its
-   min-content, so one long label would set the tree's width and the aside would scroll sideways). The
-   full text is on the row's title attribute and in its accessible name. */
+/* Tree rows truncate rather than widen the rail. min-inline-size:0 makes that binding, since a flex
+   item floors at its min-content and one long label would set the tree's width. The full text is on
+   the row's title attribute. */
 .console-log-runs .pf-v6-c-tree-view {
   --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockStart: var(--pf-t--global--spacer--xs);
   --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockEnd--base: var(--pf-t--global--spacer--xs);
@@ -329,17 +298,16 @@
 }
 .console-log-runs [data-leaf] .pf-v6-c-tree-view__node-title { font-family: var(--pf-t--global--font--family--mono); }
 .console-log-runs .pf-v6-c-tree-view__node.pf-m-current { font-weight: var(--pf-t--global--font--weight--body--bold); }
-/* The item takes focus, as in PF's markup, but a branch holds its whole subtree: the global ring on
-   the item would box every child. The ring goes on the item's own row instead, inside it so the
-   rail's overflow does not clip it. */
+/* The item takes focus as in PF's markup, but a branch holds its subtree, so the global ring on the
+   item would box every child. The ring goes on the item's own row, inside the rail's overflow. */
 .console-log-runs .pf-v6-c-tree-view__list-item:focus-visible { outline: none; }
 .console-log-runs .pf-v6-c-tree-view__list-item:focus-visible > .pf-v6-c-tree-view__content {
   outline: var(--pf-t--global--focus-ring--width--offset) solid var(--pf-t--global--focus-ring--color--default);
   outline-offset: var(--console-focus-inset);
 }
 
-/* The slim reopen rail, shown only while the aside is hidden but it has content. A column, so a
-   caller's count (activity's event count) stacks under the icon instead of squeezing beside it. */
+/* The reopen rail shows only while the aside is hidden but has content. A column, so a caller's count
+   stacks under the icon. */
 .console-log-runs__reopen {
   flex: 0 0 auto;
   align-self: stretch;
@@ -360,9 +328,8 @@
 }
 .console-log-runs__reopen-badge:empty { display: none; }
 
-/* A narrow pane: an open aside would squeeze the content to a sliver, so it floats over the scroll
-   area with a scrim behind it. The open and closed state is JS-driven (the hidden attribute, set in
-   runtree.ts against this same container width); this only changes how an open aside lays out. */
+/* A narrow pane floats the open aside over the scroll area with a scrim. Open and closed is
+   JS-driven (runtree.ts, against this same container width); this only changes the open layout. */
 .console-log-split__scrim { display: none; }
 @container console-split (max-width: 47.999rem) {
   .console-log-runs:not([hidden]) {

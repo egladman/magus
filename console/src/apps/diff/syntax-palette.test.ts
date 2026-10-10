@@ -11,7 +11,7 @@ import { test } from "node:test";
 // readFileSync("index.html"): esbuild bundles every *.test.ts into .testcache with an outbase that
 // varies with how many files are in the build, which would make an import.meta.url-relative path
 // correct in a full test run and wrong in a scoped one.
-const consoleCss = readFileSync("src/styles/tokens.css", "utf8");
+const consoleCss = readFileSync("src/styles/base/tokens.css", "utf8");
 const docsCss = readFileSync("../docs/src/styles/theme.css", "utf8");
 
 // The declarations of the first rule that matches `selector` and declares `marker`. Every block

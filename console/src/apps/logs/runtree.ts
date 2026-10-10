@@ -625,7 +625,7 @@ function iconButton(
 // A collapsible master panel docked down the left of a render app's scroll box: a titled header
 // (refresh + hide icons) over a caller-filled tree, plus a slim reopen rail. The log viewer's run
 // browser and the activity view's event index are the same frame (both sheets import
-// render/frame.css, so both reuse the .console-log-runs styles); only what fills treeBox differs.
+// styles/layouts/Frame/frame.css, so both reuse the .console-log-runs styles); only what fills treeBox differs.
 export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
   // The BODY's header, the index header's opposite number across the splitter. It exists so the two

@@ -1,0 +1,68 @@
+/* Documentation search at the top of the Reference panel. The field is a PF TextInputGroup; only the
+   results list, which has no PF component, and its spacing are authored here. */
+.console-shell-refsearch {
+  margin-bottom: var(--pf-t--global--spacer--md);
+  padding-bottom: var(--pf-t--global--spacer--md);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-refsearch__note {
+  margin: var(--pf-t--global--spacer--sm) 0 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-refsearch__results {
+  margin: var(--pf-t--global--spacer--sm) 0 0;
+  padding: 0;
+  list-style: none;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  max-height: 18rem;
+  overflow-y: auto;
+}
+.console-shell-refsearch__empty { padding: var(--pf-t--global--spacer--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-shell-refsearch__result {
+  display: block;
+  padding: var(--pf-t--global--spacer--sm);
+  text-decoration: none;
+  color: inherit;
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-refsearch__results > li:last-child .console-shell-refsearch__result { border-bottom: 0; }
+.console-shell-refsearch__result:hover,
+.console-shell-refsearch__result[aria-selected="true"] { background: var(--console-accent); color: var(--pf-t--global--text--color--on-brand--default); }
+.console-shell-refsearch__result:hover .console-shell-refsearch__snippet,
+.console-shell-refsearch__result[aria-selected="true"] .console-shell-refsearch__snippet { color: inherit; }
+.console-shell-refsearch__title { display: block; font-weight: var(--pf-t--global--font--weight--body--bold); }
+.console-shell-refsearch__snippet {
+  display: block;
+  margin-top: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The accent tint reads on both the normal row and the accent-inverted hover or selected row. */
+.console-shell-refsearch__hl { background: color-mix(in srgb, var(--console-accent) 35%, transparent); color: inherit; border-radius: var(--console-radius-micro); padding: 0; }
+.console-shell-refsearch__result:hover .console-shell-refsearch__hl,
+.console-shell-refsearch__result[aria-selected="true"] .console-shell-refsearch__hl { background: color-mix(in srgb, var(--pf-t--global--text--color--on-brand--default) 30%, transparent); }
+/* Read-only chips showing how the query was parsed; a negated part is struck and muted. */
+.console-shell-refsearch__preview { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--xs); margin: var(--pf-t--global--spacer--sm) 0 0; }
+.console-shell-refsearch__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: var(--pf-t--global--font--line-height--body);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-refsearch__chip-scope { color: var(--pf-t--global--text--color--subtle); text-transform: lowercase; }
+.console-shell-refsearch__chip-value { color: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
+.console-shell-refsearch__chip[data-neg] .console-shell-refsearch__chip-value { text-decoration: line-through; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-refsearch__loading { display: flex; justify-content: center; padding: var(--pf-t--global--spacer--md) 0; }
+/* A class-set display beats the hidden attribute's UA display:none. */
+.console-shell-refsearch__preview[hidden],
+.console-shell-refsearch__loading[hidden] { display: none; }

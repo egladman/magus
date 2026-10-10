@@ -63,7 +63,7 @@ test("token exists reads a var() fallback", async () => {
 test("token exists applies in tokens.css as well", async () => {
   const warnings = await flagged(
     ":root { --pf-t--global--border--radius--tiny: 2px; --pf-t--global--border--radius--teeny: 1px; }",
-    "/work/console/src/styles/tokens.css",
+    "/work/console/src/styles/base/tokens.css",
   );
 
   assert.equal(warnings.length, 1);

@@ -34,7 +34,7 @@ test("theme.ts writes the same two colours when the theme is picked by hand", ()
 });
 
 test("tokens.css still defines the chrome as those colours", () => {
-  const tokens = read("src/styles/tokens.css");
+  const tokens = read("src/styles/base/tokens.css");
   assert.match(
     tokens,
     /--console-chrome: var\(--pf-t--global--background--color--secondary--default\)/,

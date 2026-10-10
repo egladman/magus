@@ -1,0 +1,12 @@
+/* The console's own reduced-motion switch is a blanket kill, so it cannot drift from the dozen
+   prefers-reduced-motion blocks. Near-zero durations rather than animation: none, because a
+   zero-length animation still fires animationend and code waiting on one would hang. The graph's
+   simulation is JS and reads the preference itself. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

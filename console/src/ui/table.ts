@@ -1,5 +1,5 @@
 // table.ts - the console's one sortable table, shared by the Dashboard's tiles and the Tools app. It is
-// a PatternFly compact Table with a sortable header. Its rules are styles/table.css, loaded with the
+// a PatternFly compact Table with a sortable header. Its rules are styles/components/Table/table.css, loaded with the
 // shell.
 
 import { h } from "../desktop/view";

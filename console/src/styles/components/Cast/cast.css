@@ -1,0 +1,27 @@
+/* The first-sight flourish (cast.ts): the ground dims and the workspace's sigil traces itself once.
+   Every move is a transition rather than a keyframe animation: a browser does not advance animations
+   in a hidden tab, which would spend a once-ever showing on a tab nobody sees. */
+.console-shell-cast {
+  position: fixed;
+  inset: 0;
+  z-index: var(--pf-t--global--z-index--2xl);
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 72%, transparent);
+  backdrop-filter: blur(7px);
+  opacity: 0;
+  transition: opacity var(--pf-t--global--motion--duration--lg) ease;
+}
+.console-shell-cast[data-on] { opacity: 1; }
+/* Turning while it draws is legible only because the figure is rotationally symmetric. */
+.console-shell-cast__mark {
+  color: var(--console-accent);
+  transform: rotate(-120deg) scale(0.9);
+  opacity: 0;
+  transition: transform var(--console-motion-ceremony) ease-in-out, opacity var(--pf-t--global--motion--duration--xl) ease;
+}
+.console-shell-cast[data-on] .console-shell-cast__mark { transform: rotate(0deg) scale(1); opacity: 1; }
+/* cast.ts skips the ceremony for reduced motion; this covers a preference that changes mid-flight. */
+@media (prefers-reduced-motion: reduce) {
+  .console-shell-cast, .console-shell-cast__mark { transition: none; }
+}

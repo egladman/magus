@@ -1,22 +1,10 @@
-/* render.css - the styles for the shared leaf renderers in render/sections.ts.
- *
- * renderLine / renderContent / fillAnsi are shared TypeScript: the log viewer, the activity trail and
- * the dashboard's live-activity preview all build the same .console-render-line,
- * .console-render-badge and .console-render-ansi* markup through them, so their styles live here,
- * next to the helpers. The boundary is narrow on purpose: ONLY what sections.ts's line-level helpers
- * emit. The panel frame, the foldable section chrome and the empty state are frame.css, which only
- * the two apps that build a whole log-shaped page load.
- *
- * Consumed by @import from frame.css and dashboard.css, bundled at build time.
- *
- * --log-pad is supplied by the including sheet: the log viewer wants its own gutter, and a compact
- * preview inside a dashboard tile wants a much smaller one. The fallback keeps this sheet usable on
- * its own. */
+/* Line-level renderers from render/sections.ts, shared by the log viewer, the activity trail and the
+   dashboard's live-activity preview. The page frame is layouts/Frame. --log-pad comes from the
+   importing sheet, since a dashboard tile wants a much smaller gutter; the fallback keeps this sheet
+   usable alone. */
 
-/* Status badge: the "[pass]"/"[fail]" bracket token promoted to a coloured chip.
- *
- * Fill and ink come as a pair from PatternFly's status tokens, so the ink follows the fill in both
- * themes. Pinning the ink to white or near-black measured 2.2:1 on the light fills. */
+/* Fill and ink are a pair from PatternFly's status tokens, so the ink follows the fill in both
+   themes; pinning it to white or near-black measured 2.2:1 on the light fills. */
 .console-render-badge {
   display: inline-block;
   margin-inline-end: var(--pf-t--global--spacer--sm);
@@ -27,9 +15,9 @@
   line-height: var(--pf-t--global--font--line-height--body);
   text-transform: uppercase;
   letter-spacing: var(--console-chip-tracking);
-  /* The badge is ~15px tall, where the platform-tuned radius tokens (rounder on Apple) read as a lozenge. */
+  /* At about 15px tall, the platform-tuned radius tokens read as a lozenge. */
   border-radius: var(--console-radius-micro);
-  /* Transparent here so the outline variant below takes no extra height. */
+  /* Transparent so the outline variant takes no extra height. */
   border: var(--pf-t--global--border--width--regular) solid transparent;
   vertical-align: baseline;
   color: var(--pf-t--global--text--color--regular);
@@ -48,8 +36,8 @@
   background: var(--pf-t--global--color--status--warning--default);
   color: var(--pf-t--global--text--color--status--on-warning--default);
 }
-/* CACHED is the quietest thing in a magus log: no work happened. It is the one badge that is an
-   outline rather than a fill, which keeps it separable from info and summary without a third grey. */
+/* CACHED is the one outline badge: no work happened, and it stays apart from info and summary without
+   a third grey. */
 .console-render-badge--cached {
   background: none;
   color: var(--pf-t--global--text--color--subtle);
@@ -65,7 +53,6 @@
   color: var(--pf-t--global--text--color--nonstatus--on-purple--default);
 }
 
-/* A single output line: a fixed line-number gutter plus the wrapping content. */
 .console-render-line {
   display: flex;
   gap: var(--pf-t--global--spacer--sm);
@@ -73,8 +60,7 @@
   padding-inline: var(--log-pad, var(--console-pad));
 }
 .console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
-/* Line-number gutter: always shown and never selectable, so copying the body grabs the text without
-   the numbers. Shared by body lines and section heads for continuous numbering. */
+/* Never selectable, so copying the body grabs the text without the numbers. */
 .console-render-line__gutter {
   flex: 0 0 auto;
   min-inline-size: 2.5em;
@@ -82,7 +68,7 @@
   color: var(--pf-t--global--text--color--subtle);
   user-select: none;
   -webkit-user-select: none;
-  cursor: pointer; /* a line number is a deep-link anchor (GitHub-style #L10-L20) */
+  cursor: pointer;
 }
 .console-render-line .console-render-line__content {
   flex: 1 1 auto;
@@ -91,19 +77,16 @@
   word-break: break-word;
 }
 
-/* Line-range highlight: rows named by an #L<n> / #L<a>-L<b> fragment. */
+/* Rows named by an #L<n> or #L<a>-L<b> fragment. */
 .console-render-line[data-highlight] { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
 
-/* Zebra striping, opt-in via [data-zebra] on the container: a rolling tail with no gutter has
-   nothing to track along, and it is read at a distance. Kept very low contrast so it groups rows
-   without fighting the ANSI colours and badges that are the actual signal. */
+/* Opt-in zebra for a rolling tail with no gutter to track along, read at a distance. Low contrast, so
+   it does not fight the ANSI colours and badges. */
 [data-zebra] .console-render-line:nth-child(even) {
   background: color-mix(in srgb, var(--pf-t--global--text--color--subtle) 7%, transparent);
 }
 [data-zebra] .console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
 
-/* ANSI SGR -> CSS. magus uses dim, bold, and the basic 8 foreground colours, taken from the
-   console's theme-aware --console-ansi-* tokens. black/white inherit. */
 .console-render-ansi--bold { font-weight: var(--pf-t--global--font--weight--body--bold); }
 .console-render-ansi--dim { opacity: 0.6; }
 .console-render-ansi--italic { font-style: italic; }

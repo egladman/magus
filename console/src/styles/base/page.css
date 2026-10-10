@@ -1,0 +1,20 @@
+/* A disabled button is flatly inert: muted fill, text and border at full opacity, so an unavailable
+   control does not read as a faint copy of an enabled one. The body[data-console-app] prefix
+   out-specifies the apps' own button:disabled rules, which load later. */
+body[data-console-app] button:disabled,
+body[data-console-app] button[disabled],
+body[data-console-app] button[aria-disabled="true"] {
+  opacity: 1;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-color: var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* PF v6 draws a button's outline on ::after and hardcodes it transparent when disabled. */
+body[data-console-app] .pf-v6-c-button:disabled::after,
+body[data-console-app] .pf-v6-c-button[disabled]::after,
+body[data-console-app] .pf-v6-c-button[aria-disabled="true"]::after {
+  border-color: var(--pf-t--global--border--color--default);
+}

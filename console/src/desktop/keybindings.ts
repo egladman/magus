@@ -132,7 +132,7 @@ export interface KeybindingsOverlay {
 }
 
 // createKeybindingsEditor builds the table + capture core into a [data-kbeditor] container, re-rendering
-// on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in overrides.css.
+// on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in styles/components/KeybindingsEditor.
 // How long the recorder waits after the last chord before it commits the captured sequence. A single
 // chord thus saves after a brief pause; a multi-chord sequence (mod+x o) is typed in order and saved
 // when you stop. Roughly matches the matcher's own sequence timeout so recording feels like using it.

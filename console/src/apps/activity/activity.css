@@ -1,31 +1,25 @@
-/* activity.css - the Activity app's own rules. The page frame, foldable sections, empty state and the
-   event-index panel are shared with the log viewer and live in render/frame.css; this sheet adds the
-   structured event head, the refresh notice and the busy state. */
-@import "../../render/frame.css";
+/* The Activity app's own rules; the frame it shares with the log viewer is layouts/Frame. */
+@import "../../styles/layouts/Frame/frame.css";
 
-/* The connection note in the index header: how many events are loaded. */
 .console-activity-conn {
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
-
 /* A failed refresh sits above the events that stayed on screen. */
 .console-activity-notice {
   padding-block: var(--pf-t--global--spacer--sm) 0;
   padding-inline: var(--log-pad);
 }
 .console-activity-notice[hidden] { display: none; }
-
-/* "Load older activity" closes the list, inset to the same gutter as the rows above it. */
 .console-activity-more {
   margin-block: var(--pf-t--global--spacer--md);
   margin-inline: var(--log-pad);
 }
 
-/* An event's head as structure. The source and the outcome are PF Labels that never shrink; the
-   action is the part that gives way in a narrow pane, then the actor; the duration and the time are
-   their own elements, so neither is lost to a truncated string. */
+/* An event's head is structure. The source and outcome are PF Labels that never shrink; the action
+   gives way first in a narrow pane, then the actor; the duration and time are their own elements, so
+   a truncated string never loses them. */
 .console-render-section__title[data-structured] {
   display: flex;
   align-items: center;
@@ -56,9 +50,21 @@
   font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle);
 }
-/* In a narrow pane there is no one line that holds the labels, the action and the time, and
-   truncating the row clipped the time. The head wraps instead: source, outcome and time lead, and
-   the action and actor take a line of their own beneath, where they truncate on their own. */
+/* The session id is opaque, so it is quiet and monospaced to stay comparable when truncated. */
+.console-activity-index__session { font-family: var(--pf-t--global--font--family--mono); }
+
+@keyframes console-activity-spin {
+  to { transform: rotate(360deg); }
+}
+.console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg {
+  animation: console-activity-spin var(--console-motion-spin) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg { animation: none; }
+}
+
+/* No single line holds the labels, action and time in a narrow pane, and truncation clipped the time.
+   The head wraps: source, outcome and time lead, and the action and actor take a line beneath. */
 @container console-pane (max-width: 34rem) {
   .console-render-section__title[data-structured] {
     flex-wrap: wrap;
@@ -70,19 +76,4 @@
   .console-activity-head__action { order: 3; flex: 1 1 100%; }
   .console-activity-head__actor { order: 4; flex: 1 1 100%; max-inline-size: none; }
   .console-render-section__count { display: none; }
-}
-
-/* The event index's session id, on the second line of a session branch: opaque, so it is quiet and
-   monospaced to stay comparable when it is truncated. */
-.console-activity-index__session { font-family: var(--pf-t--global--font--family--mono); }
-
-/* A load in flight: the refresh icon turns, and "Load older" says so. */
-@keyframes console-activity-spin {
-  to { transform: rotate(360deg); }
-}
-.console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg {
-  animation: console-activity-spin var(--console-motion-spin) linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg { animation: none; }
 }

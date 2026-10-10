@@ -67,7 +67,7 @@ export default {
     "magus/token-tier": [true, {
       definitions: [
         {
-          file: /(?:^|\/)src\/styles\/tokens\.css$/,
+          file: /(?:^|\/)src\/styles\/base\/tokens\.css$/,
           reason: "tokens.css adapts PatternFly's base and palette tokens into the console's semantic and --console-* slots",
         },
       ],
@@ -110,7 +110,7 @@ export default {
     "magus/color-token": [true, {
       definitions: [
         {
-          file: /(?:^|\/)src\/styles\/tokens\.css$/,
+          file: /(?:^|\/)src\/styles\/base\/tokens\.css$/,
           reason: "tokens.css is the one file that adapts PatternFly's palette and defines the console's colours",
         },
       ],

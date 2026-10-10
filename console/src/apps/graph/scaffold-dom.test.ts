@@ -1,7 +1,7 @@
 // scaffold-dom.test.ts - structural invariants of the graph app's markup.
 //
 // The Reference drawer (ui/ref-drawer.ts) CLONES every [data-ref-section] block, strips ids
-// from the clone, and leaves the source hidden by overrides.css's
+// from the clone, and leaves the source hidden by utilities/hidden.css's
 // [data-ref-section]{display:none}. A control wired BY ID from inside a reference block is
 // therefore unreachable both ways: invisible at its source, id-less in its clone. These tests
 // pin the placement rules that follow from that.

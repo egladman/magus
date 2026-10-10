@@ -1,10 +1,7 @@
-/* runs.css - the Runs app: a toolbar over a facet strip over a list / detail split.
-   Its own sheet rather than a reuse of logs.css: that sheet's geometry is tuned to a rail docked
-   inside the viewer, and this is a full page whose two columns each want their own scroll.
-   Shares only the console's semantic tokens, which is the layer meant to be shared.
-
-   Layout answers to the PAGE, not the window: the console tiles apps, so .console-runs is a size
-   container and every query below asks it how wide it is. */
+/* The Runs app: a toolbar over a facet strip over a list and detail split. Its own sheet, since the
+   log viewer's geometry is tuned to a rail docked inside the viewer and this is a full page whose two
+   columns each scroll. Layout answers to the page, so .console-runs is a size container and every
+   query asks it how wide it is. */
 
 .console-runs {
   display: flex;
@@ -15,10 +12,9 @@
   background: var(--pf-t--global--background--color--primary--default);
 }
 
-/* --- Toolbar ---------------------------------------------------------------------------------
-   ONE control scale on this row: PF's pf-m-small shrinks padding AND font while pf-m-compact shrinks
-   only padding, so no pairing of the two lines up. Everything takes the default and the input sets
-   the row's height. The bar's height is a floor, because the row wraps in a narrow page. */
+/* One control scale on this row: pf-m-small shrinks padding and font while pf-m-compact shrinks only
+   padding, so no pairing lines up. Everything takes the default and the input sets the row's height.
+   The bar's height is a floor, since the row wraps in a narrow page. */
 .console-runs__bar {
   flex: 0 0 auto;
   display: flex;
@@ -31,8 +27,7 @@
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
-/* The page's heading, in the same voice as the Dashboard bar's OPERATIONS, so a reader switching
-   tabs meets a titled row on every app instead of a bare filter field. */
+/* Titles the row in the voice of the Dashboard bar's OPERATIONS. */
 .console-runs__label {
   order: 0;
   flex: 0 0 auto;
@@ -52,9 +47,8 @@
   gap: var(--pf-t--global--spacer--xs);
 }
 .console-runs__field { flex: 1 1 auto; min-inline-size: 0; }
-/* The readout, not a control: how many runs are showing and how many of them failed. Tabular so the
-   digits do not jitter as it updates, and never broken across lines: "35 runs, 3 failed" wrapped to
-   three numbers on a phone. */
+/* A readout. Tabular so digits do not jitter, and unbroken: "35 runs, 3 failed" wrapped to three
+   numbers on a phone. */
 .console-runs__count {
   order: 2;
   white-space: nowrap;
@@ -64,11 +58,10 @@
 }
 .console-runs__refresh { order: 3; margin-inline-start: auto; }
 
-/* --- Facet strip -----------------------------------------------------------------------------
-   Under the toolbar, not a third column: these are a control for the query box above them, and a
-   column charged a third of the page's width to hold a dozen short chips. It wraps rather than
-   scrolling sideways, because a value you cannot see is a value you will not use. Past a cap the
-   strip scrolls; in a narrow page it folds behind its summary instead. */
+/* The facet strip sits under the toolbar because it controls the query box above, and a third column
+   charged a third of the page's width for a dozen short chips. It wraps instead of scrolling sideways,
+   because a value you cannot see goes unused. Past a cap it scrolls; in a narrow page it folds behind
+   its summary. */
 .console-runs__filters {
   flex: 0 0 auto;
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
@@ -97,8 +90,7 @@
   padding-inline: var(--console-pad);
 }
 .console-runs__facets:empty { display: none; }
-/* One facet: its heading and its values on one line, kept together so a wrap never orphans a
-   heading from the chips it names. */
+/* A facet's heading and values stay on one line, so a wrap never orphans a heading from its chips. */
 .console-runs__facet {
   display: flex;
   flex-wrap: wrap;
@@ -121,10 +113,9 @@
 }
 .console-runs__facet-count { font-variant-numeric: tabular-nums; }
 
-/* --- Body split --------------------------------------------------------------------------------
-   Two independently scrolling columns: the runs, and the one you picked. min-inline-size:0 is what
-   keeps a long command line from setting a column's width - a flex item defaults to min-content, and
-   one `magus affected ci --no-default-charms` would otherwise push the detail pane off screen. */
+/* Two independently scrolling columns. min-inline-size:0 keeps a long command line from setting a
+   column's width: a flex item defaults to min-content, and one `magus affected ci
+   --no-default-charms` would push the detail pane off screen. */
 .console-runs__body {
   flex: 1 1 auto;
   display: flex;
@@ -148,11 +139,9 @@
 .console-runs__detail:focus-visible { outline-offset: var(--console-focus-inset); }
 .console-runs__back { display: none; margin-block-end: var(--pf-t--global--spacer--sm); }
 
-/* --- Run list ----------------------------------------------------------------------------------
-   PF's clickable data list, in its stacked layout (pf-m-grid): two cells per item, so two lines. The
-   outcome and the command that produced the run, then its when, how long and how many. The command is
-   the identity because it is what a person remembers; the invocation id is machine vocabulary and
-   lives in the detail pane. The second line indents past the mark to the command. */
+/* PF's clickable data list in its stacked layout (pf-m-grid): two cells, so two lines. The command is
+   the identity because a person remembers it; the invocation id is machine vocabulary and lives in the
+   detail pane. The second line indents past the mark to the command. */
 .console-runs__row { cursor: pointer; }
 .console-runs__list .pf-v6-c-data-list__cell { min-inline-size: 0; }
 .console-runs__row-head {
@@ -180,8 +169,7 @@
 }
 .console-runs__row-meta > :not(:first-child)::before { content: "\00b7"; margin-inline-end: var(--pf-t--global--spacer--sm); }
 
-/* --- Detail pane ------------------------------------------------------------------------------
-   Three blocks with real separation: what ran, the facts about it, then its targets. */
+/* The detail pane is three blocks: what ran, the facts about it, then its targets. */
 .console-runs__detail-head {
   margin-block-end: var(--pf-t--global--spacer--lg);
   padding-block-end: var(--pf-t--global--spacer--md);
@@ -204,9 +192,7 @@
   overflow-wrap: anywhere;
 }
 .console-runs__pill { flex: 0 0 auto; }
-
-/* The facts grid: a label column sized to its content and a value column taking the rest, so the
-   values line up and the eye can run down either one. */
+/* The label column is sized to its content and the value column takes the rest, so the values line up. */
 .console-runs__facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -229,13 +215,12 @@
   line-height: var(--pf-t--global--font--line-height--body);
   overflow-wrap: anywhere;
 }
-/* The parenthetical half of a fact ("1h ago" beside the clock time): same row, lower contrast, so
-   it reads as a gloss on the value rather than as a second value. */
+/* The gloss on a fact ("1h ago" beside the clock time): lower contrast, so it reads as a gloss and not
+   as a second value. */
 .console-runs__fact-extra {
   margin-inline-start: var(--pf-t--global--spacer--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-
 .console-runs__section-head {
   margin-block: 0 var(--pf-t--global--spacer--xs);
   font-size: var(--console-label-size);
@@ -274,8 +259,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle);
 }
-/* Everything a target says sits in ONE block under its name - the ref, the failure, the link - so
-   the pane reads as a list of targets rather than as a stack of loose lines. */
+/* Everything a target says sits in one block under its name, so the pane reads as a list of targets. */
 .console-runs__target-body {
   grid-column: 2;
   display: flex;
@@ -289,8 +273,7 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The failure text, not a decoration: it is usually the reason the reader came to this page, so it
-   gets the danger hue and is allowed to wrap in full rather than truncating. */
+/* The failure text is usually why the reader came, so it takes the danger hue and wraps in full. */
 .console-runs__target-error {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -304,23 +287,19 @@
   line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* Mono alone, no chip. A padded fill inside a sentence pushes the punctuation after it away from the
-   word, and "start , or set" reads as a typo rather than as a command. */
+/* Monospace without a chip: a padded fill inside a sentence pushes punctuation away from the word,
+   and "start , or set" reads as a typo. */
 .console-runs__cmd {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: inherit;
   color: var(--pf-t--global--text--color--regular);
 }
-
-/* --- Empty states ---------------------------------------------------------------------------- */
 .console-runs__empty-item { list-style: none; }
 .console-runs__empty { max-inline-size: 34rem; text-align: start; }
 
-/* --- Narrow page -----------------------------------------------------------------------------
-   Below 64rem the two columns stack: a 375px page cannot carry a list beside a detail pane, and
-   squeezing them makes both unusable rather than one. Selecting a run scrolls its detail into view
-   and offers a way back to the list. Below 40rem the toolbar's filter takes a row of its own and
-   the facets fold behind their summary. */
+/* Below 64rem the columns stack: a 375px page cannot carry a list beside a detail pane, and squeezing
+   them makes both unusable. Selecting a run scrolls its detail into view and offers a way back. Below
+   40rem the toolbar's filter takes a row of its own and the facets fold behind their summary. */
 @container console-runs (max-width: 63.999rem) {
   .console-runs__body { flex-direction: column; overflow: auto; }
   .console-runs__list,

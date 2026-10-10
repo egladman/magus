@@ -1,7 +1,7 @@
 // panel.ts - the right-docked side panel the shell uses for Share and Activity (and that the
 // notification panel's markup follows): docked between the top chrome and the status bar, a head with
-// an h2 title and a close button, a scrolling body. Three copies of this lived side by side in
-// overrides.css with diverging semantics - a span for a title, a text multiplication sign for the
+// an h2 title and a close button, a scrolling body. Three copies of this lived side by side
+// with diverging semantics - a span for a title, a text multiplication sign for the
 // close, aria-hidden toggled beside `hidden`, a dialog role on one and a region on another. This is
 // the one pattern: the structure and the behaviour a panel owes a keyboard and a screen reader.
 //

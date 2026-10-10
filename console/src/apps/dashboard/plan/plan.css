@@ -1,21 +1,10 @@
-/* plan.css - page-scoped styles for the console Jobs view: work drawn as the DAG it is, from either
- * of its two sources (the jobs this server knows about, and the derived target plan).
- *
- * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
- * form control, the empty state, the buttons, the path chips are PF Labels. What PF has no
- * component for is the STAGE - a laid-out node/edge drawing - and the dense node list and detail
- * sheet beside it, so those are authored here under the console-plan-* area of the naming formula
- * (README.md). Transient state is data-* throughout (data-phase, data-source, data-state,
- * data-selected, data-readonly, data-back), never a --modifier class.
- *
- * The states read from the PF-native status tokens, so a theme toggle re-tints the drawing with no
- * per-theme rule here. no_return gets its OWN color (the neutral-but-marked purple family used for
- * spells), deliberately NOT the danger red a failure gets: a job that never returned is not a job
- * that failed, and a reader must be able to tell them apart at a glance and by mark.
- *
- * Type is the console's tokens and nothing is under 12px. The drawing is laid out in CSS pixels, 1:1
- * (plan/main.ts sizes the SVG from its viewBox), so its text is 12px however the pane is shaped and
- * the stage scrolls instead of shrinking it. */
+/* The Jobs view: work drawn as the DAG it is, from either source (the jobs this server knows about, or
+   the derived target plan). PatternFly owns what it has a component for; what it lacks is the stage (a
+   laid-out node and edge drawing) and the dense node list and detail sheet beside it, authored here
+   under console-plan-*. State is data-* throughout. no_return takes its own colour (the spell purple),
+   not the danger red of a failure, because a job that never returned has not failed and a reader must
+   tell them apart by colour and mark. The drawing is laid out 1:1 in CSS pixels (plan/main.ts sizes
+   the SVG from its viewBox), so its text stays 12px and the stage scrolls instead of shrinking it. */
 
 .console-plan-layout {
   display: grid;
@@ -35,22 +24,18 @@
   --console-plan-fail: var(--console-status-danger);
   --console-plan-no-return: var(--console-node-spell);
 }
+/* One state, one colour, resolved once per element carrying data-state. Scoped to the layout because
+   data-state is console-wide (the status bar's connection dot carries one) and an unscoped selector
+   would tint it. A target nobody has started and a job nobody has begun are the same fact, so idle
+   takes the declared colour. */
+.console-plan-layout [data-state="declared"] { --console-plan-state: var(--console-plan-declared); }
+.console-plan-layout [data-state="running"] { --console-plan-state: var(--console-plan-running); }
+.console-plan-layout [data-state="pass"] { --console-plan-state: var(--console-plan-pass); }
+.console-plan-layout [data-state="fail"] { --console-plan-state: var(--console-plan-fail); }
+.console-plan-layout [data-state="no_return"] { --console-plan-state: var(--console-plan-no-return); }
+.console-plan-layout [data-state="idle"] { --console-plan-state: var(--console-plan-declared); }
 
-/* The stage, the list and the detail are all one answer to "what is the plan"; when there is no
-   plan to show, the empty state replaces the lot rather than framing three blank panels. */
-.console-plan-empty { display: none; }
-.console-plan-layout[data-phase="empty"] .console-plan-tree,
-.console-plan-layout[data-phase="empty"] .console-plan-stage,
-.console-plan-layout[data-phase="empty"] .console-plan-detail { display: none; }
-.console-plan-layout[data-phase="empty"] .console-plan-empty {
-  display: flex;
-  grid-row: 3;
-  grid-column: 1 / -1;
-}
-
-/* The one-line explainer under the title: what a job IS (owned work), telling it apart from a run
-   (Runs, one click away). Visible in every phase, empty included - it says what the view is FOR
-   regardless of whether there happens to be anything in it right now. */
+/* Visible in every phase: it says what the view is for, a job being owned work as opposed to a run. */
 .console-plan-intro {
   grid-area: intro;
   margin: 0;
@@ -61,19 +46,14 @@
   border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-plan-intro__link { font-size: inherit; }
-
-/* Compact, so it does not tower over the summary line beside it - the same treatment (and the same
-   reason) as the settings sheet's view toggle. The height comes from the shared token (the toolbar
-   carries data-control-size="compact") rather than a padding guess, so it lands on PF's own compact
-   step and the form control beside it lands on the same one. Only the inline padding and the type
-   ramp stay local. */
+/* The height comes from the shared token (the toolbar carries data-control-size="compact"), so it
+   lands on PF's compact step with the form control beside it. */
 .console-plan-source .pf-v6-c-toggle-group__button {
   block-size: var(--console-control-block-size);
   padding-block: 0;
   padding-inline: var(--pf-t--global--spacer--sm);
   font-size: var(--pf-t--global--font--size--body--sm);
 }
-
 .console-plan-toolbar {
   grid-area: toolbar;
   display: flex;
@@ -90,22 +70,19 @@
   font-size: var(--pf-t--global--font--size--body--default);
   color: var(--pf-t--global--text--color--regular);
 }
-/* The stale-picture note. Loud enough to be read, quiet enough not to look like a failure: what is
-   on screen is still the work, it is just older than the work. */
+/* The stale-picture note: what is on screen is still the work, only older than the work, so it is
+   legible without looking like a failure. */
 .console-plan-note {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--console-status-warn-text);
 }
-/* The target override is the only thing after the summary now, so it takes the free space and sits
-   right on its own. */
 .console-plan-target {
   display: flex;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
   margin-inline-start: auto;
 }
-.console-plan-target[hidden] { display: none; }
 .console-plan-target__label {
   font-size: var(--console-label-size);
   font-weight: var(--console-label-weight);
@@ -113,30 +90,49 @@
   letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* Deliberately narrow: the override is not the entry point. The run plan follows the live run, and
-   this is the small affordance for the exception. The height is the row's, not PF's default. */
+/* Narrow on purpose: the run plan follows the live run, and this is the exception. */
 .console-plan-target .pf-v6-c-form-control {
   width: 9rem;
   block-size: var(--console-control-block-size);
 }
 .console-plan-target .pf-v6-c-form-control > input { padding-block: 0; }
 
-/* ---- the accessible twin -------------------------------------------------- */
-
 .console-plan-tree {
   grid-area: tree;
   min-height: 0;
-  /* Never sideways: the rows wrap and ellipsize inside the column, and min-width: 0 below is what
-     lets them. A row wider than the column is a bug that would otherwise scroll the whole index. */
+  /* Never sideways: rows wrap and ellipsize in the column, and a row wider than it is a bug. */
   overflow-x: hidden;
   overflow-y: auto;
   border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
+.console-plan-tree__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--console-app-head-h);
+  padding-block: 0;
+  padding-inline: var(--console-pad);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-plan-tree__heading {
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* The toggle and the reopen rail are PF plain buttons, with PF's hit area and focus ring. */
+.console-plan-reopen {
+  grid-area: tree;
+  align-self: stretch;
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
 .console-plan-list { margin: 0; padding: var(--pf-t--global--spacer--xs) 0; list-style: none; }
-/* A row is the selecting button plus, on a job the server holds, the control that runs it, in ONE
-   row: the button takes the width the Run control leaves, and the id has the first line of it. They
-   are siblings rather than nested, because a button inside a button is not markup a browser honors. */
+/* A row is the selecting button plus, on a job the server holds, its Run control. They are siblings
+   because a button inside a button is not markup a browser honours. */
 .console-plan-list__row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -154,7 +150,7 @@
   color: var(--pf-t--global--text--color--subtle);
   overflow-wrap: anywhere;
 }
-/* The GOALS line: criteria and parent, under the job rather than crowded into it. */
+/* The goals line (criteria and parent) sits under the job instead of crowding it. */
 .console-plan-list__goal {
   grid-column: 1 / -1;
   display: flex;
@@ -182,8 +178,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* The selecting button, as a grid: state mark, id and age on the first line (the id takes what is
-   left and is never pushed off), then everything else about the job under it. */
+/* The id takes what is left of the first line and is never pushed off. */
 .console-plan-list__item {
   grid-column: 1;
   display: grid;
@@ -209,15 +204,14 @@
   cursor: pointer;
 }
 .console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
-/* Secondary plus an accent edge, NOT the highlight token. highlight--default is a saturated yellow
-   that keeps its own value in both themes while the row's text does not - so the selected row was
-   the one row on the view you could not read, and it collided with the gold the warnings own. */
+/* Secondary plus an accent edge, not the highlight token: highlight--default is a saturated yellow
+   that keeps its value in both themes while the row's text does not, so the selected row was the one
+   row you could not read. */
 .console-plan-list__item[aria-current="true"] {
   background: var(--pf-t--global--background--color--secondary--hover);
   border-inline-start-color: var(--console-accent);
 }
-/* The mark is the shape half of the state: an icon in the state's colour, with the word in the meta
-   line beside it. */
+/* The mark is the shape half of the state; the word is in the meta line beside it. */
 .console-plan-list__mark {
   grid-area: mark;
   color: var(--console-plan-state, inherit);
@@ -239,11 +233,9 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The two warnings a job can carry: another job claims one of its paths, and nobody has touched it
-   in a while. Both read in the PF warning token, the same gold the stale-picture note above uses -
-   a warning, never a failure: the job is still the job, and magus derived neither of these from
-   anything but what two agents declared. Each carries its own word, so the warning survives with no
-   color at all. */
+/* Two warnings: another job claims one of its paths, and nobody has touched it in a while. Both read
+   in the warning token, never the failure one, and each carries its own word so the warning survives
+   without colour. */
 .console-plan-list__warn,
 .console-plan-list__age[data-stale] {
   color: var(--console-status-warn-text);
@@ -262,55 +254,35 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* One state, one color, resolved ONCE per element that carries data-state and read by whatever
-   sits inside it (the list mark, the node box and its mark, the detail's state word). Scoped to
-   the layout because data-state is a console-wide hook - the status bar's connection dot carries
-   one too - and an unscoped attribute selector in a globally loaded sheet would tint it. */
-.console-plan-layout [data-state="declared"] { --console-plan-state: var(--console-plan-declared); }
-.console-plan-layout [data-state="running"] { --console-plan-state: var(--console-plan-running); }
-.console-plan-layout [data-state="pass"] { --console-plan-state: var(--console-plan-pass); }
-.console-plan-layout [data-state="fail"] { --console-plan-state: var(--console-plan-fail); }
-.console-plan-layout [data-state="no_return"] { --console-plan-state: var(--console-plan-no-return); }
-/* The target plan's idle takes the declared styling, and that is the whole mapping: a target nobody
-   has started and a job nobody has begun are the same fact told two different ways, so they must
-   not be two different colors. running / pass / fail already mean the same in both. */
-.console-plan-layout [data-state="idle"] { --console-plan-state: var(--console-plan-declared); }
-
-/* ---- the stage ------------------------------------------------------------ */
-
+/* A grab cursor announces the drawing can be dragged. */
 .console-plan-stage {
   grid-area: stage;
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: var(--pf-t--global--spacer--sm);
+  cursor: grab;
 }
-/* Sized by plan/main.ts, in pixels, from the viewBox: 1:1 at full size, so 12px type is 12px. */
 .console-plan-stage__svg { display: block; max-width: none; }
-
 .console-plan-edge {
   fill: none;
   stroke: var(--pf-t--global--border--color--default);
   stroke-width: 1.2;
 }
-/* Parent and depends_on must not read as the same relation: one is who spawned whom, the other is
-   what has to finish first. Solid for the parent spine, dashed and accented for the ordering
-   constraints laid over it. */
+/* Parent and depends_on must not read as one relation: solid for the parent spine, dashed and accented
+   for the ordering constraints over it. */
 .console-plan-edge[data-kind="depends_on"] {
   stroke: var(--console-accent);
   stroke-dasharray: 5 3;
   opacity: 0.75;
 }
-/* An edge the layout had to reverse to break a cycle. The dotted stroke says the drawn direction is
-   layout fiction, not what the server reported. */
+/* A reversed edge breaks a cycle; the dotted stroke says its drawn direction is layout fiction. */
 .console-plan-edge[data-back] { stroke-dasharray: 2 3; opacity: 0.5; }
 .console-plan-arrow { fill: var(--pf-t--global--border--color--default); }
 .console-plan-arrow[data-kind="depends_on"] { fill: var(--console-accent); }
-
-/* In the target plan EVERY edge is a dependency, so there is nothing to tell it apart from. The
-   dashed accent exists to separate depends_on from the parent spine; with no spine to separate it
-   from it is just noise, so that source draws its dependencies plain. The markup still says
-   depends_on, because that is what the edge is. */
+/* In the target plan every edge is a dependency, so the accent has no spine to separate it from; the
+   markup still says depends_on, since that is what the edge is. A reversed one stays marked, because
+   a cycle in a resolved run plan is worth seeing. */
 .console-plan-layout[data-source="targets"] .console-plan-edge[data-kind="depends_on"] {
   stroke: var(--pf-t--global--border--color--default);
   stroke-dasharray: none;
@@ -319,34 +291,22 @@
 .console-plan-layout[data-source="targets"] .console-plan-arrow[data-kind="depends_on"] {
   fill: var(--pf-t--global--border--color--default);
 }
-/* Except a reversed one: a cycle in a resolved run plan is worth seeing whichever source drew it. */
 .console-plan-layout[data-source="targets"] .console-plan-edge[data-back] {
   stroke-dasharray: 2 3;
   opacity: 0.5;
 }
-
 .console-plan-node { cursor: pointer; }
-/* FLOATING, not secondary. Secondary is darker than the stage it sits on, so every node read as a
-   hole punched in the view with a colored outline round it - an empty black box, not a card.
-   Floating is the token for a layer lifted ABOVE its ground, in both themes, which is what a node on
-   a canvas is. */
+/* Floating, not secondary: secondary is darker than the stage, so every node read as a hole punched in
+   the view. Floating is the token for a layer lifted above its ground in both themes. */
 .console-plan-node__box {
   fill: var(--pf-t--global--background--color--floating--default);
   stroke: var(--console-plan-state, var(--pf-t--global--border--color--default));
   stroke-width: 1.4;
 }
 .console-plan-node[data-readonly] .console-plan-node__box { stroke-dasharray: 4 2; }
-
-/* Work in flight breathes. Only the RUNNING state pulses, and only on the box's stroke: it marks
-   the one or two jobs something is actually happening in, which a static drawing cannot
-   distinguish from the jobs merely declared around them.
- *
- * Slow (2.4s) and shallow (down to 0.45), because this runs for as long as the work does - a fast
- * or high-contrast blink beside text somebody is reading is an irritant within a minute. Nothing
- * moves POSITION: the box does not grow, so the pulse cannot be mistaken for the layout shifting.
- *
- * The color still says "running" on its own; this only adds emphasis, so a reader who never sees
- * the animation loses nothing. */
+/* Only the running state breathes, and only on the box's stroke, to mark where something is happening.
+   Slow (2.4s) and shallow (down to 0.45), since it runs as long as the work does. Nothing moves
+   position, so it cannot read as the layout shifting, and the colour still says "running" alone. */
 @keyframes console-plan-breathe {
   0%,
   100% {
@@ -356,27 +316,17 @@
     stroke-opacity: 0.45;
   }
 }
-
 .console-plan-node[data-state="running"] .console-plan-node__box {
   animation: console-plan-breathe var(--console-motion-breathe) ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .console-plan-node[data-state="running"] .console-plan-node__box {
-    animation: none;
-  }
 }
 .console-plan-node[data-selected] .console-plan-node__box {
   stroke: var(--console-accent);
   stroke-width: 2.4;
-  /* A node a reader has selected holds still: the accent outline is the answer to "which one is
-     this", and a throbbing outline under a detail pane being read is a distraction. */
+  /* A selected node holds still: a throbbing outline under a detail pane being read is a distraction. */
   animation: none;
 }
-/* A warned node keeps its state color on the box - the state is still what it is - and turns its
-   id gold, so a contested or untouched job is findable in the drawing without reading the list.
-   The words themselves are in the list row beside it; a color on the picture is never the only
-   place a warning is told. */
+/* A warned node keeps its state colour and turns its id gold. The words are in the list row, so colour
+   on the picture is never the only place a warning is told. */
 .console-plan-node[data-warn] .console-plan-node__id,
 .console-plan-node[data-stale] .console-plan-node__id {
   fill: var(--console-status-warn);
@@ -394,11 +344,7 @@
 }
 .console-plan-node__id { fill: var(--pf-t--global--text--color--regular); }
 .console-plan-node__ro { fill: var(--pf-t--global--text--color--subtle); }
-/* KIND + truncated GOAL, the card's own answer to the same question the list row's meta/goal
-   lines answer. Quieter than the id above it - it is context for the mark and id. */
 .console-plan-node__goal { fill: var(--pf-t--global--text--color--subtle); }
-
-/* ---- the detail sheet ----------------------------------------------------- */
 
 .console-plan-detail {
   grid-area: detail;
@@ -432,8 +378,7 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-detail__hint { margin: var(--pf-t--global--spacer--xs) 0; color: var(--pf-t--global--text--color--subtle); }
-/* A label and the value it names touch; the separation belongs BETWEEN pairs, and it comes from the
-   label's own margin above. */
+/* A label and its value touch; separation between pairs comes from the label's margin above. */
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: var(--pf-t--global--spacer--xs); margin: 0; }
 .console-plan-detail__label {
   margin-top: var(--pf-t--global--spacer--md);
@@ -453,8 +398,8 @@
   letter-spacing: var(--console-label-tracking);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The released paths: what the lease gave up, and which version of it the next one inherits. Two
-   lines per entry so a long path never squeezes the digest it has to be compared against. */
+/* Released paths and declared goals use two lines per entry, so a long path or check command never
+   squeezes the digest or id it is compared against. */
 .console-plan-detail__releases { margin: 0; padding: 0; list-style: none; }
 .console-plan-detail__release { display: flex; flex-direction: column; padding: var(--pf-t--global--spacer--xs) 0; }
 .console-plan-detail__releasepath { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
@@ -463,10 +408,6 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* The declared goals: an id, the kind+expect pair that says what must be true, and the subject (a
-   check rendered as its command, a path glob, or a symbol) as its own line below - the same two-tier
-   shape the released-paths list uses, for the same reason (a long check command must not squeeze the
-   id it belongs to). */
 .console-plan-detail__gates { margin: 0; padding: 0; list-style: none; }
 .console-plan-detail__gate { display: flex; flex-direction: column; padding: var(--pf-t--global--spacer--xs) 0; }
 .console-plan-detail__gateid { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; }
@@ -477,8 +418,7 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   overflow-wrap: anywhere;
 }
-/* Unresolved risks are prose a holder wrote, not paths - a plain bulleted list rather than the chip
-   treatment pathField gives something a reader searches or compares. */
+/* Unresolved risks are prose a holder wrote, not paths, so a plain bulleted list. */
 .console-plan-detail__risks { margin: 0; padding-inline-start: var(--pf-t--global--spacer--lg); }
 .console-plan-detail__risk { font-size: var(--pf-t--global--font--size--body--sm); overflow-wrap: anywhere; padding: var(--pf-t--global--spacer--xs) 0; }
 .console-plan-detail__runlist { margin: 0; padding: 0; list-style: none; }
@@ -498,19 +438,14 @@
   color: var(--console-status-ok-text);
 }
 
-/* The live feed: what the selected job's holder is doing right now, as opposed to everything
-   above it, which is what the job was declared to be and how it has been graded.
-
-   It reads like a terminal on purpose. A person watching four workers is scanning a column for
-   the word "deny" going past, not reading sentences, so the row is fixed columns and the list
-   scrolls with the newest at the bottom, which is the shape they already know how to read. */
+/* The live feed shows what the selected job's holder is doing now. It reads like a terminal on
+   purpose: a person watching four workers scans a column for the word "deny", so the rows are fixed
+   columns with the newest at the bottom. */
 .console-plan-feed__list {
   margin: 0;
   padding: 0;
   list-style: none;
-  /* Bounded, and it is the bound that makes the section usable: a feed free to grow pushes the
-     declared fields above it off the screen, so opening a drawer on a busy worker would cost the
-     reader everything else the sheet says. */
+  /* The bound keeps a busy worker's feed from pushing the declared fields off the screen. */
   max-block-size: 18rem;
   overflow-y: auto;
 }
@@ -525,8 +460,7 @@
   color: var(--pf-t--global--text--color--subtle);
   font-variant-numeric: tabular-nums;
 }
-/* Fixed width so the labels line up into a column the eye can run down, rather than moving with
-   the length of each word. */
+/* Fixed widths line the labels up into columns the eye can run down. */
 .console-plan-feed__kind {
   inline-size: 2.6rem;
   color: var(--pf-t--global--text--color--subtle);
@@ -537,12 +471,38 @@
   color: var(--pf-t--global--text--color--subtle);
   overflow-wrap: anywhere;
 }
-/* A deny, an ask, a failed run, a contested path. The only rows worth interrupting a worker over
-   are the ones this marks, which is the point of marking them. */
-.console-plan-feed__row[data-bad] .console-plan-feed__mark { color: var(--console-status-danger-text); }
 
-/* One column in a narrow pane: the drawing is the first thing to go, since the list carries the same
-   nodes with the same states in words. The question is how wide THIS pane is, not the window. */
+/* When there is no plan the empty state replaces the stage, list and detail instead of framing three
+   blank panels. */
+.console-plan-empty { display: none; }
+.console-plan-layout[data-phase="empty"] .console-plan-tree,
+.console-plan-layout[data-phase="empty"] .console-plan-stage,
+.console-plan-layout[data-phase="empty"] .console-plan-detail { display: none; }
+.console-plan-layout[data-phase="empty"] .console-plan-empty {
+  display: flex;
+  grid-row: 3;
+  grid-column: 1 / -1;
+}
+.console-plan-target[hidden] { display: none; }
+.console-plan-reopen[hidden] { display: none; }
+/* Collapsed, the index gives its column to the stage and leaves the reopen rail, as the diff's file
+   index and the activity trail's event index do. */
+.console-plan-layout[data-tree="collapsed"] {
+  grid-template-columns: auto minmax(0, 1fr) 22rem;
+}
+.console-plan-stage[data-panning] { cursor: grabbing; }
+/* A pan must not paint a text selection across every label it crosses. */
+.console-plan-stage[data-panning] * { user-select: none; }
+/* A deny, an ask, a failed run or a contested path: the rows worth interrupting a worker over. */
+.console-plan-feed__row[data-bad] .console-plan-feed__mark { color: var(--console-status-danger-text); }
+@media (prefers-reduced-motion: reduce) {
+  .console-plan-node[data-state="running"] .console-plan-node__box {
+    animation: none;
+  }
+}
+
+/* One column in a narrow pane: the drawing goes first, since the list carries the same nodes and
+   states in words. The question is how wide this pane is, not the window. */
 @container dashboard (max-width: 56rem) {
   .console-plan-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -554,45 +514,3 @@
   }
   .console-plan-stage { display: none; }
 }
-
-/* ---- the collapsible index ------------------------------------------------ */
-
-/* Collapsed, the index gives its column back to the stage and leaves only the reopen rail, the
-   same affordance the diff's file index and the activity trail's event index use. */
-.console-plan-layout[data-tree="collapsed"] {
-  grid-template-columns: auto minmax(0, 1fr) 22rem;
-}
-
-.console-plan-tree__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--pf-t--global--spacer--xs);
-  min-block-size: var(--console-app-head-h);
-  padding-block: 0;
-  padding-inline: var(--console-pad);
-  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-}
-.console-plan-tree__heading {
-  font-size: var(--console-label-size);
-  font-weight: var(--console-label-weight);
-  letter-spacing: var(--console-label-tracking);
-  text-transform: uppercase;
-  color: var(--pf-t--global--text--color--subtle);
-}
-/* The toggle and the reopen rail are PF plain buttons, so they have PF's hit area and focus ring. */
-.console-plan-reopen {
-  grid-area: tree;
-  align-self: stretch;
-  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-.console-plan-reopen[hidden] { display: none; }
-
-/* ---- stage controls -------------------------------------------------------- */
-
-/* Grab, so the drawing announces that it can be dragged before anybody tries. */
-.console-plan-stage { cursor: grab; }
-.console-plan-stage[data-panning] { cursor: grabbing; }
-/* A pan must not paint a text selection across every label it crosses. */
-.console-plan-stage[data-panning] * { user-select: none; }

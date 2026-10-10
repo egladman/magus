@@ -1,0 +1,74 @@
+/* The connect screen (ui/signin.ts): who you are, then which workspace. One dialog, because the
+   workspace list is authenticated and cannot populate before the credential works. */
+.console-shell-signin__section {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  align-items: baseline;
+  margin-block-end: var(--pf-t--global--spacer--md);
+  padding-block-end: var(--pf-t--global--spacer--md);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-signin__label {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-signin__value { font-size: var(--pf-t--global--font--size--body--sm); min-inline-size: 0; overflow-wrap: anywhere; }
+/* An address should have resolved by the time this opens; when it has not, say so in another voice. */
+.console-shell-signin__value[data-anomaly] { color: var(--console-status-warn-text); }
+.console-shell-signin__lede {
+  margin-block: var(--pf-t--global--spacer--xs) 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* One bordered menu holds the choices: two bordered cards read as two things to study. */
+.console-shell-signin__menu {
+  margin-block: var(--pf-t--global--spacer--md);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: none;
+}
+.console-shell-signin__list { margin: 0; padding: 0; }
+/* Stacked, since the path under a name is the only way to tell two checkouts with the same leaf apart. */
+.console-shell-signin__choice {
+  inline-size: 100%;
+  text-align: start;
+}
+.console-shell-signin__choice .pf-v6-c-menu__item-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--pf-t--global--spacer--xs);
+}
+/* Selecting is not confirming, so the chosen row has to look settled. Only the background is set:
+   PF's .pf-m-selected already draws an inset ring and wins the cascade. */
+.console-shell-signin__choice[aria-checked="true"] {
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-signin__path {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+}
+/* The remembered pick is suggested, not chosen: a scope nobody chose is the failure this screen
+   exists to prevent. It is outlined, but not while focused, so it never replaces the focus ring. */
+.console-shell-signin__choice[data-suggested] {
+  border-color: var(--console-spruce);
+}
+.console-shell-signin__choice[data-suggested]:not(:focus-visible) {
+  outline: var(--pf-t--global--border--width--regular) solid var(--console-spruce);
+  outline-offset: calc(-1 * var(--pf-t--global--border--width--regular));
+}
+.console-shell-signin__choice[data-suggested] .pf-v6-c-menu__item-text::after {
+  content: "last used";
+  margin-inline-start: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  letter-spacing: 0.02em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-signin__footer { display: flex; justify-content: flex-end; padding-block-start: var(--pf-t--global--spacer--sm); }
+/* A disabled confirm means nothing is remembered yet: a real choice has to happen. */
+.console-shell-signin__confirm:disabled { cursor: not-allowed; }
+.console-shell-signin__all { align-self: flex-start; }

@@ -71,6 +71,7 @@ import {
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
 import { wireMenu } from "../../ui/menu";
+import { kebabIcon, menuToggle } from "../../ui/menu-toggle";
 import { reportFailure } from "../../lib/notifications";
 import { errMessage } from "../../lib/guards";
 import { connectLive, setLiveVisible } from "./live";
@@ -195,6 +196,16 @@ function wireRunBrowser(): void {
   };
   stopBrowserWatch?.();
   stopBrowserWatch = startBrowserWatch();
+}
+
+// moreToggle builds the PF MenuToggle that opens the More menu and puts it ahead of the menu.
+function moreToggle(menu: HTMLElement): HTMLElement {
+  const btn = menuToggle({ variant: "plain", icon: kebabIcon(), ariaLabel: "More actions" });
+  btn.id = "log-more-btn";
+  btn.title = "More actions";
+  btn.setAttribute("aria-controls", menu.id);
+  menu.before(btn);
+  return btn;
 }
 
 // paintEmpty writes the cold empty state from what the run browser beside it knows. It repeats the
@@ -687,9 +698,9 @@ function wireControls(): void {
   }
 
   // The More menu holds the actions used once and then forgotten; Pause and Copy stay on the row.
-  const moreBtn = el("log-more-btn");
   const moreMenu = el("log-more-menu");
-  if (moreBtn && moreMenu) {
+  if (moreMenu) {
+    const moreBtn = el("log-more-btn") ?? moreToggle(moreMenu);
     const dispose = wireMenu(moreMenu, moreBtn);
     lifecycleAbort?.signal.addEventListener("abort", dispose);
   }

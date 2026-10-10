@@ -477,7 +477,7 @@ export function mountNotificationCenter(): NotificationCenter {
   }
 
   // The history panel: a PF Notification drawer, docked as a right-hand overlay pop-out (positioned in
-  // overrides.css). It reuses the Reference panel's pop-out mechanics via wireDrawerToggle rather than
+  // styles/components/SidePanel). It reuses the Reference panel's pop-out mechanics via wireDrawerToggle rather than
   // inventing a second idiom.
   const panel = document.createElement("section");
   panel.id = "console-notifypanel";
@@ -582,7 +582,7 @@ export function mountNotificationCenter(): NotificationCenter {
 
   panel.append(head, bodyEl);
   // Anchor the panel in the title-bar control group so it drops directly under the bell (positioned in
-  // overrides.css, like the Applications menu). Fall back to the body if the control group is absent.
+  // styles/components/SidePanel, like the Applications menu). Fall back to the body if the control group is absent.
   (actions ?? document.body).append(panel);
 
   const renderList = (): void => {

@@ -111,7 +111,7 @@ export function activityTile(): Tile {
   // A <div>, not a <pre>: every line is rendered through the SHARED renderLine() the log viewer and
   // the activity trail use, so the preview carries the same ANSI colors, [pass]/[fail] status
   // badges, and line markup rather than being a flat monospace dump of the same bytes. The styles
-  // come from render/render.css, which dashboard.css imports for exactly this.
+  // come from styles/components/Render/render.css, which dashboard.css imports for exactly this.
   //
   // It scrolls, so it is a named, focusable log. aria-live is off: the tail is rebuilt on every
   // frame, and a live region around that would read the whole buffer out again each time.

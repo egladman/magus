@@ -1,0 +1,7 @@
+/* An inline copy drops the button's padding as PF's inline examples do; the hit area still meets the
+   console's 24px floor. */
+.pf-v6-c-clipboard-copy.pf-m-inline .pf-v6-c-button.pf-m-no-padding {
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  justify-content: center;
+}

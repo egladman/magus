@@ -71,8 +71,8 @@ test("token tier does not take 2xl, h1 or a mid-name number for a base token", a
 test("token tier lets tokens.css adapt the base layer, and nothing else", async () => {
   const code = ":root { --pf-t--global--color--brand--200: #3f6b60; --console-x: var(--pf-t--color--white); }";
 
-  assert.deepEqual(await flagged(code, "/work/console/src/styles/tokens.css"), []);
-  assert.equal((await flagged(code, "/work/console/src/styles/overrides.css")).length, 2);
+  assert.deepEqual(await flagged(code, "/work/console/src/styles/base/tokens.css"), []);
+  assert.equal((await flagged(code, "/work/console/src/styles/base/focus.css")).length, 2);
 });
 
 test("token tier refuses an allowance with no reason or a file that is not a pattern", async () => {

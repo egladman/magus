@@ -1,0 +1,62 @@
+/* The divider is a real grid track, so it is the gap and a draggable hit box. data-dir carries the
+   split axis for the resize cursor. */
+#console-outlet [data-divider] {
+  position: relative;
+  align-self: stretch;
+  justify-self: stretch;
+  background: var(--pf-t--global--border--color--default);
+  cursor: col-resize;
+  touch-action: none;
+}
+#console-outlet [data-divider][data-dir="col"] { cursor: row-resize; }
+/* A pseudo-element grip keeps the divider a single track. */
+#console-outlet [data-divider]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--pf-t--global--text--color--subtle);
+  border-radius: var(--console-radius-micro);
+}
+#console-outlet [data-divider][data-dir="row"]::after { width: 2px; height: 1.5rem; }
+#console-outlet [data-divider][data-dir="col"]::after { width: 1.5rem; height: 2px; }
+#console-outlet [data-divider]:hover,
+#console-outlet [data-divider]:active { background: var(--console-accent); }
+#console-outlet [data-divider]:hover::after,
+#console-outlet [data-divider]:active::after { background: var(--pf-t--global--text--color--on-brand--default); }
+
+/* The focused pane rings on keyboard focus only; data-focus still drives status-bar ownership. */
+#console-outlet [data-pane-id]:focus-visible {
+  outline-offset: var(--console-focus-inset);
+  z-index: 1;
+}
+/* data-focus-ring="always" (a Settings toggle) rings the focused pane on any focus. */
+:root[data-focus-ring="always"] #console-outlet [data-pane-id][data-focus] {
+  outline: var(--pf-t--global--focus-ring--width--offset) solid var(--pf-t--global--focus-ring--color--default);
+  outline-offset: var(--console-focus-inset);
+  z-index: 1;
+}
+
+/* The in-pane launcher offers the apps for a fresh split pane (tileView). */
+#console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
+#console-outlet [data-pane-launcher] {
+  margin: 0 0 var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  text-align: center;
+}
+/* No max-width: a two-pane split leaves this nearly full width. Same min column as the home launcher. */
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery {
+  width: 100%;
+  padding: 0 var(--pf-t--global--spacer--md);
+  --pf-v6-l-gallery--GridTemplateColumns--min: 17rem;
+}
+/* PF cards ship no border; the home launcher cards add a hairline and these match it. */
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card {
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  transition: border-color var(--console-motion) var(--console-ease, ease), background var(--console-motion) var(--console-ease, ease);
+}
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery .pf-v6-c-card:hover {
+  border-color: var(--console-accent);
+  background: var(--pf-t--global--background--color--tertiary--default);
+}

@@ -1,29 +1,21 @@
-/* logs.css - the log viewer's own chrome: its toolbar, the filter echo and notice strip, the trace
- * waterfall and the help disclosures. The page frame, foldable sections, empty state and the
- * run-browser panel are shared with Activity and live in render/frame.css, pulled in here.
- *
- * Layout answers to the PANE, not the window. The console tiles apps, so the toolbar and the
- * waterfall ask the panel (.console-render-panel is a size container named console-pane) how wide
- * they have, and a viewport width query would answer the wrong question. */
-@import "../../render/frame.css";
+/* The log viewer's own chrome: toolbar, filter echo and notices, trace waterfall and help disclosures.
+   The frame it shares with Activity is layouts/Frame. Layout answers to the pane, not the window:
+   .console-render-panel is a size container named console-pane. */
+@import "../../styles/layouts/Frame/frame.css";
 
-/* --- View toolbar (PatternFly Toolbar) -------------------------------------------------------
-   One bar that stays out of the way until a log is loaded: every control in it acts on a log, so
-   showing it over the cold empty state offered buttons that could do nothing. */
+/* Every control in the bar acts on a log, so it stays hidden over the cold empty state. */
 .console-log-app:not([data-loaded]) #log-bar { display: none; }
 #log-bar {
   flex: 0 0 auto;
-  /* --console-chrome: this toolbar frames the content the way the shell's bars do. One token for
-     everything that is chrome is what keeps the app from showing seams where it joins the shell. */
+  /* The chrome token, so the app shows no seam where it joins the shell. */
   background: var(--console-chrome);
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   padding-block: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
 }
 #log-bar .pf-v6-c-toolbar__content { padding-block: 0; padding-inline: var(--log-pad); }
-/* One bar height, the console's, as a floor: the row wraps in a narrow pane and has to be free to
-   grow. Its own block padding is zero, or the two stack and the row comes out taller than every
-   other bar. */
+/* The console's bar height as a floor, free to grow when the row wraps. Its own block padding is
+   zero, or the two stack and the row comes out taller than every other bar. */
 #log-bar-controls .pf-v6-c-toolbar__content-section {
   flex-wrap: wrap;
   align-items: center;
@@ -38,8 +30,8 @@
   display: flex;
   gap: var(--pf-t--global--spacer--sm);
 }
-/* The filter leads the row and is the one element that grows; every other cluster is its content's
-   width, so a narrow pane wraps cluster by cluster instead of breaking into ragged rows. */
+/* The filter leads and is the one element that grows, so a narrow pane wraps cluster by cluster
+   instead of breaking into ragged rows. */
 .console-log-toolbar__filter {
   display: flex;
   flex: 1 1 18rem;
@@ -49,12 +41,10 @@
 }
 .console-log-toolbar__filter .console-filter { flex: 1 1 auto; min-inline-size: 0; }
 .console-log-toolbar__actions { margin-inline-start: auto; }
-#log-timerange[hidden] { display: none; }
 #log-timerange .pf-v6-c-form-control { inline-size: auto; }
 .console-log-toolbar__labelrow { display: flex; align-items: center; gap: var(--pf-t--global--spacer--xs); }
 .pf-v6-c-toolbar__item.console-log-toolbar__labelrow > * { flex: 0 0 auto; }
-/* Names the time-range select, which otherwise showed only its resting option and read as an
-   action nobody could name. */
+/* Names the time-range select, which otherwise showed only its resting option. */
 .console-log-toolbar__label {
   font-size: var(--console-label-size);
   font-weight: var(--console-label-weight);
@@ -67,18 +57,9 @@
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
-.console-log-focus__window[hidden],
-#log-focus-reset[hidden] { display: none; }
 #log-bar-controls .pf-v6-c-button__icon { display: inline-flex; line-height: 0; }
 #log-bar-controls .console-render-btn__icon { display: block; }
-/* Pressed toolbar toggles (Pause while paused) read as depressed. */
-#log-bar-controls .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
-  background: color-mix(in srgb, var(--console-accent) 14%, transparent);
-  border-color: var(--console-accent);
-  color: var(--console-accent);
-}
-/* The More menu drops from its button, right-aligned so it stays in the pane. Only the position is
-   here; the menu chrome is PatternFly's. */
+/* Only the position of the More menu is here; the chrome is PatternFly's. Right-aligned so it stays in the pane. */
 .console-log-toolbar__more { position: relative; }
 #log-more-menu {
   position: absolute;
@@ -87,30 +68,8 @@
   min-inline-size: 12rem;
   z-index: var(--pf-t--global--z-index--md);
 }
-#log-more-menu[hidden] { display: none; }
 
-/* A pane too narrow for one row: the filter takes a row of its own and the clusters wrap beneath it,
-   and the buttons keep their icons and give up their words (still in the accessible name). */
-@container console-pane (max-width: 42rem) {
-  #log-bar-controls .pf-v6-c-toolbar__content-section { column-gap: var(--pf-t--global--spacer--sm); }
-  .console-log-toolbar__filter { flex-basis: 100%; max-inline-size: none; }
-  .console-log-toolbar__actions { margin-inline-start: auto; }
-  #log-bar-controls .pf-v6-c-toolbar__group { gap: var(--pf-t--global--spacer--xs); }
-}
-@container console-pane (max-width: 34rem) {
-  .console-log-toolbar__actions .pf-v6-c-button__text,
-  .console-log-toolbar__modes .pf-v6-c-toggle-group__text {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-}
-
-/* --- Filter echo and notices ----------------------------------------------------------------
-   The parsed-filter chip row: each term is a PF Label, joined by muted "AND" connectives. */
+/* The parsed-filter echo: each term is a PF Label, joined by muted "AND" connectives. */
 .console-log-filter {
   display: flex;
   flex-wrap: wrap;
@@ -121,19 +80,17 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
-.console-log-filter[hidden] { display: none; }
 .console-log-filter__op {
   font-weight: var(--pf-t--global--font--weight--body--bold);
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* Loading and failure notices: a PF inline Alert, inset to the panel gutter. */
+/* A PF inline Alert for loading and failure, inset to the panel gutter. */
 .console-log-status {
   padding-block: var(--pf-t--global--spacer--sm) 0;
   padding-inline: var(--log-pad);
 }
-.console-log-status[hidden] { display: none; }
-/* Shown in the pretty view when the active filter matches nothing. */
+/* The pretty view when the active filter matches nothing. */
 .console-log-filter__empty {
   display: flex;
   flex-direction: column;
@@ -144,12 +101,13 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-log-filter__empty p { margin: 0; }
+.console-log-runs__search { display: flex; align-items: center; gap: var(--pf-t--global--spacer--xs); }
+.console-log-runs__search .console-filter { flex: 1 1 auto; min-inline-size: 0; }
+.console-log-noscript { padding: var(--pf-t--global--spacer--lg); color: var(--pf-t--global--text--color--subtle); }
 
-/* --- Trace waterfall (Timeline) -------------------------------------------------------------
-   The invocation's spans (targets, and their steps) on a shared time axis, drawn as inline SVG
-   (offline and CSP-safe, no chart library). The drawing is authored in a 900-unit box and never
-   drawn narrower, so its 12px type is 12px or more; a narrower pane scrolls across it. The same
-   data is a visually hidden table beside it (waterfall.ts). */
+/* The invocation's spans on a shared time axis, as inline SVG (offline and CSP-safe, no chart
+   library). It is authored in a 900-unit box and never drawn narrower, so its 12px type stays 12px or
+   more and a narrower pane scrolls across it. waterfall.ts adds the same data as a visually hidden table. */
 .console-render-body[data-waterfall] {
   padding-block: var(--pf-t--global--spacer--sm);
   padding-inline: var(--log-pad);
@@ -164,7 +122,7 @@
   min-inline-size: 900px;
   block-size: auto;
   cursor: crosshair;
-  /* The waterfall zooms its own drawing; the text view zooms the body (frame.css). */
+  /* The waterfall zooms its own drawing; the text view zooms the body. */
   zoom: var(--log-zoom, 1);
 }
 .console-log-waterfall__axisline { stroke: var(--pf-t--global--border--color--default); stroke-width: 1; }
@@ -181,15 +139,14 @@
 }
 .console-log-waterfall__label--target { fill: var(--log-head-fg, var(--pf-t--global--text--color--regular)); }
 .console-log-waterfall__label--step { fill: var(--pf-t--global--text--color--subtle); }
-/* Invocation group header in a multi-invocation waterfall: the command, bold. */
 .console-log-waterfall__grouphead {
   font-size: var(--pf-t--global--font--size--body--default);
   font-weight: var(--pf-t--global--font--weight--body--bold);
   fill: var(--pf-t--global--text--color--regular);
   font-family: var(--pf-t--global--font--family--mono);
 }
-/* Every bar has an outline in the control border token, which holds 3:1 against the page in both
-   themes; a fill alone, least of all a pale one, did not. */
+/* Every bar is outlined in the control border token, which holds 3:1 against the page in both themes;
+   a pale fill alone did not. */
 .console-log-waterfall__bar {
   fill: var(--console-accent);
   stroke: var(--pf-t--global--border--color--control--default);
@@ -198,7 +155,7 @@
 .console-log-waterfall__bar--step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
 .console-log-waterfall__bar[data-status="pass"] { fill: var(--pf-t--global--color--status--success--default); }
 .console-log-waterfall__bar[data-status="fail"] { fill: var(--pf-t--global--color--status--danger--default); }
-/* A cached bar is hatched by a pattern fill set in waterfall.ts; the stripe colour is here. */
+/* waterfall.ts hatches a cached bar with a pattern fill; the stripe colour is here. */
 .console-log-waterfall__hatch { fill: var(--pf-t--global--border--color--control--default); }
 .console-log-waterfall__barlabel {
   fill: var(--pf-t--global--text--color--regular);
@@ -210,26 +167,16 @@
 .console-log-waterfall__barlabel[data-status="pass"] { fill: var(--pf-t--global--text--color--status--on-success--default); }
 .console-log-waterfall__barlabel[data-status="fail"] { fill: var(--pf-t--global--text--color--status--on-danger--default); }
 .console-log-waterfall__barlabel.console-log-waterfall__barlabel--outside { fill: var(--pf-t--global--text--color--regular); }
-/* Filter dim: spans the filter excludes fade back so the matching ones stand out. */
-.console-log-waterfall__svg [data-dim] { opacity: 0.18; }
-.console-log-waterfall__bar--step[data-dim] { opacity: 0.12; }
-/* Brush selection rectangle drawn over the waterfall while dragging a focus window. */
-.console-log-waterfall__brush { fill: var(--console-accent); fill-opacity: 0.14; stroke: var(--console-accent); stroke-opacity: 0.5; }
 .console-log-waterfall__empty {
   padding: var(--pf-t--global--spacer--xl);
   text-align: center;
   color: var(--pf-t--global--text--color--subtle);
 }
+/* Brush selection drawn over the waterfall while dragging a focus window. */
+.console-log-waterfall__brush { fill: var(--console-accent); fill-opacity: 0.14; stroke: var(--console-accent); stroke-opacity: 0.5; }
 
-/* --- Run browser rail ------------------------------------------------------------------------
-   The filter row under the panel header (the rest of the panel is frame.css). */
-.console-log-runs__search { display: flex; align-items: center; gap: var(--pf-t--global--spacer--xs); }
-.console-log-runs__search .console-filter { flex: 1 1 auto; min-inline-size: 0; }
-
-.console-log-noscript { padding: var(--pf-t--global--spacer--lg); color: var(--pf-t--global--text--color--subtle); }
-
-/* --- Disclosures: "Loading a log by URL" and "Filter syntax" ---------------------------------
-   An uppercase, muted summary label over a bordered, tinted panel. */
+/* Disclosures ("Loading a log by URL", "Filter syntax"): a muted uppercase summary over a bordered,
+   tinted panel. */
 .console-log-help {
   margin-block: var(--pf-t--global--spacer--xs) var(--log-pad);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -267,3 +214,39 @@ main .console-log-help[open] > summary:not([role]) { color: var(--pf-t--global--
 .console-log-help dt { margin: 0; white-space: nowrap; }
 .console-log-help dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
 .console-log-help code { font-size: inherit; }
+
+/* Pressed toolbar toggles (Pause while paused) read as depressed. */
+#log-bar-controls .pf-v6-c-button[aria-pressed="true"]:not(:disabled) {
+  background: color-mix(in srgb, var(--console-accent) 14%, transparent);
+  border-color: var(--console-accent);
+  color: var(--console-accent);
+}
+/* Spans the filter excludes fade back so the matching ones stand out. */
+.console-log-waterfall__svg [data-dim] { opacity: 0.18; }
+.console-log-waterfall__bar--step[data-dim] { opacity: 0.12; }
+#log-timerange[hidden],
+#log-more-menu[hidden],
+.console-log-filter[hidden],
+.console-log-status[hidden],
+.console-log-focus__window[hidden],
+#log-focus-reset[hidden] { display: none; }
+
+/* A pane too narrow for one row gives the filter a row of its own with the clusters beneath, and the
+   buttons keep their icons and give up their words, which stay in the accessible name. */
+@container console-pane (max-width: 42rem) {
+  #log-bar-controls .pf-v6-c-toolbar__content-section { column-gap: var(--pf-t--global--spacer--sm); }
+  .console-log-toolbar__filter { flex-basis: 100%; max-inline-size: none; }
+  .console-log-toolbar__actions { margin-inline-start: auto; }
+  #log-bar-controls .pf-v6-c-toolbar__group { gap: var(--pf-t--global--spacer--xs); }
+}
+@container console-pane (max-width: 34rem) {
+  .console-log-toolbar__actions .pf-v6-c-button__text,
+  .console-log-toolbar__modes .pf-v6-c-toggle-group__text {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}

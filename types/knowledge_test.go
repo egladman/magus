@@ -146,7 +146,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 		return string(data)
 	}
 
-	tokens := read("console", "src", "styles", "tokens.css")
+	tokens := read("console", "src", "styles", "base", "tokens.css")
 	graphCSS := read("console", "src", "apps", "graph", "graph.css")
 	mainTS := read("console", "src", "apps", "graph", "main.ts")
 	shapesTS := read("console", "src", "apps", "graph", "shapes.ts")

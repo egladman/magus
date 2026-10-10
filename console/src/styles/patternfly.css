@@ -1,35 +1,17 @@
-/* patternfly.css - the PatternFly Core CSS entry for the console (W0 spike).
- *
- * esbuild bundles this with --bundle so each @import is inlined and minified into one
- * gen/patternfly.css. We import PER-COMPONENT sheets (not the 1.8MB patternfly.min.css
- * monolith) to keep the precache lean: the base token/reset layer plus only the
- * components the console actually mounts. Add a component's sheet here when an app
- * starts using it; that is the whole opt-in for PatternFly.
- *
- * patternfly-base.css is the unavoidable fixed cost - it defines the full --pf-t-* token
- * palette (light + dark) and is ~321KB minified on its own. Per-component sheets are small
- * on top of it. See README.md for the stack and the PurgeCSS follow-up.
- *
- * Font/image url() assets in the base (RedHat webfonts, icons) are marked --external in
- * the build so esbuild leaves the urls untouched instead of trying to inline 10MB of
- * fonts. tokens.css overrides the font-family tokens to a system stack, so the declared
- * @font-face rules are never referenced and the browser never fetches them (no 404s). */
+/* The PatternFly Core entry. esbuild --bundle inlines each import into gen/patternfly.css. Per-component
+   sheets replace the 1.8MB patternfly.min.css monolith: add one when an app starts mounting a
+   component, and drop it with the last use. patternfly-base.css defines the full --pf-t-* palette for
+   both themes (about 321KB minified). Its font and image url() assets are marked --external in the
+   build, and base/tokens.css points the font tokens at a system stack, so no @font-face is fetched. */
 
 @import "@patternfly/patternfly/patternfly-base.css";
 @import "@patternfly/patternfly/components/Button/button.css";
-/* Icon - the wrapper an inline svg needs beside button text. PF's own icons are a FONT, so a
- * button centres its contents on the text baseline; a bare svg baselines on its bottom edge and
- * rides high. This sheet applies the -0.125em nudge that puts one back on the optical centre. */
+/* Icon wraps an inline svg beside button text: PF's own icons are a font, so a bare svg would baseline
+   on its bottom edge and ride high. */
 @import "@patternfly/patternfly/components/Icon/icon.css";
 @import "@patternfly/patternfly/components/Tabs/tabs.css";
 @import "@patternfly/patternfly/components/Card/card.css";
 @import "@patternfly/patternfly/layouts/Gallery/gallery.css";
-/* W2 shell rebuild - the components the migrated chrome mounts:
- *   Label       - the status-bar chips (#offline-badge)
- *   Menu        - the floating settings popover (#settings-panel)
- *   Form/FormControl - the settings-panel controls (poll/host inputs, theme button)
- *   ModalBox + Backdrop + Bullseye - the keybindings editor and cheat sheet overlays
- * Card + Gallery (already above) also cover the home launcher and the in-pane launcher. */
 @import "@patternfly/patternfly/components/Label/label.css";
 @import "@patternfly/patternfly/components/Menu/menu.css";
 @import "@patternfly/patternfly/components/Form/form.css";
@@ -37,60 +19,20 @@
 @import "@patternfly/patternfly/components/ModalBox/modal-box.css";
 @import "@patternfly/patternfly/components/Backdrop/backdrop.css";
 @import "@patternfly/patternfly/layouts/Bullseye/bullseye.css";
-/* W3 dashboard - the dashboard app's added components:
- *   EmptyState - the connect/front-door screen (#dash-connect) when no server is streaming.
- * Card + Gallery (already above) cover the dashboard tiles and the app-waffle launcher. */
 @import "@patternfly/patternfly/components/EmptyState/empty-state.css";
-/* Notes - the scope banners and the store repair warnings. Alert is the one component the
- * console mounts whose absence is silent: an undeclared alert still renders its text, just as
- * an unstyled paragraph, so the Notes app shipped with every banner reading as body prose. */
+/* Alert is the one component whose absence is silent: an undeclared alert still renders its text, as
+   an unstyled paragraph. */
 @import "@patternfly/patternfly/components/Alert/alert.css";
-/* W3 log viewer - the log viewer app's added components:
- *   Toolbar - the file/query bar: the ref identity strip plus the filter field + action buttons.
- * Button (above) covers the toolbar/section action buttons; FormControl (above) the filter field
- * and time-range select; EmptyState (above) the cold "nothing loaded" screen. The ANSI-colored log
- * body, the foldable sections, and the trace waterfall have no PF component - they stay custom
- * rendering (logs.css), colored from the console's --console-* tokens. */
 @import "@patternfly/patternfly/components/Toolbar/toolbar.css";
-/*   ToggleGroup - the Pretty|Raw and Log|Timeline view switches (a real PF segmented control,
- *   replacing the console's old custom sliding toggle). */
 @import "@patternfly/patternfly/components/ToggleGroup/toggle-group.css";
-/*   InputGroup - the filter field + its attached "?" syntax-help control button.
- *   Divider     - the vertical separator between the clipboard and open/fullscreen action groups. */
 @import "@patternfly/patternfly/components/InputGroup/input-group.css";
 @import "@patternfly/patternfly/components/Divider/divider.css";
-/*   TreeView + Badge - the log viewer's run browser: a left master-detail tree of prior runs
- *   (project -> target -> run), with a small count badge per branch. Reads the server's read-only
- *   /api/v1/outputs feed; selecting a run loads its verbatim captured output on the right. */
 @import "@patternfly/patternfly/components/TreeView/tree-view.css";
 @import "@patternfly/patternfly/components/Badge/badge.css";
-/*   Spinner - the load indicator for the two slow fetches: the ~486KB docs search index (reference
- *   panel) and the ~1.4MB demo graph.json (graph explorer). */
 @import "@patternfly/patternfly/components/Spinner/spinner.css";
-/* Reference panel rebuild - the shell's right-side Reference panel is a real PF Drawer
- * (pf-m-panel-right pf-m-inline pf-m-expanded): the tab outlet is its __content, the
- * reference panel its __panel, so opening insets the content instead of the old custom
- * fixed aside + body padding hack. TextInputGroup is the panel's docs-search field. */
 @import "@patternfly/patternfly/components/Drawer/drawer.css";
 @import "@patternfly/patternfly/components/TextInputGroup/text-input-group.css";
-/* The shell's left navigation rail (#console-sidebar, sidebar.ts) is a PF Nav: __list/__item/__link
- * with pf-m-current for the app the active tab is showing. Collapsed it shows only __link-icon;
- * the widths and the collapsed geometry are returned through PF's own --pf-v6-c-nav__link--* custom
- * properties in console.css rather than by re-skinning the component. */
 @import "@patternfly/patternfly/components/Nav/nav.css";
-/* The shared pieces (src/ui, src/lib/toast.ts) and the per-app rebuilds onto PF components:
- *   Alert + Alert group - ui/alert.ts (inline) and lib/toast.ts (the toast group)
- *   Popover             - ui/help-popover.ts
- *   Table               - ui/table.ts, the one sortable table
- *   Switch, Radio, Check - boolean and exclusive settings controls
- *   Progress, Skeleton  - a measured amount, and a placeholder while data loads
- *   DescriptionList     - label/value pairs
- *   HelperText          - the hint or error line under a field
- *   ClipboardCopy       - a value with its copy control
- *   DataList            - dense row lists
- *   MenuToggle          - the button that opens a menu (ui/menu-toggle.ts)
- *   NotificationDrawer  - the notification panel (lib/notifications.ts)
- * Drawer, Badge, Label and Spinner are imported above. */
 @import "@patternfly/patternfly/components/Alert/alert-group.css";
 @import "@patternfly/patternfly/components/Popover/popover.css";
 @import "@patternfly/patternfly/components/Table/table.css";

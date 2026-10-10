@@ -1,7 +1,5 @@
-/* tools.css - the Tools app: a bar of filters over one full-width table.
-   Its own sheet rather than the Dashboard's: dashboard.css loads only with the Dashboard, and the
-   table here is a page, not a tile. Shares the console's semantic tokens, the layer meant to be
-   shared. */
+/* The Tools app: a bar of filters over one full-width table. It has its own sheet because
+   dashboard.css loads only with the Dashboard, and here the table is a page, not a tile. */
 
 /* The pane is the container, so the bar answers to the width it was given, not the window's. */
 .console-tools {
@@ -13,8 +11,7 @@
   background: var(--pf-t--global--background--color--primary--default);
 }
 
-/* --- Bar ------------------------------------------------------------------------
-   The console's one bar height and one app gutter, as a floor: the row wraps on a narrow pane. */
+/* The console's bar height and app gutter as a floor; the row wraps in a narrow pane. */
 .console-tools__bar {
   flex: 0 0 auto;
   display: flex;
@@ -27,8 +24,7 @@
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
-/* The three toggles scroll sideways inside their own row rather than pushing the bar to several
-   rows tall; in a narrow pane they take the whole first row and the count and Refresh share the next. */
+/* The toggles scroll sideways in their own row rather than stretching the bar several rows tall. */
 .console-tools__filters { max-inline-size: 100%; overflow-x: auto; }
 .console-tools__filter { white-space: nowrap; }
 .console-tools__count {
@@ -37,17 +33,27 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-tools__refresh { margin-inline-start: auto; }
-@container (max-width: 40rem) {
-  .console-tools__filters { flex: 1 1 100%; }
+
+/* The table is the shared one (styles/components/Table), whose wrapper is the one scroll container.
+   A one-row grid hands the wrapper this box's whole height as a definite size, so the rows scroll
+   under a fixed header and the page never scrolls. */
+.console-tools__table {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  padding-inline: var(--console-pad);
+}
+.console-tools__empty {
+  padding-block: var(--pf-t--global--spacer--2xl);
+  padding-inline: var(--console-pad);
+  max-inline-size: 34rem;
 }
 
-/* A failed refresh over a table still on screen. Empty when the last read worked, so it takes no room. */
+/* The next two are empty when there is nothing to say, so they take no room. */
 .console-tools__stale { padding-inline: var(--console-pad); }
 .console-tools__stale:empty { display: none; }
 .console-tools__stale:not(:empty) { padding-block: var(--pf-t--global--spacer--sm); }
-
-/* Says where the end-of-life columns came from when that is not a live answer. Empty when there is
-   nothing to say, so it takes no room then. */
 .console-tools__note {
   margin: 0;
   padding-inline: var(--console-pad);
@@ -58,25 +64,10 @@
   padding-block: var(--pf-t--global--spacer--sm);
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
-
-/* --- Table ----------------------------------------------------------------------
-   The table itself is the shared one (styles/table.css), whose wrapper is the one scroll container.
-   This box only gives that wrapper a height: a one-row grid hands its item the box's whole height as
-   a definite size, so the wrapper scrolls the rows under a header that stays put, and the page itself
-   never scrolls. */
-.console-tools__table {
-  flex: 1 1 auto;
-  min-block-size: 0;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr);
-  padding-inline: var(--console-pad);
-}
 .console-tools__table[hidden] { display: none; }
-
-/* --- Connect prompt -------------------------------------------------------------- */
-.console-tools__empty {
-  padding-block: var(--pf-t--global--spacer--2xl);
-  padding-inline: var(--console-pad);
-  max-inline-size: 34rem;
-}
 .console-tools__empty[hidden] { display: none; }
+
+/* In a narrow pane the toggles take the whole first row and the count and Refresh share the next. */
+@container (max-width: 40rem) {
+  .console-tools__filters { flex: 1 1 100%; }
+}

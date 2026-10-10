@@ -82,7 +82,7 @@ export interface AlertRail {
 // panels container and calls destroy() on teardown.
 export function mountAlertRail(): AlertRail {
   // Shown/hidden by a data attribute rather than the `hidden` property, so the rail can TRANSITION
-  // in and out. `hidden` resolves to display:none (overrides.css enforces it with !important), and
+  // in and out. `hidden` resolves to display:none (utilities/hidden.css enforces it with !important), and
   // display is not an animatable property - toggling it makes the rail snap in and out, which on a
   // board being watched from across a room reads as the whole screen flinching. The attribute keeps
   // it in the layout and lets opacity and transform carry the change.

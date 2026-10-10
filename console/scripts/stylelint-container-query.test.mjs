@@ -61,7 +61,7 @@ test("container query leaves files outside src/apps alone", async () => {
   const code = "@media (max-width: 40rem) { .console-a { display: none; } }";
 
   assert.deepEqual(await flagged(code, "/repo/console/src/styles/console.css"), []);
-  assert.deepEqual(await flagged(code, "/repo/console/src/render/render.css"), []);
+  assert.deepEqual(await flagged(code, "/repo/console/src/styles/components/Render/render.css"), []);
   assert.deepEqual(await flagged(code, "/repo/console/src/appsish/x.css"), []);
   assert.equal((await flagged(code, "/repo/console/src/apps/dashboard/plan/plan.css")).length, 1);
 });

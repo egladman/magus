@@ -116,8 +116,8 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
                      "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
-// The shared stylesheets, each bundled with what it @imports (console.css takes table.css).
-final SHELL_CSS = ["tokens.css", "overrides.css", "console.css"];
+// The shell stylesheet, bundled with the base, layout, component and utility sheets it @imports.
+final SHELL_CSS = ["console.css"];
 
 // appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
 // gen/<id>/<id>.js, the path the shell loads it from. An app whose manifest (app.ts) says
@@ -150,7 +150,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(docs\build_playground);
     ctx.writesFiles(
         "gen/console.js", "gen/theme.js",
-        "gen/patternfly.css", "gen/tokens.css", "gen/overrides.css", "gen/console.css",
+        "gen/patternfly.css", "gen/console.css",
         "gen/*/*.js", "gen/*/*.css", "gen/*/scaffold.html",
         "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
         "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",

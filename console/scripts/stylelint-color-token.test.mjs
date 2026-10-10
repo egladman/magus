@@ -141,7 +141,7 @@ test("color token lets tokens.css define colours in custom properties", async ()
       --pf-t--global--color--brand--200: rgb(63 107 96);
     }
   `,
-    "/repo/console/src/styles/tokens.css",
+    "/repo/console/src/styles/base/tokens.css",
   );
 
   assert.deepEqual(warnings, []);
@@ -153,7 +153,7 @@ test("color token still rejects a colour tokens.css writes into a real property"
     :root { color: #3f6b60; box-shadow: 0 0 2px #000; }
     [data-control-size] { background: rgb(1 2 3); }
   `,
-    "/repo/console/src/styles/tokens.css",
+    "/repo/console/src/styles/base/tokens.css",
   );
 
   assert.equal(warnings.length, 3);
@@ -207,7 +207,7 @@ test("color token accepts transparent, currentcolor and a name that is not a col
 
 test("color token lets tokens.css define a named colour in a custom property only", async () => {
   const code = ":root { --console-x: olive; } .a { color: olive; }";
-  const warnings = await flagged(code, "/repo/console/src/styles/tokens.css");
+  const warnings = await flagged(code, "/repo/console/src/styles/base/tokens.css");
 
   assert.equal(warnings.length, 1);
 });

@@ -19,16 +19,9 @@
   <link rel="icon" href="./assets/favicon.svg" type="image/svg+xml">
   <link rel="icon" href="./assets/favicon-32.png" sizes="32x32" type="image/png">
   <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png">
-  <!-- PatternFly Core: the PF base + component sheets, then the console's PF-native token layer
-       (tokens.css) that squares the corners, points the fonts at a system stack, and defines the
-       --console-* semantic slots. Then console.css (the shell rules) and overrides.css. -->
+  <!-- PatternFly first, then console.css: the console's tokens, base, layouts, components and utilities. -->
   <link rel="stylesheet" href="./patternfly.css">
-  <link rel="stylesheet" href="./tokens.css">
   <link rel="stylesheet" href="./console.css">
-  <!-- The small, ID-scoped escape hatch for the shell bits PatternFly has no component for (the
-       status-bar frame, the side panels). Loaded LAST so its ID rules win. See
-       src/styles/overrides.css. -->
-  <link rel="stylesheet" href="./overrides.css">
   <script src="./theme.js"></script>
 </head>
 <!-- The console is a self-contained app, not a page in a site: NO site nav, NO brand mark. The title

@@ -11,7 +11,8 @@ the stylesheet stack, the token map, and the naming rules every authored class f
   `src/apps/index.ts` imports every manifest by hand.
 - `src/desktop/` is the frame that belongs to no app: the launcher, tabs, tiling, the rail, the
   command bar, keybindings and the router.
-- `src/render/`, `src/lib/`, `src/ui/` and `src/styles/` are shared by both.
+- `src/render/`, `src/lib/`, `src/ui/` and `src/styles/` are shared by both. `src/styles/` mirrors
+  PatternFly's layout (`base/`, `layouts/`, `components/`, `utilities/`); the map is under PatternFly below.
 
 Where a new piece goes:
 
@@ -125,7 +126,7 @@ rest of this file says how each rule is built.
   | A show/hide section | `expandableSection` (`ui/expandable.ts`)                       |
 
 - **One focus ring** (a house rule, below). The global
-  `:where(button, a, [role="button"], [tabindex]):focus-visible` rule in `console.css` draws PF's
+  `:where(button, a, [role="button"], [tabindex]):focus-visible` rule in `base/focus.css` draws PF's
   focus-ring token at PF's offset. A sheet does not restate the colour or the width. Where an ancestor's
   `overflow` would clip an outside ring, set only `outline-offset: var(--console-focus-inset)`.
 - **Hit areas** are at least 24px square for anything pressed (a house rule, below), and a `title=` is
@@ -142,7 +143,7 @@ decision, with the reason, so a reviewer can tell a rule to keep from a PatternF
   viewport answers the wrong question. Where a PF component has no container hook, size its
   container instead of overriding its breakpoints.
 - **The focus ring is the console's.** PF Core 6.5.2 draws no focus ring on a button, link or
-  `tabindex` element; it only ships the focus-ring tokens. The global rule in `console.css` is
+  `tabindex` element; it only ships the focus-ring tokens. The global rule in `base/focus.css` is
   the console's, and `tokens.css` points PF's focus-ring colour primitives at the brand ramp so the ring
   matches the buttons beside it.
 - **24px targets.** WCAG 2.2 AA 2.5.8 asks for 24 by 24 CSS pixels. PatternFly's compact tier (29px
@@ -172,21 +173,37 @@ decision, with the reason, so a reviewer can tell a rule to keep from a PatternF
 JS runtime), which is the documented path for non-React consumers. Prefix `pf-v6`; expect a
 `pf-v6 -> pf-v7` churn at the next major, contained to the class strings and `tokens.css`.
 
-PatternFly is the console's ONLY design system. The stylesheet stack, in load order:
+PatternFly is the console's ONLY design system. The console's own shared CSS mirrors
+PatternFly's package layout, so a reader who knows `@patternfly/patternfly/{base,components,layouts,utilities}`
+finds the same shelves here. The stylesheet stack, in load order:
 
-1. `patternfly.css`: PF Core base + the per-component sheets we render.
-2. `tokens.css`: the console's PF-native token layer (corner radii, the brand ramp and focus ring, system fonts, `--console-*` slots, the syntax palette).
-3. `console.css`: the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
-   launcher, layout).
-4. `overrides.css`: the small ID/class-scoped escape hatch for PF-less shell chrome.
-5. Per app, lazily: every `apps/<id>/<id>.css` (`activity`, `dashboard`, `diff`, `graph`, `logs`,
+1. `styles/patternfly.css`: PF Core base + the per-component sheets we render. The only file that imports PF.
+2. `styles/console.css`: the shell entry. It only `@import`s the sheets below, in cascade order, and
+   builds to `gen/console.css`.
+3. Per app, lazily: every `apps/<id>/<id>.css` (`activity`, `dashboard`, `diff`, `graph`, `logs`,
    `notes`, `runs`, `tools`) bundles into `gen/<id>/<id>.css`. A view's sheet
    (`dashboard/plan/plan.css`, `graph/diagrams/diagrams.css`) rides its app's sheet by `@import`.
-   Two sheets are shared by more than one app: `render/frame.css` is the log and activity frame
-   (foldable sections, empty state, event index), imported by both `logs/logs.css` and
-   `activity/activity.css`, and it imports `render/render.css`, which `dashboard/dashboard.css`
-   imports too. `apps/activity/activity.css` is the Activity app's own sheet on top of that frame (the
-   event head, the refresh notice, the busy state), so a change to the frame lands in both apps.
+
+What `console.css` imports, and where a rule goes:
+
+- `styles/base/`: `tokens.css` (the PF-native token layer), `focus.css` (the one focus ring) and
+  `page.css` (global control rules).
+- `styles/layouts/<Name>/<name>.css`: `Shell` (body grid, outlet, panes, frame), `Tiling` (dividers,
+  in-pane launcher), `Detached`, and `Frame` (the log and activity frame, imported by `logs.css` and
+  `activity.css` only, not by `console.css`).
+- `styles/components/<Name>/<name>.css`: one console-owned component each. The chrome is `TitleBar`,
+  `Tabs`, `Nav` (the rail), `StatusBar`, `SidePanel` with `SharePanel`, `ActivityPanel` and
+  `NotificationDrawer`, `PanesPopup`, `ScopePicker`, `Signin` and `Cast`. The overlays are `CommandBar`,
+  `ReferenceDrawer` with `RefSearch`, `CheatSheet`, `KeybindingsEditor` and `HelpPopover`. The rest are
+  `Launcher`, `Shortcuts`, `Keycap`, `ZoomStepper`, `EmptyState`, `ClipboardCopy`, `Toolbar` and
+  `Table`. `Render` (the line renderers) is imported by `Frame` and `dashboard.css` only.
+- `styles/utilities/`: `hidden.css` (the `[hidden]` guarantee) and `motion.css` (the console's
+  reduced-motion switch).
+
+A rule used by more than one app belongs in `components/` or `layouts/`; a rule only one app reads
+stays in `apps/<id>/`. Inside an app sheet the order is custom properties, layout, components,
+states, then container queries, because a container query has to follow the base rules it
+overrides. The same applies to a shell sheet: custom properties first, container and media queries last.
 
 ### How it is bundled
 
@@ -205,7 +222,7 @@ PatternFly is the console's ONLY design system. The stylesheet stack, in load or
   how few components we render. Running PurgeCSS over the built bundle is the single biggest
   remaining precache win, and is deliberately not done yet.
 
-## Token map (`src/styles/tokens.css`)
+## Token map (`src/styles/base/tokens.css`)
 
 The ONE file adapting PF tokens to the console.
 
@@ -359,8 +376,8 @@ skips until `magus run build_playground docs` has run.
   `data-card`).
 - **Accessibility is semantic elements + ARIA**, orthogonal to the classes: keep
   `<header>/<main>/<footer>` landmarks, real `<button>`, `role`/`aria-*`.
-- **One small audited `overrides.css` is the escape hatch** for a genuinely PF-less bit. Prefer a
-  `pf-v6-u-*` utility or an ID-scoped rule first.
+- **A PF-less bit gets its own component sheet** under `styles/components/<Name>/`, ID-scoped.
+  Prefer a `pf-v6-u-*` utility or an ID-scoped rule first.
 
 ## Naming methodology (strict: the formula for every class we author)
 

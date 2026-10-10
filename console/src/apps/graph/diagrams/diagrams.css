@@ -1,7 +1,6 @@
-/* diagrams.css - the Graph's Figures mode: a bar (figure and lens) over the figure's own control row,
-   then the figure beside its node list. A CHROME app: the bars run full bleed and the figure
-   meets the pane edge. The figure's colours are the --magus-diagram-* tokens in tokens.css. The width
-   rule is an @container query against the Graph's pane root (.console-graph-main, graph.css). */
+/* The Graph's Figures mode: a bar (figure and lens) over the figure's own control row, then the figure
+   beside its node list. The bars run full bleed and the figure meets the pane edge. The figure's colours
+   are the --magus-diagram-* tokens in base/tokens.css. */
 
 .console-diagrams {
   display: flex;
@@ -10,7 +9,6 @@
   min-block-size: 0;
   background: var(--pf-t--global--background--color--primary--default);
 }
-
 .console-diagrams__bar {
   flex: 0 0 auto;
   display: flex;
@@ -23,34 +21,12 @@
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
-/* A shared link has no picker or lens to offer and draws without asking for the runtime. */
-.console-diagrams__bar[hidden],
-.console-diagrams__controls .pf-v6-c-button[hidden] { display: none; }
 .console-diagrams__lens { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-diagrams__field { display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-diagrams__field-label { font-size: var(--pf-t--global--font--size--body--default); color: var(--pf-t--global--text--color--subtle); white-space: nowrap; }
-
-/* The console's inline notice: full bleed, severity in the left rule, never a card over the figure. */
-.console-diagrams__notices:empty { display: none; }
-.console-diagrams__notice.pf-v6-c-alert {
-  border-radius: 0;
-  border-inline: 0;
-  border-block-start: 0;
-  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-slate);
-  padding-block: var(--pf-t--global--spacer--sm);
-  padding-inline: var(--console-pad);
-  box-shadow: none;
-}
-.console-diagrams__notice.pf-m-warning { border-inline-start-color: var(--console-status-warn); }
-.console-diagrams__notice.pf-m-danger { border-inline-start-color: var(--console-status-danger); }
-.console-diagrams__notice .pf-v6-c-alert__title { overflow-wrap: anywhere; }
-.console-diagrams__notice .pf-v6-c-alert__description { white-space: pre-wrap; overflow-wrap: anywhere; }
-
 .console-diagrams__body { flex: 1 1 auto; display: flex; min-block-size: 0; }
 .console-diagrams__main { flex: 1 1 auto; display: flex; flex-direction: column; min-inline-size: 0; }
-
-/* The figure's controls sit in their own row above it, so nothing ever covers the drawing. */
+/* The controls sit in a row above the figure, so nothing covers the drawing. */
 .console-diagrams__controls {
   flex: 0 0 auto;
   display: flex;
@@ -62,7 +38,6 @@
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-diagrams__runtime-status { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-
 .console-diagrams__figure {
   flex: 1 1 auto;
   display: flex;
@@ -71,8 +46,7 @@
   margin: 0;
   background: var(--magus-diagram-paper);
 }
-/* What stands in for the frame while there is no figure: a spinner or a PF empty state, centred in
-   the room the frame would have had. */
+/* Stands in for the frame while there is no figure: a spinner or a PF empty state. */
 .console-diagrams__state {
   flex: 1 1 auto;
   min-block-size: 18rem;
@@ -80,8 +54,6 @@
   align-items: center;
   justify-content: center;
 }
-.console-diagrams__state[hidden],
-.console-diagrams__frame[hidden] { display: none; }
 .console-diagrams__loading {
   display: flex;
   flex-direction: column;
@@ -90,9 +62,8 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-diagrams__loading p { margin: 0; }
-/* pan-y, never none: none would also take the browser's own pinch zoom and page scroll away. The
-   focus ring is the console's one (console.css); only the offset is set, because the frame's own
-   overflow would clip a ring drawn outside it. */
+/* pan-y, never none: none would take the browser's pinch zoom and page scroll away. Only the focus
+   offset is set, since the frame's overflow would clip a ring drawn outside it. */
 .console-diagrams__frame {
   flex: 1 1 auto;
   min-block-size: 18rem;
@@ -100,16 +71,13 @@
   touch-action: pan-y;
   cursor: grab;
 }
-.console-diagrams__frame[data-dragging] { cursor: grabbing; }
 .console-diagrams__frame:focus-visible { outline-offset: var(--console-focus-inset); }
-.console-diagrams__frame[aria-busy="true"] { opacity: 0.6; }
 .console-diagrams__frame > svg {
   display: block;
   inline-size: 100%;
   block-size: 100%;
   transition: opacity var(--console-motion) var(--console-ease);
 }
-.console-diagrams__frame > svg[data-entering] { opacity: 0; }
 .console-diagrams__caption {
   flex: 0 0 auto;
   padding-block: var(--pf-t--global--spacer--sm);
@@ -117,18 +85,6 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-
-/* Focus, dim and hover: only what the figure declares (see interact.ts). */
-.console-diagrams__frame [data-node],
-.console-diagrams__frame [data-edge] {
-  transition: opacity var(--console-motion-fast) var(--console-ease);
-}
-.console-diagrams__frame svg[data-focused] [data-dim] { opacity: 0.18; }
-.console-diagrams__frame [data-edge][data-hot],
-.console-diagrams__frame [data-edge][data-lit] { stroke: var(--magus-diagram-accent); }
-.console-diagrams__frame a[data-node] { cursor: pointer; }
-.console-diagrams__frame [data-node]:focus-visible { outline-offset: var(--pf-t--global--spacer--xs); }
-
 .console-diagrams__aside {
   flex: 0 0 16rem;
   display: flex;
@@ -151,11 +107,6 @@
   padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--console-pad);
 }
-/* A node the focus has dimmed is set apart by the subtle text colour, which keeps its contrast; fading
-   the row to half opacity dropped the text under the minimum. */
-.console-diagrams__node[data-dim],
-.console-diagrams__node[data-dim] .pf-v6-c-button { color: var(--pf-t--global--text--color--subtle); }
-.console-diagrams__node[data-lit] { font-weight: var(--pf-t--global--font--weight--heading--default); }
 .console-diagrams__source {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
@@ -163,13 +114,47 @@
   overflow-wrap: anywhere;
 }
 a.console-diagrams__source { color: var(--pf-t--global--text--color--link--default); }
-
-/* A narrow pane stacks the node list under the figure. */
-@container graph (max-width: 47.99rem) {
-  .console-diagrams__body { flex-direction: column; }
-  .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
+/* The console's inline notice: full bleed, with severity in the left rule. */
+.console-diagrams__notice.pf-v6-c-alert {
+  border-radius: 0;
+  border-inline: 0;
+  border-block-start: 0;
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid var(--console-slate);
+  padding-block: var(--pf-t--global--spacer--sm);
+  padding-inline: var(--console-pad);
+  box-shadow: none;
 }
+.console-diagrams__notice.pf-m-warning { border-inline-start-color: var(--console-status-warn); }
+.console-diagrams__notice.pf-m-danger { border-inline-start-color: var(--console-status-danger); }
+.console-diagrams__notice .pf-v6-c-alert__title { overflow-wrap: anywhere; }
+.console-diagrams__notice .pf-v6-c-alert__description { white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* Focus, dim and hover: only what the figure declares (interact.ts). */
+.console-diagrams__frame [data-node],
+.console-diagrams__frame [data-edge] {
+  transition: opacity var(--console-motion-fast) var(--console-ease);
+}
+.console-diagrams__frame svg[data-focused] [data-dim] { opacity: 0.18; }
+.console-diagrams__frame [data-edge][data-hot],
+.console-diagrams__frame [data-edge][data-lit] { stroke: var(--magus-diagram-accent); }
+.console-diagrams__frame a[data-node] { cursor: pointer; }
+.console-diagrams__frame [data-node]:focus-visible { outline-offset: var(--pf-t--global--spacer--xs); }
+
+/* A dimmed node keeps contrast through the subtle text colour; half opacity dropped the text under
+   the minimum. */
+.console-diagrams__node[data-dim],
+.console-diagrams__node[data-dim] .pf-v6-c-button { color: var(--pf-t--global--text--color--subtle); }
+.console-diagrams__node[data-lit] { font-weight: var(--pf-t--global--font--weight--heading--default); }
+.console-diagrams__frame[data-dragging] { cursor: grabbing; }
+.console-diagrams__frame[aria-busy="true"] { opacity: 0.6; }
+.console-diagrams__frame > svg[data-entering] { opacity: 0; }
+/* A shared link has no picker or lens to offer, and draws without asking for the runtime. */
+.console-diagrams__bar[hidden],
+.console-diagrams__controls .pf-v6-c-button[hidden] { display: none; }
+.console-diagrams__notices:empty { display: none; }
+.console-diagrams__state[hidden],
+.console-diagrams__frame[hidden] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .console-diagrams__frame > svg,
   .console-diagrams__frame [data-node],
@@ -178,3 +163,9 @@ a.console-diagrams__source { color: var(--pf-t--global--text--color--link--defau
 :root[data-motion="reduced"] .console-diagrams__frame > svg,
 :root[data-motion="reduced"] .console-diagrams__frame [data-node],
 :root[data-motion="reduced"] .console-diagrams__frame [data-edge] { transition: none; }
+
+/* A narrow pane stacks the node list under the figure, asking the Graph's pane root (graph.css). */
+@container graph (max-width: 47.99rem) {
+  .console-diagrams__body { flex-direction: column; }
+  .console-diagrams__aside { flex-basis: auto; border-inline-start: 0; border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
+}

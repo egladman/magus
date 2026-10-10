@@ -276,7 +276,7 @@ describe("a prepared figure", () => {
   // Every role cssVarPalette paints (magus/figure, libs/figure/figure.buzz) needs a console
   // definition, or that role falls back to its light hex on a dark console.
   test("tokens.css defines every --magus-diagram-* role", () => {
-    const css = readFileSync("src/styles/tokens.css", "utf8");
+    const css = readFileSync("src/styles/base/tokens.css", "utf8");
     for (const role of [
       "paper",
       "fill",

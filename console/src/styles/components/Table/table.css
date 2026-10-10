@@ -1,14 +1,10 @@
-/* table.css - the rules for ui/table.ts, the one sortable table (Dashboard tiles, Tools app). Pulled
-   into console.css by @import, so it loads once with the shell. The table itself is PatternFly's
-   compact Table; this file only adds what PF leaves to the page.
+/* The one sortable table (ui/table.ts: Dashboard tiles, Tools app), on PatternFly's compact Table.
+   The wrapper is the one scroll container: PF's sticky header sticks to the nearest scrolling
+   ancestor, so a second overflow box between wrapper and pane would leave it a scrollport that never
+   scrolls. A caller bounds the wrapper's height with --console-table-max-block-size or a parent height.
+   It is also the inline-size container PF's grid modifiers key on, named as PF documents it
+   (pf-v6-contain-table), so a narrow pane stacks the table into labelled rows. */
 
-   The wrapper is the ONE scroll container. PF's sticky header sticks to the nearest scrolling
-   ancestor, so a second overflow box between the wrapper and the pane would leave it with a scrollport
-   that never scrolls and the header would not stay put. A caller that wants the rows to scroll under a
-   fixed header bounds the wrapper's height: --console-table-max-block-size, or a parent with a height.
-
-   The wrapper is also the inline-size container PF's grid modifiers key on, named as PF documents it
-   (pf-v6-contain-table), so the table stacks into labelled rows when its pane is narrow. */
 .console-table__wrap {
   overflow: auto;
   max-block-size: var(--console-table-max-block-size, 100%);
@@ -22,8 +18,7 @@
 }
 .console-table th[data-num] .pf-v6-c-table__button-content { justify-content: flex-end; }
 .console-table td[data-num] { font-family: var(--pf-t--global--font--family--mono); }
-/* PF's sort button is as tall as its text plus the compact padding, which can land under the 24px
-   floor the console holds for anything pressed. */
+/* PF's sort button can land under the console's 24px floor for anything pressed. */
 .console-table .pf-v6-c-table__button {
   min-block-size: var(--pf-t--global--spacer--lg);
   min-inline-size: var(--pf-t--global--spacer--lg);
@@ -34,9 +29,9 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* The scroll cue. The frame (ui/table.ts) names the edges with more table past them in data-more, and
-   a fade on each says so. The frame is what carries it because the scroller cannot: a pseudo-element
-   inside the scroller would scroll away with the rows. */
+/* The scroll cue: the frame names the edges with more table past them in data-more, and a fade on
+   each says so. The frame carries it because a pseudo-element inside the scroller would scroll away
+   with the rows. */
 .console-table__frame { position: relative; min-block-size: 0; }
 .console-table__frame::before,
 .console-table__frame::after {

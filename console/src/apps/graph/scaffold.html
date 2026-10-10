@@ -4,7 +4,7 @@
          syntax, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
          again on a tab change while docked - cloning, not moving, so the app can unmount and remount
-         freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
+         freely. The sources are hidden in place by [data-ref-section]{display:none} (utilities/hidden.css);
          only the clones are shown. -->
     <details class="console-graph-help" data-ref-section>
       <summary>Views</summary>
@@ -13,9 +13,9 @@
       <table class="pf-v6-c-table pf-m-compact" aria-label="Views and their CLI equivalents">
         <thead class="pf-v6-c-table__thead">
           <tr class="pf-v6-c-table__tr">
-            <th class="pf-v6-c-table__th" scope="col">Question</th>
-            <th class="pf-v6-c-table__th" scope="col">View</th>
-            <th class="pf-v6-c-table__th" scope="col">CLI equivalent</th>
+            <th class="pf-v6-c-table__th pf-m-nowrap" scope="col">Question</th>
+            <th class="pf-v6-c-table__th pf-m-nowrap" scope="col">View</th>
+            <th class="pf-v6-c-table__th pf-m-nowrap" scope="col">CLI equivalent</th>
           </tr>
         </thead>
         <tbody class="pf-v6-c-table__tbody">
@@ -266,15 +266,19 @@
              first visit costs no graph download. Dismissed when any graph arrives. -->
         <div class="pf-v6-c-empty-state" id="graph-empty-state" hidden>
           <div class="pf-v6-c-empty-state__content">
-            <div class="pf-v6-c-empty-state__icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
-                <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
-              </svg>
+            <div class="pf-v6-c-empty-state__header">
+              <div class="pf-v6-c-empty-state__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="6" r="2.4"/><circle cx="12" cy="18" r="2.4"/>
+                  <line x1="6.6" y1="7.8" x2="10.4" y2="16.2"/><line x1="17.4" y1="7.8" x2="13.6" y2="16.2"/><line x1="7.4" y1="6" x2="16.6" y2="6"/>
+                </svg>
+              </div>
+              <div class="pf-v6-c-empty-state__title"><h1 class="pf-v6-c-empty-state__title-text">No graph loaded</h1></div>
             </div>
-            <h1 class="pf-v6-c-empty-state__title-text">No graph loaded</h1>
             <div class="pf-v6-c-empty-state__body">
               <p>Explore a workspace's projects, targets and dependencies as a graph.</p>
+            </div>
+            <div class="pf-v6-c-empty-state__footer">
               <div class="pf-v6-c-empty-state__actions" data-empty-ways>
                 <div data-empty-way>
                   <span data-empty-way-label>Open your workspace</span>

@@ -1,18 +1,9 @@
-/* notes.css - the Notes app's own sheet.
- *
- * Notes does not reuse logs/logs.css, though both apps build a panel frame and sharing one
- * would save a sheet. The frame is shareable; the typography is not. `.console-render-body` is a
- * monospace grid sized for log lines, so a note's title and its human prose would land in mono
- * across a pane's full width - a 140-character measure on a wide display.
- *
- * So the two share a shell contract and nothing else. Notes owns `.console-notes-app`
- * (registered in console.css's fill chain beside the other app roots) and every class below.
- *
- * Type and spacing come from the PF tokens, colour from the PF and --console-* tokens, so light
- * and dark need no per-mode rules here. */
+/* The Notes app. It does not reuse the log viewer's sheet: the frame is shareable but the typography is
+   not, since .console-render-body is a monospace grid for log lines and a note's prose would land in
+   mono across a pane's full width. The two share a shell contract and nothing else; the app root
+   .console-notes-app is registered in the Shell layout's fill chain beside the other app roots. */
 
 .console-notes-app {
-  /* The shell's app gutter, kept as a local name because every rule below spends it. */
   --notes-pad: var(--console-pad);
   --notes-bar-h: var(--console-app-bar-h);
   display: flex; flex-direction: column; position: relative;
@@ -22,33 +13,26 @@
   border-radius: var(--pf-t--global--border--radius--small); overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
   font-size: var(--pf-t--global--font--size--body--default);
-  /* Queried below. The split has to key on the PANE, not the viewport: this app is mounted
-     in a tiled pane as often as in a whole tab, and a half-width pane on a wide display has a
-     phone's room to work in. */
+  /* The split keys on the pane, not the viewport: the app mounts in a tiled pane as often as in a
+     tab, and a half-width pane on a wide display has a phone's room. */
   container-type: inline-size; container-name: notes;
 }
 
-/* --- Two-pane body ----------------------------------------------------------------------- */
-/* Not positioned: the open note's overlay is placed against the panel, so in a narrow pane it
-   covers the filter bar as well as the list. */
+/* Not positioned: the open note's overlay is placed against the panel, so in a narrow pane it covers
+   the filter bar as well as the list. */
 .console-notes-app__main { flex: 1 1 auto; min-height: 0; display: flex; }
-.console-notes-app__main[hidden] { display: none; }
-/* Its own stacking context, so the z-index PF puts on a selected ToggleGroup button competes
-   inside the pane instead of against the detail overlay that covers it. */
+/* Its own stacking context, so the z-index PF puts on a selected ToggleGroup button competes inside
+   the pane and not against the detail overlay that covers it. */
 .console-notes-app__pane {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
   position: relative; z-index: 0;
 }
-
-/* --- Filter bar -------------------------------------------------------------------------- */
 .console-notes-app__bar {
   flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); align-items: center;
   min-height: var(--notes-bar-h); box-sizing: border-box;
   padding: 0 var(--notes-pad);
   border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
-.console-notes-app__bar[hidden] { display: none; }
-/* The bar's leading label - see the note on .console-runs__label; the two bars carry the same slot. */
 .console-notes-app__label {
   flex: 0 0 auto;
   font-size: var(--console-label-size);
@@ -58,7 +42,7 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-notes-app__search { flex: 1 1 8rem; min-width: 0; }
-/* The text-input group carries its own clear button; the browser's second one would double it. */
+/* The text-input group has its own clear button; the browser's would double it. */
 .console-notes-app__search input::-webkit-search-cancel-button { appearance: none; display: none; }
 .console-notes-app__count {
   flex: 0 0 auto; white-space: nowrap;
@@ -66,14 +50,11 @@
   font-variant-numeric: tabular-nums;
   color: var(--pf-t--global--text--color--subtle);
 }
-
-/* --- The list ---------------------------------------------------------------------------- */
 .console-notes-app__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
-/* The store heading carries the consequence sentence itself rather than a banner beneath it: what
-   a store IS outranks everything else on this app, and a reader who scrolls past it has lost the
-   only fact separating the two. Sticky, so the scroll cannot lose it. The <h2> only gives the
-   button its place in the outline. */
+/* The store heading carries the consequence sentence itself, since what a store is outranks
+   everything else here and a reader who scrolls past it loses the one fact separating the two. It is
+   sticky for that reason. The h2 only gives the button its place in the outline. */
 .console-notes-app__store-heading {
   position: sticky; top: 0; z-index: 1; margin: 0;
   font-size: inherit; font-weight: inherit;
@@ -96,23 +77,19 @@
   transition: transform var(--console-motion-fast);
 }
 .console-notes-app__store[aria-expanded="true"] .console-notes-app__store-twist { transform: rotate(90deg); }
-@media (prefers-reduced-motion: reduce) { .console-notes-app__store-twist { transition: none; } }
 .console-notes-app__store-title { flex: 0 0 auto; }
 .console-notes-app__store-consequence {
   flex: 1 1 auto; text-align: end; text-transform: none; letter-spacing: 0;
   font-family: var(--pf-t--global--font--family--body);
   overflow-wrap: anywhere;
 }
-.console-notes-app__region[hidden] { display: none; }
-
-/* A row is a PF clickable data-list item: the item is the control, so the whole row is the target
-   and PF supplies the hover and selected fills. Selected alone also takes the bolder title. */
+/* A row is a PF clickable data-list item: the item is the control, so the whole row is the target and
+   PF supplies the hover and selected fills. Selected alone also takes the bolder title. */
 .console-notes-app__note { cursor: pointer; min-block-size: var(--console-control-block-size); }
 .console-notes-app__note .pf-v6-c-data-list__cell { min-inline-size: 0; }
 .console-notes-app__note[aria-current="true"] .console-notes-app__note-title {
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }
-
 .console-notes-app__note-top { display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
 .console-notes-app__note-title {
   flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
@@ -130,12 +107,11 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* A status mark and its words, kept together: an icon wrapped away from its text reads as nothing. */
+/* A status mark and its words stay together: an icon wrapped away from its text reads as nothing. */
 .console-notes-app__status {
   display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--xs);
 }
-
-/* A store problem belongs in the list it describes. A PF inline alert, spaced to sit in the list. */
+/* A store problem belongs in the list it describes: a PF inline alert, spaced to sit in the list. */
 .console-notes-app__issues {
   display: grid; gap: var(--pf-t--global--spacer--sm);
   padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--notes-pad);
@@ -150,16 +126,14 @@
 .console-notes-app__note-none code { font-size: inherit; }
 .console-notes-app__hint { padding-block: var(--pf-t--global--spacer--lg); padding-inline: var(--notes-pad); }
 
-/* --- The note ---------------------------------------------------------------------------- */
 .console-notes-app__detail {
   position: absolute; inset: 0; z-index: 2;
   display: flex; flex-direction: column;
   background: var(--pf-t--global--background--color--primary--default);
   visibility: hidden;
 }
-.console-notes-app__detail[data-open] { visibility: visible; }
-/* Overlay mode only - it holds the way back, and in split mode the list never went away. The
-   split rule below removes it entirely rather than leaving an empty strip above the prose. */
+/* Overlay mode only: it holds the way back, and the split rule below removes it rather than leaving an
+   empty strip above the prose. */
 .console-notes-app__detail-bar {
   flex: 0 0 auto; display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
   min-block-size: var(--notes-bar-h); box-sizing: border-box;
@@ -186,9 +160,8 @@
 }
 .console-notes-app__read > .pf-v6-c-label-group { margin-bottom: var(--pf-t--global--spacer--md); }
 
-/* Rendered markdown, so normal wrapping: markdown's soft-break rule means a single newline
-   inside a paragraph reflows, and renderMarkdown has already joined those lines. `pre-wrap`
-   here would undo that and put the author's hard wrapping back. */
+/* Rendered markdown wraps normally: a single newline reflows and renderMarkdown has already joined
+   those lines, so pre-wrap would put the author's hard wrapping back. */
 .console-notes-app__prose {
   margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--body);
   overflow-wrap: anywhere;
@@ -201,8 +174,7 @@
 }
 .console-notes-app__md-p { margin: 0 0 var(--pf-t--global--spacer--md); }
 .console-notes-app__prose > :last-child { margin-bottom: 0; }
-/* Headings inside a note sit BELOW its title, which is the h2 above this prose - so they are
-   sized down rather than competing with it. */
+/* Headings inside a note sit below its title, the h2 above this prose, so they are sized down. */
 .console-notes-app__md-h {
   margin: var(--pf-t--global--spacer--lg) 0 var(--pf-t--global--spacer--sm);
   line-height: var(--pf-t--global--font--line-height--heading); text-wrap: balance;
@@ -212,8 +184,7 @@
 .console-notes-app__prose > .console-notes-app__md-h:first-child { margin-top: 0; }
 .console-notes-app__md-list { margin: 0 0 var(--pf-t--global--spacer--md); padding-inline-start: var(--pf-t--global--spacer--lg); }
 .console-notes-app__md-list li { margin-bottom: var(--pf-t--global--spacer--xs); }
-/* Code keeps its own wrapping and scrolls rather than reflowing: a wrapped command is a command
-   that cannot be copied and run. */
+/* Code scrolls rather than reflowing: a wrapped command cannot be copied and run. */
 .console-notes-app__md-code {
   margin: 0 0 var(--pf-t--global--spacer--md); padding: var(--pf-t--global--spacer--sm); overflow-x: auto;
   border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
@@ -264,9 +235,8 @@
   flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere;
   font-family: var(--pf-t--global--font--family--mono);
 }
-/* An anchor's explanation and its graph node id render as text rather than as a title tooltip.
-   They carry the only copy saying what a verdict means, and a tooltip is undiscoverable with a
-   mouse and absent altogether on touch. */
+/* An anchor's explanation and graph node id render as text, not a title tooltip: they carry the only
+   copy saying what a verdict means, and a tooltip is undiscoverable by mouse and absent on touch. */
 .console-notes-app__anchor-detail {
   display: block; margin-top: var(--pf-t--global--spacer--xs); line-height: var(--pf-t--global--font--line-height--body);
   font-family: var(--pf-t--global--font--family--body);
@@ -281,11 +251,7 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--console-status-ok-text);
 }
-.console-notes-app__copied[hidden] { display: none; }
-
-/* --- Cold empty state --------------------------------------------------------------------
-   The [data-empty-*] "ways" hooks are styled in the shared console.css, so this only has to
-   centre the block within the panel. */
+/* The [data-empty-*] "ways" hooks are components/EmptyState; this only centres the block in the panel. */
 .console-notes-app__empty {
   flex: 1 1 auto;
   padding: var(--pf-t--global--spacer--xl); color: var(--pf-t--global--text--color--subtle);
@@ -293,12 +259,60 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   box-sizing: border-box;
 }
-.console-notes-app__empty[hidden] { display: none; }
 
-/* --- The split ---------------------------------------------------------------------------
-   With room for both, the detail stops being an overlay and becomes a second pane, so moving
-   down the list does not cost the reader the note they are reading. main.ts asks this rule's
-   result (the detail's computed position) to decide whether the list is covered. */
+/* A capture is quoted material, and the reader has to see that before a word of it: a label marks it
+   in the list and the header, and the detail renders a thread. The thread groups twice so it does not
+   read as a monologue: the file is a divider printed where it changes, and the speaker is printed once
+   per run. */
+.console-notes-app__thread {
+  display: grid; gap: var(--pf-t--global--spacer--sm); margin-top: var(--pf-t--global--spacer--md);
+}
+.console-notes-app__thread-file {
+  display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
+  margin: var(--pf-t--global--spacer--sm) 0 0; padding-bottom: var(--pf-t--global--spacer--xs);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--default);
+  color: var(--pf-t--global--text--color--subtle); overflow-wrap: anywhere;
+}
+.console-notes-app__thread-file:first-child { margin-top: 0; }
+.console-notes-app__entry {
+  position: relative;
+  padding-block: var(--pf-t--global--spacer--xs); padding-inline: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--sm);
+  border-inline-start: var(--pf-t--global--border--width--strong) solid var(--pf-t--global--border--color--default);
+}
+.console-notes-app__entry-author {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular); margin-bottom: var(--pf-t--global--spacer--xs);
+}
+.console-notes-app__entry > .pf-v6-c-label { margin-bottom: var(--pf-t--global--spacer--xs); }
+.console-notes-app__entry-body {
+  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--body);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--pf-t--global--font--family--body);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+/* A person and an agent differ by hue, because a tool's output reading as a colleague's opinion is
+   the one misreading a transcript must not allow. The author line says it in words too. Neither hue is
+   a status colour. */
+.console-notes-app__entry[data-voice="person"] { border-inline-start-color: var(--console-slate); }
+.console-notes-app__entry[data-voice="agent"] { border-inline-start-color: var(--console-indigo); }
+.console-notes-app__entry[data-continued] { padding-top: 0; }
+.console-notes-app__detail[data-open] { visibility: visible; }
+.console-notes-app__main[hidden],
+.console-notes-app__bar[hidden],
+.console-notes-app__region[hidden],
+.console-notes-app__copied[hidden],
+.console-notes-app__empty[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .console-notes-app__store-twist { transition: none; } }
+
+/* With room for both, the detail stops being an overlay and becomes a second pane, so moving down the
+   list does not cost the reader the note they are reading. main.ts reads this rule's result, the
+   detail's computed position, to decide whether the list is covered. */
 @container notes (min-width: 46rem) {
   .console-notes-app__pane {
     flex: 0 0 21rem;
@@ -306,13 +320,11 @@
   }
   .console-notes-app__detail { position: static; flex: 1 1 auto; min-width: 0; visibility: visible; }
   .console-notes-app__detail-bar { display: none; }
-  /* Sized to the column it acts on, so the filter ends where the list ends instead of reaching
-     across the reading pane. */
+  /* Sized to the column it acts on, so the filter ends where the list ends. */
   .console-notes-app__search { flex: 0 1 16rem; }
 }
-
-/* Wider still, the extra column buys context rather than line length: the measure is capped and
-   the note's facts move beside the prose instead of under it. */
+/* Wider still, the extra column buys context rather than line length: the measure is capped and the
+   note's facts move beside the prose. */
 @container notes (min-width: 68rem) {
   .console-notes-app__pane { flex-basis: 23rem; }
   .console-notes-app__detail-body {
@@ -329,51 +341,4 @@
     padding-inline-start: var(--pf-t--global--spacer--md);
   }
   .console-notes-app__facts-head:first-child { margin-top: 0; }
-}
-
-/* --- Captured conversations ---------------------------------------------------------------
-   A capture is quoted material, and the reader has to see that before reading a word of it.
-   A label marks it in the list and the note's header; in the detail it renders as a thread.
-
-   The thread groups twice, and the grouping is what stops it reading as a monologue. The file
-   is a divider printed where it CHANGES, the way a channel names what is being discussed
-   instead of tagging every line. The speaker is printed once per run, so a normal review does
-   not read as one person talking to themselves. */
-.console-notes-app__thread {
-  display: grid; gap: var(--pf-t--global--spacer--sm); margin-top: var(--pf-t--global--spacer--md);
-}
-.console-notes-app__thread-file {
-  display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
-  margin: var(--pf-t--global--spacer--sm) 0 0; padding-bottom: var(--pf-t--global--spacer--xs);
-  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: var(--pf-t--global--font--size--body--sm);
-  font-weight: var(--pf-t--global--font--weight--body--default);
-  color: var(--pf-t--global--text--color--subtle); overflow-wrap: anywhere;
-}
-.console-notes-app__thread-file:first-child { margin-top: 0; }
-
-.console-notes-app__entry {
-  position: relative;
-  padding-block: var(--pf-t--global--spacer--xs); padding-inline: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--sm);
-  border-inline-start: var(--pf-t--global--border--width--strong) solid var(--pf-t--global--border--color--default);
-}
-/* Person and agent are separated by hue, because a tool's output reading as a colleague's
-   opinion is the one misreading a transcript must not allow. The author line says the same in
-   words. Neither is a status colour. */
-.console-notes-app__entry[data-voice="person"] { border-inline-start-color: var(--console-slate); }
-.console-notes-app__entry[data-voice="agent"] { border-inline-start-color: var(--console-indigo); }
-.console-notes-app__entry[data-continued] { padding-top: 0; }
-.console-notes-app__entry-author {
-  font-family: var(--pf-t--global--font--family--mono);
-  font-size: var(--pf-t--global--font--size--body--sm);
-  font-weight: var(--pf-t--global--font--weight--body--bold);
-  color: var(--pf-t--global--text--color--regular); margin-bottom: var(--pf-t--global--spacer--xs);
-}
-.console-notes-app__entry > .pf-v6-c-label { margin-bottom: var(--pf-t--global--spacer--xs); }
-.console-notes-app__entry-body {
-  margin: 0; font-size: var(--pf-t--global--font--size--body--default); line-height: var(--pf-t--global--font--line-height--body);
-  white-space: pre-wrap; overflow-wrap: anywhere;
-  font-family: var(--pf-t--global--font--family--body);
-  color: var(--pf-t--global--text--color--regular);
 }
