@@ -758,7 +758,7 @@ func TestServicePageStatesTheCallContract(t *testing.T) {
 		"`POST /magus.token.v1.TokenService/WatchTokens`: server streaming.",
 		"Takes [ListTokensRequest](#listtokensrequest), returns [ListTokensResponse](#listtokensresponse).",
 		"Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`.",
-		"Part of the [server API](../../index.md).",
+		"Part of the [daemon API](../../index.md).",
 		"### RevokeToken\n\n**Deprecated.**",
 	} {
 		assert.Contains(t, body, want)
@@ -901,9 +901,9 @@ func TestIndexOrientsAClientWithNoGeneratedCode(t *testing.T) {
 	fm, ok := docs.ParseFrontmatter(body)
 	require.True(t, ok)
 	assert.Equal(t, docs.Frontmatter{
-		Title:         "Server API",
+		Title:         "Daemon API",
 		GeneratedFrom: "proto/magus/**/*.proto",
-		Description:   "The magus server's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
+		Description:   "The magus daemon's Connect, gRPC, and gRPC-Web API: every service, method, message, and enum, generated from the .proto contract.",
 		Tags:          []string{"api", "proto", "protobuf", "connect", "grpc", "server", "reference"},
 	}, fm)
 
@@ -944,7 +944,7 @@ func TestPackagePageDocumentsTypesWithNoServiceOfTheirOwn(t *testing.T) {
 	}, fm)
 
 	for _, want := range []string{
-		"Declares no service of its own; part of the [server API](../../index.md).",
+		"Declares no service of its own; part of the [daemon API](../../index.md).",
 		"Ranges are half-open and read start\\|end.",
 		"### TimeRange\n",
 		"| `start` | string | 1 |",

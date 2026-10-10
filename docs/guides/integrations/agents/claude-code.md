@@ -405,7 +405,7 @@ hand the subagent.
 ## Notifications
 
 `magus session notify` turns a host event into a desktop notification. It does not
-send an event to the server or Console. Wire `Notification` (it fires on a
+send an event to the daemon or Console. Wire `Notification` (it fires on a
 permission prompt and when the agent goes idle waiting for input), and `Stop` or
 `SubagentStop` for completion.
 
@@ -517,10 +517,10 @@ whose source is `claude-code-mod/` beside this page. Install it once per person:
 It adds three things to a session:
 
 - A status line entry and a band above the prompt that name a magus problem with the
-  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped server,
-  a server running another version, or an MCP endpoint that is not serving.
+  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped daemon,
+  a daemon running another version, or an MCP endpoint that is not serving.
 - A pane, opened with `/magus`, of the job tree, recent runs, and the session's
-  subagents. It reads the server's Connect API over its unix socket, the same
+  subagents. It reads the daemon's Connect API over its unix socket, the same
   services the console uses, so it needs `magus server start` and holds no token.
 - Prompt-cache warnings: a countdown before the cache expires, and a warning or a
   held prompt when you submit after it has, priced from a rates table you can

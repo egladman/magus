@@ -346,7 +346,7 @@ not know your build.
 Three things keep it honest:
 
 - **It runs what the magusfile declares, and nothing else.** The console names a target and a
-  project, never a command. The server admits the run only if that project declares that target,
+  project, never a command. The daemon admits the run only if that project declares that target,
   so a browser-reachable button is strictly less capable than a terminal.
 - **A verdict is about a TREE STATE.** Edit anything and the answer greys out and says
   `passed - since edited`, because a green tick over code you have since changed is a wrong
@@ -376,8 +376,7 @@ no hunk unread.
 
 The push itself asks the same question without doing the work. The `pre-push` hook magus
 installs hands off to the `check-drift` job, and that job adds one line counting the unread
-hunks of the range being pushed; see [the drift
-notice](../guides/integrations/git.md#the-drift-notice). Nothing blocks the push.
+hunks of the range being pushed; see [the drift notice](../guides/integrations/git.md#the-drift-notice). Nothing blocks the push.
 
 ## The report
 

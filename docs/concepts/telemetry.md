@@ -162,7 +162,7 @@ slots and falls as they release, so its value reads as the live running depth.
 
 Leases, attention requests and paired review: the three places a fleet of
 agents and the people working with them meet. **Every producer here runs in the
-server**, which is what makes them collectable at all: a magus CLI invocation is
+daemon**, which is what makes them collectable at all: a magus CLI invocation is
 a one-shot process, and the CLI halves of these same features (raising an
 attention request, the agent guard grading a write) reach the
 [activity trail](../guides/integrations/server.md) instead. Read each row for

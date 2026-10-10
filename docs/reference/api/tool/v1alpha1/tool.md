@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, toolservice]
 
 ToolService serves the toolchain view. Read-only: nothing here installs, selects, or moves a version. ListTools reaches the network through the lifecycle provider; the server memoizes that answer, and Lifecycle names what it read.
 
-Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L146). Part of the [server API](../../index.md).
+Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Source: [tool.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1alpha1/tool.proto#L146). Part of the [daemon API](../../index.md).
 
 ## Methods
 

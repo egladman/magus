@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, jobservice]
 
 JobService is the server's control service for background maintenance jobs. Trigger RPCs submit a job and return immediately; ListJobs reports every job's state. Reads stay on the per-domain services - this one only mutates.
 
-Package `magus.job.v1alpha1`, defined in `proto/magus/job/v1alpha1/job.proto`. Source: [job.proto:23](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L23). Part of the [server API](../../index.md).
+Package `magus.job.v1alpha1`, defined in `proto/magus/job/v1alpha1/job.proto`. Source: [job.proto:23](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L23). Part of the [daemon API](../../index.md).
 
 ## Methods
 

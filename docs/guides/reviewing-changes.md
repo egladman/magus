@@ -148,8 +148,7 @@ read, it says the read state is unknown and calls no hunk unread.
 
 You do not need a hook of your own to hear about it on a push. The `pre-push` section magus
 installs hands off to the `check-drift` job, which adds one line saying how many hunks of the
-range being pushed are unread. See [the drift
-notice](integrations/git.md#the-drift-notice).
+range being pushed are unread. See [the drift notice](integrations/git.md#the-drift-notice).
 
 ## Telling others you are reading
 
