@@ -513,7 +513,8 @@ type RefreshHookInstaller interface {
 
 // DriftHookInstaller is the capability (sibling of RefreshHookInstaller) to install a
 // hook firing after a commit is made and again before it is pushed, to report generated
-// output a commit left stale. It shares the managed-section convention (and the
+// output a commit left stale and, where the push hook names the range it sends, that
+// range's unread hunks. It shares the managed-section convention (and the
 // fail-open, one-line hook body) the refresh hook uses, under its own markers so the two
 // coexist without one clobbering the other. Callers skip the install on
 // *VCSUnsupportedError (jj has no native hooks, the gap RefreshHookInstaller documents).

@@ -40,6 +40,12 @@ export enum<str> DiffUncoveredReason {
     noIndexer = "no-indexer",
 }
 
+export enum<str> DiffReadState {
+    none = "",
+    known = "known",
+    unknown = "unknown",
+}
+
 export enum<str> KnowledgeResolution {
     none = "",
     id = "id",
@@ -275,7 +281,7 @@ export object DiffUncovered {
 }
 
 export object DiffUnread {
-    readState: str = "",
+    readState: DiffReadState = DiffReadState.none,
     reason: str = "",
     hunks: int = 0,
     unread: int = 0,

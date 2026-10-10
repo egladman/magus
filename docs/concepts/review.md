@@ -409,8 +409,10 @@ note: no symbol index loaded: changed-symbol callers and coverage overlays are u
 
 <!-- /example -->
 
-Each thread on the pull request is named beside the hunk it sits on, as `thread <id>`, and
-`-o json` carries the same ids under each file's `threads`.
+While the server runs, each thread on the pull request is named beside the hunk it sits on, as
+`thread <id>`, and `-o json` carries the same ids under each file's `threads`. The report takes
+them from the server's session and never asks the host itself, so with no server it lists no
+threads and prints one line naming `magus server start`.
 
 ### One thread
 

@@ -1299,7 +1299,7 @@ func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
 
 func ObjectDiffUnread(v types.DiffUnread) vm.Value {
 	out := vm.NewMap()
-	out.MapSet("readState", vm.StrValue(v.ReadState))
+	out.MapSet("readState", vm.StrValue(string(v.ReadState)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
 	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
 	out.MapSet("unread", vm.IntValue(int64(v.Unread)))

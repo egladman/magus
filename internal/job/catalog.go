@@ -72,7 +72,7 @@ var catalog = []CatalogEntry{
 	},
 	{
 		Name: NameCheckDrift,
-		Desc: "notice, without blocking, when the last commit left generated output stale, and how many hunks a push would send are unread",
+		Desc: "notice, without blocking, when the last commit left generated output stale, and how many hunks a push sends are unread",
 		Argv: []string{"server", NameCheckDrift},
 	},
 }
@@ -92,16 +92,110 @@ func Lookup(name string) (CatalogEntry, bool) {
 	return CatalogEntry{}, false
 }
 
-// IsWorkerArgv reports whether argv exactly matches a registered job's worker command. The
-// server's job dispatch uses it as an allowlist so a JobRequest can only run a recognized
-// job's worker, never an arbitrary command handed to the fire-and-forget RPC.
+// IsWorkerArgv reports whether argv is a registered job's worker command: its Argv exactly, or
+// for check-drift its Argv followed by the arguments a [DriftHook] writes. The server's job
+// dispatch uses it as an allowlist so a JobRequest can only run a recognized job's worker,
+// never an arbitrary command handed to the fire-and-forget RPC.
 func IsWorkerArgv(argv []string) bool {
 	for _, j := range catalog {
 		if slices.Equal(j.Argv, argv) {
 			return true
 		}
+		if j.Name == NameCheckDrift && len(argv) > len(j.Argv) && slices.Equal(j.Argv, argv[:len(j.Argv)]) {
+			_, ok := ParseDriftHook(argv[len(j.Argv):])
+			return ok
+		}
 	}
 	return false
+}
+
+// The hooks that run check-drift, and the flags its worker takes after its Argv.
+const (
+	DriftHookPostCommit = "post-commit"
+	DriftHookPrePush    = "pre-push"
+
+	driftHookFlag   = "--hook="
+	driftRemoteFlag = "--remote="
+	driftPushFlag   = "--push="
+)
+
+// DriftHook is the VCS hook a check-drift run is for. A commit carries only Hook; a push
+// also names the remote and each ref it sends.
+type DriftHook struct {
+	Hook   string
+	Remote string
+	Pushes []DriftPush
+}
+
+// DriftPush is one ref a push sends, as git's pre-push hook reads it: Remote is the object
+// the remote holds now, all zeros for a ref it does not have yet, and Local the one sent.
+type DriftPush struct {
+	Remote string
+	Local  string
+}
+
+// Argv is the check-drift worker command for h, which [ParseDriftHook] reads back.
+func (h DriftHook) Argv() []string {
+	entry, _ := Lookup(NameCheckDrift)
+	argv := append(slices.Clone(entry.Argv), driftHookFlag+h.Hook)
+	if h.Remote != "" {
+		argv = append(argv, driftRemoteFlag+h.Remote)
+	}
+	for _, p := range h.Pushes {
+		argv = append(argv, driftPushFlag+p.Remote+":"+p.Local)
+	}
+	return argv
+}
+
+// ParseDriftHook reads the arguments [DriftHook.Argv] appends to check-drift's Argv. ok is
+// false for anything it would not have written: an unknown hook or flag, a remote name
+// that could pass for an option, or an object id that is not a full hex hash.
+func ParseDriftHook(args []string) (h DriftHook, ok bool) {
+	for _, arg := range args {
+		switch {
+		case strings.HasPrefix(arg, driftHookFlag):
+			h.Hook = strings.TrimPrefix(arg, driftHookFlag)
+			if h.Hook != DriftHookPostCommit && h.Hook != DriftHookPrePush {
+				return DriftHook{}, false
+			}
+		case strings.HasPrefix(arg, driftRemoteFlag):
+			h.Remote = strings.TrimPrefix(arg, driftRemoteFlag)
+			if !remoteName(h.Remote) {
+				return DriftHook{}, false
+			}
+		case strings.HasPrefix(arg, driftPushFlag):
+			remote, local, found := strings.Cut(strings.TrimPrefix(arg, driftPushFlag), ":")
+			if !found || !objectID(remote) || !objectID(local) {
+				return DriftHook{}, false
+			}
+			h.Pushes = append(h.Pushes, DriftPush{Remote: remote, Local: local})
+		default:
+			return DriftHook{}, false
+		}
+	}
+	return h, h.Hook != ""
+}
+
+// objectID reports whether s is a full SHA-1 or SHA-256 object id in lowercase hex.
+func objectID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	return strings.Trim(s, "0123456789abcdef") == ""
+}
+
+// remoteName reports whether s can name a git remote here. A leading dash is refused because
+// the name reaches git's argv as part of a revision.
+func remoteName(s string) bool {
+	if s == "" || s[0] == '-' {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("._/-", r)) {
+			return false
+		}
+	}
+	return true
 }
 
 // ActionString is the canonical trail "action" for a job argv: the space-joined command.

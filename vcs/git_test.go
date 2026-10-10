@@ -207,8 +207,9 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 }
 
 // TestInstallDriftHookInstallsBoth pins that both post-commit and pre-push get the
-// managed section, that it is idempotent, and that a fail-open one-liner is what got
-// written: no shell logic beyond the command and its `|| true`.
+// managed section, that it is idempotent, and that a fail-open one-liner naming its hook
+// is what got written: no shell logic beyond the command, pre-push's own arguments and
+// the `|| true`.
 func TestInstallDriftHookInstallsBoth(t *testing.T) {
 	dir := t.TempDir()
 	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
@@ -217,14 +218,55 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"post-commit", "pre-push"}, installed)
 
-	for _, name := range gitDriftHooks {
-		assertFile(t, filepath.Join(dir, ".git", "hooks", name),
-			"#!/bin/sh\n\n"+driftMarkers.section("magus job run check-drift >/dev/null 2>&1 || true\n"), 0o755)
-	}
+	hooks := filepath.Join(dir, ".git", "hooks")
+	assertFile(t, filepath.Join(hooks, "post-commit"),
+		"#!/bin/sh\n\n"+driftMarkers.section("magus job run check-drift post-commit >/dev/null 2>&1 || true\n"), 0o755)
+	assertFile(t, filepath.Join(hooks, "pre-push"),
+		"#!/bin/sh\n\n"+driftMarkers.section("magus job run check-drift pre-push \"$@\" >/dev/null 2>&1 || true\n"), 0o755)
 
 	again, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
 	assert.Empty(t, again, "re-installing an unchanged drift hook reports no install")
+}
+
+// TestInstallDriftHookRewritesAnOlderSection pins that a drift section an older magus wrote,
+// which named no hook, is rewritten in place on the next install rather than left as it is.
+func TestInstallDriftHookRewritesAnOlderSection(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	prePush := filepath.Join(dir, ".git", "hooks", "pre-push")
+	_, err := writeManagedSection(prePush, driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
+	require.NoError(t, err)
+
+	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"post-commit", "pre-push"}, installed)
+	assertFile(t, prePush,
+		"#!/bin/sh\n\n"+driftMarkers.section("magus job run check-drift pre-push \"$@\" >/dev/null 2>&1 || true\n"), 0o755)
+}
+
+// TestPrePushDriftHookHandsOverItsArgumentsAndStdin runs the installed pre-push script the way
+// git does, with the remote and url as arguments and the pushed refs on stdin, and pins that
+// the command receives all three untouched.
+func TestPrePushDriftHookHandsOverItsArgumentsAndStdin(t *testing.T) {
+	dir := t.TempDir()
+	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	got := filepath.Join(t.TempDir(), "got")
+	record := filepath.Join(t.TempDir(), "record")
+	require.NoError(t, os.WriteFile(record, []byte("#!/bin/sh\n{ echo \"$@\"; cat; } >"+got+"\n"), 0o755))
+	_, err := gitVCS{}.InstallDriftHook(t.Context(), dir, record)
+	require.NoError(t, err)
+
+	refs := "refs/heads/main " + strings.Repeat("a", 40) + " refs/heads/main " + strings.Repeat("0", 40) + "\n"
+	cmd := exec.Command("sh", filepath.Join(dir, ".git", "hooks", "pre-push"), "origin", "git@example.com:o/r.git")
+	cmd.Dir = dir
+	cmd.Stdin = strings.NewReader(refs)
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+
+	data, err := os.ReadFile(got)
+	require.NoError(t, err)
+	assert.Equal(t, "pre-push origin git@example.com:o/r.git\n"+refs, string(data))
 }
 
 // TestInstallDriftHookCoexistsWithRefreshHook pins that the two managed sections, and a
@@ -240,7 +282,7 @@ func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
 	require.NoError(t, err)
 
 	postCommit := filepath.Join(dir, ".git", "hooks", "post-commit")
-	drift := driftMarkers.section("magus job run check-drift >/dev/null 2>&1 || true\n")
+	drift := driftMarkers.section("magus job run check-drift post-commit >/dev/null 2>&1 || true\n")
 	assertFile(t, postCommit, "#!/bin/sh\n\n"+drift, 0o755)
 
 	refresh := refreshMarkers.section("magus job run sync-graph >/dev/null 2>&1 || true\n")

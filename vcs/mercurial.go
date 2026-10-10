@@ -25,7 +25,8 @@ import (
 // closest either tool has to git's pre-push. Neither can block: a non-zero "commit" hook
 // cannot undo the commit, and "outgoing" fires after the changeset set is already
 // decided, which is why it, not "preoutgoing", is the one used. Verified against hg 6.x
-// and sl 0.2.x.
+// and sl 0.2.x. Neither names the range a push sends ("outgoing" gives only the first
+// changeset, and fires for pull and bundle too), so a push here counts no unread hunks.
 var hgDriftHooks = []string{"commit", "outgoing"}
 
 // hgUsername is the global option naming as as the acting user, none for the zero Person.

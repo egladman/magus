@@ -712,7 +712,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		return nil
 	}
 	name := args[0]
-	job, ok := job.Lookup(name)
+	entry, ok := job.Lookup(name)
 	if !ok {
 		return fmt.Errorf("magus job run: no job named %q; run `%s` to list them", name, hint.JobRun)
 	}
@@ -721,7 +721,11 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncNoServer})
 		return nil // no server: quietly do nothing so a checkout hook is never delayed
 	}
-	inv, err := proc.SubmitJob(ctx, addr, job.Argv, version)
+	argv := entry.Argv
+	if name == job.NameCheckDrift {
+		argv = checkDriftJobArgv(args[1:], hookStdin())
+	}
+	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
 		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the next
 		// trigger (hook, RPC, or manual submit) will catch up.
@@ -829,6 +833,9 @@ func jobRunUsage() {
 	fmt.Fprintln(os.Stderr, "Submit one of the server's own jobs, the housekeeping magus does for itself,")
 	fmt.Fprintln(os.Stderr, "then return immediately. It shows beside every other job in `magus ls jobs`.")
 	fmt.Fprintln(os.Stderr, "A no-op when no server is running, so a VCS hook can call it unconditionally.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "check-drift takes the name of the git hook that runs it, then that hook's own")
+	fmt.Fprintln(os.Stderr, "arguments; for pre-push it reads the refs being pushed from standard input.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Jobs:")
 	for _, j := range job.All() {
@@ -958,7 +965,8 @@ func installRefreshHooks(ctx context.Context) {
 
 // installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
 // commit and the push that follows it each poke this server to check, in the background,
-// whether the commit left generated output stale. Same shape and same guarantees as
+// whether the commit left generated output stale, and a push also hands over the refs it
+// sends so the server counts their unread hunks. Same shape and same guarantees as
 // installRefreshHooks: best-effort, never fatal to starting the server, and a no-op on a
 // non-git tree or a VCS with no hook support (jj).
 func installDriftHooks(ctx context.Context) {

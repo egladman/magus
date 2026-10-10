@@ -464,20 +464,20 @@ type Diff struct {
 	Unread *DiffUnread `json:"unread,omitempty" yaml:"unread,omitempty"`
 }
 
-// The DiffReadState constants say whether the read marks behind a [DiffUnread] filter could be
-// read.
+// DiffReadState says whether the read marks behind a [DiffUnread] filter could be read.
+type DiffReadState string
+
 const (
 	// DiffReadStateKnown means the marks were read, so the filtered report is the answer.
-	DiffReadStateKnown = "known"
+	DiffReadStateKnown DiffReadState = "known"
 	// DiffReadStateUnknown means they could not be. The filtered report is then empty and says
 	// nothing about what is unread: an unreadable store never calls a hunk unread.
-	DiffReadStateUnknown = "unknown"
+	DiffReadStateUnknown DiffReadState = "unknown"
 )
 
 // DiffUnread is what the unread filter did to a report.
 type DiffUnread struct {
-	// ReadState is DiffReadStateKnown or DiffReadStateUnknown.
-	ReadState string `json:"read_state" yaml:"read_state"`
+	ReadState DiffReadState `json:"read_state" yaml:"read_state"`
 	// Reason is why the marks could not be read, set only when ReadState is unknown.
 	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 	// Hunks counts the changeset's hunks before the filter.
