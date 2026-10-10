@@ -376,7 +376,7 @@ derived data buys nothing (`export` exists for teams that want a snapshot).
   guard.idx            what the agent guard asks the graph (see below)
 ```
 
-`guard.idx` is written by `magus graph build` and after each run of the server's
+`guard.idx` is written by `magus graph build` and after each run of the daemon's
 background symbol indexer. It lists the ids the guard's search rules check a pattern
 against (symbol names, doc sections, targets, diagnostics) and a stamp of every source
 they came from. The guard hook reads this one file instead of loading the graph, and
@@ -514,13 +514,13 @@ source tree: magus hands the indexer the destination through a `MAGUS_SYMBOL_IND
 environment variable it injects for the op, and reads that same path back at query
 time. The next graph query folds the symbols in, every index of a project unioned.
 
-**The server keeps it fresh for you.** While the server runs, background auto-indexing
+**The daemon keeps it fresh for you.** While the daemon runs, background auto-indexing
 re-runs each symbol-capable project's indexer ops when its sources change, so symbols stay
 current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
 into one run (a quiet window), a project re-indexes at most once per interval, a run
 starts only when nothing else is running, and it cancels itself the moment your own work
 needs a slot. Each run goes through the normal path, so it shows up as an ordinary
-journaled job, not hidden work. It is on by default in the server; a one-shot CLI never
+journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run of that index just fails and backs off, while the project's other indexes keep

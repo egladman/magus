@@ -423,7 +423,7 @@ the way out.
   ```
 
   Drop `--secrets` for the whole event stream, or add `-o json` for a record. Run logs are
-  trimmed to a cap by the server's `RotateLogs` job, so this answers for recent runs
+  trimmed to a cap by the daemon's `RotateLogs` job, so this answers for recent runs
   rather than forever; export what an auditor needs to keep.
 - **Memoizes it per reference and per provider.** A provider that shells out is invoked
   once per reference, not once per call site, and two targets resolving the same
@@ -433,7 +433,7 @@ the way out.
   a declared one.
 - **Holds the value for as long as the workspace is open, not for one run.** That scope
   is deliberate: a magusfile is evaluated once during preload and again during the run,
-  and a narrower scope made a single command prompt twice. The cost is that the server
+  and a narrower scope made a single command prompt twice. The cost is that the daemon
   keeps a workspace open for as long as it serves it, so on a machine running `magus
 server start` a resolved credential is resident in that process until it restarts, and
   would appear in a heap or core dump. A one-shot CLI invocation holds it for the life of
