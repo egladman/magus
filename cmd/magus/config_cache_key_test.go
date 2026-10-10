@@ -28,7 +28,7 @@ func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		_ = captureStderr(t, func() { err = configCacheKeyGenerate(nil) })
+		_ = noticesFrom(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)
 
@@ -46,8 +46,8 @@ func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
 	withOutputFlags(t, "template={{.keyid}}", "")
 
 	var err error
-	errOut := captureStderr(t, func() {
-		_ = captureStdout(t, func() { err = configCacheKeyGenerate(nil) })
+	errOut := noticesFrom(t, func() {
+		_ = captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)
 
@@ -62,7 +62,7 @@ func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
 func TestCacheKeyGenerateRefusesTee(t *testing.T) {
 	withOutputFlags(t, "json", "keys.json")
 
-	err := configCacheKeyGenerate(nil)
+	err := configCacheKeyGenerate(t.Context(), nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must not come to rest on disk")
@@ -88,7 +88,7 @@ func TestCacheKeyGenerateDefaultStaysHumanReadable(t *testing.T) {
 	withOutputFlags(t, "", "")
 
 	var err error
-	out := captureStdout(t, func() { err = configCacheKeyGenerate(nil) })
+	out := captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	require.NoError(t, err)
 
 	assert.Contains(t, out, "keyid  ")

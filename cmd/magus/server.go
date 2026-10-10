@@ -141,12 +141,9 @@ func serverStatus(ctx context.Context, args []string) error {
 		// To stderr, like every other thing `magus server` says when it cannot do what it
 		// was asked: stdout carries the report, and a caller redirecting it wants an empty
 		// file rather than a sentence about why there is nothing in it.
-		fmt.Fprintln(os.Stderr, "no server is running")
-		if report.PoolError != "" {
-			fmt.Fprintln(os.Stderr, report.PoolError)
-		}
-		fmt.Fprintf(os.Stderr, "start one with `%s`. `%s` still reports this workspace and this host without a server.\n",
-			hint.ServerStart, hint.Status)
+		slog.ErrorContext(ctx, "no server is running", attr.Notice(""),
+			attr.Why(strings.TrimSpace(report.PoolError+"\n"+fmt.Sprintf("`%s` still reports this workspace and this host without a server.", hint.Status))),
+			attr.Next(hint.ServerStart.String()))
 		return errSilent{exitCode: 1}
 	}
 	printServerRows(os.Stdout, report.Server, time.Now())
@@ -206,7 +203,7 @@ func serverStart(ctx context.Context, args []string) error {
 	if addr == "" {
 		return fmt.Errorf("magus server: socket not available (no workspace found, or socket bind failed)")
 	}
-	fmt.Fprintf(os.Stderr, "magus: server (pid %d) listening on %s\n", os.Getpid(), addr)
+	slog.InfoContext(ctx, fmt.Sprintf("server (pid %d) listening on %s", os.Getpid(), addr), attr.Notice(""), attr.Component("magus"))
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -275,11 +272,11 @@ var startServerServices = func(ctx context.Context, cancel context.CancelFunc) {
 	// printed here rather than left in the log. A console that is not mounted says so: a
 	// silent absence is what sends somebody reading the server's source.
 	if u := consoleRootURL(); u != "" {
-		fmt.Fprintf(os.Stderr, "magus: console at %s (it asks for a token; `%s` mints one)\n", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires()))
+		slog.InfoContext(ctx, fmt.Sprintf("console at %s (it asks for a token; `%s` mints one)", u, hint.ConfigConsoleTokenCreate.With("--expires", console.LinkTokenExpires())), attr.Notice(""), attr.Component("magus"))
 	} else {
-		fmt.Fprintln(os.Stderr, "magus: no console is mounted (none is built, or console.enabled is false)")
+		slog.InfoContext(ctx, "no console is mounted (none is built, or console.enabled is false)", attr.Notice(""), attr.Component("magus"))
 	}
-	fmt.Fprintf(os.Stderr, "magus: send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration\n", hint.ServerStop)
+	slog.InfoContext(ctx, fmt.Sprintf("send SIGINT / SIGTERM or run `%s` to shut down; SIGHUP reloads configuration", hint.ServerStop), attr.Notice(""), attr.Component("magus"))
 
 	installRefreshHooks(ctx)
 	installDriftHooks(ctx)
@@ -315,10 +312,10 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 	// Idempotent start: a server already accepting on the socket means there is nothing to do.
 	if proc.SocketLive(ctx, addr) {
 		if st, err := proc.QueryStatus(ctx, addr); err == nil && st.ParentPID != 0 {
-			fmt.Fprintf(os.Stderr, "magus: server already running (pid %d) on %s%s\n",
-				st.ParentPID, addr, servingSuffix(st))
+			slog.InfoContext(ctx, fmt.Sprintf("server already running (pid %d) on %s%s", st.ParentPID, addr, servingSuffix(st)),
+				attr.Notice(""), attr.Component("magus"))
 		} else {
-			fmt.Fprintf(os.Stderr, "magus: server already running on %s\n", addr)
+			slog.InfoContext(ctx, "server already running on "+addr, attr.Notice(""), attr.Component("magus"))
 		}
 		return 0, true
 	}
@@ -330,10 +327,11 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 		return 1, true
 	}
 	if err := waitServerReady(ctx, addr, serverReadyTimeout); err != nil {
-		fmt.Fprintf(os.Stderr, "magus: server (pid %d) did not become ready within %s; see %s\n", pid, serverReadyTimeout, logPath)
+		slog.ErrorContext(ctx, fmt.Sprintf("server (pid %d) did not become ready within %s; see %s", pid, serverReadyTimeout, logPath),
+			attr.Notice(""), attr.Component("magus"))
 		return 1, true
 	}
-	fmt.Fprintf(os.Stderr, "magus: server started (pid %d) on %s; logs at %s\n", pid, addr, logPath)
+	slog.InfoContext(ctx, fmt.Sprintf("server started (pid %d) on %s; logs at %s", pid, addr, logPath), attr.Notice(""), attr.Component("magus"))
 	return 0, true
 }
 
@@ -487,7 +485,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 		return fmt.Errorf("the server is running on %s but its console is not serving at %s, check console.enabled and mcp.address", sock, addr)
 	}
 
-	fmt.Fprintf(os.Stderr, "magus: starting the server to serve the console, from %s.\n", root)
+	slog.InfoContext(ctx, fmt.Sprintf("starting the server to serve the console, from %s.", root), attr.Notice(""), attr.Component("magus"))
 	logPath := serverLogPath()
 	pid, err := spawnDetached([]string{"server", "--foreground"}, logPath)
 	if err != nil {
@@ -498,7 +496,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 	deadline := time.Now().Add(consoleReadyTimeout)
 	for {
 		if err := probe(); err == nil {
-			fmt.Fprintf(os.Stderr, "magus: server started (pid %d); logs at %s; `%s` stops it\n", pid, logPath, hint.ServerStop)
+			slog.InfoContext(ctx, fmt.Sprintf("server started (pid %d); logs at %s; `%s` stops it", pid, logPath, hint.ServerStop), attr.Notice(""), attr.Component("magus"))
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -633,7 +631,7 @@ func serverStop(ctx context.Context, args []string) error {
 		return qerr
 	}
 	if qerr != nil {
-		fmt.Fprintf(os.Stderr, "magus: no server is running at %s\n", addr)
+		slog.ErrorContext(ctx, "no server is running at "+addr, attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 1}
 	}
 	if err := proc.Shutdown(ctx, addr); err != nil {
@@ -646,9 +644,9 @@ func serverStop(ctx context.Context, args []string) error {
 		return fmt.Errorf("server stop: server (pid %d) on %s did not stop within %s", st.ParentPID, addr, stopTimeout)
 	}
 	if st.ParentPID != 0 {
-		fmt.Fprintf(os.Stderr, "magus: stopped server (pid %d)\n", st.ParentPID)
+		slog.InfoContext(ctx, fmt.Sprintf("stopped server (pid %d)", st.ParentPID), attr.Notice(""), attr.Component("magus"))
 	} else {
-		fmt.Fprintln(os.Stderr, "magus: stopped server")
+		slog.InfoContext(ctx, "stopped server", attr.Notice(""), attr.Component("magus"))
 	}
 	return nil
 }
@@ -731,12 +729,12 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	}
 	if inv == "" { // the server coalesced this into an already-running job of the same kind
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncCoalesced})
-		fmt.Fprintf(os.Stderr, "magus: %s is already running\n", name)
+		slog.InfoContext(ctx, name+" is already running", attr.Notice(""), attr.Component("magus"))
 	} else {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncSubmitted, Job: inv})
-		fmt.Fprintf(os.Stderr, "magus: submitted %s in the background (job %s)\n", name, inv)
+		slog.InfoContext(ctx, fmt.Sprintf("submitted %s in the background (job %s)", name, inv), attr.Notice(""), attr.Component("magus"))
 	}
-	printJobWatchHint(os.Stderr)
+	printJobWatchHint(ctx)
 	return nil
 }
 
@@ -774,12 +772,13 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 // The terminal check stays, but it is no longer a secrecy measure: it is that this line
 // invites somebody to go look at something, and the VCS refresh hook is not somebody. A
 // suggestion nobody can act on is noise in a log.
-func printJobWatchHint(w *os.File) {
-	if !tty.IsTerminalWriter(w, tty.SystemProbe) {
+func printJobWatchHint(ctx context.Context) {
+	if !tty.IsTerminalWriter(os.Stderr, tty.SystemProbe) {
 		return
 	}
 	if u := consoleWatchURL(); u != "" {
-		fmt.Fprintf(w, "magus: watch it in the console dashboard: %s\n%s\n", u, authHint(u))
+		slog.LogAttrs(ctx, slog.LevelInfo, "watch it in the console dashboard: "+u,
+			attr.Notice(""), attr.Component("magus"), attr.Next(console.OpenCommand(u)))
 	}
 }
 
@@ -952,7 +951,7 @@ func installRefreshHooks(ctx context.Context) {
 		return
 	}
 	if len(installed) > 0 {
-		fmt.Fprintf(os.Stderr, "magus: installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically\n", res.Name, strings.Join(installed, ", "))
+		slog.InfoContext(ctx, fmt.Sprintf("installed %s refresh hook(s) [%s]; history changes now reconcile the graph automatically", res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
 	}
 }
 
@@ -983,7 +982,7 @@ func installDriftHooks(ctx context.Context) {
 		return
 	}
 	if len(installed) > 0 {
-		fmt.Fprintf(os.Stderr, "magus: installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically\n", res.Name, strings.Join(installed, ", "))
+		slog.InfoContext(ctx, fmt.Sprintf("installed %s drift-notice hook(s) [%s]; a commit that leaves generated output stale is now noticed automatically", res.Name, strings.Join(installed, ", ")), attr.Notice(""), attr.Component("magus"))
 	}
 }
 
@@ -1025,7 +1024,7 @@ func serverReload(ctx context.Context, args []string) error {
 		if proc.ServerOutdated(qerr) {
 			return qerr
 		}
-		fmt.Fprintln(os.Stderr, "magus: no server is running; every command already reads the current config")
+		slog.InfoContext(ctx, "no server is running; every command already reads the current config", attr.Notice(""), attr.Component("magus"))
 		return nil
 	}
 
@@ -1035,11 +1034,11 @@ func serverReload(ctx context.Context, args []string) error {
 	}
 	switch {
 	case dropped == 0 && busy == 0:
-		fmt.Fprintln(os.Stderr, "magus: the server held no open workspaces; the next command reads the current config")
+		slog.InfoContext(ctx, "the server held no open workspaces; the next command reads the current config", attr.Notice(""), attr.Component("magus"))
 	case busy > 0:
-		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); %d still running and kept the config they started with, so re-run this when they finish\n", dropped, busy)
+		slog.InfoContext(ctx, fmt.Sprintf("reloaded %d workspace(s); %d still running and kept the config they started with, so re-run this when they finish", dropped, busy), attr.Notice(""), attr.Component("magus"))
 	default:
-		fmt.Fprintf(os.Stderr, "magus: reloaded %d workspace(s); the next command against each reads the current config\n", dropped)
+		slog.InfoContext(ctx, fmt.Sprintf("reloaded %d workspace(s); the next command against each reads the current config", dropped), attr.Notice(""), attr.Component("magus"))
 	}
 	return nil
 }

@@ -296,7 +296,7 @@ func (p *Plan) Apply() error {
 		s, err := stage(f.abs, f.after, f.mode)
 		if err != nil {
 			discard()
-			return fmt.Errorf("edit: stage %s, nothing written: %w", f.path, err)
+			return fmt.Errorf("stage %s, nothing written: %w", f.path, err)
 		}
 		staged[i] = s
 	}

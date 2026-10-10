@@ -57,6 +57,8 @@ func watchInterrupts(parent context.Context) (context.Context, func(), func() (s
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
+		// The warning answers a keypress, so it is written to the terminal itself: a
+		// quiet display would drop it and the run would look hung.
 		confirmInterrupts(ctx, sigs, cancel, os.Stderr,
 			tty.IsTerminalWriter(os.Stderr, tty.SystemProbe), confirmWindow, cache.InFlight,
 			func(sig syscall.Signal) { stopped.Store(int32(sig)) },

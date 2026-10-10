@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -204,7 +206,8 @@ func attentionDispose(root string, args []string) error {
 	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap
 	// --ack closed this way first (diff.go).
 	if !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: session dispose records that a person closed this request, so it needs an interactive terminal")
+		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 
@@ -387,5 +390,5 @@ func noteAttentionOpenFailure(err error) {
 // an agent whose blocks never reach the queue has no other symptom.
 func noteMissingAttentionSource() {
 	slog.Warn("magus session notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
-		slog.String("next", "have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
+		attr.Why("have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }

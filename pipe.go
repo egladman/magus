@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/sys/pid"
 	"github.com/egladman/magus/internal/sys/pipepeer"
@@ -98,7 +99,8 @@ func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 		}
 		r, err := ReadRecords(stdin)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "magus: pid %d upstream writes records this process cannot read: %v\n", recordsFrom, err)
+			slog.WarnContext(ctx, fmt.Sprintf("pid %d upstream writes records this process cannot read", recordsFrom),
+				attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			p.holdProof(stdin)
 			return
 		}

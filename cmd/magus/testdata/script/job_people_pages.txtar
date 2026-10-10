@@ -93,4 +93,3 @@ overlaps
     footprints: disjoint
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

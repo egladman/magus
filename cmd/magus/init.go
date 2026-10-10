@@ -243,42 +243,41 @@ func printInitPlan(root string, global, local, force bool) error {
 // Gated on the user-controlled hints preference, not terminal interactivity.
 // cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
 // was stubbed (false when --global was used); isLocal is true when --local was used.
-func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal bool) {
+func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
 	if !interactive.HintsEnabled() {
 		return
 	}
 
-	interactive.Emit(os.Stderr, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
+	interactive.Hint(ctx, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
 
 	if scaffolded {
-		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.buzz")
-		interactive.Emit(os.Stderr, "run your first target:  "+hint.Run.With("build"))
+		interactive.Hint(ctx, "magusfile scaffolded: magusfile.buzz")
+		interactive.Hint(ctx, "run your first target:  "+hint.Run.With("build"))
 	}
 
 	if isLocal {
-		interactive.Emit(os.Stderr, "tip: commit magus.yaml to share config with your team")
+		interactive.Hint(ctx, "tip: commit magus.yaml to share config with your team")
 	}
 
 	// Server rc snippet — clearly optional, copy/paste only.
-	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "optional: start the server automatically on login")
-	interactive.Emit(os.Stderr, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # start magus server on login (magus works fine without it)")
-	fmt.Fprintln(os.Stderr, "  if command -v magus >/dev/null 2>&1 && \\")
-	fmt.Fprintln(os.Stderr, "     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then")
-	fmt.Fprintln(os.Stderr, "    "+hint.ServerStart.String()+" &")
-	fmt.Fprintln(os.Stderr, "  fi")
-	fmt.Fprintln(os.Stderr, "")
-	interactive.Emit(os.Stderr, "stop with:  "+hint.ServerStop.String())
+	interactive.Hint(ctx, "")
+	interactive.Hint(ctx, "optional: start the server automatically on login")
+	interactive.Hint(ctx, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
+	slog.InfoContext(ctx, "\n"+
+		"  # start magus server on login (magus works fine without it)\n"+
+		"  if command -v magus >/dev/null 2>&1 && \\\n"+
+		"     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then\n"+
+		"    "+hint.ServerStart.String()+" &\n"+
+		"  fi\n", attr.Notice(""))
+	interactive.Hint(ctx, "stop with:  "+hint.ServerStop.String())
 
 	// Point users at the agent integration. A hint, not a step: connecting a client
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap; init just says where to look.
-	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
-	interactive.Emit(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
+	interactive.Hint(ctx, "")
+	interactive.Hint(ctx, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
+	interactive.Hint(ctx, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
+	interactive.Hint(ctx, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has

@@ -217,9 +217,9 @@ func assembleMagus(ctx context.Context, sess *buzz.Session, obs buzz.DirectObser
 	// hint(msg): advisory nudge (see emitMagusHint), non-fatal, deduped, honors the
 	// hints toggle. Not a level, but it emits and returns, which is the line this
 	// nested object is drawn on.
-	logLevels.MapSet("hint", directVal(obs, "magus.log.hint", func(_ context.Context, args []vm.Value) (vm.Value, error) {
+	logLevels.MapSet("hint", directVal(obs, "magus.log.hint", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		if len(args) > 0 && args[0].IsStr() {
-			emitMagusHint(args[0].AsString())
+			emitMagusHint(ctx, args[0].AsString())
 		}
 		return vm.Null, nil
 	}))

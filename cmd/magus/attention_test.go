@@ -564,6 +564,7 @@ func TestAttentionDisposeRefusesWithoutATerminal(t *testing.T) {
 	id := openRequestIDs(t, root)[0]
 
 	withoutInteractiveTTY(t)
+	useTextLogger(t)
 	var err error
 	errText := captureStderr(t, func() {
 		err = sessionCmd(context.Background(), root, []string{"dispose", id})

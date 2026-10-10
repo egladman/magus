@@ -80,13 +80,11 @@ release-1.3/changelog  changelog  exited  -      1      alone  -
 release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- wait-changelog.out --
 verified release-1.3/changelog, recorded pass
 goal changelog: verified
 footprint: where its diff since the checkpoint landed
   CHANGELOG.md:3-6
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- wait-notes.out --
 rejected release-1.3/notes, and its state is unchanged
   job release-1.3/notes is not read-only and the result claims no changed paths at all
@@ -96,11 +94,9 @@ goal notes: rejected
 footprint: no line changed since the checkpoint
 unresolved risks its holder reported
   the notes need the final benchmark numbers
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
 -- ls-board.out --
 JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
 release-1.3/changelog  changelog  pass    -      1      alone  -
 release-1.3/notes      notes      exited  -      1      alone  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

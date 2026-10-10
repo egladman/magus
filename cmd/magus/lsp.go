@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/langservice"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // lspCmd implements `magus buzz lsp`: a stdio Language Server that exposes the
@@ -385,12 +387,12 @@ func (s *lspServer) replyError(id json.RawMessage, code int, msg string) {
 func (s *lspServer) writeMessage(v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lsp: marshal: %v\n", err)
+		slog.Error("cannot encode a response", attr.Notice(""), attr.Component("lsp"), attr.Error(err))
 		return
 	}
 	fmt.Fprintf(s.writeBuf, "Content-Length: %d\r\n\r\n", len(body))
 	if _, err := s.writeBuf.Write(body); err != nil {
-		fmt.Fprintf(os.Stderr, "lsp: write: %v\n", err)
+		slog.Error("cannot write a response", attr.Notice(""), attr.Component("lsp"), attr.Error(err))
 		return
 	}
 	_ = s.writeBuf.Flush()

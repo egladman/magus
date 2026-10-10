@@ -98,12 +98,86 @@ func TestWrapPolicy(t *testing.T) {
 	}
 }
 
-func TestWrapKeepsEnabled(t *testing.T) {
+// log.silent quiets the display without raising its level, so an info note is dropped by
+// quiet itself, not by the level.
+func TestWrapDropsInfoAtAnInfoLevel(t *testing.T) {
 	var buf bytes.Buffer
-	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	l := slog.New(Wrap(textHandler(&buf), false))
+	l.InfoContext(context.Background(), "using this workspace's own binary", attr.Notice(""))
+	l.InfoContext(context.Background(), "http://127.0.0.1:7700/jobs", attr.Notice("console"), attr.Next("magus console open"))
+	assert.Equal(t, "level=INFO msg=\"magus console open\" notice=console\n", buf.String())
+}
+
+// Info passes Enabled so a hint or a next command can reach Handle; every other level
+// stays the inner handler's call.
+func TestWrapEnabledFloorsAtInfo(t *testing.T) {
+	var buf bytes.Buffer
+	inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})
 	h := Wrap(inner, false)
 	ctx := context.Background()
-	require.False(t, h.Enabled(ctx, slog.LevelInfo))
-	require.True(t, h.Enabled(ctx, slog.LevelWarn))
-	require.False(t, h.WithAttrs(nil).WithGroup("g").Enabled(ctx, slog.LevelInfo))
+	require.False(t, h.Enabled(ctx, slog.LevelDebug))
+	require.True(t, h.Enabled(ctx, slog.LevelInfo))
+	require.False(t, h.Enabled(ctx, slog.LevelWarn))
+	require.True(t, h.WithAttrs(nil).WithGroup("g").Enabled(ctx, slog.LevelInfo))
+}
+
+func TestWrapBelowLevel(t *testing.T) {
+	cases := []struct {
+		name string
+		log  func(*slog.Logger)
+		want string
+	}{
+		{
+			name: "drops a plain record",
+			log: func(l *slog.Logger) {
+				l.InfoContext(context.Background(), "using this workspace's own binary", attr.Component("magus"))
+			},
+			want: "",
+		},
+		{
+			name: "keeps a hint without its why",
+			log: func(l *slog.Logger) {
+				l.InfoContext(context.Background(), "pass --force to replace it", attr.Hint(), attr.Why("x"))
+			},
+			want: "level=INFO msg=\"pass --force to replace it\" notice=hint\n",
+		},
+		{
+			name: "drops a warning's next with the warning",
+			log: func(l *slog.Logger) {
+				l.WarnContext(context.Background(), "index stale", attr.Next("magus graph build"))
+			},
+			want: "",
+		},
+		{
+			name: "keeps a next command alone",
+			log: func(l *slog.Logger) {
+				l.InfoContext(context.Background(), "http://127.0.0.1:7700/jobs", attr.Notice("console"),
+					attr.Next("magus console open"), attr.Why("server is v0.4"), slog.String("dir", "api"))
+			},
+			want: "level=INFO msg=\"magus console open\" notice=console\n",
+		},
+		{
+			name: "keeps an error and its next at the level",
+			log: func(l *slog.Logger) {
+				l.ErrorContext(context.Background(), "index stale", attr.Next("magus graph build"), attr.Why("x"))
+			},
+			want: "level=ERROR msg=\"index stale\" next=\"magus graph build\"\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			inner := slog.NewTextHandler(&buf, &slog.HandlerOptions{
+				Level: slog.LevelError,
+				ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+					if a.Key == slog.TimeKey {
+						return slog.Attr{}
+					}
+					return a
+				},
+			})
+			tc.log(slog.New(Wrap(inner, false)))
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -126,7 +127,7 @@ func noteUnusableEnvelope(err error, ev types.Event) {
 	}
 	slog.Warn("magus session notify: stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
 		slog.String("missing", strings.Join(missing, ", ")),
-		slog.String("next", "send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
+		attr.Why("send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
 }
 
 func normalizeEvent(ev *types.Event) {

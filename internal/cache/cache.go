@@ -664,7 +664,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
-	result.HintID = c.emitUnchangedFailureHint(hash)
+	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
 	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
 }
 
@@ -939,8 +939,8 @@ const maxHintErrChars = 120
 //
 // Once per key rather than per target, because the fact reported is about the KEY: a
 // re-run whose inputs moved hashes differently and deserves silence. The attempt id
-// differs per failure, so interactive.Emit's whole-message dedupe cannot do this.
-func (c *Cache) emitUnchangedFailureHint(hash string) string {
+// differs per failure, so interactive.Hint's whole-message dedupe cannot do this.
+func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) string {
 	// A record-only run carries the same pointer as run.target.result's next breadcrumbs.
 	if c.outputs == nil || !interactive.HintsEnabled() || c.recordsOnly {
 		return ""
@@ -961,7 +961,7 @@ func (c *Cache) emitUnchangedFailureHint(hash string) string {
 	if len(msg) > maxHintErrChars {
 		msg = msg[:maxHintErrChars] + "..."
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
+	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
 		d.Attempt, msg, hint.QueryOutput.With(d.Attempt)))
 	return HintUnchangedFailure
 }
@@ -1957,15 +1957,16 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// sole output for an otherwise-silent passing run.
 	if c.silent {
 		for _, msg := range extractNotices(logPath) {
+			// Past the level gate, which -s raises to error: a notice is the one line a
+			// silent passing run prints, so it reaches the handler whatever the level.
+			r := slog.NewRecord(time.Now(), slog.LevelInfo, projectPath+": "+msg, 0)
+			r.AddAttrs(attr.Notice("notice"))
 			if c.recordsOnly {
-				// Past the level gate, which -s raises to error: the text line below
-				// prints whatever the level, and so must its record.
-				r := slog.NewRecord(time.Now(), slog.LevelInfo, "cache.notice", 0)
+				// The -o jsonl wire shape: readers match its "notice" attribute.
+				r = slog.NewRecord(time.Now(), slog.LevelInfo, "cache.notice", 0)
 				r.AddAttrs(slog.String("project", projectPath), slog.String("notice", msg))
-				_ = c.log.Handler().Handle(ctx, r)
-				continue
 			}
-			_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", projectPath, msg)
+			_ = c.log.Handler().Handle(ctx, r)
 		}
 	}
 

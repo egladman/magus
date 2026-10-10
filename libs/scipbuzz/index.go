@@ -73,7 +73,7 @@ func Index(ctx context.Context, opts Options) (*scip.Index, error) {
 	}
 	rels, err := discover(project)
 	if err != nil {
-		return nil, fmt.Errorf("scipbuzz: discover .buzz files: %w", err)
+		return nil, fmt.Errorf("discover .buzz files: %w", err)
 	}
 
 	var docs []*file

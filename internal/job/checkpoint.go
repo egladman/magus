@@ -40,7 +40,7 @@ func (s *Store) DeclaredCheckpoint(ctx context.Context, rows []types.Job, id, to
 	}
 	full, err := s.fullRevision(ctx, rev)
 	if err != nil {
-		return "", fmt.Errorf("job: checkpoint %q names no revision this repository holds, `%s` prints a real one: %w", token, real, err)
+		return "", fmt.Errorf("checkpoint %q names no revision this repository holds, `%s` prints a real one: %w", token, real, err)
 	}
 	if digest == "" {
 		return full, nil

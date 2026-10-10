@@ -37,9 +37,7 @@ func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 	path := filepath.Join(dir, "unused.buzz")
 	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
 
-	prevQuiet, prevSilent := global.quiet, global.silent
-	global.quiet, global.silent = false, false
-	t.Cleanup(func() { global.quiet, global.silent = prevQuiet, prevSilent })
+	useTextLogger(t)
 
 	var runErr error
 	stderr := captureStderr(t, func() {
@@ -63,8 +61,7 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 	path := filepath.Join(dir, "unused.buzz")
 	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
 
-	prevSilent := global.silent
-	t.Cleanup(func() { global.silent = prevSilent })
+	useTextLogger(t)
 
 	var runErr error
 	stderr := captureStderr(t, func() {

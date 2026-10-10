@@ -19,14 +19,18 @@ import (
 	"github.com/egladman/magus/internal/report"
 )
 
+func configHistoryUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: magus config history <subcommand>")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Subcommands:")
+	fmt.Fprintln(os.Stderr, "  import   merge runtime-history JSON files into the history (e.g. per-shard CI histories)")
+	fmt.Fprintln(os.Stderr, "  passed   record the commit a ref last completed a fully passing run at")
+	fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
+}
+
 func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		fmt.Fprintln(os.Stderr, "Usage: magus config history <subcommand>")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  import   merge runtime-history JSON files into the history (e.g. per-shard CI histories)")
-		fmt.Fprintln(os.Stderr, "  passed   record the commit a ref last completed a fully passing run at")
-		fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
+		configHistoryUsage()
 		return flag.ErrHelp
 	}
 

@@ -51,7 +51,7 @@ func runBindings(args []string) error {
 	}
 	out, err := emitBuzz(m)
 	if err != nil {
-		return fmt.Errorf("emit: %w", err)
+		return fmt.Errorf("render buzz declarations: %w", err)
 	}
 	if err := emit.File(*outPath, out); err != nil {
 		return fmt.Errorf("write %s: %w", *outPath, err)

@@ -119,6 +119,7 @@ linters:
     - fieldwise
     - diagmsg
     - errmsg
+    - stderrprint
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -318,6 +319,48 @@ linters:
             - {file: types/secret.go, reason: staged}
             - {file: watchdog.go, reason: staged}
 
+      # Results go to stdout through the output emitters, help to stderr when asked,
+      # and every other stderr line is a slog record, so -q, -s, why folding, -o jsonl
+      # notices and redaction reach it. The cmd/magus-* tools are build-time codegen
+      # with no display of their own.
+      stderrprint:
+        type: module
+        description: reports a write to os.Stderr outside a usage function and the display
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          usage-pattern: '(?i)(usage|help)$'
+          usage-fields: [Usage]
+          callee-packages: [github.com/egladman/magus]
+          # Handed the terminal to draw on or probe, which is the display's job.
+          display:
+            - github.com/egladman/magus/internal/interactive/tty
+            - github.com/egladman/magus/internal/cache.NewPrettyHandler
+            - github.com/egladman/magus/internal/report.NewLineEncoder
+            - github.com/egladman/magus.NewSink
+            - github.com/egladman/magus.pickTerminal
+          allow:
+            - {file: "cmd/magus-*/*.go", reason: build-time codegen with no log display}
+            - {file: cmd/langservice-manifest/*.go, reason: build-time codegen with no log display}
+            - {file: internal/config/generate/*.go, reason: build-time codegen with no log display}
+            - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
+            - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
+            - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
+            - {file: cmd/magus/main.go, reason: "reports flag and config errors before the display exists, and relays a worker's stderr"}
+            - {file: cmd/magus/pprof.go, reason: MAGUS_PPROF starts before the display exists}
+            - {file: cmd/magus/bootstrap_exec.go, reason: runs before the display exists}
+            - {file: cmd/magus/bootstrap_exec_unix.go, reason: runs before the display exists}
+            - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
+            - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
+            - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
+            - {file: cmd/magus/stepper.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
+            - {file: cmd/magus/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
+            - {file: cmd/magus/failures.go, reason: the end-of-run failure prompt and its OSC 52 copy}
+            - {file: internal/cache/cache.go, reason: "relays a target's captured log and the frame around it"}
+            - {file: internal/settle/quiet.go, reason: relays the captured output of a silenced run}
+            - {file: internal/sandbox/launch.go, reason: reports from inside the confined child before any display exists}
+          hint: "a notice is slog.InfoContext(ctx, msg, attr.Notice(label)), with attr.Why for a reason and attr.Next for the command; a hint is interactive.Hint"
+
       # A plain Go error is a fragment its callers chain context onto with ": ".
       # diagmsg judges what magus prints; this judges errors.New and fmt.Errorf,
       # including one built only to wrap inside a coded diagnostic. With module
@@ -329,6 +372,12 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
+          # `magus run` is the command its errors name, not internal/run.
+          operations: [run]
+          # A notice's error rides attr.Error, so the display names its origin once.
+          notice-attrs:
+            - github.com/egladman/magus/internal/log/attr.Notice
+            - github.com/egladman/magus/internal/log/attr.Hint
           allow:
             - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
 

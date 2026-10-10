@@ -773,6 +773,19 @@ func captureStderr(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+// captureLog points the process logger at the pretty display for the duration of fn and
+// returns what it rendered.
+func captureLog(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(NewPrettyHandler(&buf, slog.LevelInfo)))
+	defer slog.SetDefault(prev)
+
+	fn()
+	return buf.String()
+}
+
 // silentCache builds a Cache in silent mode with a log dir under t.TempDir.
 func silentCache(t *testing.T) *Cache {
 	t.Helper()
@@ -782,6 +795,8 @@ func silentCache(t *testing.T) *Cache {
 
 func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	c := silentCache(t)
+	var buf bytes.Buffer
+	c.log = slog.New(NewPrettyHandler(&buf, slog.LevelError))
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := captureStderr(t, func() {
@@ -794,7 +809,8 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", out)
+	assert.Empty(t, out, "a notice is a record, not a raw stderr line")
+	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", buf.String())
 	// Successful-run log is retained (replayable).
 	_, statErr := os.Stat(lp)
 	require.NoError(t, statErr)
@@ -1008,14 +1024,14 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 		return boom
 	}
 
-	first := captureStderr(t, func() {
+	first := captureLog(t, func() {
 		_, err := c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, first, "inputs unchanged", "nothing was recorded yet to point at")
 
 	var second Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		var err error
 		second, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
@@ -1029,7 +1045,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.Equal(t, HintUnchangedFailure, second.HintID)
 
 	var thirdRes Result
-	third := captureStderr(t, func() {
+	third := captureLog(t, func() {
 		var err error
 		thirdRes, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
@@ -1061,7 +1077,7 @@ func TestRunHintsUnchangedFailureOnlyForItsOwnFailure(t *testing.T) {
 			require.ErrorIs(t, err, boom)
 
 			var res Result
-			out := captureStderr(t, func() {
+			out := captureLog(t, func() {
 				res, err = c.Run(context.Background(), step, fn)
 				require.ErrorIs(t, err, boom)
 			})
@@ -1098,7 +1114,7 @@ func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
 	require.NotEmpty(t, failed.Ref)
 
 	var passed Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		passed, err = c.Run(context.Background(), step, fn)
 	})
 	require.NoError(t, err)
@@ -1165,7 +1181,7 @@ func TestRunNoHintWhenInputsChanged(t *testing.T) {
 
 	writeMain(t, step.WorkspaceRoot, "package main // hint moved inputs, edited")
 	var res Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		res, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
@@ -1185,7 +1201,7 @@ func TestRunNoHintAfterSuccess(t *testing.T) {
 
 	step.SkipReplay = true
 	var res Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		res, err = c.Run(context.Background(), step, fn)
 		require.NoError(t, err)
 	})

@@ -125,7 +125,7 @@ func (cn *conn) roundTripFiles(ctx context.Context, id uint64, typ string, body 
 	if f.Type == typeError {
 		var er errorReply
 		if err := decodeBody(f, &er); err != nil {
-			return fmt.Errorf("broker: %s: undecodable error reply: %w", typ, err)
+			return fmt.Errorf("%s: undecodable error reply: %w", typ, err)
 		}
 		return &Error{Code: er.Code, Message: er.Message}
 	}
@@ -136,7 +136,7 @@ func (cn *conn) roundTripFiles(ctx context.Context, id uint64, typ string, body 
 		return nil
 	}
 	if err := decodeBody(f, out); err != nil {
-		return fmt.Errorf("broker: %s: decode reply: %w", typ, err)
+		return fmt.Errorf("%s: decode reply: %w", typ, err)
 	}
 	return nil
 }

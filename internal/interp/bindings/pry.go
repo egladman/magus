@@ -3,11 +3,13 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
+	"github.com/egladman/magus/internal/log/attr"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
@@ -29,7 +31,7 @@ func buildBuzzPry(sess *buzz.Session, parseMode bool) vm.Callable {
 
 		resume, err := interp.Pry(ctx, esess, buzzPryContext(esess), opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "magus.pry: %v\n", err)
+			warnPry(ctx, err)
 			return vm.Null, nil
 		}
 		if resume == interp.ResumeContinue {
@@ -38,6 +40,11 @@ func buildBuzzPry(sess *buzz.Session, parseMode bool) vm.Callable {
 		buzzInstallStepHook(ctx, esess, resume, opts)
 		return vm.Null, nil
 	}
+}
+
+// warnPry reports a REPL that failed to open or run; the script carries on without it.
+func warnPry(ctx context.Context, err error) {
+	slog.WarnContext(ctx, "", attr.Notice("magus.pry"), attr.Error(err))
 }
 
 // buzzPryContext builds the REPL's PryContext from the session's current call
@@ -100,7 +107,7 @@ func buzzInstallStepHook(ctx context.Context, esess engine.Session, resume inter
 		stepper.ClearStepHook()
 		next, err := interp.Pry(ctx, esess, buzzPryContext(esess), opts)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "magus.pry: %v\n", err)
+			warnPry(ctx, err)
 			return
 		}
 		if next == interp.ResumeContinue {
