@@ -137,6 +137,11 @@ type PrettyHandler struct {
 	// printing every restatement in full, which is what happens today.
 	blockedAt map[causeKey]int
 	blocked   []blockedGroup
+	// failedSteps holds, per project, the target names this run has seen fail, with
+	// and without their charm suffix. A composite prefixes each member's failure with
+	// the member's name, and these are the names that make such a prefix a hop rather
+	// than part of a message. Per RUN, cleared by resetRun.
+	failedSteps map[string]map[string]bool
 	// repeated groups the steps that failed with a diagnostic code an earlier step
 	// already printed in full, so the code's text and link print once and the rest are
 	// counted in one footer line. repeatedAt indexes it by code; both are per RUN.
@@ -1088,10 +1093,11 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 // Counters are deliberately untouched: a blocked target did fail, and the
 // summary has to keep saying so. This changes what is printed, not what is counted.
 func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) bool {
+	defer h.noteFailedStep(project, target)
 	if cause == "" {
 		return false
 	}
-	sig, viaDeps := causeSignature(cause)
+	sig, viaDeps := causeSignature(cause, func(name string) bool { return h.failedSteps[project][name] })
 	key := causeKey{project: project, cause: sig}
 	i, known := h.blockedAt[key]
 	if !known {
@@ -1111,6 +1117,24 @@ func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) 
 	}
 	h.blocked[i].blocked = append(h.blocked[i].blocked, name)
 	return true
+}
+
+// noteFailedStep records target as failed in project, under its repro name and its
+// bare name: the record carries "name:charm" while a composite prefixes "name".
+func (h *PrettyHandler) noteFailedStep(project, target string) {
+	if target == "" {
+		return
+	}
+	if h.failedSteps == nil {
+		h.failedSteps = make(map[string]map[string]bool)
+	}
+	names := h.failedSteps[project]
+	if names == nil {
+		names = make(map[string]bool)
+		h.failedSteps[project] = names
+	}
+	names[target] = true
+	names[bareTarget(target)] = true
 }
 
 // printBlocked names, once per root, the targets whose failure was suppressed as
@@ -1219,16 +1243,24 @@ func (h *PrettyHandler) printRepeated(colorize bool) {
 // The second return says every line arrived through a dependency. A cause with
 // no hops is the target's own failure, and a target reporting its own failure is
 // never suppressed however familiar the message looks.
-func causeSignature(cause string) (sig string, viaDeps bool) {
+//
+// A hop is a ctx.needs marker, or a leading "name: " where failedStep says name is
+// a step already seen to fail: a composite prefixes each member's failure with the
+// member's name and nothing else. failedStep may be nil. A "see: <url>" line is the
+// docs link of the coded message above it, never a failure of its own.
+func causeSignature(cause string, failedStep func(string) bool) (sig string, viaDeps bool) {
 	var msgs []string
 	seen := make(map[string]bool)
 	viaDeps = true
 	for _, part := range strings.Split(cause, "\n") {
 		part = strings.TrimSpace(part)
-		if part == "" {
+		if part == "" || strings.HasPrefix(part, "see: ") {
 			continue
 		}
 		hops, msg := splitHopChain(part)
+		if len(hops) == 0 && failedStep != nil {
+			hops, msg = splitStepPrefixes(part, failedStep)
+		}
 		if len(hops) == 0 {
 			viaDeps = false
 		}
@@ -1245,6 +1277,21 @@ func causeSignature(cause string) (sig string, viaDeps bool) {
 		return cause, false
 	}
 	return strings.Join(msgs, "\n"), viaDeps
+}
+
+// splitStepPrefixes peels the leading "name: " segments of line that failedStep
+// recognizes, and returns them with the message beneath. It never peels the last
+// segment, so a message is always left.
+func splitStepPrefixes(line string, failedStep func(string) bool) (hops []string, message string) {
+	segs := strings.Split(line, ": ")
+	i := 0
+	for i < len(segs)-1 && failedStep(segs[i]) {
+		i++
+	}
+	if i == 0 {
+		return nil, ""
+	}
+	return segs[:i], strings.Join(segs[i:], ": ")
 }
 
 // failureCauseExcerptLogMarker is the label MGS3011's message puts before the captured
@@ -1869,6 +1916,7 @@ func (h *PrettyHandler) resetRun() {
 	h.mintedRef = false
 	h.blockedAt = nil
 	h.blocked = nil
+	h.failedSteps = nil
 	h.repeatedAt = nil
 	h.repeated = nil
 	// The preview belongs to a failure from the run that just ended. Left set,

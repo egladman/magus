@@ -928,7 +928,8 @@ const maxHintErrChars = 120
 // BEFORE the run, so it says the step runs again: under -s a passing re-run prints
 // nothing else, and a bare "which failed" before exit 0 reads as a failure replayed as a
 // pass. Empty when the key has no stored execution, when the newest one passed, when
-// hints are off, or when this key was already hinted.
+// hints are off, when the recorded failure only restates a dependency's, or when this
+// key was already hinted.
 //
 // The line names the failed ATTEMPT, not the step ref: the step ref resolves to the
 // key's newest attempt, so once the re-run passes it shows that pass instead.
@@ -943,6 +944,11 @@ func (c *Cache) emitUnchangedFailureHint(hash string) string {
 	}
 	d, err := c.outputs.newestDescriptor(hash)
 	if err != nil || !d.Failed || d.Attempt == "" {
+		return ""
+	}
+	// A failure that only restates a dependency's is that dependency's to report: its
+	// own key carries the same hint, and a cascade would print one line per composite.
+	if _, restated := causeSignature(d.ErrMsg, nil); restated {
 		return ""
 	}
 	if _, dup := c.failureHinted.LoadOrStore(hash, struct{}{}); dup {

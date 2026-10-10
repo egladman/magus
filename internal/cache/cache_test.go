@@ -1039,6 +1039,43 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.Equal(t, 3, calls)
 }
 
+// A step whose recorded failure only restates a dependency's gets no unchanged-inputs
+// line: the dependency's own key speaks for that failure, and a cascade of composites
+// would otherwise print one line per step for one cause.
+func TestRunHintsUnchangedFailureOnlyForItsOwnFailure(t *testing.T) {
+	const root = "[MGS4007] .:types-generate modified its declared sources a.md\n  see: https://example/MGS4007/"
+	for name, tc := range map[string]struct {
+		err  string
+		hint bool
+	}{
+		"its own coded failure":           {root, true},
+		"a restated dependency failure":   {"ctx.needs: types-generate: " + root, false},
+		"a restatement two hops down":     {"ctx.needs: job-generate: ctx.needs: types-generate: " + root, false},
+		"its own failure beside a needed": {"ctx.needs: types-generate: " + root + "\nmockery exited 1", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			step, c := hintCache(t, "package main // "+name)
+			boom := errors.New(tc.err)
+			fn := func(context.Context) error { return boom }
+			_, err := c.Run(context.Background(), step, fn)
+			require.ErrorIs(t, err, boom)
+
+			var res Result
+			out := captureStderr(t, func() {
+				res, err = c.Run(context.Background(), step, fn)
+				require.ErrorIs(t, err, boom)
+			})
+			if tc.hint {
+				assert.Contains(t, out, "inputs unchanged since")
+				assert.Equal(t, HintUnchangedFailure, res.HintID)
+				return
+			}
+			assert.NotContains(t, out, "inputs unchanged")
+			assert.Empty(t, res.HintID)
+		})
+	}
+}
+
 // TestRunEnvironmentalFailureRerunsToAPass pins that a failure never becomes the key's
 // verdict. The step fails once for a reason outside its inputs (a tool lock held by a
 // parallel process), then passes with the key unchanged: the second run executes, its

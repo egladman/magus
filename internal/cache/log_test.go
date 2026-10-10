@@ -993,6 +993,102 @@ func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
 	assert.NotContains(t, out, "blocked by")
 }
 
+// generateRoot is the root of the generate cascade below: a coded diagnostic, which
+// renders its docs URL on a second line.
+const generateRoot = "[MGS4007] .:types-generate modified its declared sources .claude/skills/magus-docs-lookup-full/SKILL.md, " +
+	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.modifiesExistingFiles(...)\n" +
+	"  see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"
+
+// generateCascade replays a lint run in which types-generate failed and every
+// generator composing it restated that failure, prefixed with the names of the steps
+// it came through and with no ctx.needs marker, so each composite repeated every
+// chain and every see: line.
+func generateCascade(t *testing.T, h *PrettyHandler) {
+	t.Helper()
+	via := func(names ...string) string { return strings.Join(names, ": ") + ": " + generateRoot }
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", via("types-generate"))
+	failEvent(t, h, ".", "termcast-generate:rw", via("job-generate", "types-generate"))
+	failEvent(t, h, ".", "langservice-generate:rw", via("job-generate", "types-generate"))
+	failEvent(t, h, ".", "bindings-generate:rw", strings.Join([]string{
+		via("types-generate"),
+		via("job-generate", "types-generate"),
+		via("langservice-generate", "job-generate", "types-generate"),
+	}, "\n"))
+	failEvent(t, h, ".", "generate:rw", strings.Join([]string{
+		via("bindings-generate", "types-generate"),
+		via("termcast-generate", "job-generate", "types-generate"),
+	}, "\n"))
+}
+
+func TestBlockedCascadeFoldsCompositeRestatements(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	generateCascade(t, h)
+	summaryEvent(t, h, 6)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "modified its declared sources"), "the cause prints once")
+	assert.Equal(t, 1, strings.Count(out, "see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"),
+		"a see: line belongs to the message above it, so it folds with it")
+	assert.Equal(t, 1, strings.Count(out, "[fail]"), "only the root prints a block")
+	assert.Contains(t, out, "blocked by workspace types-generate:rw: job-generate:rw, termcast-generate:rw, "+
+		"langservice-generate:rw, bindings-generate:rw, generate:rw\n")
+	assert.Contains(t, out, "6 failed", "a blocked step did fail")
+	assert.Equal(t, 6, h.status.failed)
+}
+
+// The same cascade as the binary reports it once both ctx.needs paths mark their hops.
+func TestBlockedCascadeFoldsMarkedRestatementsWithSeeLines(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", "ctx.needs: types-generate: "+generateRoot)
+	failEvent(t, h, ".", "termcast-generate:rw", "ctx.needs: job-generate: ctx.needs: types-generate: "+generateRoot)
+	summaryEvent(t, h, 3)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "see: "))
+	assert.Contains(t, out, "blocked by workspace types-generate:rw: job-generate:rw, termcast-generate:rw\n")
+}
+
+// A prefix counts as a hop only when it names a step this run already saw fail, so a
+// message that merely starts with a word and a colon stays the target's own.
+func TestBlockedKeepsAPrefixThatNamesNoFailedStep(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", "templates: "+generateRoot)
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	assert.NotContains(t, out, "blocked by")
+}
+
+// A composite that restates the root and also failed on its own keeps its block: the
+// own failure is news.
+func TestBlockedKeepsACompositeWithItsOwnFailureBesideTheRoot(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "generate:rw", "types-generate: "+generateRoot+"\nmocks-generate: mockery exited 1")
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	assert.Contains(t, out, "mockery exited 1")
+	assert.NotContains(t, out, "blocked by")
+}
+
 // TestBlockedSuppressionDoesNotChangeTheCount is the line between presentation
 // and bookkeeping: a blocked target did fail, and the footer must keep saying so.
 func TestBlockedSuppressionDoesNotChangeTheCount(t *testing.T) {

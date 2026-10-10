@@ -499,8 +499,15 @@ func buildBuzzNeeds(targets map[string]vm.Callable, exports map[string]vm.Value,
 			// here. Handing it something it can simply invoke keeps the dependency
 			// pointing one way, and DependencyWait.Do times it without this site having
 			// to remember to.
+			//
+			// The marker matches the inline branch below. The driver returns this error
+			// as the body's, and the reporter reads the marker to tell a dependent
+			// restating its dependency's failure from a target failing on its own.
 			w.Request(func(runCtx context.Context) error {
-				return runBuzzDependencies(runCtx, targets, names)
+				if err := runBuzzDependencies(runCtx, targets, names); err != nil {
+					return fmt.Errorf("ctx.needs: %w", err)
+				}
+				return nil
 			})
 			return vm.Null, vm.Suspend(vm.Null)
 		}
