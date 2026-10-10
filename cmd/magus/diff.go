@@ -446,7 +446,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
-			fmt.Fprintln(os.Stderr, "magus diff: "+review.UnreadLine(*rev.Unread, src.label))
+			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, src.label), attr.Notice(""), attr.Component("magus"))
 		}
 	}
 	// The threads are named on the report so a person can find the id --thread takes. A patch
@@ -456,7 +456,8 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		if comments, _, served := serverReviewComments(ctx); served {
 			review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
 		} else {
-			fmt.Fprintf(os.Stderr, "magus diff: review threads are listed only while the server runs; `%s` starts it\n", hint.ServerStart)
+			slog.InfoContext(ctx, "review threads are listed only while the server runs",
+				attr.Notice(""), attr.Component("magus"), attr.Next(fmt.Sprint(hint.ServerStart)))
 		}
 	}
 	if rf.Ack {
@@ -595,7 +596,7 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 		return fmt.Errorf("magus diff: %w", threadLookupError(err, reason, len(comments)))
 	}
 	if reason != "" {
-		fmt.Fprintf(os.Stderr, "magus diff: part of the review could not be read: %s\n", reason)
+		slog.WarnContext(ctx, "part of the review could not be read: "+reason, attr.Notice(""), attr.Component("magus"))
 	}
 	switch t.opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -901,7 +902,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
-			fmt.Fprintln(os.Stderr, "magus diff: "+review.UnreadLine(*rev.Unread, req.label))
+			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, req.label), attr.Notice(""), attr.Component("magus"))
 			sync.close()
 			return nil
 		}
