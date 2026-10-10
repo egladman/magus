@@ -34,6 +34,7 @@ import "flags";
 import "fs";
 import "magus";
 import "os";
+import "proc";
 import "serialize";
 import "sort";
 import "std";
@@ -430,8 +431,23 @@ export object LayerWrite {
     partial: {str: str},
 }
 
+// The fixture tests set "on": their temp repositories are not the caller's work, so git
+// runs there outside the lease gate vcs\cmd applies and without the lease in its environment.
+final UNLEASED = mut {"on": false};
+
+fun runGit(root: str, args: [str], allowFailure: bool) > proc\ExecResult !> any {
+    if (!UNLEASED["on"]!) {
+        return vcs\cmd(args, opts: {"quiet": true, "dir": root, "allow_failure": allowFailure});
+    }
+    var res: proc\ExecResult? = null;
+    os\withEnv({"BAGGAGE": ""}, callback: fun () > void !> any {
+        res = proc\exec("git", args: args, dir: root, opts: {"quiet": true, "allow_failure": allowFailure});
+    });
+    return res!;
+}
+
 fun gitIn(root: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": root}).stdout.trim();
+    return runGit(root, args: args, allowFailure: false).stdout.trim();
 }
 
 // writeLayers commits each layer on top of the one below it through a temporary index and
@@ -441,8 +457,7 @@ fun gitIn(root: str, args: [str]) > str !> any {
 export fun writeLayers(root: str, mergeBase: str, layers: [LayerWrite], changed: [str]) > [str] !> any {
     foreach (l in layers) {
         gitIn(root, args: ["check-ref-format", "--branch", l.branch]);
-        final taken = vcs\cmd(["show-ref", "--verify", "--quiet", "refs/heads/{l.branch}"],
-            opts: {"quiet": true, "dir": root, "allow_failure": true});
+        final taken = runGit(root, args: ["show-ref", "--verify", "--quiet", "refs/heads/{l.branch}"], allowFailure: true);
         if (taken.code == 0) {
             throw "split-into-branches: branch {l.branch} already exists; delete it or pass another --prefix";
         }
@@ -1908,7 +1923,7 @@ export fun layerWrites(p: SymPlan, change: SymbolChange, stem: str) > [LayerWrit
 fun readTexts(root: str, mergeBase: str, paths: [str]) > {str: FileText} !> any {
     final texts = mut {<str: FileText>};
     foreach (p in paths) {
-        final shown = vcs\cmd(["show", "{mergeBase}:{p}"], opts: {"quiet": true, "dir": root, "allow_failure": true});
+        final shown = runGit(root, args: ["show", "{mergeBase}:{p}"], allowFailure: true);
         var lost = 0;
         if (shown.code == 0) {
             // A captured stdout loses its trailing newlines; the blob's size says how many.
@@ -2303,6 +2318,7 @@ fun symbolRepo() > Repo !> any {
         syms.append(Sym{ id = s.q("id").stringValue(), label = s.q("label").stringValue(), path = s.q("path").stringValue(),
             change = s.q("change").stringValue(), line = s.q("line").integerValue(), refs = sites });
     }
+    UNLEASED["on"] = true;
     final root = fs\tempDir("split-symbols-");
     writeTree(root, files: doc.q("base").mapValue());
     var texts = {<str: FileText>};
