@@ -23,9 +23,10 @@ import "lib/hook" as hook;
 //
 // It then resolves the binary the guard glue would run for that cwd and loads the
 // workspace with it (`ls`). If that fails, or no binary resolves at all, it answers
-// with additionalContext naming the single fix, once per session. A guard whose binary
-// cannot load the tree judges nothing and denies every write, and a session should hear
-// that when it starts, not at the first refused edit. Otherwise it prints nothing on stdout.
+// with additionalContext naming one command, once per session. A guard whose binary
+// cannot load the tree judges nothing and denies every call that changes state, and a
+// session should hear that when it starts, not at the first refused edit. Otherwise it
+// prints nothing on stdout.
 // It exits 0 either way.
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
@@ -67,34 +68,35 @@ fun leaseFrom(baggage: str) > str {
     return "";
 }
 
-// fixFor is the one command that brings back a binary able to load root. A leased worker
-// never builds: there is one binary per base, and the orchestrator places it.
+// fixFor is the likeliest fix for a binary unable to load root, carrying at most one
+// command. A leased worker never builds: there is one binary per base, and the main
+// session places it.
 fun fixFor(own: bool, hasBinary: bool, lease: str) > str {
     if (lease != "") {
         if (own) {
-            return "ask the orchestrator to place this worktree's binary with `magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease}`. A worker never builds one.";
+            return "ask the main session to place ./magus: `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job {lease} --from <main checkout>`";
         }
-        return "ask the orchestrator, or the person who runs this workspace, to install a magus that loads it.";
+        return "ask the main session to install a magus that loads this workspace";
     }
     if (own and hasBinary) {
-        return "rebuild it with `./magus run go-build .`. If that cannot load the tree either, run `mv magus magus.old`, then `{BOOTSTRAP}`.";
+        return "rebuild ./magus with `./magus run go-build .`";
     }
     if (own) {
-        return "this checkout has no ./magus; bootstrap one with `{BOOTSTRAP}`.";
+        return "bootstrap ./magus with `{BOOTSTRAP}`";
     }
-    return "install a magus that loads this workspace with `magus self update`.";
+    return "install a magus that loads this workspace with `magus self update`";
 }
 
-// unloadableNotice states what failed and the fix. why is the error the load printed, or
-// "" when no binary resolved at all.
+// unloadableNotice is the verdict and the fix on its first line, and the cause after it.
+// why is the error the load printed, or "" when no binary resolved at all.
 fun unloadableNotice(root: str, bin: str, why: str, fix: str) > str {
-    var cause = "no magus binary resolves for {root}";
+    var cause = "No magus binary resolves for {root}.";
     if (bin != "") {
-        cause = "{bin} cannot load {root}";
-        if (why != "") { cause = cause + ": {why}"; }
+        cause = "{bin} cannot load {root}.";
+        if (why != "") { cause = "{bin} cannot load {root}: {why}"; }
     }
-    return "magus guard is NOT judging this session: {cause}, so this workspace's guard policy is not running. A binary older than the tree, or a checkout with no ./magus, "
-        + "has every edit, spawn, push and state-changing command denied until a magus loads the tree; reads, `git status` and the fix still run. Fix: {fix}";
+    return "the magus guard is not judging this session; {fix}.\n{cause}\n"
+        + "Every edit, spawn, push and state-changing command is denied until a magus loads the tree; reads, `git status` and the fix still run.";
 }
 
 fun contextReply(text: str) > str {
@@ -170,20 +172,30 @@ test "a lease is read off the baggage header" {
     std\assert(leaseFrom("") == "", message: "empty");
 }
 
-test "the fix follows who is asking" {
-    std\assert(fixFor(true, hasBinary: true, lease: "").startsWith("rebuild it with `./magus run go-build .`"), message: "orchestrator with a binary");
-    std\assert(fixFor(true, hasBinary: false, lease: "").indexOf(BOOTSTRAP) != null, message: "orchestrator with none");
-    std\assert(fixFor(false, hasBinary: true, lease: "").indexOf("magus self update") != null, message: "another workspace");
-    final worker = fixFor(true, hasBinary: true, lease: "w1");
-    std\assert(worker.indexOf("bootstrap-worktree.buzz -- --job w1") != null, message: "a worker asks for a placed binary");
-    std\assert(worker.indexOf("go-build") == null, message: "and is never told to build");
+// commandCount is how many backticked commands text carries.
+fun commandCount(text: str) > int {
+    return (text.split("`").len() - 1) / 2;
 }
 
-test "the notice names the cause and the one fix" {
-    final text = unloadableNotice("/w", bin: "/usr/bin/magus", why: "object guard has no field", fix: "rebuild it.");
-    std\assert(text.indexOf("/usr/bin/magus cannot load /w: object guard has no field, so") != null, message: text);
-    std\assert(text.endsWith("Fix: rebuild it."), message: text);
-    std\assert(unloadableNotice("/w", bin: "", why: "", fix: "x").indexOf("no magus binary resolves for /w") != null, message: "nothing resolves");
+test "the fix follows who is asking and names one command" {
+    std\assert(fixFor(true, hasBinary: true, lease: "") == "rebuild ./magus with `./magus run go-build .`", message: "main session with a binary");
+    std\assert(fixFor(true, hasBinary: false, lease: "") == "bootstrap ./magus with `{BOOTSTRAP}`", message: "main session with none");
+    std\assert(fixFor(false, hasBinary: true, lease: "") == "install a magus that loads this workspace with `magus self update`", message: "another workspace");
+    final worker = fixFor(true, hasBinary: true, lease: "w1");
+    std\assert(worker.indexOf("bootstrap-worktree.buzz -- --job w1 --from <main checkout>") != null, message: "a worker asks for a placed binary");
+    std\assert(worker.indexOf("go-build") == null, message: "and is never told to build");
+    foreach (fix in [fixFor(true, hasBinary: true, lease: ""), fixFor(true, hasBinary: false, lease: ""), fixFor(false, hasBinary: true, lease: ""), worker]) {
+        std\assert(commandCount(fix) <= 1, message: fix);
+    }
+}
+
+test "the notice opens with the verdict and one command; the error follows it" {
+    final text = unloadableNotice("/w", bin: "/usr/bin/magus", why: "object guard has no field", fix: "rebuild ./magus with `./magus run go-build .`");
+    final lines = text.split("\n");
+    std\assert(lines[0] == "the magus guard is not judging this session; rebuild ./magus with `./magus run go-build .`.", message: text);
+    std\assert(lines[1] == "/usr/bin/magus cannot load /w: object guard has no field", message: text);
+    std\assert(commandCount(lines[0]) == 1, message: text);
+    std\assert(unloadableNotice("/w", bin: "", why: "", fix: "x").indexOf("\nNo magus binary resolves for /w.\n") != null, message: "nothing resolves");
 }
 
 test "the reply is the SessionStart envelope" {

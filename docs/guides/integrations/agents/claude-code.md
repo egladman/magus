@@ -214,22 +214,25 @@ A magus that runs but cannot load the workspace is different, because the verdic
 renders comes from the built-in rules alone and the workspace's own rules judged
 nothing. When neither the working tree nor its approved copy loads, and the binary is
 older than the tree (a name the magusfile calls that this build predates, such as
-`magus\guard.builtins`) or the checkout holds no `./magus`, the guard denies every write:
-file edits, spawns, pushes and every shell command that changes state, and the magus MCP
-tools that write: `client`, which runs a script, and `diff` with any `op` other than
-`state`. The tools that only read (`status`, `config`, `console`, `buzz`, `diff` with
-`op=state`) still answer. Reads, `git status` and the fix still run, and the denial names the one command to run. The workspace
-needs only to show a guard rule in its magusfile for this, so a fresh worktree is covered
-before any policy has loaded in its cache.
+`magus\guard.builtins`) or the checkout holds no `./magus`, the guard denies every call
+that changes state under the `stale-binary` rule: file edits, spawns, pushes, every shell
+command that changes state, and the magus MCP tools that write: `client`, which runs a
+script, and `diff` with an `op` other than `state` or `thread`. The tools that only read
+(`status`, `config`, `console`, `buzz`, `diff` with no `op`, `op=state` or `op=thread`)
+still answer. Reads, `git status`, `magus affected --explain` and the fix still run, and
+so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.
+The denial names the cause and the one likeliest fix; the fallbacks sit behind its `full
+verdict:` ref. The workspace needs only to show a guard rule in its magusfile for this,
+so a fresh worktree is covered before any policy has loaded in its cache.
 
-The fix depends on who is asking. The orchestrator or a person rebuilds with `./magus
+The fix depends on who is asking. The main session or a person rebuilds with `./magus
 run go-build .`, or bootstraps with the command the denial prints where the checkout has
-no binary. A worker holding a lease never builds one: there is one binary per base, the
-orchestrator builds it in the root, and `hack/dev/bootstrap-worktree.buzz` places a copy
-in the worker's checkout, so the denial tells the worker to ask for that. A worktree
-session with no `./magus` is an error, where it used to run open on whatever PATH held;
-`SessionStart` says so once per session, naming the one fix, whenever the binary that
-would judge the session cannot load the tree.
+no binary. A worker holding a lease never builds one: there is one binary per base, and
+the main session builds it and places a copy in the worker's checkout with
+`hack/dev/bootstrap-worktree.buzz`, so the denial tells the worker to ask for that. A
+worktree session with no `./magus` is an error, where it used to run open on whatever
+PATH held; `SessionStart` says so once per session, naming one command, whenever the
+binary that would judge the session cannot load the tree.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and the command
 template renders it as `permissionDecision: "ask"`: Claude Code shows you the
