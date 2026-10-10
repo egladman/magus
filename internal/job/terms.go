@@ -11,9 +11,8 @@ import (
 // Terms is what one job grants its holder: the declared job, and the workspace facts
 // magus resolved against it.
 //
-// CONTEXT, NEVER A STATUS, which is the shape `magus diff --prompt` already has. magus
-// assembles what it holds and a person or an orchestrator hands it on; nothing here calls
-// a model and nothing here decides what the holder should do.
+// CONTEXT, NEVER A STATUS. magus assembles what it holds and a person or an orchestrator
+// hands it on; nothing here calls a model and nothing here decides what the holder should do.
 //
 // IT CARRIES NO PROCEDURE. Taking a job is `magus job exec`'s work to DO, and the fifty
 // lines of "run this, then this" that used to render here were a procedure a reader could

@@ -1,10 +1,8 @@
 package changeset
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,86 +82,6 @@ func TestUnreadLoadViewedWithNoStateDirectoryIsTheSentinel(t *testing.T) {
 	_, err := NewStore("").LoadViewed()
 
 	assert.ErrorIs(t, err, ErrNoStateDir)
-}
-
-const unreadTestPatch = "diff --git a/core.go b/core.go\n" +
-	"@@ -3 +3 @@\n" +
-	"+func F() {}\n" +
-	"@@ -9 +9,2 @@\n" +
-	"+func G() { F() }\n" +
-	"+func H() {}\n" +
-	"diff --git a/other.go b/other.go\n" +
-	"@@ -20 +20 @@\n" +
-	"+var _ = F\n" +
-	"diff --git a/gen/out.json b/gen/out.json\n" +
-	"@@ -1 +1 @@\n" +
-	"-{}\n" +
-	"+{\"a\":1}\n"
-
-func TestUnreadReportListsHunksNoMarkCovers(t *testing.T) {
-	t.Parallel()
-
-	parsed := ParseHunks(unreadTestPatch)
-	read := parsed[0].Hunks[0].Digest
-
-	rep := BuildUnreadReport("the range a...b", unreadTestPatch, []string{read, "digest-of-a-hunk-elsewhere"}, nil)
-
-	assert.Equal(t, UnreadReport{
-		Source: "the range a...b",
-		State:  UnreadKnown,
-		Hunks:  4,
-		Unread: []types.DiffHunkRef{
-			{Path: "core.go", Index: 1, Digest: parsed[0].Hunks[1].Digest},
-			{Path: "other.go", Index: 0, Digest: parsed[1].Hunks[0].Digest},
-			{Path: "gen/out.json", Index: 0, Digest: parsed[2].Hunks[0].Digest},
-		},
-	}, rep)
-
-	var buf strings.Builder
-	require.NoError(t, WriteUnread(&buf, rep, unreadTestPatch, "magus diff --rev a...b"))
-	assert.Equal(t, `3 of 4 hunks in the range a...b are not marked read
-  core.go:9-10
-  other.go:20
-  gen/out.json:1
-mark them read in the viewer: magus diff --rev a...b
-`, buf.String())
-}
-
-func TestUnreadReportSaysUnknownWhenTheMarksCannotBeRead(t *testing.T) {
-	t.Parallel()
-
-	rep := BuildUnreadReport("the working tree", unreadTestPatch, nil, errors.New("read marks: permission denied"))
-
-	assert.Equal(t, UnreadReport{
-		Source: "the working tree",
-		State:  UnreadUnknown,
-		Reason: "read marks: permission denied",
-		Hunks:  4,
-		Unread: []types.DiffHunkRef{},
-	}, rep, "an unreadable store says nothing about what is unread")
-	var buf strings.Builder
-	require.NoError(t, WriteUnread(&buf, rep, unreadTestPatch, ""))
-	assert.Equal(t, `read state unknown for the working tree: the read marks could not be read (read marks: permission denied)
-4 hunks in the range; none is called unread
-`, buf.String())
-}
-
-func TestUnreadReportOfAFullyReadChangesetSaysSo(t *testing.T) {
-	t.Parallel()
-
-	var all []string
-	for _, f := range ParseHunks(unreadTestPatch) {
-		for _, h := range f.Hunks {
-			all = append(all, h.Digest)
-		}
-	}
-
-	rep := BuildUnreadReport("the working tree", unreadTestPatch, all, nil)
-
-	assert.Empty(t, rep.Unread)
-	var buf strings.Builder
-	require.NoError(t, WriteUnread(&buf, rep, unreadTestPatch, ""))
-	assert.Equal(t, "every hunk of the working tree is marked read (4 hunks)\n", buf.String())
 }
 
 func TestNewRangeNamesTheLinesAHunkLeavesBehind(t *testing.T) {

@@ -32,7 +32,6 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/prompt"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -64,16 +63,9 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
 		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
 	}
-	briefing := rf.Thread != ""
-	if briefing && (rf.Prompt || rf.Unread || rf.PrintHook || rf.Ack || rf.Watch) {
-		return usagef("magus diff: --thread prints the brief for one thread and returns, so it cannot be combined with --prompt, --unread, --print-hook, --ack or --watch")
-	}
-	if rf.PrintHook {
-		if rf.Unread {
-			return usagef("magus diff: --print-hook prints the hook that runs --unread, so the two cannot be combined")
-		}
-		_, err := io.WriteString(os.Stdout, review.PrePushHook)
-		return err
+	rf.Thread = strings.TrimSpace(rf.Thread)
+	if rf.Thread != "" && (rf.Ack || rf.Unread || rf.Impact) {
+		return usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
@@ -119,9 +111,6 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if rf.Ack && rf.Watch {
 		return usagef("magus diff: --ack records once and returns, so it cannot be combined with a live view")
 	}
-	if rf.Unread && (rf.Ack || rf.Watch || rf.Prompt || rf.Impact || rf.Baseline != "") {
-		return usagef("magus diff: --unread lists hunks and returns, so it cannot be combined with --ack, --watch, --prompt, --impact or --baseline")
-	}
 	// --reason is optional, deliberately. Requiring a sentence the way spells.allow_shadow does
 	// would not hold here: an allow_shadow entry is written a handful of times in a repository's
 	// life, while a changeset ack is written daily and becomes a form field, teaching the
@@ -142,9 +131,6 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if briefing && opts.Format == outputName {
-		return usagef("magus diff: --thread prints one brief, not a list of names, so it cannot be combined with -o name")
-	}
 	term := diffTUITerm{
 		Reads:  isInteractiveTTY(),
 		Paints: tty.IsTerminalWriter(os.Stdout, tty.SystemProbe),
@@ -154,7 +140,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	tui := !briefing && wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
+	tui := wantsTUI(rf, src, opts.Format, term, m.DiffTUIEnabled())
 
 	if tui && (gates.MinCohort != 0 || gates.MinShare != 0) {
 		// The viewer can join a server's review, which ran with the server's gates, so the
@@ -331,10 +317,9 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	switch {
 	case rf.NoTui, !enabled:
 		return false
-	// All four END in output the viewer has nowhere to put: a receipt count, a report, a
-	// prompt to copy, and a bump. They are requests for an answer rather than for somewhere
-	// to read.
-	case rf.Ack, rf.Impact, rf.Prompt, rf.Unread, rf.Baseline != "":
+	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
+	// bump. They are requests for an answer rather than for somewhere to read.
+	case rf.Ack, rf.Impact, rf.Baseline != "":
 		return false
 	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
 	// drives the terminal itself. A revision range is neither: it is a tree state magus can
@@ -388,21 +373,13 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if err != nil {
 		return err
 	}
-	if rf.Unread {
-		return printUnread(m, src, opts, patch)
-	}
-	if rf.Thread != "" {
-		variant := prompt.Short
-		if rf.Impact {
-			variant = prompt.Full
-		}
+	if rf.Thread != "" && !tui {
 		return printThread(ctx, m, threadPrint{
-			opts:    opts,
-			id:      rf.Thread,
-			patch:   patch,
-			variant: variant,
+			opts:  opts,
+			id:    rf.Thread,
+			patch: patch,
 			annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
-				// The brief never reads the reading order, and ranking the whole changeset is not cheap.
+				// The record never reads the reading order, and ranking the whole changeset is not cheap.
 				g := gates
 				g.Patch, g.SkipOrder = patch, true
 				return annotateDiff(ctx, m, readReviewedContent(ctx, m, src), paths, base, rf.Baseline, g)
@@ -452,12 +429,28 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// tree it is talking about, and a second resolve is a second chance to disagree.
 	content := readReviewedContent(ctx, m, src)
 	if tui {
-		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
+		return runDiffTUI(ctx, m, content, diffTUIRequest{
+			patch: patch, base: base, paths: paths, label: src.label,
+			showGenerated: rf.Generated, unread: rf.Unread, thread: rf.Thread,
+		})
 	}
 	gates.Patch = patch
 	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline, gates)
 	if err != nil {
 		return err
+	}
+	if rf.Unread {
+		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
+		rev = review.FilterUnread(rev, viewed, verr)
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			fmt.Fprintln(os.Stderr, "magus diff: "+review.UnreadLine(*rev.Unread, src.label))
+		}
+	}
+	// The threads are named on the report so a person can find the id --thread takes. A patch
+	// somebody handed over belongs to no review this branch has open.
+	if src.addressable() && opts.Format != outputName {
+		comments, _ := reviewComments(ctx, m)
+		review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)
@@ -475,28 +468,6 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		fmt.Println(msg)
 		return nil
-	}
-
-	// Before the format switch, because a prompt is TEXT for a person to paste whatever -o says.
-	// The other formats project a record; this one is prose, and there is nothing to project.
-	if rf.Prompt {
-		// --impact already means "give me the fuller answer", so it selects the full form
-		// here rather than a second flag that would ask the same question again.
-		variant := prompt.Short
-		if impact {
-			variant = prompt.Full
-		}
-		// Best-effort: a backend that cannot report branches is an ordinary state, and the
-		// prompt omits that section rather than refusing to render.
-		overlap, _ := m.BranchChanges(ctx, branchOverlapLimit)
-		out := review.Prompt(review.PromptInput{
-			Changeset: rev,
-			Origin:    m.ReviewOrigin(ctx),
-			Overlap:   overlap,
-			Variant:   variant,
-		})
-		_, err := io.WriteString(os.Stdout, out)
-		return err
 	}
 
 	var pre *diffImpact
@@ -517,17 +488,35 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	case outputName:
 		// Left alone under --impact: -o name is the shape a shell loop reads, and one
 		// non-path line in it would break every one of them.
-		paths := make([]string, 0, len(rev.Files))
+		shown := make([]types.DiffFile, 0, len(rev.Files))
 		for _, f := range rev.Files {
 			if f.Generated() && !rf.Generated {
 				continue
 			}
+			shown = append(shown, f)
+		}
+		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
+		// every unread hunk rather than every file that holds one.
+		if rev.Unread != nil {
+			return emitNames(review.HunkNames(types.Diff{Files: shown}))
+		}
+		paths := make([]string, 0, len(shown))
+		for _, f := range shown {
 			paths = append(paths, f.Path)
 		}
 		return emitNames(paths)
 	}
+	if rev.Unread != nil {
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			return nil
+		}
+		fmt.Println(review.UnreadLine(*rev.Unread, src.label))
+		if rev.Unread.Unread == 0 {
+			return nil
+		}
+		fmt.Println()
+	}
 	hintSinceLastReview(os.Stderr, rev, src)
-	hintReviewPrompt(os.Stderr, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
 
@@ -567,50 +556,21 @@ func short(rev string) string {
 	return rev[:12]
 }
 
-// promptHintFiles is the changeset size above which reading alone stops being the whole job. Set
-// where a reader plausibly wants a second pass rather than at a number that fires on every commit:
-// a hint printed every time is one nobody sees by the third time, which is exactly when it starts
-// to matter.
-const promptHintFiles = 10
-
-// hintReviewPrompt mentions `--prompt` on a changeset big enough to want a second reader.
-//
-// It exists because a flag nobody knows about is a feature nobody has. `agent install` settled the
-// same question the same way (it prints the managed AGENTS.md block only when the reader's file
-// is missing it or carrying a stale one), and this is that discipline applied to the other place
-// magus hands a person text to carry somewhere itself refuses to go.
-//
-// stderr, so a piped or redirected report is unchanged, and only where hints are enabled at all.
-func hintReviewPrompt(w io.Writer, rev types.Diff, rf *gen.DiffFlags) {
-	if rf.Prompt || !interactive.HintsEnabled() || len(rev.Files) < promptHintFiles {
-		return
-	}
-	interactive.Emit(w, fmt.Sprintf(
-		"%d changed files: `"+hint.Diff.With("--prompt")+"` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
-		len(rev.Files)))
-}
-
-// branchOverlapLimit caps how many branches the prompt's overlap lookup examines, and so how many
-// forks it costs. It matches the console route's bound for the same reason: unbounded, it would be
-// the most expensive thing in the command on a repository with a hundred stale branches.
-const branchOverlapLimit = 20
-
-// threadPrint is what printThread prints a brief from. The patch, the changeset annotation and
-// the notes join are the CLI's own; assembling a brief from them is review.NewThreadInput's.
+// threadPrint is what printThread reads one thread from. The patch, the changeset annotation
+// and the notes join are the CLI's own; assembling a record from them is review.NewThreadInput's.
 type threadPrint struct {
 	opts OutputOptions
-	// id names the thread: its top-level comment, or any reply in it.
-	id    string
-	patch string
-	// variant is the full form when --impact asked for it, as it does for --prompt.
-	variant  prompt.Variant
+	// id names the thread: its first comment, or any reply in it.
+	id       string
+	patch    string
 	annotate func(ctx context.Context, paths []string) (types.Diff, error)
 	anchors  func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
 }
 
-// printThread prints the brief for one review thread and returns.
+// printThread prints one review thread and returns: the conversation, the hunk, and what the
+// change there reaches.
 //
-// An empty patch is not a refusal: a review outlives the tree it was written on, and the brief
+// An empty patch is not a refusal: a review outlives the tree it was written on, and the record
 // then carries the thread and the host's own copy of the hunk.
 func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 	comments, reason := reviewComments(ctx, m)
@@ -619,29 +579,47 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 		Comments: comments,
 		Annotate: t.annotate,
 		Anchors:  t.anchors,
-		Variant:  t.variant,
 	})
 	if err != nil {
 		return fmt.Errorf("magus diff: %w", err)
 	}
-	reply, err := review.ThreadBrief(in, t.id)
+	rec, err := review.ReadThread(in, t.id)
 	if err != nil {
-		switch {
-		case reason != "":
-			err = fmt.Errorf("%w (the review was only partly read: %s)", err, reason)
-		case len(comments) == 0:
-			err = fmt.Errorf("%w (no comments were found: is a review open for this branch?)", err)
-		}
-		return fmt.Errorf("magus diff: %w", err)
+		return fmt.Errorf("magus diff: %w", threadLookupError(err, reason, len(comments)))
 	}
 	if reason != "" {
 		fmt.Fprintf(os.Stderr, "magus diff: part of the review could not be read: %s\n", reason)
 	}
 	switch t.opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(t.opts, reply)
+		return emitFormatted(t.opts, rec)
+	case outputName:
+		if rec.Hunk.Source == "patch" && rec.InChangeset {
+			for _, f := range in.Changeset.Files {
+				for _, h := range f.Hunks {
+					if f.Path == rec.Path && h.Index == rec.Hunk.Index {
+						return emitNames([]string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
+					}
+				}
+			}
+		}
+		return emitNames([]string{rec.Path})
 	}
-	_, err = io.WriteString(os.Stdout, reply.Brief)
+	for _, line := range review.ThreadLines(rec) {
+		fmt.Println(line)
+	}
+	return nil
+}
+
+// threadLookupError says why an id named no thread when the review itself explains it: it was
+// only partly read, or nothing was read at all.
+func threadLookupError(err error, reason string, comments int) error {
+	switch {
+	case reason != "":
+		return fmt.Errorf("%w (the review was only partly read: %s)", err, reason)
+	case comments == 0:
+		return fmt.Errorf("%w (no comments were found: is a review open for this branch?)", err)
+	}
 	return err
 }
 
@@ -861,18 +839,73 @@ func pathLinker(root string) func(string) string {
 	}
 }
 
+// diffTUIRequest is what one viewer session opens on.
+type diffTUIRequest struct {
+	patch, base string
+	paths       []string
+	// label names the changeset in a sentence, as diffInput.label does.
+	label         string
+	showGenerated bool
+	// unread narrows the viewer to the hunks no read mark covers.
+	unread bool
+	// thread, when set, is a review thread id the viewer opens positioned on.
+	thread string
+}
+
+// keepHunksOf drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
+// changeset shows only what the filter kept.
+func keepHunksOf(rev types.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
+	kept := map[string]bool{}
+	for _, f := range rev.Files {
+		for _, h := range f.Hunks {
+			kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = true
+		}
+	}
+	out := make([]changeset.FileHunks, 0, len(parsed))
+	for _, f := range parsed {
+		var hunks []changeset.Hunk
+		for _, h := range f.Hunks {
+			if kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] {
+				hunks = append(hunks, h)
+			}
+		}
+		if len(hunks) > 0 {
+			f.Hunks = hunks
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // runDiffTUI opens the interactive reader over the working tree's changeset.
 //
 // This is what makes "three clients, one session" true for a terminal. `magus diff` already
 // shared the COMPUTATION with the console and the MCP tools; what it did not share was the
 // coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
-func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
-	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, base, paths)
+func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, req diffTUIRequest) error {
+	patch := req.patch
+	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, req.base, req.paths)
 	if err != nil {
 		return err
 	}
-	files := diffOrderTUIFiles(rev, changeset.ParseHunks(patch))
+	parsed := changeset.ParseHunks(patch)
+	if req.unread {
+		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
+		rev = review.FilterUnread(rev, viewed, verr)
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			fmt.Fprintln(os.Stderr, "magus diff: "+review.UnreadLine(*rev.Unread, req.label))
+			sync.close()
+			return nil
+		}
+		if rev.Unread.Unread == 0 {
+			fmt.Println(review.UnreadLine(*rev.Unread, req.label))
+			sync.close()
+			return nil
+		}
+		parsed = keepHunksOf(rev, parsed)
+	}
+	files := diffOrderTUIFiles(rev, parsed)
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
@@ -887,8 +920,20 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	comments, _ := reviewComments(ctx, m)
+	comments, reason := reviewComments(ctx, m)
 	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
+	start := types.DiffCursor{Hunk: -1}
+	if req.thread != "" {
+		thread, terr := changeset.FindThread(comments, req.thread)
+		if terr != nil {
+			return fmt.Errorf("magus diff: %w", threadLookupError(terr, reason, len(comments)))
+		}
+		if !slices.ContainsFunc(files, func(f difftui.File) bool { return f.Path == thread.Head.Path }) {
+			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change; `%s` prints it",
+				thread.ID(), thread.Head.Path, req.label, hint.Diff.With("--thread", thread.ID(), "--no-tui"))
+		}
+		start = types.DiffCursor{Path: thread.Head.Path, Hunk: thread.Head.Hunk}
+	}
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -903,8 +948,9 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 			// The incompleteness reason is dropped because the viewer takes the terminal over
 			// immediately; `magus notes capture` keeps it, where a reader can still see it.
 			ReviewComments: comments,
-			Unfolded:       showGenerated,
+			Unfolded:       req.showGenerated,
 			Link:           pathLinker(m.Root()),
+			Start:          start,
 		},
 		Sync: sync,
 		// Called at quit rather than computed here, so the line reports the fold the reader
@@ -1325,9 +1371,9 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 }
 
 func diffUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
+	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--unread] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
 	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
-	fmt.Fprintln(w, "       magus diff --thread <id>")
+	fmt.Fprintln(w, "       magus diff --thread <id> [--rev <base>...<head>]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
 	tty.Prose(w, tty.SystemProbe,
@@ -1386,21 +1432,17 @@ func diffUsage(w io.Writer) {
 	tty.ProseItem(w, tty.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
 	tty.ProseItem(w, tty.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
 	tty.ProseItem(w, tty.SystemProbe, "  --unread      ",
-		"list the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks.",
-		"Where the marks cannot be read it says the read state is unknown. Text and -o json only.")
-	tty.ProseItem(w, tty.SystemProbe, "  --print-hook  ",
-		"print a pre-push git hook that runs --unread on the range being pushed. magus only prints it:",
-		"save it as .git/hooks/pre-push and make it executable. The hook always exits 0.")
+		"narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk.",
+		"It always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread.")
 	tty.ProseItem(w, tty.SystemProbe, "  --rev         ",
 		"review a committed range instead of the working tree, as base...head:",
 		"a colleague's branch, or an agent's finished work")
 	tty.ProseItem(w, tty.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
-	tty.ProseItem(w, tty.SystemProbe, "  --prompt      ",
-		"print a review prompt to paste into your own LLM: the context magus has, never a drafted review")
 	tty.ProseItem(w, tty.SystemProbe, "  --thread      ",
-		"print the context for one review thread, named by its thread id (its first comment's), to paste into your own LLM:",
-		"the exchange, its hunk, and what the graph knows about the symbols changed there.",
-		"It asks for findings and leaves the reply for you to type.")
+		"narrow the review to one pull request thread, named by its thread id or any of its comments' ids;",
+		"the report lists each thread's id beside its hunk, and -o json under each file's threads.",
+		"The viewer opens on its hunk. Printed, it is the conversation oldest first, the hunk,",
+		"and what the change there reaches: callers, who it is public to, coverage, conformance and notes.")
 	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
 		"a `"+hint.GraphExport.With("--symbols", "-o", "json")+"` of the base, which adds what each changed symbol did to the API",
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
@@ -1575,6 +1617,15 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	fmt.Printf("  %s\n", link(f.Path))
 	for _, fact := range diffFileFacts(f) {
 		fmt.Printf("      %s\n", fact)
+	}
+	for _, t := range f.Threads {
+		at := "not on a hunk of this changeset"
+		for _, h := range f.Hunks {
+			if h.Index == t.Hunk {
+				at = "on " + changeset.NewRange(f.Path, h.NewStart, h.NewCount)
+			}
+		}
+		fmt.Printf("      %s, %s\n", review.ThreadRefLine(t), at)
 	}
 	// Agent touches come last: they are the deepest context and the least urgent, and a reader
 	// scanning for risk should meet reach and coverage first.

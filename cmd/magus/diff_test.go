@@ -2064,19 +2064,44 @@ func TestDiffSourceFromFlags(t *testing.T) {
 	})
 }
 
-// TestDiffThreadRefusesToShareTheInvocation. --thread prints one brief and returns, so a flag
-// that asks for something else of the same run is a misunderstanding to name, not one to resolve
+// TestDiffThreadRefusesWhatAnswersForTheWholeChangeset. --thread narrows the review to one
+// thread, so a flag that answers for every file is a misunderstanding to name, not one to resolve
 // by picking a winner.
-func TestDiffThreadRefusesToShareTheInvocation(t *testing.T) {
-	for _, other := range []string{"--prompt", "--unread", "--print-hook", "--ack", "--watch"} {
+func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
+	for _, other := range []string{"--unread", "--ack", "--impact"} {
 		t.Run(other, func(t *testing.T) {
 			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
 
 			require.Error(t, err)
 			assert.IsType(t, errUsage{}, err)
-			assert.Contains(t, err.Error(), "--thread prints the brief for one thread")
+			assert.Contains(t, err.Error(), "--thread narrows the review to one thread")
 		})
 	}
+}
+
+// TestDiffNoLongerTakesThePromptOrPrintHookFlags. Both were removed outright; an old script that
+// still passes one is told it is not a flag rather than having it ignored.
+func TestDiffNoLongerTakesThePromptOrPrintHookFlags(t *testing.T) {
+	for _, gone := range []string{"--prompt", "--print-hook"} {
+		t.Run(gone, func(t *testing.T) {
+			err := diffCmd(t.Context(), t.TempDir(), []string{gone})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), strings.TrimPrefix(gone, "--"))
+		})
+	}
+}
+
+// TestWantsTUIKeepsTheViewerForUnreadAndThread. Both narrow what the viewer shows rather than
+// asking for an answer it has nowhere to put, so at a terminal the viewer still opens.
+func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
+	term := diffTUITerm{Reads: true, Paints: true}
+	src := diffInput{kind: inputWorkingTree}
+
+	assert.True(t, wantsTUI(&gen.DiffFlags{Unread: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
 }
 
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
@@ -2167,40 +2192,6 @@ func TestPathLinkerLeavesPipedOutputBare(t *testing.T) {
 	link := pathLinker(t.TempDir())
 	assert.Equal(t, "cmd/magus/diff.go", link("cmd/magus/diff.go"))
 	assert.Equal(t, "/abs/path.go", link("/abs/path.go"))
-}
-
-// diffFiles returns a diff of n files, for exercising the hint's threshold.
-func diffFiles(n int) types.Diff {
-	rev := types.Diff{Base: "main"}
-	for i := range n {
-		rev.Files = append(rev.Files, types.DiffFile{Path: strings.Repeat("a", i+1) + ".go"})
-	}
-	return rev
-}
-
-// TestReviewPromptHintFiresOnlyOnALargeChangeset. A flag nobody knows about is a feature
-// nobody has, which is why the hint exists, but one printed on every diff is one the reader
-// stops seeing by the third time, which is exactly when it starts to matter. Both halves are
-// the feature, so both are pinned.
-func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
-	var small, large strings.Builder
-	hintReviewPrompt(&small, diffFiles(promptHintFiles-1), &gen.DiffFlags{})
-	hintReviewPrompt(&large, diffFiles(promptHintFiles), &gen.DiffFlags{})
-
-	assert.Empty(t, small.String(), "an ordinary changeset gets no hint")
-	assert.Contains(t, large.String(), "--prompt")
-	// The refusal travels with the offer: a reader must not have to wonder whether pressing
-	// this sends their code somewhere.
-	assert.Contains(t, large.String(), "calls no model and sends nothing")
-}
-
-// TestReviewPromptHintIsSilentWhenAlreadyAsked: suggesting a flag the reader just passed is
-// how a command teaches people to ignore its hints.
-func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
-	var out strings.Builder
-	hintReviewPrompt(&out, diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true})
-
-	assert.Empty(t, out.String())
 }
 
 func TestRevRangeFromFlag(t *testing.T) {

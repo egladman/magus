@@ -1100,6 +1100,16 @@ func ObjectDiffChurn(v types.DiffChurn) vm.Value {
 	return out
 }
 
+func ObjectDiffThreadRef(v types.DiffThreadRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("hunk", vm.IntValue(int64(v.Hunk)))
+	out.MapSet("line", vm.IntValue(int64(v.Line)))
+	out.MapSet("comments", vm.IntValue(int64(v.Comments)))
+	out.MapSet("outdated", vm.BoolValue(v.Outdated))
+	return out
+}
+
 func ObjectDiffFile(v types.DiffFile) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
@@ -1144,6 +1154,11 @@ func ObjectDiffFile(v types.DiffFile) vm.Value {
 		optReach = vm.IntValue(int64((*v.Reach)))
 	}
 	out.MapSet("reach", optReach)
+	itemsThreads := make([]vm.Value, len(v.Threads))
+	for indexThreads := range v.Threads {
+		itemsThreads[indexThreads] = ObjectDiffThreadRef(v.Threads[indexThreads])
+	}
+	out.MapSet("threads", vm.ListValue(itemsThreads))
 	return out
 }
 
@@ -1282,6 +1297,15 @@ func ObjectDiffUncovered(v types.DiffUncovered) vm.Value {
 	return out
 }
 
+func ObjectDiffUnread(v types.DiffUnread) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("readState", vm.StrValue(v.ReadState))
+	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("hunks", vm.IntValue(int64(v.Hunks)))
+	out.MapSet("unread", vm.IntValue(int64(v.Unread)))
+	return out
+}
+
 func ObjectDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
@@ -1326,6 +1350,11 @@ func ObjectDiff(v types.Diff) vm.Value {
 		itemsUncovered[indexUncovered] = ObjectDiffUncovered(v.Uncovered[indexUncovered])
 	}
 	out.MapSet("uncovered", vm.ListValue(itemsUncovered))
+	optUnread := vm.Null
+	if v.Unread != nil {
+		optUnread = ObjectDiffUnread((*v.Unread))
+	}
+	out.MapSet("unread", optUnread)
 	return out
 }
 

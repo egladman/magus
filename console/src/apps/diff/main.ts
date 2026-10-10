@@ -103,7 +103,7 @@ import {
 } from "./session";
 import { setMarkdown } from "./markdown";
 import { guardOutline, guardReply, outlineKey, outlinesByThread } from "./outline";
-import { copyThreadBrief } from "./thread-brief";
+import { copyThreadText } from "./thread-copy";
 import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
 import {
@@ -1209,19 +1209,19 @@ export function activate(host: HTMLElement): AppInstance {
         composeReply(thread);
       });
       actions.append(replyBtn);
-      // Beside Reply: the brief for this thread, copied when the person clicks. Carrying it to a
-      // model is theirs to do; this only puts the text on their clipboard. The showcase has no
-      // server to build one, so it withholds the button the way it withholds Peek.
+      // Beside Reply: this thread as `magus diff --thread` prints it, copied when the person
+      // clicks. It only puts the text on their clipboard. The showcase has no server to build
+      // it, so it withholds the button the way it withholds Peek.
       if (!demo) {
-        const briefBtn = linkButton("Copy brief");
-        briefBtn.classList.add("console-diff-row__brief");
-        briefBtn.dataset.threadId = commentThreadId(thread);
-        briefBtn.title = "Copy a brief of this thread, to paste to your own model";
-        briefBtn.addEventListener("click", (event) => {
+        const copyBtn = linkButton("Copy thread");
+        copyBtn.classList.add("console-diff-row__brief");
+        copyBtn.dataset.threadId = commentThreadId(thread);
+        copyBtn.title = "Copy this thread with its hunk and what the change there reaches";
+        copyBtn.addEventListener("click", (event) => {
           event.stopPropagation();
-          void copyBrief(commentThreadId(thread), briefBtn);
+          void copyThread(commentThreadId(thread), copyBtn);
         });
-        actions.append(briefBtn);
+        actions.append(copyBtn);
       }
       el.append(actions);
       return el;
@@ -3382,24 +3382,24 @@ export function activate(host: HTMLElement): AppInstance {
     field.focus();
   };
 
-  // copyBrief puts the brief for the thread `threadId` names on the clipboard. Every way it can
-  // fail is a toast. The showcase never reaches it: it has no server to build a brief, so it does
-  // not render the button.
-  const copyBrief = async (threadId: string, btn: HTMLButtonElement): Promise<void> => {
+  // copyThread puts the thread `threadId` names on the clipboard, as `magus diff --thread`
+  // prints it. Every way it can fail is a toast. The showcase never reaches it: it has no server
+  // to build the text, so it does not render the button.
+  const copyThread = async (threadId: string, btn: HTMLButtonElement): Promise<void> => {
     const hp = host_();
     if (!hp) {
-      reportFailure("Review", "Connect a server to copy a brief.", "thread:no-server");
+      reportFailure("Review", "Connect a server to copy a thread.", "thread:no-server");
       return;
     }
     btn.disabled = true;
-    const copied = await copyThreadBrief(hp, threadId, controller.signal);
+    const copied = await copyThreadText(hp, threadId, controller.signal);
     btn.disabled = false;
     if (disposed || !copied) return;
     // Said to the ear as well as the eye, and put back so the button can be used again.
     btn.textContent = "Copied";
-    announce("Brief copied");
+    announce("Thread copied");
     window.setTimeout(() => {
-      btn.textContent = "Copy brief";
+      btn.textContent = "Copy thread";
     }, COPIED_MS);
   };
 

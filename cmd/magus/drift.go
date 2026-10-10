@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/types"
@@ -40,12 +41,17 @@ import (
 //     (types.UnformattedCommit): a sibling of MGS4006, not a duplicate of lint's own
 //     formatting check: lint answers "is this file formatted, right now, anywhere in
 //     the tree"; this answers "did this commit leave a file it touched unformatted".
+//
+// It also counts the hunks of the range a push would send that no read mark covers
+// (pushRangeUnread), the same count `magus diff --unread` filters to, so a push hands off that
+// question too without the hook doing any of the work.
 func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	if _, err := cmdParse("server "+job.NameCheckDrift, args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus server check-drift")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale. This is the")
+			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale, and count the unread")
+			fmt.Fprintln(os.Stderr, "hunks of the range a push would send. This is the")
 			fmt.Fprintln(os.Stderr, "worker for `"+hint.JobRun.With(job.NameCheckDrift)+"`; prefer that form.")
 		}
 	}); err != nil {
@@ -75,14 +81,70 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		slog.WarnContext(ctx, "server check-drift: could not check HEAD for stale output", slog.String("error", err.Error()))
 		// Best-effort: a broken check must not be mistaken for a failed commit or push.
+		ok = false
+	}
+	unread := pushRangeUnread(ctx, res, m.Root(), m.CacheDir(), m.ReviewOrigin(ctx).Remote)
+	if !ok {
+		// The unread count alone is the job's output, not an alert: the job also runs after
+		// every commit, and a desktop notice per commit would be noise.
+		if unread != "" {
+			fmt.Fprintln(os.Stderr, unread)
+		}
 		return nil
 	}
-	if !ok {
-		return nil
+	if unread != "" {
+		notice += "\n" + unread
 	}
 	fmt.Fprintln(os.Stderr, notice)
 	noteJobDesktop(ctx, job.NameCheckDrift, notice)
 	return nil
+}
+
+// pushRangeUnread is the unread line for the commits a push would send: HEAD against its
+// upstream, or against the remote's default branch for a branch with no upstream yet. Git only,
+// since no other backend names an upstream. It is "" when there is no range to read or nothing
+// in it is unread.
+func pushRangeUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, remote string) string {
+	rr, ok := res.VCS.(types.RangeReporter)
+	if !ok || res.Name != "git" {
+		return ""
+	}
+	if remote == "" {
+		remote = "origin"
+	}
+	for _, base := range []string{"@{upstream}", remote + "/HEAD"} {
+		patch, err := rr.RangeDiff(ctx, root, base, "HEAD", nil)
+		if err != nil {
+			continue
+		}
+		viewed, verr := changeset.NewStore(cacheDir).LoadViewed()
+		return unreadRangeLine(base+"...HEAD", patch, viewed, verr)
+	}
+	return ""
+}
+
+// unreadRangeLine says how many hunks of patch no read mark covers. viewed holds the digests
+// marked read and loadErr is the error from reading them: an unreadable store makes the line
+// say the read state is unknown, never that every hunk is unread. It is "" for a range with no
+// hunks, or one read in full.
+func unreadRangeLine(rangeLabel, patch string, viewed []string, loadErr error) string {
+	parsed := changeset.ParseHunks(patch)
+	total := 0
+	for _, f := range parsed {
+		total += len(f.Hunks)
+	}
+	if total == 0 {
+		return ""
+	}
+	if loadErr != nil {
+		return fmt.Sprintf("read state unknown for the %d hunks of this range (%s): the read marks could not be read (%v)", total, rangeLabel, loadErr)
+	}
+	n := len(changeset.UnreadHunks(parsed, viewed))
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d of %d hunks of this range (%s) unread; read them with %s",
+		n, total, rangeLabel, hint.Diff.With("--unread", "--rev", rangeLabel))
 }
 
 // checkDriftForCommit is the VCS-facing half of serverCheckDrift, kept separate so it can

@@ -156,6 +156,14 @@ export object DiffChurn {
     projectTrend: int = 0,
 }
 
+export object DiffThreadRef {
+    id: str = "",
+    hunk: int = 0,
+    line: int = 0,
+    comments: int = 0,
+    outdated: bool = false,
+}
+
 export object DiffFile {
     path: str = "",
     project: str = "",
@@ -171,6 +179,7 @@ export object DiffFile {
     churn: DiffChurn? = null,
     noHistory: bool = false,
     reach: int? = null,
+    threads: [DiffThreadRef] = [],
 }
 
 export object ImpactProject {
@@ -265,6 +274,13 @@ export object DiffUncovered {
     reason: DiffUncoveredReason = DiffUncoveredReason.none,
 }
 
+export object DiffUnread {
+    readState: str = "",
+    reason: str = "",
+    hunks: int = 0,
+    unread: int = 0,
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -276,6 +292,7 @@ export object Diff {
     reviewed: DiffReviewed = DiffReviewed{},
     conformanceError: Diagnostic? = null,
     uncovered: [DiffUncovered] = [],
+    unread: DiffUnread? = null,
 }
 
 export object DirCall {

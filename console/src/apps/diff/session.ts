@@ -584,19 +584,19 @@ export async function reply(
   }
 }
 
-// fetchThreadBrief reads the brief for one conversation: the text a person pastes to their own
-// model, built by the server from the graph. root is the conversation's first comment (see
-// rootOf in rows.ts).
+// fetchThreadText reads one conversation as `magus diff --thread` prints it: the comments, the
+// hunk, and what the change there reaches, built by the server from the graph. root is the
+// conversation's first comment (see rootOf in rows.ts).
 //
-// Reading it posts nothing and sends nothing anywhere; carrying it to a model is the person's act.
-// A refusal (no review open, no such conversation) surfaces as a toast carrying the server's own
-// words and resolves to null, so the caller copies nothing.
-export async function fetchThreadBrief(
+// Reading it posts nothing and sends nothing anywhere. A refusal (no review open, no such
+// conversation) surfaces as a toast carrying the server's own words and resolves to null, so the
+// caller copies nothing.
+export async function fetchThreadText(
   host: string,
   root: string,
   signal: AbortSignal,
 ): Promise<string | null> {
-  const what = "the thread brief";
+  const what = "the thread";
   try {
     const q = new URLSearchParams({ id: root });
     const res = await fetch(`http://${host}/api/v1/diff/thread?${q}`, {
@@ -609,12 +609,12 @@ export async function fetchThreadBrief(
       else reportHttpStatus(host, what, res.status);
       return null;
     }
-    const body = (await res.json()) as { brief?: unknown };
-    if (typeof body.brief !== "string" || body.brief === "") {
-      reportFailure("Review", "The server sent no brief for this thread.", "thread:empty");
+    const body = (await res.json()) as { text?: unknown };
+    if (typeof body.text !== "string" || body.text === "") {
+      reportFailure("Review", "The server sent no text for this thread.", "thread:empty");
       return null;
     }
-    return body.brief;
+    return body.text;
   } catch (e) {
     reportFetchFailure(host, what, e);
     return null;

@@ -18,6 +18,15 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 		return nil
 	}
 	ranges := hunkRanges(rev)
+	threads := map[string][]types.DiffThreadRef{}
+	for _, f := range rev.Files {
+		for _, t := range f.Threads {
+			if t.Hunk >= 0 {
+				key := types.DiffHunkRef{Path: f.Path, Index: t.Hunk}.Key()
+				threads[key] = append(threads[key], t)
+			}
+		}
+	}
 	lines := []string{"", "reading order"}
 	for gi, g := range order.Groups {
 		lines = append(lines, "", fmt.Sprintf("group %d of %d: %s", gi+1, len(order.Groups), GroupTitle(g)))
@@ -37,6 +46,9 @@ func OrderLines(rev types.Diff, showGenerated bool) []string {
 					head += "  " + h.Label
 				}
 				lines = append(lines, head, "        "+h.Why.Text)
+				for _, t := range threads[h.Ref.Key()] {
+					lines = append(lines, "        "+ThreadRefLine(t))
+				}
 			}
 		}
 	}

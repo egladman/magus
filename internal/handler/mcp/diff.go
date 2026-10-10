@@ -11,7 +11,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/observability"
-	"github.com/egladman/magus/internal/prompt"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -38,8 +37,8 @@ import (
 //
 // It cannot reply to, publish to, or approve a review either, and the one thing it can leave
 // about a thread is an outline: a few short topics shown to the person, who types the
-// reply. projection=thread hands the agent the same brief the person can paste to their own
-// model, built from the graph, so an agent never answers from a bare hunk.
+// reply. op=thread reads the agent the same thread record `magus diff --thread` prints for the
+// person, built from the graph, so an agent never answers from a bare hunk.
 //
 // It also cannot mark a hunk viewed, for a quieter reason: "read" is a claim only the reader
 // can make, and an agent ticking it off would erase the human's own account of what they have
@@ -54,9 +53,9 @@ type diffTool struct {
 	// last attached, which is how an agent came to comment on a file that had no uncommitted
 	// changes, in a tree the CLI reported clean, with nothing objecting.
 	src workspaceSource
-	// anchors joins the workspace's notes stores against a changeset, for projection=thread.
-	// Nil is a server wired with no notes store, and the brief then names note anchors among
-	// what it could not measure.
+	// anchors joins the workspace's notes stores against a changeset, for op=thread. Nil is a
+	// server wired with no notes store, and the record then names note anchors among what it
+	// could not measure.
 	anchors func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
 }
 
@@ -69,7 +68,7 @@ const reviewLookupTimeout = 5 * time.Second
 // because internal/handler/status has its own diffSource meaning something narrower.
 type workspaceSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
-	// DiffWith is Diff with options; the thread brief passes SkipOrder.
+	// DiffWith is Diff with options; op=thread passes SkipOrder.
 	DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// ReviewOrigin says where this tree's changes are discussed, so the threads on that review
@@ -203,7 +202,7 @@ func projectDiffState(st diffState, projection string) (any, error) {
 			Hunks:      st.Hunks,
 		}, nil
 	default:
-		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, patch, or thread)", projection)
+		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, or patch; one thread is op=thread)", projection)
 	}
 }
 
@@ -225,6 +224,16 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	}
 	op := strings.TrimSpace(paramString(req.Params, "op", "state"))
 
+	// One thread is read from the working tree and the host alone, as the console's thread route
+	// reads it, so it needs no session.
+	if op == "thread" {
+		rec, terr := t.thread(ctx, strings.TrimSpace(paramString(req.Params, "thread", "")))
+		if terr != nil {
+			return spells.InvokeResponse{}, terr
+		}
+		return spells.InvokeResponse{Data: rec}, nil
+	}
+
 	// Every op but `state` needs an attached session, and attaching is the HUMAN's act: the
 	// console fetching a review is what creates one. An agent that could attach would be
 	// starting a review nobody asked for and then talking into it.
@@ -241,15 +250,6 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		// The whole session: the annotated changeset, where the human is, what they have read,
 		// and the conversation so far, recomputed first when the tree has moved underneath it.
 		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
-		if projection == "thread" {
-			// Not a narrowing of the session, so it never builds one: the brief is read from the
-			// working tree and the host alone.
-			reply, terr := t.threadBrief(ctx, strings.TrimSpace(paramString(req.Params, "thread", "")))
-			if terr != nil {
-				return spells.InvokeResponse{}, terr
-			}
-			return spells.InvokeResponse{Data: reply}, nil
-		}
 		st, serr := t.state(ctx, sess, wantsThreads(projection))
 		if serr != nil {
 			return spells.InvokeResponse{}, serr
@@ -321,7 +321,8 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 
 	case "outline":
 		// An outline is NOT a reply: it is a few short topics shown to the person, who types
-		// the reply. Held in memory with the session and never sent anywhere.
+		// the reply. Held in memory with the session and never sent anywhere. A second outline
+		// of the same thread replaces the first, so sending one twice is the same as once.
 		thread := strings.TrimSpace(paramString(req.Params, "thread", ""))
 		if thread == "" {
 			return spells.InvokeResponse{}, errors.New("mcp: outline needs thread, the id of a thread's top-level comment")
@@ -348,7 +349,7 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 
 	default:
 		return spells.InvokeResponse{}, errors.New(
-			"mcp: unknown op " + op + " (one of: state, comment, suggest, resolve, outline)")
+			"mcp: unknown op " + op + " (one of: state, thread, comment, suggest, resolve, outline)")
 	}
 }
 
@@ -403,21 +404,20 @@ func (t *diffTool) reviewComments(ctx context.Context) []types.ReviewComment {
 	return comments
 }
 
-// threadBrief renders the brief for the thread id names, the same text `magus diff --thread`
-// and the console's route serve. It is context for the person's own model: the tool returns it
-// to the agent that asked and posts nothing to the review.
-func (t *diffTool) threadBrief(ctx context.Context, id string) (review.ThreadBriefResult, error) {
+// thread reads the thread id names: the same record `magus diff --thread -o json` prints and
+// the console's route serves. It posts nothing to the review.
+func (t *diffTool) thread(ctx context.Context, id string) (types.DiffThread, error) {
 	if id == "" {
-		return review.ThreadBriefResult{}, errors.New(
-			"mcp: projection=thread needs thread, the id of a thread's top-level comment in op=state's threads")
+		return types.DiffThread{}, errors.New(
+			"mcp: thread needs thread, the id of a thread's top-level comment in op=state's threads")
 	}
 	if t.src == nil {
-		return review.ThreadBriefResult{}, errors.New("mcp: projection=thread needs the workspace, which this server has not wired")
+		return types.DiffThread{}, errors.New("mcp: thread needs the workspace, which this server has not wired")
 	}
 	comments := t.reviewComments(ctx)
 	patch, err := t.src.WorkingDiff(ctx, nil)
 	if err != nil {
-		return review.ThreadBriefResult{}, err
+		return types.DiffThread{}, err
 	}
 	in, err := review.NewThreadInput(ctx, review.ThreadParts{
 		Patch:    patch,
@@ -426,16 +426,15 @@ func (t *diffTool) threadBrief(ctx context.Context, id string) (review.ThreadBri
 			return t.src.DiffWith(ctx, paths, types.DiffOptions{SkipOrder: true})
 		},
 		Anchors: t.anchors,
-		Variant: prompt.Short,
 	})
 	if err != nil {
-		return review.ThreadBriefResult{}, err
+		return types.DiffThread{}, err
 	}
-	res, err := review.ThreadBrief(in, id)
+	rec, err := review.ReadThread(in, id)
 	if errors.Is(err, changeset.ErrNoThread) {
-		return review.ThreadBriefResult{}, fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
+		return types.DiffThread{}, fmt.Errorf("mcp: %w (read op=state's threads for the ids on this review)", err)
 	}
-	return res, err
+	return rec, err
 }
 
 // threadID resolves a comment id on the review to its thread's, so an outline is keyed the way

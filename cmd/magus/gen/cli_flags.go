@@ -181,10 +181,6 @@ const (
 	FlagDiffNoTui = "no-tui"
 	// diff: --patch
 	FlagDiffPatch = "patch"
-	// diff: --print-hook
-	FlagDiffPrintHook = "print-hook"
-	// diff: --prompt
-	FlagDiffPrompt = "prompt"
 	// diff: --reason
 	FlagDiffReason = "reason"
 	// diff: --rev
@@ -1840,10 +1836,8 @@ type DiffFlags struct {
 	Watch                bool   // --watch
 	Ack                  bool   // --ack
 	Reason               string // --reason
-	Prompt               bool   // --prompt
 	Thread               string // --thread
 	Unread               bool   // --unread
-	PrintHook            bool   // --print-hook
 	Rev                  string // --rev
 	Patch                string // --patch
 	Baseline             string // --baseline
@@ -1859,10 +1853,8 @@ func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	fs.BoolVar(&f.Ack, FlagDiffAck, false, "Record that you have read the changed files at their current content; --impact reports what carries no such record")
 	fs.StringVar(&f.Reason, FlagDiffReason, "", "An optional note kept with an --ack, for the next reader of the report")
-	fs.BoolVar(&f.Prompt, FlagDiffPrompt, false, "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction")
-	fs.StringVar(&f.Thread, FlagDiffThread, "", "Print the context for one review thread, by its thread id, to paste into your own LLM: the thread, its hunk, and what the graph knows about the symbols changed there. It never drafts a reply. Text, or -o json for {id, brief}")
-	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "List the hunks of the chosen source that no read mark covers, and exit 0 whether or not any are left: it never blocks. Where the marks cannot be read it says the read state is unknown. Text and -o json only")
-	fs.BoolVar(&f.PrintHook, FlagDiffPrintHook, false, "Print a pre-push git hook that runs --unread on the range being pushed, and exit. magus only prints it; save it as .git/hooks/pre-push and make it executable. The hook always exits 0")
+	fs.StringVar(&f.Thread, FlagDiffThread, "", "Narrow the review to one pull request thread, by the thread id or any of its comments' ids, which the report lists beside each hunk. The viewer opens on its hunk; printed, it is the conversation, the hunk and what the change there reaches")
+	fs.BoolVar(&f.Unread, FlagDiffUnread, false, "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread")
 	fs.StringVar(&f.Rev, FlagDiffRev, "", "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work")
 	fs.StringVar(&f.Patch, FlagDiffPatch, "", "Review a patch somebody handed you instead of the working tree; `-` reads stdin")
 	fs.StringVar(&f.Baseline, FlagDiffBaseline, "", "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves")

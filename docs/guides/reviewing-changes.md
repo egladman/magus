@@ -1,6 +1,6 @@
 ---
 title: Reviewing your changes
-description: Read a changeset in the order its symbols suggest, a definition before its uses, price what landing it costs before you push, list the hunks nobody has marked read, and keep a bookmark of what you have read, from the terminal, your own editor, the console, or a patch someone sent you.
+description: Read a changeset in the order its symbols suggest, a definition before its uses, price what landing it costs before you push, narrow it to the hunks nobody has marked read or to one review thread, and keep a bookmark of what you have read, from the terminal, your own editor, the console, or a patch someone sent you.
 tags:
   [
     diff,
@@ -139,20 +139,17 @@ which hunks of a range have you not marked read?
 magus diff --unread --rev main...HEAD
 ```
 
-It lists the hunks no mark covers and says how to open them in the viewer. It exits 0 whether
-or not anything is left, because a push held up by a read count would make the count the
-goal. If the marks cannot be read, it says the state is unknown and calls no hunk unread.
-`-o json` prints the same report.
+It narrows the review to the hunks no mark covers: at a terminal the viewer opens on just
+those, and printed it is the usual report, filtered. It works under every `-o`. `-o name`
+prints one `path:start-end` per unread hunk, ready for a shell loop, and `-o json` is the
+usual document, filtered, with an `unread` record. It exits 0 whether or not anything is left,
+because a push held up by a read count would make the count the goal. If the marks cannot be
+read, it says the read state is unknown and calls no hunk unread.
 
-To see the list on every push, print the hook:
-
-```sh
-magus diff --print-hook
-```
-
-The script runs `--unread` on each range being pushed, writes to stderr and always exits 0.
-Save it as `.git/hooks/pre-push` and make it executable. magus prints it and never installs
-it.
+You do not need a hook of your own to hear about it on a push. The `pre-push` section magus
+installs hands off to the `check-drift` job, which adds one line saying how many hunks of the
+range being pushed are unread. See [the drift
+notice](integrations/git.md#the-drift-notice).
 
 ## Telling others you are reading
 
@@ -165,21 +162,21 @@ If the review merges while the mark is set, magus reports `review.merged` and cl
 Two opt-in telemetry metrics, `magus.review.merged_while_reading` and its `.duration`,
 count how often that happens and what it cost. See [Review](../concepts/review.md#saying-you-are-reading).
 
-## Briefing your own model on a thread
+## One thread at a time
 
-A review thread on the host shows with its replies under the hunk it started on.
-To get a model's help with one:
+A review thread on the host shows with its replies under the hunk it started on, and the
+report names it there as `thread <id>`. To read one:
 
 ```sh
 magus diff --thread 2193847561
 ```
 
-The id is the thread id, the id of its first comment, or any reply's. magus prints the thread, its hunk, and
-what the graph knows about the symbols changed there, then stops. The brief asks for findings
-and leaves the reply to you, and it is yours to carry to whichever model you use. An agent
-that pairs with you over MCP may leave an outline of up to five short topics beside the
-thread; you still type every reply. See
-[Review](../concepts/review.md#one-thread) for what the brief holds.
+The id is the thread id, the id of its first comment, or any reply's. At a terminal the viewer
+opens on the thread's hunk. With `--no-tui`, or into a pipe, magus prints the conversation, the
+hunk, and what the change there reaches: the callers, who it is public to, coverage,
+conformance and notes. `-o json` carries the same record. An agent that pairs with you over MCP
+may leave an outline of up to five short topics beside the thread; you still type every reply.
+See [Review](../concepts/review.md#one-thread) for what the record holds.
 
 ## Stepping through it in the terminal
 

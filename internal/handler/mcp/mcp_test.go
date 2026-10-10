@@ -352,7 +352,7 @@ func TestUnregisteredDrivers(t *testing.T) {
 }
 
 // TestDiffToolIsWiredWithReviewAnchors. A diff tool built by allToolDrivers joins notes against
-// the changeset, so projection=thread briefs name anchors rather than saying none was wired.
+// the changeset, so op=thread records name anchors rather than saying none was wired.
 // A workspace declaring no notes store joins nothing, and says so by returning no hits.
 func TestDiffToolIsWiredWithReviewAnchors(t *testing.T) {
 	t.Parallel()

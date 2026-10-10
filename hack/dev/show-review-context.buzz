@@ -6,7 +6,7 @@
 // beside it, tests, the diagnostics it cites and the notes on it. The change as a whole gets
 // the projects and dependencies it moves and the words it introduces. It reads only SCIP
 // facts and magus's own graph, so every indexed language reads the same way.
-// `magus diff --prompt` is the per-file view; this is the per-symbol one.
+// `magus diff` is the per-file view; this is the per-symbol one.
 //
 //	magus buzz hack/dev/show-review-context.buzz -- [diff] [--rev <base>...<head> | --patch <file|-> | --from <diff.json|->]
 //	    [--baseline <graph.json>] [--budget <n>] [--depth <n>] [--lens architecture|code|all] [-o json]

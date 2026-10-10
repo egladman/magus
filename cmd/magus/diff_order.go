@@ -3,11 +3,8 @@ package main
 import (
 	"fmt"
 	"io"
-	"os"
 
-	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
@@ -95,28 +92,14 @@ func diffOrderTUIFiles(rev types.Diff, parsed []changeset.FileHunks) []difftui.F
 	return out
 }
 
+// orderSteps is the order's step count: its highest step number, since steps are numbered from
+// 1 across the whole order and the unread filter drops steps without renumbering the rest.
 func orderSteps(o *types.DiffOrder) int {
 	n := 0
 	for _, g := range o.Groups {
-		n += len(g.Steps)
+		for _, s := range g.Steps {
+			n = max(n, s.Number)
+		}
 	}
 	return n
-}
-
-// printUnread implements `magus diff --unread`. It returns nil whatever the report says: it
-// reports, and a read count that blocked a push would be a gate on the measure it reports.
-func printUnread(m *magus.Magus, src diffInput, opts OutputOptions, patch string) error {
-	if opts.Format != outputText && opts.Format != outputJSON {
-		return usagef("magus diff: --unread prints text or -o json, not -o %v", opts.Format)
-	}
-	viewed, err := changeset.NewStore(m.CacheDir()).LoadViewed()
-	rep := changeset.BuildUnreadReport(src.label, patch, viewed, err)
-	if opts.Format == outputJSON {
-		return emitFormatted(opts, rep)
-	}
-	next := hint.Diff.String()
-	if src.kind == inputRevRange {
-		next = hint.Diff.With("--rev", src.base+"..."+src.head)
-	}
-	return changeset.WriteUnread(os.Stdout, rep, patch, next)
 }

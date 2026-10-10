@@ -3,8 +3,8 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7359
-skill_short_bytes: 4922
+skill_full_bytes: 6519
+skill_short_bytes: 4415
 ---
 
 # magus-change-summary
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `81b6a13cc913` |
+| `skill-content` | `0f08d5ce2b94` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -162,17 +162,6 @@ pieces:
 WRONG: re-reviewing a whole branch because nobody recorded where the last review
 stopped.
 CORRECT: checkpoint at review time, pipe the delta later.
-
-## Hand a change to a second reader
-
-`magus diff --prompt` prints a review prompt for a person to paste into any model;
-`--prompt --impact` adds the rationale behind each instruction.
-
-magus assembles it and stops: it calls no model and sends nothing. The prompt asks for FINDINGS (file, line,
-what is wrong), never review prose to paste at a colleague.
-
-Do not hand-build that context into a prompt of your own. It names the installed
-skills instead of restating them; a hand-built copy drifts from both.
 ````
 
 
@@ -197,7 +186,6 @@ brief. The output is a decision aid, not a chronological commit dump.
 - Write a changelog entry
 - Answer a granular diff question
 - Resume a review from a checkpoint
-- Hand a change to a second reader
 
 ## Gather evidence
 
@@ -344,22 +332,6 @@ pieces:
 WRONG: re-reviewing a whole branch because nobody recorded where the last review
 stopped.
 CORRECT: checkpoint at review time, pipe the delta later.
-
-## Hand a change to a second reader
-
-`magus diff --prompt` prints a review prompt for a person to paste into any model;
-`--prompt --impact` adds the rationale behind each instruction. It carries the
-reading order, which projects rebuild, what could NOT be measured, and which other
-branches touch the same files: the
-context a model cannot work out from a diff alone.
-
-magus assembles it and stops: it calls no model and sends nothing,
-which is what keeps the resulting review something the human wrote rather than
-something generated in their name. The prompt asks for FINDINGS (file, line,
-what is wrong), never review prose to paste at a colleague.
-
-Do not hand-build that context into a prompt of your own. It names the installed
-skills instead of restating them; a hand-built copy drifts from both.
 ````
 
 

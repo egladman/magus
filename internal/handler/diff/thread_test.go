@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeThreadWorkspace answers the three reads the brief route makes: where the review is, the
+// fakeThreadWorkspace answers the three reads the thread route makes: where the review is, the
 // patch, and the annotated changeset for the paths in it.
 type fakeThreadWorkspace struct{ patch string }
 
@@ -28,11 +28,11 @@ func (w fakeThreadWorkspace) WorkingDiff(context.Context, []string) (string, err
 	return w.patch, nil
 }
 
-// DiffWith refuses a call that does not set SkipOrder: a brief reads the code around one
+// DiffWith refuses a call that does not set SkipOrder: a thread record reads the code around one
 // thread and must never pay for the reading order of the whole changeset.
 func (fakeThreadWorkspace) DiffWith(_ context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
 	if !opts.SkipOrder {
-		return types.Diff{}, errors.New("the brief asked for the reading order")
+		return types.Diff{}, errors.New("the thread asked for the reading order")
 	}
 	reach := 9
 	return types.Diff{
@@ -54,7 +54,7 @@ func getThread(h http.Handler, query string) *httptest.ResponseRecorder {
 	return w
 }
 
-func TestThreadRouteServesTheBriefForAThread(t *testing.T) {
+func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
@@ -69,15 +69,32 @@ func TestThreadRouteServesTheBriefForAThread(t *testing.T) {
 	w := getThread(h, "?id=t1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefResult
+	var got ThreadReply
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.Equal(t, "t1", got.ID)
-	assert.Contains(t, got.Brief, "- priya:\n  > why new?\n- marcus:\n  > see the cache")
-	assert.Contains(t, got.Brief, "- where: a.go:11")
-	assert.Contains(t, got.Brief, "+new")
-	assert.Contains(t, got.Brief, "`New` - referenced from 9 file(s), 12 reference(s)")
-	assert.Contains(t, got.Brief, "- note new-is-cheap anchors file:a.go")
-	assert.NotContains(t, got.Brief, "no notes store wired")
+	reach := 9
+	assert.Equal(t, types.DiffThread{
+		ID:   "t1",
+		Path: "a.go",
+		Line: 11,
+		Comments: []types.ReviewComment{
+			{ID: "t1", Path: "a.go", Line: 11, Hunk: 0, Author: "priya", Body: "why new?"},
+			{ID: "t2", Root: "t1", Path: "a.go", Hunk: 0, Author: "marcus", Body: "see the cache"},
+		},
+		Hunk: types.DiffThreadHunk{
+			Index: 0, Source: "patch",
+			Lines: []string{"@@ -10,3 +10,3 @@ func New() {", " ten", "-old", "+new"},
+			Note:  "hunk 0 of a.go, as it stands now",
+		},
+		InChangeset: true,
+		Project:     "root",
+		Role:        types.DiffRoleSource,
+		Reach:       &reach,
+		Symbols:     []types.DiffSymbol{{ID: "m a/New().", Label: "New", Qualified: "New", FileCount: 9, RefCount: 12}},
+		Notes:       []string{"note new-is-cheap anchors file:a.go"},
+		Change:      "The change touches 1 file(s) in root.",
+		Unmeasured:  []string{"coverage: no coverage run has been observed for this file"},
+	}, got.DiffThread)
+	assert.Contains(t, got.Text, "  priya:\n    > why new?\n  marcus:\n    > see the cache\n", "the text is the one --thread prints")
 }
 
 // TestThreadRouteAnswersAReplyIdWithTheThreadId. A client holding the id of the reply it just saw
@@ -92,7 +109,7 @@ func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 	w := getThread(h, "?id=t2")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefResult
+	var got ThreadReply
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
 	assert.Equal(t, "t1", got.ID)
 }
@@ -108,10 +125,11 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 	w := getThread(h, "?id=t1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var got review.ThreadBriefResult
+	var got ThreadReply
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	assert.Contains(t, got.Brief, "note anchors: this server has no notes store wired, so none was joined")
-	assert.NotContains(t, got.Brief, "## Notes anchored here")
+	assert.Contains(t, got.Unmeasured, "note anchors: this server has no notes store wired, so none was joined")
+	assert.Empty(t, got.Notes)
+	assert.Contains(t, got.Text, "note anchors: this server has no notes store wired, so none was joined")
 }
 
 func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
@@ -128,7 +146,7 @@ func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/diff/thread?id=t1", nil))
-	assert.Equal(t, http.StatusMethodNotAllowed, w.Code, "reading a brief is a GET and nothing else")
+	assert.Equal(t, http.StatusMethodNotAllowed, w.Code, "reading a thread is a GET and nothing else")
 }
 
 func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
@@ -137,11 +155,11 @@ func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, getThread(h, "?id=t1").Code)
 
 	assert.Equal(t, http.StatusNotFound, getThread(NewThreadHandler(ThreadOptions{}, nil), "?id=t1").Code,
-		"a server with no workspace has no review to brief")
+		"a server with no workspace has no review to read")
 }
 
 // A misdeclared notes store is a fault the person has to fix, so the route reports it rather than
-// serving a brief whose anchors section reads as a clean tree nobody checked.
+// serving a record whose notes read as a clean tree nobody checked.
 func TestThreadRouteReportsAnAnchorsFailure(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},

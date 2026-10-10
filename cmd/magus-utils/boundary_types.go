@@ -148,6 +148,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
 	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
 	{Name: "DiffHunk", Type: reflect.TypeFor[types.DiffHunk](), RuntimeObject: true},
+	{Name: "DiffThreadRef", Type: reflect.TypeFor[types.DiffThreadRef](), RuntimeObject: true},
 	{Name: "DiffFile", Type: reflect.TypeFor[types.DiffFile](), RuntimeObject: true},
 	{Name: "DiffHunkRef", Type: reflect.TypeFor[types.DiffHunkRef](), RuntimeObject: true},
 	{Name: "DiffWhy", Type: reflect.TypeFor[types.DiffWhy](), RuntimeObject: true},
@@ -162,6 +163,7 @@ var boundaryTypes = []boundaryType{
 	// A thrown error's shape, and also returned: Diff.conformanceError is one.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic](), RuntimeObject: true},
 	{Name: "DiffUncovered", Type: reflect.TypeFor[types.DiffUncovered](), RuntimeObject: true},
+	{Name: "DiffUnread", Type: reflect.TypeFor[types.DiffUnread](), RuntimeObject: true},
 	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
