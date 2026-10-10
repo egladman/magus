@@ -650,8 +650,8 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
     return event?.q("title").stringValue() ?? "";
 }
 
-// Fails a pull request title that is not a conventional commit subject, or whose
-// description opens in the past tense or sells instead of saying what changed.
+// Fails a pull request title that is not a conventional commit subject, or whose subject
+// is not imperative or carries a selling word.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problems = mut [<str>];
@@ -669,10 +669,11 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
 }
 
-// Fails a pull request whose title or description the prose judge in libs/conventions/prose
-// finds a fault in, the judge the guard's pull-request-text rule runs, so the two cannot
-// disagree. Each area the branch touches that the description never names is asked about
-// as a warning, which fails nothing. --title and --body carry the text; the workflow, not
+// Fails a pull request whose title or description the guard's pull-request-text rule
+// would deny. It runs the same judgeText: the prose judge under this repository's
+// decisions table, the word budget the branch's diff earns and the title checks. Advice,
+// such as an area the branch touches that the description never names, is a warning,
+// which fails nothing. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(conventions\judge_build);
@@ -680,19 +681,15 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "pr-description: unexpected arguments {args.join(" ")}; pass --title=<title> --body=<description>";
     }
-    final text = "{parsed.values["--title"] ?? ""}\n{parsed.values["--body"] ?? ""}";
-    final problems = mut [<str>];
-    final judge = descriptions\judgeRunner(".");
-    foreach (f in judge(text)) {
-        problems.append(descriptions\judgedProblem(f));
+    final text = descriptions\Text{ kind = "change-description", title = parsed.values["--title"] ?? "",
+        body = parsed.values["--body"] ?? "" };
+    final found = descriptions\judgeText(text, facts: fun () > descriptions\Facts => descriptions\branchDiff(".")(""),
+        judge: descriptions\judgeRunner("."));
+    foreach (note in found.advice) {
+        magus\log.warn("pr-description: {note}");
     }
-    final changed = mut [<str>];
-    foreach (f in vcs\changedFiles(vcs\base())) { changed.append(f.value); }
-    foreach (question in descriptions\areaQuestions(descriptions\unnamedAreas(descriptions\areasOf(".", paths: changed), text: text))) {
-        magus\log.warn("pr-description: {question}");
-    }
-    if (problems.len() > 0) {
-        throw "pr-description: the description breaks the prose rules (docs/conventions.md):\n  " + problems.join("\n  ");
+    if (found.denies.len() > 0) {
+        throw "pr-description: the description breaks the prose rules (docs/conventions.md):\n  " + found.denies.join("\n  ");
     }
     magus\log.info("pr-description: the title and description pass the prose rules");
 }

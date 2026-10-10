@@ -463,14 +463,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		v := run(describe)
 		assert.Equal(t, "pass", v.Decision, "judged, not failed open: "+v.Reason+v.Context)
 
+		// attribution ships off; this repository's decisions table turns it on.
 		v = run("gh pr create --title \"Pin the key\" --body \"$(cat <<'EOF'\nClaude pinned the key.\nEOF\n)\"")
-		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
 		assert.Contains(t, v.Reason, `pr-title: "Pin the key": no `+"`<type>: `"+` prefix`)
 		assert.Contains(t, v.Reason, "Drop 'Claude': describe the change, not who or what produced it. [attribution]")
 		assert.NotContains(t, v.Reason, "Skill(")
 
 		v = run(`gh pr edit 412 --title "fix(cache): pin the key" --body "Workers miss the skill rules because the guard reads a stale copy; it reads .claude/skills/x/SKILL.md instead."`)
 		assert.Equal(t, "pass", v.Decision, "a path spelling a tool's name credits no one: "+v.Reason+v.Context)
+
+		v = run(`gh pr comment 412 --body "Good catch: the map is written from two goroutines, so it takes a lock now."`)
+		assert.NotEqual(t, "deny", v.Decision, "a reply is judged as a reply: "+v.Reason+v.Context)
+		v = run(`gh pr comment 412 --body "No, as I said, the map is shared."`)
+		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
+		assert.Contains(t, v.Reason, "[reply-opener]")
 
 		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
 		unbuilt := t.TempDir()

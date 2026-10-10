@@ -24,7 +24,9 @@ final nonASCII = $"[^ -~\n\t]";
 final titlecased = $"^[^A-Za-z]*[A-Z][a-z]";
 final conventionalPrefix = $"^[a-z]+(\([^)\n]*\))?!?: ";
 final pastOrThirdPerson = $"(?i)^(added|adds|adding|fixed|fixes|fixing|updated|updates|updating|removed|removes|removing|changed|changes|changing|implemented|implements|implementing|refactored|refactors|refactoring|improved|improves|improving|created|creates|creating|introduced|introduces|introducing|renamed|renames|renaming|moved|moves|moving|made|makes|making)\b";
-export final puffery = $"(?i)\b(comprehensive|robust|seamless|seamlessly|powerful|elegant|elegantly|cutting-edge|state-of-the-art|world-class|effortless|effortlessly)\b";
+// The selling words a subject is denied. A description's twin is the prose judge's filler
+// list in libs/conventions/prose, which pull-request-text runs.
+final puffery = $"(?i)\b(comprehensive|robust|seamless|seamlessly|powerful|elegant|elegantly|cutting-edge|state-of-the-art|world-class|effortless|effortlessly)\b";
 
 // Syntax is how one tool's commit command spells its options: the long options and the
 // single-letter ones that take a value, attached or as the next word, and whether a second

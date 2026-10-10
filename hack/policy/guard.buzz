@@ -37,12 +37,13 @@
 //     or describe, that carries an attribution or a body, or whose subject breaks the form
 //     its branch takes: the conventional subject hack/magusfile/commits.buzz defines on the base
 //     branch, one lowercase imperative line anywhere else.
-//   pull-request-text (deny): a `gh pr create|edit` title or description the prose judge
-//     in libs/conventions/prose finds a fault in (no lead naming the goal, a heading, reply
-//     voice, tense, a hedge, filler, credit to a tool), one that runs past the word budget
-//     its diff earns, or a title the pr-title check would fail. Prose outside the
-//     lead-and-bullets shape, and an area the diff touches that the description never
-//     names, are advised once per pull request.
+//   pull-request-text (deny, named): a pull request title, description or review reply,
+//     posted by any forge command its table lists, with a finding the prose judge in
+//     libs/conventions/prose decides deny under hack/policy/prose.buzz, a description past
+//     the word budget its diff earns after the lead, or a title the pr-title check would
+//     fail. Advise findings, prose outside the lead, bullets and headed sections, and an
+//     area the diff touches that the description never names are advised once per pull
+//     request.
 //   code-comments (write): a Go comment block the write adds over the owner's budget is
 //     advised, over twice it or above the package clause denied; the first write of a
 //     session adding comments to any code file is advised once.
@@ -291,8 +292,8 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // advisories, then the branch name advisories. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
 // files it names, diff reads the branch's diff for a description's budget, and judge runs
-// the prose judge over a pull request's title and description.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
+// the prose judge over a pull request's text of a kind.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
     final hostVerdict = host\decideHost(programs);
     if (hostVerdict.decision != "allow") {
         return hostVerdict;
@@ -319,7 +320,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
 // denials, the gh advisories, then the pull request text advisories.
-fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
+fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once);
     if (github.decision == "deny") {
         return github;
