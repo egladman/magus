@@ -99,8 +99,8 @@ func (s *ProcessStdio) ProveUpstream(ctx context.Context) {
 		}
 		r, err := ReadRecords(stdin)
 		if err != nil {
-			slog.WarnContext(ctx, fmt.Sprintf("pid %d upstream writes records this process cannot read: %v", recordsFrom, err),
-				attr.Notice(""), attr.Component("magus"))
+			slog.WarnContext(ctx, fmt.Sprintf("pid %d upstream writes records this process cannot read", recordsFrom),
+				attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			p.holdProof(stdin)
 			return
 		}

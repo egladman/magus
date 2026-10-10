@@ -44,7 +44,7 @@ func buildBuzzPry(sess *buzz.Session, parseMode bool) vm.Callable {
 
 // warnPry reports a REPL that failed to open or run; the script carries on without it.
 func warnPry(ctx context.Context, err error) {
-	slog.WarnContext(ctx, err.Error(), attr.Notice(""), attr.Component("magus.pry"))
+	slog.WarnContext(ctx, "", attr.Notice("magus.pry"), attr.Error(err))
 }
 
 // buzzPryContext builds the REPL's PryContext from the session's current call
