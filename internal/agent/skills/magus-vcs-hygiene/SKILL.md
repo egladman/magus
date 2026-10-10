@@ -128,7 +128,7 @@ without committing."{{if .Full}} The working tree is ALREADY what you want to ve
 so run `{{cmd "run"}} build` / `{{cmd "affected"}} ci` in place; building does not
 require committing first. A whole-tree revert also unrecoverably
 destroys any untracked work a concurrent agent is writing.{{else}} Build in place; a
-whole-tree revert destroys a concurrent agent's untracked work.{{end}} If you truly need
+whole-tree revert destroys a concurrent agent's untracked work.{{end}} If you need
 a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
 add`, never the live tree.
 

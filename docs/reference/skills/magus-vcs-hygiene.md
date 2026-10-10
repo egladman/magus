@@ -3,8 +3,8 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9885
-skill_short_bytes: 6173
+skill_full_bytes: 9879
+skill_short_bytes: 6167
 ---
 
 # magus-vcs-hygiene
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `116` |
+| `agent-skill-version` | `117` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `969bbcdad30a` |
+| `skill-content` | `07b4b00908f5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -140,7 +140,7 @@ verdict. An empty section means nobody could measure it, not that nothing was fo
 
 Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a build
 without committing." Build in place; a
-whole-tree revert destroys a concurrent agent's untracked work. If you truly need
+whole-tree revert destroys a concurrent agent's untracked work. If you need
 a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
 add`, never the live tree.
 
@@ -319,7 +319,7 @@ Never `git stash`, `git reset`, `git checkout .`, or `git clean` to "verify a bu
 without committing." The working tree is ALREADY what you want to verify,
 so run `magus run build` / `magus affected ci` in place; building does not
 require committing first. A whole-tree revert also unrecoverably
-destroys any untracked work a concurrent agent is writing. If you truly need
+destroys any untracked work a concurrent agent is writing. If you need
 a pristine tree (e.g. to diff regenerated output), use a throwaway `git worktree
 add`, never the live tree.
 
