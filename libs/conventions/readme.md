@@ -20,6 +20,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
 | `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
 | `errmsg`        | an `errors.New` or `fmt.Errorf` text joining clauses, spanning lines or sentences, or with `%w` not last    |
+| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
