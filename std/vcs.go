@@ -68,6 +68,17 @@ var Vcs = Module{
 			Impl:    VcsRegions,
 		},
 		{
+			Name: "diff_stat",
+			Doc:  "Line counts for the change the checked-out revision carries past its merge base with base (defaults to vcs\\base): one {path, added, deleted, binary} per file, ordered by path, with repository-relative forward-slash paths; dir reads the repository holding that directory as vcs\\changedFiles does. The working copy is not read, so uncommitted edits are not counted (on jj the checked-out revision is @, which is the working copy). Renames are not detected: a rename is a delete of the old path plus an add of the new one. A binary file reports binary true with zero counts. It never fetches, so a base the repository does not hold, or one sharing no history with the revision, raises. Empty when no VCS is resolved or the revision changed nothing; raises when the backend cannot count lines (all four built-in backends can), since an empty list reads as a change that touched nothing.",
+			Args: []Arg{
+				{Name: "base", Type: TypeString, Optional: true},
+				{Name: "dir", Type: TypeString, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAny, Object: "[FileStat]"}},
+			Raises:  true,
+			Impl:    VcsDiffStat,
+		},
+		{
 			Name: "ref",
 			Doc:  "The movable name pointing at the current revision, or null when none names it: a detached git HEAD, or jj's working copy, which is usually an anonymous change, so null is an ordinary answer there, not a failure. Backend-specific by nature: a git branch, a Mercurial named branch, a Jujutsu bookmark. dir reads the repository holding that directory (relative to the target's cwd) instead of the one holding the cwd. Raises when no VCS is resolved, its metadata cannot be read, or dir does not exist - use vcs\\name() to test for a VCS first.",
 			Args: []Arg{

@@ -35,6 +35,13 @@ export object Commit {
     files: [str] = [],
 }
 
+export object FileStat {
+    path: str = "",
+    added: int = 0,
+    deleted: int = 0,
+    binary: bool = false,
+}
+
 export object FileChange {
     path: str = "",
     prevPath: str = "",
@@ -76,6 +83,7 @@ export extern fun changedFiles(base: str = "", dir: str = "") > [Path] !> any;
 export extern fun cmd(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun commit(rev: str = "") > Commit !> any;
 export extern fun describe() > str !> any;
+export extern fun diffStat(base: str = "", dir: str = "") > [FileStat] !> any;
 export extern fun dirtyDiff(paths: [str] = [<str>]) > str;
 export extern fun history(limit: int = 10, paths: [str] = [<str>], first_parent: bool = false) > [Commit] !> any;
 export extern fun isDirty(paths: [str] = [<str>]) > bool !> any;

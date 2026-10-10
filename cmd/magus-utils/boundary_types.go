@@ -250,6 +250,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "Finding", Type: reflect.TypeFor[types.Finding]()},
 	{Name: "FileChange", Type: reflect.TypeFor[types.FileChange](), RuntimeObject: true},
 	{Name: "RegionChange", Type: reflect.TypeFor[types.RegionChange](), RuntimeObject: true},
+	{Name: "FileStat", Type: reflect.TypeFor[types.FileStat](), RuntimeObject: true},
 	{Name: "JobOverlapFootprint", Type: reflect.TypeFor[types.JobOverlapFootprint](), RuntimeObject: true},
 	{Name: "JobOverlap", Type: reflect.TypeFor[types.JobOverlap](), RuntimeObject: true},
 	{Name: "JobBlock", Type: reflect.TypeFor[types.JobBlock](), RuntimeObject: true},

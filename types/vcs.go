@@ -438,6 +438,7 @@ const (
 	CapRevisionFetcher       VCSCapability = "RevisionFetcher"
 	CapPusher                VCSCapability = "Pusher"
 	CapBundler               VCSCapability = "Bundler"
+	CapDiffStater            VCSCapability = "DiffStater"
 )
 
 // VCSUnsupportedError is a backend declining a capability it does not implement: the one
@@ -1082,6 +1083,35 @@ type TreeMerger interface {
 	// they have none, or several (a criss-cross), since no one commit is then the base
 	// either side's changes are measured from.
 	MergeBase(ctx context.Context, root, a, b string) (base string, ok bool, err error)
+}
+
+// FileStat is one file's line counts in a change, as DiffStater reports them.
+type FileStat struct {
+	// Path is repository-relative with forward slashes.
+	Path string `json:"path"`
+	// Added and Deleted count lines. Both are zero for a binary file, and for a change
+	// that moves no lines (a mode change, an empty file).
+	Added   int `json:"added"`
+	Deleted int `json:"deleted"`
+	// Binary marks a file whose lines cannot be counted.
+	Binary bool `json:"binary"`
+}
+
+// DiffStater is the capability to count the lines a revision changed. It is optional and
+// deliberately not embedded in VCSDriver: a caller asserts for it and reports a backend
+// without it, so a driver or mock written before it existed keeps compiling.
+type DiffStater interface {
+	// DiffStat counts the lines the checked-out revision carries past its merge base with
+	// base. An empty base is the driver's Base. The working copy is not read, so
+	// uncommitted edits are not counted; on jj the checked-out revision is @, which is the
+	// working copy by construction.
+	//
+	// Renames are not detected: a rename is a delete of the old path plus an add of the
+	// new one. A binary file reports Binary with zero counts. The result is sorted by
+	// path and is empty only when the revision changed nothing: a backend that cannot
+	// count returns an error. It never fetches, so a base the repository does not hold is
+	// an error, and so is one that shares no history with the revision.
+	DiffStat(ctx context.Context, dir, base string) ([]FileStat, error)
 }
 
 // GeneratedPathReporter is the capability to report which paths a REVISION marks as
