@@ -493,6 +493,20 @@ It adds three things to a session:
 Every threshold is a setting in `/config`. The mod uses the early-access Claude
 Code plugin API, so a Claude Code update can change what it needs.
 
+A workspace can register the marketplace and turn the mod on for everyone who opens
+it, through an opt-in harness beside the one that wires the guard:
+
+```buzz
+import "spells/harness/claude-code-mod" as claudeMod;
+magus\harness.provider(claudeMod);
+```
+
+`magus describe harness claude-code-mod` then prints the two settings it keeps in
+`.claude/settings.json`, `extraKnownMarketplaces.magus` and
+`enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
+reads the marketplace only once the person trusts the folder, and each person still
+runs the install line above once.
+
 ## Coverage and limits
 
 No transport gap in the guard contract: all three kinds of input are wired, `deny`
