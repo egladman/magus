@@ -1,16 +1,17 @@
-// Package errorstrings holds the text of plain Go errors to the standard
+// Package errmsg holds the text of plain Go errors to the standard
 // library's convention: an error is a sentence fragment, and as it wraps, each
 // caller chains its context in front with ": ". A message written as prose
 // breaks that chain.
 //
 // It judges the message argument of errors.New and the format of fmt.Errorf,
 // wherever they are called, including inside a call that builds a coded
-// diagnostic: that inner error is still a plain error. A coded diagnostic's
+// diagnostic: that inner error is still a plain error. It judges what an
+// error type's own Error() method returns the same way. A coded diagnostic's
 // own constructor is never judged here. String constants and concatenations
 // resolve to their text; an operand only known at run time is opaque.
 //
 // Capitalization and trailing punctuation are staticcheck's ST1005.
-package errorstrings
+package errmsg
 
 import (
 	"fmt"
@@ -90,36 +91,36 @@ type AllowEntry struct {
 func New(opts Options) (*analysis.Analyzer, error) {
 	for _, r := range opts.Rules {
 		if !slices.Contains(Rules, r) {
-			return nil, fmt.Errorf("errorstrings: rule %q is not one of %q", r, Rules)
+			return nil, fmt.Errorf("errmsg: rule %q is not one of %q", r, Rules)
 		}
 	}
 	allowed := make(source.Globs, 0, len(opts.Allow))
 	for _, a := range opts.Allow {
 		if a.File == "" || a.Reason == "" {
-			return nil, fmt.Errorf("errorstrings: allow entry %+v needs both file and reason", a)
+			return nil, fmt.Errorf("errmsg: allow entry %+v needs both file and reason", a)
 		}
 		if a.Rule != "" && !slices.Contains(Rules, a.Rule) {
-			return nil, fmt.Errorf("errorstrings: allow entry %+v names no rule of %q", a, Rules)
+			return nil, fmt.Errorf("errmsg: allow entry %+v names no rule of %q", a, Rules)
 		}
 		allowed = append(allowed, a.File)
 	}
-	if err := opts.Files.Validate("errorstrings"); err != nil {
+	if err := opts.Files.Validate("errmsg"); err != nil {
 		return nil, err
 	}
-	if err := allowed.Validate("errorstrings"); err != nil {
+	if err := allowed.Validate("errmsg"); err != nil {
 		return nil, err
 	}
-	if err := source.InModule("errorstrings", opts.Module, func(root string) error {
-		if err := opts.Files.RequireMatches("errorstrings", "files", root); err != nil {
+	if err := source.InModule("errmsg", opts.Module, func(root string) error {
+		if err := opts.Files.RequireMatches("errmsg", "files", root); err != nil {
 			return err
 		}
-		return allowed.RequireMatches("errorstrings", "allow", root)
+		return allowed.RequireMatches("errmsg", "allow", root)
 	}); err != nil {
 		return nil, err
 	}
 	return &analysis.Analyzer{
-		Name: "errorstrings",
-		Doc:  "judge errors.New and fmt.Errorf text as a fragment chained with \": \"",
+		Name: "errmsg",
+		Doc:  "judge error text (errors.New, fmt.Errorf, Error methods) as a fragment chained with \": \"",
 		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts) },
 	}, nil
 }
@@ -134,38 +135,88 @@ func run(pass *analysis.Pass, opts Options) error {
 		if !ok || source.IsTest(pass, f) || (len(opts.Files) > 0 && !opts.Files.Match(rel)) {
 			continue
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok || len(call.Args) == 0 {
-				return true
-			}
-			fn, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func)
+		report := func(e ast.Expr, format bool) {
+			text, pos, ok := resolve(pass, e)
 			if !ok {
-				return true
+				return
 			}
-			var format bool
-			switch fn.FullName() {
-			case "errors.New":
-			case "fmt.Errorf":
-				format = true
-			default:
-				return true
+			for _, rule := range Judge(text, format) {
+				if (len(opts.Rules) == 0 || slices.Contains(opts.Rules, rule.Rule)) && !allowed(opts, rel, rule.Rule) {
+					pass.Report(analysis.Diagnostic{
+						Pos:      pos,
+						Category: string(rule.Rule),
+						Message:  source.Hint(fmt.Sprintf("%s: %s", rule.Rule, rule.Message), opts.Hint),
+					})
+				}
 			}
-			if text, pos, ok := resolve(pass, call.Args[0]); ok {
-				for _, rule := range Judge(text, format) {
-					if (len(opts.Rules) == 0 || slices.Contains(opts.Rules, rule.Rule)) && !allowed(opts, rel, rule.Rule) {
-						pass.Report(analysis.Diagnostic{
-							Pos:      pos,
-							Category: string(rule.Rule),
-							Message:  source.Hint(fmt.Sprintf("%s: %s", rule.Rule, rule.Message), opts.Hint),
-						})
-					}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.CallExpr:
+				switch callee(pass, n) {
+				case "errors.New":
+					report(n.Args[0], false)
+				case "fmt.Errorf":
+					report(n.Args[0], true)
+				}
+			case *ast.FuncDecl:
+				if errorMethod(pass, n) {
+					judgeReturns(pass, n.Body, report)
 				}
 			}
 			return true
 		})
 	}
 	return nil
+}
+
+// callee is the full name of the function call invokes with at least one
+// argument, or "" for anything else.
+func callee(pass *analysis.Pass, call *ast.CallExpr) string {
+	if len(call.Args) == 0 {
+		return ""
+	}
+	fn, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func)
+	if !ok {
+		return ""
+	}
+	return fn.FullName()
+}
+
+// errorMethod reports whether decl is an `Error() string` method, the text an
+// error type of our own prints wherever it wraps.
+func errorMethod(pass *analysis.Pass, decl *ast.FuncDecl) bool {
+	if decl.Recv == nil || decl.Name.Name != "Error" || decl.Body == nil {
+		return false
+	}
+	fn, ok := pass.TypesInfo.Defs[decl.Name].(*types.Func)
+	if !ok {
+		return false
+	}
+	sig, ok := fn.Type().(*types.Signature)
+	return ok && sig.Params().Len() == 0 && sig.Results().Len() == 1 &&
+		types.Identical(sig.Results().At(0).Type(), types.Typ[types.String])
+}
+
+// judgeReturns judges what body's own return statements build: a string, or the
+// format of a fmt.Sprintf. A function literal inside body returns for itself.
+func judgeReturns(pass *analysis.Pass, body *ast.BlockStmt, report func(ast.Expr, bool)) {
+	ast.Inspect(body, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.FuncLit:
+			return false
+		case *ast.ReturnStmt:
+			if len(n.Results) != 1 {
+				return true
+			}
+			if call, ok := ast.Unparen(n.Results[0]).(*ast.CallExpr); ok && callee(pass, call) == "fmt.Sprintf" {
+				report(call.Args[0], true)
+				return true
+			}
+			report(n.Results[0], false)
+		}
+		return true
+	})
 }
 
 func allowed(opts Options, rel string, rule Rule) bool {

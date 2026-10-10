@@ -60,3 +60,31 @@ func diagnostics(err error) {
 	_ = diag.Wrap(1, fmt.Errorf("lock held; retry later: %w", err)) // want `error-join`
 	_ = diag.Wrap(1, errors.New("one\ntwo"))                        // want `error-newline`
 }
+
+type lockErr struct{ path string }
+
+func (e lockErr) Error() string {
+	return "lock held on " + e.path + "; retry later" // want `error-join`
+}
+
+type usageErr struct{ flag string }
+
+func (e *usageErr) Error() string {
+	if e.flag == "" {
+		return "bad usage. See help" // want `error-sentences`
+	}
+	return fmt.Sprintf("unknown flag %s\nrun with -h", e.flag) // want `error-newline`
+}
+
+type wrapErr struct{ err error }
+
+func (e wrapErr) Error() string {
+	describe := func() string { return "not judged; a closure returns for itself" }
+	_ = describe
+	return "open: " + e.err.Error()
+}
+
+// Error here is no error method: it takes an argument.
+type logger struct{}
+
+func (logger) Error(msg string) string { return msg + "; logged" }

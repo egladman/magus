@@ -1,4 +1,4 @@
-package errorstrings
+package errmsg
 
 import (
 	"strings"
@@ -43,7 +43,7 @@ func TestNewRejectsDeadScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts.Allow[0].File = "internal/guard/sh.go"
-	if _, err := New(opts); err == nil || !strings.Contains(err.Error(), `errorstrings: allow pattern "internal/guard/sh.go"`) {
+	if _, err := New(opts); err == nil || !strings.Contains(err.Error(), `errmsg: allow pattern "internal/guard/sh.go"`) {
 		t.Fatalf("want an error naming the dead pattern, got %v", err)
 	}
 }

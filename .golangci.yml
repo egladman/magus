@@ -118,7 +118,7 @@ linters:
     - providerio
     - fieldwise
     - diagmsg
-    - errorstrings
+    - errmsg
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -323,7 +323,7 @@ linters:
       # including one built only to wrap inside a coded diagnostic. With module
       # set, the same block judges a lib module's packages when its run enables
       # this linter; libs/gopherbuzz is excluded below.
-      errorstrings:
+      errmsg:
         type: module
         description: 'judges errors.New and fmt.Errorf text as a fragment chained with ": "'
         original-url: github.com/egladman/magus/libs/conventions
@@ -807,7 +807,7 @@ linters:
         text: ^token\.Tokenize stutters
       # gopherbuzz's error text follows upstream Buzz's, not Go's convention.
       - path: ^libs/gopherbuzz/
-        linters: [errorstrings]
+        linters: [errmsg]
       - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
         linters: [stutter]
         text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters
