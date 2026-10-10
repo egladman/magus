@@ -79,7 +79,7 @@ final ALLOW = [
 final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitHub Enterprise",
     "Goblin Tools", "JSON Patch", "SWE-bench Verified", "VS Code"];
 
-final JUDGE = "libs/conventions/cmd/judge-docs";
+final JUDGE = "{judgeDocs\home}/{judgeDocs\command}";
 
 // KINDS are the judge's kinds this rule runs, one judge run each.
 final KINDS = ["reference", "guide", "agent-instructions", "agent-instructions-template"];

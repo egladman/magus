@@ -5,10 +5,11 @@ import "fs";
 import "crypto";
 
 // The prose judge as `magus run judge-build libs/conventions` leaves it, relative to
-// home, the module it is built in: the linked binary, and the digest of the sources it was
-// linked from. A hook runs the binary rather than `go run`, whose compile on a cold Go cache
-// outlasts the rule timeout.
+// home, the module it is built in: its main package, the linked binary, and the digest of
+// the sources it was linked from. A hook runs the binary rather than `go run`, whose compile
+// on a cold Go cache outlasts the rule timeout.
 export final home = "libs/conventions";
+export final command = "cmd/judge-docs";
 export final binary = "gen/judge-docs";
 export final inputsFile = "gen/judge-docs.inputs";
 export final build = "magus run judge-build libs/conventions";
@@ -19,7 +20,7 @@ export final build = "magus run judge-build libs/conventions";
 // judge-build hashes this list and the guard rehashes it, so neither can drift from the other.
 export fun sources(dir: str) > [str] !> any {
     final found = mut ["go.mod", "go.sum"];
-    foreach (pkg in ["prose", "cmd/judge-docs"]) {
+    foreach (pkg in ["prose", command]) {
         foreach (name in fs\listDir("{dir}/{pkg}")) {
             if (name.endsWith(".go") and !name.endsWith("_test.go")) {
                 found.append("{pkg}/{name}");
@@ -44,15 +45,15 @@ export fun inputs(dir: str) > str !> any {
 // or the sources it was linked from are not the ones in the tree.
 export fun whyStale(dir: str) > str {
     if (!(fs\isFile("{dir}/{binary}") catch false)) {
-        return "libs/conventions/{binary} is not built";
+        return "{home}/{binary} is not built";
     }
     final built = fs\readFile("{dir}/{inputsFile}") catch "";
     final current = inputs(dir) catch "";
     if (current == "") {
-        return "the sources of libs/conventions/{binary} could not be read";
+        return "the sources of {home}/{binary} could not be read";
     }
     if (built.trim() != current) {
-        return "libs/conventions/{binary} was linked from other sources than the tree holds";
+        return "{home}/{binary} was linked from other sources than the tree holds";
     }
     return "";
 }
