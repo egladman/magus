@@ -18,26 +18,23 @@ func TestResolveAudience(t *testing.T) {
 		name       string
 		configured string
 		env        map[string]string
-		terminal   bool
 		forced     bool
 		want       audience.Audience
 	}{
 		{name: "configured human beats every signal", configured: "human", env: map[string]string{trail.EnvBaggage: lease}, forced: true, want: audience.Human},
-		{name: "configured agent beats a terminal and CI", configured: "agent", env: map[string]string{"CI": "true"}, terminal: true, want: audience.Agent},
-		{name: "forced beats a terminal", forced: true, terminal: true, want: audience.Agent},
-		{name: "forced beats CI", forced: true, env: map[string]string{"CI": "true"}, want: audience.Agent},
-		{name: "lease in baggage beats a terminal", env: map[string]string{trail.EnvBaggage: lease}, terminal: true, want: audience.Agent},
-		{name: "lease among other baggage members", env: map[string]string{trail.EnvBaggage: "userId=alice, " + lease}, terminal: true, want: audience.Agent},
-		{name: "baggage without a lease is no signal", env: map[string]string{trail.EnvBaggage: "userId=alice"}, terminal: true, want: audience.Human},
-		{name: "terminal on stderr", terminal: true, want: audience.Human},
-		{name: "CI without a terminal", env: map[string]string{"CI": "true"}, want: audience.Human},
-		{name: "a pipe outside CI", want: audience.Agent},
-		{name: "an unknown configured value falls through", configured: "robot", terminal: true, want: audience.Human},
+		{name: "configured agent", configured: "agent", want: audience.Agent},
+		{name: "forced", forced: true, want: audience.Agent},
+		{name: "lease in baggage", env: map[string]string{trail.EnvBaggage: lease}, want: audience.Agent},
+		{name: "lease among other baggage members", env: map[string]string{trail.EnvBaggage: "userId=alice, " + lease}, want: audience.Agent},
+		{name: "baggage without a lease is no signal", env: map[string]string{trail.EnvBaggage: "userId=alice"}, want: audience.Human},
+		{name: "nothing told means a person", want: audience.Human},
+		{name: "a runner's variables are not read", env: map[string]string{"CI": "true", "GITHUB_ACTIONS": "true"}, want: audience.Human},
+		{name: "an unknown configured value falls through", configured: "robot", want: audience.Human},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			env := func(k string) string { return tc.env[k] }
-			assert.Equal(t, tc.want, resolveAudience(tc.configured, env, tc.terminal, tc.forced))
+			assert.Equal(t, tc.want, resolveAudience(tc.configured, env, tc.forced))
 		})
 	}
 }

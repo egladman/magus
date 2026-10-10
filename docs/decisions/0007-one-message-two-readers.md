@@ -61,17 +61,16 @@ lint.
 
 ### The invocation resolves one audience
 
-_Done._ Each invocation resolves `human` or `agent` once, from the first signal that
-answers:
+_Done._ Each invocation resolves `human` or `agent` once, from what magus was told and
+never from where it runs ([Told, never guessed](../doctrine.md)). The first signal that
+answers wins:
 
 1. `log.audience`, set in magus.yaml, as `--log-audience`, or as `MAGUS_LOG_AUDIENCE`,
-   which the harness configuration `magus describe harness` prints sets. magus names no
-   host in its own source.
+   which the harness configuration `magus describe harness` prints sets for an agent
+   host. magus names no host in its own source.
 2. The guard hook and the MCP server, both agents by construction.
 3. A `magus.lease` member in `BAGGAGE`.
-4. A terminal on stderr: `human`.
-5. A `CI` variable in the environment: `human`, since a person reads the log later.
-6. Anything else: `agent`.
+4. Nothing told: `human`. A terminal, a pipe and a CI runner read the same output.
 
 ### One handler renders for the audience
 
