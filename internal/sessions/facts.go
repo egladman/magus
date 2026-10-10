@@ -3,9 +3,11 @@ package sessions
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/logattr"
 )
 
 // FactHandler turns the execution journal's result events into durable session facts.
@@ -105,13 +107,46 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 // journal event, so Handle returns before it reaches the lock.
 func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 	h.broken = true
-	slog.WarnContext(ctx, "magus: this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
+	logattr.For("magus").WarnContext(ctx, "this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
 		slog.String("store", h.dir),
 		slog.String("error", err.Error()))
 }
 
-func (h *FactHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *FactHandler) WithGroup(string) slog.Handler      { return h }
+// WithAttrs returns a handler writing to h's store with attrs ahead of each
+// record's own.
+func (h *FactHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
+	return factWithAttrs{h: h, attrs: slices.Clone(attrs)}
+}
+
+func (h *FactHandler) WithGroup(string) slog.Handler { return h }
+
+type factWithAttrs struct {
+	h     *FactHandler
+	attrs []slog.Attr
+}
+
+func (f factWithAttrs) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return f.h.Enabled(ctx, lvl)
+}
+
+func (f factWithAttrs) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(f.attrs...)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(a)
+		return true
+	})
+	return f.h.Handle(ctx, nr)
+}
+
+func (f factWithAttrs) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return factWithAttrs{h: f.h, attrs: append(slices.Clip(f.attrs), attrs...)}
+}
+
+func (f factWithAttrs) WithGroup(string) slog.Handler { return f }
 
 // factOutcome maps the execution journal's three statuses onto the session store's
 // pass/fail axis. A cache hit is a PASS that was replayed, not a third outcome: "did

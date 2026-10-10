@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -271,7 +272,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	tier, mode := m.CacheDescription()
 	sink.EmitCache(ctx, tier, mode)
 	if len(targets) == 0 {
-		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
+		logattr.For("affected").InfoContext(ctx, "no projects affected", slog.String("target", target))
 		return nil
 	}
 
@@ -799,13 +800,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// Advice, once, where a person reads it. Both facts are about runner spend and
 	// runner death, neither of which the shard table shows.
 	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
+		logattr.For("magus").WarnContext(ctx, fmt.Sprintf(
+			"%d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
 			len(plan.Shards), n, n))
 	}
 	if len(plan.OverBudget) > 0 {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
+		logattr.For("magus").WarnContext(ctx, fmt.Sprintf(
+			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
 

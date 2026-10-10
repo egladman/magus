@@ -3,9 +3,10 @@ package cache
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/egladman/magus/internal/logattr"
 )
 
 // keyedLock is a per-key mutex with context-cancellable acquisition.
@@ -118,7 +119,7 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 			ProgressFromContext(ctx).Beat()
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for a cache lock held by %s (%s so far)",
+				logattr.For("magus").InfoContext(ctx, fmt.Sprintf("%s is waiting for a cache lock held by %s (%s so far)",
 					displayLockParty(waiter), displayLockParty(k.currentHolder(key)), elapsed.Round(time.Second)))
 			}
 		case <-ctx.Done():

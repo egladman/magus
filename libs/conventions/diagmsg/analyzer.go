@@ -3,8 +3,9 @@
 // the rationale, never a paragraph.
 //
 // A message is found where it is built: the argument a configured function
-// takes it as, the value of a configured struct field, or any string opening
-// with a configured prefix. String constants and concatenations resolve to
+// takes it as, the value of a configured struct field, any string opening
+// with a configured prefix, or, with [Options.Slog], a log/slog call's message,
+// which is held to the message-tag rule alone. String constants and concatenations resolve to
 // their text; a format verb, or an operand only known at run time, counts as
 // one rune.
 package diagmsg
@@ -49,11 +50,19 @@ type Options struct {
 	// Prefixes mark a message by its opening text, wherever it is built.
 	Prefixes []string `json:"prefixes"`
 
+	// Slog judges the message of every log/slog call, the package's Debug,
+	// Info, Warn and Error functions, their Context forms, and the same methods
+	// on a *slog.Logger, by [prose.RuleMessageTag] alone: a record names what
+	// logged it with an attribute, never a tag in its text. [Options.Allow]
+	// never exempts one, so a file staged for its other messages cannot hide a
+	// tagged log line.
+	Slog bool `json:"slog"`
+
 	// Rules are the rules reported. Empty reports every message rule.
 	Rules []prose.Rule `json:"rules"`
 
 	// Allow exempts a file from one rule, or from every rule when Rule is
-	// empty.
+	// empty. It never exempts a log/slog message; see [Options.Slog].
 	Allow []AllowEntry `json:"allow"`
 
 	// Hint is appended to every diagnostic: the repository's own remedy.
@@ -100,8 +109,8 @@ type AllowEntry struct {
 // nothing, on a malformed call, field or glob, on a rule that is no message
 // rule, and on an allow entry with no reason or no file it matches.
 func New(opts Options) (*analysis.Analyzer, error) {
-	if len(opts.Calls) == 0 && len(opts.Fields) == 0 && len(opts.Prefixes) == 0 {
-		return nil, errors.New("diagmsg: calls, fields and prefixes are all empty: the rule judges nothing")
+	if len(opts.Calls) == 0 && len(opts.Fields) == 0 && len(opts.Prefixes) == 0 && !opts.Slog {
+		return nil, errors.New("diagmsg: calls, fields and prefixes are all empty and slog is off: the rule judges nothing")
 	}
 	if opts.MaxRunes < 0 {
 		return nil, fmt.Errorf("diagmsg: max-runes %d is negative", opts.MaxRunes)
@@ -199,6 +208,11 @@ func (j *judge) sites(f *ast.File) {
 					j.message(n.Args[c.Arg], c.Format)
 				}
 			}
+			if arg, ok := slogMessages[fn.FullName()]; ok && j.opts.Slog && arg < len(n.Args) {
+				if text, pos, ok := j.text(n.Args[arg], false); ok {
+					j.report(text, pos, true)
+				}
+			}
 		case *ast.CompositeLit:
 			for _, elt := range n.Elts {
 				kv, ok := elt.(*ast.KeyValueExpr)
@@ -222,6 +236,19 @@ func (j *judge) sites(f *ast.File) {
 		return true
 	})
 }
+
+// slogMessages maps each log/slog call [Options.Slog] judges to its message
+// argument's index.
+var slogMessages = func() map[string]int {
+	m := map[string]int{}
+	for _, level := range []string{"Debug", "Info", "Warn", "Error"} {
+		for _, owner := range []string{"log/slog.", "(*log/slog.Logger)."} {
+			m[owner+level] = 0
+			m[owner+level+"Context"] = 1
+		}
+	}
+	return m
+}()
 
 // field reports whether obj is one of the configured fields.
 func (j *judge) field(obj types.Object) bool {
@@ -281,7 +308,7 @@ func (j *judge) prefixed(f *ast.File) {
 		}
 		text, pos, ok := j.text(e, formats[e])
 		if ok && slices.ContainsFunc(j.opts.Prefixes, func(p string) bool { return strings.HasPrefix(text, p) }) {
-			j.report(text, pos)
+			j.report(text, pos, false)
 		}
 		return false
 	})
@@ -312,7 +339,7 @@ func (j *judge) formatter(call *ast.CallExpr) bool {
 // message judges e when it resolves to text.
 func (j *judge) message(e ast.Expr, format bool) {
 	if text, pos, ok := j.text(e, format); ok {
-		j.report(text, pos)
+		j.report(text, pos, false)
 	}
 }
 
@@ -364,13 +391,18 @@ func (j *judge) text(e ast.Expr, format bool) (string, token.Pos, bool) {
 	return "", token.NoPos, false
 }
 
-func (j *judge) report(text string, pos token.Pos) {
+// report judges text by every rule, or a log/slog message by the tag rule
+// alone and past every allow entry.
+func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 	if j.seen[pos] {
 		return
 	}
 	j.seen[pos] = true
 	for _, f := range prose.JudgeMessage(text, j.opts.MaxRunes) {
-		if (len(j.opts.Rules) > 0 && !slices.Contains(j.opts.Rules, f.Rule)) || j.allowed(f.Rule) {
+		if len(j.opts.Rules) > 0 && !slices.Contains(j.opts.Rules, f.Rule) {
+			continue
+		}
+		if (slogMessage && f.Rule != prose.RuleMessageTag) || (!slogMessage && j.allowed(f.Rule)) {
 			continue
 		}
 		j.pass.Report(analysis.Diagnostic{

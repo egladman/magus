@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/dropin"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 )
 
@@ -229,7 +230,7 @@ func (s *Store) read(st *dirState) error {
 		t, err := parseTokenRecord(f.name, path, f.info, now)
 		if err != nil {
 			st.skipped = append(st.skipped, err)
-			slog.WarnContext(context.Background(), "auth: skipped a token record", slog.String("path", path), slog.String("error", err.Error()))
+			logattr.For("auth").WarnContext(context.Background(), "skipped a token record", slog.String("path", path), slog.String("error", err.Error()))
 			continue
 		}
 		st.tokens = append(st.tokens, t)
@@ -347,9 +348,9 @@ func (s *Store) prune(st *dirState, now time.Time) {
 		switch err := s.removeExact(t); {
 		case err == nil, errors.Is(err, errReplaced):
 			changed = true
-			slog.DebugContext(context.Background(), "auth: removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
+			logattr.For("auth").DebugContext(context.Background(), "removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
 		default:
-			slog.WarnContext(context.Background(), "auth: could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
+			logattr.For("auth").WarnContext(context.Background(), "could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
 			kept = append(kept, t)
 		}
 	}

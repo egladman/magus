@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/logattr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -80,7 +81,7 @@ func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineCla
 	if c.Slots == 0 {
 		c.Slots = 1
 	}
-	g := &machineGate{admit: admit, required: required, log: slog.Default()}
+	g := &machineGate{admit: admit, required: required, log: logattr.For("magus")}
 	return g.acquire(ctx, c)
 }
 
@@ -174,7 +175,7 @@ func (g *machineGate) releaser(id string) func() {
 // reader to scroll past the line.
 func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	g.lost.Do(func() {
-		g.log.WarnContext(ctx, "magus: host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
+		g.log.WarnContext(ctx, "host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
 			slog.String("error", err.Error()))
 	})
 	return func() {}

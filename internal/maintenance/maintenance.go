@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 )
@@ -103,7 +104,7 @@ func runDue(ctx context.Context, opts Options, schedule []scheduledJob) {
 		// to disable every scheduled job with nothing said. Once, because the condition
 		// does not change and a line every quarter hour is a line people filter.
 		unusable.Do(func() {
-			slog.WarnContext(ctx, "maintenance: scheduler idle for the life of this server; no job will run",
+			logattr.For("maintenance").WarnContext(ctx, "scheduler idle for the life of this server; no job will run",
 				slog.String("trail_base", base), slog.String("socket", addr))
 		})
 		return

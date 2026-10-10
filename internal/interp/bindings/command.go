@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/service"
@@ -399,7 +399,7 @@ func warnCharmConflicts(ctx context.Context, base []string, charms map[string]sp
 		if _, seen := charmConflictWarned.LoadOrStore(sig, struct{}{}); seen {
 			continue
 		}
-		slog.WarnContext(ctx, "magus: an active charm is overridden by another and has no effect",
+		logattr.For("magus").WarnContext(ctx, "an active charm is overridden by another and has no effect",
 			"charm", c.Name,
 			"overridden_by", winner,
 			"hint", fmt.Sprintf("charms %q and %q both edit the same argument; %q wins by name order, so %q does nothing here. Drop one, or make their edits disjoint.", c.Name, winner, winner, c.Name))
@@ -416,7 +416,7 @@ var directMagusBinaryWarnOnce sync.Once
 func execCommand(ctx context.Context, dir, cmd string, args []string, env map[string]string, stdin string, capture bool) (run.ExecResult, error) {
 	if filepath.Base(cmd) == "magus" {
 		directMagusBinaryWarnOnce.Do(func() {
-			slog.WarnContext(ctx, "magus: command spell target called with 'magus' binary",
+			logattr.For("magus").WarnContext(ctx, "command spell target called with 'magus' binary",
 				"hint", "use magus.cmd(...) or a typed magus.run/describe/insight/doctor(...) instead; contextual cwd, version-pinned, no arg-quoting issues")
 		})
 	}

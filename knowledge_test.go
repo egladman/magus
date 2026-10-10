@@ -898,7 +898,7 @@ func TestLoadKnowledgePackagesReadsEveryEcosystem(t *testing.T) {
 	}, got, "the bun project contributes nothing and no key")
 
 	logged := buf.String()
-	assert.Equal(t, 1, strings.Count(logged, "knowledge: a manifest yielded no package versions"), logged)
+	assert.Equal(t, 1, strings.Count(logged, `msg="a manifest yielded no package versions"`), logged)
 	assert.Contains(t, logged, "project=bun")
 	assert.Contains(t, logged, "package.json read, no lockfile it understands (pnpm-lock.yaml, package-lock.json, npm-shrinkwrap.json, yarn.lock); no npm nodes for bun")
 	assert.Contains(t, logged, "pyproject.toml read, no lockfile it understands (uv.lock, poetry.lock, pdm.lock, Pipfile.lock); no python nodes for bun")

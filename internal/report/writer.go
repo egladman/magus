@@ -10,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/egladman/magus/internal/logattr"
 )
 
 // Writer is an async JSONL event sink; safe for concurrent use. A single drain
@@ -176,7 +178,8 @@ func (w *Writer) drain() {
 					// stream itself.
 					if n := w.dropped.Load(); n > 0 {
 						write(envelope{Type: TypeNotice, Body: Notice{
-							Level: slog.LevelError, Message: fmt.Sprintf("report: %d events dropped", n),
+							Level: slog.LevelError, Message: fmt.Sprintf("%d events dropped", n),
+							Attrs: map[string]any{logattr.Component: "report"},
 						}})
 					}
 					flush()
@@ -232,7 +235,7 @@ func (w *Writer) setErr(err error) {
 	}
 	w.mu.Unlock()
 	if first {
-		slog.Error("report: drain failed", "error", err)
+		logattr.For("report").Error("drain failed", "error", err)
 	}
 }
 

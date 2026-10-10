@@ -12,6 +12,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/types"
 )
@@ -67,7 +68,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 	if !row.ReadOnly {
 		b.granted = grantedPaths(loc.Root, row.WritePaths, row.DenyPaths)
 	}
-	slog.InfoContext(ctx, "magus: narrowed the sandbox write grant to a lease boundary",
+	logattr.For("magus").InfoContext(ctx, "narrowed the sandbox write grant to a lease boundary",
 		"lease", row.ID, "parent", row.Parent, "write_paths", len(row.WritePaths), "write_rules", len(b.granted))
 	return b.apply(policy)
 }

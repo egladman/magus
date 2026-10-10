@@ -40,6 +40,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 )
 
@@ -628,6 +629,6 @@ func (s *Store) saveSeen(ids []string) {
 		return nil
 	})
 	if err != nil {
-		slog.WarnContext(ctx, "magus: could not persist the review's seen threads", slog.String("err", err.Error()))
+		logattr.For("magus").WarnContext(ctx, "could not persist the review's seen threads", slog.String("err", err.Error()))
 	}
 }

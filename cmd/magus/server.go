@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
@@ -249,7 +250,7 @@ func awaitServerStop(ctx context.Context, grace time.Duration, now <-chan struct
 	case <-serverStopped:
 	case <-now:
 	case <-timer.C:
-		slog.WarnContext(ctx, "server: the runs it adopted did not unwind within shutdown_grace; exiting anyway",
+		logattr.For("server").WarnContext(ctx, "the runs it adopted did not unwind within shutdown_grace; exiting anyway",
 			slog.Duration("grace", grace))
 	}
 	return nil
@@ -262,7 +263,7 @@ func reloadOnHangup(ctx context.Context) {
 		return
 	}
 	dropped, busy := serverRegistry.evictAll()
-	slog.InfoContext(ctx, "server: reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
+	logattr.For("server").InfoContext(ctx, "reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
 		slog.Int("dropped", dropped), slog.Int("busy", busy))
 }
 

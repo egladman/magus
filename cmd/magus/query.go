@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/internal/service/console"
@@ -1150,7 +1151,7 @@ func askServer(ctx context.Context, root, verb string, read *graphRead, reply an
 		return false
 	}
 	if err := proc.Read(ctx, sock, version, wsRoot, verb, read, reply); err != nil {
-		slog.DebugContext(ctx, "magus: the server did not answer this read; reading locally", slog.String("error", err.Error()))
+		logattr.For("magus").DebugContext(ctx, "the server did not answer this read; reading locally", slog.String("error", err.Error()))
 		return false
 	}
 	return true

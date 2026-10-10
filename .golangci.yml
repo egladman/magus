@@ -271,6 +271,10 @@ linters:
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
             - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
           prefixes: ["magus workspace:"]
+          # A log record names what logged it with a component attribute
+          # (internal/logattr), never a tag in its text. The allow list below
+          # never exempts a slog message.
+          slog: true
           hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
           # A RATCHET: every file holding a finding on 2026-10-09 (173 findings in 54
           # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
@@ -382,10 +386,11 @@ linters:
             # since the MCP workers re-exec into internal/interp/mcpclient and
             # internal/interp/transform before the CLI starts, 71 since
             # internal/gcpolicy is a dependency-free leaf imported first so its
-            # init runs early. Raising it is a sentence in the commit message.
+            # init runs early, 72 since internal/logattr names the component a
+            # log record carries. Raising it is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 71
+              max: 72
 
       stutter:
         type: module

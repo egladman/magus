@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/secret"
 )
 
@@ -644,8 +646,44 @@ func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool {
 	defer h.mu.Unlock()
 	return lvl >= h.level
 }
-func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *PrettyHandler) WithGroup(_ string) slog.Handler      { return h }
+
+// WithAttrs returns a handler that renders through h, band and counters included,
+// with attrs ahead of each record's own.
+func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
+	return prettyWithAttrs{h: h, attrs: slices.Clone(attrs)}
+}
+
+// WithGroup returns h: the pretty form prints attrs flat, so a group changes nothing.
+func (h *PrettyHandler) WithGroup(_ string) slog.Handler { return h }
+
+// prettyWithAttrs is a [PrettyHandler] carrying attrs from [slog.Logger.With].
+type prettyWithAttrs struct {
+	h     *PrettyHandler
+	attrs []slog.Attr
+}
+
+func (p prettyWithAttrs) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return p.h.Enabled(ctx, lvl)
+}
+
+func (p prettyWithAttrs) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(p.attrs...)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(a)
+		return true
+	})
+	return p.h.Handle(ctx, nr)
+}
+
+func (p prettyWithAttrs) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return prettyWithAttrs{h: p.h, attrs: append(slices.Clip(p.attrs), attrs...)}
+}
+
+func (p prettyWithAttrs) WithGroup(_ string) slog.Handler { return p }
 
 // Handle renders one record. It deliberately does NOT skip on ctx.Err(): a handler must
 // not treat cancellation as permission to drop output. The check that used to live here
@@ -875,15 +913,20 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	if colorize && attrs != "" {
 		attrs = tty.Colorize(attrs, colDim)
 	}
-	h.printf("%s %s%s\n", Glyph(colorize, label, color), r.Message, attrs)
+	msg := r.Message
+	if c := recordStr(r, logattr.Component); c != "" {
+		msg = c + ": " + msg
+	}
+	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
 }
 
-// formatAttrs renders a record's attrs as " key=value" pairs, skipping the noisy
-// "dir" correlation attr unless the record is at debug level or below.
+// formatAttrs renders a record's attrs as " key=value" pairs, skipping the
+// component (handleGeneric prints it ahead of the message) and the noisy "dir"
+// correlation attr unless the record is at debug level or below.
 func formatAttrs(r slog.Record) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == "dir" && r.Level > slog.LevelDebug {
+		if a.Key == logattr.Component || (a.Key == "dir" && r.Level > slog.LevelDebug) {
 			return true
 		}
 		_, _ = fmt.Fprintf(&b, " %s=%s", a.Key, a.Value.String())

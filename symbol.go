@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/logattr"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
@@ -234,7 +235,7 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 	}
 	si.mu.Unlock()
 
-	si.log.DebugContext(ctx, "magus: background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
+	si.log.DebugContext(ctx, "background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
 	err := si.runIndex(ctx, ref)
 
 	si.mu.Lock()
@@ -264,7 +265,7 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		st.backoffTill = si.now().Add(backoffDuration(st.failures))
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
-		si.log.WarnContext(ctx, "magus: background symbol index failed, backing off",
+		si.log.WarnContext(ctx, "background symbol index failed, backing off",
 			slog.String("project", ref.project), slog.String("op", ref.op), slog.Int("failures", st.failures), slog.String("error", err.Error()))
 		return
 	}
@@ -375,7 +376,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 
 	si := &symbolIndexer{
-		log:         slog.Default(),
+		log:         logattr.For("magus"),
 		quiet:       quiet,
 		minInterval: minInterval,
 		now:         time.Now,
@@ -391,7 +392,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
-					slog.Default().DebugContext(ctx, "magus: guard index not written", slog.String("error", gerr.Error()))
+					logattr.For("magus").DebugContext(ctx, "guard index not written", slog.String("error", gerr.Error()))
 				}
 			}
 			if err == nil || ctx.Err() != nil {
@@ -419,7 +420,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	m.symbolStatus.setWatched(true)
 	go si.loop(wctx, watcher)
 	go si.seed(wctx)
-	slog.Default().DebugContext(ctx, "magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
+	logattr.For("magus").DebugContext(ctx, "background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)
 		cancel()
@@ -607,7 +608,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 	m.probeCacheOnce.Do(func() {
 		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
 		if err != nil {
-			slog.WarnContext(ctx, "magus: cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
+			logattr.For("magus").WarnContext(ctx, "cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
 			return
 		}
 		m.probeCache = c

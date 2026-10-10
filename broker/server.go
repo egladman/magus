@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 )
 
@@ -91,6 +92,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	for _, fn := range opts {
 		fn(&o)
 	}
+	o.log = o.log.With(logattr.Component, "broker")
 	exe, _ := os.Executable()
 	s := &server{
 		opts:       o,
@@ -138,25 +140,25 @@ loop:
 			drain = nil
 			held := s.startDrain()
 			if held == 0 {
-				o.log.InfoContext(ctx, "broker: stopping; it holds nothing")
+				o.log.InfoContext(ctx, "stopping; it holds nothing")
 				break loop
 			}
-			o.log.InfoContext(ctx, "broker: draining; seating nothing new until the runs holding it finish",
+			o.log.InfoContext(ctx, "draining; seating nothing new until the runs holding it finish",
 				slog.Int("holding", held), slog.Duration("grace", o.drainGrace))
 			graceTimer = time.NewTimer(o.drainGrace)
 			graceUp = graceTimer.C
 		case <-s.released:
 			if s.isDraining() && s.held() == 0 {
-				o.log.InfoContext(ctx, "broker: drained; stopping")
+				o.log.InfoContext(ctx, "drained; stopping")
 				break loop
 			}
 		case <-graceUp:
-			o.log.WarnContext(ctx, "broker: drain grace passed with runs still holding it; stopping, and they re-assert on the next broker",
+			o.log.WarnContext(ctx, "drain grace passed with runs still holding it; stopping, and they re-assert on the next broker",
 				slog.Int("holding", s.held()), slog.Duration("grace", o.drainGrace))
 			break loop
 		case now := <-tick:
 			if idle := s.idleDuration(now); idle >= o.idleExit {
-				o.log.InfoContext(ctx, "broker: exiting; it has held nothing", slog.Duration("idle", idle.Round(time.Second)))
+				o.log.InfoContext(ctx, "exiting; it has held nothing", slog.Duration("idle", idle.Round(time.Second)))
 				break loop
 			}
 		}
@@ -338,7 +340,7 @@ func (s *server) handle(conn net.Conn) {
 		f, err := r.read()
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				s.opts.log.DebugContext(s.ctx, "broker: connection ended", slog.Int("pid", h.PID), slog.String("error", err.Error()))
+				s.opts.log.DebugContext(s.ctx, "connection ended", slog.Int("pid", h.PID), slog.String("error", err.Error()))
 			}
 			break
 		}
@@ -389,7 +391,7 @@ func (s *server) forget(conn net.Conn, sess *session) {
 	}
 	if len(claims) > 0 || len(services) > 0 {
 		s.noteRelease()
-		s.opts.log.InfoContext(s.ctx, "broker: released a closed connection's hold",
+		s.opts.log.InfoContext(s.ctx, "released a closed connection's hold",
 			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("services", len(services)))
 	}
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -79,7 +80,7 @@ func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where str
 	}
 	ignored, err := hint.CheckKeys(m.MapKeys(), known, types.RemovedOptions, where)
 	for _, k := range ignored {
-		slog.WarnContext(ctx, "magusfile: ignoring an option this magus does not recognize",
+		logattr.For("magusfile").WarnContext(ctx, "ignoring an option this magus does not recognize",
 			slog.String("where", where), slog.String("option", k),
 			slog.String("advice", hint.IgnoredKeyAdvice()))
 	}

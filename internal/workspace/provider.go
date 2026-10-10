@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -91,7 +92,7 @@ func AddProvidedProjects(ctx context.Context, ws *types.Workspace, spellNames []
 			return fmt.Errorf("magus: workspace provider %q: %w", spellName, err)
 		}
 		if len(provided) == 0 {
-			slog.WarnContext(ctx, "magus: workspace provider reported no projects",
+			logattr.For("magus").WarnContext(ctx, "workspace provider reported no projects",
 				slog.String("provider", spellName), slog.String("root", ws.Root))
 			continue
 		}
@@ -165,10 +166,10 @@ func reportProvidedCollision(ctx context.Context, spellName, rel, owner string) 
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.ProviderProjectShadowed,
 			fmt.Sprintf("workspace provider %q reported %q, which already has a magusfile; the magusfile wins and the provider's configuration for it is ignored", spellName, rel)))
 	case spellName:
-		slog.DebugContext(ctx, "magus: workspace provider reported the same path twice; the first record wins",
+		logattr.For("magus").DebugContext(ctx, "workspace provider reported the same path twice; the first record wins",
 			slog.String("provider", spellName), slog.String("path", rel))
 	default:
-		slog.DebugContext(ctx, "magus: workspace provider path already claimed by an earlier provider",
+		logattr.For("magus").DebugContext(ctx, "workspace provider path already claimed by an earlier provider",
 			slog.String("provider", spellName), slog.String("owner", owner), slog.String("path", rel))
 	}
 }

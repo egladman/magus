@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
@@ -850,7 +851,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	if workDir != "" {
 		ctx = std.WithCwd(ctx, workDir)
 	}
-	slog.DebugContext(ctx, "interp: run magusfile target", "target", target, "dir", workDir)
+	logattr.For("interp").DebugContext(ctx, "run magusfile target", "target", target, "dir", workDir)
 
 	load, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
@@ -1249,7 +1250,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 				}
 			}
 		} else if err != nil && !errors.Is(err, ErrNoMagusfile) {
-			slog.WarnContext(ctx, "interp: buzz repl autoload find failed", slog.String("error", err.Error()))
+			logattr.For("interp").WarnContext(ctx, "buzz repl autoload find failed", slog.String("error", err.Error()))
 		}
 	}
 

@@ -40,6 +40,18 @@ func TestAnalyzerReportsOnlyTheRulesNamedOutsideAllowedFiles(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "quiet")
 }
 
+// TestAnalyzerJudgesSlogMessagesByTheTagRule holds a log/slog message, through
+// the package functions and *slog.Logger methods alike, to the tag rule and no
+// other, with slog the only thing configured. An allow entry over the whole
+// file exempts none of them.
+func TestAnalyzerJudgesSlogMessagesByTheTagRule(t *testing.T) {
+	analyzer, err := New(Options{Slog: true, Allow: []AllowEntry{{File: "logs/*.go", Reason: "staged"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, analysistest.TestData(), analyzer, "logs")
+}
+
 // TestNewRejectsDeadScope fails at load when a file it names has moved.
 func TestNewRejectsDeadScope(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "internal/guard/shell.go")

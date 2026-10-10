@@ -54,6 +54,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
@@ -946,7 +947,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// Announced rather than silent: a run quietly narrower than requested is as hard
 		// to attribute as one that thrashes.
 		if clamped, was := cache.ClampConcurrency(concurrency); was {
-			slog.Warn("magus: concurrency capped to this machine",
+			logattr.For("magus").Warn("concurrency capped to this machine",
 				slog.Int("requested", concurrency), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			concurrency = clamped

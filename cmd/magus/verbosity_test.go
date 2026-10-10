@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 )
@@ -49,6 +51,25 @@ func TestCtxAttrHandlerInjectsDir(t *testing.T) {
 			t.Fatalf("did not expect a dir attr, got: %s", buf.String())
 		}
 	})
+}
+
+// TestDirHandlerRendersComponentByFormat pins how a record's component reaches
+// each default handler the CLI installs: pretty leads the message with it, as
+// the tag in the message text used to, and text keeps it an attribute.
+func TestDirHandlerRendersComponentByFormat(t *testing.T) {
+	ctx := std.WithCwd(context.Background(), "/ws/api")
+
+	var pretty bytes.Buffer
+	slog.New(dirHandler{cache.NewPrettyHandler(&pretty, slog.LevelInfo)}).
+		With(logattr.Component, "knowledge").
+		WarnContext(ctx, "cannot decode symbol index", "index", "a.scip")
+	assert.Equal(t, "[warn] knowledge: cannot decode symbol index index=a.scip\n", pretty.String())
+
+	var text bytes.Buffer
+	slog.New(dirHandler{slog.NewTextHandler(&text, nil)}).
+		With(logattr.Component, "knowledge").
+		WarnContext(ctx, "cannot decode symbol index", "index", "a.scip")
+	assert.Contains(t, text.String(), `msg="cannot decode symbol index" component=knowledge index=a.scip dir=/ws/api`)
 }
 
 // TestExpandVerbosityArgsStopsAtSeparator pins the transformer half of the "--"

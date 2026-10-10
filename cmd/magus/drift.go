@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -132,7 +133,7 @@ func checkDriftForCommit(
 			// probe must not hide a real generated-output finding and must not fail
 			// the job. It is logged by the caller if this bubbles up, but here it just
 			// means the formatting class stays silent for this run.
-			slog.WarnContext(ctx, "check-drift: gofmt probe failed", slog.String("error", gerr.Error()))
+			logattr.For("check-drift").WarnContext(ctx, "gofmt probe failed", slog.String("error", gerr.Error()))
 		} else {
 			finding.unformatted = unformatted
 		}

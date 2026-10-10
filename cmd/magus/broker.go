@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
@@ -139,9 +140,9 @@ func brokerServe(ctx context.Context, args []string) error {
 	// anything new is hosted.
 	journal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
 	if jerr != nil {
-		slog.Warn("broker: service journal unavailable; crash reaping disabled", slog.String("error", jerr.Error()))
+		logattr.For("broker").Warn("service journal unavailable; crash reaping disabled", slog.String("error", jerr.Error()))
 	} else if res := journal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
-		slog.Info("broker: reaped orphaned services a previous broker left",
+		logattr.For("broker").Info("reaped orphaned services a previous broker left",
 			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
 	}
 	reg := service.New(service.ExecRunner{}, defaultServiceIdle, service.WithJournal(journal))
@@ -192,14 +193,14 @@ func brokerServe(ctx context.Context, args []string) error {
 // file to reopen, and says so rather than exiting.
 func reopenBrokerLog(ctx context.Context, path string) {
 	if path == "" {
-		slog.InfoContext(ctx, "broker: SIGHUP reopens the --log file, and this broker logs to stderr")
+		logattr.For("broker").InfoContext(ctx, "SIGHUP reopens the --log file, and this broker logs to stderr")
 		return
 	}
 	if err := redirectStdio(path); err != nil {
-		slog.ErrorContext(ctx, "broker: could not reopen its log; still writing to the old one", slog.String("error", err.Error()))
+		logattr.For("broker").ErrorContext(ctx, "could not reopen its log; still writing to the old one", slog.String("error", err.Error()))
 		return
 	}
-	slog.InfoContext(ctx, "broker: reopened its log", slog.String("log", path))
+	logattr.For("broker").InfoContext(ctx, "reopened its log", slog.String("log", path))
 }
 
 func brokerStatus(ctx context.Context, args []string) error {
@@ -343,13 +344,13 @@ func ensureBroker(ctx context.Context) int {
 	}
 	pid, logPath, err := spawnBroker()
 	if err != nil {
-		slog.Debug("magus: could not start a broker", slog.String("error", err.Error()))
+		logattr.For("magus").Debug("could not start a broker", slog.String("error", err.Error()))
 		return 0
 	}
 	deadline := time.Now().Add(brokerReadyTimeout)
 	for !broker.Live(ctx, addr) {
 		if time.Now().After(deadline) || ctx.Err() != nil {
-			slog.Debug("magus: the broker a run started did not come up", slog.Int("pid", pid), slog.String("log", logPath))
+			logattr.For("magus").Debug("the broker a run started did not come up", slog.Int("pid", pid), slog.String("log", logPath))
 			return 0
 		}
 		time.Sleep(20 * time.Millisecond)

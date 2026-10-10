@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/vcs"
 )
@@ -185,7 +185,7 @@ func removeAbandonedSeeds(ctx context.Context, dst string) {
 			continue
 		}
 		if err := os.RemoveAll(m); err != nil {
-			slog.DebugContext(ctx, "spell: could not remove an abandoned seed", "path", m, "err", err)
+			logattr.For("spell").DebugContext(ctx, "could not remove an abandoned seed", "path", m, "err", err)
 			continue
 		}
 		_ = os.Remove(m + seedLockSuffix)

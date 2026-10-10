@@ -125,7 +125,7 @@ func Ensure(ctx context.Context, cacheDir string, opts BuildOptions, want []Shar
 		if err := e.resolveStamps(ctx); err != nil {
 			return nil, err
 		}
-		e.store.log.DebugContext(ctx, "knowledge: reassembling shard classes", slog.Any("classes", stale))
+		e.store.log.DebugContext(ctx, "reassembling shard classes", slog.Any("classes", stale))
 		in, err := gather(stale)
 		if err != nil {
 			return nil, err

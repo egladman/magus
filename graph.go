@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 )
 
@@ -191,7 +192,7 @@ func newWarmGraph(rebuild func(context.Context, bool) (*knowledge.Graph, error),
 	if log == nil {
 		log = slog.Default()
 	}
-	return &warmGraph{rebuild: rebuild, log: log, reload: make(chan struct{}, 1), settle: warmGraphReloadSettle}
+	return &warmGraph{rebuild: rebuild, log: log.With(logattr.Component, "magus"), reload: make(chan struct{}, 1), settle: warmGraphReloadSettle}
 }
 
 // warmGraphReloadSettle sits on top of the watcher's own debounce: a checkout or a
@@ -307,7 +308,7 @@ func (w *warmGraph) reloadLoop(ctx context.Context) {
 			}
 		}
 		if _, err := w.Get(ctx, false); err != nil && ctx.Err() == nil {
-			w.log.DebugContext(ctx, "magus: background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
+			w.log.DebugContext(ctx, "background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
 		}
 	}
 }
@@ -357,7 +358,7 @@ func (w *warmGraph) follow(ctx context.Context, watcher *watch.Watcher) {
 			return
 		case batch, ok := <-watcher.Events():
 			if !ok {
-				w.log.WarnContext(ctx, "magus: knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
+				w.log.WarnContext(ctx, "knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
 				return
 			}
 			if graphRelevant(batch.Paths) {

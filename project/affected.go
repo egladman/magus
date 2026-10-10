@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/graph/dependency"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -60,7 +61,7 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	// changed, the projects that directly contain them (seed), and the dependency
 	// closure that selection expands to. The starting point for "why did magus run
 	// X?" (or "why didn't it run Y?"). -vv surfaces it.
-	slog.DebugContext(ctx, "affected: derived set",
+	logattr.For("affected").DebugContext(ctx, "derived set",
 		slog.String("base", base),
 		slog.Int("changed_files", len(changed)),
 		slog.Any("seed", seed),
@@ -247,7 +248,7 @@ func newProjectIndex(ctx context.Context, w *types.Workspace) *projectIndex {
 		// once per file. Silent, it reads as a declared input while keying nothing,
 		// and MGS1028 then advises declaring a path the project already "declares".
 		if bad := types.InvalidGlobs(globs[path]); len(bad) > 0 {
-			slog.WarnContext(ctx, "affected: project declares globs this matcher cannot parse; they match nothing",
+			logattr.For("affected").WarnContext(ctx, "project declares globs this matcher cannot parse; they match nothing",
 				slog.String("project", path),
 				slog.Any("globs", bad))
 		}

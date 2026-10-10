@@ -14,6 +14,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/cache"
 	interp "github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/logattr"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 )
@@ -264,7 +265,7 @@ func (m *Magus) settleDerivedOrder(ctx context.Context, st *orderSettle, steps [
 		if !p.TargetPolicies[node.Target].SkipCache {
 			continue
 		}
-		slog.InfoContext(ctx, "magus: derived ordering: re-running target whose declared inputs were written after it ran",
+		logattr.For("magus").InfoContext(ctx, "derived ordering: re-running target whose declared inputs were written after it ran",
 			slog.String("project", node.Project), slog.String("target", node.Target),
 			slog.String("written_by", stale.Project+":"+stale.Target))
 		types.ActiveDispatchFromContext(ctx).Mark(p.Path)

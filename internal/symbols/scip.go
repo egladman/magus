@@ -18,6 +18,7 @@ import (
 	"github.com/scip-code/scip/bindings/go/scip"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/types"
 )
 
@@ -329,7 +330,7 @@ func ParseDecoded(ctx context.Context, idx *scip.Index, projectPath, declaredLan
 		// index filtered to nothing looks exactly like a scip target that never ran, and
 		// the caller logs nothing for an empty result. The count is what tells those
 		// apart when an indexer's root does not match what magus assumed.
-		slog.DebugContext(ctx, "symbols: skipped documents outside the workspace",
+		logattr.For("symbols").DebugContext(ctx, "skipped documents outside the workspace",
 			slog.String("project", projectPath),
 			slog.Int("skipped", skipped),
 			slog.Int("kept", len(idx.Documents)-skipped))

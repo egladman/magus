@@ -93,12 +93,12 @@ func (s *server) watchCrash(h hello, hint string, report, stderr *os.File) {
 		}
 		msg := hint
 		if path, err := s.saveCrash(h, body.Bytes()); err != nil {
-			s.opts.log.WarnContext(s.ctx, "broker: could not save a crash report", slog.Int("pid", h.PID), slog.String("error", err.Error()))
+			s.opts.log.WarnContext(s.ctx, "could not save a crash report", slog.Int("pid", h.PID), slog.String("error", err.Error()))
 		} else if path != "" {
 			msg += "The crash report is saved at " + path + ".\n"
 		}
 		_, _ = io.WriteString(stderr, msg)
-		s.opts.log.WarnContext(s.ctx, "broker: a watched process crashed", slog.Int("pid", h.PID), slog.String("command", strings.Join(h.Argv, " ")))
+		s.opts.log.WarnContext(s.ctx, "a watched process crashed", slog.Int("pid", h.PID), slog.String("command", strings.Join(h.Argv, " ")))
 	}()
 }
 

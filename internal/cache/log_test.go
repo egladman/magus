@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/internal/logattr"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -217,13 +218,29 @@ func TestPrettyHandlerGenericMessage(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	r := buildRecord("magus: something happened", slog.String("key", "val"))
+	r := buildRecord("something happened", slog.String(logattr.Component, "magus"), slog.String("key", "val"))
 	require.NoError(t, h.Handle(context.Background(), r), "Handle")
 	out := buf.String()
-	assert.Contains(t, out, "[info] magus: something happened")
-	assert.Contains(t, out, "key=val")
+	assert.Equal(t, "[info] magus: something happened key=val\n", out,
+		"the component leads the message and stays out of the attr dump")
 	assert.NotContains(t, out, "time=", "generic pretty output must not carry a timestamp")
 	assert.NotContains(t, out, "level=", "generic pretty output must not carry a level= field")
+}
+
+// TestPrettyHandlerWithAttrsKeepsAttrsAndState pins that a logger derived with
+// With renders its attrs, component as the leading tag, through the same handler
+// state as the original: a derived handler that dropped them would print the bare
+// message, and one that copied the state would split the run's counters.
+func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	log := slog.New(h).With(logattr.Component, "knowledge").WithGroup("g").With("path", "a.scip")
+	log.Warn("cannot decode symbol index", "error", "EOF")
+	assert.Equal(t, "[warn] knowledge: cannot decode symbol index path=a.scip error=EOF\n", buf.String())
+
+	slog.New(h).With("k", "v").Info("cache.miss", "label", "api", "duration", time.Second)
+	assert.Equal(t, 1, h.status.passed, "the derived handler counts into the original's status line")
 }
 
 // TestPrettyHandlerGenericLevels verifies the level-to-tag mapping for generic records.

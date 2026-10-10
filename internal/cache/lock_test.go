@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -27,9 +28,36 @@ func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return recordingWith{h: h, attrs: attrs}
+}
 
 func (h *recordingHandler) WithGroup(string) slog.Handler { return h }
+
+// recordingWith records into h with attrs ahead of each record's own, so a line
+// logged through logattr.For carries its component.
+type recordingWith struct {
+	h     *recordingHandler
+	attrs []slog.Attr
+}
+
+func (w recordingWith) Enabled(context.Context, slog.Level) bool { return true }
+
+func (w recordingWith) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(w.attrs...)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(a)
+		return true
+	})
+	return w.h.Handle(ctx, nr)
+}
+
+func (w recordingWith) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return recordingWith{h: w.h, attrs: append(slices.Clip(w.attrs), attrs...)}
+}
+
+func (w recordingWith) WithGroup(string) slog.Handler { return w }
 
 // lines renders each record as "message key=value ..." for a plain contains assertion.
 func (h *recordingHandler) lines() []string {
@@ -106,9 +134,9 @@ func TestKeyedLockWaitBeatsAndNamesTheHolder(t *testing.T) {
 
 	assert.Equal(t, ". generate", blockedOn, "the mark names the holder, not just the key")
 	assert.Contains(t, logs.lines(),
-		"magus: . coverage-badge is waiting for a cache lock held by . generate (0s so far)")
+		". coverage-badge is waiting for a cache lock held by . generate (0s so far) component=magus")
 	assert.NotContains(t, logs.lines(),
-		"magus: . coverage-badge is waiting for a cache lock held by . generate",
+		". coverage-badge is waiting for a cache lock held by . generate component=magus",
 		"the moment of queueing is not news; only a wait past the first notice is")
 }
 

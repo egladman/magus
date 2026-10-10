@@ -3,10 +3,11 @@ package file
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/egladman/magus/internal/logattr"
 )
 
 // workspaceScheme is the RETIRED URI prefix a project reference may carry.
@@ -103,7 +104,7 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 		if suggest == "" {
 			suggest = "."
 		}
-		slog.WarnContext(ctx, "magus: workspace:// is deprecated; a bare workspace-relative path means the same thing",
+		logattr.For("magus").WarnContext(ctx, "workspace:// is deprecated; a bare workspace-relative path means the same thing",
 			"ref", input, "use", suggest)
 		if rest == "" {
 			return ".", nil
