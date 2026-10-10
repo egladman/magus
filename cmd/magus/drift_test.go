@@ -326,22 +326,33 @@ func TestBuildDriftNoticeBothClasses(t *testing.T) {
 
 const driftRangePatch = "diff --git a/a.go b/a.go\n--- a/a.go\n+++ b/a.go\n@@ -1 +1 @@\n-a\n+b\n@@ -9 +9 @@\n-c\n+d\n"
 
-// TestUnreadRangeLineCountsWhatNoMarkCovers pins the one line the drift job adds for the range a
+// TestUnreadRangeNoticeCountsWhatNoMarkCovers pins the notice the drift job adds for the range a
 // push sends: silent when there is nothing to read or nothing unread, a count otherwise, and
-// "unknown", never "all unread", when the marks cannot be read.
-func TestUnreadRangeLineCountsWhatNoMarkCovers(t *testing.T) {
+// "unknown", never "all unread", when the marks cannot be read. The command rides apart from the
+// message and the load error rides as an error.
+func TestUnreadRangeNoticeCountsWhatNoMarkCovers(t *testing.T) {
 	first := changeset.ParseHunks(driftRangePatch)[0].Hunks[0].Digest
+	next := hint.Diff.With("--unread", "--rev", "@{upstream}...HEAD")
 
-	line := unreadRangeLine("@{upstream}...HEAD", driftRangePatch, []string{first}, nil)
-	assert.True(t, strings.HasPrefix(line, "1 of 2 hunks of this range (@{upstream}...HEAD) unread; read them with "), line)
-	assert.Contains(t, line, "diff --unread --rev @{upstream}...HEAD")
+	got, ok := unreadRangeNotice("@{upstream}...HEAD", driftRangePatch, []string{first}, nil)
+	require.True(t, ok)
+	assert.Equal(t, unreadNotice{msg: "1 of 2 hunks of this range (@{upstream}...HEAD) unread", next: next}, got)
 
 	all := []string{first, changeset.ParseHunks(driftRangePatch)[0].Hunks[1].Digest}
-	assert.Empty(t, unreadRangeLine("@{upstream}...HEAD", driftRangePatch, all, nil), "a range read in full says nothing")
-	assert.Empty(t, unreadRangeLine("@{upstream}...HEAD", "", nil, nil), "an empty range says nothing")
-	assert.Equal(t,
-		"read state unknown for the 2 hunks of this range (@{upstream}...HEAD): the read marks could not be read (permission denied)",
-		unreadRangeLine("@{upstream}...HEAD", driftRangePatch, nil, errors.New("permission denied")))
+	_, ok = unreadRangeNotice("@{upstream}...HEAD", driftRangePatch, all, nil)
+	assert.False(t, ok, "a range read in full says nothing")
+	_, ok = unreadRangeNotice("@{upstream}...HEAD", "", nil, nil)
+	assert.False(t, ok, "an empty range says nothing")
+
+	loadErr := errors.New("permission denied")
+	got, ok = unreadRangeNotice("@{upstream}...HEAD", driftRangePatch, nil, loadErr)
+	require.True(t, ok)
+	assert.Equal(t, unreadNotice{
+		msg:  "read state unknown for the 2 hunks of this range (@{upstream}...HEAD)",
+		next: next,
+		why:  "the read marks could not be read",
+		err:  loadErr,
+	}, got)
 }
 
 // TestPushedUnreadReadsExactlyThePushedRange runs against a real repository: the range is what
@@ -375,11 +386,15 @@ func TestPushedUnreadReadsExactlyThePushedRange(t *testing.T) {
 		{Remote: zero, Local: sent},
 		{Remote: strings.Repeat("e", 40), Local: sent},
 	})
-	assert.Equal(t, []string{
-		"1 of 1 hunks of this range (" + held[:12] + "..." + sent[:12] + ") unread; read them with " +
-			hint.Diff.With("--unread", "--rev", held[:12]+"..."+sent[:12]),
-		"1 of 1 hunks of this range (origin/HEAD..." + sent[:12] + ") unread; read them with " +
-			hint.Diff.With("--unread", "--rev", "origin/HEAD..."+sent[:12]),
+	assert.Equal(t, []unreadNotice{
+		{
+			msg:  "1 of 1 hunks of this range (" + held[:12] + "..." + sent[:12] + ") unread",
+			next: hint.Diff.With("--unread", "--rev", held[:12]+"..."+sent[:12]),
+		},
+		{
+			msg:  "1 of 1 hunks of this range (origin/HEAD..." + sent[:12] + ") unread",
+			next: hint.Diff.With("--unread", "--rev", "origin/HEAD..."+sent[:12]),
+		},
 	}, got)
 	assert.Nil(t, pushedUnread(context.Background(), res, dir, cache, "origin", nil), "a commit's run sends no range")
 }

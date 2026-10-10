@@ -131,8 +131,9 @@ The order reaches every place you read a change:
 - the console's focus mode (`f`) walks it one step at a time.
 
 When the symbol index cannot be brought current, magus prints no order and a note says to run
-`magus graph build`. An order drawn without the uses would read as "nothing is related",
-which is a claim it cannot back.
+`magus graph build`. With the daemon running, a stale index is rebuilt in the background, so a
+retry in a minute may find it current. An order drawn without the uses would read as "nothing
+is related", which is a claim it cannot back.
 
 ## Reading
 
@@ -408,10 +409,11 @@ note: no symbol index loaded: changed-symbol callers and coverage overlays are u
 
 <!-- /example -->
 
-While the server runs, each thread on the pull request is named beside the hunk it sits on, as
+While the daemon runs, each thread on the pull request is named beside the hunk it sits on, as
 `thread <id>`, and `-o json` carries the same ids under each file's `threads`. The report takes
-them from the server's session and never asks the host itself, so with no server it lists no
-threads and prints one line naming `magus server start`.
+them from the daemon's session and never asks the host itself, so with no daemon it lists no
+threads and logs a notice with `magus server start` as the next command. Under `-q` the notice
+shrinks to that command.
 
 ### One thread
 

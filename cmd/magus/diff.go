@@ -446,7 +446,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
-			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, src.label), attr.Notice(""), attr.Component("magus"))
+			warnUnreadUnknown(ctx, *rev.Unread, src.label, verr)
 		}
 	}
 	// The threads are named on the report so a person can find the id --thread takes. A patch
@@ -556,6 +556,13 @@ func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
 }
 
+// warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
+// the record's error.
+func warnUnreadUnknown(ctx context.Context, u types.DiffUnread, source string, loadErr error) {
+	slog.WarnContext(ctx, review.UnreadLine(u, source),
+		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
+}
+
 // short abbreviates a revision for a message a person reads, keeping the full one for the command.
 func short(rev string) string {
 	if len(rev) <= 12 {
@@ -596,7 +603,7 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 		return fmt.Errorf("magus diff: %w", threadLookupError(err, reason, len(comments)))
 	}
 	if reason != "" {
-		slog.WarnContext(ctx, "part of the review could not be read: "+reason, attr.Notice(""), attr.Component("magus"))
+		slog.WarnContext(ctx, "part of the review could not be read", attr.Notice(""), attr.Component("magus"), attr.Why(reason))
 	}
 	switch t.opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -624,9 +631,9 @@ func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
 func threadLookupError(err error, reason string, comments int) error {
 	switch {
 	case reason != "":
-		return fmt.Errorf("%w: the review was only partly read: %s", err, reason)
+		return fmt.Errorf("the review was only partly read: %s: %w", reason, err)
 	case comments == 0:
-		return fmt.Errorf("%w: no comments were found, is a review open for this branch?", err)
+		return fmt.Errorf("no comments were found: %w", err)
 	}
 	return err
 }
@@ -902,7 +909,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, re
 		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
 		rev = review.FilterUnread(rev, viewed, verr)
 		if rev.Unread.ReadState == types.DiffReadStateUnknown {
-			slog.WarnContext(ctx, review.UnreadLine(*rev.Unread, req.label), attr.Notice(""), attr.Component("magus"))
+			warnUnreadUnknown(ctx, *rev.Unread, req.label, verr)
 			sync.close()
 			return nil
 		}

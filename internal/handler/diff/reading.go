@@ -1,11 +1,11 @@
 package diff
 
 import (
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
 )
@@ -37,7 +37,7 @@ func (h *ReviewHandler) reading(w http.ResponseWriter, r *http.Request, req revi
 	ctx := r.Context()
 	if !req.On {
 		if err := h.Sessions.ClearReading(ctx); err != nil {
-			h.Log.WarnContext(ctx, "diff session: could not clear the reading mark", slog.String("error", err.Error()))
+			h.Log.With(attr.Component("diff-session")).WarnContext(ctx, "could not clear the reading mark", attr.Error(err))
 			handler.Refuse(w, r, rpcerr.Internal("clearing the reading mark"))
 			return
 		}
@@ -55,7 +55,7 @@ func (h *ReviewHandler) reading(w http.ResponseWriter, r *http.Request, req revi
 	}
 	mark, err := h.Sessions.SetReading(ctx, at, time.Now())
 	if err != nil {
-		h.Log.WarnContext(ctx, "diff session: could not record the reading mark", slog.String("error", err.Error()))
+		h.Log.With(attr.Component("diff-session")).WarnContext(ctx, "could not record the reading mark", attr.Error(err))
 		handler.Refuse(w, r, rpcerr.Internal("recording the reading mark"))
 		return
 	}

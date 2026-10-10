@@ -77,27 +77,33 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	}
 	notice, ok, err := checkDriftForCommit(ctx, m.Root(), res.VCS, m.ClassifyFiles, formatGlobs, realGofmtList)
 	if err != nil {
-		slog.WarnContext(ctx, "server check-drift: could not check HEAD for stale output", slog.String("error", err.Error()))
+		slog.With(attr.Component("check-drift")).WarnContext(ctx, "could not check HEAD for stale output", attr.Error(err))
 		// Best-effort: a broken check must not be mistaken for a failed commit or push.
 		ok = false
 	}
 	var lines []string
 	if ok {
 		lines = append(lines, notice)
+		slog.WarnContext(ctx, notice, attr.Notice(""))
 	}
 	if hook.Hook == job.DriftHookPrePush {
 		remote := hook.Remote
 		if remote == "" {
 			remote = m.ReviewOrigin(ctx).Remote
 		}
-		lines = append(lines, pushedUnread(ctx, res, m.Root(), m.CacheDir(), remote, hook.Pushes)...)
+		log := slog.With(attr.Component("check-drift"))
+		for _, u := range pushedUnread(ctx, res, m.Root(), m.CacheDir(), remote, hook.Pushes) {
+			attrs := []any{attr.Notice(""), attr.Next(u.next)}
+			if u.err != nil {
+				attrs = append(attrs, attr.Why(u.why), attr.Error(u.err))
+			}
+			log.WarnContext(ctx, u.msg, attrs...)
+			lines = append(lines, u.msg)
+		}
 	}
-	if len(lines) == 0 {
-		return nil
+	if len(lines) > 0 {
+		noteJobDesktop(ctx, job.NameCheckDrift, strings.Join(lines, "\n"))
 	}
-	notice = strings.Join(lines, "\n")
-	slog.WarnContext(ctx, notice, attr.Notice(""))
-	noteJobDesktop(ctx, job.NameCheckDrift, notice)
 	return nil
 }
 
@@ -127,11 +133,11 @@ func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
 	return h, err
 }
 
-// pushedUnread is the unread line of each range a push sends: what the remote held against what
+// pushedUnread is the unread notice of each range a push sends: what the remote held against what
 // is sent, or the remote's default branch against it for a ref the remote does not have yet. Git
 // only, since only git's hook names the objects. A range that cannot be read, or has nothing
-// unread, adds no line.
-func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, remote string, pushes []job.DriftPush) []string {
+// unread, adds no notice.
+func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, remote string, pushes []job.DriftPush) []unreadNotice {
 	rr, ok := res.VCS.(types.RangeReporter)
 	if !ok || res.Name != "git" || len(pushes) == 0 {
 		return nil
@@ -140,7 +146,7 @@ func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, 
 		remote = "origin"
 	}
 	viewed, verr := changeset.NewStore(cacheDir).LoadViewed()
-	var lines []string
+	var notices []unreadNotice
 	for _, p := range pushes {
 		base, label := p.Remote, short(p.Remote)
 		if strings.Trim(p.Remote, "0") == "" {
@@ -149,14 +155,14 @@ func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, 
 		}
 		patch, err := rr.RangeDiff(ctx, root, base, p.Local, nil)
 		if err != nil {
-			slog.DebugContext(ctx, "server check-drift: pushed range unreadable", slog.String("base", base), slog.String("error", err.Error()))
+			slog.With(attr.Component("check-drift")).DebugContext(ctx, "pushed range unreadable", slog.String("base", base), attr.Error(err))
 			continue
 		}
-		if line := unreadRangeLine(label+"..."+short(p.Local), patch, viewed, verr); line != "" {
-			lines = append(lines, line)
+		if n, ok := unreadRangeNotice(label+"..."+short(p.Local), patch, viewed, verr); ok {
+			notices = append(notices, n)
 		}
 	}
-	return lines
+	return notices
 }
 
 // hookStdin is what git wrote the hook running this command, and nothing when a person typed
@@ -201,28 +207,41 @@ func checkDriftJobArgv(hookArgs []string, stdin io.Reader) []string {
 	return h.Argv()
 }
 
-// unreadRangeLine says how many hunks of patch no read mark covers. viewed holds the digests
-// marked read and loadErr is the error from reading them: an unreadable store makes the line
-// say the read state is unknown, never that every hunk is unread. It is "" for a range with no
-// hunks, or one read in full.
-func unreadRangeLine(rangeLabel, patch string, viewed []string, loadErr error) string {
+// unreadNotice is what the drift job says about one pushed range: the message, the one command
+// that reads it, and for a range whose read marks failed to load, the reason and the error.
+type unreadNotice struct {
+	msg, next string
+	why       string
+	err       error
+}
+
+// unreadRangeNotice says how many hunks of patch no read mark covers. viewed holds the digests
+// marked read and loadErr is the error from reading them: an unreadable store makes the notice
+// say the read state is unknown, never that every hunk is unread. It reports false for a range
+// with no hunks, or one read in full.
+func unreadRangeNotice(rangeLabel, patch string, viewed []string, loadErr error) (unreadNotice, bool) {
 	parsed := changeset.ParseHunks(patch)
 	total := 0
 	for _, f := range parsed {
 		total += len(f.Hunks)
 	}
 	if total == 0 {
-		return ""
+		return unreadNotice{}, false
 	}
+	next := hint.Diff.With("--unread", "--rev", rangeLabel)
 	if loadErr != nil {
-		return fmt.Sprintf("read state unknown for the %d hunks of this range (%s): the read marks could not be read (%v)", total, rangeLabel, loadErr)
+		return unreadNotice{
+			msg:  fmt.Sprintf("read state unknown for the %d hunks of this range (%s)", total, rangeLabel),
+			next: next,
+			why:  "the read marks could not be read",
+			err:  loadErr,
+		}, true
 	}
 	n := len(changeset.UnreadHunks(parsed, viewed))
 	if n == 0 {
-		return ""
+		return unreadNotice{}, false
 	}
-	return fmt.Sprintf("%d of %d hunks of this range (%s) unread; read them with %s",
-		n, total, rangeLabel, hint.Diff.With("--unread", "--rev", rangeLabel))
+	return unreadNotice{msg: fmt.Sprintf("%d of %d hunks of this range (%s) unread", n, total, rangeLabel), next: next}, true
 }
 
 // checkDriftForCommit is the VCS-facing half of serverCheckDrift, kept separate so it can

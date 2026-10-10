@@ -342,7 +342,7 @@ func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
 	long := strings.Repeat("a reply is what a person writes, ", 4)
 	_, err := invoke(t, tool, map[string]any{"op": "outline", "thread": "t1", "topics": []any{long}})
 	require.Error(t, err, "an over-long outline is a reply, and is refused")
-	assert.Contains(t, err.Error(), "the person types the reply")
+	assert.Contains(t, err.Error(), "not a reply")
 	assert.Empty(t, tool.sessions.Get(tool.workspaceRoot).Outlines, "and nothing of it is held")
 }
 
@@ -451,7 +451,7 @@ func TestThreadOpRefusesWhatNamesNoThread(t *testing.T) {
 
 	_, err = invoke(t, tool, map[string]any{"op": "thread", "thread": "t404"})
 	require.ErrorIs(t, err, changeset.ErrNoThread)
-	assert.Contains(t, err.Error(), "op=state's threads")
+	assert.Contains(t, err.Error(), "op=state lists the thread ids")
 }
 
 // projection narrows the session and nothing else: one thread is op=thread's.
