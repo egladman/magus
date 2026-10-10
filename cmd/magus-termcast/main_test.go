@@ -200,7 +200,7 @@ func TestCheckNoiseQuotesThreeLinesThenCounts(t *testing.T) {
 		t.Fatal("five warning lines must be refused")
 	}
 	msg := err.Error()
-	for _, want := range []string{"(5 warning or failure lines)", "[warn] probe 0 failed", "... and 2 more"} {
+	for _, want := range []string{"(5 warning or failure lines)", "[warn] probe 0 failed", ", and 2 more"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("diagnostic does not contain %q:\n%s", want, msg)
 		}

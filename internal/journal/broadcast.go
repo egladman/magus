@@ -61,8 +61,8 @@ func (b *Broadcaster) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (b *Broadcaster) WithAttrs([]slog.Attr) slog.Handler { return b }
-func (b *Broadcaster) WithGroup(string) slog.Handler      { return b }
+func (b *Broadcaster) WithAttrs(attrs []slog.Attr) slog.Handler { return withAttrs(b, attrs) }
+func (b *Broadcaster) WithGroup(string) slog.Handler            { return b }
 
 // Subscribe registers a new live subscriber. It returns a snapshot of the backlog (the
 // events emitted before this call), a channel that receives events emitted after it, and an

@@ -3,6 +3,8 @@ package diagnostics
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -83,6 +85,84 @@ func TestWrapfChainsCause(t *testing.T) {
 	// Unwrap is nil for a plain Errorf.
 	if plain := d.Errorf(Code("TST0002"), "x"); plain.Unwrap() != nil {
 		t.Error("a non-wrapping Errorf must Unwrap to nil")
+	}
+}
+
+// A coded error formatted into another names its code inline, and the result carries one see:
+// line, the outer one, even through a plain fmt wrapper between the two.
+func TestNestedCodeRendersOneSeeLine(t *testing.T) {
+	d := New(testURL)
+	inner := d.Errorf(Code("TST0002"), "go reports no version")
+	wrapped := fmt.Errorf("pkg: %w; install it", inner)
+
+	got := d.Errorf(Code("TST0001"), "index not current for %v; fix it", wrapped).Error()
+
+	want := "[TST0001] index not current for pkg: go reports no version (TST0002); install it; fix it\n" +
+		"  see: https://example/docs/TST0001.md"
+	if got != want {
+		t.Errorf("nested render = %q, want %q", got, want)
+	}
+	if n := strings.Count(got, "see:"); n != 1 {
+		t.Errorf("rendered %d see: lines, want 1", n)
+	}
+}
+
+func TestInline(t *testing.T) {
+	d := New(testURL)
+	if got := Inline(d.Errorf(Code("TST0003"), "boom")); got != "boom (TST0003)" {
+		t.Errorf("Inline(coded) = %q", got)
+	}
+	if got := Inline(errors.New("plain")); got != "plain" {
+		t.Errorf("Inline(plain) = %q", got)
+	}
+	joined := errors.Join(errors.New("a"), d.Errorf(Code("TST0004"), "b"))
+	if got := Inline(joined); got != "a\nb (TST0004)" {
+		t.Errorf("Inline(joined) = %q", got)
+	}
+}
+
+// Why is for a reader who asks for it, so no rendering of the error carries it.
+func TestWhyNeverRenders(t *testing.T) {
+	d := New(testURL)
+	const why = "a stale index answers with symbols that no longer exist"
+	err := d.Errorf(Code("TST0005"), "index is stale").WithWhy(why)
+
+	if got := err.Error(); strings.Contains(got, why) {
+		t.Errorf("Error() = %q, carries the why", got)
+	}
+	if got := Inline(fmt.Errorf("load: %w", err)); got != "load: index is stale (TST0005)" {
+		t.Errorf("Inline = %q", got)
+	}
+	if got := d.Errorf(Code("TST0006"), "outer: %v", err).Error(); strings.Contains(got, why) {
+		t.Errorf("nested Errorf = %q, carries the why", got)
+	}
+}
+
+func TestRationale(t *testing.T) {
+	d := New(testURL)
+	inner := d.Errorf(Code("TST0007"), "inner").WithWhy("inner why")
+	bare := d.Errorf(Code("TST0008"), "bare")
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, ""},
+		{"plain error", errors.New("plain"), ""},
+		{"coded without why", bare, ""},
+		{"coded with why", inner, "inner why"},
+		{"through a fmt wrapper", fmt.Errorf("ctx: %w", inner), "inner why"},
+		{"outer without why falls through", d.Wrapf(Code("TST0009"), inner, "outer"), "inner why"},
+		{"outermost why wins", d.Wrapf(Code("TST0009"), inner, "outer").WithWhy("outer why"), "outer why"},
+		{"joined", errors.Join(errors.New("a"), inner), "inner why"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Rationale(tc.err); got != tc.want {
+				t.Errorf("Rationale = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

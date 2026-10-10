@@ -68,5 +68,5 @@ func TestWriter_CloseRecordsTheDropCount(t *testing.T) {
 	dropped := w.Stats().Dropped
 	require.NotZero(t, dropped)
 	lines := strings.Split(strings.TrimSpace(g.buf.String()), "\n")
-	assert.Equal(t, fmt.Sprintf(`{"schema":5,"type":"run.notice","level":"error","msg":"report: %d events dropped"}`, dropped), lines[len(lines)-1])
+	assert.Equal(t, fmt.Sprintf(`{"schema":5,"type":"run.notice","level":"error","msg":"%d events dropped","attrs":{"component":"report"}}`, dropped), lines[len(lines)-1])
 }

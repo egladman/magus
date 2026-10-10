@@ -202,8 +202,8 @@ func failureLines(failures []trail.RuleFailure) []string {
 // does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
 func unloadedReason(call unloadedCall, failures []trail.RuleFailure, own, hasBinary bool) string {
 	var b strings.Builder
-	b.WriteString("magus workspace: " + call.verb + " is denied because this workspace's guard policy is not running. " +
-		"It registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
+	b.WriteString("magus workspace: " + call.verb + " is denied because this workspace's guard policy is not running.\n")
+	b.WriteString("It registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
 	for _, f := range failures {
 		b.WriteString("\n  " + f.Side + ": " + f.Error)
 	}

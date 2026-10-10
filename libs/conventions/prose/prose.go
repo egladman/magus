@@ -1,9 +1,9 @@
 // Package prose judges prose: the doc comment and name of one symbol a SCIP
 // index describes, a hand-written Markdown file, a skill, a pull request's
-// title and description, or the comments of a stylesheet. It parses no
-// programming language, so every indexer's symbols meet the same rules; the
-// one reader it carries, for CSS, only finds comments and the code beside them
-// (see [JudgeCSS]).
+// title and description, the comments of a stylesheet, or a message a program
+// prints. It parses no programming language, so every indexer's symbols meet
+// the same rules; the one reader it carries, for CSS, only finds comments and
+// the code beside them (see [JudgeCSS]).
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
@@ -82,6 +82,17 @@ const (
 	// RuleBannedWord reports a word this repository does not use in a CSS
 	// comment: story, chapter, handoff, `lane`, `corpus` and `surface` as a noun.
 	RuleBannedWord Rule = "banned-word"
+	// RuleMessageLength reports a message over its rune cap.
+	RuleMessageLength Rule = "message-length"
+	// RuleMessageRationale reports a message that stacks reasons: more than
+	// one causal join such as " so ", " because ", "; " or ", which ".
+	RuleMessageRationale Rule = "message-rationale"
+	// RuleMessageCommands reports a message naming more than one backticked
+	// command.
+	RuleMessageCommands Rule = "message-commands"
+	// RuleMessageTag reports a message opening with a component tag such as
+	// "server: ", or carrying a bracketed marker such as "[AGENT]".
+	RuleMessageTag Rule = "message-tag"
 )
 
 // Kind names the kind of text a rule judges.
@@ -113,6 +124,11 @@ const (
 	// holds each to the doc rules and the written ones, since a comment is
 	// both a doc on the code beside it and prose a maintainer reads cold.
 	KindCSS Kind = "css"
+	// KindMessage is one message magus prints to whoever runs it: a
+	// diagnostic, a guard verdict, a breadcrumb's reason. It is plain text, not
+	// Markdown, held to the message rules alone: a verdict, one next command,
+	// and a ref for the rationale.
+	KindMessage Kind = "message"
 )
 
 var (
@@ -123,6 +139,7 @@ var (
 	skill   = []Kind{KindSkill}
 	guide   = []Kind{KindGuide}
 	css     = []Kind{KindCSS}
+	message = []Kind{KindMessage}
 )
 
 // checks run in this order, which is the order [Judge] and [JudgeText] report
@@ -160,6 +177,10 @@ var checks = []struct {
 	{RuleSecondPerson, guide, secondPerson},
 	{RuleStepVerb, guide, stepVerb},
 	{RuleCondescension, guide, condescension},
+	{RuleMessageLength, message, messageLength},
+	{RuleMessageRationale, message, messageRationale},
+	{RuleMessageCommands, message, messageCommands},
+	{RuleMessageTag, message, messageTag},
 	// A skill body that does not render is reported before any rule runs; the
 	// entry gives the rule its place in [Rules].
 	{RuleTemplate, nil, nil},
@@ -170,6 +191,19 @@ func Rules() []Rule {
 	out := make([]Rule, len(checks))
 	for i, c := range checks {
 		out[i] = c.rule
+	}
+
+	return out
+}
+
+// KindRules returns the rules that judge kind, in [Rules] order.
+func KindRules(kind Kind) []Rule {
+	var out []Rule
+
+	for _, c := range checks {
+		if slices.Contains(c.on, kind) {
+			out = append(out, c.rule)
+		}
 	}
 
 	return out
@@ -214,6 +248,9 @@ type input struct {
 	lines []string
 	// css is the comment [JudgeCSS] is judging, set for [KindCSS] alone.
 	css *cssComment
+	// text is a [KindMessage]'s whole text and maxRunes its length cap.
+	text     string
+	maxRunes int
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty, and

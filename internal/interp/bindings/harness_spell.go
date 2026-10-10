@@ -93,7 +93,30 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
 		}
 	}
+	settingsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessSettingsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessSettingsContract, err)
+		}
+	} else if settingsResp.Data != nil {
+		if err := decodeHarnessSettings(settingsResp.Data, &d); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessSettingsContract, err)
+		}
+	}
 	return d, "spell:" + id, true, nil
+}
+
+// decodeHarnessSettings reads the settings list through the descriptor's own JSON shape,
+// like prompts.
+func decodeHarnessSettings(data any, d *agent.HarnessDescriptor) error {
+	if _, ok := data.([]any); !ok {
+		return fmt.Errorf("want list, got %T", data)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, &d.Settings)
 }
 
 // decodeHarnessAgents reads the agents list through the descriptor's own JSON shape, like

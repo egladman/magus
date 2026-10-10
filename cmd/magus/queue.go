@@ -302,7 +302,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: remote, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
 	var refused *types.SetupRefusedError
 	if errors.As(err, &refused) {
-		return fmt.Errorf("%w; then run: %s", err, renderRerun(e.root, fs, refused.App))
+		return fmt.Errorf("retry with %s: %w", renderRerun(e.root, fs, refused.App), err)
 	}
 	if err != nil {
 		return err

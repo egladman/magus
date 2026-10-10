@@ -122,7 +122,7 @@ func (t Table) Lookup(model string) (Rates, error) {
 	if r, ok := t.models[datedModelSuffix.ReplaceAllString(model, "")]; ok {
 		return r, nil
 	}
-	return Rates{}, fmt.Errorf("pricing: model %q is absent from the pricing table; add its published prices", model)
+	return Rates{}, fmt.Errorf("pricing: model %q is absent from the pricing table, add its published prices", model)
 }
 
 // parse reads rates.json. The underscore-prefixed members of that file are

@@ -7,9 +7,10 @@ import "magus";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/builds" as builds;
 
-final isolationDenial = "A worker that changes code gets its own checkout: spawn it with "
-    + "`isolation: \"worktree\"`, and have it detach onto its branch (`git switch --detach <branch>`) "
-    + "as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
+final isolationDenial = "a worker that changes code would share this checkout; spawn it with "
+    + "`isolation: \"worktree\"`.\n"
+    + "A worker that changes code gets its own checkout, and detaches onto its branch "
+    + "(`git switch --detach <branch>`) as its first act. Measured 09-22: 312 writes from 7 workers sharing a checkout landed in the "
     + "orchestrator's tree, and no isolated writer's did. Thinking roles (plan, review, research, "
     + "scout, integrate) may share it.";
 
@@ -82,8 +83,8 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
     }
     final line = lineage(spawn.title);
     if (line == null) {
-        return magus\guard.deny("The spawn description `{spawn.title}` names no job: it must read "
-            + "`<parent>/<role> <job>`, where <job> is a live row in this workspace's job store. "
+        return magus\guard.deny("the spawn description `{spawn.title}` names no job; it must read "
+            + "`<parent>/<role> <job>`, where <job> is a live row in this workspace's job store.\n"
             + remedy(spawn, line: null));
     }
     var found: helpers\JobRow? = null;
@@ -95,17 +96,17 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
         }
     }
     if (found == null) {
-        return magus\guard.deny("No row `{line!.job}` (or `{line!.parent}/{line!.job}`) is in this "
-            + "workspace's job store, so the guard has no lease to bind this spawn's child to. "
+        return magus\guard.deny("no row `{line!.job}` (or `{line!.parent}/{line!.job}`) is in this "
+            + "workspace's job store, so the guard has no lease to bind this spawn's child to.\n"
             + remedy(spawn, line: line));
     }
     if (["declared", "running", "exited"].indexOf(found!.state) == null) {
-        return magus\guard.deny("The row `{found!.id}` has ended ({found!.state}), so a child bound to "
-            + "it is graded by nothing. " + remedy(spawn, line: line));
+        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state}), so a child bound to "
+            + "it is graded by nothing.\n" + remedy(spawn, line: line));
     }
     if (spawn.lease != "" and !descends(rows!, job: found!.id, ancestor: spawn.lease)) {
-        return magus\guard.deny("You act under the lease `{spawn.lease}`, and `{found!.id}` is neither "
-            + "it nor forked beneath it, so the guard will not bind the child to it. "
+        return magus\guard.deny("you act under the lease `{spawn.lease}`, and `{found!.id}` is neither "
+            + "it nor forked beneath it, so the guard will not bind the child to it.\n"
             + remedy(spawn, line: line));
     }
     return magus\guard.allow();

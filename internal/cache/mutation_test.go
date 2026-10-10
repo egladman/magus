@@ -2,8 +2,10 @@ package cache
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -30,6 +32,30 @@ func TestRunReportsUndeclaredSourceMutation(t *testing.T) {
 	require.Error(t, err, "a target that rewrote its own declared source must fail")
 	assert.ErrorContains(t, err, string(types.UndeclaredSourceModified))
 	assert.ErrorContains(t, err, "test/pkg/main.go", "the diagnostic names the file that moved")
+}
+
+// The verdict stays short; the reason rides beside it as the failure record's why, where a
+// person's display prints it and an agent's leaves it in the run log.
+func TestRunReportsUndeclaredSourceMutationWithItsReason(t *testing.T) {
+	root := t.TempDir()
+	logs := &recordingHandler{}
+	c, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithLocalWrite(true), WithLogger(slog.New(logs)))
+	require.NoError(t, err, "cache.Open")
+	writeMain(t, root, "package main // recieve")
+
+	_, err = c.Run(t.Context(), makeStep(root), rewriteMain(t, root, "package main // receive"))
+	require.Error(t, err)
+	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
+	assert.Equal(t, why, types.DiagnosticRationale(err))
+	assert.NotContains(t, err.Error(), why, "the reason is never part of the error's text")
+
+	var failure string
+	for _, l := range logs.lines() {
+		if strings.HasPrefix(l, "cache.error ") {
+			failure = l
+		}
+	}
+	assert.Contains(t, failure, " why="+why)
 }
 
 // The declaration is what separates a formatter from the footgun: ctx.modifiesExistingFiles

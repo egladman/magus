@@ -235,11 +235,17 @@ func builtFrom(version, commit string) bool {
 	return false
 }
 
-// askUnrendered is appended when the verdict would be ask and the caller did not declare
-// that it renders one. Such a hook predates the decision, renders it as nothing, and its
-// host reads nothing as allow, so the push is refused instead of published unasked.
+// askUnrendered is the rationale of askUnrenderedDeny, beside the push's own verdict.
 const askUnrendered = "This hook predates approval prompts, so it cannot ask the person and the push is refused instead. " +
 	"Merge what `magus describe harness` prints or refresh the hook template from the magus docs, then push again; or push from your own terminal."
+
+// askUnrenderedDeny refuses a push of commit whose verdict would be ask when the caller did
+// not declare that it renders one. Such a hook predates the decision, renders it as
+// nothing, and its host reads nothing as allow, so the push is refused instead of
+// published unasked.
+func askUnrenderedDeny(commit string) string {
+	return "this hook predates approval prompts and cannot ask about pushing " + commit + " ungated; merge what `magus describe harness` prints."
+}
 
 // gradePushWithoutGate is the verdict for a push at commit when no green gate covers it:
 // "ask" for a session no job lease binds, "deny" for one a lease binds, and "" when a gate
@@ -264,9 +270,12 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	case gateFailed:
 		state = "the `" + string(types.TargetCI) + "` run at this commit failed"
 	case gateIncomplete:
-		state = "the `" + string(types.TargetCI) + "` run at this commit never finished, so it is still going or it was killed"
+		state = "the `" + string(types.TargetCI) + "` run at this commit never finished"
 	}
 	head := "pushing " + commit + ", which no passing gate covers: " + state + ".\n"
+	if cover == gateIncomplete {
+		head += "That run is still going or it was killed.\n"
+	}
 	gate := "`" + hint.Affected.With(string(types.TargetCI)) + "` runs the gate, and CI runs the identical command on the identical tree, so a red push pays twice for one answer."
 	if lease != "" {
 		return "deny", head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate

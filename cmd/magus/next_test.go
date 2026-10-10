@@ -26,6 +26,11 @@ func gateAt(base, session string) nextGate {
 // the second time, so it fires once per session and the command survives it. The two
 // never share a line: a reader copies the command, and a parenthetical on it comes along.
 func TestPrintNextFiresEachWhyOnce(t *testing.T) {
+	// printNext reads the process-global -s, which an earlier test in the package may
+	// have left set.
+	saved := global
+	t.Cleanup(func() { global = saved })
+	global.silent = false
 	s := gateAt(t.TempDir(), "session-1")
 
 	var first, second bytes.Buffer

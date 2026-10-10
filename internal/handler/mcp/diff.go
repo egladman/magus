@@ -240,8 +240,8 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	sess := t.sessions.Get(t.workspaceRoot)
 	if sess == nil {
 		return spells.InvokeResponse{}, errors.New(
-			"mcp: no diff session is open. A session attaches when the console's Diff app " +
-				"is opened (GET /api/v1/diff); plain `magus diff` does not attach one. This tool " +
+			"mcp: no diff session is open: a session attaches when the console's Diff app " +
+				"is opened (GET /api/v1/diff), plain `magus diff` does not attach one, and this tool " +
 				"joins the session the console started")
 	}
 
@@ -494,10 +494,10 @@ func (t *diffTool) validateAnchor(ctx context.Context, path string, hunk int) er
 	counts := changeset.HunkCounts(patch)
 	n, ok := counts[path]
 	if !ok {
-		return errors.New("mcp: " + path + " has no changes in this diff; read op=state for the paths that do")
+		return errors.New("mcp: " + path + " has no changes in this diff, read op=state for the paths that do")
 	}
 	if hunk >= n {
-		return fmt.Errorf("mcp: %s has %d hunk(s), so hunk %d does not exist (0-based; omit hunk to address the file)", path, n, hunk)
+		return fmt.Errorf("mcp: %s has %d hunk(s), so hunk %d does not exist (0-based, omit hunk to address the file)", path, n, hunk)
 	}
 	return nil
 }

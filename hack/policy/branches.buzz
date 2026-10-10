@@ -105,9 +105,9 @@ export fun authorityDenial(caller: Pusher) > str {
     if (why.len() == 0) {
         return "";
     }
-    return "push-authority: only the main session pushes or opens a pull request: "
-        + why.join("; ") + ". Commit in your checkout and report its branch and commits; "
-        + "the main session publishes them.";
+    return "only the main session pushes or opens a pull request; commit in your checkout and report "
+        + "its branch and commits.\nThe main session publishes them. This caller is not it: "
+        + why.join("; ") + ".";
 }
 
 // Push is one branch a line publishes. name is the branch as the remote receives it, ""
@@ -632,8 +632,8 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         return magus\guard.allow();
     }
     if (remote.unreadable != "") {
-        return magus\guard.deny("branch-name: {remote.unreadable}, so a push to the base branch cannot be told "
-            + "from a topic branch. Fix the checkout's version control, then push again.");
+        return magus\guard.deny("a push to the base branch cannot be told from a topic branch: "
+            + "{remote.unreadable}; fix the checkout's version control, then push again.");
     }
     final baseParts = remote.base.split("/");
     final baseName = baseParts[baseParts.len() - 1];
@@ -658,7 +658,7 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
             continue;
         }
         var mechanical = false;
-        final lines = mut ["branch-name: `{p.name}` is not a name to publish."];
+        final lines = mut ["`{p.name}` is not a branch name to publish."];
         foreach (f in verdict.failures) {
             lines.append("- {f.rule}: {f.why}");
             if (f.rule != "topic") { mechanical = true; }

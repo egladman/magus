@@ -36,7 +36,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "stubbed, each function documented inline, and a runnable test block.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

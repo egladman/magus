@@ -127,6 +127,8 @@ func TestReportedRunErr(t *testing.T) {
 	assert.False(t, reportedRunErr(errors.New("plain")))
 	assert.True(t, reportedRunErr(&types.SpellErrors{Project: "web"}))
 	assert.True(t, reportedRunErr(errors.Join(errors.New("other"), &types.SpellErrors{Project: "web"})))
+	assert.True(t, reportedRunErr(fmt.Errorf("run: %w", cache.ReportedError{Err: errors.New("step failed")})),
+		"a step failure the cache logged is not printed again")
 }
 
 func TestErrSilentIsAlreadyReported(t *testing.T) {

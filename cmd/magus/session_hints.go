@@ -60,7 +60,7 @@ func sessionHintsUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "transcripts in it reports nothing. Load one with `magus session load`.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 }
 

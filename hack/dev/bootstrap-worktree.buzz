@@ -205,10 +205,21 @@ fun checkRepository(root: str) > str !> any {
 fun magusAt(bin: str, root: str, args: [str]) > str !> any {
     final r = proc\exec(bin, args: args, dir: root, opts: {"quiet": true, "allow_failure": true});
     if (r.code != 0) {
-        final said = if (r.stderr.trim() != "") r.stderr.trim() else r.stdout.trim();
-        throw "bootstrap-worktree: `{bin} {args.join(" ")}` exited {r.code}:\n{said}";
+        throw "bootstrap-worktree: `{bin} {args.join(" ")}` failed: {failureCause(r.code, stdout: r.stdout, stderr: r.stderr)}";
     }
     return r.stdout;
+}
+
+// failureCause is what a failed command said, or, when it said nothing, how it ended.
+export fun failureCause(code: int, stdout: str, stderr: str) > str {
+    final said = if (stderr.trim() != "") stderr.trim() else stdout.trim();
+    if (said != "") {
+        return "exit {code}:\n{said}";
+    }
+    if (code == -1) {
+        return "it never started, or was killed, and printed nothing";
+    }
+    return "exit {code}, and it printed nothing";
 }
 
 fun readHead(dir: str) > str !> any {
@@ -291,8 +302,12 @@ export fun bootstrap(root: str, job: str, source: str) > Row !> any {
     } catch (e: str) {
         throw refusal(e, source: origin);
     }
-    fs\copyFile(v.bin, dst: local);
-    fs\chmod(local, mode: 493);
+    // Copy beside it, then rename over it: a copy truncates ./magus in place, and this script
+    // is often running from that file (magus re-execs into a workspace's own ./magus). On
+    // darwin every later exec of an executable rewritten in place is SIGKILLed.
+    fs\copyFile(v.bin, dst: "{local}.bootstrap");
+    fs\chmod("{local}.bootstrap", mode: 493);
+    fs\rename("{local}.bootstrap", dst: local);
     std\print("placed " + placed(v.bin, commit: v.build.commit, rootRev: readHead(root), scopes: v.scopes));
     // A bound job cannot rewrite the skills that steer it, so refresh every wired
     // harness before job exec takes the lease. Do this before graph build so it
@@ -471,6 +486,19 @@ test "a build input is a Go file, a module file, or a file in a package scope" {
         want: "/r/magus was built at 166d3dabd, while this worktree is at 1111111; no Go build input under 3 package scopes differs", message: "another commit");
     assert\equal(refusal("x", source: "/r"), want: "bootstrap-worktree: REFUSED to place x\nA worker checkout never compiles magus. The orchestrator builds ./magus once for this base, in /r (`/r/magus --root /r run go-build .`), then reruns this with `--from /r`.", message: "refusal");
     assert\equal(parseBuild("\{\"version\":\"v0.4.3-485-g166d3dabd-dirty\",\"commit\":\"166d3dabd\"}"), want: BuildFacts{ commit = "166d3dabd", dirty = true }, message: "dirty build");
+}
+
+test "a command killed by a signal names the signal, not exit -1" {
+    var said = "";
+    try {
+        magusAt("/bin/sh", root: ".", args: ["-c", "kill -9 $$"]);
+    } catch (e: str) {
+        said = e;
+    }
+    assert\equal(said.startsWith("bootstrap-worktree: `/bin/sh -c kill -9 $$` failed: exit -1:\n"), want: true, message: said);
+    assert\equal(said.endsWith("signal: killed"), want: true, message: said);
+    assert\equal(failureCause(1, stdout: "", stderr: ""), want: "exit 1, and it printed nothing", message: "silent exit");
+    assert\equal(failureCause(2, stdout: "out", stderr: " err\n"), want: "exit 2:\nerr", message: "stderr first");
 }
 
 test "the main worktree is the porcelain's first stanza" {

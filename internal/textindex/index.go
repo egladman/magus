@@ -187,7 +187,7 @@ func intersect(a, b []uint32) []uint32 {
 // it over fewer files rather than trying to beat it.
 func (ix *Index) SearchLiteral(pattern string) ([]Match, error) {
 	if pattern == "" {
-		return nil, fmt.Errorf("textindex: an empty pattern matches everything; say what you are looking for")
+		return nil, fmt.Errorf("textindex: an empty pattern matches everything, say what you are looking for")
 	}
 	pat := []byte(pattern)
 	var out []Match
@@ -213,7 +213,7 @@ func (ix *Index) SearchLiteral(pattern string) ([]Match, error) {
 // parameter rather than the default.
 func Scan(paths []string, read ReadFunc, pattern string, fold bool) ([]Match, error) {
 	if pattern == "" {
-		return nil, fmt.Errorf("textindex: an empty pattern matches everything; say what you are looking for")
+		return nil, fmt.Errorf("textindex: an empty pattern matches everything, say what you are looking for")
 	}
 	pat := []byte(pattern)
 	if fold {

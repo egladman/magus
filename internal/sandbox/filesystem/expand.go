@@ -50,7 +50,7 @@ func ExpandUserRule(rawPath, mode, home string, lookupEnv func(string) (string, 
 		return v
 	})
 	if len(unset) > 0 {
-		return Rule{}, fmt.Errorf("sandbox: %q: %w: %s", rawPath, ErrUnsetVariable, strings.Join(unset, ", "))
+		return Rule{}, fmt.Errorf("sandbox: %q: %s: %w", rawPath, strings.Join(unset, ", "), ErrUnsetVariable)
 	}
 	if expanded == "~" || strings.HasPrefix(expanded, "~/") {
 		if home == "" {

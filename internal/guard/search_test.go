@@ -81,7 +81,7 @@ func TestSymbolSearchDeniesEveryProvableShape(t *testing.T) {
 		assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: want}, v.Rule, tt.command)
 		assert.Equal(t, tt.arg == "stale", strings.Contains(v.Deny, "graph build --silent"), "%q: only a stale index serves the rebuild", tt.command)
 		for _, name := range strings.Split(want, ",") {
-			assert.Contains(t, v.Deny, name, "%q: one command per name", tt.command)
+			assert.Contains(t, denial{Say: v.Deny, Why: v.Why}.full(), name, "%q: one command per name", tt.command)
 		}
 	}
 }
@@ -140,7 +140,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		}
 		assert.Equal(t, advisoryPrecedent, v.Kind, tt.command)
 		assert.Contains(t, v.Brief, tt.advice, tt.command)
-		assert.Contains(t, v.Context, "The search runs as typed.", tt.command)
+		assert.Contains(t, v.Context, "the search runs as typed.", tt.command)
 	}
 }
 
@@ -288,6 +288,7 @@ func TestSymbolSearchAnswersTreeSearches(t *testing.T) {
 			continue
 		}
 		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		assert.NotEmpty(t, v.Why, "a set Why keeps the answer in the shown verdict: %s", tt.command)
 		assert.Equal(t, tt.piped, strings.HasSuffix(v.Deny, notReproduced), tt.command)
 	}
 }
@@ -308,13 +309,13 @@ func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
 	v, ok := searchVerdictAt(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "ParseConfig"}, v.Rule, "the demoted tree search outranks the precedent advisory")
-	assert.Equal(t, ShellVerdict{Context: v.Deny, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
+	assert.Equal(t, ShellVerdict{Context: v.Deny, Why: v.Why, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
 
 	deps.Builtins = map[string]builtin.Setting{string(advisoryPrecedent): {Decision: builtin.Deny}}
 	v, ok = searchVerdictAt(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, read, v)
-	assert.Equal(t, ShellVerdict{Deny: read.Context, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
+	assert.Equal(t, ShellVerdict{Deny: read.Context, Why: read.Why, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
 }
 
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:
@@ -428,8 +429,8 @@ func TestGraphBackedDeniesAdviseOnAnIndexFromAnotherRevision(t *testing.T) {
 		v := Evaluate(strict(deps), tt.command)
 		if tt.rule == denyRuleSymbolSearch {
 			assert.Equal(t, denyRuleSymbolSearch, v.Rule.Name, tt.command)
-			assert.Contains(t, v.Deny, "graph build --silent`, then ", tt.command)
-			assert.Contains(t, v.Deny, "The symbol index describes another tree (the index was built at 0123456789ab and the checkout is at fedcba9)", tt.command)
+			assert.Contains(t, v.Deny, "graph build --silent`.", tt.command)
+			assert.Contains(t, v.Deny, "the symbol index describes another tree (the index was built at 0123456789ab and the checkout is at fedcba9)", tt.command)
 			continue
 		}
 		assert.Empty(t, v.Deny, tt.command)
@@ -715,9 +716,9 @@ func TestStaleSymbolDenyCarriesTheIndexCause(t *testing.T) {
 	const cause = "Why: no server is running, so the refresh hook synced nothing. Fix: `magus server start`."
 	named := stale(cause)
 	require.Equal(t, denyRuleSymbolSearch, named.Rule.Name)
-	assert.Contains(t, named.Deny, "pattern misses included.\n"+cause)
+	assert.Contains(t, named.Why, "pattern misses included.\n"+cause)
 
 	unnamed := stale("")
-	assert.NotContains(t, unnamed.Deny, "Why:")
-	assert.Contains(t, unnamed.Deny, "The symbol index is older than the sources it covers")
+	assert.NotContains(t, unnamed.Why, "Why:")
+	assert.Contains(t, unnamed.Deny, "the symbol index is older than the sources it covers")
 }

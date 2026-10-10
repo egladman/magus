@@ -23,6 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	jobstore "github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -197,7 +198,7 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	}
 	addr := s.socket()
 	if addr == "" {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no server socket to submit to; run `magus server start`"))
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("job: no server socket to submit to, run `magus server start`"))
 	}
 	// Snapshot the running set BEFORE submitting: on a coalesced submit the already-running job
 	// predates our call, so it is reliably in this snapshot; a query taken AFTER the submit could
@@ -245,7 +246,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 		}
 		row.LastRun.Invocation = inv
 	}); err != nil {
-		slog.DebugContext(ctx, "job: recording the submitted job's row failed",
+		slog.With(attr.Component("job")).DebugContext(ctx, "recording the submitted job's row failed",
 			slog.String("job", j.Name), slog.String("error", err.Error()))
 	}
 }

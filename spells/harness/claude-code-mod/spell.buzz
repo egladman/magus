@@ -1,0 +1,62 @@
+// The magus Claude Code mod, as an opt-in harness beside spells/harness/claude-code. It
+// wires no guard and no skills: it keeps two settings in .claude/settings.json so a session
+// knows this repository's plugin marketplace and turns the mod on.
+//
+//   import "spells/harness/claude-code-mod" as claudeMod
+//   magus\harness.provider(claudeMod)
+//
+// Claude Code reads extraKnownMarketplaces only after the person trusts the folder, and
+// enabling a plugin from a GitHub marketplace installs it for nobody: each person runs
+// `/plugin install magus --marketplace egladman/magus` once. See
+// docs/guides/integrations/agents/claude-code.md.
+
+import "magus/spell";
+import "assert";
+
+export fun mgs_getName() > str { return "claude-code-mod"; }
+
+final SETTINGS_PATH = ".claude/settings.json";
+
+fun mod_settings() > [any] {
+    return [
+        {
+            "path": SETTINGS_PATH,
+            "key": ["extraKnownMarketplaces", "magus"],
+            "value": {"source": {"source": "github", "repo": "egladman/magus"}},
+        },
+        {
+            "path": SETTINGS_PATH,
+            "key": ["enabledPlugins", "magus@magus"],
+            "value": true,
+        },
+    ];
+}
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": ""};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [<str>], "form": "both"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [];
+}
+
+export fun harness_settings(target: Target, cb: fun(any)) > [any] {
+    return mod_settings();
+}
+
+test "mgs_getName is the harness id describe and verify look up" {
+    assert\equal(mgs_getName(), "claude-code-mod", "id must match magus\\harness.provider wiring and --id");
+}
+
+test "the settings register the marketplace and enable the mod in Claude Code settings" {
+    final settings = mod_settings();
+    assert\equal(settings.len(), 2, "a marketplace and a plugin");
+    foreach (s in settings) {
+        assert\equal("{s["path"]}", SETTINGS_PATH, "the project settings Claude Code reads");
+    }
+    assert\equal("{settings[1]["key"]}", "[enabledPlugins, magus@magus]", "the install id is <plugin>@<marketplace>");
+}

@@ -255,7 +255,9 @@ type ownBuildOutcome struct {
 	link          bool
 	hasBinary     bool
 	multipleCmds  bool
-	advisory      ShellVerdict
+	// others is the rest of the call's line, as besideGoCall renders it.
+	others   []string
+	advisory ShellVerdict
 	// recovery is a recoversMagus call alone on its line in a root whose workspace fails
 	// to load with MGS1021, advised through as recoveryAdvisory.
 	recovery         bool
@@ -276,20 +278,86 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	case o.recovery:
 		return o.recoveryAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
-		v.Deny += "\nNot a bootstrap: " + o.root + " already has a magus binary. Rebuild with " + ownRebuild + "."
+		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = "magus workspace: not a bootstrap: " + o.root + " already has a magus binary; rebuild with " + ownRebuild + "."
+		v.Next, v.Lead = nil, ""
 		return v
 	case o.hasBinary:
 		return v
 	case o.bootstrap && o.multipleCmds:
-		v.Deny += "\nThe bootstrap is exempt only alone on its line."
-		return v
+		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = "magus workspace: the bootstrap runs only alone on its line; drop " + dropList(o.others) + "."
+		v.Next, v.Lead = nil, ""
+		return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
 	case o.bootstrap && o.prefixed:
 		return o.advisory
 	}
-	v.Deny += "\n" + o.root + " has no magus binary yet. Get one with `" + strings.Join(o.bootstrapArgv, " ") + "`: " + bootstrapWhy
+	v.Why = bootstrapWhy + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
+	v.Deny = "magus workspace: " + o.root + " has no magus binary yet; one command builds it."
 	v.Next, v.Lead = nil, ""
-	return v.withRemedy("This checkout has no magus binary yet; one command builds it.",
-		hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
+	return v.withRemedy(v.Deny, hint.NextForDenyRemedy(string(denyRuleRawTool), o.bootstrapArgv, bootstrapWhy))
+}
+
+// dropList quotes each part of a line to drop, joined for a sentence.
+func dropList(parts []string) string {
+	quoted := make([]string, len(parts))
+	for i, p := range parts {
+		quoted[i] = "`" + p + "`"
+	}
+	switch len(quoted) {
+	case 0:
+		return "everything else on it"
+	case 1:
+		return quoted[0]
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
+}
+
+// besideGoCall renders every command on a line but its first go call, each with the
+// operator that joins it to the line, as the reader would delete it: `| tail -5`,
+// `; ls -la magus`, or `cd x &&` for one ahead of the call.
+func besideGoCall(command string, d Dialect) []string {
+	f, err := parseFile(command, d)
+	if err != nil {
+		return nil
+	}
+	type part struct{ op, text string }
+	var parts []part
+	var walk func(st *syntax.Stmt, op string)
+	walk = func(st *syntax.Stmt, op string) {
+		if bin, ok := st.Cmd.(*syntax.BinaryCmd); ok && len(st.Redirs) == 0 && !st.Negated && !st.Background {
+			walk(bin.X, op)
+			walk(bin.Y, bin.Op.String())
+			return
+		}
+		var b strings.Builder
+		if syntax.NewPrinter(syntax.SingleLine(true)).Print(&b, st) != nil {
+			return
+		}
+		parts = append(parts, part{op, strings.TrimSpace(b.String())})
+	}
+	for i, st := range f.Stmts {
+		op := ""
+		if i > 0 {
+			op = ";"
+		}
+		walk(st, op)
+	}
+	goAt := slices.IndexFunc(parts, func(p part) bool {
+		cmds, ok := ParseCommandsDialect(p.text, d)
+		return ok && slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return c.Name == "go" })
+	})
+	var out []string
+	for i, p := range parts {
+		switch {
+		case i == goAt:
+		case i < goAt:
+			out = append(out, p.text+" "+parts[i+1].op)
+		default:
+			out = append(out, strings.TrimSpace(p.op+" "+p.text))
+		}
+	}
+	return out
 }
 
 // newOwnBuildOutcome builds the outcome rankOwnBuild layers onto the deny for denied.
@@ -313,15 +381,17 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		link:          call.linksMagus(),
 		hasBinary:     hasMagusBinary(root),
 		multipleCmds:  multipleCmds,
+		others:        besideGoCall(command, d),
 		advisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed, since " + where + " has no magus binary yet: " + bootstrapWhy + " Use ./magus from then on.",
+			Context: "magus workspace: bootstrap allowed because " + where + " has no magus binary yet: use ./magus from then on.",
+			Why:     "A bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 		recovery: recovery,
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: recovery allowed, since " + where + " cannot load its own sources (MGS1021) and no magus target can run until it does. " +
-				"Relink and regenerate only; once it loads, rebuild with " + ownRebuild + ".",
-			Rule: rule,
+			Context: "magus workspace: recovery allowed because " + where + " cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with " + ownRebuild + ".",
+			Why:     "No magus target can run until the checkout loads its own sources again, so only the go commands that repair it are let through.",
+			Rule:    rule,
 		}, workspaceShell),
 	}
 }

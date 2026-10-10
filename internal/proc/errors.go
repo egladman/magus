@@ -101,7 +101,7 @@ func decodeWireError(msg string) error {
 		return ErrTokenRefused
 	}
 	if strings.HasPrefix(msg, ErrNotAdoptable.Error()+":") {
-		return fmt.Errorf("%w%s", ErrNotAdoptable, strings.TrimPrefix(msg, ErrNotAdoptable.Error()))
+		return fmt.Errorf("%w: %s", ErrNotAdoptable, strings.TrimLeft(strings.TrimPrefix(msg, ErrNotAdoptable.Error()+":"), " "))
 	}
 	return errors.New(msg)
 }

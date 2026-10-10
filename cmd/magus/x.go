@@ -44,7 +44,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 			fmt.Fprintln(os.Stderr, "for scripts use `"+hint.Run.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -73,7 +73,7 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	defer func() { _ = cleanup() }()
 	all := m.All()
 	if len(all) == 0 {
-		return errors.New("magus x: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `" + hint.Init.String() + "` to bootstrap one")
+		return errors.New("magus x: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project), run `" + hint.Init.String() + "` to bootstrap one")
 	}
 
 	chosen, err := pickProject(ctx, root, all, filters)

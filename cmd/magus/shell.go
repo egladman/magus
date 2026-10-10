@@ -145,6 +145,10 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
+	// --transport is how installed glue says a host called; a person typing this names none.
+	if sf.Transport != "" {
+		forceQuietDisplay()
+	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
 		return err

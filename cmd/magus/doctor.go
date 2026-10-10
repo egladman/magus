@@ -44,7 +44,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 			fmt.Fprintln(os.Stderr, "them all, and what each one looks at, without running any.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

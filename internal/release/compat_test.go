@@ -74,7 +74,7 @@ func TestJudge(t *testing.T) {
 		{
 			name: "patch refuses any code", report: CompatReport{Base: "v1.0.0", Codes: codes}, bump: BumpPatch,
 			announced: codes,
-			want:      "release: a patch release must load v1.0.0, but it fails:\n  MGS1002 x1\n  MGS1039 x2",
+			want:      "release: a patch release must load v1.0.0, but it fails: MGS1002 x1, MGS1039 x2",
 		},
 		{
 			name: "minor allows announced codes", report: CompatReport{Base: "v1.0.0", Codes: codes}, bump: BumpMinor,
@@ -83,11 +83,11 @@ func TestJudge(t *testing.T) {
 		{
 			name: "minor refuses an unannounced code", report: CompatReport{Base: "v1.0.0", Codes: codes}, bump: BumpMinor,
 			announced: []diagnostics.Code{types.MagusNotImported},
-			want:      "release: a minor release must load v1.0.0, but it fails:\n  MGS1002 x1",
+			want:      "release: a minor release must load v1.0.0, but it fails: MGS1002 x1",
 		},
 		{
 			name: "minor refuses uncoded", report: CompatReport{Base: "v1.0.0", Uncoded: []string{"boom"}}, bump: BumpMinor,
-			want: "release: a minor release must load v1.0.0, but it fails:\n  uncoded: boom",
+			want: "release: a minor release must load v1.0.0, but it fails: uncoded: boom",
 		},
 		{
 			name: "major never refuses", report: CompatReport{Base: "v1.0.0", Codes: codes, Uncoded: []string{"boom"}},

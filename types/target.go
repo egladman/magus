@@ -312,7 +312,7 @@ func ParseTimeout(s string) (time.Duration, error) {
 		return 0, fmt.Errorf("%q is not a duration (want a Go duration string such as \"15m\" or \"90s\")", s)
 	}
 	if d <= 0 {
-		return 0, fmt.Errorf("%q is not positive; omit the key to leave the target unbounded", s)
+		return 0, fmt.Errorf("%q is not positive, omit the key to leave the target unbounded", s)
 	}
 	return d, nil
 }

@@ -121,7 +121,7 @@ func configMCPConnectorCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "later; rotate by creating a new token. A running server accepts it immediately.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

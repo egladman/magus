@@ -33,6 +33,8 @@
 //     hack/dev/bootstrap-worktree.buzz places it; the orchestrator and a person build freely.
 //   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
 //     line that names the command only to forbid it ("never ...") is not graded.
+//   worker-bootstrap (deny): the bootstrap run by any caller but the main session, which
+//     places ./magus instead; foreign-binary lets the placement script through.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
 //   stale-write (deny): a magus verb that writes state other checkouts or magus versions
@@ -96,7 +98,8 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease }, disk: binaries\onDisk());
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease }, disk: binaries\onDisk(),
+        worker: req.role == "worker" or req.parent != "" or req.agent != "");
     if (denial != "") {
         return magus\guard.deny(denial);
     }

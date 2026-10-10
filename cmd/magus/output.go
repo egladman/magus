@@ -223,7 +223,7 @@ func jsonlPrimaryField(rt reflect.Type) ([]int, error) {
 			}
 			if f.Tag.Get(jsonlPrimaryTag) == "primary" {
 				if tagged != nil {
-					return fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\"; exactly one collection streams",
+					return fmt.Errorf("-o jsonl: %s marks both %q and %q as jsonl:\"primary\", exactly one collection streams",
 						typeLabel(rt), taggedKey, jsonFieldKey(f))
 				}
 				tagged, taggedKey = at, jsonFieldKey(f)
@@ -246,7 +246,7 @@ func jsonlPrimaryField(rt reflect.Type) ([]int, error) {
 	case 1:
 		return candidates[0], nil
 	}
-	return nil, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit; use -o json for the whole record",
+	return nil, fmt.Errorf("-o jsonl: %s carries %d collections (%s) and none is marked jsonl:\"primary\", so there is no single stream to emit, use -o json for the whole record",
 		typeLabel(rt), len(keys), strings.Join(keys, ", "))
 }
 
@@ -332,9 +332,8 @@ func writeTemplate(w io.Writer, v any, body string) error {
 		// Names the contract AND the exact way to see it. A template error that only
 		// says "no entry for key" leaves the reader guessing at casing, which is the
 		// state this whole path was in when it rendered nothing and exited 0.
-		return fmt.Errorf("execute template: %w\n"+
-			"  template fields are the -o json names, not the Go field names: .name, not .Name\n"+
-			"  to list every field this command exposes, rerun it with a bare -o template (no '=' and no body)", err)
+		return fmt.Errorf("execute template: template fields are the -o json names, not the Go field names (.name, not .Name), "+
+			"to list every field this command exposes, rerun it with a bare -o template (no '=' and no body): %w", err)
 	}
 	return nil
 }

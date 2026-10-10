@@ -281,6 +281,63 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	requireCurrent(t, root, "flat")
 }
 
+// An object default reaches inside the person's object: the variable lands beside their
+// own, and a value they set for it is the one the host keeps.
+func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
+	descriptor := `{
+  "schema_version": 2,
+  "id": "envhost",
+  "display": {"name": "Env Host"},
+  "config": {"path": "envhost/settings.json"},
+  "config_defaults": {"env": {"MAGUS_LOG_SILENT": "true"}},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [
+    {"path": ["hooks"], "entries": [{"command": "magus buzz -s magus-command.buzz"}]}
+  ]
+}`
+	for _, tc := range []struct {
+		name, existing string
+		changes        []types.HarnessChange
+		env            map[string]any
+	}{
+		{
+			name:     "no env object",
+			existing: `{"hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env", Value: map[string]any{"MAGUS_LOG_SILENT": "true"}}},
+			env:      map[string]any{"MAGUS_LOG_SILENT": "true"},
+		},
+		{
+			name:     "env without the variable",
+			existing: `{"env": {"FOO": "1"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			changes:  []types.HarnessChange{{Op: types.HarnessSet, Key: "env.MAGUS_LOG_SILENT", Value: "true"}},
+			env:      map[string]any{"FOO": "1", "MAGUS_LOG_SILENT": "true"},
+		},
+		{
+			name:     "the person chose human",
+			existing: `{"env": {"MAGUS_LOG_SILENT": "false"}, "hooks": [{"command": "magus buzz -s magus-command.buzz"}]}`,
+			env:      map[string]any{"MAGUS_LOG_SILENT": "false"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			registerHarnessSpell(t, "envhost", descriptor)
+			path := filepath.Join(root, "envhost", "settings.json")
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+			require.NoError(t, os.WriteFile(path, []byte(tc.existing), 0o644))
+
+			plan := mergeHarness(t, root, "envhost")
+			assert.Equal(t, tc.changes, normalizeFiles(t, plan.Files)["envhost/settings.json"].Changes)
+
+			body, err := os.ReadFile(path)
+			require.NoError(t, err)
+			doc := map[string]any{}
+			require.NoError(t, decodeHarnessJSON(body, &doc))
+			assert.Equal(t, tc.env, doc["env"])
+			requireCurrent(t, root, "envhost")
+		})
+	}
+}
+
 func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 	root := t.TempDir()
 	registerHarnessSpell(t, "managed", `{
@@ -782,6 +839,105 @@ func TestHarnessDescriptorRejectsAMalformedPrompt(t *testing.T) {
 	} {
 		d := base
 		d.Prompts = []HarnessPrompt{prompt}
+		assert.Error(t, validateHarnessDescriptor(d), name)
+	}
+}
+
+// writeSettingsHarness registers a settings-only harness keeping two values in one shared
+// config: a marketplace to know and a plugin to enable.
+func writeSettingsHarness(t *testing.T) {
+	t.Helper()
+	registerHarnessSpell(t, "moder", `{
+  "schema_version": 2,
+  "id": "moder",
+  "display": {"name": "Moder"},
+  "skills": {"paths": [], "form": "both"},
+  "settings": [
+    {"path": ".claude/settings.json", "key": ["extraKnownMarketplaces", "magus"], "value": {"source": {"source": "github", "repo": "egladman/magus"}}},
+    {"path": ".claude/settings.json", "key": ["enabledPlugins", "magus@magus"], "value": true}
+  ]
+}`)
+}
+
+// TestPlanHarnessPlansSettings pins that the plan puts both settings in place in one file and
+// leaves the person's other keys alone, and that verify then reports them.
+func TestPlanHarnessPlansSettings(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	config := filepath.Join(root, ".claude", "settings.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
+	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "enabledPlugins": {"other@x": true}}`), 0o644))
+
+	before, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, before.SettingStatus)
+	assert.Contains(t, before.SettingReason, "extraKnownMarketplaces.magus")
+
+	plan := mergeHarness(t, root, "moder")
+	marketplace := map[string]any{"source": map[string]any{"source": "github", "repo": "egladman/magus"}}
+	assert.Equal(t, map[string]types.HarnessFile{
+		".claude/settings.json": {
+			Exists: true,
+			Fragment: map[string]any{
+				"extraKnownMarketplaces": map[string]any{"magus": marketplace},
+				"enabledPlugins":         map[string]any{"magus@magus": true},
+			},
+			Changes: []types.HarnessChange{
+				{Op: types.HarnessSet, Key: "extraKnownMarketplaces.magus", Value: marketplace},
+				{Op: types.HarnessSet, Key: "enabledPlugins.magus@magus", Value: true},
+			},
+		},
+	}, plan.Files)
+
+	var got map[string]any
+	body, err := os.ReadFile(config)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(body, &got))
+	assert.Equal(t, map[string]any{
+		"model":                  "m",
+		"enabledPlugins":         map[string]any{"other@x": true, "magus@magus": true},
+		"extraKnownMarketplaces": map[string]any{"magus": marketplace},
+	}, got)
+
+	requireCurrent(t, root, "moder")
+
+	after, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, after.SettingStatus)
+	assert.Empty(t, after.SettingReason)
+}
+
+// TestPlanHarnessRefusesASettingThePersonChanged pins that no plan overwrites a value
+// someone set, and that it names the key: a person who turned the mod off meant it.
+func TestPlanHarnessRefusesASettingThePersonChanged(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	config := filepath.Join(root, ".claude", "settings.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
+	require.NoError(t, os.WriteFile(config, []byte(`{"enabledPlugins": {"magus@magus": false}}`), 0o644))
+
+	_, err := PlanHarness(context.Background(), root, "moder")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "enabledPlugins.magus@magus")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.SettingStatus)
+}
+
+// TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
+// inside a workspace file.
+func TestHarnessDescriptorRejectsAMalformedSetting(t *testing.T) {
+	base := HarnessDescriptor{SchemaVersion: harnessSchemaVersion, ID: "s", Display: HarnessDisplay{Name: "S"}, Skills: HarnessSkills{Form: "both"}}
+	for name, setting := range map[string]HarnessSetting{
+		"no path":   {Key: []string{"k"}, Value: true},
+		"escapes":   {Path: "../x", Key: []string{"k"}, Value: true},
+		"no key":    {Path: "x", Value: true},
+		"empty key": {Path: "x", Key: []string{"a", ""}, Value: true},
+		"no value":  {Path: "x", Key: []string{"k"}},
+	} {
+		d := base
+		d.Settings = []HarnessSetting{setting}
 		assert.Error(t, validateHarnessDescriptor(d), name)
 	}
 }

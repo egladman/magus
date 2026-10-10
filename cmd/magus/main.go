@@ -54,6 +54,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
@@ -251,6 +252,9 @@ type dispatchProfile struct {
 	// loaded the machine is, and starting a broker for one would make every read command
 	// spawn a background process.
 	spawnsWork bool
+	// hostOnly marks a command whose stderr only a host's glue reads, never a person, so
+	// its display is quiet (see quietDisplay).
+	hostOnly bool
 }
 
 // isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
@@ -466,7 +470,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
 		// that adopted the call would serve its own. The preload opens the workspace the
 		// host launched it in and hosts the proc server the tools' runs share.
-		return dispatchProfile{needsConfig: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsWorkspace: true, hostOnly: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -679,6 +683,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
+	// Before the first applyDisplay below, so the workspace preload already logs under it.
+	if profile.hostOnly {
+		quietForced.Store(true)
+	}
 
 	if !profile.needsConfig {
 		// This branch skips the main flag parse entirely, so anything written BEFORE
@@ -946,7 +954,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// Announced rather than silent: a run quietly narrower than requested is as hard
 		// to attribute as one that thrashes.
 		if clamped, was := cache.ClampConcurrency(concurrency); was {
-			slog.Warn("magus: concurrency capped to this machine",
+			slog.With(attr.Component("magus")).Warn("concurrency capped to this machine",
 				slog.Int("requested", concurrency), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			concurrency = clamped
@@ -1493,6 +1501,15 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
+// rationaleArgs returns err's rationale as an [attr.Why] log argument, or none when err
+// carries no rationale.
+func rationaleArgs(err error) []any {
+	if why := types.DiagnosticRationale(err); why != "" {
+		return []any{attr.Why(why)}
+	}
+	return nil
+}
+
 // mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
 func mapExitCode(err error) int {
 	if err == nil {
@@ -1508,7 +1525,7 @@ func mapExitCode(err error) int {
 	// A misuse of the command line exits 2, not 1: the work was never attempted.
 	var usage errUsage
 	if errors.As(err, &usage) {
-		slog.Error(err.Error())
+		slog.Error(err.Error(), rationaleArgs(err)...)
 		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
@@ -1523,7 +1540,7 @@ func mapExitCode(err error) int {
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
-	slog.Error(err.Error())
+	slog.Error(err.Error(), rationaleArgs(err)...)
 	// A failure that names its own status keeps it, the same question internal/proc's
 	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
 	// busy machine and not a broken build: a contended no-wait workspace lock, and a

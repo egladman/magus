@@ -65,7 +65,7 @@ func parseLock(raw []byte) (Lock, error) {
 		return Lock{}, fmt.Errorf("%s: %w", LockFile, err)
 	}
 	if l.Version != lockVersion {
-		return Lock{}, fmt.Errorf("%s: schema version %d, this magus reads version %d; rewrite it with `magus spell lock --update`",
+		return Lock{}, fmt.Errorf("%s: schema version %d, this magus reads version %d: rewrite it with `magus spell lock --update`",
 			LockFile, l.Version, lockVersion)
 	}
 	for path, e := range l.Spells {

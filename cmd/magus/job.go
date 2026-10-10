@@ -118,14 +118,23 @@ func consoleJobLine(id string) string {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
 		return ""
 	}
+	// A quiet display gets the one command that opens the console, and nothing when there
+	// is nothing to open (ADR 0007).
+	terse := quietDisplay()
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
+		if terse {
+			return ""
+		}
 		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
 	}
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
 		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
+	}
+	if terse {
+		return "console: " + console.OpenCommand(link)
 	}
 	line := "console: " + link + "\n  " + authHint(link)
 	if skew := consoleSkew(serverVersion, version); skew != "" {
@@ -235,7 +244,7 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, `  magus ls jobs -o template='{{range .jobs}}{{.id}}  {{.checkout_root}}{{"\n"}}{{end}}'`)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -670,7 +679,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus describe job refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -896,7 +905,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job fork refactor/pricing --write-paths pricing/total.sh --check 'test .'")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -943,6 +952,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if err := job.RefuseForkLimits(plan, row.ID, row.Parent, globalCfg.Jobs); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if row.Checkpoint, err = store.DeclaredCheckpoint(ctx, plan, row.ID, row.Checkpoint); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	// The reader loads the graph only when a gate names a symbol.
@@ -1077,7 +1089,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exec refactor/pricing   # in the worktree you will edit")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1094,7 +1106,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		base, _ = checkoutBaseToken(ctx, root)
 	}
 	if strings.TrimSpace(base) == "" {
-		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s;"+
+		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s,"+
 			" pass the one you are on with --base", pos[0])
 	}
 	store, err := openJobs(root)
@@ -1166,7 +1178,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exit scout-a scout-b scout-c")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1292,7 +1304,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job wait refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1316,8 +1328,8 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if actor := store.Actor(); !actor.Verifies(rows, pos[0]) {
-		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
-			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
+		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work,"+
+			" exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
 
 	var result *types.JobResult
@@ -2120,7 +2132,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job rm refactor/pricing-draft")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2181,7 +2193,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2349,7 +2361,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job prune --dry-run")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

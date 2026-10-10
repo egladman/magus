@@ -104,7 +104,7 @@ func graphCoverage(ctx context.Context, g knowledgeGraphs, input string, seeded 
 // with the symbol shards merged in; every other query reads the domain graph.
 func MagusQuery(ctx context.Context, query string, opts map[string]any) (types.KnowledgeQueryOutput, error) {
 	if strings.TrimSpace(query) == "" {
-		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, e.g. \"kind=spell go\"")
+		return types.KnowledgeQueryOutput{}, errors.New("magus\\query: needs search terms, such as \"kind=spell go\"")
 	}
 	o, err := intOptions("query", opts, "budget", "limit", "offset")
 	if err != nil {
@@ -151,7 +151,7 @@ func MagusExplain(ctx context.Context, node string) (types.KnowledgeExplainOutpu
 		// A bare name reads the symbol-free graph, so a miss on a name that could be a
 		// code symbol is a blind spot, not an absence.
 		if knowledge.Answer(node, false, graphCoverage(ctx, g, node, seeded)).Verdict == types.VerdictUnknown {
-			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q in the domain graph; code symbols are not loaded here, so ask magus\\refs", node)
+			return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q in the domain graph, code symbols are not loaded here, so ask magus\\refs", node)
 		}
 		return types.KnowledgeExplainOutput{}, fmt.Errorf("magus\\explain: no node matches %q", node)
 	}
@@ -383,7 +383,7 @@ func MagusSymbols(ctx context.Context) (map[string]any, error) {
 // node raises DirNotInGraph: a typo must not come back as an empty Dir.
 func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 	if strings.TrimSpace(dir) == "" {
-		return types.Dir{}, errors.New("magus\\dir: needs a workspace-relative directory, e.g. \"internal/httpx\"")
+		return types.Dir{}, errors.New("magus\\dir: needs a workspace-relative directory, such as \"internal/httpx\"")
 	}
 	g, err := graphsFromContext(ctx, "dir")
 	if err != nil {
@@ -405,7 +405,7 @@ func MagusDir(ctx context.Context, dir string) (types.Dir, error) {
 // LayerNotDeclared.
 func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.Dir, error) {
 	if strings.TrimSpace(glob) == "" {
-		return nil, errors.New("magus\\dirs: needs a glob over workspace paths, e.g. \"internal/**\"")
+		return nil, errors.New("magus\\dirs: needs a glob over workspace paths, such as \"internal/**\"")
 	}
 	o := optionReader{member: "dirs", opts: opts}
 	if err := o.only("layer", "language", "depth"); err != nil {
@@ -441,7 +441,7 @@ func MagusDirs(ctx context.Context, glob string, opts map[string]any) ([]types.D
 // magus.project "layers" entry declares raises LayerNotDeclared.
 func MagusLayer(ctx context.Context, name string) (types.Layer, error) {
 	if strings.TrimSpace(name) == "" {
-		return types.Layer{}, errors.New("magus\\layer: needs a layer name, e.g. \"handler\"")
+		return types.Layer{}, errors.New("magus\\layer: needs a layer name, such as \"handler\"")
 	}
 	g, err := graphsFromContext(ctx, "layer")
 	if err != nil {
@@ -627,7 +627,7 @@ func (o optionReader) relations() ([]types.RelationID, error) {
 // checkout's output store, so a ref minted in another worktree does not resolve here.
 func MagusOutput(ctx context.Context, ref string) (types.OutputRecord, error) {
 	if !cache.LooksLikeRef(ref) {
-		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, e.g. out1a2b3c)", ref)
+		return types.OutputRecord{}, fmt.Errorf("magus\\output: %q is not an output ref (expected out<hex>, such as out1a2b3c)", ref)
 	}
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {

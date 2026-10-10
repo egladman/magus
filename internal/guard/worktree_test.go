@@ -80,8 +80,9 @@ func (r worktreeRepo) judgeFrom(callDir, command string, rows ...types.Job) Shel
 func assertRemovalDenied(t *testing.T, v ShellVerdict, says ...string) {
 	t.Helper()
 	assert.Equal(t, denyRule{Name: denyRuleWorktreeRemove}, v.Rule)
+	assert.Contains(t, v.Deny, " may lose work: ", "the verdict names the first condition it fails")
 	for _, s := range says {
-		assert.Contains(t, v.Deny, s)
+		assert.Contains(t, denial{Say: v.Deny, Why: v.Why}.full(), s)
 	}
 }
 

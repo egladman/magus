@@ -201,9 +201,8 @@ func gitFileCommonDir(gitFile string) (string, bool) {
 // one of them is on screen: the command looks correct, and what is wrong with it
 // is where it points.
 func siblingCheckoutDenial(here, there string) string {
-	return fmt.Sprintf("magus guard denied a magus command relocated into %s.\n\n"+
+	return fmt.Sprintf("magus guard denied a magus command relocated into %s, another checkout of this repository; run it here: `magus run <target> <project>`.\n\n"+
 		"That is a different checkout of THIS repository, not a different workspace. Its `./magus` was linked from ITS sources and its cache is keyed to ITS tree, so a verdict from there describes neither checkout: a gate that passes says nothing about %s, and whatever it regenerates lands over there unmarked.\n\n"+
-		"Run magus from this checkout and name the project: `magus run <target> <project>`.\n"+
-		"A genuinely different workspace is `--root <path>`, which keeps one cache. Work that belongs to the other checkout belongs to a session rooted there.",
+		"Run magus from this checkout and name the project. A genuinely different workspace is `--root <path>`, which keeps one cache. Work that belongs to the other checkout belongs to a session rooted there.",
 		there, here)
 }

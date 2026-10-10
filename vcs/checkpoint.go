@@ -31,7 +31,7 @@ import (
 // also the only case where a digest would say anything.
 func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preserve bool) (types.VCSCheckpoint, error) {
 	if res.VCS == nil {
-		return types.VCSCheckpoint{}, errors.New("vcs checkpoint: no VCS resolved for this workspace; there is no revision to record")
+		return types.VCSCheckpoint{}, errors.New("vcs checkpoint: no VCS resolved for this workspace, there is no revision to record")
 	}
 	meta, err := res.VCS.Metadata(ctx, dir)
 	if err != nil {
@@ -79,7 +79,7 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution, preser
 // Jujutsu mints nothing to drop; both answer with an empty list, which is not an error.
 func PrunePreserved(ctx context.Context, dir string, res types.VCSResolution) ([]string, error) {
 	if res.VCS == nil {
-		return nil, errors.New("vcs prune-preserved: no VCS resolved for this workspace; there is nothing to prune")
+		return nil, errors.New("vcs prune-preserved: no VCS resolved for this workspace, there is nothing to prune")
 	}
 	dropped, err := res.VCS.PrunePreserved(ctx, dir, time.Now().Add(-preserveRetention))
 	if err != nil {

@@ -306,7 +306,7 @@ type Log struct {
 	Level string `json:"level" yaml:"level" validate:"omitempty,oneof=trace debug info warn error"`
 	// Silent suppresses progress like --quiet, and additionally bounds the failing-project
 	// dump (tail + path to the full log) and bubbles up only lines a target marks as a
-	// notice ("magus:notice:"). Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
+	// notice ("magus:notice:"). Like --quiet it prints a failure's reasoning only at -v. Normally set via -s/--silent; MAGUS_LOG_SILENT=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Silent *bool `json:"silent" yaml:"silent"`
 	// Stream shows every target's subprocess output live and interleaved, instead of
@@ -844,7 +844,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_CACHE_TOOL_VERSION", "", "project", "Env-only, no magus.yaml equivalent: how tool versions key the cache: project (per project), workspace (once for the workspace), or off"},
 		{"MAGUS_LOG_FORMAT", "log.format", "pretty", "Output format: pretty, plain, text, or json"},
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
-		{"MAGUS_LOG_SILENT", "log.silent", "false", "When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, and surface only lines a target marks as a notice"},
+		{"MAGUS_LOG_SILENT", "log.silent", "false", "When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, print a failure's reasoning only at -v, and surface only lines a target marks as a notice"},
 		{"MAGUS_LOG_STREAM", "log.stream", "false", "When true, the env equivalent of -vv: stream every target's output live instead of withholding a passing target's output"},
 		{"MAGUS_CONCURRENCY", "concurrency", "concurrency_profile decides", "Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive"},
 		{"MAGUS_CONCURRENCY_PROFILE", "concurrency_profile", "balanced", "Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly"},

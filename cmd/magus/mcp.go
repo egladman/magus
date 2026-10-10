@@ -156,12 +156,12 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 func publishServerTrailBase() {
 	root, err := magus.FindRoot("")
 	if err != nil {
-		slog.Warn("[AGENT] no workspace root; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
 		return
 	}
 	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
-		slog.Warn("[AGENT] cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
 		return
 	}
 	serverTrailBase = base
@@ -186,7 +186,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	mcpOn := globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 	addr, err := mcpAddrPort()
 	if mcpOn && err != nil {
-		slog.Error("[AGENT] MCP skipped: invalid MCP address", slog.String("error", err.Error()))
+		slog.Error("MCP skipped: invalid MCP address", slog.String("error", err.Error()))
 		mcpOn = false
 	}
 	// The bridge Magus MUST share the server's single provider (WithProvider) so the
@@ -205,13 +205,13 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	if err != nil {
 		root, rerr := magus.FindRoot("")
 		if !mcpOn || rerr != nil || serverRegistry == nil {
-			slog.Warn("[AGENT] workspace unavailable; no MCP, console or watch for it", slog.String("error", err.Error()))
+			slog.Warn("workspace unavailable; no MCP, console or watch for it", slog.String("error", err.Error()))
 			return
 		}
 		// Serve anyway: a console and an agent that can connect and read the diagnostic
 		// beat a server with nothing listening. The registry holds the failure and retries
 		// once a source changes; every route is served when that load succeeds.
-		slog.Warn("[AGENT] workspace failed to load; serving its failure until a source changes",
+		slog.Warn("workspace failed to load; serving its failure until a source changes",
 			slog.String("root", root), slog.String("error", err.Error()))
 		serverRegistry.failBridge(root, err)
 		serverHTTPAddr.Store(addr.String())
@@ -249,10 +249,10 @@ func startWatch(ctx context.Context, m *magus.Magus) {
 // stale until a manual `magus run ::scip`. It reports whether the symbol indexer started.
 func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
-		slog.Warn("[AGENT] knowledge-graph watcher unavailable; queries will rebuild per call", slog.String("error", werr.Error()))
+		slog.Warn("knowledge-graph watcher unavailable; queries will rebuild per call", slog.String("error", werr.Error()))
 	}
 	if _, werr := m.WatchSymbolIndexing(ctx); werr != nil {
-		slog.Warn("[AGENT] symbol auto-indexer unavailable; symbol indexes will not refresh automatically", slog.String("error", werr.Error()))
+		slog.Warn("symbol auto-indexer unavailable; symbol indexes will not refresh automatically", slog.String("error", werr.Error()))
 		return false
 	}
 	return true
@@ -286,7 +286,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 	select {
 	case err := <-done:
 		if err != nil && ctx.Err() == nil {
-			slog.Error("[AGENT] MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
+			slog.Error("MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
 			cancel()
 		}
 	case m := <-active:
@@ -295,7 +295,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 		if m == nil {
 			return
 		}
-		slog.Info("[AGENT] workspace loaded; serving every route", slog.String("root", root))
+		slog.Info("workspace loaded; serving every route", slog.String("root", root))
 		startWatch(ctx, m)
 		serveBridge(ctx, cancel, m, addr)
 	}
@@ -398,7 +398,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 			// Any other error means MCP is gone while the server is still up —
 			// clients would receive no response indefinitely. Cancel the server
 			// context to trigger a clean restart by the process supervisor.
-			slog.Error("[AGENT] MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
+			slog.Error("MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
 			cancel()
 		}
 	}()

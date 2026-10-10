@@ -117,7 +117,7 @@ func validLevel(s Scope, l Level) error {
 	case l > LevelWrite:
 		return fmt.Errorf("%s has unknown level %d", s, uint8(l))
 	case l == LevelRead && s != ScopeConsole:
-		return fmt.Errorf("%s=read means nothing; %s is none or write", s, s)
+		return fmt.Errorf("%s=read means nothing, %s is none or write", s, s)
 	}
 	return nil
 }

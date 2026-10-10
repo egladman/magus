@@ -268,8 +268,8 @@ func checkNotExpired(expiresAt string) error {
 		return fmt.Errorf("release index expires_at %q is not RFC3339: %w", expiresAt, err)
 	}
 	if now := time.Now(); now.After(deadline) {
-		return fmt.Errorf("release index expired at %s (%d days ago); it is republished on release, "+
-			"so this is either a stale mirror or a replay - reinstall from https://eli.gladman.cc/magus/guides/setup/",
+		return fmt.Errorf("release index expired at %s (%d days ago), it is republished on release, "+
+			"so this is either a stale mirror or a replay, reinstall from https://eli.gladman.cc/magus/guides/setup/",
 			expiresAt, int(now.Sub(deadline).Hours()/24))
 	}
 	return nil
@@ -460,7 +460,7 @@ func FetchAndVerifyTarball(ctx context.Context, url, assetName string, m *Manife
 
 	sum := sha256.Sum256(data)
 	if !bytes.Equal(sum[:], expected) {
-		return nil, fmt.Errorf("SHA-256 mismatch for %s\n  expected: %s\n  got:      %s",
+		return nil, fmt.Errorf("SHA-256 mismatch for %s: expected %s, got %s",
 			assetName, expectedHex, hex.EncodeToString(sum[:]))
 	}
 	return ExtractBinary(data)
@@ -605,8 +605,8 @@ func CheckFileWritable(path string) error {
 	if err != nil {
 		if os.IsPermission(err) {
 			return fmt.Errorf(
-				"binary at %s is not writable by the current user\n"+
-					"  hint: re-run with elevated privileges, or reinstall via your package manager",
+				"binary at %s is not writable by the current user, "+
+					"re-run with elevated privileges, or reinstall via your package manager",
 				path,
 			)
 		}
@@ -623,8 +623,8 @@ func CheckParentWritable(path string) error {
 	if err != nil {
 		if os.IsPermission(err) {
 			return fmt.Errorf(
-				"directory %s is not writable by the current user\n"+
-					"  hint: re-run from an elevated prompt, or pass --bin-dir to a writable location",
+				"directory %s is not writable by the current user, "+
+					"re-run from an elevated prompt, or pass --bin-dir to a writable location",
 				dir,
 			)
 		}

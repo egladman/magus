@@ -412,8 +412,9 @@ func TestARecordThatDoesNotReadIsNone(t *testing.T) {
 }
 
 // The read that ends a job whose checkout is gone also tombstones every caller record
-// naming such a job, so that caller reads as bound to an ended job rather than unbound.
-// A record naming a job still taken somewhere, one never taken, or no job at all stays.
+// naming such a job, or naming a row nobody holds any more, so that caller reads as bound
+// to an ended job rather than unbound. A record naming a job still taken somewhere, or one
+// never taken, stays.
 func TestListTombstonesRecordsWhoseCheckoutIsGone(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	s, _ := sweepStore(t, 1_000, time.Hour)
@@ -452,7 +453,7 @@ func TestListTombstonesRecordsWhoseCheckoutIsGone(t *testing.T) {
 		"w/returned": {"", Binding{Job: "w/returned", Gone: true, swept: 1_000}},
 		"w/here":     {"w/here", Binding{Job: "w/here"}},
 		"w/untaken":  {"w/untaken", Binding{Job: "w/untaken"}},
-		"w/nobody":   {"w/nobody", Binding{Job: "w/nobody"}},
+		"w/nobody":   {"", Binding{Job: "w/nobody", Gone: true, swept: 1_000}},
 	}, got)
 	entries, err := os.ReadDir(filepath.Join(filepath.Dir(s.path), agentRecordDir))
 	require.NoError(t, err)
@@ -510,6 +511,27 @@ func TestBindReplacesATombstone(t *testing.T) {
 	require.NoError(t, s.Bind(c, "w/next"))
 
 	assert.Equal(t, []any{"w/next", Binding{Job: "w/next"}}, []any{s.Bound(c), s.Binding(c)})
+}
+
+// Release unbinds a caller from the job it names and from no other: a record already
+// naming another job, or a tombstone, stays as it was.
+func TestReleaseDropsOnlyTheNamedBinding(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	s, _ := sweepStore(t, 1_000, time.Hour)
+	held := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	rebound := Caller{Host: "claude-code", Session: "s1", Agent: "a2"}
+	buried := Caller{Host: "claude-code", Session: "s1", Agent: "a3"}
+	require.NoError(t, s.Bind(held, "w/held"))
+	require.NoError(t, s.Bind(rebound, "w/next"))
+	require.NoError(t, os.WriteFile(s.record(buried), []byte("gone w/held 900\n"), 0o600))
+
+	for _, c := range []Caller{held, rebound, buried} {
+		s.Release(c, "w/held")
+	}
+	s.Release(Caller{Host: "claude-code", Session: "s1", Agent: "never-bound"}, "w/held")
+
+	assert.Equal(t, []Binding{{}, {Job: "w/next"}, {Job: "w/held", Gone: true, swept: 900}},
+		[]Binding{s.Binding(held), s.Binding(rebound), s.Binding(buried)})
 }
 
 // A caller rebound between the sweep's read and its removal keeps the new binding.

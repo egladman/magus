@@ -492,12 +492,12 @@ func TestOpenRefusesABrokerItWouldNotUse(t *testing.T) {
 	}{
 		"off by option": {
 			opts:    []Option{WithBroker(client), WithBrokerPolicy(types.BrokerOff)},
-			wantErr: "magus: WithBroker passed a client, but WithBrokerPolicy is off, so it would never be used; drop one or the other",
+			wantErr: "magus: WithBroker passed a client, but WithBrokerPolicy is off, so it would never be used, drop one or the other",
 		},
 		"off by the workspace setting": {
 			yaml:    "broker: off\n",
 			opts:    []Option{WithBroker(client)},
-			wantErr: "magus: WithBroker passed a client, but the workspace's broker setting is off, so it would never be used; drop one or the other",
+			wantErr: "magus: WithBroker passed a client, but the workspace's broker setting is off, so it would never be used, drop one or the other",
 		},
 		"a nil client": {
 			opts:    []Option{WithBroker(nil), WithBrokerPolicy(types.BrokerBestEffort)},

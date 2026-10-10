@@ -64,7 +64,7 @@ func resolveOwedPaths(ctx context.Context, root string) (owedPaths, bool, error)
 		if strings.Contains(stderr.String(), "not a git repository") {
 			return owedPaths{}, false, nil
 		}
-		return owedPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: %w: %s", root, err, strings.TrimSpace(stderr.String()))
+		return owedPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: %w", root, withOutput(err, stderr.String()))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) != 2 {
@@ -165,7 +165,7 @@ func readOwed(path string) ([]OwedRegeneration, error) {
 		return nil, fmt.Errorf("vcs: parse %s: %w", path, err)
 	}
 	if doc.SchemaVersion != owedSchemaVersion {
-		return nil, fmt.Errorf("vcs: %s has schema_version %d and this magus reads %d; run the generate targets it names by hand, then delete it",
+		return nil, fmt.Errorf("vcs: %s has schema_version %d and this magus reads %d, run the generate targets it names by hand, then delete it",
 			path, doc.SchemaVersion, owedSchemaVersion)
 	}
 	return doc.Owed, nil

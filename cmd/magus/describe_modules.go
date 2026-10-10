@@ -25,7 +25,7 @@ func describeModules(args []string) error {
 			fmt.Fprintln(os.Stderr, "with Buzz signatures.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

@@ -164,7 +164,7 @@ func (b *cmdBatch) Close() error {
 	}
 	if waitErr != nil {
 		if msg := strings.TrimSpace(b.stderr.String()); msg != "" {
-			return fmt.Errorf("%s cmdserver: %w: %s", b.prog, waitErr, msg)
+			return fmt.Errorf("%s cmdserver: %s: %w", b.prog, msg, waitErr)
 		}
 		return fmt.Errorf("%s cmdserver: %w", b.prog, waitErr)
 	}

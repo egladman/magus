@@ -69,6 +69,9 @@ final maxLine = 3000;
 // `-` or a word character is a path (`.claude/worktrees`), and "agent" alone is a word
 // this repository's code uses, so only an agent as the subject of the work counts.
 final credit = $"(?i)(^|[^./\w-])(claude|anthropic|copilot)\b|\b(sub)?agent('s)?\s+(found|implemented|built|fixed|reported|wrote|discovered|verified|measured)|\bbranch report\b";
+// The Claude Code harness magus supports is subject matter, not credit: removed before
+// credit is searched, as the judge's toolName rule skips it, so the two cannot disagree.
+final harnessName = $"(?i)claude code";
 final narrative = $"(?i)\b(this session|this week's session|the report above|as reported)\b";
 final attribution = $"(?i)co-authored-by|generated with";
 final nonASCII = $"[^ -~\n\t]";
@@ -810,7 +813,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             }
         }
     } else {
-        if (credit.match(text) != null) {
+        if (credit.match(harnessName.replaceAll(text, with: "")) != null) {
             problems.append("it credits a tool or an agent: describe the change, not how it was produced");
         }
         if (narrative.match(text) != null) {
@@ -914,7 +917,7 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
         }
     }
     if (problems.len() > 0) {
-        return magus\guard.deny("This pull request text breaks the description rules:\n  - " + problems.join("\n  - ") + "\n" + fixLine);
+        return magus\guard.deny("this pull request text breaks a description rule: {problems[0]}\n  - " + problems.join("\n  - ") + "\n" + fixLine);
     }
     if (advice.len() > 0 and once(key)) {
         return magus\guard.advise("This pull request description could read better:\n  - " + advice.join("\n  - ") + "\n" + shapeLine);
@@ -1320,6 +1323,15 @@ test "an unreadable description is judged from the whole line" {
     std\assert(judged(programs, line: line, files: {<str: str>}).reason.indexOf("credits a tool") != null, message: "the line");
     final long = "gh pr create --body \"$BODY\" " + "x".repeat(3000);
     std\assert(judged(programs, line: long, files: {<str: str>}).reason.indexOf("the command runs") != null, message: "a long line");
+}
+
+test "an unreadable description that names the Claude Code harness is not credit" {
+    final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
+    final line = "gh pr create --title \"feat: add a Claude Code mod\" --body-file /elsewhere/pr.md";
+    final reason = judged(programs, line: line, files: {<str: str>}).reason;
+    std\assert(reason.indexOf("credits a tool") == null, message: reason);
+    final credited = "gh pr create --title \"feat: add a Claude Code mod\" --body \"$BODY by Claude\"";
+    std\assert(judged(programs, line: credited, files: {<str: str>}).reason.indexOf("credits a tool") != null, message: "credit beside the harness name");
 }
 
 test "other gh calls and a line that only mentions gh pr create stay silent" {

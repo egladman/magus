@@ -391,7 +391,7 @@ func (e *lockContendedError) Error() string {
 	}
 	// Named because a fail-fast that cannot say who won leaves the caller nothing to
 	// act on.
-	return fmt.Sprintf("magus: project %s is locked by another magus process%s; not waiting", p, heldBy(e.Owner))
+	return fmt.Sprintf("magus: project %s is locked by another magus process%s, not waiting", p, heldBy(e.Owner))
 }
 
 // heldBy renders a describeOwner string as a parenthetical, or "" when there is nothing

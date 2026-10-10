@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -323,6 +324,24 @@ func TestExitCodeOf(t *testing.T) {
 	// that a reader sees it when the run stops rather than only at the end.
 	assert.Equal(t, 3, mapExitCode(types.ExitError{Code: 3}))
 	assert.Equal(t, 70, mapExitCode(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
+}
+
+// The top-level error line carries the diagnostic's reason as its why, so the display
+// decides who reads it; a plain error carries none.
+func TestMapExitCodeLogsTheRationale(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	const why = "No cache key could tell the tool's upgrades apart."
+	err := fmt.Errorf("go: %w", types.DiagnosticErrorf(types.ToolUnprobeable, "go:go reports no version in .").WithWhy(why))
+	assert.Equal(t, 1, mapExitCode(err))
+	assert.Contains(t, logged.String(), `why="`+why+`"`)
+
+	logged.Reset()
+	assert.Equal(t, 1, mapExitCode(errors.New("go exited 1")))
+	assert.NotContains(t, logged.String(), "why=")
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do

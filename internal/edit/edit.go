@@ -296,7 +296,7 @@ func (p *Plan) Apply() error {
 		s, err := stage(f.abs, f.after, f.mode)
 		if err != nil {
 			discard()
-			return fmt.Errorf("edit: stage %s: %w, nothing written", f.path, err)
+			return fmt.Errorf("edit: stage %s, nothing written: %w", f.path, err)
 		}
 		staged[i] = s
 	}
@@ -311,7 +311,7 @@ func (p *Plan) Apply() error {
 			if rerr := p.restore(p.files[:i]); rerr != nil {
 				return errors.Join(failed, fmt.Errorf("%w: %w", ErrRestoreFailed, rerr))
 			}
-			return fmt.Errorf("%w; every file written before it was restored", failed)
+			return fmt.Errorf("every file written before it was restored: %w", failed)
 		}
 		staged[i] = ""
 	}

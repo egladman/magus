@@ -325,9 +325,9 @@ func TestSelfUpdate_RunningPrereleaseRefusalNamesTheChannel(t *testing.T) {
 	setVersion(t, "v0.5.0-rc.1")
 
 	err := selfUpdateCmd(context.Background(), []string{"--dry-run", "--yes"})
-	require.EqualError(t, err, "you are running prerelease v0.5.0-rc.1 and automatic updates follow stable releases only; "+
-		"the newest stable release is v0.4.3\n"+
-		"  name a later prerelease with --version, or use --version v0.4.3 --force to return to stable")
+	require.EqualError(t, err, "you are running prerelease v0.5.0-rc.1 and automatic updates follow stable releases only, "+
+		"the newest stable release is v0.4.3, "+
+		"name a later prerelease with --version, or use --version v0.4.3 --force to return to stable")
 }
 
 // TestSelfUpdate_UnknownVersionRefusesAutoSelect proves that a dev build

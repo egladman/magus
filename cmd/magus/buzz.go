@@ -310,7 +310,7 @@ func buzzCmd(ctx context.Context, root string, args []string) (retErr error) {
 		// Strict mode refuses both a raising call and a try at the top level, so the
 		// fix is the one place a raise may go, which -e can hold as well as a file.
 		if d := (*diagnostics.Error)(nil); errors.As(err, &d) && d.Code == buzz.UnhandledRaise {
-			return fmt.Errorf("%s: %w\n  a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level; -e takes that form too", name, err)
+			return fmt.Errorf("%s: a raising call belongs in `fun main(args: [str]) > void !> any { ... }`, which magus buzz calls after the top level, and -e takes that form too: %w", name, err)
 		}
 		return fmt.Errorf("%s: %w", name, err)
 	}

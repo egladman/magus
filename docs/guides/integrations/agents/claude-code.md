@@ -28,6 +28,7 @@ event.
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
+| quiet output     | `env.MAGUS_LOG_SILENT` in `.claude/settings.json`: `true`     |
 
 ## Skills
 
@@ -167,6 +168,20 @@ doctor's own, cannot print its version, or does not exist. It also fails a linke
 worktree that holds no `./magus`, since its hooks then judge with whatever magus is on
 PATH, which may not load the tree. The trail records the judging binary's path and
 version and the event's `cwd` on every hook row.
+
+### Quiet output
+
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. The printed settings set it in
+Claude Code's own `env` object, which Claude Code sets on the session, so every Bash
+tool command inherits it:
+
+```json
+{ "env": { "MAGUS_LOG_SILENT": "true" } }
+```
+
+`magus describe harness claude-code` sets only the variable your `env` lacks, beside
+whatever else it holds. A value you already chose, `false` included, stays.
 
 ### When the hook itself cannot run
 
@@ -528,6 +543,20 @@ It adds three things to a session:
 
 Every threshold is a setting in `/config`. The mod uses the early-access Claude
 Code plugin API, so a Claude Code update can change what it needs.
+
+A workspace can register the marketplace and turn the mod on for everyone who opens
+it, through an opt-in harness beside the one that wires the guard:
+
+```buzz
+import "spells/harness/claude-code-mod" as claudeMod;
+magus\harness.provider(claudeMod);
+```
+
+`magus describe harness claude-code-mod` then prints the two settings it keeps in
+`.claude/settings.json`, `extraKnownMarketplaces.magus` and
+`enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
+reads the marketplace only once the person trusts the folder, and each person still
+runs the install line above once.
 
 ## Coverage and limits
 

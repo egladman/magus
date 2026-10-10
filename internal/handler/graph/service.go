@@ -116,7 +116,7 @@ func (s *Service) ExplainNode(
 	}
 	out, ok := g.Explain(name)
 	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+"; try `magus query "+name+"` for a wider search"))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+", try `magus query "+name+"` for a wider search"))
 	}
 	resp := &graphv1.NodeContext{
 		Node:        nodeToProto(out.Node),
@@ -176,7 +176,7 @@ func (s *Service) FindDependents(
 	// unknown id returns nil, which would report "nothing rebuilds" for a typo.
 	matches := g.Resolve(name, 1)
 	if len(matches) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+"; try `magus query "+name+"` for a wider search"))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("graph: no node matches "+name+", try `magus query "+name+"` for a wider search"))
 	}
 	id := matches[0].ID
 	return connect.NewResponse(&graphv1.Dependents{Node: id, Ids: g.Dependents(id)}), nil

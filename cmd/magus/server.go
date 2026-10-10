@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
@@ -112,7 +113,7 @@ func serverStatus(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "Exits non-zero when no server is running, so a script can chain on it.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -194,7 +195,7 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nSocket address: --server-address flag > MAGUS_SERVER_ADDRESS env >")
 			fmt.Fprintln(os.Stderr, "server.address in magus.yaml > default ("+proc.ServerDefaultAddr()+")")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -250,7 +251,7 @@ func awaitServerStop(ctx context.Context, grace time.Duration, now <-chan struct
 	case <-serverStopped:
 	case <-now:
 	case <-timer.C:
-		slog.WarnContext(ctx, "server: the runs it adopted did not unwind within shutdown_grace; exiting anyway",
+		slog.With(attr.Component("server")).WarnContext(ctx, "the runs it adopted did not unwind within shutdown_grace; exiting anyway",
 			slog.Duration("grace", grace))
 	}
 	return nil
@@ -263,7 +264,7 @@ func reloadOnHangup(ctx context.Context) {
 		return
 	}
 	dropped, busy := serverRegistry.evictAll()
-	slog.InfoContext(ctx, "server: reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
+	slog.With(attr.Component("server")).InfoContext(ctx, "reloaded configuration on SIGHUP; a busy workspace keeps the config it started with",
 		slog.Int("dropped", dropped), slog.Int("busy", busy))
 }
 
@@ -484,7 +485,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 		return nil
 	}
 	if sock := resolveServerAddr(""); proc.SocketLive(ctx, sock) {
-		return fmt.Errorf("the server is running on %s but its console is not serving at %s; check console.enabled and mcp.address", sock, addr)
+		return fmt.Errorf("the server is running on %s but its console is not serving at %s, check console.enabled and mcp.address", sock, addr)
 	}
 
 	fmt.Fprintf(os.Stderr, "magus: starting the server to serve the console, from %s.\n", root)
@@ -503,7 +504,7 @@ func ensureConsoleServer(ctx context.Context, addr, root string) error {
 		}
 		if time.Now().After(deadline) {
 			reapSpawned(ctx, pid, "")
-			return fmt.Errorf("server (pid %d) did not serve the console at %s within %s; see %s", pid, addr, consoleReadyTimeout, logPath)
+			return fmt.Errorf("server (pid %d) did not serve the console at %s within %s, see %s", pid, addr, consoleReadyTimeout, logPath)
 		}
 		select {
 		case <-ctx.Done():
@@ -614,7 +615,7 @@ func serverStop(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "complete before the server exits. The broker is a separate process; the")
 			fmt.Fprintln(os.Stderr, "services it hosts are stopped with `"+hint.BrokerStop.With("--services")+"`.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -714,7 +715,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	name := args[0]
 	entry, ok := job.Lookup(name)
 	if !ok {
-		return fmt.Errorf("magus job run: no job named %q; run `%s` to list them", name, hint.JobRun)
+		return fmt.Errorf("magus job run: no job named %q, run `%s` to list them", name, hint.JobRun)
 	}
 	addr := resolveServerAddr("")
 	if !proc.SocketLive(ctx, addr) {
@@ -1018,7 +1019,7 @@ func serverReload(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nA workspace with a run in flight is left alone: it keeps the config it")
 			fmt.Fprintln(os.Stderr, "started with, and is reported so you know to re-run this once it finishes.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

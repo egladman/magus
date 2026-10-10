@@ -239,7 +239,7 @@ func (s *Store) overlayShards(ctx context.Context, man *manifest) []Shard {
 		sf, err := s.readVerifiedShard(ctx, man, name)
 		if err != nil {
 			// mergeOverlayShard treats an unreadable overlay as absent, and so does this.
-			s.log.DebugContext(ctx, "knowledge: overlay unreadable", "shard", name, "error", err.Error())
+			s.log.DebugContext(ctx, "overlay unreadable", "shard", name, "error", err.Error())
 			continue
 		}
 		out = append(out, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})

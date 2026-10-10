@@ -279,7 +279,7 @@ func hgExportRevision(ctx context.Context, v types.VCSDriver, prog, dir, rev, ds
 	cmd := vcsExec(ctx, prog, append(args, staging)...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s archive %q: %w\n%s", prog, rev, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s archive %q: %w", prog, rev, withOutput(err, string(out)))
 	}
 	_, prefix, err := repoPathPrefix(ctx, v, dir)
 	if err != nil {
@@ -406,7 +406,7 @@ func hgRun(ctx context.Context, prog, dir string, args []string) error {
 	cmd := vcsExec(ctx, prog, args...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("%s %s: %w: %s", prog, args[0], err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("%s %s: %w", prog, args[0], withOutput(err, string(out)))
 	}
 	return nil
 }

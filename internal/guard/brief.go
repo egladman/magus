@@ -55,7 +55,8 @@ func denyBriefCommand(deps Dependencies, brief string) ShellVerdict {
 		}
 		first, _, _ := strings.Cut(v.Deny, "\n")
 		return ShellVerdict{
-			Deny: "Fix the brief: it teaches `" + elideCommand(cmd) + "`, which the guard denies [" + v.RuleName() + "]. " + first + "\n" +
+			Deny: "this brief teaches `" + elideCommand(cmd) + "`, a command the guard denies [" + v.RuleName() + "]; fix the brief.",
+			Why: "The guard's verdict on it: " + first + "\n" +
 				"A worker runs a brief's commands as written, so every worker it reaches is refused, or learns a way around the refusal. A line that names it to forbid it (\"never ...\") is not graded.",
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: v.RuleName()},
 		}
@@ -127,7 +128,7 @@ func briefOffCheckDeny(row types.Job, line, target string) string {
 	for i, c := range checks {
 		names[i] = "`" + c.String() + "`"
 	}
-	return fmt.Sprintf("Fix the brief: it tells job %s's worker to run `%s`, and that row's check is %s [%s]. The line: %q\n"+
+	return fmt.Sprintf("this brief tells job %s's worker to run `%s`, not its check %s [%s]; fix the brief.\nThe line: %q\n"+
 		"A worker runs only its row's check and the targets that regenerate its write paths; the orchestrator runs the rest serially, in its own tree, after it integrates the units. A line that names it to forbid it (\"never run ...\") is not graded.",
 		row.ID, target, strings.Join(names, " or "), denyRuleWorkerCheckOnly, elideCommand(strings.TrimSpace(line)))
 }

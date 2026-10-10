@@ -39,7 +39,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.Job{}, err
 	}
 	if !slices.ContainsFunc(rows, func(r types.Job) bool { return r.ID == id }) {
-		return types.Job{}, fmt.Errorf("%w %q: nothing declared it, so there is nothing to end", ErrUnknownJob, id)
+		return types.Job{}, fmt.Errorf("%w: %q, nothing declared it, so there is nothing to end", ErrUnknownJob, id)
 	}
 	if result == nil {
 		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })

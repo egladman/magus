@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/internal/cache"
@@ -1219,23 +1219,21 @@ func TestPipeNoticesStatusUnknown(t *testing.T) {
 	if beside.Len() != 0 {
 		t.Errorf("a record notice also wrote prose: %q", beside.String())
 	}
-	var rec struct {
+	type notice struct {
 		Type  string         `json:"type"`
 		Level string         `json:"level"`
 		Attrs map[string]any `json:"attrs"`
 	}
+	var rec notice
 	if err := json.Unmarshal(records.Bytes(), &rec); err != nil {
 		t.Fatalf("record %q: %v", records.String(), err)
 	}
-	assert.Equal(t, struct {
-		Type  string         `json:"type"`
-		Level string         `json:"level"`
-		Attrs map[string]any `json:"attrs"`
-	}{
+	want := notice{
 		Type:  report.TypeNotice,
 		Level: "warn",
 		Attrs: map[string]any{"upstream_pid": float64(4242), "upstream_command": "magus affected generate"},
-	}, rec, "a warn run.notice naming pid 4242 and its command")
+	}
+	require.Equal(t, want, rec)
 }
 
 // TestPipeSettleCountsAVanishedUpstreamAsUnknown: a stage killed before it could record its
