@@ -38,44 +38,44 @@ func TestAudienceWrapAgentPolicy(t *testing.T) {
 	}{
 		{
 			name: "drops why on the record",
-			log:  func(l *slog.Logger) { l.Warn("index stale", attr.Why("stale symbols mislead"), "dir", "api") },
+			log:  func(l *slog.Logger) { l.WarnContext(context.Background(), "index stale", attr.Why("stale symbols mislead"), "dir", "api") },
 			want: "level=WARN msg=\"index stale\" dir=api\n",
 		},
 		{
 			name:    "keeps why when verbose",
 			verbose: true,
-			log:     func(l *slog.Logger) { l.Warn("index stale", attr.Why("stale symbols mislead")) },
+			log:     func(l *slog.Logger) { l.WarnContext(context.Background(), "index stale", attr.Why("stale symbols mislead")) },
 			want:    "level=WARN msg=\"index stale\" why=\"stale symbols mislead\"\n",
 		},
 		{
 			name: "drops why added through With",
-			log:  func(l *slog.Logger) { l.With(attr.Why("stale symbols mislead"), "dir", "api").Warn("index stale") },
+			log:  func(l *slog.Logger) { l.With(attr.Why("stale symbols mislead"), "dir", "api").WarnContext(context.Background(), "index stale") },
 			want: "level=WARN msg=\"index stale\" dir=api\n",
 		},
 		{
 			name: "drops why inside a group",
-			log:  func(l *slog.Logger) { l.WithGroup("g").Warn("index stale", attr.Why("x"), "dir", "api") },
+			log:  func(l *slog.Logger) { l.WithGroup("g").WarnContext(context.Background(), "index stale", attr.Why("x"), "dir", "api") },
 			want: "level=WARN msg=\"index stale\" g.dir=api\n",
 		},
 		{
 			name: "drops a short wait",
-			log:  func(l *slog.Logger) { l.Info("waiting for the broker", attr.Elapsed(59*time.Second)) },
+			log:  func(l *slog.Logger) { l.InfoContext(context.Background(), "waiting for the broker", attr.Elapsed(59*time.Second)) },
 			want: "",
 		},
 		{
 			name:    "drops a short wait even when verbose",
 			verbose: true,
-			log:     func(l *slog.Logger) { l.Info("waiting for the broker", attr.Elapsed(time.Second)) },
+			log:     func(l *slog.Logger) { l.InfoContext(context.Background(), "waiting for the broker", attr.Elapsed(time.Second)) },
 			want:    "",
 		},
 		{
 			name: "keeps a wait of a minute",
-			log:  func(l *slog.Logger) { l.Info("waiting for the broker", attr.Elapsed(time.Minute)) },
+			log:  func(l *slog.Logger) { l.InfoContext(context.Background(), "waiting for the broker", attr.Elapsed(time.Minute)) },
 			want: "level=INFO msg=\"waiting for the broker\" elapsed=1m0s\n",
 		},
 		{
 			name: "passes everything else",
-			log:  func(l *slog.Logger) { l.Error("build failed", attr.Component("cache"), "target", "go-build") },
+			log:  func(l *slog.Logger) { l.ErrorContext(context.Background(), "build failed", attr.Component("cache"), "target", "go-build") },
 			want: "level=ERROR msg=\"build failed\" component=cache target=go-build\n",
 		},
 	}

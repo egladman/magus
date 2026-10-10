@@ -238,10 +238,10 @@ func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
 	log := slog.New(h).With(attr.Component("knowledge")).WithGroup("g").With("path", "a.scip")
-	log.Warn("cannot decode symbol index", "error", "EOF")
+	log.WarnContext(t.Context(), "cannot decode symbol index", "error", "EOF")
 	assert.Equal(t, "[warn] knowledge: cannot decode symbol index path=a.scip error=EOF\n", buf.String())
 
-	slog.New(h).With("k", "v").Info("cache.miss", "label", "api", "duration", time.Second)
+	slog.New(h).With("k", "v").InfoContext(t.Context(), "cache.miss", "label", "api", "duration", time.Second)
 	assert.Equal(t, 1, h.status.passed, "the derived handler counts into the original's status line")
 }
 
