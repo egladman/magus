@@ -67,8 +67,9 @@ step at a time. `-o json` carries it as `order`: `groups` of `steps`, each hunk 
 `why`, and `count`.
 
 It needs the symbol index. When the index cannot be brought current, magus prints no order
-and a note says to run `magus graph build`. See [Review](../concepts/review.md#the-reading-order)
-for how the order is built.
+and a note says to run `magus graph build`. With the [daemon](integrations/server.md) running,
+stale indexes are rebuilt in the background, so trying again in a minute can work. See
+[Review](../concepts/review.md#the-reading-order) for how the order is built.
 
 ## What landing it costs
 
