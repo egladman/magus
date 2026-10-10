@@ -88,6 +88,9 @@ export interface SettingsDeps {
   install: InstallStore;
 }
 
+// The loopback address Test probes when the field is empty. Empty stays "unset", so it is not a value.
+const DEFAULT_HOST = "127.0.0.1:7391";
+
 // A config app has nothing to find in the shared search box, so it opts out.
 const noSearch: SearchProvider<null> = {
   placeholder: "",
@@ -562,11 +565,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test");
   testBtn.type = "button";
   testBtn.addEventListener("click", () => {
-    const raw = hostInput.value.trim();
-    if (!raw) {
-      hostTest.set("Enter an address to test, for example 127.0.0.1:7391.", "error");
-      return;
-    }
+    // An empty field means the default loopback, so that is what gets probed.
+    const raw = hostInput.value.trim() || DEFAULT_HOST;
     const generation = hostTestGeneration;
     testBtn.disabled = true;
     hostTest.set("Testing...");

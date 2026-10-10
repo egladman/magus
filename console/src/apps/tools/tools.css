@@ -24,8 +24,8 @@
   border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   background: var(--console-chrome);
 }
-/* The toggles scroll sideways in their own row rather than stretching the bar several rows tall. */
-.console-tools__filters { max-inline-size: 100%; overflow-x: auto; }
+/* The toggles wrap inside the pane, so no label is clipped or scrolled out of reach. */
+.console-tools__filters { flex-wrap: wrap; max-inline-size: 100%; }
 .console-tools__filter { white-space: nowrap; }
 .console-tools__count {
   font-size: var(--pf-t--global--font--size--body--sm);

@@ -2,7 +2,8 @@
    two-column label and keys grid grouped by area, scrollable for long lists. */
 #console-cheatsheet { z-index: var(--pf-t--global--z-index--lg); }
 .console-shell-cheatsheet { max-height: min(80vh, 40rem); overflow-y: auto; }
-.console-shell-cheatsheet:focus-visible { outline-offset: var(--console-focus-inset); }
+/* The box takes focus only to own keydowns. */
+.console-shell-cheatsheet:focus { outline: none; }
 .console-shell-cheatsheet__body { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 .console-shell-cheatsheet__hint {
   margin: 0;

@@ -440,10 +440,14 @@
   gap: var(--pf-t--global--spacer--sm);
 }
 /* The legend and the reading command are PF popovers under their buttons. Absolute, not fixed: they
-   open inside the pane, and a scrolled or tiled pane moves them with it. */
+   open inside the pane, and a scrolled or tiled pane moves them with it. The reading one hangs off
+   the whole actions group, whose edge is the pane's, so it cannot open past the left edge. */
+.console-diff-toolbar__keyswrap,
+.console-diff-toolbar__actions {
+  position: relative;
+}
 .console-diff-toolbar__keyswrap,
 .console-diff-reading {
-  position: relative;
   display: inline-flex;
 }
 .console-diff-toolbar__keyswrap {
@@ -456,7 +460,7 @@
   inset-inline-end: 0;
   z-index: 5;
   inline-size: max-content;
-  max-inline-size: min(28rem, 100cqw);
+  max-inline-size: min(28rem, calc(100cqw - 2 * var(--console-pad)));
 }
 .console-diff-toolbar__keys {
   display: grid;
@@ -689,6 +693,24 @@
   background: inherit;
   font-size: var(--pf-t--global--font--size--body--sm);
   line-height: var(--console-diff-row-line-height);
+}
+/* A row with pinned actions is held to the pane, so its text yields and the chips beside it stay
+   whole instead of sliding under the actions. */
+.console-diff-row:has(> .console-diff-row__actions) {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.console-diff-row:has(> .console-diff-row__actions) > .pf-v6-c-label {
+  flex: none;
+}
+.console-diff-row:has(> .console-diff-row__actions) > :is(.console-diff-row__text, .console-diff-row__touch, .console-diff-row__ran, .console-diff-row__transcript) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.console-diff-row:has(> .console-diff-row__actions) > :is(.console-diff-row__ran, .console-diff-row__transcript) {
+  flex: 0 1 auto;
 }
 .console-diff-row__actions .pf-v6-c-button {
   min-block-size: 24px;
