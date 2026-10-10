@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/internal/cache"
@@ -1226,9 +1227,15 @@ func TestPipeNoticesStatusUnknown(t *testing.T) {
 	if err := json.Unmarshal(records.Bytes(), &rec); err != nil {
 		t.Fatalf("record %q: %v", records.String(), err)
 	}
-	if rec.Type != report.TypeNotice || rec.Level != "warn" || rec.Attrs["upstream_pid"] != float64(4242) || rec.Attrs["upstream_command"] != "magus affected generate" {
-		t.Errorf("record = %+v, want a warn run.notice naming pid 4242 and its command", rec)
-	}
+	assert.Equal(t, struct {
+		Type  string         `json:"type"`
+		Level string         `json:"level"`
+		Attrs map[string]any `json:"attrs"`
+	}{
+		Type:  report.TypeNotice,
+		Level: "warn",
+		Attrs: map[string]any{"upstream_pid": float64(4242), "upstream_command": "magus affected generate"},
+	}, rec, "a warn run.notice naming pid 4242 and its command")
 }
 
 // TestPipeSettleCountsAVanishedUpstreamAsUnknown: a stage killed before it could record its

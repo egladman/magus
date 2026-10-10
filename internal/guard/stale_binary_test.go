@@ -65,8 +65,7 @@ func TestFreshWorktreeWithoutABinaryDeniesWrites(t *testing.T) {
 	}
 
 	edit := Judge(ctx, deps, Request{Input: filepath.Join(root, "main.go"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "deny", edit.Decision)
-	assert.Equal(t, workspaceWriteRule, edit.Rule)
+	assert.Equal(t, verdictWithRule("deny", workspaceWriteRule), unworded(edit))
 }
 
 // A failure that is not stale-shaped still denies in a checkout with no ./magus, and says
@@ -185,15 +184,34 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.Len(t, commands, 1)
-	assert.Equal(t, "/work/tree/magus", commands[0].Binary)
-	assert.Equal(t, "v0.5.0-rc.3-62-gcb43888d2", commands[0].BinaryVersion)
-	assert.Equal(t, cwd, commands[0].Cwd)
+	assert.Equal(t, trail.Event{
+		Kind:          trail.KindAgentCommand,
+		Action:        "shell.command",
+		Outcome:       trail.OutcomeOK,
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+		Cwd:           cwd,
+	}, clearVolatile(commands[0]))
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
-	assert.Equal(t, "/work/tree/magus", spawns[0].Binary)
-	assert.Equal(t, "v0.5.0-rc.3-62-gcb43888d2", spawns[0].BinaryVersion)
-	assert.Equal(t, "/Users/dev/repo", spawns[0].Cwd, "the spawn envelope's reported directory")
+	assert.Equal(t, trail.Event{
+		Kind:          trail.KindAgentSpawn,
+		Action:        "general-purpose",
+		Outcome:       trail.OutcomeOK,
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+		Cwd:           "/Users/dev/repo", // the spawn envelope's reported directory
+	}, clearVolatile(spawns[0]))
+}
+
+// clearVolatile zeroes what the clock, the OS account and the content-addressed blobs decide,
+// so a recorded event compares whole and a field added to it cannot be dropped unseen.
+func clearVolatile(e trail.Event) trail.Event {
+	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
+	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
+	e.Preview, e.VerdictRef = "", ""
+	return e
 }
 
 func TestUnloadCause(t *testing.T) {

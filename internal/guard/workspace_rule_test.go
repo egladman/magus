@@ -163,8 +163,10 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	deps := unloadedDepsFor(typo)
 
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, "deny", push.Decision)
-	assert.Equal(t, unloadedReason(unloadedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true), push.Reason)
+	want := verdictWithRule("deny", workspaceCommandRule)
+	want.Reason = unloadedReason(unloadedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
+	push.Lease, push.LeaseFrom = "", ""
+	assert.Equal(t, want, push)
 	assert.Contains(t, push.Reason, "The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`.")
 
 	other := Judge(ctx, deps, Request{Input: "ls -la", Host: "claude-code", Session: "s1"})

@@ -199,13 +199,27 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	if judged.Binary == "" {
 		judged, unknown = unknown, judged
 	}
-	require.Equal(t, "/work/tree/magus", judged.Binary)
-	require.Equal(t, "v0.5.0-rc.3-62-gcb43888d2", judged.BinaryVersion)
-	require.Equal(t, "/work/tree/console", judged.Cwd)
+	require.Equal(t, stamped(t, judged, Event{
+		Kind:          KindAgentCommand,
+		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Action:        "Bash",
+		Outcome:       OutcomeOK,
+		Preview:       "guard: pass",
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+		Cwd:           "/work/tree/console",
+	}), judged)
 	require.Empty(t, unknown.Binary)
 	require.Empty(t, unknown.Cwd)
-	require.Equal(t, "/work/tree/magus", spawns[0].Binary)
-	require.Equal(t, "/work/tree", spawns[0].Cwd)
+	require.Equal(t, stamped(t, spawns[0], Event{
+		Kind:          KindAgentSpawn,
+		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Action:        "Explore",
+		Outcome:       OutcomeOK,
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0",
+		Cwd:           "/work/tree",
+	}), spawns[0])
 }
 
 func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
