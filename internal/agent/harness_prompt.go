@@ -104,7 +104,7 @@ func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) 
 		return planWholeFile(root, p.Path, p.Content)
 	}
 	return planJSONKey(root, p.Path, p.Key, p.Value, func(got any) error {
-		return fmt.Errorf("%s holds %v, not %v, so the host never asks the person there; magus leaves a value someone chose alone. Change or remove it, then describe the harness again",
+		return fmt.Errorf("%s holds %v, not %v, so the host never asks the person there, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
 			promptLocation(p), got, p.Value)
 	})
 }

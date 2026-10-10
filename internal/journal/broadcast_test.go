@@ -2,6 +2,7 @@ package journal
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,4 +68,18 @@ func TestBroadcasterMultipleSubscribers(t *testing.T) {
 	cancel1()
 	emit(bc, Event{Text: "again"})
 	assert.Equal(t, "again", (<-ch2).Text)
+}
+
+// TestBroadcasterWithAttrsCarriesAttrsIntoTheSameBacklog pins that a derived
+// handler hands its attrs to Handle, through a group too, and fills the
+// original's backlog.
+func TestBroadcasterWithAttrsCarriesAttrsIntoTheSameBacklog(t *testing.T) {
+	bc := NewBroadcaster()
+	derived := bc.WithAttrs([]slog.Attr{slog.Any(eventAttr, Event{Text: "from-with"})}).WithGroup("g")
+	require.NoError(t, derived.Handle(context.Background(), recordWith()))
+
+	backlog, _, cancel := bc.Subscribe()
+	defer cancel()
+	require.Len(t, backlog, 1)
+	assert.Equal(t, "from-with", backlog[0].Text)
 }

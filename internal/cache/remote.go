@@ -123,7 +123,7 @@ func RegisterRemoteBackendOpener(fn func(ctx context.Context, selector string) (
 // opener has been registered (no backend was linked into this binary).
 func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, error) {
 	if remoteBackendOpener == nil {
-		return nil, errors.New("cache: no remote backend registered in this binary; the spell-backed opener is wired by internal/interp/bindings (blank-imported by cmd/magus), so a program that uses this package as a library without that import never registers one")
+		return nil, errors.New("cache: no remote backend registered in this binary, the spell-backed opener is wired by internal/interp/bindings (blank-imported by cmd/magus), so a program that uses this package as a library without that import never registers one")
 	}
 	return remoteBackendOpener(ctx, selector)
 }
@@ -549,7 +549,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 	// unsigned/untrusted/tampered artifact degrades to a local build, never a replay.
 	if c.verifier != nil {
 		if sigBytes == nil {
-			return nil, errors.New("importArtifact: artifact is unsigned; refusing (trust set configured)")
+			return nil, errors.New("importArtifact: artifact is unsigned, refusing (trust set configured)")
 		}
 		if err := c.verifier.verify(domainArtifact, sigBytes, manifestBytes, extraDigest); err != nil {
 			return nil, fmt.Errorf("importArtifact: %w", err)

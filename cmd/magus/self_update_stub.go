@@ -21,5 +21,5 @@ func selfUpdateCmd(_ context.Context, args []string) error {
 	bindDisplayFlags(fs)
 	fs.Usage = func() {}
 	_ = fs.Parse(args)
-	return errors.New("magus was compiled without self-update support; rebuild without -tags noselfupdate to enable")
+	return errors.New("magus was compiled without self-update support, rebuild without -tags noselfupdate to enable")
 }

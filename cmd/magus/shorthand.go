@@ -65,8 +65,7 @@ func installShorthandCmd(args []string) error {
 
 	if err := os.Symlink(target, linkPath); err != nil {
 		if runtime.GOOS == "windows" {
-			return fmt.Errorf("magus self install-shorthand: create %s: %w\n"+
-				"  Windows creates symlinks only in Developer Mode or an elevated shell", linkPath, err)
+			return fmt.Errorf("magus self install-shorthand: create %s (Windows creates symlinks only in Developer Mode or an elevated shell): %w", linkPath, err)
 		}
 		return fmt.Errorf("magus self install-shorthand: create %s: %w", linkPath, err)
 	}

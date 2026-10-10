@@ -117,6 +117,8 @@ linters:
     - testisolation
     - providerio
     - fieldwise
+    - diagmsg
+    - errmsg
 
     # A NoError that continues past a failure reads a nil result and panics, burying
     # the error that explains it; go-require keeps require's FailNow off goroutines.
@@ -246,6 +248,90 @@ linters:
           prefix: "magus workspace:"
           hint: the guard is internal/guard, and `magus session ls` replays its rules
 
+      # A message magus prints is a verdict, one next command and a ref for the
+      # rationale. The sites below build one; a rationale field beside a verdict
+      # (ShellVerdict's Why) is left out on purpose and never judged.
+      diagmsg:
+        type: module
+        description: judges the messages magus prints by the prose message rules
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          max-runes: 160
+          calls:
+            - {func: github.com/egladman/magus/types.DiagnosticErrorf, arg: 1, format: true}
+            - {func: github.com/egladman/magus/types.WrapDiagnostic, arg: 2, format: true}
+            - {func: github.com/egladman/magus/types.FormatDiagnostic, arg: 1}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Errorf", arg: 1, format: true}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Wrapf", arg: 2, format: true}
+            - {func: "(*github.com/egladman/magus/libs/diagnostics.Domain).Format", arg: 1}
+            - {func: github.com/egladman/magus/internal/hint.breadcrumb, arg: 2}
+          fields:
+            - {type: github.com/egladman/magus/internal/hint.Next, field: Why}
+            - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Deny}
+            - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
+            - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
+          prefixes: ["magus workspace:"]
+          # A log record names what logged it with a component attribute
+          # (internal/logattr), never a tag in its text. The allow list below
+          # never exempts a slog message.
+          slog: true
+          hint: a message is the verdict, one next command and a ref; the rationale goes behind the ref
+          # A RATCHET: every file holding a finding on 2026-10-09 (173 findings in 54
+          # files: 87 message-length, 56 message-rationale, 24 message-tag, 6
+          # message-commands), exempt until the terse-output rewrites land. Delete an
+          # entry once its file is clean; never add one.
+          allow:
+            - {file: cmd/magus/gate_redundancy.go, reason: staged}
+            - {file: cmd/magus/spell.go, reason: staged}
+            - {file: cmd/magus/stale_index.go, reason: staged}
+            - {file: describe.go, reason: staged}
+            - {file: internal/auth/share.go, reason: staged}
+            - {file: internal/auth/store.go, reason: staged}
+            - {file: internal/auth/token.go, reason: staged}
+            - {file: internal/cache/deadlock.go, reason: staged}
+            - {file: internal/cache/machine_gate.go, reason: staged}
+            - {file: internal/cache/mutation.go, reason: staged}
+            - {file: internal/cache/order.go, reason: staged}
+            - {file: internal/handler/token/service.go, reason: staged}
+            - {file: internal/hint/schema.go, reason: staged}
+            - {file: internal/interp/bindings/buzz.go, reason: staged}
+            - {file: internal/interp/bindings/imports.go, reason: staged}
+            - {file: internal/interp/bindings/skills.go, reason: staged}
+            - {file: internal/interp/runtime.go, reason: staged}
+            - {file: internal/interp/transform/transform.go, reason: staged}
+            - {file: internal/job/checkout.go, reason: staged}
+            - {file: internal/job/claim.go, reason: staged}
+            - {file: internal/queue/apply.go, reason: staged}
+            - {file: internal/spell/remote/imports.go, reason: staged}
+            - {file: internal/ward/shadow.go, reason: staged}
+            - {file: internal/ward/version.go, reason: staged}
+            - {file: internal/ward/ward.go, reason: staged}
+            - {file: internal/workspace/provider.go, reason: staged}
+            - {file: lock.go, reason: staged}
+            - {file: magus.go, reason: staged}
+            - {file: pipe.go, reason: staged}
+            - {file: run.go, reason: staged}
+            - {file: std/fs.go, reason: staged}
+            - {file: std/magus.go, reason: staged}
+            - {file: symbol.go, reason: staged}
+            - {file: types/secret.go, reason: staged}
+            - {file: watchdog.go, reason: staged}
+
+      # A plain Go error is a fragment its callers chain context onto with ": ".
+      # diagmsg judges what magus prints; this judges errors.New and fmt.Errorf,
+      # including one built only to wrap inside a coded diagnostic. With module
+      # set, the same block judges a lib module's packages when its run enables
+      # this linter; libs/gopherbuzz is excluded below.
+      errmsg:
+        type: module
+        description: 'judges error text (errors.New, fmt.Errorf, Error methods) as a fragment chained with ": "'
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          allow:
+            - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
+
       asciistrings:
         type: module
         description: reports typographic glyphs in user-facing string literals
@@ -296,10 +382,12 @@ linters:
             # since the MCP workers re-exec into internal/interp/mcpclient and
             # internal/interp/transform before the CLI starts, 71 since
             # internal/gcpolicy is a dependency-free leaf imported first so its
-            # init runs early. Raising it is a sentence in the commit message.
+            # init runs early, 73 since internal/log/attr names a log record's
+            # parts and internal/log/audience filters the display for its reader.
+            # Raising it is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 71
+              max: 73
 
       stutter:
         type: module
@@ -719,6 +807,9 @@ linters:
       - path: ^libs/gopherbuzz/token/token\.go$
         linters: [stutter]
         text: ^token\.Tokenize stutters
+      # gopherbuzz's error text follows upstream Buzz's, not Go's convention.
+      - path: ^libs/gopherbuzz/
+        linters: [errmsg]
       - path: ^std/encoding/[a-z0-9]+/[a-z0-9]+\.go$
         linters: [stutter]
         text: ^(base64\.Base64(URL)?(Encode|Decode)|csv\.CSV(Parse|Stringify)|hex\.Hex(Encode|Decode)|ini\.INI(Parse|Stringify)|json\.JSON(Parse|Stringify)|toml\.TOML(Parse|Stringify)|url\.URL(Encode|Decode|Parse|Build)|xml\.XML(Element|Render|Parse)|yaml\.YAML(Parse|Stringify)) stutters

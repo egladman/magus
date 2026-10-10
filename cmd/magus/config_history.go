@@ -71,7 +71,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "rather than being stepped over.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -129,7 +129,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "CI run produces combine into a single history. Inputs may be globs.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -202,7 +202,7 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "miss in more than one shard - work a shared remote cache would eliminate.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

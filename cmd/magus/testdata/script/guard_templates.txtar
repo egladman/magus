@@ -41,7 +41,7 @@ env HOST_NAME=testscript
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout '"permissionDecisionReason":"Verify in place'
+stdout '"permissionDecisionReason":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/advise
@@ -184,7 +184,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -430,7 +430,7 @@ cd $WORK
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout '"agent_message":"Verify in place'
+stdout '"agent_message":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/pass
@@ -523,7 +523,7 @@ stdout '"permission":"allow"'
 stdin $WORK/cursor-mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -1016,20 +1016,20 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/push-approval.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"behavior":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 
 # hosts: claude-code
 env HOST_NAME=testscript
 
 # case: command/deny
-# A leased worker runs as its own session, so this refusal is its first and explains itself
-# in full, whatever the orchestrator's session was told above.
+# A leased worker runs as its own session, so this refusal is its first and prints its
+# verdict rather than the repeat line, whatever the orchestrator's session was told above.
 stdin $WORK/exec-push-worker-s-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-command-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 
 # hosts: cursor
 
@@ -1039,7 +1039,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-push.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 rm $WORK/home/state
 env HOME=/no-home
 env XDG_STATE_HOME=

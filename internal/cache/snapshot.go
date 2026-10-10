@@ -106,7 +106,7 @@ func (c *Cache) snapshotOne(abs, rel string) (OutputRecord, error) {
 	// materializes every blob as a regular file, so a non-regular output cannot
 	// round-trip anyway; refusing it is both the fix and the honest contract.
 	if !info.Mode().IsRegular() {
-		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is not a regular file (%s); a target's declared outputs must be regular files or symlinks", rel, info.Mode().Type())
+		return OutputRecord{}, fmt.Errorf("snapshotOne: %s is not a regular file (%s), a target's declared outputs must be regular files or symlinks", rel, info.Mode().Type())
 	}
 	// preHash is a cheap fast-path check only: if the CAS already holds a blob
 	// under it, we're done without touching abs again. It must never be used

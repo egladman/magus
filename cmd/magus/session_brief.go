@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -61,10 +62,9 @@ const briefRecentSessions = 3
 // laptop that already holds a go-build and a VM.
 const briefMemoryMB = 512
 
-// briefMaxLeases bounds how many live leases the brief names. Editing jobs (declared /
-// running) come first; exited holders still count as live for the write guard but a
-// dirty store of hundreds of them must not refill a compacted window. The omitted
-// count points at `magus ls jobs` for the rest.
+// briefMaxLeases bounds how many of this checkout's live leases the brief names. Editing
+// jobs (declared / running) come first; exited holders still count as live for the write
+// guard, and a checkout every job was once exec'd in can hold dozens of them.
 const briefMaxLeases = 12
 
 // sessionBrief is the whole payload, and the -o json shape.
@@ -76,10 +76,13 @@ type sessionBrief struct {
 	// checkout with no upstream and one with nothing to push are different facts.
 	Unpushed *briefUnpushed `json:"unpushed,omitempty"`
 	Tree     briefTree      `json:"tree"`
-	Leases   []briefLease   `json:"leases,omitempty"`
-	// LeasesOmitted is how many live leases were not named after briefMaxLeases.
-	LeasesOmitted int            `json:"leases_omitted,omitempty"`
-	Failures      []briefFailure `json:"failures,omitempty"`
+	// Leases are the live leases taken in this checkout or bound to the caller.
+	Leases []briefLease `json:"leases,omitempty"`
+	// OtherLeases counts the live leases the brief does not name: every other checkout's,
+	// and this checkout's past briefMaxLeases. The store is repository-wide, so naming them
+	// spent the window on work this session cannot touch.
+	OtherLeases int            `json:"other_leases,omitempty"`
+	Failures    []briefFailure `json:"failures,omitempty"`
 	// GuardWiring is the host hook config paths in this checkout that invoke magus.
 	// Empty means the rules exist here and nothing runs them.
 	GuardWiring []string `json:"guard_wiring,omitempty"`
@@ -239,7 +242,7 @@ func gatherSessionBrief(ctx context.Context, root string, ws types.WorkspaceRepo
 	if res, err := vcs.Resolve(ctx, root, "", vcsOpts); err == nil && res.VCS != nil {
 		brief.readVCS(ctx, res, ws)
 	}
-	brief.Leases, brief.LeasesOmitted = briefLeases(root)
+	brief.Leases, brief.OtherLeases = briefLeases(ctx, root)
 	brief.Failures = lastRunFailures(root)
 	brief.GuardWiring = relativeTo(root, doctor.HookConfigs(ctx, root, workspaceHarnessNames(ws)...))
 	brief.Rules = ruleLocations(ctx, root, workspaceHarnessNames(ws)...)
@@ -350,11 +353,11 @@ func unpushedCommits(ctx context.Context, res types.VCSResolution, root string) 
 	return &briefUnpushed{Base: res.Base, Count: len(history), AtLeast: true}
 }
 
-// briefLeases reads the rows a worker here may still be acting under, through the
-// same filter the write guard applies, so the brief and the refusals agree about
-// which leases are live. Editing jobs are named first; the list stops at
-// briefMaxLeases and returns how many live rows were left unnamed.
-func briefLeases(root string) (leases []briefLease, omitted int) {
+// briefLeases reads the live rows a worker here may still be acting under, through the
+// same filter the write guard applies, so the brief and the refusals agree about which
+// leases are live. It names those taken in this checkout and the caller's own binding,
+// editing jobs first, up to briefMaxLeases, and counts the rest.
+func briefLeases(ctx context.Context, root string) (leases []briefLease, others int) {
 	store, err := openJobs(root)
 	if err != nil {
 		return nil, 0
@@ -363,9 +366,20 @@ func briefLeases(root string) (leases []briefLease, omitted int) {
 	if err != nil {
 		return nil, 0
 	}
+	claim := trail.SpawnFromEnv().Lease
+	if forwarded := proc.LeaseFromContext(ctx); forwarded != "" {
+		claim = forwarded
+	}
+	acting, _, _ := checkoutLease(root, claim)
 	var editing, exited []briefLease
 	for _, row := range rows {
 		if !row.State.Live() {
+			continue
+		}
+		mine := row.ID == acting || row.ID == claim ||
+			(row.CheckoutRoot != "" && filepath.Clean(row.CheckoutRoot) == filepath.Clean(root))
+		if !mine {
+			others++
 			continue
 		}
 		criteria, _, _ := strings.Cut(strings.TrimSpace(row.Criteria), "\n")
@@ -387,9 +401,9 @@ func briefLeases(root string) (leases []briefLease, omitted int) {
 	}
 	live := append(editing, exited...)
 	if len(live) <= briefMaxLeases {
-		return live, 0
+		return live, others
 	}
-	return live[:briefMaxLeases], len(live) - briefMaxLeases
+	return live[:briefMaxLeases], others + len(live) - briefMaxLeases
 }
 
 // lastRunFailures reports the failing targets of the most recent session that ran
@@ -488,8 +502,8 @@ func (b sessionBrief) Text() string {
 	}
 	b.writeTree(&s)
 	b.writePromptCache(&s)
-	b.writeLeases(&s)
 	b.writeFailures(&s)
+	b.writeLeases(&s)
 	b.writeFeedback(&s)
 	b.writeRecent(&s)
 
@@ -587,10 +601,9 @@ func (b sessionBrief) writePromptCache(s *strings.Builder) {
 }
 
 func (b sessionBrief) writeLeases(s *strings.Builder) {
-	if len(b.Leases) == 0 && b.LeasesOmitted == 0 {
-		return
+	if len(b.Leases) > 0 {
+		briefLine(s, "leases live here:")
 	}
-	briefLine(s, "leases live here:")
 	for _, l := range b.Leases {
 		briefLine(s, "  %s (%s): %s", l.ID, orDash(l.State), orDash(l.Criteria))
 		briefLine(s, "    exec: %s", l.Exec)
@@ -598,8 +611,8 @@ func (b sessionBrief) writeLeases(s *strings.Builder) {
 			briefLine(s, "    validation: %s", l.Validation)
 		}
 	}
-	if b.LeasesOmitted > 0 {
-		briefLine(s, "  and %d more: %s", b.LeasesOmitted, hint.LsJobs.String())
+	if b.OtherLeases > 0 {
+		briefLine(s, "%d other leases: `%s`", b.OtherLeases, hint.LsJobs.String())
 	}
 }
 

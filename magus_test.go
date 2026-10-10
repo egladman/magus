@@ -811,7 +811,7 @@ func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 	require.NotNil(t, opt)
 
 	_, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt, cache.WithRemoteWrite(true))
-	assert.ErrorContains(t, err, "remote writes are required but remote github unavailable: cache: no remote backend registered in this binary")
+	assert.ErrorContains(t, err, "run local-only: remote github unavailable: cache: no remote backend registered in this binary")
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)

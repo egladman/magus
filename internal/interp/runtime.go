@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interp/engine"
 	buzzengine "github.com/egladman/magus/internal/interp/engine/buzz"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
@@ -837,7 +838,7 @@ func loadMagusfileFacts(store buzz.BytecodeStore, code string) magusfileFacts {
 // which makes the module read null on member access.
 func importTargetCollisionErr(name, importPath string) error {
 	return fmt.Errorf("magusfile: target %q shadows the module import %q, so %s.<member> "+
-		"reads null; rename the target or alias the import", name, importPath, name)
+		"reads null, rename the target or alias the import", name, importPath, name)
 }
 
 // runBuzz executes src on a fresh Buzz session and invokes target.
@@ -850,7 +851,7 @@ func runBuzz(ctx context.Context, src *Source, target string, extraArgs []string
 	if workDir != "" {
 		ctx = std.WithCwd(ctx, workDir)
 	}
-	slog.DebugContext(ctx, "interp: run magusfile target", "target", target, "dir", workDir)
+	slog.With(attr.Component("interp")).DebugContext(ctx, "run magusfile target", "target", target, "dir", workDir)
 
 	load, err := execBuzzSrc(ctx, src, false)
 	if err != nil {
@@ -952,7 +953,7 @@ func parseBuzz(ctx context.Context, src *Source) ([]Target, error) {
 // canonical key. Used by the Buzz registration path so the message
 // stays identical across engines.
 func targetCollisionErr(prev, cur, key string) error {
-	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q; "+
+	return fmt.Errorf("magusfile: targets %q and %q both normalize to %q, "+
 		"target names are matched case- and delimiter-insensitively, so rename one", prev, cur, key)
 }
 
@@ -1249,7 +1250,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 				}
 			}
 		} else if err != nil && !errors.Is(err, ErrNoMagusfile) {
-			slog.WarnContext(ctx, "interp: buzz repl autoload find failed", slog.String("error", err.Error()))
+			slog.With(attr.Component("interp")).WarnContext(ctx, "buzz repl autoload find failed", slog.String("error", err.Error()))
 		}
 	}
 

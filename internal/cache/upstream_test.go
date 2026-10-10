@@ -683,7 +683,7 @@ func TestWaitForUpstreamNamesTheWriterWithoutVouchingForIt(t *testing.T) {
 
 	lines := logs.lines()
 	assert.Contains(t, lines,
-		"magus: (root) coverage-badge is waiting for (root) generate to finish (0s so far)")
+		"(root) coverage-badge is waiting for (root) generate to finish (0s so far) component=magus")
 	// Ten beats fit in the sleep; a log per beat is the spam this test guards against.
 	var said int
 	for _, l := range lines {
@@ -693,6 +693,9 @@ func TestWaitForUpstreamNamesTheWriterWithoutVouchingForIt(t *testing.T) {
 	}
 	assert.GreaterOrEqual(t, said, 2, "the wait must keep saying so as it doubles")
 	assert.LessOrEqual(t, said, 6, "the log must back off while the wait keeps its cadence")
+	for i, d := range logs.waits() {
+		assert.GreaterOrEqual(t, d, 20*time.Millisecond, "record %d must carry the wait's elapsed time from the first beat on", i)
+	}
 }
 
 func TestWaitForUpstreamEndsOnCancel(t *testing.T) {

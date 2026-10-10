@@ -47,9 +47,10 @@ func TestMagusTimeoutDeniesTowardTheRunsOwnTimeout(t *testing.T) {
 		// Argv and Why are the remedy's tokenized form and its prose, which this test does not pin.
 		assert.Equal(t, hint.Next{ID: "deny-magus-timeout", Run: next, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], command)
 		for _, flag := range []string{"--timeout <dur>", "--target-timeout <dur>", "--stall-timeout <dur>"} {
-			assert.Contains(t, v.Deny, flag, command)
+			assert.Contains(t, v.Why, flag, command)
 		}
-		assert.Contains(t, v.Deny, "run log records no cause", command)
+		assert.Contains(t, v.Deny, "bound the run with magus's own flag: `"+next+"`.", command)
+		assert.Contains(t, v.Why, "run log records no cause", command)
 	}
 }
 
@@ -66,7 +67,8 @@ func TestMagusTimeoutServesAReadBare(t *testing.T) {
 		assert.Equal(t, denyRuleMagusTimeout, v.Rule.Name, command)
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, next, v.Next[0].Run, command)
-		assert.Contains(t, v.Deny, "MGS3009", command)
+		assert.Contains(t, v.Deny, "drop the wrapper: `"+next+"`.", command)
+		assert.Contains(t, v.Why, "MGS3009", command)
 	}
 }
 

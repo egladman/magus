@@ -49,6 +49,7 @@ import (
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
@@ -202,6 +203,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	bridgeLog, shareLog := log.With(attr.Component("bridge")), log.With(attr.Component("share"))
 
 	// ONE job store for the server's own readers, the activity feed and the JobService
 	// below. Two stores over one file each take their own mutex, and the merge Update
@@ -234,7 +236,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	// the loopback gate is sound: addr.Addr().IsLoopback() is exact.
 	if opts.Config.Console.Enabled == nil || *opts.Config.Console.Enabled {
 		if !addr.Addr().IsLoopback() {
-			log.WarnContext(ctx, "[BRIDGE] refusing to mount console on non-loopback address; set console.enabled: false to suppress this warning",
+			bridgeLog.WarnContext(ctx, "refusing to mount console on non-loopback address; set console.enabled: false to suppress this warning",
 				slog.String("addr", addr.String()))
 		} else {
 			// Start a file watcher for SSE graph-invalidation events. Non-fatal:
@@ -251,7 +253,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				watch.WithIgnore(watch.RelativeIgnore(opts.Magus.Root(), watch.BuiltinIgnore)),
 			)
 			if werr != nil {
-				log.WarnContext(ctx, "[BRIDGE] file watcher unavailable; /api/v1/events will emit heartbeats only",
+				bridgeLog.WarnContext(ctx, "file watcher unavailable; /api/v1/events will emit heartbeats only",
 					slog.String("error", werr.Error()))
 			} else {
 				// ONE consumer of the watcher, two audiences: the SSE stream's graph
@@ -392,9 +394,9 @@ func (s *Server) Serve(ctx context.Context) error {
 				f.service(mPath, mHandler)
 				// MetricsService is a read-only stream, so it joins the share read routes.
 				shareGuarded[mPath] = serviceRoute(mPath, mHandler)
-				log.InfoContext(ctx, "[BRIDGE] metrics service mounted", slog.String("path", mPath))
+				bridgeLog.InfoContext(ctx, "metrics service mounted", slog.String("path", mPath))
 			} else {
-				log.InfoContext(ctx, "[BRIDGE] metrics service off (workspace not collecting metrics)")
+				bridgeLog.InfoContext(ctx, "metrics service off (workspace not collecting metrics)")
 			}
 
 			// Activity-trail Connect service for the /dashboard + log viewer: recent agent
@@ -421,7 +423,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.service(activityPath, activityHandler)
 			// ActivityService is read-only, so it joins the share read routes.
 			shareGuarded[activityPath] = serviceRoute(activityPath, activityHandler)
-			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
+			bridgeLog.InfoContext(ctx, "activity service mounted", slog.String("path", activityPath))
 
 			// Status Connect service: the typed convergence of the JSON /api/v1/status route
 			// onto the wire contract (magus.status.v1alpha1.Status). GetStatus is the one-shot the
@@ -431,7 +433,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log), connectReadMax)
 			f.service(statusPath, statusConnectHandler)
 			shareGuarded[statusPath] = serviceRoute(statusPath, statusConnectHandler)
-			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
+			bridgeLog.InfoContext(ctx, "status service mounted", slog.String("path", statusPath))
 
 			// Tool Connect service: the toolchain view (which binaries this workspace's
 			// spells drive, what each reported, and the window it is held to).
@@ -444,7 +446,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// authenticated loopback route.
 			toolPath, toolConnectHandler := toolv1alpha1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus), connectReadMax)
 			f.service(toolPath, toolConnectHandler)
-			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
+			bridgeLog.InfoContext(ctx, "tool service mounted", slog.String("path", toolPath))
 
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
 			// the SAME cached scan through the same console service. The console dashboard reads
@@ -455,7 +457,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc), connectReadMax)
 			f.service(insightPath, insightConnectHandler)
 			shareGuarded[insightPath] = serviceRoute(insightPath, insightConnectHandler)
-			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
+			bridgeLog.InfoContext(ctx, "insight service mounted", slog.String("path", insightPath))
 
 			// Viewer Connect service: the typed twin of the JSON run-browser routes this
 			// replaced (/api/v1/outputs, /output, /runs, /run; retired in 7ce1896d4, see
@@ -471,7 +473,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			viewerPath, viewerConnectHandler := viewerv1alpha1connect.NewViewerServiceHandler(viewer.NewService(outputStore, outputStore, viewerOpts...), connectReadMax)
 			f.service(viewerPath, viewerConnectHandler)
 			shareGuarded[viewerPath] = serviceRoute(viewerPath, viewerConnectHandler)
-			log.InfoContext(ctx, "[BRIDGE] viewer service mounted", slog.String("path", viewerPath))
+			bridgeLog.InfoContext(ctx, "viewer service mounted", slog.String("path", viewerPath))
 
 			// Job control service: the server's one MUTATING console service (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
@@ -479,7 +481,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// client can trigger maintenance without the server exposing an open action endpoint.
 			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version, opts.Jobs), connectReadMax)
 			f.service(jobPath, jobHandler)
-			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
+			bridgeLog.InfoContext(ctx, "job service mounted", slog.String("path", jobPath))
 
 			// Share to phone: POST /api/v1/share opens an on-demand, time-boxed LAN
 			// listener serving shareGuarded (the read routes) under a fresh read-only
@@ -496,7 +498,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			defer shareMgr.Close()
 			consoleDir, ok := resolveConsoleDir(opts.Magus.Root())
 			if !ok {
-				log.WarnContext(ctx, "[SHARE] built console not found; share to phone will report it needs a console build",
+				shareLog.WarnContext(ctx, "built console not found; share to phone will report it needs a console build",
 					slog.String("root", opts.Magus.Root()))
 			}
 			shareH := s.newShareHandler(shareMgr, consoleDir, shareGuarded, opts.Magus.CacheDir(), log)
@@ -508,7 +510,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// expired or used code with 401.
 			f.server.Handle("/api/v1/token/exchange", httpx.GuardRebind(rpcerr.FormatJSON, f.siteAllowed, f.cors(
 				httpx.RequireLoopbackPeer(newExchangeHandler(opts.Magus.CacheDir(), log)))))
-			log.InfoContext(ctx, "[SHARE] share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
+			shareLog.InfoContext(ctx, "share endpoint mounted", slog.String("path", "/api/v1/share"), slog.Bool("console_ready", ok))
 
 			// Static console on loopback: serve the built PWA at /console/ from the SAME
 			// resolved dir the LAN share listener uses (consoleDir), so a minted server-origin
@@ -526,7 +528,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			// /console/ just 404s until a console is built.
 			if ok {
 				f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
-				log.InfoContext(ctx, "[BRIDGE] static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
+				bridgeLog.InfoContext(ctx, "static console mounted", slog.String("path", "/console/"), slog.String("dir", consoleDir))
 			}
 
 			// Token management service: the console Settings UI lists, mints and revokes console
@@ -548,7 +550,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				trailrpc.WithSubject(tokenhandler.AuditSubject)))
 			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit, connectReadMax)
 			f.service(tokenPath, tokenHandler)
-			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
+			bridgeLog.InfoContext(ctx, "token service mounted", slog.String("path", tokenPath))
 
 			// Notes service: the typed API the console's Notes view uses to READ the
 			// workspace's human-authored notes. Read-only by construction (the contract has no
@@ -566,7 +568,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit, connectReadMax)
 			f.service(notesPath, notesHandler)
-			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
+			bridgeLog.InfoContext(ctx, "notes service mounted", slog.String("path", notesPath))
 
 			// Graph service: the typed API for the knowledge graph's own verbs (query,
 			// resolve, explain, path, stats). It exists so the browser stops reimplementing them;
@@ -581,9 +583,9 @@ func (s *Server) Serve(ctx context.Context) error {
 			// one body of data hold the same need, console=read.
 			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus), connectReadMax)
 			f.service(graphPath, graphServiceHandler)
-			log.InfoContext(ctx, "[BRIDGE] graph service mounted", slog.String("path", graphPath))
+			bridgeLog.InfoContext(ctx, "graph service mounted", slog.String("path", graphPath))
 
-			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))
+			bridgeLog.InfoContext(ctx, "console mounted", slog.String("addr", addr.String()))
 		}
 	}
 
@@ -606,19 +608,19 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 		unmount, err := s.socket.Mount(f.socketMux)
 		if err != nil {
 			// Not fatal: loopback still serves all of it, to a bearer token.
-			log.WarnContext(ctx, "[AGENT] MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
+			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
 		} else {
 			defer unmount()
 		}
 	}
 	bound := httpServer.Addr()
-	log.InfoContext(ctx, "[AGENT] HTTP server starting", slog.String("addr", bound.String()))
+	log.InfoContext(ctx, "HTTP server starting", slog.String("addr", bound.String()))
 	if !bound.Addr().IsLoopback() {
-		log.WarnContext(ctx, "[AGENT] HTTP server listening beyond loopback over plaintext HTTP (mcp.insecure_bind); a bearer token is the only guard on /mcp",
+		log.WarnContext(ctx, "HTTP server listening beyond loopback over plaintext HTTP (mcp.insecure_bind); a bearer token is the only guard on /mcp",
 			slog.String("addr", bound.String()))
 	}
 	if err := httpServer.Serve(ctx); err != nil {
-		log.WarnContext(ctx, "[AGENT] shutdown error", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "shutdown error", slog.String("error", err.Error()))
 		return err
 	}
 	return nil
@@ -639,7 +641,7 @@ func (s *Server) prepare(ctx context.Context) (*slog.Logger, netip.AddrPort, err
 	// A non-loopback bind (MAGUS_MCP_ADDRESS=0.0.0.0 for k8s health probes, say) serves every
 	// bearer token over plaintext HTTP, so it is an explicit opt-in, never a warning.
 	if !addr.Addr().IsLoopback() && !s.opts.Config.MCP.InsecureBind {
-		return nil, addr, fmt.Errorf("server: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext; front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
+		return nil, addr, fmt.Errorf("server: mcp.address %s is not loopback, and a non-loopback listener sends bearer tokens in cleartext, front it with TLS or a tunnel and set mcp.insecure_bind: true (MAGUS_MCP_INSECURE_BIND=true), or bind 127.0.0.1", addr)
 	}
 
 	// Fail closed: without an operator token the server never serves. Every guard checks the
@@ -871,7 +873,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	if consoleDir, ok := resolveConsoleDir(u.Root); ok {
 		f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 	}
-	log.WarnContext(ctx, "[BRIDGE] workspace not loaded; serving status and the console only",
+	log.With(attr.Component("bridge")).WarnContext(ctx, "workspace not loaded; serving status and the console only",
 		slog.String("root", u.Root), slog.String("error", u.Err().Message))
 	return s.run(ctx, log, f)
 }

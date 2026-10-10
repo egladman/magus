@@ -121,6 +121,43 @@ func TestRunCommandForegroundsDirectService(t *testing.T) {
 	assert.Equal(t, 0, rr.started, "directly-run service must foreground, not be supervised")
 }
 
+// streamOp runs a shell line under capture (and quiet when asked) and returns what
+// the call returned alongside what reached the step's output writers.
+func streamOp(t *testing.T, script string, quiet bool) (res run.ExecResult, stdout, stderr string, err error) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	ctx := run.WithOutputWriters(std.WithCwd(t.Context(), t.TempDir()), &out, &errOut)
+	op := spells.Op{Command: spells.Command{Bin: "sh", Args: []string{"-c", script}, Capture: true, Quiet: quiet}, Capture: true}
+	res, err = runCommand(ctx, op, commandOpts{})
+	return res, out.String(), errOut.String(), err
+}
+
+func TestRunCommandQuietCaptureReturnsOutputWithoutStreaming(t *testing.T) {
+	res, stdout, stderr, err := streamOp(t, `echo '{"Module":{}}'; echo note >&2`, true)
+	require.NoError(t, err)
+	assert.Equal(t, "{\"Module\":{}}\n", res.Stdout)
+	assert.Equal(t, "note\n", res.Stderr)
+	assert.Empty(t, stdout, "a quiet op's stdout belongs to its caller, not the step log")
+	assert.Empty(t, stderr, "a quiet op that succeeds writes nothing to the step log")
+}
+
+func TestRunCommandCaptureStillStreams(t *testing.T) {
+	res, stdout, stderr, err := streamOp(t, `echo out; echo note >&2`, false)
+	require.NoError(t, err)
+	assert.Equal(t, "out\n", res.Stdout)
+	assert.Equal(t, "out\n", stdout)
+	assert.Equal(t, "note\n", stderr)
+}
+
+// A failing quiet op must still show why it failed: its stderr reaches the log, its
+// stdout does not.
+func TestRunCommandQuietFailureWritesStderr(t *testing.T) {
+	_, stdout, stderr, err := streamOp(t, `echo '{"partial":'; echo 'go: errors parsing go.mod' >&2; exit 1`, true)
+	require.Error(t, err)
+	assert.Empty(t, stdout)
+	assert.Equal(t, "go: errors parsing go.mod\n", stderr)
+}
+
 // TestExecCommandReportsCancellationNotExitCode proves a child killed because the
 // RUN was cancelled reports the cancellation, not a verdict on the tool. A killed
 // process has no exit code of its own (ExitCode() is -1), so synthesizing "exited
@@ -133,7 +170,7 @@ func TestExecCommandReportsCancellationNotExitCode(t *testing.T) {
 	defer cancel()
 	time.AfterFunc(50*time.Millisecond, cancel)
 
-	_, err := execCommand(ctx, t.TempDir(), "sh", []string{"-c", "sleep 30"}, nil, "", true)
+	_, err := execCommand(ctx, t.TempDir(), "sh", []string{"-c", "sleep 30"}, nil, "", true, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled,
@@ -146,7 +183,7 @@ func TestExecCommandReportsCancellationNotExitCode(t *testing.T) {
 // still reports its own exit code, so the cancellation check above cannot swallow a
 // genuine failure.
 func TestExecCommandReportsRealExitCode(t *testing.T) {
-	_, err := execCommand(context.Background(), t.TempDir(), "sh", []string{"-c", "exit 3"}, nil, "", true)
+	_, err := execCommand(context.Background(), t.TempDir(), "sh", []string{"-c", "exit 3"}, nil, "", true, false)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sh exited 3")
@@ -159,7 +196,7 @@ func TestExecCommandReportsRealExitCode(t *testing.T) {
 // WHY it failed, the same shape TestExecCommandReportsCancellationNotExitCode
 // pins for the cancellation case.
 func TestExecCommandReportsNotStartedErrorNotExitCode(t *testing.T) {
-	_, err := execCommand(context.Background(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true)
+	_, err := execCommand(context.Background(), t.TempDir(), "magus-does-not-exist-on-path", nil, nil, "", true, false)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, exec.ErrNotFound,

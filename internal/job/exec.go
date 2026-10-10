@@ -43,8 +43,8 @@ var (
 func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, error) {
 	base := strings.TrimSpace(reportedBase)
 	if base == "" {
-		return types.Job{}, fmt.Errorf("%w, in the form `magus vcs checkpoint -o name` prints"+
-			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
+		return types.Job{}, fmt.Errorf("%w: in the form `magus vcs checkpoint -o name` prints"+
+			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty), run that in the tree you are working in"+
 			" and exec what it prints", errNoBase)
 	}
 	// Resolved before the lock, since resolving runs the VCS; the row is read again under it.
@@ -57,12 +57,12 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 	full := s.fullRevisions(ctx, checkpoint, base)
 	return s.mutate(ctx, id, asExec, func(cur *types.Job, exists bool, now int64) error {
 		if !exists {
-			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to exec against."+
-				" Check the declared ids with `%s` and exec under the id the"+
+			return fmt.Errorf("%w: %q, nothing declared it, so there is no checkpoint to exec against,"+
+				" check the declared ids with `%s` and exec under the id the"+
 				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
 		}
 		if cur.State.Terminal() {
-			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take;"+
+			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
 				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
 		}
 		// Relative would be resolved against whichever process sweeps the row later.
@@ -76,8 +76,8 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 		// checkout already, the forker's or one a hook recorded before anyone took the job,
 		// and it is still the forker's to hand out, not a holder's to keep.
 		if cur.State == types.StateRunning && cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
-			return fmt.Errorf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it."+
-				" Its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
+			return fmt.Errorf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
+				" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
 				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)
 		}
 		cur.ReportedBase = base

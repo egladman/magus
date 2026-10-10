@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -191,7 +192,7 @@ func newWarmGraph(rebuild func(context.Context, bool) (*knowledge.Graph, error),
 	if log == nil {
 		log = slog.Default()
 	}
-	return &warmGraph{rebuild: rebuild, log: log, reload: make(chan struct{}, 1), settle: warmGraphReloadSettle}
+	return &warmGraph{rebuild: rebuild, log: log.With(attr.Component("magus")), reload: make(chan struct{}, 1), settle: warmGraphReloadSettle}
 }
 
 // warmGraphReloadSettle sits on top of the watcher's own debounce: a checkout or a
@@ -307,7 +308,7 @@ func (w *warmGraph) reloadLoop(ctx context.Context) {
 			}
 		}
 		if _, err := w.Get(ctx, false); err != nil && ctx.Err() == nil {
-			w.log.DebugContext(ctx, "magus: background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
+			w.log.DebugContext(ctx, "background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
 		}
 	}
 }
@@ -339,31 +340,33 @@ func (w *warmGraph) watch(ctx context.Context, root string) (func(), error) {
 
 	go w.reloadLoop(wctx)
 	w.requestReload()
-
-	go func() {
-		defer watcher.Close()
-		for {
-			select {
-			case <-wctx.Done():
-				w.stopWatching()
-				return
-			case batch, ok := <-watcher.Events():
-				if !ok {
-					// The watcher died; stop trusting the cache and fall back to
-					// always-rebuild so we never serve a graph nothing invalidates.
-					w.log.WarnContext(ctx, "magus: knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
-					w.stopWatching()
-					return
-				}
-				if graphRelevant(batch.Paths) {
-					w.invalidate()
-					w.requestReload()
-				}
-			}
-		}
-	}()
+	go w.follow(wctx, watcher)
 
 	return cancel, nil
+}
+
+// follow invalidates the cache and requests a rebuild on every graph-relevant batch until
+// ctx ends or the watcher dies. It owns watcher and closes it. On either exit it stops
+// trusting the cache, so Get falls back to always-rebuild rather than serve a graph
+// nothing invalidates.
+func (w *warmGraph) follow(ctx context.Context, watcher *watch.Watcher) {
+	defer watcher.Close()
+	defer w.stopWatching()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case batch, ok := <-watcher.Events():
+			if !ok {
+				w.log.WarnContext(ctx, "knowledge-graph watcher stopped; falling back to a cache-first rebuild per query")
+				return
+			}
+			if graphRelevant(batch.Paths) {
+				w.invalidate()
+				w.requestReload()
+			}
+		}
+	}
 }
 
 // stopWatching marks the cache untrusted and drops it, so Get reverts to

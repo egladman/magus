@@ -36,7 +36,7 @@ import (
 // ErrNoServer is returned when Host is empty: there is no loopback origin to build
 // the link from, so no link can be built. Callers treat it as "omit the link", not
 // a hard failure.
-var ErrNoServer = errors.New("graph link: no server host; omit the link")
+var ErrNoServer = errors.New("graph link: no server host, omit the link")
 
 // GraphLinkOpts is the input to GraphLink. Host comes from the server address the
 // caller already resolves; Code is an optional one-time sign-in code; the four directive

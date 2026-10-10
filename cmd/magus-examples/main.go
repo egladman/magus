@@ -241,7 +241,7 @@ func capture(bin string, run fixtureRun, argv []string) (string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%w\n%s", err, stderr.String())
+		return "", fmt.Errorf("stderr %q: %w", stderr.String(), err)
 	}
 	// The signed-in line names the host's opener (open, xdg-open), so a page captured on
 	// Linux CI and one captured on a Mac would differ. The docs show macOS's spelling.

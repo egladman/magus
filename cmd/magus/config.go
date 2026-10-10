@@ -73,7 +73,7 @@ func runConfigView(cfg config.Config, args []string) error {
 			fmt.Fprintln(os.Stderr, "Print the effective configuration (defaults + file + env).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -150,7 +150,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Run `"+hint.ConfigView.With("-o", "name")+"` to list all valid keys.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

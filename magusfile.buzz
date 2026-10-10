@@ -2276,9 +2276,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
         // refuses this list without testpair.
         final root = magus\describe.project().workspace;
         foreach (mod in fs\glob("libs/**/go.mod")) {
+            final dir = fs\dirname(mod.value);
+            // gopherbuzz's error text follows upstream Buzz, not Go's error-string idiom.
+            final errorStrings = if (fs\basename(dir) != "gopherbuzz") ",errmsg" else "";
             proc\exec(root + "/.magus/custom-gcl",
-                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair"],
-                      fs\dirname(mod.value));
+                      ["run", "--config", root + "/.golangci.yml", "--enable-only", "filenames,hostagnostic,stutter,testifylint,testlayout,testpair" + errorStrings],
+                      dir);
         }
     });
     go["go-vet"](ctx);

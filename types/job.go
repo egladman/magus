@@ -297,11 +297,11 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 	}
 	for _, w := range words {
 		if w == "--no-default-charms" {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s;"+
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s,"+
 				" declare the check as a record with `no_default_charms: true` instead", s, w)
 		}
 		if strings.HasPrefix(w, "-") {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s,"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
 		}
 	}
@@ -1017,13 +1017,13 @@ func (g Goal) Validate() error {
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
 	if g.Kind != GoalKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
-		return fmt.Errorf("goal %q is a %s goal and also carries a check; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries a check, a goal examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries paths; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries paths, a goal examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GoalKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries symbols; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries symbols, a goal examines one subject", g.ID, g.Kind)
 	}
 	if len(trimmedNonEmpty(g.Subject())) == 0 {
 		return fmt.Errorf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
@@ -1046,11 +1046,11 @@ func (c LeaseCheck) validScript() error {
 	case c.Script == "":
 		return nil
 	case c.Target != "":
-		return fmt.Errorf("check names target %q and script %q; a check names one", c.Target, c.Script)
+		return fmt.Errorf("check names target %q and script %q, a check names one", c.Target, c.Script)
 	case c.Project != "" && c.Project != ".":
-		return fmt.Errorf("check script %q names project %q; a recorded script run belongs to the workspace", c.Script, c.Project)
+		return fmt.Errorf("check script %q names project %q, a recorded script run belongs to the workspace", c.Script, c.Project)
 	case c.NoDefaultCharms:
-		return fmt.Errorf("check script %q sets no_default_charms; a script runs under no charms", c.Script)
+		return fmt.Errorf("check script %q sets no_default_charms, a script runs under no charms", c.Script)
 	default:
 		return nil
 	}

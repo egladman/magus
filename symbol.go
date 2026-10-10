@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/log/attr"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
@@ -82,9 +83,10 @@ type symbolIndexer struct {
 	minInterval time.Duration
 	now         func() time.Time
 
-	indexesForPath func(absPath string) []indexRef                 // changed file -> the indexes of its owning symbol-capable project
-	runIndex       func(ctx context.Context, index indexRef) error // execute one index's op
-	onChange       func()                                          // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
+	indexesForPath func(absPath string) []indexRef                     // changed file -> the indexes of its owning symbol-capable project
+	runIndex       func(ctx context.Context, index indexRef) error     // execute one index's op
+	status         func(ctx context.Context) []types.SymbolIndexStatus // every index's freshness, probed now
+	onChange       func()                                              // fired when a capable project's sources change or an index run completes (invalidates the freshness memo); nil = no-op
 
 	busy  atomic.Bool // an auto-index run is in flight (only one at a time)
 	mu    sync.Mutex
@@ -92,16 +94,17 @@ type symbolIndexer struct {
 }
 
 // loop runs the scheduler: it folds change batches into per-project state and, on each
-// tick, dispatches at most one due project. It returns when
-// ctx is cancelled or the batch channel closes (the watcher stopped).
-func (si *symbolIndexer) loop(ctx context.Context, batches <-chan watch.Batch) {
+// tick, dispatches at most one due project. It returns when ctx is cancelled or the
+// watcher stops, and owns watcher and closes it.
+func (si *symbolIndexer) loop(ctx context.Context, watcher *watch.Watcher) {
+	defer watcher.Close()
 	ticker := time.NewTicker(symbolIndexTick)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case b, ok := <-batches:
+		case b, ok := <-watcher.Events():
 			if !ok {
 				return
 			}
@@ -139,11 +142,12 @@ func (si *symbolIndexer) mark(paths []string) {
 	}
 }
 
-// seed marks refs dirty without opening a quiet window, so each one is due on the first
-// tick that the min interval and backoff allow. State is in memory only, so this is how
-// an index that went stale while no server watched it gets reindexed before its project
-// is next edited.
-func (si *symbolIndexer) seed(refs []indexRef) {
+// seed marks every index si.status finds stale dirty without opening a quiet window, so
+// each one is due on the first tick that the min interval and backoff allow. State is in
+// memory only, so this is how an index that went stale while no server watched it gets
+// reindexed before its project is next edited.
+func (si *symbolIndexer) seed(ctx context.Context) {
+	refs := staleIndexRefs(si.status(ctx))
 	si.mu.Lock()
 	defer si.mu.Unlock()
 	for _, ref := range refs {
@@ -231,7 +235,7 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 	}
 	si.mu.Unlock()
 
-	si.log.DebugContext(ctx, "magus: background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
+	si.log.DebugContext(ctx, "background symbol index starting", slog.String("project", ref.project), slog.String("op", ref.op))
 	err := si.runIndex(ctx, ref)
 
 	si.mu.Lock()
@@ -261,7 +265,7 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		st.backoffTill = si.now().Add(backoffDuration(st.failures))
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
-		si.log.WarnContext(ctx, "magus: background symbol index failed, backing off",
+		si.log.WarnContext(ctx, "background symbol index failed, backing off",
 			slog.String("project", ref.project), slog.String("op", ref.op), slog.Int("failures", st.failures), slog.String("error", err.Error()))
 		return
 	}
@@ -372,7 +376,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 
 	si := &symbolIndexer{
-		log:         slog.Default(),
+		log:         slog.With(attr.Component("magus")),
 		quiet:       quiet,
 		minInterval: minInterval,
 		now:         time.Now,
@@ -388,7 +392,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
-					slog.Default().DebugContext(ctx, "magus: guard index not written", slog.String("error", gerr.Error()))
+					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", slog.String("error", gerr.Error()))
 				}
 			}
 			if err == nil || ctx.Err() != nil {
@@ -397,6 +401,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			idx := byRef[ref]
 			return symbolRunError(idx.projectRef(), idx.language, err)
 		},
+		status: m.SymbolIndexStatusByStamp,
 		// This watcher is what makes the freshness memo trustworthy: it drops the memo
 		// whenever a capable project's sources change or an index run finishes.
 		onChange: m.symbolStatus.invalidate,
@@ -413,12 +418,9 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 	// The freshness memo is trusted only while this watcher runs (like the warm graph).
 	m.symbolStatus.setWatched(true)
-	go func() {
-		defer watcher.Close()
-		si.loop(wctx, watcher.Events())
-	}()
-	go func() { si.seed(staleIndexRefs(m.SymbolIndexStatusByStamp(wctx))) }()
-	slog.Default().DebugContext(ctx, "magus: background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
+	go si.loop(wctx, watcher)
+	go si.seed(wctx)
+	slog.With(attr.Component("magus")).DebugContext(ctx, "background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)
 		cancel()
@@ -606,7 +608,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 	m.probeCacheOnce.Do(func() {
 		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
 		if err != nil {
-			slog.WarnContext(ctx, "magus: cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
+			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
 			return
 		}
 		m.probeCache = c
@@ -687,8 +689,9 @@ func (m *Magus) freshenSymbolIndexes(ctx context.Context, paths []string) error 
 			}
 		}
 		return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-			"the cache that records whether a symbol index is current could not be opened, so the index of %s cannot be vouched for",
-			strings.Join(projects, ", "))
+			"symbol index not current for %s: the cache would not open; make the cache directory writable, then rerun",
+			strings.Join(projects, ", ")).
+			WithWhy(conformanceSkippedWhy + " The cache records whether an index is current, so without it nothing can vouch for the index.")
 	}
 	// The step each probe keyed, so a rebuild inside a run is keyed exactly as the probe
 	// after it reads it back.
@@ -781,9 +784,10 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	}
 	var problems []string
 	var built []projectIndex
+	writesOff := false
 	for _, idx := range stale {
 		if err := build(idx); err != nil {
-			problems = append(problems, symbolRunError(idx.projectRef(), idx.language, err).Error())
+			problems = append(problems, types.InlineDiagnostic(symbolRunError(idx.projectRef(), idx.language, err)))
 			continue
 		}
 		built = append(built, idx)
@@ -794,9 +798,10 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 			if after[idx.ref()] {
 				continue
 			}
-			why := "the cache recorded no run to vouch for the index it wrote"
+			why := "the cache recorded no run for the index it wrote"
 			if !writable {
-				why = "cache writes are off (cache.write.enabled: false), so the cache recorded no run to vouch for the index it wrote; enable them for this run, which publishes nothing without a signing key"
+				why = "cache writes are off (cache.write.enabled: false); enable them for this run"
+				writesOff = true
 			}
 			problems = append(problems, idx.projectRef().Display()+": "+why)
 		}
@@ -804,10 +809,22 @@ func freshenIndexes(touched []projectIndex, probe func([]projectIndex) map[index
 	if len(problems) == 0 {
 		return nil
 	}
+	fix := "fix it"
+	if len(problems) > 1 {
+		fix = "fix each"
+	}
+	why := conformanceSkippedWhy
+	if writesOff {
+		why += " With cache writes off the cache records no run to vouch for the index it wrote;" +
+			" enabling them for this run publishes nothing without a signing key."
+	}
 	return types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-		"the symbol index could not be brought current, so the conformance checks did not run: %s; fix that, then `magus graph build`",
-		strings.Join(problems, "; "))
+		"symbol index not current for %s; %s, then `magus graph build`", strings.Join(problems, "; "), fix).
+		WithWhy(why)
 }
+
+// conformanceSkippedWhy is the rationale every MGS7003 carries.
+const conformanceSkippedWhy = "The conformance checks read the symbol index, so they did not run."
 
 // uncoveredProjects names each project with a changed file, other than a declared output, that
 // has no symbol indexer: the conformance checks cannot see it, so their silence says nothing
@@ -825,14 +842,14 @@ func uncoveredProjects(files []types.DiffFile, capable []string) []types.DiffUnc
 }
 
 // toDiagnostic is err as a Diagnostic: its MGS code, message and docs link when err carries a
-// code, and the bare message otherwise.
+// code, and the bare message otherwise. Its Why is the chain's rationale either way.
 func toDiagnostic(err error) types.Diagnostic {
 	var d *types.DiagnosticError
 	if errors.As(err, &d) {
 		f := d.BuzzError()
-		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"]}
+		return types.Diagnostic{Code: f["code"], Message: f["message"], URL: f["url"], Why: types.DiagnosticRationale(err)}
 	}
-	return types.Diagnostic{Message: err.Error()}
+	return types.Diagnostic{Message: err.Error(), Why: types.DiagnosticRationale(err)}
 }
 
 // symbolRunError wraps a failed scip run with the project (by its display name, so the
@@ -841,18 +858,19 @@ func toDiagnostic(err error) types.Diagnostic {
 //
 // A run refused because another magus holds the lock or the machine budget never reached the
 // indexer, so it gets no install hint: the fix is to rerun once the holder the error names
-// finishes. A refusal by the run this one is nested inside (MGS3007) never reached it either,
-// and rerunning does not help, so it gets no hint of either kind: the diagnostic says what to do.
+// finishes. A refusal by the run this one is nested inside (MGS3007), or over a tool that
+// reports no version (MGS3035), never reached it either, and rerunning does not help, so it
+// gets no hint of either kind: the diagnostic says what to do.
 func symbolRunError(project types.ProjectRef, language string, err error) error {
-	if errors.Is(err, types.ProjectLockHeldByAncestor) {
+	if errors.Is(err, types.ProjectLockHeldByAncestor) || errors.Is(err, types.ToolUnprobeable) {
 		return fmt.Errorf("%s: %w", project.Display(), err)
 	}
 	var busy interface{ ExitCode() int }
 	if errors.As(err, &busy) && busy.ExitCode() == lockContendedExit {
-		return fmt.Errorf("%s: %w; the indexer never ran, so rerun once that finishes", project.Display(), err)
+		return fmt.Errorf("%s: the indexer never ran, so rerun once that finishes: %w", project.Display(), err)
 	}
 	if hint := symbols.InstallHint(language); hint != "" {
-		return fmt.Errorf("%s: %w; %s", project.Display(), err, hint)
+		return fmt.Errorf("%s: %s: %w", project.Display(), hint, err)
 	}
 	return fmt.Errorf("%s: %w", project.Display(), err)
 }

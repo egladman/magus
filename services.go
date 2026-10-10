@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
@@ -37,7 +38,7 @@ func (m *Magus) wireBroker() ([]cache.Option, error) {
 	}
 	if policy.Resolved() == types.BrokerOff {
 		if m.brokerGiven {
-			return nil, fmt.Errorf("magus: WithBroker passed a client, but %s is off, so it would never be used; drop one or the other", source)
+			return nil, fmt.Errorf("magus: WithBroker passed a client, but %s is off, so it would never be used, drop one or the other", source)
 		}
 		return nil, nil
 	}
@@ -79,7 +80,7 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 		// wedged broker cannot hang exit. The reference also rides the connection, so
 		// the broker drops it when this process exits even if this release is lost.
 		if err := b.ReleaseService(relCtx, key); err != nil {
-			slog.DebugContext(relCtx, "magus: releasing a broker-hosted service failed; the broker drops it when this process exits",
+			slog.With(attr.Component("magus")).DebugContext(relCtx, "releasing a broker-hosted service failed; the broker drops it when this process exits",
 				slog.String("key", key), slog.String("err", err.Error()))
 		}
 	}

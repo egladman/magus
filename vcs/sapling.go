@@ -735,7 +735,7 @@ func runSaplingBatched(ctx context.Context, root string, args []string, paths []
 		cmd := vcsExec(ctx, "sl", argv...)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("sl %s: %w\n%s", strings.Join(args, " "), err, out)
+			return fmt.Errorf("sl %s: %w", strings.Join(args, " "), withOutput(err, string(out)))
 		}
 	}
 	return nil
@@ -877,7 +877,7 @@ func (v saplingVCS) KeepIncoming(ctx context.Context, root string, paths []strin
 			continue
 		}
 		if err := runSaplingBatched(ctx, root, []string{"resolve", "--tool", ":local"}, []string{p}); err != nil {
-			return fmt.Errorf("sl resolve %q: the merge left content on neither side; resolve it by hand: %w", p, err)
+			return fmt.Errorf("sl resolve %q: the merge left content on neither side, resolve it by hand: %w", p, err)
 		}
 	}
 	return nil
@@ -960,7 +960,7 @@ func (v saplingVCS) StartMerge(ctx context.Context, root, ref string, as types.P
 	if underway, err := v.mergeInProgress(ctx, root); err != nil {
 		return err
 	} else if underway {
-		return fmt.Errorf("sl merge %s: a merge is already in progress; conclude or abandon it first", ref)
+		return fmt.Errorf("sl merge %s: a merge is already in progress, conclude or abandon it first", ref)
 	}
 	cmd := vcsExec(ctx, "sl", append(username, "--noninteractive", "merge", ref)...)
 	cmd.Dir = root
@@ -974,7 +974,7 @@ func (v saplingVCS) StartMerge(ctx context.Context, root, ref string, as types.P
 	if underway, uErr := v.mergeInProgress(ctx, root); uErr == nil && underway {
 		return nil
 	}
-	return fmt.Errorf("sl merge %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+	return fmt.Errorf("sl merge %s: %w", ref, withOutput(err, string(out)))
 }
 
 // mergeInProgress reports whether Sapling has merge state recorded. `sl debugmergestate`
@@ -1012,7 +1012,7 @@ func (v saplingVCS) AbortMerge(ctx context.Context, root string) error {
 	cmd := vcsExec(ctx, "sl", "--noninteractive", "goto", "--clean", ".")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("sl goto --clean: %w\n%s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("sl goto --clean: %w", withOutput(err, string(out)))
 	}
 	return nil
 }
@@ -1049,14 +1049,14 @@ func (v saplingVCS) Preserve(ctx context.Context, dir string) (string, error) {
 		return strings.TrimSpace(string(out)), err
 	}
 	if out, err := run("commit", "--addremove", "-m", preserveMessage); err != nil {
-		return "", fmt.Errorf("sl preserve: commit: %w: %s", err, out)
+		return "", fmt.Errorf("sl preserve: commit: %w", withOutput(err, out))
 	}
 	sha, err := run("log", "-r", ".", "--template", "{node}")
 	if err != nil {
 		return "", fmt.Errorf("sl preserve: log: %w", err)
 	}
 	if out, err := run("uncommit"); err != nil {
-		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w: %s", sha, err, out)
+		return sha, fmt.Errorf("sl preserve: recorded %s but uncommit failed, so the working copy is parked on it: %w", sha, withOutput(err, out))
 	}
 	if err := hgRestorePending(ctx, "sl", pending); err != nil {
 		return sha, fmt.Errorf("sl preserve: recorded %s, but the working copy still shows %v added and %v scheduled for removal: %w",

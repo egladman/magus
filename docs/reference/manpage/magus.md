@@ -193,7 +193,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table) (default: info). Equivalent magus.yaml key: **log.level**.
 
 **MAGUS_LOG_SILENT**
-: When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: **log.silent**.
+: When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, print a failure's reasoning only at -v, and surface only lines a target marks as a notice (default: false). Equivalent magus.yaml key: **log.silent**.
 
 **MAGUS_LOG_STREAM**
 : When true, the env equivalent of -vv: stream every target's output live instead of withholding a passing target's output (default: false). Equivalent magus.yaml key: **log.stream**.

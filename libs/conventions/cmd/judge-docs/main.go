@@ -92,7 +92,7 @@ func judge(kind prose.Kind, paths []string, stdin io.Reader) ([]finding, error) 
 	switch kind {
 	case "":
 		if len(paths) > 0 {
-			return nil, errors.New("symbols are read from stdin; a path needs -kind markdown")
+			return nil, errors.New("a path needs -kind markdown, since symbols are read from stdin")
 		}
 
 		return judgeSymbols(stdin)

@@ -22,6 +22,7 @@ export object Command {
     external: External = External.none,
     sourcesEach: bool = false,
     capture: bool = false,
+    quiet: bool = false,
     secrets: {str: str} = {},
     envKeys: [str] = [],
     hints: [Hint] = [],

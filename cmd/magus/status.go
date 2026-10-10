@@ -43,7 +43,7 @@ func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
 			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
 			fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}
 }

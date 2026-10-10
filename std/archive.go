@@ -529,7 +529,7 @@ func ArchiveCompress(ctx context.Context, src, dest string, opts map[string]any)
 		format = archiveFormatFromExt(dest)
 	}
 	if format == "" {
-		return types.CompressResult{}, fmt.Errorf("archive.compress: cannot determine format from %q; set opts.format", filepath.Base(dest))
+		return types.CompressResult{}, fmt.Errorf("archive.compress: cannot determine format from %q, set opts.format", filepath.Base(dest))
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {

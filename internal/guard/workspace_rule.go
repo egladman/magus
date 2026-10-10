@@ -155,8 +155,8 @@ func denyUnloaded(asked *rulesAnswer, seam functionSeam, verb string, at locatio
 // the fix is a rebuild of ./magus.
 func unloadedReason(seam functionSeam, verb string, failures []trail.RuleFailure, own bool) string {
 	var b strings.Builder
-	b.WriteString("magus workspace: " + verb + " is denied because this workspace's guard policy is not running. " +
-		"It registered a " + seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
+	b.WriteString("magus workspace: " + verb + " is denied because this workspace's guard policy is not running.\n")
+	b.WriteString("It registered a " + seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
 	for _, f := range failures {
 		b.WriteString("\n  " + f.Side + ": " + f.Error)
 	}

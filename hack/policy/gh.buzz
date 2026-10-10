@@ -8,9 +8,8 @@ import "./hack/policy/helpers" as helpers;
 // The one command that answers CI for every open pull request.
 final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
 
-final ciWatchDenial = "Ask for the board once, when you need the answer:\n"
-    + "  {board}\n"
-    + "Watching costs a wake-up per completion and buys nothing, because GREEN CHANGES NOTHING: "
+final ciWatchDenial = "watching CI costs a wake-up per completion and buys nothing; ask for the board once: `{board}`.\n"
+    + "Watching buys nothing because GREEN CHANGES NOTHING: "
     + "the human merges, not you. Poll that command instead while you are acting on a RED run.\n"
     + "The merge queue is the same: `magus queue ls` lists every change with merge intent and its "
     + "state in one call, so ask it rather than watching a queue.yaml or queue-apply.yaml run.";
@@ -22,14 +21,15 @@ final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
 
-final adminMergeDenial = "`--admin` merges past the merge queue: nothing validates the pull request "
-    + "on main, and nothing orders it against the others. Queue it instead:\n"
-    + "  gh pr merge <number> --auto --squash\n"
-    + "(or --rebase). The queue validates it on main's tip and merges it; `magus queue ls` shows "
+final adminMergeDenial = "`--admin` merges past the merge queue, unvalidated and unordered; queue it: "
+    + "`gh pr merge <number> --auto --squash`.\n"
+    + "Nothing validates the pull request on main, and nothing orders it against the others. "
+    + "--rebase queues it too. The queue validates it on main's tip and merges it; `magus queue ls` shows "
     + "where it stands. Bypassing the queue is the human's call, made from their own terminal.";
 
-final prWatchDenial = "Watching a pull request's state costs a call per pass and learns nothing the host "
-    + "will not tell you. Let the host report it: in Claude Code's desktop app, turn on the pull "
+final prWatchDenial = "watching a pull request's state costs a call per pass and learns nothing the host "
+    + "will not tell you; let the host report it.\n"
+    + "In Claude Code's desktop app, turn on the pull "
     + "request's CI monitor, which wakes the session on a failure, a conflict or a new comment. A "
     + "queued pull request's place is one `magus queue ls` away, asked once.";
 

@@ -161,17 +161,16 @@ func denyUntilSkillLoaded(markers hint.Gate, reportsSkills bool, workspace strin
 	// predating a rename lacked this skill, the deny kept naming it, and the host listed it
 	// the turn after `magus agent install` ran.
 	if dest, missing := missingSkillInstall(workspace, skill); missing {
-		return act + " before the " + skill.String() + " skill loaded.\n" +
+		return act + " before the " + skill.String() + " skill loaded, and it is not installed in " + dest + "; run `" +
+			hint.AgentInstall.String() + " " + dest + " --force`.\n" +
 			carries + "\n" +
-			"It is not installed in " + dest + ": run `" + hint.AgentInstall.String() + " " + dest +
-			" --force`, then load Skill(" + skill.String() + ") and retry."
+			"Then load Skill(" + skill.String() + ") and retry."
 	}
 	// The SHORT name, always. The full twin is not installed everywhere (one shipped harness
 	// asks for the short form alone), and naming a skill the reader cannot load is the
 	// failure agent.MustSkill exists to prevent.
-	return act + " before the " + skill.String() + " skill loaded.\n" +
-		carries + "\n" +
-		"Load Skill(" + skill.String() + "), then retry."
+	return act + " before the " + skill.String() + " skill loaded; load Skill(" + skill.String() + "), then retry.\n" +
+		carries
 }
 
 // missingSkillInstall reports a workspace-relative skill directory that holds a magus install

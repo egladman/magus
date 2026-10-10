@@ -165,7 +165,8 @@ func TestFilterWithoutInputDenyNamesTheFix(t *testing.T) {
 	assert.Contains(t, grep, "hangs")
 
 	tr := filterWithoutInputDeny("tr")
-	assert.Contains(t, tr, "its operands are never input", "tr takes no file at all")
+	assert.Contains(t, tr, "`tr` reads only stdin", "tr takes no file at all")
+	assert.Contains(t, tr, "Its operands are never input")
 	assert.NotContains(t, tr, "name a file")
 
 	assert.LessOrEqual(t, strings.Count(grep, "\n"), 2, "a deny is three lines at most")

@@ -183,7 +183,7 @@ func (h *RunHandler) answer(w http.ResponseWriter, r *http.Request, req diffRunR
 func (h *RunHandler) submit(ctx context.Context, argv []string) error {
 	addr := h.socket()
 	if addr == "" {
-		return errors.New("no server socket to submit to; run `magus server start`")
+		return errors.New("no server socket to submit to, run `magus server start`")
 	}
 	_, err := h.submitFn(ctx, addr, argv, h.version)
 	return err

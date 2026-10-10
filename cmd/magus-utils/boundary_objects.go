@@ -101,7 +101,7 @@ func runBoundaryObjects(args []string) error {
 
 	out, err := format.Source(b.Bytes())
 	if err != nil {
-		return fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		return gofmtError(err, b.String())
 	}
 	return emit.File(*outPath, out)
 }

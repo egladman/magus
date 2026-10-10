@@ -276,7 +276,7 @@ func DecodeSandboxValue(v vm.Value) (spells.Sandbox, error) {
 	}
 	sb, err := decodeSandboxRecord(buzzSpellObj{v: mv})
 	if err == nil && len(sb.Caches) > 0 {
-		err = errors.New("sandbox: caches are a spell's declaration, keyed by its tools; a target declares none")
+		err = errors.New("sandbox: caches are a spell's declaration, keyed by its tools, a target declares none")
 	}
 	return sb, err
 }

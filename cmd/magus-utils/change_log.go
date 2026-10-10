@@ -33,7 +33,7 @@ type fragment struct {
 func parseFragment(path string, data []byte) (fragment, error) {
 	text := strings.TrimRight(strings.ReplaceAll(string(data), "\r\n", "\n"), " \n")
 	if problems := lintUnreleased(text); len(problems) > 0 {
-		return fragment{}, fmt.Errorf("%s: %s", path, strings.Join(problems, "; "))
+		return fragment{}, fmt.Errorf("%s: %s", path, strings.Join(problems, ", "))
 	}
 	f := fragment{path: path}
 	var entries int
@@ -42,7 +42,7 @@ func parseFragment(path string, data []byte) (fragment, error) {
 		switch {
 		case strings.HasPrefix(line, "### "):
 			if f.section != "" {
-				return fragment{}, fmt.Errorf("%s: holds more than one section heading; write one fragment per entry", path)
+				return fragment{}, fmt.Errorf("%s: holds more than one section heading, write one fragment per entry", path)
 			}
 			f.section = strings.TrimSpace(line[4:])
 		case strings.HasPrefix(line, "- "):
@@ -56,7 +56,7 @@ func parseFragment(path string, data []byte) (fragment, error) {
 		return fragment{}, fmt.Errorf("%s: opens with no `### <group>` heading, one of %s", path, strings.Join(changelogSections, ", "))
 	}
 	if entries != 1 {
-		return fragment{}, fmt.Errorf("%s: holds %d entries; write one fragment per entry", path, entries)
+		return fragment{}, fmt.Errorf("%s: holds %d entries, write one fragment per entry", path, entries)
 	}
 	f.entry = strings.Join(lines, "\n")
 	return f, nil
@@ -83,7 +83,7 @@ func readFragments(dir string) ([]fragment, error) {
 		}
 		path := filepath.Join(dir, name)
 		if e.IsDir() || filepath.Ext(name) != ".md" {
-			errs = append(errs, fmt.Errorf("%s: not a fragment; %s holds only <name>.md files", path, dir))
+			errs = append(errs, fmt.Errorf("%s: not a fragment, %s holds only <name>.md files", path, dir))
 			continue
 		}
 		data, err := os.ReadFile(path)

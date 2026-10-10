@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/project"
@@ -134,24 +135,37 @@ func TestSymbolIndexerMarkAndPick(t *testing.T) {
 	assert.Equal(t, goIndexA, ref)
 }
 
+// indexStatuses is a status probe reporting each ref at its freshness.
+func indexStatuses(fresh map[indexRef]types.SymbolIndexFreshness) func(context.Context) []types.SymbolIndexStatus {
+	return func(context.Context) []types.SymbolIndexStatus {
+		var out []types.SymbolIndexStatus
+		for ref, f := range fresh {
+			out = append(out, types.SymbolIndexStatus{Project: types.NewProjectRef(ref.project, "/ws/"+ref.project), Op: ref.op, Freshness: f})
+		}
+		return out
+	}
+}
+
 func TestSymbolIndexerSeedIsDueOnTheFirstTick(t *testing.T) {
 	si, _, _ := newTestIndexer(t)
 	si.state[buzzIndexA] = &indexState{}
+	si.status = indexStatuses(map[indexRef]types.SymbolIndexFreshness{goIndexA: types.SymbolIndexStale, buzzIndexA: types.SymbolIndexFresh})
 
-	si.seed([]indexRef{goIndexA})
+	si.seed(t.Context())
 
 	ref, ok := si.pickDue()
 	require.True(t, ok, "a seeded index opens no quiet window")
 	assert.Equal(t, goIndexA, ref)
-	assert.False(t, si.state[buzzIndexA].dirty, "an index left out of the seed stays clean")
+	assert.False(t, si.state[buzzIndexA].dirty, "a fresh index stays clean")
 }
 
 func TestSymbolIndexerSeedKeepsThrottles(t *testing.T) {
 	si, _, clock := newTestIndexer(t)
 	si.state[goIndexA] = &indexState{lastRun: clock.Add(-time.Minute)}
 	si.state[buzzIndexA] = &indexState{failures: 1, backoffTill: clock.Add(time.Minute)}
+	si.status = indexStatuses(map[indexRef]types.SymbolIndexFreshness{goIndexA: types.SymbolIndexStale, buzzIndexA: types.SymbolIndexStale})
 
-	si.seed([]indexRef{goIndexA, buzzIndexA})
+	si.seed(t.Context())
 
 	_, ok := si.pickDue()
 	assert.False(t, ok, "seeding bypasses neither the min interval nor a backoff")
@@ -992,6 +1006,21 @@ func TestFreshenIndexesFailsWithACodeWhenTheIndexerCannotRun(t *testing.T) {
 	assert.Contains(t, err.Error(), symbols.InstallHint("go"), "the cause comes with its fix")
 }
 
+// A coded cause reads inline inside MGS7003, so the reader gets one link, the outer one,
+// and no install hint for an indexer the refusal never reached.
+func TestFreshenIndexesNamesACodedCauseInline(t *testing.T) {
+	idxs := freshenProjects()
+	unprobeable := types.DiagnosticErrorf(types.ToolUnprobeable, "go:go reports no version in /ws: exit status 1")
+	w := &indexWorld{current: map[string]bool{"web:scip": true}, buildErr: unprobeable}
+
+	err := freshenIndexes(idxs, w.probe, w.build, true)
+
+	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
+	assert.Equal(t, "[MGS7003] symbol index not current for ws: go:go reports no version in /ws: exit status 1 (MGS3035); "+
+		"fix it, then `magus graph build`\n  see: "+types.CodeURL(types.SymbolIndexNotCurrent), err.Error())
+	assert.Equal(t, conformanceSkippedWhy, types.DiagnosticRationale(err), "with cache writes on, the why is the skipped checks alone")
+}
+
 // Another magus holding the project's lock refuses the refresh at once; the review says so,
 // with the holder named, rather than reporting a missing indexer or reading the stale index.
 func TestFreshenIndexesNamesTheLockHolderWhenTheRefreshIsRefused(t *testing.T) {
@@ -1017,6 +1046,10 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 
 	require.ErrorIs(t, err, types.SymbolIndexNotCurrent)
 	assert.Contains(t, err.Error(), "cache writes are off")
+	why := types.DiagnosticRationale(err)
+	assert.Contains(t, why, conformanceSkippedWhy)
+	assert.Contains(t, why, "publishes nothing without a signing key", "the reason enabling writes is safe rides as the why")
+	assert.NotContains(t, err.Error(), "signing key", "and stays out of the verdict")
 }
 
 // A missing scip-buzz must not cost the root project its review: while the Go index's
@@ -1058,6 +1091,16 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 	assert.Equal(t, types.Diagnostic{Code: "MGS7003", Message: "stale", URL: d.URL}, d)
 	assert.NotEmpty(t, d.URL)
 	assert.Equal(t, types.Diagnostic{Message: "plain"}, toDiagnostic(errors.New("plain")))
+
+	reasoned := toDiagnostic(fmt.Errorf("diff: %w",
+		types.DiagnosticErrorf(types.SymbolIndexNotCurrent, "stale").WithWhy(conformanceSkippedWhy)))
+	assert.Equal(t, conformanceSkippedWhy, reasoned.Why, "-o json carries the reason beside the verdict")
+	encoded, err := json.Marshal(reasoned)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"why":"`+conformanceSkippedWhy+`"`)
+	encoded, err = json.Marshal(d)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), `"why"`, "a diagnostic with no reason omits the field")
 }
 
 // The index lives in the cache dir, where no replay restores it, so an entry for sources

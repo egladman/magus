@@ -93,7 +93,7 @@ func buildFromConfig(root string, cfg config.SandboxConfig, spellGrants map[stri
 	}
 
 	if filesystem.Under(filesystem.ResolveRulePath(o.TempDir), filesystem.ResolveRulePath(root)) {
-		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s; point TMPDIR outside it", o.TempDir, root)
+		return nil, fmt.Errorf("sandbox: the private temp dir %s is inside the workspace %s, point TMPDIR outside it", o.TempDir, root)
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -124,7 +124,7 @@ func privateTempDir(base, root string) (string, error) {
 		return "", fmt.Errorf("sandbox: %w", err)
 	}
 	if !info.IsDir() || info.Mode().Perm()&0o077 != 0 || !ownedByUser(info) {
-		return "", fmt.Errorf("sandbox: %s is not a private directory of this user; remove it and let magus recreate it", dir)
+		return "", fmt.Errorf("sandbox: %s is not a private directory of this user, remove it and let magus recreate it", dir)
 	}
 	return dir, nil
 }

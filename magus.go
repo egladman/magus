@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
@@ -663,7 +664,7 @@ func validateTargetPolicies(m *Magus, customTargets map[string][]string) error {
 			}
 			msg := fmt.Sprintf("magus: project %q: per-target policy names unknown target %q", p.Path, name)
 			if sug := hint.Nearest(name, declared); sug != "" {
-				msg += fmt.Sprintf("; did you mean %q?", sug)
+				msg += fmt.Sprintf(", did you mean %q", sug)
 			}
 			if len(declared) > 0 {
 				msg += fmt.Sprintf(" (declared targets: %s)", strings.Join(declared, ", "))
@@ -727,9 +728,9 @@ func remoteCacheSigningOpts(trustedB64 []string, insecure bool, insecureReason s
 		return []cache.Option{cache.WithInsecureRemote()}, nil
 	}
 	if len(trustedB64) == 0 {
-		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared; " +
+		return nil, fmt.Errorf("magus: a remote cache backend is wired (magus.cache.remote) but no trust set is declared, " +
 			"set cache.remote.trusted_keys in magus.yaml to the Ed25519 public key(s) that sign artifacts (or set " +
-			"cache.remote.insecure with cache.remote.insecure_reason to accept unsigned artifacts) - " +
+			"cache.remote.insecure with cache.remote.insecure_reason to accept unsigned artifacts): " +
 			"a shared cache with no signature verification is a supply-chain hazard and is not allowed by default")
 	}
 	pubkeys := make([][]byte, 0, len(trustedB64))
@@ -799,7 +800,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		telCfg.LocalCollect = m.metricsCollect // server: record metrics even when export is off
 		built, err := otlp.New(ctx, telCfg)
 		if err != nil {
-			slog.WarnContext(ctx, "magus: telemetry init failed; falling back to no-op", "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "telemetry init failed; falling back to no-op", "err", err)
 			built, _ = otlp.New(ctx, observability.Config{})
 		}
 		tel = built
@@ -1490,8 +1491,8 @@ func (m *Magus) diff(ctx context.Context, paths []string, cfg diffConfig) (types
 		out.ConformanceError = &d
 	case !indexed && len(m.symbolCapableIn(touched)) > 0:
 		d := toDiagnostic(types.DiagnosticErrorf(types.SymbolIndexNotCurrent,
-			"no symbol index loaded for %s, so the conformance checks could not run; build it with `magus graph build`",
-			strings.Join(m.symbolCapableIn(touched), ", ")))
+			"no symbol index loaded for %s; run `magus graph build`",
+			strings.Join(m.symbolCapableIn(touched), ", ")).WithWhy(conformanceSkippedWhy))
 		out.ConformanceError = &d
 	case indexed:
 		m.conformance(ctx, &out, byPath, graph, cfg, in, patchErr)
@@ -1889,7 +1890,7 @@ func (m *Magus) lastPassedBase(ctx context.Context, res types.VCSResolution) (st
 	// for, which is the failure this base ref exists to prevent. Naming the switch that
 	// caused it beats a warning nobody reads under a green check.
 	if !m.cfg.CI.RecordRuns {
-		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off; set it true or pass an explicit --base", BaseLastPassed)
+		return "", fmt.Errorf("base %q needs the run log, and ci.record_runs is off, set it true or pass an explicit --base", BaseLastPassed)
 	}
 	if res.VCS == nil || res.Source == types.VCSSourceDisabled {
 		return "", fmt.Errorf("base %q needs a VCS to resolve against, and none is active", BaseLastPassed)
@@ -1904,13 +1905,13 @@ func (m *Magus) lastPassedBase(ctx context.Context, res types.VCSResolution) (st
 		return "", fmt.Errorf("base %q: %w", BaseLastPassed, err)
 	}
 	if commit, ok := hist.PassedCommit(ref, ""); ok {
-		slog.DebugContext(ctx, "affected: base resolved from run history",
+		slog.With(attr.Component("affected")).DebugContext(ctx, "base resolved from run history",
 			slog.String("ref", ref), slog.String("commit", commit))
 		return commit, nil
 	}
 
 	parent := res.VCS.ParentRef()
-	slog.WarnContext(ctx, "affected: no passing run recorded for this ref; diffing its parent commit instead",
+	slog.With(attr.Component("affected")).WarnContext(ctx, "no passing run recorded for this ref; diffing its parent commit instead",
 		slog.String("ref", ref),
 		slog.String("base", parent),
 		slog.String("history_path", m.cfg.HistoryPath),
@@ -1934,7 +1935,7 @@ func (m *Magus) limiter() *cache.Limiter {
 		// Announced, never silent: a run quietly narrower than asked for is as hard to
 		// attribute as one that thrashes. Said once, at the moment it takes effect.
 		if clamped, was := cache.ClampConcurrency(n); was {
-			slog.WarnContext(context.Background(), "magus: concurrency capped to this machine",
+			slog.With(attr.Component("magus")).WarnContext(context.Background(), "concurrency capped to this machine",
 				slog.Int("requested", n), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			n = clamped
@@ -2085,9 +2086,9 @@ func (m *Magus) ExpandPath(t types.Target) ([]types.Target, error) {
 	}
 	if m.Get(path) == nil {
 		if hint := m.suggestProjectPath(path); hint != "" {
-			return nil, fmt.Errorf("magus: expand: %w: %q; did you mean %q?", types.ErrUnknownProject, path, hint)
+			return nil, fmt.Errorf("magus: expand: %q, did you mean %q: %w", path, hint, types.ErrUnknownProject)
 		}
-		return nil, fmt.Errorf("magus: expand: %w: %q", types.ErrUnknownProject, path)
+		return nil, fmt.Errorf("magus: expand: %q: %w", path, types.ErrUnknownProject)
 	}
 	return []types.Target{{Path: path, Name: t.Name}}, nil
 }

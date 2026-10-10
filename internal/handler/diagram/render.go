@@ -72,7 +72,7 @@ func (e *LensError) Error() string { return "diagram: " + e.msg }
 
 // ErrNotIndexed is an import figure asked of a workspace with no symbol index: an empty
 // figure would read as "nothing imports anything".
-var ErrNotIndexed = errors.New("diagram: the import graph is not indexed; run magus graph build")
+var ErrNotIndexed = errors.New("diagram: the import graph is not indexed, run magus graph build")
 
 type edge struct {
 	src, dst string

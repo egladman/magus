@@ -90,10 +90,10 @@ func (s staleGraph) verdict() ShellVerdict {
 		rebuild += " once that is finished"
 	}
 	return ShellVerdict{
-		Context: "magus workspace: the graph is stale, " + s.reason + ", so no graph answer replaces this search and it runs as typed. " +
-			rebuild + ", and the graph answers exactly again.",
-		Kind:  advisoryGraphStale,
-		Brief: "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
+		Context: "magus workspace: the graph is stale (" + s.reason + "), and this search runs as typed; " + rebuild + ".",
+		Why:     "No graph answer replaces a search while the graph is stale. Once it is rebuilt, the graph answers exactly again.",
+		Kind:    advisoryGraphStale,
+		Brief:   "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
 	}
 }
 
@@ -410,7 +410,7 @@ func grepReaderVerdict(deps Dependencies, cmds []hint.Invocation) (ShellVerdict,
 			}
 		}
 		if len(next) == len(routes) {
-			v = v.withRemedy(printClause(routes)+" the declaration whole.", next...)
+			v = v.withRemedy(denyGrepReaderLead+"; print it whole instead.", next...)
 		}
 		return v, true
 	}
@@ -575,9 +575,13 @@ func printClause(routes []searchRoute) string {
 	return strings.Join(runs, ", ") + " print"
 }
 
-// denyGrepReader leads with the commands, since they are the whole correction.
+// denyGrepReaderLead names what the search does; the commands that correct it follow.
+const denyGrepReaderLead = "a context flag makes this search read a declaration by a guessed length"
+
+// denyGrepReader names the commands in its verdict, since they are the whole correction.
 func denyGrepReader(routes []searchRoute) string {
-	return printClause(routes) + " the declaration whole, numbered, where a context count only guesses at its length.\n" +
+	return denyGrepReaderLead + "; " + printClause(routes) + " it whole.\n" +
+		"The commands print the declaration numbered, where a context count only guesses at its length. " +
 		"With -A, -B or -C this search is a read, so the single-file allowance a plain search gets does not apply. " +
 		"A search for where a name is USED, without a context flag, runs as before."
 }
@@ -616,10 +620,10 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 		return stale.verdict(), true
 	}
 	return ShellVerdict{
-		Context: routeClause(routes) + " this for every file, checked against the tree, including the generated and cross-language sites a pattern misses. " +
-			"The search runs as typed.",
-		Kind:  advisoryPrecedent,
-		Brief: "magus workspace: " + routeClause(routes) + " this for every file.",
+		Context: "magus workspace: " + routeClause(routes) + " this for every file; the search runs as typed.",
+		Why:     "The answer is checked against the tree, including the generated and cross-language sites a pattern misses.",
+		Kind:    advisoryPrecedent,
+		Brief:   "magus workspace: " + routeClause(routes) + " this for every file.",
 	}, true
 }
 
@@ -629,10 +633,12 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js searchJudgment, piped bool) ShellVerdict {
 	routes := js.routes
 	textNote, textNext := textRemedy(c, js)
-	v := ShellVerdict{Deny: denySymbolSearch(routes) + "\n" + classifiedLine(js) + textNote, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
+	d := denySymbolSearch(routes, js)
+	v := ShellVerdict{Deny: d.Say + textNote, Why: d.Why, Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(routes)}}
 	if answer, ok := treeSymbolAnswer(deps, dir, c, routes); ok {
+		// The answer stays inline with the verdict, since it is what the search was for;
+		// a lead would drop it.
 		v.Deny += "\n" + answerBlock("Its answer", answer) + pipeNote(piped)
-		// The answer is already in the deny, and a lead would drop it.
 		return v
 	}
 	v.Deny += pipeNote(piped)
@@ -640,7 +646,7 @@ func treeSymbolVerdict(deps Dependencies, dir string, c hint.Invocation, js sear
 	if len(next) > 0 {
 		next = append(next, textNext...)
 	}
-	return v.withRemedy(routeClause(routes)+" this exactly, checked against the tree rather than matched against it. "+classifiedLine(js)+textNote, next...)
+	return v.withRemedy(denySymbolSearchLead+", which the graph answers exactly. "+classifiedLine(js)+textNote, next...)
 }
 
 // routeNexts serves each route as a remedy, or none when one of them cannot be.
@@ -1327,9 +1333,10 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	build := hint.GraphBuild.With("--silent")
 	textNote, textNext := textRemedy(c, js)
 	v := ShellVerdict{
-		Deny: "`" + build + "`, then " + routeClause(js.routes) + " this exactly.\n" +
+		Deny: denySymbolSearchLead + ", and the symbol index " + symbolIndexCause(moved) + "; rebuild it: `" + build + "`.",
+		Why: "Then " + routeClause(js.routes) + " this exactly.\n" +
 			classifiedLine(js) + "\n" +
-			"The symbol index " + symbolIndexCause(moved) + ", so it is rebuilt first; refs then checks every site against the tree, the generated and cross-language ones a pattern misses included." +
+			"refs checks every site against the tree, the generated and cross-language ones a pattern misses included." +
 			indexCauseNote(deps) + textNote + pipeNote(piped),
 		Rule: denyRule{Name: denyRuleSymbolSearch, Arg: routeNames(js.routes)},
 	}
@@ -1345,7 +1352,7 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 	next = append(append(next, routes...), textNext...)
 	// The lead replaces the deny when the remedy is served, so it carries the classification:
 	// it is what makes a false positive disputable.
-	return v.withRemedy("Rebuild the index, then "+routeClause(js.routes)+" this exactly. "+classifiedLine(js)+textNote, next...)
+	return v.withRemedy(denySymbolSearchLead+", and the symbol index "+symbolIndexCause(moved)+"; rebuild it, then ask the graph. "+classifiedLine(js)+textNote, next...)
 }
 
 // noGraphVerdict advises a search for a name in a workspace with no symbol index to route
@@ -1353,9 +1360,9 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 func noGraphVerdict(ident string) ShellVerdict {
 	return ShellVerdict{
 		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
+		Why:     precedentSearchAdviceWhy,
 		Kind:    advisoryPrecedent,
-		Brief: "magus workspace: no symbol index exists yet, so this search runs. `" + hint.GraphBuild.With("--silent") +
-			"` builds one, then `" + hint.Refs.With(ident, "--occurrences") + "` answers exactly, and this search is refused.",
+		Brief:   "magus workspace: no symbol index exists yet and this search runs; `" + hint.GraphBuild.With("--silent") + "` builds one.",
 	}
 }
 
@@ -1435,9 +1442,14 @@ func routeClause(routes []searchRoute) string {
 	return strings.Join(runs, ", ") + " " + verb
 }
 
-// denySymbolSearch leads with the commands, one per name, since that is the whole
-// correction.
-func denySymbolSearch(routes []searchRoute) string {
-	return routeClause(routes) + " this exactly, checked against the tree rather than matched against it.\n" +
-		"Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it."
+// denySymbolSearchLead names what the search is for; the classification after it is what
+// makes a false positive disputable.
+const denySymbolSearchLead = "this text search is for an indexed name"
+
+// denySymbolSearch names the commands, one per name, since that is the whole correction.
+func denySymbolSearch(routes []searchRoute, js searchJudgment) denial {
+	return denial{
+		Say: denySymbolSearchLead + "; " + routeClause(routes) + " it exactly. " + classifiedLine(js),
+		Why: "The graph checks every site against the tree rather than matching it. Every name searched for is indexed here, so the graph knows every definition, reference and document, including the generated and cross-language ones a pattern misses. Search raw TEXT (a string literal, a comment, a config value) with grep as before: no index holds that, so nothing replaces it.",
+	}
 }

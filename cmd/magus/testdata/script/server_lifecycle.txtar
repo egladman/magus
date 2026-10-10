@@ -91,7 +91,7 @@ stderr 'rotate-logs'
 stderr 'clear-cache'
 
 ! exec magus job run badname
-stderr 'no job named "badname"; run `magus job run` to list them'
+stderr 'no job named "badname", run `magus job run` to list them'
 
 # A real job name against no server is a documented no-op (so a VCS hook
 # can call it unconditionally) rather than an error - it exits 0 with no

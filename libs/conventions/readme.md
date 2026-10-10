@@ -18,6 +18,8 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
+| `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
+| `errmsg`        | an `errors.New` or `fmt.Errorf` text joining clauses, spanning lines or sentences, or with `%w` not last    |
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
@@ -61,6 +63,14 @@ more of its fields: that fix compares fields the test never looked at, so it may
 need volatile fields normalized first. This tree turns it on: once a struct grows
 a field, a test that named every field asserts only some, and only
 `report-partial` still reports it.
+
+`errmsg` judges a plain Go error, which its callers extend with ": " as it
+wraps: `error-join` reports `"; "`, `" - "` or an em dash, `error-newline` a newline,
+`error-sentences` a period followed by more text outside quotes and
+abbreviations, and `error-wrap` a `%w` anywhere but an opening `"%w: "` or a closing `": %w"`. A
+`fmt.Errorf` built only to wrap inside a coded diagnostic is still judged; the
+diagnostic's own constructor is `diagmsg`'s. Capitalization and trailing
+punctuation are staticcheck's ST1005.
 
 ## Not here
 

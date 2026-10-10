@@ -110,13 +110,13 @@ func (c *Cache) GetArtifact(ctx context.Context, v ArtifactVersion, dst string) 
 		return os.Symlink(v.Output.Symlink, dst)
 	}
 	if v.Output.Blob == "" {
-		return fmt.Errorf("%w: %s recorded no content", ErrArtifactMissing, v.Output.Path)
+		return fmt.Errorf("%s recorded no content: %w", v.Output.Path, ErrArtifactMissing)
 	}
 
 	src := c.blobPath(v.Output.Blob)
 	if fi, err := os.Stat(src); err != nil || fi.IsDir() {
-		return fmt.Errorf("%w: %s (%s), produced by %s at %s; re-run that target with --no-cache to regenerate it",
-			ErrArtifactMissing, v.Output.Path, v.ShortBlob(), v.Target, v.CreatedAt.UTC().Format(time.RFC3339))
+		return fmt.Errorf("%s (%s), produced by %s at %s, re-run that target with --no-cache to regenerate it: %w",
+			v.Output.Path, v.ShortBlob(), v.Target, v.CreatedAt.UTC().Format(time.RFC3339), ErrArtifactMissing)
 	}
 	mode := os.FileMode(v.Output.Mode).Perm()
 	if err := reflink.Clone(src, dst); err == nil {

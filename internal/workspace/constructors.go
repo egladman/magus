@@ -85,7 +85,7 @@ func WithSources(paths ...string) ProjectOption {
 		clean := func(glob string) (string, error) {
 			glob = path.Clean(glob)
 			if rooted := types.RootGlob(p.Path, glob); rooted == ".." || strings.HasPrefix(rooted, "../") {
-				return "", fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q); "+
+				return "", fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q), "+
 					"a path outside the workspace can never key a cache entry", p.Path, glob, rooted)
 			}
 			return glob, nil
@@ -138,7 +138,7 @@ func WithReviewRequired(globs ...string) ProjectOption {
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
 				return fmt.Errorf("magus: project %q: review_required glob %q escapes the workspace root "+
-					"(it resolves to %q); it would match nothing and silently mark no paths at all", p.Path, raw, rooted)
+					"(it resolves to %q), it would match nothing and silently mark no paths at all", p.Path, raw, rooted)
 			}
 			cleaned = append(cleaned, glob)
 		}
@@ -163,7 +163,7 @@ func WithGateLowRisk(globs ...string) ProjectOption {
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
 				return fmt.Errorf("magus: project %q: gate_low_risk glob %q escapes the workspace root "+
-					"(it resolves to %q); it would classify nothing at all", p.Path, raw, rooted)
+					"(it resolves to %q), it would classify nothing at all", p.Path, raw, rooted)
 			}
 			cleaned = append(cleaned, glob)
 		}
@@ -186,7 +186,7 @@ func WithMergeLowRisk(globs ...string) ProjectOption {
 			rooted := types.RootGlob(p.Path, glob)
 			if rooted == ".." || strings.HasPrefix(rooted, "../") {
 				return fmt.Errorf("magus: project %q: merge_low_risk glob %q escapes the workspace root "+
-					"(it resolves to %q); it would opt nothing in", p.Path, raw, rooted)
+					"(it resolves to %q), it would opt nothing in", p.Path, raw, rooted)
 			}
 			p.MergeLowRisk = append(p.MergeLowRisk, glob)
 		}

@@ -193,7 +193,7 @@ Drops `-print`.
 
 ## go-mod-json
 
-Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits.
+Captures Go's structured module view for the spell's higher-level Buzz helper. This is deliberately a separate read-only op: `-json` and `-print` are distinct Go modes, while go-mod-edit remains the one command that applies derived edits. Quiet: the JSON exists to be parsed, and streamed it buried a failing step's cause.
 
 **Command:** `go mod edit -json`
 

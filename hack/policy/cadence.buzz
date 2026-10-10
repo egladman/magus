@@ -5,9 +5,9 @@ import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
 
-final gateDenial ="The gate runs once per branch, by the orchestrator or by a worker spawned as "
-    + "`<parent>/integrate <job>`, never by a worker mid-change. Finish with the narrow validation "
-    + "your brief names and report; the gate runs once your branch is integrated. "
+final gateDenial = "a worker mid-change does not run the gate; finish with the narrow validation your brief names and report.\n"
+    + "The gate runs once per branch, by the orchestrator or by a worker spawned as "
+    + "`<parent>/integrate <job>`, once your branch is integrated. "
     + "`magus affected ci --plan` stays open to you: it runs nothing.";
 
 // Caller is who runs a command: role is root or worker (a lease binds it), and title is
@@ -83,9 +83,10 @@ fun unqualifiedPush(programs: [helpers\Program], checkout: Checkout) > str {
                     if (ref.startsWith("HEAD:")) {
                         final name = ref.sub(5);
                         if (!name.startsWith("refs/") and checkout.remoteBranches.indexOf("{remote}/{name}") == null) {
-                            return "HEAD is detached and {remote} has no branch `{name}` this checkout knows of, so git "
-                                + "cannot tell a branch from a tag and refuses the push; a `;` or a background run hides "
-                                + "that. Name the branch in full: `git push {remote} HEAD:refs/heads/{name}`.";
+                            return "HEAD is detached and {remote} has no branch `{name}` this checkout knows of; "
+                                + "name the branch in full: `git push {remote} HEAD:refs/heads/{name}`.\n"
+                                + "Without it git cannot tell a branch from a tag and refuses the push; a `;` or a "
+                                + "background run hides that.";
                         }
                     }
                 }

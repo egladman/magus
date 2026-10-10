@@ -98,7 +98,7 @@ func TestSkillsThroughBuzzScript(t *testing.T) {
 	assert.Equal(t, "acme-rules local full true\nmagus-query shipped full true\n", got)
 
 	_, err = callSkills(t, ctx, sess, "unknown")
-	assert.ErrorContains(t, err, `no skill named "acme-rule"; near matches: acme-rules`)
+	assert.ErrorContains(t, err, `no skill named "acme-rule", near matches: acme-rules`)
 
 	_, err = callSkills(t, ctx, sess, "misspelledOption")
 	assert.ErrorContains(t, err, `unknown option "nmae" (want name, form)`)

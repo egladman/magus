@@ -9,6 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/egladman/magus/internal/log/attr"
 	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
@@ -45,7 +46,7 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 func liveStatus(ctx context.Context, log *slog.Logger, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
 	s, dropped := statusSnapshotToProto(r, build)
 	if dropped != nil {
-		log.WarnContext(ctx, "status: sending a snapshot without an error detail", slog.String("error", dropped.Error()))
+		log.With(attr.Component("status")).WarnContext(ctx, "sending a snapshot without an error detail", slog.String("error", dropped.Error()))
 	}
 	return s
 }

@@ -12,11 +12,13 @@ import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
 
-final captureDenial = "Use `magus query output <ref>`. A failure prints `output: out<hex>` on the line under `cause:`, and that ref is the whole log.\n"
-    + "Reading `.magus/logs` or a task capture, by cat or by a range, drops the ref and keeps a slice.";
+final captureDenial = "reading a run log or task capture by cat or by a range drops its ref; read it whole: `magus query output <ref>`.\n"
+    + "A failure prints `output: out<hex>` on the line under `cause:`, and that ref is the whole log. "
+    + "Reading `.magus/logs` or a task capture keeps a slice.";
 
-final terminalsDenial = "Use `magus status`. It reads the project lock: who holds it, what they are running, and how long they have held it.\n"
-    + "A directory named terminals is not a run. Do not create one and do not read its files.";
+final terminalsDenial = "a directory named terminals is a host session folder, not a run; read the project lock: `magus status`.\n"
+    + "Status reports who holds the lock, what they are running, and how long they have held it. "
+    + "Do not create a terminals directory and do not read its files.";
 
 // decideHost denies a command that reads a run capture or that creates or reads
 // a terminals directory. Anything else is allowed, including a search whose

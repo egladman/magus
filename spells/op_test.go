@@ -61,6 +61,13 @@ func TestCommandSecretsOmittedWhenEmpty(t *testing.T) {
 	assert.NotContains(t, string(b), "secrets", "an op with no declared secrets must not carry the key at all")
 }
 
+func TestCommandValidateQuiet(t *testing.T) {
+	require.NoError(t, Command{Bin: "go"}.Validate())
+	require.NoError(t, Command{Bin: "go", Capture: true}.Validate())
+	require.NoError(t, Command{Bin: "go", Capture: true, Quiet: true}.Validate())
+	require.ErrorContains(t, Command{Bin: "go", Quiet: true}.Validate(), "quiet without capture")
+}
+
 // TestServiceValidate pins the shape rules a Service is resolved against: exactly one
 // of Command or Start, and a Start service declares both how to tell it is up and how
 // to stop it, since the supervisor holds none of its processes.
@@ -76,8 +83,8 @@ func TestServiceValidate(t *testing.T) {
 	}{
 		{"command alone", Service{Command: cmd}, ""},
 		{"start with readiness and stop", Service{Start: start, Readiness: probe, Stop: stop}, ""},
-		{"neither", Service{Readiness: probe}, "service declares neither command nor start; set exactly one"},
-		{"both", Service{Command: cmd, Start: start, Readiness: probe, Stop: stop}, "service declares both command and start; set exactly one"},
+		{"neither", Service{Readiness: probe}, "service declares neither command nor start, set exactly one"},
+		{"both", Service{Command: cmd, Start: start, Readiness: probe, Stop: stop}, "service declares both command and start, set exactly one"},
 		{"start without readiness", Service{Start: start, Stop: stop}, "a start service needs readiness: it is how magus learns the service is up without holding its process"},
 		{"start without stop", Service{Start: start, Readiness: probe}, "a start service needs stop: magus holds no process to signal"},
 	}

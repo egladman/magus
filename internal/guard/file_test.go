@@ -25,7 +25,7 @@ func TestAdviseNewFileNameListsTheSiblingsItWillJoin(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "advisory.go", "cache.go", "focus.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "lease.go"))
+	got := adviseNewFileName(filepath.Join("internal", "guard", "lease.go")).Say
 
 	assert.Contains(t, got, "NEW FILE")
 	assert.Contains(t, got, "advisory.go, cache.go, focus.go", "the siblings ARE the advisory")
@@ -48,7 +48,7 @@ func TestAdviseNewFileNameLeavesTheEmptyDirectoryToTheBoundaryRule(t *testing.T)
 
 	assert.Empty(t, adviseNewFileName(filepath.Join("newpkg", "thing.go")), "nothing there yet")
 	assert.Empty(t, adviseNewFileName(filepath.Join("internal", "helper.go")), "internal/ holds packages, not files")
-	assert.Contains(t, adviseNewSourceDir(filepath.Join("newpkg", "thing.go")), "creates a NEW DIRECTORY",
+	assert.Contains(t, adviseNewSourceDir(filepath.Join("newpkg", "thing.go")).Say, "creates a NEW DIRECTORY",
 		"the case this rule declines is the case that one takes")
 }
 
@@ -67,7 +67,7 @@ func TestAdviseNewFileNameStillSpeaksForANameOffTheEponymousFile(t *testing.T) {
 	root := inWorkspace(t)
 	populate(t, root, filepath.Join("internal", "guard"), "guard.go", "advisory.go", "cache.go")
 
-	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_thing.go"))
+	got := adviseNewFileName(filepath.Join("internal", "guard", "guard_thing.go")).Say
 
 	assert.Contains(t, got, "NEW FILE")
 	assert.Contains(t, got, "advisory.go, cache.go, guard.go", "the list is what names the convention")
@@ -84,7 +84,7 @@ func TestAdviseNewFileNameHandlesTheAbsolutePathTheHostSends(t *testing.T) {
 	t.Chdir(ws)
 	populate(t, ws, filepath.Join("internal", "guard"), "advisory.go")
 
-	assert.Contains(t, adviseNewFileName(filepath.Join(ws, "internal", "guard", "lease.go")), "NEW FILE")
+	assert.Contains(t, adviseNewFileName(filepath.Join(ws, "internal", "guard", "lease.go")).Say, "NEW FILE")
 }
 
 // Fixtures, pruned trees and anything outside the workspace are not places anyone is
@@ -110,7 +110,7 @@ func TestAdviseNewFileNameBoundsTheList(t *testing.T) {
 	}
 	populate(t, root, "wide", names...)
 
-	got := adviseNewFileName(filepath.Join("wide", "zzz.go"))
+	got := adviseNewFileName(filepath.Join("wide", "zzz.go")).Say
 
 	assert.Contains(t, got, "already holds 20")
 	assert.Contains(t, got, "and 8 more")

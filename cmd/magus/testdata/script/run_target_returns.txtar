@@ -61,7 +61,7 @@ stdout '"alpha"'
 # A map is refused, and the message names the type it got AND the set it accepts, so
 # the fix is in the error rather than in the docs.
 ! exec magus run mappy
-stderr 'a target may return str, \[str\], or nothing; got a map'
+stderr 'a target may return str, \[str\], or nothing, got a map'
 
 # So is a bool, for the same reason: it is neither terminal-by-rule nor chainable. A
 # target reporting a flag returns a str, which is what the CLI prints either way.

@@ -370,8 +370,10 @@ func translateSearches(deps Dependencies, dir string, cmds []hint.Invocation) (S
 				continue
 			}
 		}
+		d := denySearchTranslation(tr, pipedInto(cmds[min(i+1+tr.consumed, len(cmds)):]))
 		v := ShellVerdict{
-			Deny: denySearchTranslation(tr, pipedInto(cmds[min(i+1+tr.consumed, len(cmds)):])),
+			Deny: d.Say,
+			Why:  d.Why,
 			Rule: denyRule{Name: denyRuleSearchTranslation, Arg: strings.Join(tr.args, " ")},
 		}
 		if walk.settles(deps, v) {
@@ -399,18 +401,24 @@ func translateSearch(deps Dependencies, dir string, c hint.Invocation) (translat
 	return tr, ok
 }
 
-func denySearchTranslation(tr translation, piped bool) string {
+// denySearchTranslation keeps the graph's answer inline with the verdict, and what the
+// answer covers and leaves out with it: they are what the search was for, and behind the
+// ref they would cost the reader another call.
+func denySearchTranslation(tr translation, piped bool) denial {
 	reach := "exactly"
 	if tr.reach != "" {
 		reach = tr.reach
 	}
-	deny := "`" + hint.BinaryName() + " " + strings.Join(tr.args, " ") + "` answers this search " + reach + ".\n" +
+	d := denial{Say: "this text search asks what the graph holds; `" + hint.BinaryName() + " " + strings.Join(tr.args, " ") + "` answers this search " + reach + ".\n" +
 		tr.why + "\n" +
-		answerBlock("Its answer", tr.answer) + pipeNote(piped)
-	if tr.proven {
-		return deny
+		answerBlock("Its answer", tr.answer) + pipeNote(piped)}
+	// Why is never empty here: an empty one would have the renderer cut the answer off
+	// at the verdict's first line.
+	d.Why = "Every match this search could make is a graph node, so the answer is complete."
+	if !tr.proven {
+		d.Why = "Search raw TEXT (a string literal, a comment, a config value) with grep as before: no graph node holds that, so nothing replaces it."
 	}
-	return deny + "\nSearch raw TEXT (a string literal, a comment, a config value) with grep as before: no graph node holds that, so nothing replaces it."
+	return d
 }
 
 // diagnosticDigitAtom is one digit position of a code-shaped alternative, optionally

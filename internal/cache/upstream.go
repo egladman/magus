@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -89,7 +90,8 @@ func (b *upstreamRuns) waitForUpstreams(ctx context.Context, s Step) error {
 }
 
 // waitForUpstream blocks on done, logging who waits on whom at the first beat and then
-// at each doubling of the elapsed time.
+// at each doubling of the elapsed time. Each record carries [attr.Elapsed], so a quiet
+// display holds back the waits under a minute.
 //
 // Unlike the keyed lock and the machine gate it does not beat the invocation heartbeat:
 // the upstream is a step of this run and beats for itself, and beating here would keep
@@ -106,8 +108,9 @@ func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstrea
 		case <-beat.C:
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for %s to finish (%s so far)",
-					displayNodeLabel(waiting), displayNodeLabel(upstream), elapsed.Round(time.Second)))
+				slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf("%s is waiting for %s to finish (%s so far)",
+					displayNodeLabel(waiting), displayNodeLabel(upstream), elapsed.Round(time.Second)),
+					attr.Elapsed(elapsed))
 			}
 		case <-ctx.Done():
 			return ctx.Err()

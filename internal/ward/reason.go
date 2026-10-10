@@ -19,7 +19,7 @@ type Override struct {
 	// Spelling is the whole accepted form, copyable as written. A script this refusal
 	// breaks needs the replacement in full.
 	Spelling string
-	// Records completes "The reason ...", naming where the prose is kept. A reason
+	// Records completes "the reason ...", naming where the prose is kept. A reason
 	// nobody keeps is a form field.
 	Records string
 }
@@ -37,6 +37,6 @@ func RequireReason(o Override, on bool, reason string) error {
 	if !on || strings.TrimSpace(reason) != "" {
 		return nil
 	}
-	return fmt.Errorf("%s %s. Say why: %s. The reason %s",
+	return fmt.Errorf("%s %s, say why: %s, the reason %s",
 		o.Name, o.Silences, o.Spelling, o.Records)
 }

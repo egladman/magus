@@ -232,7 +232,7 @@ func loadDirInto(cfg Config, dir string) (Config, error) {
 	dottedExists := dottedErr == nil
 
 	if plainExists && dottedExists {
-		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml - pick one", dir)
+		return Config{}, fmt.Errorf("config: %s contains both magus.yaml and .magus.yaml, pick one", dir)
 	}
 	if !plainExists && !dottedExists {
 		return cfg, nil

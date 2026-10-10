@@ -283,7 +283,7 @@ func (c hookCommand) policy() (*sandbox.Policy, error) {
 	}
 	switch {
 	case len(placed) > 0:
-		return nil, fmt.Errorf("the sandbox grants a hook write on %s, outside its candidate's box, where another candidate's hook can plant what this one's gate trusts; drop the grant from the base's sandbox config or spells", joinPaths(placed))
+		return nil, fmt.Errorf("the sandbox grants a hook write on %s, outside its candidate's box, where another candidate's hook can plant what this one's gate trusts, drop the grant from the base's sandbox config or spells", joinPaths(placed))
 	case len(linked) > 0:
 		return nil, changeFailure{why: "found a link in its box leading a grant out of it, to " + joinPaths(linked)}
 	}

@@ -209,9 +209,18 @@ fun claude_entries() > [any] {
     ];
 }
 
+// claude_config_env is the settings "env" object: Claude Code sets it on the session, so
+// every Bash tool command the agent runs inherits it (testdata/hosts/claude-code/
+// settings.schema.json, "env"). MAGUS_LOG_SILENT=true is -s for every one of them; a
+// value the person already set stays.
+fun claude_config_env() > {str: str} {
+    return {"MAGUS_LOG_SILENT": "true"};
+}
+
 fun claude_config() > {str: any} {
     return {
         "path": claude_config_path(),
+        "defaults": {"env": claude_config_env()},
     };
 }
 
@@ -345,6 +354,13 @@ test "harness_config names Claude Code settings" {
     assert\equal(claude_config_path(), ".claude/settings.json", "workspace-relative host config path");
     final cfg = claude_config();
     assert\equal("{cfg["path"]}", ".claude/settings.json", "config map carries the same path");
+}
+
+test "harness_config makes every Bash tool command quiet" {
+    final defaults = claude_config()["defaults"] as {str: any};
+    final env = defaults["env"] as {str: str};
+    assert\equal(env.len(), 1, "one variable, magus's own");
+    assert\equal(env["MAGUS_LOG_SILENT"], "true", "the settings env object Claude Code sets on the session");
 }
 
 test "harness_skills installs both forms under .claude/skills" {

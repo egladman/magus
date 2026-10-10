@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/libs/conventions/asciistrings"
+	"github.com/egladman/magus/libs/conventions/diagmsg"
+	"github.com/egladman/magus/libs/conventions/errmsg"
 	"github.com/egladman/magus/libs/conventions/fieldwise"
 	"github.com/egladman/magus/libs/conventions/filenames"
 	"github.com/egladman/magus/libs/conventions/hostagnostic"
@@ -26,6 +28,8 @@ import (
 
 func init() {
 	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
+	register.Plugin("diagmsg", plugin("diagmsg", diagmsg.New))
+	register.Plugin("errmsg", plugin("errmsg", errmsg.New))
 	register.Plugin("fieldwise", plugin("fieldwise", fieldwise.New))
 	register.Plugin("filenames", plugin("filenames", filenames.New))
 	register.Plugin("hostagnostic", plugin("hostagnostic", hostagnostic.New))

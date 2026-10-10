@@ -138,8 +138,10 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	execHere(t, ctx, held.ID)
 
 	gate := hint.NewGate(cacheDir, "orchestrator")
-	note := adviseSharedCheckoutSpawn(ctx, gate, at)
+	full := adviseSharedCheckoutSpawn(ctx, gate, at)
+	note := full.Say
 	require.NotEmpty(t, note)
+	assert.NotEmpty(t, full.Why, "the first firing carries the rationale for the stored advice")
 	assert.Contains(t, note, "wave/holder")
 	assert.Contains(t, note, "internal/job")
 	assert.Contains(t, note, "types/job.go")
@@ -147,7 +149,7 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	assert.Contains(t, note, "worktree")
 
 	t.Run("it fires once per session", func(t *testing.T) {
-		again := adviseSharedCheckoutSpawn(ctx, gate, at)
+		again := adviseSharedCheckoutSpawn(ctx, gate, at).Say
 		assert.NotEqual(t, note, again, "the full text is spent once; a brief line is what repeats")
 	})
 }
