@@ -272,6 +272,21 @@ func RefuseUngraded(row types.Job) error {
 		row.ID, strings.Join(row.WritePaths, ", "), hint.JobWait.With(row.ID), hint.JobFork.With("--schema"))
 }
 
+// RefuseUnscoped refuses a forked job that is neither read-only nor handed a write path.
+// The guard scopes nothing by an empty write set, so its holder could write anywhere, and
+// `job wait` refuses a result that changed nothing on a row that is not read-only: a scout
+// forked this way can only end no_return.
+func RefuseUnscoped(row types.Job) error {
+	if row.ReadOnly || len(row.WritePaths) > 0 {
+		return nil
+	}
+	return fmt.Errorf("job: %s names no write paths and is not read-only, so nothing bounds what its holder writes."+
+		" A job that only reads is \"read_only\" (--read-only); a job that writes names its files with --write-paths."+
+		` A read-only job passes only with a script check, {"check": {"script": "<probe>.buzz"}}, whose result cites`+
+		" the ref `%s` prints; without one its holder ends it with `%s`",
+		row.ID, hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID))
+}
+
 // RefuseForkLimits refuses a fork that would put the job deeper below its root, or leave
 // its root's tree holding more live jobs, than the workspace's jobs section allows. rows is
 // the plan before the fork; a zero limit is unlimited.

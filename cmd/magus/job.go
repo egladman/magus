@@ -879,7 +879,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
 			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobWait.String()+"` grades them. `--schema` prints the record. A job that")
-			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal; a read-only one is exempt.")
+			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal, and one naming no write paths must")
+			fmt.Fprintln(os.Stderr, "be --read-only. A read-only job passes only by a script check, `\"check\":")
+			fmt.Fprintln(os.Stderr, "{\"script\": \"<probe>.buzz\"}` in a --stdin record, whose result cites the ref")
+			fmt.Fprintln(os.Stderr, "`"+hint.Buzz.With("--record", "<probe>.buzz")+"` prints; without one its holder ends it with")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`, recorded "+string(types.StateNoReturn)+".")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
@@ -935,6 +939,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	var probe types.Job
 	row.Apply(&probe)
 	probe.ID = row.ID
+	if err := job.RefuseUnscoped(probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	if err := job.RefuseUngraded(probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
