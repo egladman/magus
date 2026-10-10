@@ -824,7 +824,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 			rc.onError(err)
 		}
 		rc.fireResults(rc.step, &result, err)
-		return result, err
+		return result, ReportedError{Err: err}
 	}
 
 	if runErr != nil {
@@ -1149,6 +1149,13 @@ func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error
 	)
 	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
 }
+
+// ReportedError is a step failure the cache already logged as a cache.error record, so a
+// caller printing errors at the top of a command does not print it a second time.
+type ReportedError struct{ Err error }
+
+func (e ReportedError) Error() string { return e.Err.Error() }
+func (e ReportedError) Unwrap() error { return e.Err }
 
 // withWhy returns attrs as log arguments, followed by err's rationale as [attr.Why] when
 // err carries one.
