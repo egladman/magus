@@ -695,6 +695,22 @@ func TestWaitForUpstreamNamesTheWriterWithoutVouchingForIt(t *testing.T) {
 	assert.LessOrEqual(t, said, 6, "the log must back off while the wait keeps its cadence")
 }
 
+func TestWaitForUpstreamIsSilentBeforeTheFirstNotice(t *testing.T) {
+	withWaitTimings(t, 20*time.Millisecond, time.Hour)
+	logs := captureLogs(t)
+
+	upstream := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- waitForUpstream(context.Background(), upstream, ref(".", "coverage-badge"), ref(".", "generate"))
+	}()
+	time.Sleep(80 * time.Millisecond)
+	close(upstream)
+	require.NoError(t, <-done)
+
+	assert.Empty(t, logs.lines(), "a wait under the first notice has nothing to report")
+}
+
 func TestWaitForUpstreamEndsOnCancel(t *testing.T) {
 	withShortHeartbeat(t, time.Hour)
 	ctx, cancel := context.WithCancel(context.Background())

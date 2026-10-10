@@ -26,12 +26,17 @@ type keyedLockEntry struct {
 
 func newKeyedLock() *keyedLock { return &keyedLock{} }
 
-// lockWaitHeartbeat is how often a queued acquirer says it is still queued. It matches
-// the machine gate's cadence for the same reason: a wait with nothing on screen is
-// indistinguishable from a hang, to a reader and to the stall watchdog alike.
+// lockWaitHeartbeat is how often a queued acquirer beats the stall watchdog. It matches
+// the machine gate's cadence for the same reason: a wait the watchdog cannot see is
+// indistinguishable from a hang.
 //
 // A var, not a const, for the reason stated above about lock.go's wait timings.
 var lockWaitHeartbeat = 15 * time.Second
+
+// waitFirstNotice is how long a lock or upstream wait stays silent before it tells the
+// reader; the notice then repeats at each doubling of the elapsed time. Shorter waits are
+// routine contention between steps, and the reader can do nothing about them.
+var waitFirstNotice = time.Minute
 
 // acquireNamed takes the lock for key on waiter's behalf, recording waiter as the holder
 // so the next caller can name what it is waiting for. Returns an unlock func (call
@@ -94,18 +99,14 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 	default:
 	}
 
-	// Past here this caller is queued behind somebody. Report it once, by name.
-	holder := k.currentHolder(key)
 	if onBlock != nil {
-		done := onBlock(holder)
+		done := onBlock(k.currentHolder(key))
 		defer done()
 	}
-	slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for a cache lock held by %s",
-		displayLockParty(waiter), displayLockParty(holder)))
 	beat := time.NewTicker(lockWaitHeartbeat)
 	defer beat.Stop()
 	started := time.Now()
-	next := lockWaitHeartbeat
+	next := waitFirstNotice
 	for {
 		select {
 		case e.sem <- struct{}{}:
@@ -117,7 +118,7 @@ func (k *keyedLock) acquireNamed(ctx context.Context, key, waiter string, onBloc
 			ProgressFromContext(ctx).Beat()
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is still waiting for a cache lock held by %s (%s so far)",
+				slog.InfoContext(ctx, fmt.Sprintf("magus: %s is waiting for a cache lock held by %s (%s so far)",
 					displayLockParty(waiter), displayLockParty(k.currentHolder(key)), elapsed.Round(time.Second)))
 			}
 		case <-ctx.Done():

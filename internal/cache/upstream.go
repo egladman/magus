@@ -88,8 +88,8 @@ func (b *upstreamRuns) waitForUpstreams(ctx context.Context, s Step) error {
 	return nil
 }
 
-// waitForUpstream blocks on done, logging who waits on whom at the first beat and then
-// at each doubling of the elapsed time.
+// waitForUpstream blocks on done, logging who waits on whom once the wait reaches
+// waitFirstNotice and then at each doubling of the elapsed time.
 //
 // Unlike the keyed lock and the machine gate it does not beat the invocation heartbeat:
 // the upstream is a step of this run and beats for itself, and beating here would keep
@@ -98,7 +98,7 @@ func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstrea
 	beat := time.NewTicker(upstreamWaitHeartbeat)
 	defer beat.Stop()
 	started := time.Now()
-	next := upstreamWaitHeartbeat
+	next := waitFirstNotice
 	for {
 		select {
 		case <-done:
