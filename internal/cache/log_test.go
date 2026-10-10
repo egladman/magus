@@ -229,6 +229,46 @@ func TestPrettyHandlerGenericMessage(t *testing.T) {
 	assert.NotContains(t, out, "level=", "generic pretty output must not carry a level= field")
 }
 
+// A notice reads as words addressed to a person: its label, never a level glyph, and a
+// next command in the layout a result's breadcrumbs use.
+func TestPrettyHandlerNotice(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		level slog.Level
+		attrs []slog.Attr
+		want  string
+	}{
+		{"label", slog.LevelInfo, []slog.Attr{attr.Hint()}, "hint: pass --force\n"},
+		{"component when unlabeled", slog.LevelWarn, []slog.Attr{attr.Notice(""), attr.Component("magus")}, "magus: pass --force\n"},
+		{"bare", slog.LevelInfo, []slog.Attr{attr.Notice("")}, "pass --force\n"},
+		{
+			"why and next", slog.LevelInfo,
+			[]slog.Attr{attr.Notice("console"), attr.Why("server is v0.4"), attr.Next("magus server restart")},
+			"console: pass --force\n  server is v0.4\nnext:\n  magus server restart\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			rec := slog.NewRecord(time.Now(), tc.level, "pass --force", 0)
+			rec.AddAttrs(tc.attrs...)
+			require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+}
+
+func TestPrettyHandlerNextUnderALogRecord(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "symbol index not current", 0)
+	rec.AddAttrs(attr.Component("magus"), attr.Next("magus graph build"))
+	require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+	assert.Equal(t, "[warn] magus: symbol index not current\nnext:\n  magus graph build\n", buf.String())
+}
+
 // TestPrettyHandlerWithAttrsKeepsAttrsAndState pins that a logger derived with
 // With renders its attrs, component as the leading tag, through the same handler
 // state as the original: a derived handler that dropped them would print the bare

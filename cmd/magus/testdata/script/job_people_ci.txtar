@@ -85,9 +85,7 @@ JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
 release/pricing  -       declared  -      1      alone  magus run test .
 release/tax      -       declared  -      1      alone  magus run test .
 
-in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- fail.out --
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes-- fail.out --
 integration: release/pricing fails in ~/src/shop; its state is unchanged
 release/pricing: 0 of 1 goal(s) met
   [unmet] check

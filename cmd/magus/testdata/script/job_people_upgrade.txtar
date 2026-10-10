@@ -96,12 +96,9 @@ verified upgrade/api, recorded pass
 its holder reports it ran magus run test api
 goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
-  api/deps.txt:1-1
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- ls-done.out --
+  api/deps.txt:1-1-- ls-done.out --
 JOB          HOLDER  STATE  MODEL  PATHS  PROOF  CHECK
 upgrade/api  ana     pass   -      1      alone  magus run test api
 upgrade/web  ben     pass   -      1      alone  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder

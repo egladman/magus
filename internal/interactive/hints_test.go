@@ -2,11 +2,31 @@ package interactive
 
 import (
 	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestHintLogsAHintRecordOnce(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	msg := "pass --force to replace it: " + t.Name()
+	Hint(t.Context(), msg, attr.Component("spell"))
+	Hint(t.Context(), msg)
+	assert.Equal(t, "level=INFO msg=\""+msg+"\" component=spell notice=hint\n", buf.String())
+}
 
 func TestEmit_DefaultOn(t *testing.T) {
 	var buf bytes.Buffer

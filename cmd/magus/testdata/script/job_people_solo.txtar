@@ -22,6 +22,7 @@ exec git commit -q -m 'shop before the refactor'
 
 exec magus job fork refactor/pricing --criteria 'totals are computed in cents' --write-paths pricing/total.sh --check 'test .'
 cmp stdout $WORK/fork.out
+stderr '^console: nothing is serving it; `magus server start` to watch this job'
 exec magus job fork refactor/tax --criteria 'tax rounds half up' --write-paths checkout/tax.sh --check 'test .'
 exec git worktree add -q ../shop-pricing
 exec git worktree add -q ../shop-tax
@@ -95,16 +96,12 @@ total() { echo $(( $1 + $2 )); }
  "validation": {"command": "magus run test .", "output_ref": "out<hex>"},
  "unresolved_risks": []}
 -- fork.out --
-forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- ls-declared.out --
+forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`-- ls-declared.out --
 JOB               HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
 refactor/pricing  -       declared  -      1      alone  magus run test .
 refactor/tax      -       declared  -      1      alone  magus run test .
 
-in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- exec.out --
+in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes-- exec.out --
 recorded job refactor/pricing's base as a1d513296908525d76f16e0f80c672c5ec69acbb, which is the checkpoint it was handed. Nothing to reconcile; carry on.
 took refactor/pricing in ~/src/shop-pricing; read the terms with `magus describe job refactor/pricing`
 -- describe.out --
@@ -127,9 +124,7 @@ the only check you run
 magus run test .
 refactor/pricing: 0 of 1 goal(s) met
   [unmet] check
-      carries no output_ref, so there is no run to reopen
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- exit.out --
+      carries no output_ref, so there is no run to reopen-- exit.out --
 exited refactor/pricing, recorded exited, with its result filed. Whoever forked it verifies with `magus job wait refactor/pricing`
 -- abandon.out --
 abandoned refactor/tax, recorded no_return
@@ -138,12 +133,9 @@ verified refactor/pricing, recorded pass
 its holder reports it ran magus run test .
 goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
-  pricing/total.sh:1-1
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
--- ls-done.out --
+  pricing/total.sh:1-1-- ls-done.out --
 JOB               HOLDER        STATE      MODEL  PATHS  PROOF  CHECK
 refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
 refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
-console: nothing is serving it; `magus server start` to watch this job without interrupting its holder
