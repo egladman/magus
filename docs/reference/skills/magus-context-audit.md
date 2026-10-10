@@ -3,7 +3,7 @@ title: magus-context-audit
 generated_from: internal/agent/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
-skill_full_bytes: 5754
+skill_full_bytes: 5943
 skill_short_bytes: 4099
 ---
 
@@ -28,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
 | `skill-content` | `cb4c4abc5ca4` |
 | `skill-variant` | `full` |
@@ -170,6 +170,14 @@ which file outranks which, or which was written for a version of the tools that
 no longer exists. A contradiction between any two is not a documentation nit: the
 model cannot resolve it from inside, so it picks one arbitrarily, alternates
 across turns, or spends reasoning budget arbitrating instead of working.
+
+## Contents
+
+- Enumerate before reading
+- Check claims against the tool, not against the other documents
+- Rank what you find
+- Do not report these
+- Recommend, then verify the fix landed
 
 ## Enumerate before reading
 

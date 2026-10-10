@@ -12,6 +12,9 @@ type HarnessPlan struct {
 	// <id> -o json` and pipes it into `magus buzz`, which merges each file with merge\json.
 	Merge   string `json:"merge,omitempty"`
 	MCPHint string `json:"mcp_hint,omitempty"`
+	// AgentHints name the person-owned setting that picks a shipped agent's model, one per
+	// distinct setting, when the harness spell left the model to the host's default.
+	AgentHints []string `json:"agent_hints,omitempty"`
 	// Wired is every entry group the descriptor manages, as the host file reads once it is
 	// current, whether or not it already does. A current harness carries no Files, and this is
 	// where a reader finds what the host runs (each hook's command) without parsing the host file.

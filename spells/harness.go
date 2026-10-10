@@ -38,4 +38,13 @@ const (
 	// inside a JSON document. It is how a guard verdict of ask reaches the person on a
 	// host whose hooks cannot prompt.
 	HarnessPromptsContract = "harness_prompts"
+
+	// HarnessAgentsContract renders the named subagents magus ships in this host's format.
+	// Optional: a host without a subagent file format omits it and receives none.
+	//
+	// magus invokes it with Params {"agents": [...]}, each agent a map of name, description,
+	// instructions, read_only and class. The spell returns [{path, content}]: whole
+	// workspace-relative files the descriptor owns. How a class maps to a model is the
+	// spell's to decide, since only the host knows its own model names.
+	HarnessAgentsContract = "harness_agents"
 )

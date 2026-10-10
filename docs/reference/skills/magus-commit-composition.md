@@ -3,7 +3,7 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4190
+skill_full_bytes: 4402
 skill_short_bytes: 3394
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `73042740fbed` |
+| `skill-content` | `bd8aea338bdd` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -179,6 +179,15 @@ magus does not rewrite history for you, the same way it reports what a
 change affects without editing it. It shows the seams and proves afterwards that
 nothing was lost; your VCS performs the edit.
 
+## Contents
+
+- Two constraints that decide most groupings
+- Ask the workspace where the seams are
+- Where this stops
+- Before you start, and after you finish
+- What does not belong in a commit at all
+- See also
+
 ## Two constraints that decide most groupings
 
 **Only unpushed work is eligible.** Published commits are fixed. Establish what is
@@ -212,8 +221,8 @@ Three signals, strongest first:
 - **Blast radius.** Groups that reach disjoint project sets are separable; groups
   that reach the same set usually want one commit.
 - **Symbol coupling.** A rename's sites belong together, however many directories
-  they span. If refs reports a project not-indexed, run `magus graph
-  build` first: `unknown, not absent` is not an empty result.
+  they span. If refs reports a project not-indexed, run
+  `magus graph build` first: `unknown, not absent` is not an empty result.
 
 ## Where this stops
 

@@ -90,6 +90,64 @@ export fun harness_prompts(target: Target, cb: fun(any)) > [any] {
     return opencode_prompts();
 }
 
+// opencode_yaml_quote renders text as a YAML double-quoted scalar, so a colon, a quote or a
+// newline in a description cannot change what the frontmatter means.
+fun opencode_yaml_quote(text: str) > str {
+    final escaped = text.replace("\\", with: "\\\\").replace("\"", with: "\\\"").replace("\n", with: "\\n").replace("\r", with: "\\r").replace("\t", with: "\\t");
+    return "\"" + escaped + "\"";
+}
+
+// opencode_agent renders one shipped agent as an OpenCode subagent file. It sets no model,
+// so the agent inherits the one the invoking session uses, and OpenCode names its agents
+// by file name rather than a frontmatter field.
+fun opencode_agent(agent: {str: any}) > {str: any} {
+    final content = "---\ndescription: " + opencode_yaml_quote("{agent["description"]}") + "\nmode: subagent\n---\n\n" + "{agent["instructions"]}".trim() + "\n";
+    return {
+        "path": ".opencode/agents/{agent["name"]}.md",
+        "content": content,
+    };
+}
+
+fun opencode_agents(agents: [any]) > [any] {
+    final files: mut [any] = mut [];
+    foreach (agent in agents) {
+        files.append(opencode_agent(agent as {str: any}));
+    }
+    return files;
+}
+
+// harness_agents receives the shipped agents as req["agents"]. A call with none renders none.
+export fun harness_agents(target: Target, cb: fun(any)) > [any] {
+    final req = {<str: any>};
+    cb(req);
+    final agents = req["agents"];
+    if (agents == null) { return []; }
+    return opencode_agents(agents as [any]);
+}
+
+test "harness_agents renders a subagent with no model" {
+    final file = opencode_agent({
+        "name": "magus-scout",
+        "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
+        "instructions": "First line.\n\nSecond line.\n",
+        "read_only": true,
+        "class": "economy",
+    });
+    assert\equal("{file["path"]}", ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
+    assert\equal(
+        "{file["content"]}",
+        "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\n---\n\nFirst line.\n\nSecond line.\n",
+        "frontmatter then the instructions",
+    );
+    assert\isTrue("{file["content"]}".indexOf("model") == null, "the invoking session's model applies");
+}
+
+test "harness_agents renders nothing when the call carries no agents" {
+    final noTarget = null;
+    final cb = fun(_: any) > void {};
+    assert\equal(harness_agents(noTarget, cb).len(), 0, "no agents, no files");
+}
+
 test "harness_prompts asks before every backend's bare push and push with arguments" {
     final prompts = opencode_prompts();
     assert\equal(prompts.len(), 8, "a bare and an argument key per backend");

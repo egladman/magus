@@ -1228,6 +1228,7 @@ export object HarnessPlan {
     files: {str: HarnessFile} = {},
     merge: str = "",
     mcpHint: str = "",
+    agentHints: [str] = [],
     wired: [HarnessWired] = [],
 }
 
