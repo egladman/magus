@@ -29,8 +29,8 @@
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
 //   worker-builds-magus (deny): a caller holding a worker lease compiling magus (`go run`,
 //     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
-//     project), the bootstrap included. The orchestrator builds ./magus once per base commit and
-//     hack/dev/bootstrap-worktree.buzz places it; the orchestrator and a person build freely.
+//     project), the bootstrap included. The main session builds ./magus once per base commit and
+//     hack/dev/bootstrap-worktree.buzz places it; the main session and a person build freely.
 //   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
 //     line that names the command only to forbid it ("never ...") is not graded.
 //   worker-bootstrap (deny): the bootstrap run by any caller but the main session, which

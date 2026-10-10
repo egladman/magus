@@ -516,10 +516,10 @@ time. The next graph query folds the symbols in, every index of a project unione
 
 **The daemon keeps it fresh for you.** While the daemon runs, background auto-indexing
 re-runs each symbol-capable project's indexer ops when its sources change, so symbols stay
-current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
-into one run (a quiet window), a project re-indexes at most once per interval, a run
-starts only when nothing else is running, and it cancels itself the moment your own work
-needs a slot. Each run goes through the normal path, so it shows up as an ordinary
+current with no manual step. A burst of edits coalesces into one run (a quiet window), a
+project re-indexes at most once per interval, and a run queues on the pool like any other
+work. At start it re-indexes every index that went stale while no daemon ran, and a run an
+edit raced is retried. Each run goes through the normal path, so it shows up as an ordinary
 journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background

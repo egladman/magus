@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/handler"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -680,8 +681,8 @@ func (h *ReviewHandler) mintReceipt(ctx context.Context, path string) {
 		return
 	}
 	if err := review.Record(h.CacheDir, []review.Receipt{{Path: path, Digest: digest, At: time.Now()}}); err != nil {
-		h.Log.DebugContext(ctx, "diff session: could not record a read receipt",
-			slog.String("path", path), slog.String("error", err.Error()))
+		h.Log.With(attr.Component("diff-session")).DebugContext(ctx, "could not record a read receipt",
+			slog.String("path", path), attr.Error(err))
 	}
 }
 
