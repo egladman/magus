@@ -72,7 +72,7 @@ The declarations the change against base (defaults to vcs\base) lands in: one {f
 
 Line counts for the change the checked-out revision carries past its merge base with base (defaults to vcs\base): one {path, added, deleted, binary} per file, ordered by path, with repository-relative forward-slash paths; dir reads the repository holding that directory as vcs\changedFiles does. The working copy is not read, so uncommitted edits are not counted (on jj the checked-out revision is @, which is the working copy). Renames are not detected: a rename is a delete of the old path plus an add of the new one. A binary file reports binary true with zero counts. It never fetches, so a base the repository does not hold, or one sharing no history with the revision, raises. Empty when no VCS is resolved or the revision changed nothing; raises when the backend cannot count lines (all four built-in backends can), since an empty list reads as a change that touched nothing.
 
-**Signature:** `vcs\diffStat([base], [dir]) -> [FileStat]` - [source](https://github.com/egladman/magus/blob/main/std/vcs_diffstat.go#L14)
+**Signature:** `vcs\diffStat([base], [dir]) -> [FileStat]` - [source](https://github.com/egladman/magus/blob/main/std/vcs_diff_stat.go#L14)
 
 | Parameter | Type     | Optional | Description |
 | --------- | -------- | -------- | ----------- |

@@ -348,7 +348,7 @@ import (
 // magus-upstream-source is new: the last-resort read of magus's code at the binary's
 // commit, which `magus version -o json` now reports in full.
 // 116: economy-first spawns, the magus-scout agent, reference.md files and contents lists.
-// 117: skill prose drops the selling and filler words the prose judge now refuses.
+// 117: skill text drops the selling and filler words proofread now refuses.
 const SkillVersion = 117
 
 const skillLicense = "GPL-3.0-or-later"

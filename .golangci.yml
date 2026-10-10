@@ -199,10 +199,10 @@ linters:
           module: github.com/egladman/magus
           # Generated output, and the packages that embed documentation checked
           # elsewhere. Each must name a directory holding Go files; the go tool
-          # never builds dot directories or testdata, so they need no entry. The
-          # prose judge is skipped too: its attribution rule names the tools whose
+          # never builds dot directories or testdata, so they need no entry.
+          # proofread is skipped too: its attribution rule names the tools whose
           # credit it refuses, which is this repository's policy, not magus naming a host.
-          skip-dirs: [gen, docs, schema, prose]
+          skip-dirs: [gen, docs, schema, proofread]
           hosts: [claude, opencode, codex, aider, windsurf]
           # Cursor is a terminal position and a pagination token far more often
           # than the host, so only the shapes that mean the host are matched: the

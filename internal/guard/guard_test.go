@@ -450,9 +450,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	covered["pull-request-text"] = true
 	t.Run("pull-request-text", func(t *testing.T) {
-		// The rule runs the prose judge that `magus run judge-build libs/conventions` links into
+		// The rule runs proofread, which `magus run proofread-build libs/conventions` links into
 		// the workspace's libs/conventions/gen, so this one holds that module, built output
-		// and all; the root test target needs judge-build. It is not the checkout itself, whose
+		// and all; the root test target needs proofread-build. It is not the checkout itself, whose
 		// branch diff would add advice about the areas it touches to every verdict.
 		conventions := filepath.Join(root, "libs", "conventions")
 		ws := t.TempDir()
@@ -483,26 +483,26 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		unbuilt := t.TempDir()
 		mod := filepath.Join(unbuilt, "libs", "conventions")
 		require.NoError(t, os.MkdirAll(mod, 0o755))
-		for _, name := range []string{"go.mod", "go.sum", "prose", "cmd"} {
+		for _, name := range []string{"go.mod", "go.sum", "proofread", "cmd"} {
 			require.NoError(t, os.Symlink(filepath.Join(conventions, name), filepath.Join(mod, name)))
 		}
 		v = shellIn(t, "trim-key", unbuilt)(describe)
 		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Contains(t, v.Reason, "libs/conventions/gen/judge-docs is not built; run `magus run judge-build libs/conventions`")
+		assert.Contains(t, v.Reason, "libs/conventions/gen/proofread is not built; run `magus run proofread-build libs/conventions`")
 
 		// The built judge beside a source it was not linked from is as stale as none.
 		require.NoError(t, os.Symlink(filepath.Join(conventions, "gen"), filepath.Join(mod, "gen")))
-		require.NoError(t, os.Remove(filepath.Join(mod, "prose")))
-		require.NoError(t, os.Mkdir(filepath.Join(mod, "prose"), 0o755))
-		sources, err := filepath.Glob(filepath.Join(conventions, "prose", "*.go"))
+		require.NoError(t, os.Remove(filepath.Join(mod, "proofread")))
+		require.NoError(t, os.Mkdir(filepath.Join(mod, "proofread"), 0o755))
+		sources, err := filepath.Glob(filepath.Join(conventions, "proofread", "*.go"))
 		require.NoError(t, err)
 		for _, src := range sources {
-			require.NoError(t, os.Symlink(src, filepath.Join(mod, "prose", filepath.Base(src))))
+			require.NoError(t, os.Symlink(src, filepath.Join(mod, "proofread", filepath.Base(src))))
 		}
-		require.NoError(t, os.WriteFile(filepath.Join(mod, "prose", "zz.go"), []byte("package prose\n"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(mod, "proofread", "zz.go"), []byte("package proofread\n"), 0o644))
 		v = shellIn(t, "trim-key", unbuilt)(describe)
 		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run judge-build libs/conventions`")
+		assert.Contains(t, v.Reason, "was linked from other sources than the tree holds; run `magus run proofread-build libs/conventions`")
 	})
 
 	covered["code-comments"] = true
