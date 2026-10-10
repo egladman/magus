@@ -171,8 +171,8 @@ func Rules() []Rule {
 	return out
 }
 
-// RulesFor returns the rules that judge kind, in [Rules] order.
-func RulesFor(kind Kind) []Rule {
+// KindRules returns the rules that judge kind, in [Rules] order.
+func KindRules(kind Kind) []Rule {
 	var out []Rule
 
 	for _, c := range checks {

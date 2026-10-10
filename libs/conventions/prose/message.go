@@ -27,8 +27,8 @@ func JudgeMessage(text string, maxRunes int) []Finding {
 	return run(input{kind: KindMessage, text: text, lines: strings.Split(text, "\n"), maxRunes: maxRunes})
 }
 
-// lineOf is the 1-based line of text holding offset.
-func lineOf(text string, offset int) int {
+// lineAt is the 1-based line of text holding offset.
+func lineAt(text string, offset int) int {
 	return 1 + strings.Count(text[:offset], "\n")
 }
 
@@ -63,7 +63,7 @@ func messageRationale(in input) []Finding {
 		Message: fmt.Sprintf("Give a message one reason (this one joins %d): keep the verdict and move the "+
 			"rest behind a ref.", len(joins)),
 		Match: strings.TrimSpace(in.text[at[0]:at[1]]),
-		Line:  lineOf(in.text, at[0]),
+		Line:  lineAt(in.text, at[0]),
 	}}
 }
 
@@ -90,7 +90,7 @@ func messageCommands(in input) []Finding {
 		Message: fmt.Sprintf("Name one next command (this message names %d): keep the one to run first.",
 			len(commands)),
 		Match: in.text[at[0]:at[1]],
-		Line:  lineOf(in.text, at[0]),
+		Line:  lineAt(in.text, at[0]),
 	}}
 }
 
@@ -110,7 +110,7 @@ func messageTag(in input) []Finding {
 		out = append(out, Finding{
 			Message: fmt.Sprintf("Drop the leading '%s' tag: open with the verdict.", m),
 			Match:   m,
-			Line:    lineOf(in.text, at[0]),
+			Line:    lineAt(in.text, at[0]),
 		})
 	}
 
@@ -120,7 +120,7 @@ func messageTag(in input) []Finding {
 		out = append(out, Finding{
 			Message: fmt.Sprintf("Drop the '%s' marker: a message is plain text for whoever reads it.", m),
 			Match:   m,
-			Line:    lineOf(in.text, at[0]),
+			Line:    lineAt(in.text, at[0]),
 		})
 	}
 

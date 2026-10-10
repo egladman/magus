@@ -112,8 +112,8 @@ func TestMessageTagReportsAComponentTagOrMarker(t *testing.T) {
 
 func TestMessageRulesJudgeOnlyMessages(t *testing.T) {
 	want := []Rule{RuleMessageLength, RuleMessageRationale, RuleMessageCommands, RuleMessageTag}
-	if got := RulesFor(KindMessage); !reflect.DeepEqual(got, want) {
-		t.Errorf("RulesFor(KindMessage) = %q, want %q", got, want)
+	if got := KindRules(KindMessage); !reflect.DeepEqual(got, want) {
+		t.Errorf("KindRules(KindMessage) = %q, want %q", got, want)
 	}
 
 	text := "server: refused because x, so y"

@@ -128,7 +128,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if slices.Contains(opts.Prefixes, "") {
 		return nil, errors.New("diagmsg: an empty prefix would mark every string")
 	}
-	messageRules := prose.RulesFor(prose.KindMessage)
+	messageRules := prose.KindRules(prose.KindMessage)
 	for _, r := range opts.Rules {
 		if !slices.Contains(messageRules, r) {
 			return nil, fmt.Errorf("diagmsg: rule %q is not one of %q", r, messageRules)
