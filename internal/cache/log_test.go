@@ -862,6 +862,47 @@ func TestBlockedCascadeReportsTheRootOnce(t *testing.T) {
 		"one failure block, one blocked-by line, one summary")
 }
 
+// One cause shared by many independent steps (every formatter step tripping MGS4007)
+// prints in full once; the rest are one footer line, and the summary still counts all.
+func TestRepeatedCodeFoldsIntoOneFooterLine(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	mutation := func(project, target string) string {
+		return "[MGS4007] " + project + ":" + target + " modified its declared sources a.go; declare them with ctx.modifiesExistingFiles(...)\n" +
+			"  see: https://example/MGS4007/"
+	}
+	steps := [][2]string{
+		{".", "format"}, {"docs", "render"}, {"web", "lint"}, {"api", "fmt"},
+		{"cli", "fmt"}, {"sdk", "fmt"}, {"ops", "fmt"}, {"web", "fmt"},
+	}
+	for _, s := range steps {
+		failEvent(t, h, s[0], s[1], mutation(s[0], s[1]))
+	}
+	failEvent(t, h, "api", "build", "go exited 1")
+	summaryEvent(t, h, len(steps)+1)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "[MGS4007]"), "the code's text prints once")
+	assert.Equal(t, 1, strings.Count(out, "see: https://example/MGS4007/"))
+	assert.Contains(t, out, "MGS4007 also hit 7 more steps: docs:render, web:lint, api:fmt, cli:fmt, sdk:fmt, ...\n")
+	assert.Contains(t, out, "go exited 1", "a failure with no code is never folded")
+	assert.Contains(t, out, "9 failed", "folding changes what prints, not what is counted")
+}
+
+func TestRepeatedCodeOnceNamesTheOneStep(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "format", "[MGS4007] .:format modified its declared sources a.go")
+	failEvent(t, h, "docs", "render", "[MGS4007] docs:render modified its declared sources b.md")
+	summaryEvent(t, h, 2)
+
+	assert.Contains(t, buf.String(), "MGS4007 also hit 1 more step: docs:render\n")
+}
+
 // TestBlockedCascadeLeavesTheRootPinned is why suppression has to happen before
 // the failure reaches the ring: the band holds five rows and this cascade is
 // seven failures, so suppressed restatements that still took a slot would evict

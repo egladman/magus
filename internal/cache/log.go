@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -134,6 +135,11 @@ type PrettyHandler struct {
 	// printing every restatement in full, which is what happens today.
 	blockedAt map[causeKey]int
 	blocked   []blockedGroup
+	// repeated groups the steps that failed with a diagnostic code an earlier step
+	// already printed in full, so the code's text and link print once and the rest are
+	// counted in one footer line. repeatedAt indexes it by code; both are per RUN.
+	repeatedAt map[string]int
+	repeated   []codeRepeat
 	// rowFailure maps each band row to the index in the drawn failure list it
 	// shows, or -1 for a row that is not a failure (a project header). Written
 	// by band, read by HitFailure.
@@ -801,6 +807,7 @@ func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
 	h.err = nil
 	colorize := h.WantsColor()
 	h.printBlocked(colorize)
+	h.printRepeated(colorize)
 	h.printf("%s", footer)
 	h.printRefLegend(colorize)
 	if !h.hasPinnedFailures() || !h.lease.Enabled() {
@@ -943,7 +950,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	if target != "" {
 		heading += " " + target
 	}
-	if h.suppressBlocked(heading, project, target, cause) {
+	if h.suppressBlocked(heading, project, target, cause) || h.foldRepeatedCode(heading, project, target, cause) {
 		return
 	}
 	h.ensureLease()
@@ -1071,6 +1078,88 @@ func (h *PrettyHandler) printBlocked(colorize bool) {
 			continue
 		}
 		line := "blocked by " + g.root + ": " + strings.Join(g.blocked, ", ")
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s\n", line)
+	}
+}
+
+// codeRepeat is one diagnostic code and the steps that failed with it after the first.
+type codeRepeat struct {
+	code  string
+	steps []string
+}
+
+// repeatedListed caps how many step names the repeat footer spells out.
+const repeatedListed = 5
+
+// leadingCodePattern matches the "[CODE] " a coded diagnostic's rendering starts with.
+var leadingCodePattern = regexp.MustCompile(`^\[([A-Z]{2,}[0-9]{3,})\] `)
+
+// foldRepeatedCode files this failure under the diagnostic code its cause leads with
+// and says whether an earlier step already printed that code, in which case this one
+// is left to the footer printRepeated writes. Like suppressBlocked it changes what is
+// printed, never what is counted.
+func (h *PrettyHandler) foldRepeatedCode(heading, project, target, cause string) bool {
+	code := leadingCode(cause)
+	if code == "" {
+		return false
+	}
+	i, known := h.repeatedAt[code]
+	if !known {
+		if h.repeatedAt == nil {
+			h.repeatedAt = make(map[string]int)
+		}
+		h.repeatedAt[code] = len(h.repeated)
+		h.repeated = append(h.repeated, codeRepeat{code: code})
+		return false
+	}
+	name := heading
+	if project != "" && target != "" {
+		name = project + ":" + target
+	}
+	h.repeated[i].steps = append(h.repeated[i].steps, name)
+	return true
+}
+
+// leadingCode is the diagnostic code the first line of cause leads with, once its
+// dependency hops are stripped, or "" when it carries none.
+func leadingCode(cause string) string {
+	for _, line := range strings.Split(cause, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		_, msg := splitHopChain(line)
+		if msg == "" {
+			msg = line
+		}
+		if m := leadingCodePattern.FindStringSubmatch(msg); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	return ""
+}
+
+// printRepeated writes one line per diagnostic code that more than one step failed
+// with, naming the steps after the first. A run with no repeats prints nothing.
+func (h *PrettyHandler) printRepeated(colorize bool) {
+	for _, r := range h.repeated {
+		if len(r.steps) == 0 {
+			continue
+		}
+		noun := "steps"
+		if len(r.steps) == 1 {
+			noun = "step"
+		}
+		names := r.steps
+		more := ""
+		if len(names) > repeatedListed {
+			names, more = names[:repeatedListed], ", ..."
+		}
+		line := fmt.Sprintf("%s also hit %d more %s: %s%s", r.code, len(r.steps), noun, strings.Join(names, ", "), more)
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
@@ -1737,6 +1826,8 @@ func (h *PrettyHandler) resetRun() {
 	h.mintedRef = false
 	h.blockedAt = nil
 	h.blocked = nil
+	h.repeatedAt = nil
+	h.repeated = nil
 	// The preview belongs to a failure from the run that just ended. Left set,
 	// a rerun drew rows of the PREVIOUS run's log beside an empty tree: stale
 	// content pinned in a band whose whole promise is that it holds still.
