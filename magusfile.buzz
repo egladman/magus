@@ -2125,6 +2125,8 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // embedded engine, and holds their merged line coverage above a floor. Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
+    // hack/lint/run.buzz's tests run the binary proofread-build links.
+    ctx.needs(conventions\proofread_build);
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
