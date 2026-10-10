@@ -220,9 +220,8 @@ re-forked one tier up, not retried at the same one.{{if .Full}} "Only ever spawn
 weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
 is a starting point and not a ceiling.{{end}}
 
-Model NAMES belong to the host, never to magus. Name the model your host names, or an
-agent definition the user owns. Where the host has a default-subagent setting, point
-it at its economy model, so an unnamed spawn is the cheap one.
+Model NAMES belong to the host, never to magus: name your host's model or an agent
+definition the user owns. Point a default-subagent setting at the economy model.
 
 Map work to provider capabilities without assuming model names:
 
@@ -237,24 +236,20 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy:
+To prove something, brute-force it at economy. Many economy workers finish about as
+fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref{{if .Full}}, so evidence settles the claim and not a worker's reading{{end}}.
 - The principal tier only reconciles the claims where workers disagree.
 
-Many economy workers finish in about the time one principal worker takes, for far
-fewer tokens.
-
 Keep economy jobs short-lived:
 
 - The brief points at evidence (paths, output refs, the row) and carries no transcript.
-- A worker resends its whole context every turn. Some providers raise a tier's price
-  past a prompt size, so a long-lived cheap worker crosses it silently.
-- Where the host's pricing has such a step, the brief names it. The worker reports
-  and stops before its context passes it.{{if .Full}} magus does not count tokens, so
-  only the worker can honor the line, and the root forks a fresh job for the rest.{{end}}
+- A worker resends its whole context every turn, and some providers raise a tier's
+  price past a prompt size. Where the brief names that size, the worker reports and
+  stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.

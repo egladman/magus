@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25957
-skill_short_bytes: 19224
+skill_full_bytes: 25676
+skill_short_bytes: 19058
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `7a885ca8ac03` |
+| `skill-content` | `7cd473a6644b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -213,9 +213,8 @@ that names one.
 When the tier is unclear, start at economy. A job that fails its criteria there is
 re-forked one tier up, not retried at the same one.
 
-Model NAMES belong to the host, never to magus. Name the model your host names, or an
-agent definition the user owns. Where the host has a default-subagent setting, point
-it at its economy model, so an unnamed spawn is the cheap one.
+Model NAMES belong to the host, never to magus: name your host's model or an agent
+definition the user owns. Point a default-subagent setting at the economy model.
 
 Map work to provider capabilities without assuming model names:
 
@@ -230,23 +229,20 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy:
+To prove something, brute-force it at economy. Many economy workers finish about as
+fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref.
 - The principal tier only reconciles the claims where workers disagree.
 
-Many economy workers finish in about the time one principal worker takes, for far
-fewer tokens.
-
 Keep economy jobs short-lived:
 
 - The brief points at evidence (paths, output refs, the row) and carries no transcript.
-- A worker resends its whole context every turn. Some providers raise a tier's price
-  past a prompt size, so a long-lived cheap worker crosses it silently.
-- Where the host's pricing has such a step, the brief names it. The worker reports
-  and stops before its context passes it.
+- A worker resends its whole context every turn, and some providers raise a tier's
+  price past a prompt size. Where the brief names that size, the worker reports and
+  stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.
@@ -698,9 +694,8 @@ re-forked one tier up, not retried at the same one. "Only ever spawn something
 weaker" was tried and withdrawn, because same-strength offload is legitimate, so this
 is a starting point and not a ceiling.
 
-Model NAMES belong to the host, never to magus. Name the model your host names, or an
-agent definition the user owns. Where the host has a default-subagent setting, point
-it at its economy model, so an unnamed spawn is the cheap one.
+Model NAMES belong to the host, never to magus: name your host's model or an agent
+definition the user owns. Point a default-subagent setting at the economy model.
 
 Map work to provider capabilities without assuming model names:
 
@@ -715,24 +710,20 @@ is a separate axis: evidence gathering, scouting, and review get read-only tools
 where the host offers them. Never downgrade the root integration pass or final
 release gate.
 
-To prove something, brute-force it at economy:
+To prove something, brute-force it at economy. Many economy workers finish about as
+fast as one principal worker, for far fewer tokens:
 
 - Fork one read-only job per claim, input, or variant, and run them all at once.
 - Spawn the `magus-scout` agent for each where your harness installed it.
 - Each reports its command and output ref, so evidence settles the claim and not a worker's reading.
 - The principal tier only reconciles the claims where workers disagree.
 
-Many economy workers finish in about the time one principal worker takes, for far
-fewer tokens.
-
 Keep economy jobs short-lived:
 
 - The brief points at evidence (paths, output refs, the row) and carries no transcript.
-- A worker resends its whole context every turn. Some providers raise a tier's price
-  past a prompt size, so a long-lived cheap worker crosses it silently.
-- Where the host's pricing has such a step, the brief names it. The worker reports
-  and stops before its context passes it. magus does not count tokens, so
-  only the worker can honor the line, and the root forks a fresh job for the rest.
+- A worker resends its whole context every turn, and some providers raise a tier's
+  price past a prompt size. Where the brief names that size, the worker reports and
+  stops before passing it.
 
 Nesting is allowed when the host supports it, but it creates no new budget and no
 private ownership map.
