@@ -158,8 +158,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
-			interactive.Hint(ctx, "some projects were not reindexed:")
-			slog.WarnContext(ctx, "", attr.Notice(""), attr.Error(rerr))
+			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
 			refused = reindexRefusals(rerr)
 		}
 	}
@@ -309,8 +308,7 @@ func ingestSessions(ctx context.Context, root string) {
 	results := sessions.RunAdapters(ctx, resolveRootOrEmpty(root), adapters)
 	for _, r := range results {
 		if r.Err != nil {
-			interactive.Hint(ctx, "session adapter "+r.Host+" did not finish:")
-			slog.WarnContext(ctx, "  "+r.Err.Error(), attr.Notice(""))
+			interactive.Hint(ctx, "session adapter "+r.Host+" did not finish", attr.Error(r.Err))
 		}
 		if r.Output != "" {
 			slog.InfoContext(ctx, r.Output, attr.Notice(""))

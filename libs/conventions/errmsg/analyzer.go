@@ -52,10 +52,14 @@ const (
 	// around a variable last assigned from a call into that package, whose
 	// error already names it.
 	RuleStutter Rule = "error-stutter"
+	// RuleNotice reports an error built into the message of a log/slog call
+	// that carries one of [Options.NoticeAttrs]: the error rides as an
+	// attribute, so the display can name its origin once.
+	RuleNotice Rule = "error-notice"
 )
 
 // Rules lists every rule in report order.
-var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap, RuleOrigin, RuleStutter}
+var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap, RuleOrigin, RuleStutter, RuleNotice}
 
 var messages = map[Rule]string{
 	RuleJoin:      `a clause joined by %q: chain context with ": " or use a comma`,
@@ -64,6 +68,7 @@ var messages = map[Rule]string{
 	RuleWrap:      `%w only opens the format as "%w: " or closes it as ": %w"`,
 	RuleOrigin:    `a %q prefix names another package of this module: name the operation, and let the origin name itself`,
 	RuleStutter:   `a %q prefix on an error this package already returned: say what this call was doing`,
+	RuleNotice:    `an error in a notice's message: say what failed, and attach the error as an attribute`,
 }
 
 // Options configures the analyzer returned by [New].
@@ -88,6 +93,11 @@ type Options struct {
 	// as in "run: ". Each must name a package: one that does not exempts
 	// nothing.
 	Operations []string `json:"operations"`
+
+	// NoticeAttrs are the functions, as [types.Func.FullName] spells them,
+	// whose attribute marks a log record as a notice to a person. error-notice
+	// judges only a log/slog call passing one; empty judges none.
+	NoticeAttrs []string `json:"notice-attrs"`
 
 	// Hint is appended to every diagnostic: the repository's own remedy.
 	Hint string `json:"hint"`
@@ -218,6 +228,9 @@ func run(pass *analysis.Pass, opts Options, packages map[string]bool) error {
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.CallExpr:
+				if msg := noticeMessage(pass, n, opts.NoticeAttrs); msg != nil && carriesError(pass, msg) {
+					emit(msg.Pos(), []Finding{{RuleNotice, messages[RuleNotice]}})
+				}
 				switch callee(pass, n) {
 				case "errors.New":
 					report(n.Args[0], false)
@@ -237,6 +250,73 @@ func run(pass *analysis.Pass, opts Options, packages map[string]bool) error {
 		})
 	}
 	return nil
+}
+
+// noticeMessage is the message argument of call when it is a log/slog call
+// passing one of notices, or nil.
+func noticeMessage(pass *analysis.Pass, call *ast.CallExpr, notices []string) ast.Expr {
+	if len(notices) == 0 {
+		return nil
+	}
+	fn, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func)
+	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != "log/slog" {
+		return nil
+	}
+	idx := slogMessageArg(fn)
+	if idx < 0 || idx >= len(call.Args) {
+		return nil
+	}
+	for _, a := range call.Args[idx+1:] {
+		inner, ok := ast.Unparen(a).(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+		if f, ok := typeutil.Callee(pass.TypesInfo, inner).(*types.Func); ok && slices.Contains(notices, f.FullName()) {
+			return call.Args[idx]
+		}
+	}
+	return nil
+}
+
+// slogMessageArg is the index of the message argument of a log/slog logging
+// function or *slog.Logger method, or -1 for anything else.
+func slogMessageArg(fn *types.Func) int {
+	name := fn.Name()
+	switch {
+	case name == "Log" || name == "LogAttrs":
+		return 2
+	case slices.Contains([]string{"DebugContext", "InfoContext", "WarnContext", "ErrorContext"}, name):
+		return 1
+	case slices.Contains([]string{"Debug", "Info", "Warn", "Error"}, name):
+		return 0
+	}
+	return -1
+}
+
+// carriesError reports whether msg calls an error's Error method, or formats
+// an error-typed operand.
+func carriesError(pass *analysis.Pass, msg ast.Expr) bool {
+	errType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	isErr := func(e ast.Expr) bool {
+		t := pass.TypesInfo.TypeOf(e)
+		return t != nil && types.Implements(t, errType)
+	}
+	found := false
+	ast.Inspect(msg, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok || found {
+			return !found
+		}
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Error" && len(call.Args) == 0 && isErr(sel.X) {
+			found = true
+			return false
+		}
+		if fn, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func); ok && fn.Pkg() != nil && fn.Pkg().Path() == "fmt" {
+			found = slices.ContainsFunc(call.Args, isErr)
+		}
+		return !found
+	})
+	return found
 }
 
 // callee is the full name of the function call invokes with at least one

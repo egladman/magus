@@ -164,7 +164,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 		if !cache.LooksLikeRef(ref) {
 			if !trail.ValidRef(ref) {
 				msg := fmt.Sprintf("%q is not an output ref (expected out<hex> for a run, or a stored payload such as grd<hex> or mcp<hex>)", ref)
-				slog.ErrorContext(ctx, types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg).Error(), attr.Notice("magus query output"))
+				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMalformed, "%s", msg)))
 				return errSilent{exitCode: 2}
 			}
 			if qf.Attempts || qf.Identity || qf.Publish || qf.Open || qf.Print {
@@ -355,7 +355,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 				// Not the generic lookup path: its hint suggests --publish, which is
 				// the command that just failed.
 				msg := fmt.Sprintf("no stored output for ref %q to publish; it may have aged out of the cache, or the ref is mistyped", ref)
-				slog.ErrorContext(ctx, types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error(), attr.Notice("magus query output"))
+				slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
 				return errSilent{exitCode: 2}
 			}
 			return fmt.Errorf("magus query output: publish %s: %w", ref, perr)
@@ -443,7 +443,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 	data, err := m.PayloadByRef(ref)
 	if errors.Is(err, fs.ErrNotExist) {
 		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
-		slog.ErrorContext(ctx, types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error(), attr.Notice("magus query output"))
+		slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
 		return errSilent{exitCode: 2}
 	}
 	if err != nil {
@@ -725,7 +725,7 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 	var amb *cache.AmbiguousRefError
 	switch {
 	case errors.As(err, &amb):
-		slog.ErrorContext(ctx, types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error()).Error(), attr.Notice("magus query"))
+		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefAmbiguous, "%s", amb.Error())))
 		return errSilent{exitCode: 2}
 	case errors.Is(err, fs.ErrNotExist):
 		// Name the stores consulted when the lookup knows them: a foreign ref that was
@@ -736,7 +736,7 @@ func reportRefLookupError(ctx context.Context, m *magus.Magus, ref string, err e
 		if errors.As(err, &missing) {
 			msg = missing.Error()
 		}
-		slog.ErrorContext(ctx, types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg).Error(), attr.Notice("magus query"))
+		slog.ErrorContext(ctx, "", attr.Notice("magus query"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
 		printIdentifyRefSuggestion(ctx, m, ref)
 		return errSilent{exitCode: 2}
 	default:

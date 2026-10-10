@@ -74,7 +74,7 @@ type AllowEntry struct {
 // on an allow entry with no reason or no file it matches.
 func New(opts Options) (*analysis.Analyzer, error) {
 	if opts.UsagePattern == "" && len(opts.UsageFields) == 0 {
-		return nil, errors.New("stderrprint: usage-pattern and usage-fields are both empty; no help could print")
+		return nil, errors.New("stderrprint: no usage-pattern or usage-fields, so no help could print")
 	}
 	var usage *regexp.Regexp
 	if opts.UsagePattern != "" {

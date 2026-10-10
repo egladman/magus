@@ -79,6 +79,9 @@ package of the module, read from every package clause under `module`;
 `operations` lists the names that are also commands (`run`). `error-stutter`
 reports a wrap opening with its own package's `"name: "` around a variable last
 assigned from a call into that package, which already named it.
+`error-notice` reports an error built into the message of a log record that
+carries one of `notice-attrs`: the record names who is speaking, the error rides
+as an attribute, and the display names a shared origin once.
 
 ## Not here
 
