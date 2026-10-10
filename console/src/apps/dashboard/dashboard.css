@@ -401,14 +401,15 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-row.console-dashboard-agents__call .console-dashboard-row__cmd { margin-inline-end: auto; }
 /* Out of flow, not a stretched flex item: align-self:stretch with aspect-ratio:1 is circular, since
    stretch takes the height from the row, aspect-ratio turns it into a width, and the row then sizes
-   itself around its tallest item. The width is stated and the height comes from top and bottom. */
+   itself around its tallest item. The glyph is an svg, which keeps its aspect ratio under `auto`
+   whatever top and bottom say, so both sizes are stated. */
 .console-dashboard-agents__notice {
   position: absolute;
-  inset-block: 0;
+  inset-block-start: 0;
   inset-inline-start: 0;
   box-sizing: border-box;
   inline-size: var(--pf-t--global--spacer--xl);
-  block-size: auto;
+  block-size: 100%;
   padding: var(--pf-t--global--spacer--xs);
   border-radius: 0;
   background: var(--pf-t--global--background--color--secondary--default);
@@ -906,7 +907,14 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 }
 .console-dashboard-attention__note { margin: var(--pf-t--global--spacer--sm) 0 0; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
 
-.console-dashboard-activity__note { display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+.console-dashboard-activity__note {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  min-inline-size: 0;
+  gap: var(--pf-t--global--spacer--sm);
+}
 .console-dashboard-activity__open { white-space: nowrap; }
 .console-dashboard-activity__caption {
   margin: 0 0 var(--pf-t--global--spacer--sm);
@@ -1130,8 +1138,13 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
-    grid-auto-rows: minmax(14rem, auto);
+    grid-auto-rows: minmax(7rem, auto);
     grid-template-areas: "verdict" "jobs" "agents" "runs" "now" "rotate" "pool" "cache" "ws" "locks";
+    /* A fixed height shares out its free space and clips every row to the same size, which cut the
+       hero's counts off. Content-sized rows under a ceiling scroll instead. */
+    inset-block-end: auto;
+    block-size: auto;
+    max-block-size: calc(100dvh - var(--bp-alert-h, 0px));
     overflow-y: auto;
     pointer-events: auto;
   }
@@ -1145,6 +1158,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
        bounded height wraps into a second column to the right instead of stacking. */
     flex-wrap: nowrap;
   }
+  /* The phone's vmin is its width, so the verdict takes the larger step to stay a headline. */
+  [data-bigpicture] .console-dashboard-hero__verdict { font-size: var(--pf-t--global--font--size--heading--xl); }
   /* Stacked, the counts get the full width, so equal fractions in place of the wide layout's fixed columns. */
   [data-bigpicture] .console-dashboard-hero__counts { inline-size: 100%; }
   [data-bigpicture] .console-dashboard-hero__metrics {
@@ -1167,17 +1182,6 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > [data-card="jobs"] { grid-area: jobs; }
   [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
   [data-bigpicture] #dash-panels > [data-rotate] { grid-area: rotate; }
-}
-/* The minimum: nine rows of panels, each with a title, body and residual line, need about 60rem. Below
-   it the canvas scrolls with rows tall enough for their content, since a clipped panel that says
-   nothing is worse than a scrollbar. The pointer comes back on so the wheel works. */
-@media (max-height: 60rem) {
-  [data-bigpicture] #dash-panels {
-    grid-template-rows: none;
-    grid-auto-rows: minmax(12rem, auto);
-    overflow-y: auto;
-    pointer-events: auto;
-  }
 }
 /* The split handle, a thin grab strip on the boundary between the left stack and the activity
    column. It shows only in the wide layout, which is the only one with a split, and stays nearly
@@ -1238,13 +1242,22 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   display: flex;
   flex-direction: column;
 }
-/* The hero is a row of verdict and counts, not the column other panels are. */
-[data-bigpicture] #dash-panels > .console-dashboard-hero {
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: space-between;
+/* The hero is a row of verdict and counts, not the column other panels are, until the narrow layout
+   stacks them. */
+@media (min-aspect-ratio: 4 / 5) {
+  [data-bigpicture] #dash-panels > .console-dashboard-hero {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
+/* From a distance the verdict carries the colour of its state, with the icon beside it, and the
+   why-waiting line under the counts is a lean-in read. */
+[data-bigpicture] .console-dashboard-hero[data-state="clear"][data-failing="none"] .console-dashboard-hero__verdicttext {
+  color: var(--console-status-ok-text);
+}
+[data-bigpicture] .console-dashboard-hero__reason { display: none; }
 /* After the display above, and at higher specificity: `#dash-panels [data-view-hide]` and
    `[data-bigpicture] #dash-panels > *` both score (1,1,0), so the generic display: flex would win the
    tie on source order and every board-only tile would stay on screen. */
@@ -1283,8 +1296,10 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   grid-template-columns: repeat(auto-fit, minmax(calc(4.5 * var(--pf-t--global--spacer--xl)), 1fr));
 }
 /* The numerals grow with the type, so the cards do, or a wide digit would clip. */
-[data-bigpicture] .console-dashboard-hero__metrics {
-  grid-template-columns: repeat(3, minmax(calc(4 * var(--pf-t--global--spacer--xl)), auto));
+@media (min-aspect-ratio: 4 / 5) {
+  [data-bigpicture] .console-dashboard-hero__metrics {
+    grid-template-columns: repeat(3, minmax(calc(4 * var(--pf-t--global--spacer--xl)), auto));
+  }
 }
 [data-bigpicture] .console-dashboard-pool__grid { margin-block-end: var(--pf-t--global--spacer--xs); }
 /* The preview fills its slot instead of being capped, or two thirds of the tallest panel would be
@@ -1315,7 +1330,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   inset-inline-end: 0;
   z-index: 41;
   margin: 0;
-  padding: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--md);
   background: var(--console-chrome);
   opacity: 0;
   transition: opacity var(--console-motion-fast) ease;

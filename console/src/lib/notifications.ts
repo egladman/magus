@@ -546,9 +546,12 @@ export function mountNotificationCenter(): NotificationCenter {
   wireMenu(olderMenu, olderBtn);
 
   const clearBtn = document.createElement("button");
-  clearBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__clear";
+  clearBtn.className = "pf-v6-c-button pf-m-control pf-m-small console-shell-notify__clear";
   clearBtn.type = "button";
-  clearBtn.textContent = "Clear all";
+  const clearText = document.createElement("span");
+  clearText.className = "pf-v6-c-button__text";
+  clearText.textContent = "Clear all";
+  clearBtn.append(clearText);
   clearBtn.addEventListener("click", () => {
     const dropped = store.clear();
     if (dropped.length === 0) return;

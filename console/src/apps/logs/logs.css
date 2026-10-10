@@ -240,6 +240,13 @@ main .console-log-help[open] > summary:not([role]) { color: var(--pf-t--global--
   #log-bar-controls .pf-v6-c-toolbar__group { gap: var(--pf-t--global--spacer--xs); }
 }
 @container console-pane (max-width: 34rem) {
+  /* The view switches and the actions share one row, and the range, which only the timeline shows,
+     takes the row after. Icon-only buttons drop to the compact inline padding to fit. */
+  .console-log-toolbar__actions { order: 1; }
+  .console-log-toolbar__range { order: 2; }
+  .console-log-toolbar__actions .pf-v6-c-button {
+    padding-inline: var(--pf-t--global--spacer--action--horizontal--compact);
+  }
   .console-log-toolbar__actions .pf-v6-c-button__text,
   .console-log-toolbar__modes .pf-v6-c-toggle-group__text {
     position: absolute;

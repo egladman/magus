@@ -56,7 +56,11 @@ function externalIcon(): SVGElement {
   return svg;
 }
 
-// openButton builds the "Open in log viewer" secondary button. A real <button> with the same
+// The visible label is short so the tile header fits a phone; the name says where it goes.
+const OPEN_LABEL = "Open logs";
+const OPEN_NAME = "Open logs in the log viewer";
+
+// openButton builds the "Open logs" secondary button. A real <button> with the same
 // component classes and icon-then-text children as the Big Picture button, so the two are the same
 // element rather than an anchor dressed as one.
 function openButton(): HTMLButtonElement {
@@ -65,9 +69,10 @@ function openButton(): HTMLButtonElement {
     "pf-v6-c-button pf-m-secondary console-dashboard-activity__open",
   ) as HTMLButtonElement;
   button.type = "button";
+  button.setAttribute("aria-label", OPEN_NAME);
   const icon = h("span", "pf-v6-c-button__icon pf-m-start");
   icon.append(externalIcon());
-  button.append(icon, h("span", "pf-v6-c-button__text", "Open in log viewer"));
+  button.append(icon, h("span", "pf-v6-c-button__text", OPEN_LABEL));
   return button;
 }
 
@@ -92,7 +97,8 @@ export function activityTile(): Tile {
     menuToggle({
       variant: "secondary",
       icon: externalIcon(),
-      text: "Open in log viewer",
+      text: OPEN_LABEL,
+      ariaLabel: OPEN_NAME,
       classes: "console-dashboard-activity__open",
     }),
     [],

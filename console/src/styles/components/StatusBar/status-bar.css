@@ -106,6 +106,7 @@
 
 /* A PF link button, muted to the bar's weight. The label truncates; the icon and the 24px target do not. */
 #console-conn {
+  --pf-v6-c-button--AlignItems: center;
   max-width: 100%;
   min-width: 0;
   min-block-size: var(--pf-t--global--spacer--lg);

@@ -272,6 +272,8 @@
 .console-log-runs .pf-v6-c-tree-view {
   --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockStart: var(--pf-t--global--spacer--xs);
   --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockEnd--base: var(--pf-t--global--spacer--xs);
+  /* PF zeroes an open branch's bottom padding, which sits its label low in the focus ring. */
+  --pf-v6-c-tree-view--m-compact__list-item--m-expanded__node-container--PaddingBlockEnd: var(--pf-t--global--spacer--xs);
   --pf-v6-c-tree-view--m-compact__node-container--PaddingInlineEnd: var(--pf-t--global--spacer--sm);
   --pf-v6-c-tree-view--m-compact__node-container--nested--PaddingBlockStart: var(--pf-t--global--spacer--xs);
   --pf-v6-c-tree-view--m-compact__node-container--nested--PaddingBlockEnd: var(--pf-t--global--spacer--xs);
