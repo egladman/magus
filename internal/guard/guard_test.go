@@ -644,18 +644,27 @@ func storedVerdict(t *testing.T, cacheDir, reason string) string {
 	return string(stored)
 }
 
-// withoutVerdictRef is v as a dry run renders it: the call stores its verdict and cites
-// the ref, and a dry run stores nothing, so it has no ref to cite.
+// adviceRefLine opens the line a stored advisory cites its grd ref on.
+const adviceRefLine = "\nfull advice: "
+
+// withoutVerdictRef is v as a dry run renders it: the call stores its verdict or advice
+// and cites the ref, and a dry run stores nothing, so it has no ref to cite.
 func withoutVerdictRef(v Verdict) Verdict {
-	head, rest, ok := strings.Cut(v.Reason, verdictRefLine)
+	v.Reason = withoutRefLine(v.Reason, verdictRefLine)
+	v.Context = withoutRefLine(v.Context, adviceRefLine)
+	return v
+}
+
+// withoutRefLine drops the line opening with line from text.
+func withoutRefLine(text, line string) string {
+	head, rest, ok := strings.Cut(text, line)
 	if !ok {
-		return v
+		return text
 	}
 	if _, tail, more := strings.Cut(rest, "\n"); more {
 		head += "\n" + tail
 	}
-	v.Reason = head
-	return v
+	return head
 }
 
 // treeState is every path under dirs with its bytes and modification time.
@@ -756,6 +765,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				real := Judge(ctx, deps, req)
 				if round == 0 {
 					assert.NotContains(t, preview.Reason, verdictRefLine, "a dry run stores no verdict, so it cites none")
+					assert.NotContains(t, preview.Context, adviceRefLine, "nor any advice")
 					assert.Equal(t, withoutVerdictRef(real), preview)
 					assert.NotEqual(t, before, treeState(t, dirs...), "the call itself records something")
 					got := Verdict{Decision: real.Decision, Rule: real.Rule, Lease: real.Lease, LeaseFrom: real.LeaseFrom}
@@ -768,7 +778,7 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 				if real.Decision == "deny" {
 					real.Reason, preview.Reason = "", ""
 				}
-				assert.Equal(t, real, preview, "round %d", round)
+				assert.Equal(t, withoutVerdictRef(real), preview, "round %d", round)
 			}
 		})
 	}

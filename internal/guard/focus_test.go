@@ -88,7 +88,8 @@ func TestFocusReadOperands(t *testing.T) {
 func TestFocusVerdictAdvisesWithoutALease(t *testing.T) {
 	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"../libs/ui/theme.css"})
 	// The prose is checked by substring below, so it is copied across rather than spelled out.
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Brief: got.Brief}, got)
+	assert.Equal(t, focusGrade{Decision: "advise", Rel: "libs/ui/theme.css", Context: got.Context, Why: got.Why, Brief: got.Brief}, got)
+	assert.Contains(t, got.Why, "app, libs/core", "the rationale names the focus, behind the ref")
 	assert.Contains(t, got.Context, "belongs to project libs/ui")
 	assert.Contains(t, got.Context, "outside this session's focus")
 	assert.Contains(t, got.Context, "magus describe file libs/ui/theme.css")
@@ -159,7 +160,7 @@ func TestLeaseFocusReadPathsWidenTheWritePaths(t *testing.T) {
 
 func TestFocusVerdictReportsTheFirstOperandThatLeaves(t *testing.T) {
 	got := focusVerdict(appFocus(t), "", "/ws", "/ws/app", []string{"app/a.go", "../web/b.go", "../libs/ui/c.css"})
-	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Brief: got.Brief}, got,
+	assert.Equal(t, focusGrade{Decision: "advise", Rel: "web/b.go", Context: got.Context, Why: got.Why, Brief: got.Brief}, got,
 		"one explanation per command, not one per operand")
 }
 

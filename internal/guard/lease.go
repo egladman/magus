@@ -61,10 +61,10 @@ const (
 // counted and reported as having run "here". The run log is per-workspace, one file
 // per invocation, carrying the argv and real wall clock, so the count is a fact
 // rather than a reconstruction from per-spell samples.
-func adviseRepeatGate(runsDir string, now time.Time) (full, brief string) {
+func adviseRepeatGate(runsDir string, now time.Time) (full advice, brief string) {
 	runs, spent := recentGateRuns(runsDir, now)
 	if runs < gateRepeatMinRuns || spent < gateRepeatMinSpent {
-		return "", ""
+		return advice{}, ""
 	}
 	return gateRepeatAdvice(runs, spent), gateRepeatBrief(runs, spent)
 }
@@ -228,20 +228,25 @@ func isGateCommand(args []string) bool {
 //
 // What magus can contribute is the size of the blast radius, which is what --plan prints.
 // The caller weighs that against the wall clock above.
-var gateCadence = "`" + hint.Affected.With(string(types.TargetCI), "--plan") +
-	"` sizes the risk: one project is usually answered by that project's own `" + string(types.TargetCI) +
+var gateCadence = "`" + hint.Affected.With(string(types.TargetCI), "--plan") + "` sizes the risk"
+
+// gateCadenceWhy is the trade --plan informs, kept behind the advisory's ref.
+var gateCadenceWhy = "One project is usually answered by that project's own `" + string(types.TargetCI) +
 	"`, while the root or several projects is the gate earning it."
 
-func gateRepeatAdvice(runs int, spent time.Duration) string {
-	return fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock. %s\n",
-		types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), gateCadence)
+func gateRepeatAdvice(runs int, spent time.Duration) advice {
+	return advice{
+		Say: fmt.Sprintf("magus workspace: the `%s` gate has run %d times here in the last %s, about %s of wall clock; %s first.",
+			types.TargetCI, runs, gateRepeatWindow, spent.Round(time.Second), gateCadence),
+		Why: gateCadenceWhy,
+	}
 }
 
 // gateRepeatBrief is the repeat form, and it keeps the running cost rather than going
 // quiet: the count and the wall clock are the whole argument, and they are the part that
 // has changed since the caller last read the full text.
 func gateRepeatBrief(runs int, spent time.Duration) string {
-	return fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock. %s\n",
+	return fmt.Sprintf("magus workspace: `%s` has run %d times here, about %s of wall clock; %s.",
 		types.TargetCI, runs, spent.Round(time.Second), gateCadence)
 }
 
@@ -772,14 +777,14 @@ var (
 // up either, and erroring would block the tool call over metadata. Said for EVERY kind of call,
 // from Judge: it used to be produced inside gradeLeasedWrite, so a shell-command call
 // under a typo'd id ran fully un-enrolled with no notice at all.
-func adviseInvalidLease(actingLease string) string {
+func adviseInvalidLease(actingLease string) advice {
 	if actingLease == "" || types.ValidJobID(actingLease) {
-		return ""
+		return advice{}
 	}
-	return fmt.Sprintf(
-		"magus workspace: fix the lease id and re-run, so the guard can grade this call against your lease's declared boundary.\n"+
-			"%s=%q is not a valid lease id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no lease.",
-		envHookLease, actingLease, types.MaxJobIDLen)
+	return advice{
+		Say: fmt.Sprintf("magus workspace: %s=%q is not a valid lease id: fix it and re-run, as this call was graded as naming no lease.", envHookLease, actingLease),
+		Why: fmt.Sprintf("A lease id is at most %d characters of A-Za-z0-9-_./:. Once it parses, the guard grades the call against your lease's declared boundary.", types.MaxJobIDLen),
+	}
 }
 
 // adviseTerminalLease says that a declared row has stopped running, or "" for a live one.
@@ -787,13 +792,14 @@ func adviseInvalidLease(actingLease string) string {
 // The rules keyed on the row are inert from that moment (liveLeases drops it), which is
 // correct and invisible: the verdicts look identical to a session nobody leased. One line
 // per session is what makes the difference readable.
-func adviseTerminalLease(standing leaseStanding, actingLease string) string {
+func adviseTerminalLease(standing leaseStanding, actingLease string) advice {
 	if !standing.terminal() {
-		return ""
+		return advice{}
 	}
-	return fmt.Sprintf("magus workspace: lease %s is in state %s; its rules are inert.\n"+
-		"A terminal row has no boundary left to grade against, so the lease-scoped denials are not running for this session. If work is still in flight under that id, the orchestrator owns reopening it.",
-		actingLease, standing.state)
+	return advice{
+		Say: fmt.Sprintf("magus workspace: lease %s is in state %s; its rules are inert for this session.", actingLease, standing.state),
+		Why: "A terminal row has no boundary left to grade against, so the lease-scoped denials are not running. If work is still in flight under that id, the orchestrator owns reopening it.",
+	}
 }
 
 // denyOverdueLease refuses a write graded under a live lease past its deadline, or returns

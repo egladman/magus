@@ -365,7 +365,7 @@ func TestReadVerdictWalksPastADemotedRead(t *testing.T) {
 	v, ok = readVerdictAt(deps, root, line, DialectBash)
 	require.True(t, ok)
 	assert.Equal(t, bounded, v)
-	assert.Equal(t, ShellVerdict{Deny: bounded.Context, Rule: denyRule{Name: advisoryReadSymbol}}, deps.grade(v))
+	assert.Equal(t, ShellVerdict{Deny: bounded.Context, Why: bounded.Why, Rule: denyRule{Name: advisoryReadSymbol}}, deps.grade(v))
 }
 
 func TestReadNavigationAdvisesByDefault(t *testing.T) {

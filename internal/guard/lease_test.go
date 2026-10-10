@@ -143,7 +143,8 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 	for i := range 3 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i*10)*time.Minute), 150*time.Second, "affected", "ci")
 	}
-	got, brief := adviseRepeatGate(dir, now)
+	full, brief := adviseRepeatGate(dir, now)
+	got := full.Say
 	assert.Contains(t, got, "3 times")
 	assert.Contains(t, got, "7m30s")
 	// The cost, then the command that SIZES the decision. It names --plan rather than a

@@ -140,7 +140,7 @@ func TestSymbolSearchOnNamedFiles(t *testing.T) {
 		}
 		assert.Equal(t, advisoryPrecedent, v.Kind, tt.command)
 		assert.Contains(t, v.Brief, tt.advice, tt.command)
-		assert.Contains(t, v.Context, "The search runs as typed.", tt.command)
+		assert.Contains(t, v.Context, "the search runs as typed.", tt.command)
 	}
 }
 
@@ -309,13 +309,13 @@ func TestSearchVerdictWalksPastADemotedSearch(t *testing.T) {
 	v, ok := searchVerdictAt(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, denyRule{Name: denyRuleSymbolSearch, Arg: "ParseConfig"}, v.Rule, "the demoted tree search outranks the precedent advisory")
-	assert.Equal(t, ShellVerdict{Context: denial{Say: v.Deny, Why: v.Why}.full(), Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
+	assert.Equal(t, ShellVerdict{Context: v.Deny, Why: v.Why, Kind: hint.MarkerKind(denyRuleSymbolSearch), demoted: true}, deps.grade(v))
 
 	deps.Builtins = map[string]builtin.Setting{string(advisoryPrecedent): {Decision: builtin.Deny}}
 	v, ok = searchVerdictAt(deps, root, line)
 	require.True(t, ok)
 	assert.Equal(t, read, v)
-	assert.Equal(t, ShellVerdict{Deny: read.Context, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
+	assert.Equal(t, ShellVerdict{Deny: read.Context, Why: read.Why, Rule: denyRule{Name: denyRuleName(advisoryPrecedent)}}, deps.grade(v))
 }
 
 // TestSymbolSearchStaysSilentOutsideTheWorkspace pins the scope half against a real root:

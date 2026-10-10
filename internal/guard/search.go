@@ -90,10 +90,10 @@ func (s staleGraph) verdict() ShellVerdict {
 		rebuild += " once that is finished"
 	}
 	return ShellVerdict{
-		Context: "magus workspace: the graph is stale, " + s.reason + ", so no graph answer replaces this search and it runs as typed. " +
-			rebuild + ", and the graph answers exactly again.",
-		Kind:  advisoryGraphStale,
-		Brief: "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
+		Context: "magus workspace: the graph is stale (" + s.reason + "), and this search runs as typed; " + rebuild + ".",
+		Why:     "No graph answer replaces a search while the graph is stale. Once it is rebuilt, the graph answers exactly again.",
+		Kind:    advisoryGraphStale,
+		Brief:   "magus workspace: the graph is stale, " + s.reason + ". This search runs; " + rebuild + ".",
 	}
 }
 
@@ -620,10 +620,10 @@ func fileSymbolVerdict(deps Dependencies, dir string, c hint.Invocation) (ShellV
 		return stale.verdict(), true
 	}
 	return ShellVerdict{
-		Context: routeClause(routes) + " this for every file, checked against the tree, including the generated and cross-language sites a pattern misses. " +
-			"The search runs as typed.",
-		Kind:  advisoryPrecedent,
-		Brief: "magus workspace: " + routeClause(routes) + " this for every file.",
+		Context: "magus workspace: " + routeClause(routes) + " this for every file; the search runs as typed.",
+		Why:     "The answer is checked against the tree, including the generated and cross-language sites a pattern misses.",
+		Kind:    advisoryPrecedent,
+		Brief:   "magus workspace: " + routeClause(routes) + " this for every file.",
 	}, true
 }
 
@@ -1360,9 +1360,9 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 func noGraphVerdict(ident string) ShellVerdict {
 	return ShellVerdict{
 		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
+		Why:     precedentSearchAdviceWhy,
 		Kind:    advisoryPrecedent,
-		Brief: "magus workspace: no symbol index exists yet, so this search runs. `" + hint.GraphBuild.With("--silent") +
-			"` builds one, then `" + hint.Refs.With(ident, "--occurrences") + "` answers exactly, and this search is refused.",
+		Brief:   "magus workspace: no symbol index exists yet and this search runs; `" + hint.GraphBuild.With("--silent") + "` builds one.",
 	}
 }
 

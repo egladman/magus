@@ -123,3 +123,57 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	}
 	return lead + note + command + "\nfull verdict: " + next.Run, ref, remedy
 }
+
+// advice is an advisory in the two parts shapeAdvice words it in.
+type advice struct {
+	// Say is printed inline: one sentence naming what to do and why, carrying at most
+	// one command.
+	Say string
+	// Why is the rationale, kept only behind the ref.
+	Why string
+}
+
+// full is the whole advisory, for a caller with nowhere to store the rationale.
+func (a advice) full() string { return denial(a).full() }
+
+// adviceVerdictID names the breadcrumb to an advisory's stored full text, so `magus
+// session hints` counts its reads apart from deny-verdict.
+const adviceVerdictID = "advice-verdict"
+
+// shapeAdvice words an advisory the way shapeDeny words a deny: inline, each advisory's
+// one-sentence verdict; behind a grd ref, the same verdicts with the rationale whys holds
+// for each and the rule's page. text is what Judge put on the verdict, one advisory or
+// several joined by a blank line, and whys is keyed on each one's verdict.
+//
+// An advisory with no rationale is printed as it is and stores nothing. That covers the
+// brief a held advisory repeats with, and an advisory whose text is the answer it exists
+// to deliver. A preview stores nothing, and a failed store prints everything.
+func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys map[string]string, preview bool) (shown, ref string) {
+	parts := []string{text}
+	if whys[text] == "" {
+		parts = strings.Split(text, "\n\n")
+	}
+	stored := make([]string, len(parts))
+	rationale := false
+	for i, p := range parts {
+		stored[i] = p
+		if why := whys[p]; why != "" {
+			stored[i], rationale = p+"\n"+why, true
+		}
+	}
+	if !rationale || preview {
+		return text, ""
+	}
+	full := strings.Join(stored, "\n\n")
+	if _, ok := Rule(rule); ok {
+		full += "\nsee: " + ruleDocsBase + rule + "/"
+	}
+	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
+	if ref == "" {
+		return full, ""
+	}
+	next := hint.NextForDenial(ref)
+	next.ID, next.Why = adviceVerdictID, "the ref holds this advisory's rationale, which the inline text leaves out."
+	hint.AppendServedNext(markers.CacheDir(), []hint.Next{next})
+	return text + "\nfull advice: " + next.Run, ref
+}

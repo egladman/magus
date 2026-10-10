@@ -522,7 +522,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		if tt.context == "" {
 			assert.Empty(t, v.Context, "%q must pass silently", tt.command)
 		} else {
-			assert.Contains(t, v.Context, tt.context, "%q context names the skill", tt.command)
+			assert.Contains(t, advised(v), tt.context, "%q context names the skill", tt.command)
 		}
 	}
 }
@@ -741,6 +741,9 @@ func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 	assert.Less(t, len(v.Deny), len(body), "the refusal must be shorter than what tripped it")
 }
 
+// advised is v's whole advisory: the line shown inline and the rationale stored behind it.
+func advised(v ShellVerdict) string { return advice{Say: v.Context, Why: v.Why}.full() }
+
 // TestSearchAdviceIsTentativeNotAPromise pins the honest framing: the translation is a
 // suggestion, not a drop-in replacement. grep is textual and refs/query are semantic, so they
 // agree only when the pattern is a real symbol. The advisory hands back the exact command AND
@@ -748,7 +751,7 @@ func TestDenyDoesNotReplayALongCommand(t *testing.T) {
 func TestSearchAdviceIsTentativeNotAPromise(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), `grep -rn "funcName" .`)
 	assert.Contains(t, v.Context, "magus refs funcName", "hands back the exact command to try")
-	assert.Contains(t, v.Context, "grep is right", "and hedges rather than promising equivalence")
+	assert.Contains(t, advised(v), "grep is right", "and hedges rather than promising equivalence")
 }
 
 // TestParseGuardCommands pins the resolution itself, separately from the
@@ -1446,7 +1449,7 @@ func TestOutputPipeAdvisesOnGraphReads(t *testing.T) {
 			assert.Equal(t, denyRuleOutputPipe, v.Rule.Name, tc.command)
 		case "advise":
 			assert.Empty(t, v.Deny, tc.command)
-			assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
+			assert.Equal(t, ShellVerdict{Context: v.Context, Why: pipeExitNote, Kind: advisoryGraphPipe, Brief: graphPipeBrief}, v, tc.command)
 			assert.Contains(t, v.Context, "needs no pipe: ", tc.command)
 		default:
 			assert.Empty(t, v.Deny, tc.command)
@@ -1846,8 +1849,8 @@ func TestScriptedRewriteLeavesPathsOutsideTheWorkspace(t *testing.T) {
 func TestSearchGuardRoutesAColdIndex(t *testing.T) {
 	t.Parallel()
 	v := Evaluate(strict(testDependencies()), `grep -rn "someFunc" .`)
-	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
-	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
+	assert.Contains(t, advised(v), "magus graph build", "a cold index must name the command that fixes it")
+	assert.Contains(t, advised(v), "unknown, not absent", "the verdict's meaning is the point, not just the command")
 }
 
 // TestGuardDeniesReadAck is the integrity property the whole read-receipt feature rests on.
@@ -2015,8 +2018,8 @@ func TestChainedRunAdvisesWherePipingChangesTheChain(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), tc.command)
 		assert.Empty(t, v.Deny, tc.command)
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name, tc.command)
-		assert.Contains(t, v.Context, "\nNot refused, because ", tc.command)
-		assert.Contains(t, v.Context, tc.why, tc.command)
+		assert.Contains(t, v.Why, "Not refused, because ", tc.command)
+		assert.Contains(t, v.Why, tc.why, tc.command)
 	}
 
 	// A line that does not parse is read by its shape and only advised on.
@@ -2033,7 +2036,7 @@ func TestChainedRunAdvisesWherePipesProveNothing(t *testing.T) {
 
 	v := Evaluate(strict(testDependencies()), "magus run generate . && magus run lint .")
 	assert.Empty(t, v.Deny)
-	assert.Contains(t, v.Context, "cannot prove a pipe's upstream")
+	assert.Contains(t, v.Why, "cannot prove a pipe's upstream")
 }
 
 // In magus's own checkout go-build and build relink ./magus. Every pipe stage starts at
@@ -2053,7 +2056,7 @@ func TestChainedRunAdvisesAfterRelinkingOwnBinary(t *testing.T) {
 	} {
 		v := Evaluate(deps, cmd)
 		assert.Empty(t, v.Deny, cmd)
-		assert.Contains(t, v.Context, "relinks ./magus", cmd)
+		assert.Contains(t, v.Why, "relinks ./magus", cmd)
 	}
 	assert.NotEmpty(t, Evaluate(deps, "./magus run test . && ./magus run go-build .").Deny,
 		"a relink in the LAST stage replaces nothing a later stage runs")
@@ -2276,7 +2279,7 @@ func TestGuardAdvisesFilteringATaskCapture(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Empty(t, v.Deny, "advise, never deny: %s", cmd)
-		assert.Equal(t, ShellVerdict{Context: v.Context, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
+		assert.Equal(t, ShellVerdict{Context: v.Context, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}, v, cmd)
 	}
 
 	// A deny elsewhere on the line still outranks the advice.
@@ -2293,11 +2296,11 @@ func TestCaptureFilterAdviceNamesTheFailureBlock(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), `grep -n "cause:" tasks/abc123.output | head -8`)
 	require.NotEmpty(t, v.Context)
 	for _, field := range []string{"cause:", "output: out<hex>"} {
-		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs")
+		assert.Contains(t, v.Context, field, "the matched line and the dropped ref are what the filter costs, said inline")
 	}
-	assert.Contains(t, v.Context, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
 	assert.Contains(t, v.Context, hint.QueryOutput.With("<ref>"), "the ref is what reads the rest of the log")
-	assert.Contains(t, v.Context, "sed -n '1,200p'", "a range print is a filter too, and the message says so")
+	assert.Contains(t, v.Why, "-o jsonl --tee <file>", "the sanctioned way to make the capture a contract")
+	assert.Contains(t, v.Why, "sed -n '1,200p'", "a range print is a filter too, and the stored advice says so")
 }
 
 // The rule is about the CAPTURE, not about text filters. Reading the file whole, and

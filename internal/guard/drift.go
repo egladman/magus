@@ -40,7 +40,7 @@ const advisoryTouchedProjects hint.MarkerKind = "touched-projects"
 type scopeDrift struct {
 	markers hint.Gate
 	project string
-	advice  string
+	advice  advice
 }
 
 // gradeScopeDrift judges one write against the projects this session has already
@@ -69,10 +69,10 @@ func gradeScopeDrift(ctx context.Context, deps Dependencies, markers hint.Gate, 
 	}
 	drift := driftVerdict(ws, writePath, touchedProjects(markers))
 	drift.markers = markers
-	if drift.advice != "" && leaseCoversWrite(ctx, actingLease, location, writePath) {
+	if drift.advice.Say != "" && leaseCoversWrite(ctx, actingLease, location, writePath) {
 		// A worker writing inside the paths its orchestrator leased it is in scope by
 		// declaration, whatever the graph says about the projects those paths span.
-		drift.advice = ""
+		drift.advice = advice{}
 	}
 	return drift
 }
@@ -136,12 +136,14 @@ func touchedPaths(ws types.WorkspaceReader, touched []string) []string {
 // harness installs. This ships in the binary and judges whatever workspace it is
 // pointed at, so the one skill it may route to is one magus itself installs, and
 // that skill's own opening line is to count write sets.
-func scopeDriftAdvice(proj string, touched []string) string {
-	return fmt.Sprintf(
-		"magus workspace: consider handing %s to its own subagent or session before you write here. The magus-multi-agent skill partitions work by write set, and this write opens a second one.\n"+
-			"%s depends on none of the projects this session has written to (%s), and none of them depends on it, so nothing in the graph ties the two halves of this diff together: no target run for one half validates the other.\n"+
-			"`%s` says whether they connect at all and how far apart. If they do, this is one unit after all.",
-		proj, proj, strings.Join(touched, ", "), hint.Path.With(proj, touched[0]))
+func scopeDriftAdvice(proj string, touched []string) advice {
+	return advice{
+		Say: fmt.Sprintf("magus workspace: consider handing %s to its own session: nothing in the graph ties it to %s, and `%s` checks whether they connect.",
+			proj, strings.Join(touched, ", "), hint.Path.With(proj, touched[0])),
+		Why: fmt.Sprintf("%s depends on none of the projects this session has written to (%s), and none of them depends on it, so no target run for one half of this diff validates the other. "+
+			"The magus-multi-agent skill partitions work by write set, and this write opens a second one. If the two connect, this is one unit after all.",
+			proj, strings.Join(touched, ", ")),
+	}
 }
 
 // record adds the write's project to the session's touched set.

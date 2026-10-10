@@ -113,15 +113,15 @@ func TestGradeSplitRunRecordsEveryCall(t *testing.T) {
 
 	text, ok := gradeSplitRun(facts, "magus run lint docs")
 	require.True(t, ok)
-	assert.Contains(t, text, "magus run lint . docs")
+	assert.Contains(t, text.Say, "magus run lint . docs")
 
 	// A third call compares against the SECOND call, not the first: the fact was
 	// overwritten, not accumulated.
 	text, ok = gradeSplitRun(facts, "magus run lint web")
 	require.True(t, ok)
-	assert.Contains(t, text, "magus run lint docs")
-	assert.Contains(t, text, "magus run lint web")
-	assert.NotContains(t, text, "magus run lint .", "the first call is no longer the recorded fact")
+	assert.Contains(t, text.Say, "magus run lint docs")
+	assert.Contains(t, text.Why, "magus run lint web")
+	assert.NotContains(t, text.Say, "magus run lint .", "the first call is no longer the recorded fact")
 }
 
 // The full pipeline: Judge holds the cross-call advisory to one firing per session, keyed

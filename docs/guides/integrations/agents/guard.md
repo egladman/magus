@@ -566,6 +566,20 @@ The ref is stored in the activity trail under the `grd` prefix, and the line is
 a breadcrumb with the id `deny-verdict`, so `magus session hints` counts how
 often it is read.
 
+An advisory has the same shape. Its first firing prints one sentence naming
+what to do and why, with at most one command, then a ref to the full advice:
+the rationale and the rule's page.
+
+```text
+magus workspace: run `magus affected ci` before publishing if you have not since your last change.
+full advice: magus query output grd2b3c4d5e6f7a8b9c
+```
+
+That line is a breadcrumb with the id `advice-verdict`. A brief repeat has no
+rationale to store, so it prints alone. An advisory whose text is the answer
+it exists to deliver, such as the commands a search routes to or the files a
+new one is named against, keeps that answer inline.
+
 The advisories that correct the command itself (a `time` wrapper, a chained
 run) are exempt too, because a second firing reports a
 second mistake.

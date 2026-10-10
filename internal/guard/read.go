@@ -600,7 +600,8 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 		}
 		first, last := rc.span(m.lines)
 		if e, ok := m.covering(first, last); ok && e.symbol != "" {
-			if v := (ShellVerdict{Context: adviseReadSymbol(m, e, first, last), Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}); walk.settles(deps, v) {
+			a := adviseReadSymbol(m, e, first, last)
+			if v := (ShellVerdict{Context: a.Say, Why: a.Why, Rule: denyRule{Name: advisoryReadSymbol, Arg: e.name}}); walk.settles(deps, v) {
 				return v, true
 			}
 		}
@@ -649,7 +650,10 @@ func denyReadNavigation(m fileMap) denial {
 	return denial{Say: say, Why: b.String()}
 }
 
-func adviseReadSymbol(m fileMap, e mapEntry, first, last int) string {
-	return "magus workspace: lines " + strconv.Itoa(first) + "-" + strconv.Itoa(last) + " of " + m.rel + " sit inside `" + e.name + "` (" +
-		strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "). `" + m.read(e) + "` prints that body with its line numbers, checked against the index, and finds it again after the file moves."
+func adviseReadSymbol(m fileMap, e mapEntry, first, last int) advice {
+	return advice{
+		Say: "magus workspace: lines " + strconv.Itoa(first) + "-" + strconv.Itoa(last) + " of " + m.rel + " sit inside `" + e.name + "` (" +
+			strconv.Itoa(e.first) + "-" + strconv.Itoa(e.last) + "); `" + m.read(e) + "` prints that body.",
+		Why: "It prints the body with its line numbers, checked against the index, and finds it again after the file moves.",
+	}
 }

@@ -54,8 +54,8 @@ stdin checkout-merge-head.txt
 stdout 'deny \[[a-z-]+\]: restoring a path from MERGE_HEAD discards the other side.*magus vcs resolve'
 
 # Staging everything can be undone, so with no workspace setting it advises rather than
-# refuses, and still names the command to run instead. A demoted deny advises with its
-# whole text, rationale included.
+# refuses, and still names the command to run instead. With no cache dir to store it in,
+# a demoted deny advises with its whole text, rationale included.
 stdin add-all.txt
 exec magus shell
 stdout 'advise \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
@@ -110,8 +110,8 @@ stdout 'whole-tree git stash destroys'
 
 stdin push.txt
 exec magus shell
-stdout 'advise( \[[a-z-]+\])?: magus workspace: run the gate before publishing'
-stdout 'magus affected ci'
+stdout 'advise( \[[a-z-]+\])?: magus workspace: run .magus affected ci. before publishing'
+stdout 'every project the diff reaches'
 
 stdin add-paths.txt
 exec magus shell

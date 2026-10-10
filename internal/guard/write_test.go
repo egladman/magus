@@ -35,8 +35,8 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 
 	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
 	got := adviseInstalledSkillWrite(installed)
-	assert.Contains(t, got, "INSTALLED skill")
-	assert.Contains(t, got, "magus-workspace-rules")
+	assert.Contains(t, got.Say, "INSTALLED skill")
+	assert.Contains(t, got.Why, "magus-workspace-rules")
 
 	// A workspace's own skill lives in the same directory and must draw silence:
 	// telling an author their hand-written file is generated is worse than
@@ -249,7 +249,7 @@ func TestGradeLeasedWriteMalformedDeclaration(t *testing.T) {
 		require.Equal(t, "advise", got.Decision, "an unreadable pattern says nothing about the write, only that nothing graded it")
 		assert.Contains(t, got.Context, "cmd/magus/[gen/**", "the advisory must name the pattern to fix")
 		assert.Contains(t, got.Context, "lease-b")
-		assert.Contains(t, got.Context, "not being enforced")
+		assert.Contains(t, got.Why, "not being enforced")
 	})
 
 	t.Run("another lease's write paths", func(t *testing.T) {
@@ -282,9 +282,9 @@ func TestGradeLeasedWriteUnenrolled(t *testing.T) {
 	got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/ledger/store.go"))
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "lease-a", "the advisory must name the lease already working there")
-	assert.Contains(t, got.Context, "own the ledger store")
-	assert.Contains(t, got.Context, "magus.lease", "the advisory must say how to enroll")
-	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
+	assert.Contains(t, got.Why, "own the ledger store")
+	assert.Contains(t, got.Why, "magus.lease", "the advisory must say how to enroll")
+	assert.Contains(t, got.Why, "seatbelt", "the advisory must say why it is not a block")
 }
 
 // TestGradeLeasedWriteInvalidLeaseID pins the treated-as-absent contract. A typo'd id must
@@ -295,9 +295,9 @@ func TestGradeLeasedWriteInvalidLeaseID(t *testing.T) {
 	ctx, root := fleetFixture(t, fleetLeases()...)
 
 	t.Run("the notice itself is the id rule, not the write rule", func(t *testing.T) {
-		assert.Contains(t, adviseInvalidLease("lease b!"), "not a valid lease id")
-		assert.Contains(t, adviseInvalidLease("lease b!"), "magus.lease")
-		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxJobIDLen+1)), "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease("lease b!").Say, "not a valid lease id")
+		assert.Contains(t, adviseInvalidLease("lease b!").Say, "magus.lease")
+		assert.Contains(t, adviseInvalidLease(strings.Repeat("u", types.MaxJobIDLen+1)).Say, "not a valid lease id")
 		assert.Empty(t, adviseInvalidLease("lease-a"))
 		assert.Empty(t, adviseInvalidLease(""), "naming no lease is not a typo")
 	})
@@ -337,7 +337,7 @@ func TestGradeLeasedWriteCorruptLedger(t *testing.T) {
 	assert.NotEqual(t, "deny", got.Decision, "a job store magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
-	assert.Contains(t, got.Context, "client tool", "the advisory must name the tool that re-declares the plan")
+	assert.Contains(t, got.Context, `magus\job`, "the advisory must name the tool that re-declares the plan")
 }
 
 // TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
@@ -480,10 +480,10 @@ func TestGradeLeasedEditAgainstAnotherJobsDeclarationClaim(t *testing.T) {
 func TestAdviseInstructionWrite(t *testing.T) {
 	t.Parallel()
 	for _, path := range []string{"AGENTS.md", "CLAUDE.md", "claude.md", "/repo/nested/AGENTS.md", "  AGENTS.md  "} {
-		advice := adviseInstructionWrite(path)
-		require.NotEmpty(t, advice, "expected an advisory for %q", path)
-		assert.Contains(t, advice, "every session", "the advisory names the cost")
-		assert.Contains(t, advice, "magus doctor", "and the tool whose output makes a sentence here redundant")
+		got := adviseInstructionWrite(path)
+		require.NotEmpty(t, got.Say, "expected an advisory for %q", path)
+		assert.Contains(t, got.Say, "every session", "the advisory names the cost")
+		assert.Contains(t, got.Why, "magus doctor", "and the tool whose output makes a sentence here redundant")
 	}
 	for _, path := range []string{"", "README.md", "MAGUS.md", "docs/agents.md.tmpl", "agents.mdx"} {
 		assert.Empty(t, adviseInstructionWrite(path), "no advisory belongs on %q", path)
@@ -770,9 +770,9 @@ func TestAdviseUnleasedWorker(t *testing.T) {
 		t.Setenv(trail.EnvTraceparent, spawned)
 		got := gradeLeasedWrite(ctx, Dependencies{}, "", filepath.Join(root, "internal/thing/x.go"))
 
-		require.Equal(t, writeGrade{Decision: "advise", Context: got.Context, Kind: advisoryUnleasedWrite}, got,
+		require.Equal(t, writeGrade{Decision: "advise", Context: got.Context, Why: got.Why, Kind: advisoryUnleasedWrite}, got,
 			"the spawn chain is a claim, so it may teach and may never block; a standing fact, so it is held to one firing per session")
-		assert.Contains(t, got.Context, `client tool (magus\job.put)`, "the advisory must name the tool that declares the plan")
+		assert.Contains(t, got.Context, `magus\job.put`, "the advisory must name the tool that declares the plan")
 		assert.Contains(t, got.Context, envHookLease, "and the channel a worker enrolls over")
 	})
 
@@ -832,8 +832,8 @@ func TestAdviseAgentSourceWrite(t *testing.T) {
 		"internal/hint/cli_command.go",
 	} {
 		got := adviseAgentSourceWrite(rel)
-		assert.Contains(t, got, "magus-skill-authoring", rel)
-		assert.Contains(t, got, "SkillVersion", rel)
+		assert.Contains(t, got.Say, "magus-skill-authoring", rel)
+		assert.Contains(t, got.Why, "SkillVersion", rel)
 	}
 
 	assert.Empty(t, adviseAgentSourceWrite("internal/handler/mcp/diff.go"), "one handler is not the registry")
@@ -848,7 +848,7 @@ func TestAdviseDescriptorWrite(t *testing.T) {
 	magusTreeFixture(t)
 
 	for _, rel := range []string{"proto/magus/v1/run.proto", "std/fs.go"} {
-		got := adviseDescriptorWrite(rel)
+		got := adviseDescriptorWrite(rel).Say
 		assert.Contains(t, got, "SAME commit", rel)
 		assert.Contains(t, got, "magus run generate .", rel)
 	}
@@ -881,8 +881,8 @@ func TestRepoScopedRulesHandleTheAbsolutePathTheHostSends(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(ws, "internal", "agent"), 0o755))
 
-	assert.Contains(t, adviseAgentSourceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")), "magus-skill-authoring")
-	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")), "SAME commit")
+	assert.Contains(t, adviseAgentSourceWrite(filepath.Join(ws, "internal", "agent", "skills", "magus-run", "SKILL.md")).Say, "magus-skill-authoring")
+	assert.Contains(t, adviseDescriptorWrite(filepath.Join(ws, "std", "fs.go")).Say, "SAME commit")
 	assert.Empty(t, adviseDescriptorWrite(filepath.Join(root, "elsewhere", "std", "fs.go")), "outside the workspace is not this workspace's business")
 }
 
@@ -1049,16 +1049,16 @@ func TestLeasedPathAdvisesOncePerSessionPerLease(t *testing.T) {
 
 	first := write("s1", "internal/ledger/store.go")
 	assert.Equal(t, verdictWithRule("advise", string(advisoryLeasedPath)), unworded(first))
-	assert.Contains(t, first.Context, "if you are lease lease-a")
+	assert.Contains(t, first.Context, "lease lease-a (running) owns; if you are that lease")
 	assert.NotContains(t, first.Context, "concurrent agent")
-	assert.Contains(t, first.Context, "whoever took it may be editing this file now", "fleetLeases registers lease-a with no checkout")
+	assert.Contains(t, storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, first.Context), "whoever took it may be editing this file now", "fleetLeases registers lease-a with no checkout")
 
 	assert.Equal(t, "pass", write("s1", "internal/ledger/other.go").Decision, "the same lease, told once")
 	assert.Equal(t, "pass", write("s1", "internal/ledger/store.go").Decision)
 
 	other := write("s1", "cmd/magus/main.go")
 	assert.Equal(t, string(advisoryLeasedPath), other.Rule, "a different lease is a new fact")
-	assert.Contains(t, other.Context, "if you are lease lease-b")
+	assert.Contains(t, other.Context, "lease lease-b (declared) owns; if you are that lease")
 
 	assert.Equal(t, string(advisoryLeasedPath), write("s2", "internal/ledger/store.go").Rule, "a new session has heard nothing")
 }

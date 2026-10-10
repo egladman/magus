@@ -379,14 +379,15 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		multipleCmds:  multipleCmds,
 		others:        besideGoCall(command, d),
 		advisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: bootstrap allowed, since " + where + " has no magus binary yet: " + bootstrapWhy + " Use ./magus from then on.",
+			Context: "magus workspace: bootstrap allowed because " + where + " has no magus binary yet: use ./magus from then on.",
+			Why:     "A bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 		recovery: recovery,
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
-			Context: "magus workspace: recovery allowed, since " + where + " cannot load its own sources (MGS1021) and no magus target can run until it does. " +
-				"Relink and regenerate only; once it loads, rebuild with " + ownRebuild + ".",
-			Rule: rule,
+			Context: "magus workspace: recovery allowed because " + where + " cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with " + ownRebuild + ".",
+			Why:     "No magus target can run until the checkout loads its own sources again, so only the go commands that repair it are let through.",
+			Rule:    rule,
 		}, workspaceShell),
 	}
 }

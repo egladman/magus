@@ -172,7 +172,7 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 		// the one advisory the push gate upgrades to an ask, so a push that slipped by here
 		// would publish without the person being asked.
 		if isPush(c) {
-			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+			return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 		}
 		if c.Name != "git" {
 			continue
@@ -181,21 +181,21 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 		sub, rest := g.sub, g.rest
 		switch sub {
 		case "push":
-			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+			return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 		case "add":
 			// The stage-everything forms already denied in the first pass.
-			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 		case "commit":
-			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 		case "checkout":
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
 			if slices.Contains(rest, "--") {
-				return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+				return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 			}
 		case "restore":
 			// `git restore` targets worktree files by definition.
-			return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+			return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 		case "describe":
 			// --tags and --always are the build-stamp spelling (this repository's own
 			// go_build target uses both): the caller wants a version string to embed,
@@ -204,14 +204,14 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
 				continue
 			}
-			return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+			return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 		case "stash":
 			if len(rest) > 0 && rest[0] == "create" {
-				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+				return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		case "rev-parse":
 			if isTreeIdentityQuery(rest) {
-				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+				return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		}
 	}
@@ -533,11 +533,11 @@ func gitGuardFallback(command string, grade func(ShellVerdict) (ShellVerdict, bo
 	}
 	switch {
 	case pushRe.MatchString(command):
-		return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+		return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 	case stageRe.MatchString(command):
-		return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+		return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 	case scopedRevertRe.MatchString(command):
-		return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+		return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 	}
 	return ShellVerdict{}, false
 }

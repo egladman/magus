@@ -103,7 +103,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		}
 	}
 	if held.v.demoted {
-		held.speak(hint.NewGate(at.cacheDir, who.callerKey()), &verdict)
+		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
+		held.speak(gate, &verdict, whys)
+		if verdict.Decision == "advise" {
+			verdict.Context, _ = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
+		}
 		if verdict.Decision != "pass" {
 			decided = decidedByBuiltin
 		}
@@ -161,8 +165,10 @@ func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at loc
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
-	if note := adviseSharedCheckoutSpawn(ctx, hint.NewGate(at.cacheDir, who.callerKey()), at); note != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: note, Rule: string(advisorySharedCheckout)}
+	gate := hint.NewGate(at.cacheDir, who.callerKey())
+	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
+		shown, _ := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}
 	}
 	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 }

@@ -59,28 +59,28 @@ var nameSeps = []string{"_", "-"}
 // then writing a different basename took it. Below the 21% internal/hint/next.go
 // measured for an unhinted breadcrumb it teaches nobody, and the answer then is to
 // delete it rather than reword it.
-func adviseNewFileName(path string) string {
+func adviseNewFileName(path string) advice {
 	clean := strings.TrimSpace(path)
 	dir, ok := workspaceRelativeDir(clean)
 	if !ok {
-		return ""
+		return advice{}
 	}
 	for _, seg := range strings.Split(dir, "/") {
 		if seg == "" || seg == "." {
 			continue
 		}
 		if project.IsIgnoreDir(seg) || slices.Contains(fixtureDirs, seg) {
-			return ""
+			return advice{}
 		}
 	}
 	// Runs BEFORE the write, so a file that is already there means an edit, and an edit
 	// picks no name.
 	if _, err := os.Stat(clean); err == nil {
-		return ""
+		return advice{}
 	}
 	entries, err := os.ReadDir(filepath.FromSlash(dir))
 	if err != nil {
-		return "" // an absent directory is adviseNewSourceDir's case; an unreadable one, nobody's
+		return advice{} // an absent directory is adviseNewSourceDir's case; an unreadable one, nobody's
 	}
 	siblings := make([]string, 0, len(entries))
 	for _, entry := range entries {
@@ -89,7 +89,7 @@ func adviseNewFileName(path string) string {
 		}
 	}
 	if len(siblings) == 0 {
-		return ""
+		return advice{}
 	}
 	base := dir
 	if i := strings.LastIndex(dir, "/"); i >= 0 {
@@ -97,7 +97,7 @@ func adviseNewFileName(path string) string {
 	}
 	name := filepath.Base(clean)
 	if derivedFromSibling(fileStem(name), base, siblings) {
-		return ""
+		return advice{}
 	}
 	return newFileNameAdvice(dir, name, siblings)
 }
@@ -134,14 +134,15 @@ func derivedFromSibling(stem, base string, siblings []string) bool {
 	return false
 }
 
-func newFileNameAdvice(dir, name string, siblings []string) string {
+func newFileNameAdvice(dir, name string, siblings []string) advice {
 	shown, more := siblings, ""
 	if len(shown) > siblingsShown {
 		shown = shown[:siblingsShown]
 		more = fmt.Sprintf(", and %d more", len(siblings)-siblingsShown)
 	}
-	advice := fmt.Sprintf("magus workspace: this write CREATES `%s`, a NEW FILE in `%s`, which already holds %d:\n  %s%s\n",
-		name, dir, len(siblings), strings.Join(shown, ", "), more)
-	advice += "Name it against that list rather than by analogy with the file you came from. A unit that sees only its own working directory is how one tree ends up carrying two conventions for the same thing. The list is a fact and not a verdict: the convention is yours to read off it.\n"
-	return advice
+	return advice{
+		Say: fmt.Sprintf("magus workspace: this write CREATES `%s`, a NEW FILE in `%s`, which already holds %d:\n  %s%s\nName it against that list.",
+			name, dir, len(siblings), strings.Join(shown, ", "), more),
+		Why: "Name it against the list rather than by analogy with the file you came from. A unit that sees only its own working directory is how one tree ends up carrying two conventions for the same thing. The list is a fact and not a verdict: the convention is yours to read off it.",
+	}
 }

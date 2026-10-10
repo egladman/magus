@@ -22,7 +22,7 @@ func inWorkspace(t *testing.T) string {
 // with the skill that would have questioned it installed and unread.
 func TestAdviseNewSourceDirFiresOnTheFirstFile(t *testing.T) {
 	inWorkspace(t)
-	got := adviseNewSourceDir(filepath.Join("kvdir", "kvdir.go"))
+	got := adviseNewSourceDir(filepath.Join("kvdir", "kvdir.go")).full()
 
 	assert.Contains(t, got, "creates a NEW DIRECTORY")
 	assert.Contains(t, got, "magus-architecture-review", "the advisory has to name the installed skill exactly, or it routes into a wall")
@@ -39,7 +39,7 @@ func TestAdviseNewSourceDirHandlesTheAbsolutePathTheHostSends(t *testing.T) {
 	require.NoError(t, os.MkdirAll(ws, 0o755))
 	t.Chdir(ws)
 
-	got := adviseNewSourceDir(filepath.Join(ws, "internal", "newpkg", "x.go"))
+	got := adviseNewSourceDir(filepath.Join(ws, "internal", "newpkg", "x.go")).full()
 	assert.Contains(t, got, "creates a NEW DIRECTORY",
 		"a dot-directory ABOVE the workspace is not part of the path being judged")
 }
@@ -50,7 +50,7 @@ func TestAdviseNewSourceDirIsLanguageAgnostic(t *testing.T) {
 	inWorkspace(t)
 	for i, name := range []string{"mod.rs", "__init__.py", "index.ts", "Main.java", "lib.buzz"} {
 		dir := filepath.Join("newthing", string(rune('a'+i)))
-		assert.Contains(t, adviseNewSourceDir(filepath.Join(dir, name)), "creates a NEW DIRECTORY", name)
+		assert.Contains(t, adviseNewSourceDir(filepath.Join(dir, name)).Say, "creates a NEW DIRECTORY", name)
 	}
 }
 

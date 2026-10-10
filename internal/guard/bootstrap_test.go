@@ -99,7 +99,7 @@ func TestRankOwnBuild(t *testing.T) {
 				assert.Empty(t, v.Deny)
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Context, "bootstrap allowed")
-				assert.Contains(t, v.Context, tt.says)
+				assert.Contains(t, v.Context+"\n"+v.Why, tt.says)
 			case tt.deny:
 				assert.Equal(t, denyRuleRawTool, v.Rule.Name)
 				assert.Contains(t, v.Deny+hint.Render(v.Next, func(hint.Next) string { return "" }), tt.says,
@@ -155,7 +155,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
-	assert.Contains(t, v.Context, "Use ./magus from then on")
+	assert.Contains(t, v.Context, "use ./magus from then on")
 }
 
 // The forms recoversMagus admits, each alone on its line.

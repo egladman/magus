@@ -802,7 +802,8 @@ func TestReadGuardInputRefusesAnOversizePayload(t *testing.T) {
 }
 
 // TestHookCmdAdvisesOncePerSession is the same rule through the command the host actually
-// runs: a held advisory prints its full text once per session and its brief after.
+// runs: a held advisory prints its verdict and the ref to its full text once per session,
+// and its brief after.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
@@ -818,14 +819,26 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 
 	first := run("session-1")
 	require.True(t, strings.HasPrefix(first, "advise [source-read]: "))
-	assert.Contains(t, first, "SCIP symbol indexes")
+	lines := strings.Split(strings.TrimSpace(first), "\n")
+	require.Len(t, lines, 2, "the advice and the ref: %q", first)
+	assert.Contains(t, lines[0], "magus refs", "the advice names the command to run")
+	assert.NotContains(t, first, "SCIP symbol indexes", "the rationale is behind the ref")
+	ref := regexp.MustCompile(`^full advice: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
+	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[1])
+	stored, err := trail.ReadBlob(base, ref[1])
+	require.NoError(t, err)
+	assert.Contains(t, string(stored), "SCIP symbol indexes", "the ref holds the rationale")
+	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/source-read/"), "with the rule's page, got %q", stored)
+	served := hint.ReadServedNext(base)
+	require.NotEmpty(t, served)
+	assert.Equal(t, "advice-verdict", served[len(served)-1].ID, "the ref line is counted as a hint")
 
 	repeat := run("session-1")
-	assert.NotContains(t, repeat, "SCIP symbol indexes", "the repeat drops the full text")
+	assert.NotContains(t, repeat, "full advice:", "the brief has no rationale to store")
 	assert.Contains(t, repeat, "magus refs", "the repeat still names the command, which is what converts")
-	assert.Less(t, len(repeat), len(first)/4, "a repeat nobody has to read around")
+	assert.Less(t, len(repeat), len(first), "a repeat nobody has to read around")
 
-	assert.Contains(t, run("session-2"), "SCIP symbol indexes", "a fresh session is owed the fact once")
+	assert.Contains(t, run("session-2"), "full advice:", "a fresh session is owed the fact once")
 }
 
 // TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal names its problem

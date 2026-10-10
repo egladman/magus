@@ -70,8 +70,8 @@ import (
 // Dependencies.grade.
 type ShellVerdict struct {
 	Deny string
-	// Why is a deny's rationale, kept only in the stored full verdict; Deny is the one
-	// sentence printed inline. See shapeDeny.
+	// Why is the rationale, kept only behind the stored verdict's ref; Deny or Context is
+	// the one sentence printed inline. See shapeDeny and shapeAdvice.
 	Why     string
 	Context string
 	Kind    hint.MarkerKind
@@ -456,7 +456,7 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 	ch, parsed := readRunChain(command, d)
 	if !parsed {
 		if chainedRunRe.MatchString(command) {
-			return ShellVerdict{Context: adviseChainedRun, Rule: denyRule{Name: denyRuleChainedRun}}, true
+			return ShellVerdict{Context: adviseChainedRun, Why: adviseChainedRunWhy, Rule: denyRule{Name: denyRuleChainedRun}}, true
 		}
 		return ShellVerdict{}, false
 	}
@@ -468,13 +468,13 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 		why = "a pipe starts every stage at once, so a stage after one that relinks ./magus would run the binary it replaces"
 	}
 	if why != "" {
-		advice := adviseChainedRun
+		said := advice{Say: adviseChainedRun, Why: adviseChainedRunWhy}
 		if cmds, ok := ParseCommandsDialect(command, d); ok {
-			if text, same := splitRunLineAdvice(cmds); same {
-				advice = text
+			if a, same := splitRunLineAdvice(cmds); same {
+				said = a
 			}
 		}
-		return ShellVerdict{Context: advice + "\nNot refused, because " + why + ".", Rule: denyRule{Name: denyRuleChainedRun}}, true
+		return ShellVerdict{Context: said.Say, Why: "Not refused, because " + why + ".\n" + said.Why, Rule: denyRule{Name: denyRuleChainedRun}}, true
 	}
 	stages := make([][]string, len(ch.stages))
 	for i, s := range ch.stages {
@@ -1852,8 +1852,9 @@ var (
 // error here instead of a verdict that names a command nobody can run. That makes these
 // vars rather than consts: a Command renders through a method call.
 var (
-	vcsGuardContext = "magus workspace: classify the dirty tree first with `" + hint.DescribeFile.With("$(git diff --name-only)") + "`, then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
-		"role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
+	vcsGuardContext    = "magus workspace: classify the dirty tree first with `" + hint.DescribeFile.With("$(git diff --name-only)") + "`, then stage the reviewed paths explicitly."
+	vcsGuardContextWhy = "Stage them by name: `git add -- <paths>`. role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. " +
+		"Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
 	// The tail of runGuardContextFor, which supplies the replacements. This half
 	// carries only the WHY and the anti-retry line.
 	//
@@ -1868,8 +1869,8 @@ var (
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
-	revertGuardContext = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it.\n" +
-		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
+	revertGuardContext    = "magus workspace: classify before reverting with `" + hint.DescribeFile.With("<paths>") + "`, and do not revert a file just because you did not hand-edit it."
+	revertGuardContextWhy = "A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged. That drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
 	// Shared by every advisory that routes to refs. A not-indexed verdict is the one
 	// answer a reader can misread as "absent" and fall back to grep on, so whichever
 	// advisory sent them to refs owes them this sentence.
@@ -1880,23 +1881,25 @@ var (
 	// instead of assembling it from grep hits. Measured over 1,499 sessions: 42% of new
 	// files were preceded by one of these, 71% in subagent sessions, where only 12.9%
 	// reached for a magus verb at all.
-	precedentSearchAdvice = "this workspace has a knowledge graph, and it answers \"what already does this\" directly:\n" +
-		"  EVERY VERIFIED SITE, checked against the tree:  " + hint.Refs.With("%s", "--occurrences") + "\n" +
-		"  DOES IT EXIST, and what kind of thing is it:  " + hint.Query.With("%s") + "\n" +
-		"A text match finds the name. refs finds the USES, generated and cross-language ones included, which is what a precedent hunt is actually asking for. An empty result means it was text rather than a symbol, and grep is right after all. " + searchColdIndexRouting
+	precedentSearchAdvice = "magus workspace: the knowledge graph answers \"what already does this\":\n" +
+		"  EVERY VERIFIED SITE:  " + hint.Refs.With("%s", "--occurrences") + "\n" +
+		"  DOES IT EXIST, and as what:  " + hint.Query.With("%s")
+	precedentSearchAdviceWhy = "A text match finds the name. refs finds the USES, generated and cross-language ones included, which is what a precedent hunt is actually asking for. " +
+		"An empty result means it was text rather than a symbol, and grep is right after all. " + searchColdIndexRouting
 
 	// Shared with Cursor's Read synthesis: an unbounded source dump before refs/query.
-	sourceReadAdvice = "this workspace has SCIP symbol indexes; an unbounded source read wastes the context they already answered. Before dumping a whole file to find a definition or call site:\n" +
-		"  CODE SYMBOL (defined / used where):  `" + hint.Refs.With("<symbol>") + "`  (add `--occurrences` for edit-precise ranges)\n" +
-		"  DOMAIN ENTITY (projects, targets, spells, ops):  `" + hint.Query.With("\"<terms>\"") + "`\n" +
-		"Then read ONLY the path+line range refs returned. If you already have that range from refs, a bounded read is fine. " + searchColdIndexRouting
+	sourceReadAdvice    = "magus workspace: `" + hint.Refs.With("<symbol>") + "` answers where a symbol is defined and used; read only the path+line range it returns, not the whole file."
+	sourceReadAdviceWhy = "This workspace has SCIP symbol indexes, and an unbounded source read wastes the context they already answered. " +
+		"Add `--occurrences` for edit-precise ranges. A DOMAIN ENTITY (projects, targets, spells, ops) is `" + hint.Query.With("\"<terms>\"") + "`.\n" +
+		"If you already have that range from refs, a bounded read is fine. " + searchColdIndexRouting
 
 	sourceReadBrief = "magus workspace: `" + hint.Refs.With("<sym>") + "` before reading whole source files."
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
 	// workspace vocabulary and routes through discovery.
-	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
+	pushGuardContext    = "magus workspace: run `" + hint.Affected.With("ci") + "` before publishing if you have not since your last change."
+	pushGuardContextWhy = "The gate runs over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
 	denyAgentSignOff    = "only a person may stamp a read receipt or dispose an attention request; report what is unread: `" + hint.Diff.With("--impact") + "`."
@@ -1940,10 +1943,10 @@ var (
 	denyProcessPoll    = "`pgrep`, `pidof` and `ps` poll for what the project lock already records; read it: `" + hint.Status.With("--watch=15s") + "`."
 	denyProcessPollWhy = "Status reads the project lock continuously (holder PID, command, age), where the process table invents an unbounded poll."
 
-	// LEADS with the better route, like the pipe and redirect messages it extends,
-	// and spells out the block because the reader cannot lose what they can see.
-	captureFilterAdvice = "magus workspace: this filters a run capture. Next time give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
-		"A failure prints `cause:` and `output: out<hex>` two lines apart, so `grep cause:` keeps the symptom and drops the ref `" + hint.QueryOutput.With("<ref>") + "` reads the whole log from.\n" +
+	// Names what the filter cuts, or the reader corrects the spelling instead of the
+	// mistake: the ref two lines under each failure's cause.
+	captureFilterAdvice    = "magus workspace: a filter over a run capture keeps cause: and drops the output: out<hex> ref under it; read it whole: `" + hint.QueryOutput.With("<ref>") + "`."
+	captureFilterAdviceWhy = "Next time give the run a contract up front: `-o jsonl --tee <file>`, then `jq` over that.\n" +
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION."
 	captureFilterBrief = "magus workspace: a filter over a run capture drops the `output:` ref under `cause:`; `-o jsonl --tee <file>` gives the run a contract."
 
@@ -1962,7 +1965,8 @@ var (
 
 	// The advisory a chain keeps when a pipe of its stages would change what it does; see
 	// pipeBreaks for each case.
-	adviseChainedRun = "Run the LAST target and let its dependencies pull the rest in. Targets compose through ctx.needs, so a chain is usually ONE invocation: here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
+	adviseChainedRun    = "magus workspace: run the LAST target and let its dependencies pull the rest in: targets compose through ctx.needs, so a chain is usually ONE invocation."
+	adviseChainedRunWhy = "Here `lint` needs `format` needs `generate`, and `" + hint.Run.With("lint", ".") + "` alone runs all three in order.\n" +
 		"Check what a target already pulls in before chaining: `" + hint.Run.With("<target>", "<project>", "--dry-run") + "` prints the plan without executing it.\n" +
 		"`" + hint.Affected.With("ci") + "` counts as one of these: it runs the whole pipeline over everything the diff reaches, so a build immediately before it does that work twice, and the second run can trip MGS4007 on an output the first one left behind.\n" +
 		"What it does NOT do is regenerate. A workspace whose default charms the gate strips (`--no-default-charms`) turns the composed `generate` into a drift GATE, so stale outputs fail it rather than being rewritten. Regenerate first, in ONE invocation across every affected project: `" + hint.Affected.With("generate:rw") + "`.\n" +
@@ -2027,11 +2031,12 @@ func pipeAnswer(p pipedMagus) denial {
 }
 
 // graphPipeAdvice is pipeAnswer's answer, offered rather than imposed.
-func graphPipeAdvice(p pipedMagus) string {
-	return "magus workspace: " + pipeAnswer(p).full()
+func graphPipeAdvice(p pipedMagus) advice {
+	answer := pipeAnswer(p)
+	return advice{Say: "magus workspace: " + answer.Say, Why: answer.Why}
 }
 
-const graphPipeBrief = "magus workspace: a graph read projects its own record: `-o name`, `-o json`, `-o template='{{.field}}'`."
+const graphPipeBrief = "magus workspace: a graph read projects its own record with `-o name`, json or a template, and needs no pipe."
 
 // redirectDeny answers what the redirect was for, about the command that was run.
 //
@@ -2298,7 +2303,8 @@ var (
 	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
 	// strict SUPERSET rather than a substitute, so there is nothing to block. That
 	// also rules out the third deny trigger, which needs an exact equivalent.
-	checkpointGuardContext = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state (`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty), so a later reader knows what the work was looking at. It PRINTS; the value reaches a store only when you register it with a lease or record it with `magus session checkpoint`.\n" +
+	checkpointGuardContext    = "magus workspace: `" + hint.VCSCheckpoint.String() + "` identifies the working state, dirty or clean, so a later reader knows what the work was looking at."
+	checkpointGuardContextWhy = "`-o name` prints `<revision>` clean, `<revision>+<digest>` dirty. It PRINTS; the value reaches a store only when you register it with a lease or record it with `magus session checkpoint`.\n" +
 		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS with no tag, no stash, no ref, and no file, so one nobody keeps has cost nothing."
 
 	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
@@ -2315,7 +2321,8 @@ var (
 	// rule answers first.
 	updateAdvice = "Run the covering target with the update charm (`" + hint.Run.With("<target>:update", "<project>") + "`) so the dependency rewrite happens inside magus, cached and visible to affected tracking. `" + hint.DescribeTargets.String() + "` lists what this workspace defines.\n" +
 		"update is the reserved charm for moving PINNED UPSTREAM state forward, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry or a vulnerability feed serves today is update. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
-	updateGuardContext = "magus workspace: " + updateAdvice
+	updateGuardContext    = "magus workspace: run the covering target with the update charm (`" + hint.Run.With("<target>:update", "<project>") + "`) so magus sees the dependency rewrite."
+	updateGuardContextWhy = updateAdvice
 
 	// Advice, not a deny: a raw install is correct, only uncached. "install" is the
 	// project's own top-level target (magusfile convention, not a spell op name: a
@@ -2327,7 +2334,8 @@ var (
 
 	// Advise, not deny: timing a command is legitimate, and the point is that magus
 	// already answered the question better than the shell can.
-	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
+	timedMagusAdvice    = "magus workspace: magus times itself; drop `-s` and it prints each target's duration and whether it was cached or ran."
+	timedMagusAdviceWhy = "Each target prints a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed, which is usually the thing being asked."
 )
 
 // denySharedStash refuses an unqualified stash restore. The verb it names in the
@@ -2653,7 +2661,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// would otherwise speak for the grep and say nothing about what it was cutting away.
 	var captureAdvice ShellVerdict
 	if parsed && captureFilterFires(cmds, command, d) {
-		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
+		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Why: captureFilterAdviceWhy, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
 	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
 		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
@@ -2786,7 +2794,8 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		return captureAdvice
 	}
 	if pipedRead.ok {
-		return ShellVerdict{Context: graphPipeAdvice(pipedRead), Kind: advisoryGraphPipe, Brief: graphPipeBrief}
+		a := graphPipeAdvice(pipedRead)
+		return ShellVerdict{Context: a.Say, Why: a.Why, Kind: advisoryGraphPipe, Brief: graphPipeBrief}
 	}
 	if parsed {
 		if v, ok := readVerdict(deps, command, d); ok {
@@ -2802,11 +2811,11 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	}
 	switch {
 	case parsed && slices.ContainsFunc(work, isDependencyMutation):
-		return ShellVerdict{Context: updateGuardContext, Rule: denyRule{Name: advisoryDependencyUpdate}}
+		return ShellVerdict{Context: updateGuardContext, Why: updateGuardContextWhy, Rule: denyRule{Name: advisoryDependencyUpdate}}
 	case parsed && slices.ContainsFunc(work, func(c hint.Invocation) bool { return installAdvised(deps, c) }):
 		return ShellVerdict{Context: installGuardContext, Rule: denyRule{Name: advisoryDependencyInstall}}
 	case ruleFires(cmds, parsed, command, sourceReadFires, sourceReadRe):
-		return ShellVerdict{Context: sourceReadAdvice, Kind: advisorySourceRead, Brief: sourceReadBrief}
+		return ShellVerdict{Context: sourceReadAdvice, Why: sourceReadAdviceWhy, Kind: advisorySourceRead, Brief: sourceReadBrief}
 	}
 	// Each translation weighs a stale graph itself: a listing proved against the disk holds
 	// at any revision, and a diagnostic code is symbol-search's.
@@ -2824,7 +2833,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	case echoOnSuccessRe.MatchString(command):
 		return ShellVerdict{Context: echoOnSuccessAdvice, Rule: denyRule{Name: advisoryEchoOnSuccess}}
 	case timedMagusRe.MatchString(command):
-		return ShellVerdict{Context: timedMagusAdvice, Rule: denyRule{Name: advisoryTimedMagus}}
+		return ShellVerdict{Context: timedMagusAdvice, Why: timedMagusAdviceWhy, Rule: denyRule{Name: advisoryTimedMagus}}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

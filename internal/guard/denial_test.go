@@ -225,3 +225,33 @@ func TestWholeTreeStoresTheBackendsScratchCheckout(t *testing.T) {
 		}
 	}
 }
+
+// TestShapeAdvisoryStoresTheRationale pins an advisory's two forms: its verdict inline with
+// the ref, and the rationale and the rule's page behind that ref. An advisory with nothing
+// stored behind it, a brief or a joined notice with no rationale, prints as it is.
+func TestShapeAdvisoryStoresTheRationale(t *testing.T) {
+	const see = "\nsee: " + ruleDocsBase + "push-gate/"
+	cacheDir := t.TempDir()
+	gate := hint.NewGate(cacheDir, "s1")
+	whys := map[string]string{"run the gate.": "it reaches every project."}
+
+	got, ref := shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.\n\nan aside.", whys, false)
+	require.NotEmpty(t, ref)
+	assert.Equal(t, "run the gate.\n\nan aside.\nfull advice: "+hint.NextForDenial(ref).Run, got)
+	stored, err := trail.ReadBlob(cacheDir, ref)
+	require.NoError(t, err)
+	assert.Equal(t, "run the gate.\nit reaches every project.\n\nan aside."+see, string(stored))
+	assert.Equal(t, adviceVerdictID, servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
+
+	got, ref = shapeAdvice(t.Context(), gate, string(advisoryPushGate), "a brief.", whys, false)
+	assert.Equal(t, "a brief.", got, "no rationale, nothing to store")
+	assert.Empty(t, ref)
+
+	got, ref = shapeAdvice(t.Context(), gate, string(advisoryPushGate), "run the gate.", whys, true)
+	assert.Equal(t, "run the gate.", got, "a preview stores nothing, so it cites nothing")
+	assert.Empty(t, ref)
+
+	got, ref = shapeAdvice(t.Context(), hint.Gate{}, string(advisoryPushGate), "run the gate.", whys, false)
+	assert.Equal(t, "run the gate.\nit reaches every project."+see, got, "with nowhere to store it, the advisory speaks in full")
+	assert.Empty(t, ref)
+}
