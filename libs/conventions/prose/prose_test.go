@@ -41,14 +41,25 @@ func assertFindings(t *testing.T, got, want []Finding) {
 	}
 }
 
+// ruleNames lists the rules cs runs, in order. tone_test.go and slop_test.go
+// pin the order inside [toneChecks] and [slopChecks].
+func ruleNames(cs []check) []Rule {
+	out := make([]Rule, len(cs))
+	for i, c := range cs {
+		out[i] = c.rule
+	}
+
+	return out
+}
+
 func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
-	want := []Rule{
+	want := slices.Concat([]Rule{
 		RuleCommentBlock, RuleCommentSentence, RuleFiller, RuleTerms,
 		RuleNameSuffix, RuleAside, RuleHistory, RuleDocStub,
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
-		RuleSecondPerson, RuleStepVerb, RuleCondescension, RuleTemplate,
-	}
+		RuleSecondPerson, RuleStepVerb, RuleCondescension,
+	}, ruleNames(toneChecks), ruleNames(slopChecks), []Rule{RuleTemplate})
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Rules() = %q, want %q", got, want)
