@@ -32,6 +32,7 @@ final SKIPPED = {
     "releases/**": "published release notes are history",
     "blog/**": "a post is one author's dated account",
     "**/testdata/hosts/**": "third-party host schemas, kept verbatim",
+    "libs/conventions/prose/testdata/css_banned_*.css": "the CSS check's cases spell the words it refuses",
     "**/pnpm-lock.yaml": "pnpm writes it",
     "changes/unreleased/surface-names*.md": "the changelog entries name the identifiers they renamed",
     THIS: "it spells the words it refuses",

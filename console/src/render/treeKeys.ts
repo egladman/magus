@@ -11,7 +11,7 @@
 const ITEM = 'li[role="treeitem"]';
 const NODE = ":scope > .pf-v6-c-tree-view__content > .pf-v6-c-tree-view__node";
 
-function nodeOf(item: HTMLElement): HTMLElement | null {
+function treeNode(item: HTMLElement): HTMLElement | null {
   return item.querySelector<HTMLElement>(NODE);
 }
 
@@ -71,17 +71,17 @@ export function attachTreeKeys(tree: HTMLElement): () => void {
         go(all[all.length - 1]);
         break;
       case "ArrowRight":
-        if (expanded === "false") nodeOf(item)?.click();
+        if (expanded === "false") treeNode(item)?.click();
         else if (expanded === "true") go(all[at + 1]);
         break;
       case "ArrowLeft":
-        if (expanded === "true") nodeOf(item)?.click();
+        if (expanded === "true") treeNode(item)?.click();
         else go(parentItem(item) ?? undefined);
         break;
       case "Enter":
       case " ":
         if (ev.target !== item) return;
-        nodeOf(item)?.click();
+        treeNode(item)?.click();
         break;
       default:
         return;

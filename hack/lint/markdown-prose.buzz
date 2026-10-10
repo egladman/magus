@@ -78,7 +78,7 @@ final ALLOW = [
     "GitHub", "Go", "Jenkins", "Linux", "MinIO", "Nx", "OpenTelemetry", "PatternFly", "Python",
     "Swift", "TypeScript", "Unix", "Windows",
     // Acronyms and initialisms.
-    "ADR", "AI", "API", "CI", "CLI", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",
+    "ADR", "AI", "API", "CI", "CLI", "CSS", "CWD", "FAQ", "FFI", "HTTP", "ID", "IDs", "JIT", "JSON",
     "LLM", "MCP", "PATH", "PF", "REPL", "RFC", "SBOM", "SCIP", "SDK", "UI", "URL", "URLs",
     "VCS", "YAML",
 ];

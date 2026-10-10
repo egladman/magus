@@ -2218,7 +2218,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
                    "proto/**/*.buzz",
-                   "**/*.css", "console/**/*.css", "docs/**/*.css",
+                   "**/*.css", "console/**/*.css", "docs/**/*.css", "libs/conventions/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
                    "**/*.mjs", "console/**/*.mjs",
                    "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",

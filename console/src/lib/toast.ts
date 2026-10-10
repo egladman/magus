@@ -110,7 +110,7 @@ export function pushToast(spec: ToastSpec): ToastHandle {
   const key = spec.key ?? (spec.kind ?? "ok") + "|" + spec.source + "|" + spec.message;
   for (const live of group.querySelectorAll<HTMLElement>("[data-toast-key]")) {
     if (live.dataset.toastKey === key && !live.classList.contains("pf-m-outgoing")) {
-      return handleFor(live, () => {});
+      return toastHandle(live, () => {});
     }
   }
 
@@ -225,14 +225,14 @@ export function pushToast(spec: ToastSpec): ToastHandle {
   for (const extra of live.slice(MAX_TOASTS)) dismissers.get(extra as HTMLElement)?.();
 
   start();
-  return handleFor(item, dismiss);
+  return toastHandle(item, dismiss);
 }
 
 // dismissers lets a later call close a toast it did not create (the stack cap). A WeakMap, so a
 // removed toast takes its entry with it.
 const dismissers = new WeakMap<HTMLElement, () => void>();
 
-function handleFor(item: HTMLElement, dismiss: () => void): ToastHandle {
+function toastHandle(item: HTMLElement, dismiss: () => void): ToastHandle {
   return {
     el: item,
     setMessage(text: string): void {

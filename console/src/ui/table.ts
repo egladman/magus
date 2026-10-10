@@ -70,9 +70,9 @@ function indicator(dir: SortDir | null): HTMLElement {
   return span;
 }
 
-// gridFor picks the container width below which PF stacks the table into labelled rows. A table
+// gridBreakpoint picks the container width below which PF stacks the table into labelled rows. A table
 // needs room for its columns, so the more it has the wider the pane must be before it stays tabular.
-function gridFor(columns: number): "md" | "lg" | "xl" {
+function gridBreakpoint(columns: number): "md" | "lg" | "xl" {
   if (columns <= 4) return "md";
   return columns <= 7 ? "lg" : "xl";
 }
@@ -108,7 +108,7 @@ export class SortableTable<T> {
     this.wrap = wrap;
     const table = h(
       "table",
-      `pf-v6-c-table pf-m-compact pf-m-grid-${gridFor(cols.length)} pf-m-sticky-header console-table`,
+      `pf-v6-c-table pf-m-compact pf-m-grid-${gridBreakpoint(cols.length)} pf-m-sticky-header console-table`,
     );
     table.setAttribute("role", "grid");
     table.setAttribute("aria-label", opts.label ?? "Table");

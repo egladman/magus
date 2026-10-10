@@ -266,7 +266,7 @@ func placeComments(f *cssFile, items []cssItem, raws []rawComment, rawAt map[int
 		case raw.code && !raw.inStmt && last >= 0 && f.stmts[last].end == raw.start:
 			c.place = placeTrailing
 			c.target = f.stmts[last].text
-			c.owner = headerOf(f, f.stmts[last].parent)
+			c.owner = blockHeader(f, f.stmts[last].parent)
 
 			if f.stmts[last].block {
 				c.block = last
@@ -275,21 +275,21 @@ func placeComments(f *cssFile, items []cssItem, raws []rawComment, rawAt map[int
 			}
 		case raw.inStmt || raw.code:
 			c.place = placeInline
-			c.owner = headerOf(f, raw.parent)
+			c.owner = blockHeader(f, raw.parent)
 		default:
 			c.place = standalonePlace(f, items, n, raw, seenCode)
 
 			if next, ok := adjacentStmt(f, items, n); ok {
 				s := f.stmts[next]
 				c.target = s.text
-				c.owner = headerOf(f, s.parent)
+				c.owner = blockHeader(f, s.parent)
 
 				if s.block {
 					c.block = next
-					c.inside = declarationsOf(f, next)
+					c.inside = blockDeclarations(f, next)
 				}
 			} else {
-				c.owner = headerOf(f, raw.parent)
+				c.owner = blockHeader(f, raw.parent)
 			}
 		}
 
@@ -337,9 +337,9 @@ func adjacentStmt(f *cssFile, items []cssItem, n int) (int, bool) {
 // whole by a one-line comment above it.
 const maxRepeatable = 4
 
-// declarationsOf joins the declarations directly inside block, or returns "" when
+// blockDeclarations joins the declarations directly inside block, or returns "" when
 // the block is too large for one line to repeat.
-func declarationsOf(f *cssFile, block int) string {
+func blockDeclarations(f *cssFile, block int) string {
 	var decls []string
 
 	for _, s := range f.stmts {
@@ -355,7 +355,7 @@ func declarationsOf(f *cssFile, block int) string {
 	return strings.Join(decls, " ")
 }
 
-func headerOf(f *cssFile, block int) string {
+func blockHeader(f *cssFile, block int) string {
 	if block < 0 {
 		return ""
 	}

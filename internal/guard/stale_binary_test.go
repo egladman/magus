@@ -344,7 +344,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 	}
 
 	for name, call := range map[string]string{
-		"status":       mcpEnvelope(t, "status", map[string]any{}),
+		"status":        mcpEnvelope(t, "status", map[string]any{}),
 		"config":        mcpEnvelope(t, "config", map[string]any{}),
 		"console":       mcpEnvelope(t, "console", map[string]any{"app": "diff"}),
 		"buzz":          mcpEnvelope(t, "buzz", map[string]any{"script": "fun transform(input: any, args: [str]) > any { return input; }"}),

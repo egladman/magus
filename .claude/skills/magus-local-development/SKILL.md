@@ -142,7 +142,7 @@ treats `.cursor/` as disposable host state.
 ## Build ./magus once per base; a worker is handed it
 
 Never tell a worker to build magus, and a worker never does. The orchestrator builds
-`./magus` once per base commit, in the root checkout, and
+`./magus` once per base commit, in the root checkout.
 `hack/dev/bootstrap-worktree.buzz` copies it into each worker checkout while no Go build
 input differs. The guard refuses a brief that says to build it (`brief-builds-magus`) and
 a leased worker that tries (`worker-builds-magus`).
