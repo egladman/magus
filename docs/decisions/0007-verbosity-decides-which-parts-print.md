@@ -77,20 +77,7 @@ guard when installed hook glue calls it, and the MCP server. The harness configu
 `magus describe harness` prints sets `MAGUS_LOG_SILENT=true` where the host has a place
 for it, which is `-s` on every command run there.
 
-## Alternatives
-
-_Not built._
-
-- **A setting naming who reads the output.** The verbosity flags already say how much a
-  run wants, and a second knob would let the two disagree.
-- **Rewriting prose at render time.** Summarizing a message by model or by pattern is
-  nondeterministic, adds latency to every line, and nothing can test it.
-- **A branch at each call site.** It spreads one policy across every message and drifts
-  the first time a site forgets it.
-- **A second catalog of short wording.** Two texts for one message drift apart, and
-  nothing reports which one went stale.
-
-## Consequences
+### What this branch already does
 
 - _Done._ Guard denials print the verdict, one command and the ref, and the rationale
   moves into the stored verdict. A search denial keeps the graph's answer inline.
@@ -105,6 +92,17 @@ _Not built._
 - _Done._ MGS3035, MGS4007 and MGS7003 keep their short verdicts and carry their reasons
   as `why`: dim under the cause by default, a `why` field in `-o json`, and in the run
   log under `-q` and `-s`.
+
+## Not built
+
+- **A setting naming who reads the output.** The verbosity flags already say how much a
+  run wants, and a second knob would let the two disagree.
+- **Rewriting prose at render time.** Summarizing a message by model or by pattern is
+  nondeterministic, adds latency to every line, and nothing can test it.
+- **A branch at each call site.** It spreads one policy across every message and drifts
+  the first time a site forgets it.
+- **A second catalog of short wording.** Two texts for one message drift apart, and
+  nothing reports which one went stale.
 
 ## Open questions
 
