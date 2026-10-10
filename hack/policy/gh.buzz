@@ -21,14 +21,14 @@ final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
 
-final adminMergeDenial = "`--admin` merges past the merge queue, unvalidated and unordered; queue it: "
-    + "`gh pr merge <number> --auto --squash`.\n"
+final adminMergeDenial = "`--admin` merges past the merge queue, unvalidated and unordered; the person queues it "
+    + "with `gh pr merge <number> --auto --squash`, never you.\n"
     + "Nothing validates the pull request on main, and nothing orders it against the others. "
     + "--rebase queues it too. The queue validates it on main's tip and merges it; `magus queue ls` shows "
     + "where it stands. Queuing and bypassing the queue are both the person's call, made from their own "
     + "terminal: you hand over the command and never run it.";
 
-final autoMergeDenial = "A person enables auto-merge, not an agent; hand them the command: "
+final autoMergeDenial = "a person enables auto-merge, not an agent; hand them the command: "
     + "`gh pr merge <number> --auto --squash`.\n"
     + "Auto-merge is the decision to merge, made after reading the review "
     + "(docs/decisions/0006-the-person-drives-review.md). --rebase works too. "
@@ -366,7 +366,7 @@ test "a queued merge on the same line is denied, handing the command to the pers
     ]) {
         final v = decideGitHub(chain(merge), once: helpers\counter());
         std\assert(v.decision == "deny", message: merge.join(" "));
-        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
+        std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
 }
 
@@ -406,7 +406,7 @@ test "enabling auto-merge through gh pr merge is denied, telling the person's co
     ]) {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
-        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
+        std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
         std\assert(v.reason.indexOf("gh pr merge <number> --auto") != null, message: "names the command to tell the person");
     }
 }
@@ -420,7 +420,7 @@ test "enabling auto-merge through gh api is denied" {
     ]) {
         final v = ask(argv);
         std\assert(v.decision == "deny", message: argv.join(" "));
-        std\assert(v.reason.indexOf("A person enables auto-merge") != null, message: "says a person enables it");
+        std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
     final fed = decideGitHub(helpers\request([["gh", "api", "graphql", "--input", "-"]]), once: helpers\counter(),
         line: "gh api graphql --input - <<'EOF'\n" + mutation + "\nEOF");
@@ -429,7 +429,9 @@ test "enabling auto-merge through gh api is denied" {
 
 test "the admin merge's denial hands the person the queue's command, not an order to run it" {
     final v = ask(["gh", "pr", "merge", "12", "--admin"]);
-    std\assert(v.reason.indexOf("queue it: `gh pr merge") != null and v.reason.indexOf("never run it") != null, message: v.reason);
+    std\assert(v.reason.startsWith("`--admin` merges past the merge queue"), message: v.reason);
+    std\assert(v.reason.split("\n")[0].indexOf("the person queues it with `gh pr merge <number> --auto --squash`") != null, message: v.reason);
+    std\assert(v.reason.indexOf("queue it:") == null and v.reason.indexOf("never run it") != null, message: v.reason);
 }
 
 test "disabling or reading auto-merge, and other gh calls, stay silent" {
