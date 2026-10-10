@@ -380,58 +380,171 @@ supersedes: <what this replaces, optional>
 
 ## Writing rules
 
-Hand-written Markdown and every pull request's title and description read as plain,
-prescriptive technical writing: a stranger understands each sentence without the request,
-the conversation or the tool behind it. The judge is Go, in
-[`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose).
-`judge-docs -kind markdown <file>...` judges files, and `judge-docs -kind
-pull-request` judges a pull request read from stdin, its title on the first line. The
-guard's `pull-request-text` rule runs it on `gh pr create` and `gh pr edit`, and the
-`pr-description` check runs it on every pull request, so the two cannot disagree. Every
-rule is an error:
+Hand-written Markdown, every pull request's title and description, review replies, doc
+comments and the text an agent loads read as plain technical writing: a teammate
+understands each sentence without the request, the conversation or the tool behind it.
+The checks are a Go package, the prose judge, in
+[`libs/conventions/prose`](https://github.com/egladman/magus/blob/main/libs/conventions/prose);
+the `judge-docs` command runs it. The guard's `pull-request-text` rule runs it on a
+pull request description and on a reply an agent posts, and the `pr-description` check
+runs it on every pull request, so the two cannot disagree. A person runs it on a draft
+before posting. [ADR 0008](decisions/0008-writing-a-teammate-reads.md) holds the
+design.
 
-- `reply-voice`: no opener that answers a request (`This PR`, `This change`, `Here's`,
-  `I've`, `Let me`), no reference to a conversation (`as discussed`, `per your`), and no
-  list item that opens with a bold label (`- **Cache:** on`). A pull request description
-  also carries no heading and no section label such as `Summary` or `Test plan`.
-- `lead-context`: a pull request description opens with a paragraph of at least 12 words
-  naming the goal behind the change and why this code stands in its way. The bullets of
-  what changes follow it.
+[Each rule has a page](reference/prose/index.md): what it catches, why, its default
+decision on each kind of text, and its `PRS` code. A finding names the rule and the code
+and links to that page.
+
+### Kinds
+
+A rule judges text by what the text is for.
+
+| Kind                          | Text                                                             |
+| ----------------------------- | ---------------------------------------------------------------- |
+| `reference`                   | a hand-written page a reader looks things up in                  |
+| `guide`                       | a procedural page, under `docs/guides/`                          |
+| `change-description`          | a pull request: its title on the first line, its description     |
+| `review-reply`                | a review comment, a review's body or a reply in a thread         |
+| `agent-instructions`          | Markdown an agent loads as written, such as a SKILL.md           |
+| `agent-instructions-template` | a template that renders a short and a full form of such a skill  |
+| `doc-comment`                 | one symbol's doc comment, read from the symbol index             |
+
+### Decisions
+
+Each rule ships a default decision per kind, `deny` or `advise`, the two words a guard
+rule's default takes. A caller refuses text on a `deny`, reports an `advise` once and
+lets the text through, and never sees a rule that is `off`.
+
+A repository changes any of them with a decisions table: a file that sets a rule
+`off`, `advise` or `deny` for everything judged, or for the files a glob matches, the
+way `magus\guard.builtins` sets a built-in guard rule. A glob entry is an exemption and
+carries its reason, as a guard override does. There are no named profiles; a table is
+the one spelling.
+
+House style ships `off`. It is the set of rules that encode one repository's
+conventions rather than writing a teammate reads: the glossary (`terms`), the present
+tense with no author (`tense`), no credit to a tool (`attribution`), plain ASCII
+typography (`dash`, `ascii`), the doc-comment budgets, and the agent-instruction budgets.
+This repository turns them on in `hack/policy/prose.buzz`, with a reason beside every
+entry. With no table, the judge holds text to shape, tone, claims and the
+generated-writing tells alone, which suits a repository that has not chosen a house
+style.
+
+The findings are a contract: `{source, kind, rule, code, decision, message, match, url}`.
+Any command that writes the same array, such as a team's own style checker, feeds the
+same guard rule and the same decisions table.
+
+### The shape of a description
+
+A change description is read by a reviewer now and by whoever follows the squash commit
+to it later, so it opens with what changed for a reader and keeps the rest in named
+sections.
+
+| Part              | Required                                   | What it holds                                                                                                   |
+| ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Lead (no heading) | yes                                        | The outcome first: what a reader can now do or no longer has to do. Then how the work came up and why it mattered. |
+| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                                      |
+| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                                                |
+| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                                          |
+| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                                                 |
+| Not verified      | when something was not tested              | What was not checked, and why.                                                                                  |
+| Reading guide     | optional                                   | Where to start reading.                                                                                         |
+
+The lead is at least 12 words and names a result, not the defect: the defect is the
+reason (`lead-context`). A change in a series names the destination and its own place in
+it. Headings after the lead are sentence case. The stock labels a reply generator emits
+(`Summary`, `Test plan`, `Overview`), a bold label opening a bullet, an opener that
+answers a request (`This PR`, `Here's`, `I've`) and a reference to a conversation
+(`as discussed`) stay refused, because they answer a prompt the reader never saw
+(`reply-voice`). The word budget applies to everything after the lead, so cutting words
+never removes the origin or the reason.
+
+### Claims and evidence
+
+A sentence that states a measurement (`410ms to 260ms`, `7 of 50`), a comparison
+(`faster`, `fewer`), a completion (`fixes`, `no longer flakes`) or an absolute about
+behavior carries its evidence in the same sentence or bullet: a code span naming the
+command, test or benchmark, a link, or an output ref (`claim`). A claim covers exactly
+what was measured. A judgment call is labelled as one, with its reason. What is not known
+goes under Not verified, or opens a sentence with `Not measured`, `Not tested` or
+`Untested`.
+
+A softener on a claim (`might fix`, `may help`, `probably`, `aims to`) stays refused
+(`hedge`): it lets a claim stand with no evidence. A `may` that grants a permission or
+states a contract (`a workspace may declare`) is not a hedge. In this repository the
+guard also resolves every output ref a description cites, and refuses one that does not
+exist or names a failed run.
+
+### Tone
+
+The tone rules describe a situation, never a person or the earlier code's character:
+"the cache kept the old key after a rename", not "the cache was broken". Each names the
+posture it catches and how to say the same fact.
+
+- `condescension`: no word that tells the reader how hard a step should feel or what
+  they should already know (`obviously`, `of course`, `simply`, `easy`).
+- `blame`: no person or past work as the subject of a fault (`should have`, `forgot to`,
+  `sloppy`).
+- `verdict`, `absolute`, `intent` and `credit` advise: a judgment word standing in for
+  the behavior (`messy`), `never` or `nobody` about the past, a motive given to a tool
+  (`pretends`), and a removal that names nothing the old design was for.
+
+`blame` denies and the other four advise, because the words they catch also state
+contracts elsewhere ("never returns nil"); each moves to `deny` only after it has fired
+on real text and every firing was right.
+
+### Review replies
+
+A reply takes the tone rules and four of its own. A reply does not open by
+contradicting (`No,`, `Actually,`, `As I said`; `reply-opener`), labels a
+recommendation as a judgment and gives its reason (`judgment-as-fact`), states a doubt
+once instead of stacking softeners or apologizing before a valid point
+(`stacked-hedge`), and offers a call by the fourth reply of one author in a thread
+(`long-thread`, which needs the thread length the caller passes in). Reading a thread is
+provider I/O, so the guard passes none and `long-thread` stays silent there.
+
+### Generated-writing tells
+
+The deterministic checks of the `stop-slop` and `humanizer` skills run in the judge, so
+a skill spends no tokens on them. They refuse chatbot residue (`leak`, `chatbot`),
+announcements standing where the point should be (`signpost`, `closer`), weight asserted
+with nothing named (`vague`), words chosen to sound significant (`buzzword`, with
+`buzzword-weak` advising on those that have an ordinary sense), throat-clearing and
+filler (`filler`, `wordy`), a claim made by denying its opposite (`contrast`), runs of
+very short sentences (`staccato`) and a participle clause that claims significance
+(`ing-tail`). What stays in a skill is the judgment no rule sees: a claim with no
+specific behind it, and padding.
+
+### Other rules
+
+- `terms`: one spelling per glossary term, such as `subagent`.
+- `attribution`: no credit to a tool and no account of how the work was made
+  (`Co-Authored-By`, `Generated with`, `after several iterations`). Agents, subagents,
+  prompts and sessions are what magus is about, so a page names them freely; in a pull
+  request an agent that found or fixed something, or `this session`, is the story of the
+  work and is refused.
 - `tense`: the present tense, describing the code after the change, with no `will`. A page
   may speak as the project (`we believe`), but no author is the actor of a change
   (`we added`), and a pull request names no author at all.
-- `hedge`: no softener on a claim (`might fix`, `may help`, `probably`, `aims to`,
-  `hopefully`). A `may` that grants a permission or states a contract (`a workspace may
-  declare`, `the value may be empty`) is not one.
-- `attribution`: no credit to a tool and no account of how the work was made
-  (`Co-Authored-By`, `Generated with`, `written with an AI`, `after several iterations`).
-  Agents, subagents, prompts and sessions are what magus is about, so a page names them
-  freely; in a pull request an agent that found or fixed something, or `this session`, is
-  the story of the work and is refused.
-- `filler`: no throat-clearing (`Note that`) and no filler word (`simply`, `actually`,
-  `really`, `very`, `robust`, `seamless`, `leverage`, `utilize`, and `just` meaning
-  merely).
-- `terms`: one spelling per glossary term, such as `subagent`.
 
-A skill is loaded into an agent's context every session, so `judge-docs -kind skill`
-and `-kind skill-source` hold what a skill's short form shows to three more rules: no
-sentence over 25 words (`terse-sentence`), no paragraph or list item over 60
-(`terse-paragraph`), and no phrase with a shorter equivalent (`wordy`, such as `in order
-to` for `to`). In a skill body under `internal/agent/skills/`, text inside an `{{if .Full}}`
-arm is in the full form only and meets the rules above alone, plus `bare-rule`. In a
-skill a rule is only what magus enforces (a guard, workspace or lint rule, a diagnostic,
-or a rule id) and everything else a skill asks of an agent is an instruction, so
-`bare-rule` refuses `rule` in either form unless a qualifier or a rule id in code names
-the mechanism.
+A skill is loaded into an agent's context every session, so what a skill's short form
+shows meets three more rules in the `agent-instructions` kinds: no sentence over 25 words
+(`terse-sentence`), no paragraph or list item over 60 (`terse-paragraph`), and no phrase
+with a shorter equivalent (`wordy`, such as `in order to` for `to`). In a skill body
+under `internal/agent/skills/`, text inside an `{{if .Full}}` arm is in the full form only
+and meets the rules above alone, plus `bare-rule`. In a skill a rule is only what magus
+enforces (a guard, workspace or lint rule, a diagnostic, or a rule id) and everything
+else a skill asks of an agent is an instruction, so `bare-rule` refuses `rule` in either
+form unless a qualifier or a rule id in code names the mechanism.
 
 A guide is a procedure the reader follows with a terminal open: every page under
-`docs/guides/`, which holds the setup and migrating pages too. `judge-docs
--kind guide` holds it to three rules on top of the Markdown ones: it addresses the
-reader as you, with no `we`, `us` or `our` (`second-person`); each step of a numbered
-procedure opens with its verb, never an article, a pronoun, `You` or a bare code span
-(`step-verb`), while a numbered list with no imperative step is ordered facts and is left
-alone; and no word tells the reader a step is easy (`condescension`: `easy`, `simple`,
-`obviously`, `of course`, `clearly`, `please`, and `just` before a verb).
+`docs/guides/`, which holds the setup and migrating pages too. The `guide` kind holds it
+to rules on top of the reference ones: it addresses the reader as you, with no `we`,
+`us` or `our` (`second-person`); each step of a numbered procedure opens with its verb,
+never an article, a pronoun, `You` or a bare code span (`step-verb`), while a numbered
+list with no imperative step is ordered facts and is left alone; and no word tells the
+reader a step is easy (`condescension`: `easy`, `simple`, `obviously`, `of course`,
+`clearly`, `please`, and `just` before a verb).
 
 The `banned-words` lint rule holds hand-written Go, Buzz, Markdown, TypeScript, CSS,
 HTML, YAML, proto and txtar files to three bans: `surface` as a noun, where the verb in
