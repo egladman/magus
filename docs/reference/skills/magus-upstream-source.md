@@ -3,7 +3,7 @@ title: magus-upstream-source
 generated_from: internal/agent/skills/magus-upstream-source/SKILL.md
 description: "Last resort: read magus's OWN source code at the exact commit of the magus binary in use, to trace behavior its docs cannot explain."
 tags: [agents, skills, magus-upstream-source]
-skill_full_bytes: 3048
+skill_full_bytes: 3184
 skill_short_bytes: 2353
 ---
 
@@ -28,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
 | `skill-content` | `1865a18b4fde` |
 | `skill-variant` | `full` |
@@ -144,6 +144,13 @@ Read magus's source only when both hold:
 - magus crashed (a Go panic and trace), or the magus-upstream-docs skill could
   not reconcile the docs with what the binary does.
 - You have a reproduction: one command and the output that shows the problem.
+
+## Contents
+
+- Pin the source to the binary
+- Fetch it outside the workspace
+- Read it without changing it
+- Report what the code says
 
 ## Pin the source to the binary
 

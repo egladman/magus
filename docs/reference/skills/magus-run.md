@@ -3,7 +3,7 @@ title: magus-run
 generated_from: internal/agent/skills/magus-run/SKILL.md
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 13409
+skill_full_bytes: 13669
 skill_short_bytes: 8240
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `ae8cd9e72172` |
+| `skill-content` | `9319dac0d5ef` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -251,6 +251,17 @@ magus is the task orchestrator, and its unit of work is the target. Targets decl
 their inputs, outputs and sandbox. magus caches results and computes what a change
 affects. A raw language tool bypasses all of that, so the cache goes stale, declared
 outputs drift, and `magus affected` can no longer vouch for your change.
+
+## Contents
+
+- Which project a command hits
+- How to run work
+- Command patterns
+- Output control: silence runs, read structure
+- When you need finer granularity
+- When a target fails
+- When another magus process holds the project
+- Fetching current behavior
 
 ## Which project a command hits
 

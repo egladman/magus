@@ -3,7 +3,7 @@ title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
 description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
 tags: [agents, skills, magus-diagram]
-skill_full_bytes: 7974
+skill_full_bytes: 8189
 skill_short_bytes: 6715
 ---
 
@@ -28,7 +28,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
 | `skill-content` | `e7a0f1d3f188` |
 | `skill-variant` | `full` |
@@ -222,6 +222,18 @@ records carry.
 
 You never place anything or type an edge between two packages. The
 module places the figure, or refuses with a finding naming the call to change.
+
+## Contents
+
+- When to reach for it
+- The first figure
+- Boxes, groups and actors
+- Edges come from the graph
+- Scope
+- Findings name the call to change
+- Register and embed
+- The console
+- What this skill refuses
 
 ## When to reach for it
 

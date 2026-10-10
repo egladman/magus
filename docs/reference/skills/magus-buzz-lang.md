@@ -3,7 +3,7 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12601
+skill_full_bytes: 12809
 skill_short_bytes: 10390
 ---
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `5b2aed6e0d51` |
+| `skill-content` | `ff0297f9d3f1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -309,6 +309,16 @@ way a TypeScript, Go or Python author would: the checker rejected 22, and of the
 it accepted, 6 failed or printed the wrong thing when run, and every one that called
 its own `main()` ran twice. Work in this order: copy the shapes on this page,
 check, fix the first error, run.
+
+## Contents
+
+- The loop
+- One script with every common shape
+- Coming from TypeScript, Go, Python or Swift
+- Built-in methods
+- Host modules: ask, never guess
+- Test what you write
+- Where Buzz code belongs
 
 ## The loop
 

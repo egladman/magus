@@ -3,8 +3,8 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 14466
-skill_short_bytes: 10345
+skill_full_bytes: 15093
+skill_short_bytes: 10505
 ---
 
 # magus-query
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `115` |
+| `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `d091c8f52025` |
+| `skill-content` | `0cbb3382f618` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -63,6 +63,9 @@ FAST PATH: in a magus workspace (a magusfile.buzz at the root), ask the graph FI
 That covers "what exists", "what depends on X", "where is Y used", and "how do A and
 B relate". Do not open Grep or Glob for it. If the graph cannot answer, say so,
 then fall back: falling back silently hides the gap.
+
+Send a lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model.
 
 `MAGUS.md` IS NOT YOUR SOURCE. It is a
 generated index for humans, true only as of its last regeneration. Read it only as a
@@ -286,6 +289,11 @@ source or scored by a rubric, and says which. If the graph cannot answer, say so
 then fall back: a silent fallback hides the gap that should be
 reported.
 
+Send a lookup whose answer is all you need to the `magus-scout` agent, where your
+harness installed one. Otherwise use a worker on your host's cheapest model. Answering
+from the graph takes no judgment, so the strongest model spends its tokens for nothing
+there, and a scout's short context keeps every lookup cheap.
+
 `MAGUS.md` IS NOT YOUR SOURCE. It is a generated routing index written for a
 HUMAN reading the repo, and it is only as true as its last regeneration: a
 workspace whose generate target has not run since the last change describes a
@@ -293,6 +301,19 @@ tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
 workspace. Read it as a LAST RESORT: when no server is reachable and the CLI is
 unavailable too, or when a human explicitly asks what the committed index says.
+
+## Contents
+
+- Act in this order
+- Rewriting a symbol everywhere it appears
+- Query grammar
+- Retrieving prose from the docs
+- Reading results
+- Ownership and blast radius
+- What other sessions already did here
+- Across workspaces and neighbors
+- Do not render the graph yourself
+- Fetching current behavior
 
 ## Act in this order
 
