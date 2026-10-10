@@ -65,12 +65,54 @@ func SameExecutable(pid int) bool {
 	return os.SameFile(theirs, ours)
 }
 
-// ExecPending reports whether pid runs the same executable file as its parent with the
-// same arguments, which is what a child looks like between fork and exec: a shell's
-// pipeline stage, or any other process's child that briefly holds a copy of every
-// descriptor its parent had. What such a process runs proves nothing yet; a caller
-// asking what a pipe's peer runs skips it and asks again.
-func ExecPending(pid int) bool {
+// An ExecState is what a process listed at one end of a Pipe has exec'd, judged against
+// this process's executable.
+type ExecState uint8
+
+const (
+	// ExecOther is a peer running another executable, one that has exited, or one that no
+	// longer holds the end it was listed at.
+	ExecOther ExecState = iota
+	// ExecPending is a fork that has not exec'd yet: a shell's pipeline stage, or any
+	// other process's child, briefly holding a copy of every descriptor its parent had.
+	// What it runs proves nothing, so a caller asking what the pipe's peer runs asks again.
+	ExecPending
+	// ExecSame is a peer that has exec'd this process's executable and holds the end it
+	// was listed at.
+	ExecSame
+)
+
+// WriterExec reports what pid, listed among p's writers, has exec'd. For ExecSame, argv
+// is pid's argv, argv[0] first, or nil when it cannot be read.
+func (p Pipe) WriterExec(pid int) (argv []string, state ExecState) {
+	return peerExec(pid, p.WrittenBy)
+}
+
+// ReaderExec is WriterExec for a pid listed among p's readers.
+func (p Pipe) ReaderExec(pid int) (argv []string, state ExecState) {
+	return peerExec(pid, p.ReadBy)
+}
+
+func peerExec(pid int, holds func(pid int) bool) ([]string, ExecState) {
+	if execPending(pid) {
+		return nil, ExecPending
+	}
+	if !SameExecutable(pid) {
+		return nil, ExecOther
+	}
+	argv, _ := Args(pid)
+	// Asked last: a fork that exec'd since it was listed, this executable included, gave
+	// up its copy of the end on the way unless the command it runs writes or reads the
+	// pipe itself.
+	if !holds(pid) {
+		return nil, ExecOther
+	}
+	return argv, ExecSame
+}
+
+// execPending reports whether pid runs the same executable file as its parent with the
+// same arguments, which is what a child looks like between fork and exec.
+func execPending(pid int) bool {
 	parent, err := Parent(pid)
 	if err != nil || parent <= 0 {
 		return false
