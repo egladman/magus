@@ -4,6 +4,8 @@ import "flags";
 import "fs";
 import "io";
 import "magus";
+import "os";
+import "proc";
 import "serialize";
 import "std";
 import "vcs";
@@ -201,12 +203,27 @@ export fun candidatesFromBranches(branches: [str], rows: [JobRow], checkedOut: f
     return acc;
 }
 
+// The fixture tests set "on": their temp repositories are not the caller's work, so git
+// runs there outside the lease gate vcs\cmd applies and without the lease in its environment.
+final UNLEASED = mut {"on": false};
+
+fun runGit(dir: str, args: [str], allowFailure: bool) > ExecResult !> any {
+    if (!UNLEASED["on"]!) {
+        return vcs\cmd(args, opts: {"quiet": true, "dir": dir, "allow_failure": allowFailure});
+    }
+    var res: proc\ExecResult? = null;
+    os\withEnv({"BAGGAGE": ""}, callback: fun () > void !> any {
+        res = proc\exec("git", args: args, dir: dir, opts: {"quiet": true, "allow_failure": allowFailure});
+    });
+    return res!;
+}
+
 fun git(dir: str, args: [str]) > str !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir}).stdout.trim();
+    return runGit(dir, args: args, allowFailure: false).stdout.trim();
 }
 
 fun gitOK(dir: str, args: [str]) > bool !> any {
-    return vcs\cmd(args, opts: {"quiet": true, "dir": dir, "allow_failure": true}).code == 0;
+    return runGit(dir, args: args, allowFailure: true).code == 0;
 }
 
 fun lines(text: str) > [str] {
@@ -840,6 +857,7 @@ fun branchFrom(root: str, name: str, start: str, files: {str: str}, subject: str
 // conflicts and the merge driver settles it; dep builds on gen-b and adds a source without
 // regenerating; edit-a and clash both rewrite src/a.txt.
 fun fixtureRepo() > str !> any {
+    UNLEASED["on"] = true;
     final root = fs\tempDir("merge-job-branches-test-");
     git(root, args: ["init", "-q", "-b", "main"]);
     foreach (kv in [["user.email", "t@example.com"], ["user.name", "t"], ["commit.gpgsign", "false"], ["core.hooksPath", "/dev/null"]]) {
