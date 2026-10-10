@@ -1,27 +1,28 @@
-// Command judge-docs judges prose against the prose rules and writes a JSON
-// array of findings on stdout.
+// Command proofread judges written text against the proofread rules and
+// writes a JSON array of findings on stdout.
 //
-// With no flag, or -kind doc-comment, it reads a JSON array of symbol records
-// on stdin and judges each one's doc, reporting in input order and then the
-// order [prose.Judge] reports them. With -kind reference it judges the
-// Markdown files its arguments name, in argument order; -kind guide judges
-// them as procedural pages, held to the guide rules as well; -kind
-// agent-instructions judges them as instructions an agent loads as written,
-// and -kind agent-instructions-template as template bodies that render into a
-// short and a full form, each finding at its source line. With -kind
-// change-description it reads a pull request on stdin, the title on the first
-// line and the description after it, and with -kind review-reply a review
-// comment or a reply in a thread on stdin. A finding from text names its file,
-// or the kind it read from stdin, and its line as source, `path:line`, the way
-// a symbol's index position reads.
+// Its first argument names what to do. A kind judges text of that kind:
+// doc-comment reads a JSON array of symbol records on stdin and judges each
+// one's doc, reporting in input order and then the order [proofread.Judge]
+// reports them. reference judges the Markdown files its arguments name, in
+// argument order; guide judges them as procedural pages, held to the guide
+// rules as well; agent-instructions judges them as instructions an agent
+// loads as written, and agent-instructions-template as template bodies that
+// render into a short and a full form, each finding at its source line.
+// change-description reads a pull request on stdin, the title on the first
+// line and the description after it, and review-reply a review comment or a
+// reply in a thread on stdin. A finding from text names its file, or the kind
+// it read from stdin, and its line as source, `path:line`, the way a symbol's
+// index position reads. rules writes every rule as the docs render it, and
+// explain prints one rule, named by its name or its code.
 //
-// Each finding carries its rule's decision, advise or deny, its PRS code and
+// Each finding carries its rule's decision, advise or deny, its PRF code and
 // the page that documents the rule. -decisions names a JSON table that sets
 // rules off, advise or deny, for every file or for the files a glob matches;
 // house style runs only where it names it. -only takes comma-separated rule
-// names. A rule, a decision or a glob the judge cannot use is an error.
+// names. A rule, a decision or a glob proofread cannot use is an error.
 // -thread-length N tells the reply rules how many replies the author already
-// posted in the thread. -catalog writes every rule as the docs render it.
+// posted in the thread. The flags follow the kind.
 //
 // This repository's lint rules and its pull request guard and CI step run it.
 // The magus module never imports libs/conventions, so the rules stay this
@@ -43,7 +44,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/egladman/magus/libs/conventions/prose"
+	"github.com/egladman/magus/libs/conventions/proofread"
 )
 
 // record is one symbol as `magus\symbols()` describes it.
@@ -76,93 +77,191 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-// run returns the process exit code: 0 once the findings are written, 1 when
-// the flags, the decisions or the input cannot be used. A finding is not a
-// failure: the caller decides what one costs.
+// subcommand is one word the first argument may be. A kind judges text of
+// that kind; rules and explain read the catalog.
+type subcommand struct {
+	name    string
+	kind    proofread.Kind
+	operand string
+	summary string
+}
+
+var subcommands = []subcommand{
+	{"doc-comment", proofread.KindDocComment, "", "judge the doc of each symbol in a JSON array on stdin"},
+	{"reference", proofread.KindReference, "FILE...", "judge Markdown pages a reader looks things up in"},
+	{"guide", proofread.KindGuide, "FILE...", "judge procedural pages, held to the guide rules too"},
+	{"agent-instructions", proofread.KindAgentInstructions, "FILE...", "judge instructions an agent loads as written"},
+	{"agent-instructions-template", proofread.KindAgentInstructionsTemplate, "FILE...", "judge template bodies that render into a short and a full form"},
+	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
+	{"review-reply", proofread.KindReviewReply, "", "judge a review comment or a reply on stdin"},
+	{"rules", "", "", "write every rule as the docs render it, as JSON"},
+	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
+}
+
+// usage lists every subcommand and the flags a kind takes.
+func usage() string {
+	var b strings.Builder
+
+	b.WriteString("usage: proofread <subcommand> [flags] [operand]\n\nsubcommands:\n")
+
+	for _, s := range subcommands {
+		fmt.Fprintf(&b, "  %-28s %-10s %s\n", s.name, s.operand, s.summary)
+	}
+
+	b.WriteString("\nflags, after a kind:\n")
+	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
+	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
+	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
+
+	return b.String()
+}
+
+// run returns the process exit code: 0 once the output is written, 1 when
+// the subcommand, the flags, the decisions or the input cannot be used. A
+// finding is not a failure: the caller decides what one costs.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("judge-docs", flag.ContinueOnError)
+	if len(args) == 0 {
+		fmt.Fprint(stderr, usage())
+
+		return 1
+	}
+
+	name, rest := args[0], args[1:]
+
+	switch name {
+	case "rules":
+		return runRules(rest, stdout, stderr)
+	case "explain":
+		return runExplain(rest, stdout, stderr)
+	}
+
+	for _, s := range subcommands {
+		if s.kind != "" && s.name == name {
+			return runKind(s.kind, rest, stdin, stdout, stderr)
+		}
+	}
+
+	fmt.Fprintf(stderr, "proofread: unknown subcommand %q\n\n%s", name, usage())
+
+	return 1
+}
+
+func failure(stderr io.Writer, err error) int {
+	fmt.Fprintf(stderr, "proofread: %v\n", err)
+
+	return 1
+}
+
+func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("proofread "+string(kind), flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	kindFlag := fs.String("kind", "", "judge `reference`, guide, agent-instructions or agent-instructions-template "+
-		"files named as arguments, a change-description or review-reply on stdin, or doc-comment symbols on stdin")
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
-	catalog := fs.Bool("catalog", false, "write every rule as its reference page shows it, and judge nothing")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 
-	fail := func(err error) int {
-		fmt.Fprintf(stderr, "judge-docs: %v\n", err)
-
-		return 1
-	}
-
-	if *catalog {
-		if err := json.NewEncoder(stdout).Encode(prose.Catalog()); err != nil {
-			return fail(fmt.Errorf("write the catalog: %w", err))
-		}
-
-		return 0
-	}
-
-	kind := prose.Kind(*kindFlag)
-	if kind == "" {
-		kind = prose.KindDocComment
-	}
-
 	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
 	if err != nil {
-		return fail(err)
+		return failure(stderr, err)
 	}
 
 	onlyRules, err := onlyList(*only, t)
 	if err != nil {
-		return fail(err)
+		return failure(stderr, err)
 	}
 
-	opts := []prose.Option{prose.WithOnly(onlyRules...), prose.WithThreadLength(*threadLength)}
+	opts := []proofread.Option{proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength)}
 
 	out, err := judge(kind, fs.Args(), stdin, t, opts)
 	if err != nil {
-		return fail(err)
+		return failure(stderr, err)
 	}
 
 	if err := json.NewEncoder(stdout).Encode(out); err != nil {
-		return fail(fmt.Errorf("write findings: %w", err))
+		return failure(stderr, fmt.Errorf("write findings: %w", err))
 	}
 
 	return 0
 }
 
+func runRules(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		return failure(stderr, errors.New("rules takes no arguments"))
+	}
+
+	if err := json.NewEncoder(stdout).Encode(proofread.Catalog()); err != nil {
+		return failure(stderr, fmt.Errorf("write the rules: %w", err))
+	}
+
+	return 0
+}
+
+func runExplain(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		return failure(stderr, errors.New("explain takes one rule name or code"))
+	}
+
+	for _, doc := range proofread.Catalog() {
+		if strings.EqualFold(string(doc.Name), args[0]) || strings.EqualFold(string(doc.Code), args[0]) {
+			writeExplanation(stdout, doc)
+
+			return 0
+		}
+	}
+
+	return failure(stderr, fmt.Errorf("unknown rule or code %q", args[0]))
+}
+
+func writeExplanation(w io.Writer, doc proofread.RuleDoc) {
+	fmt.Fprintf(w, "%s (%s)\n\nCatches: %s\n", doc.Name, doc.Code, doc.Catches)
+
+	if doc.Why != "" {
+		fmt.Fprintf(w, "Why: %s\n", doc.Why)
+	}
+
+	if doc.House {
+		fmt.Fprintln(w, "House style: runs only where a decisions table names it.")
+	}
+
+	fmt.Fprintln(w, "\nDefault decisions:")
+
+	for _, k := range doc.Kinds {
+		fmt.Fprintf(w, "  %-28s %s\n", k, doc.Decisions[k])
+	}
+
+	fmt.Fprintf(w, "\nPage: %s\n", doc.URL())
+}
+
 // readsFiles reports whether kind is judged from files named as arguments
 // rather than from stdin.
-func readsFiles(kind prose.Kind) bool {
+func readsFiles(kind proofread.Kind) bool {
 	switch kind {
-	case prose.KindReference, prose.KindGuide, prose.KindAgentInstructions, prose.KindAgentInstructionsTemplate:
+	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentInstructions, proofread.KindAgentInstructionsTemplate:
 		return true
 	default:
 		return false
 	}
 }
 
-// onlyList reads -only. A rule the judge does not know is an error, and so is
+// onlyList reads -only. A rule proofread does not know is an error, and so is
 // one t leaves off for every file, since naming it selects nothing.
-func onlyList(list string, t table) ([]prose.Rule, error) {
+func onlyList(list string, t table) ([]proofread.Rule, error) {
 	if list == "" {
 		return nil, nil
 	}
 
-	house := map[prose.Rule]bool{}
-	for _, doc := range prose.Catalog() {
+	house := map[proofread.Rule]bool{}
+	for _, doc := range proofread.Catalog() {
 		house[doc.Name] = doc.House
 	}
 
-	var out []prose.Rule
+	var out []proofread.Rule
 
 	for name := range strings.SplitSeq(list, ",") {
-		r := prose.Rule(strings.TrimSpace(name))
+		r := proofread.Rule(strings.TrimSpace(name))
 
 		isHouse, known := house[r]
 		if !known {
@@ -179,17 +278,17 @@ func onlyList(list string, t table) ([]prose.Rule, error) {
 	return out, nil
 }
 
-func judge(kind prose.Kind, paths []string, stdin io.Reader, t table, opts []prose.Option) ([]finding, error) {
+func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {
 	switch {
-	case kind == prose.KindDocComment:
+	case kind == proofread.KindDocComment:
 		if len(paths) > 0 {
-			return nil, errors.New("symbols are read from stdin; a path needs -kind reference")
+			return nil, errors.New("symbols are read from stdin; a path needs the reference subcommand")
 		}
 
-		return judgeSymbols(stdin, append(opts, prose.WithDecisions(t.rules)))
+		return judgeSymbols(stdin, append(opts, proofread.WithDecisions(t.rules)))
 	case readsFiles(kind):
 		return judgeFiles(paths, kind, t, opts)
-	case kind == prose.KindChangeDescription || kind == prose.KindReviewReply:
+	case kind == proofread.KindChangeDescription || kind == proofread.KindReviewReply:
 		if len(paths) > 0 {
 			return nil, fmt.Errorf("a %s is read from stdin, not from a path", kind)
 		}
@@ -199,14 +298,13 @@ func judge(kind prose.Kind, paths []string, stdin io.Reader, t table, opts []pro
 			return nil, fmt.Errorf("read the %s: %w", kind, err)
 		}
 
-		return textFindings(string(kind), string(text), kind, append(opts, prose.WithDecisions(t.rules))), nil
+		return textFindings(string(kind), string(text), kind, append(opts, proofread.WithDecisions(t.rules))), nil
 	default:
-		return nil, fmt.Errorf("unknown kind %q: want doc-comment, reference, guide, agent-instructions, "+
-			"agent-instructions-template, change-description or review-reply", kind)
+		return nil, fmt.Errorf("no judge for kind %q", kind)
 	}
 }
 
-func judgeFiles(paths []string, kind prose.Kind, t table, opts []prose.Option) ([]finding, error) {
+func judgeFiles(paths []string, kind proofread.Kind, t table, opts []proofread.Option) ([]finding, error) {
 	out := []finding{}
 
 	for _, p := range paths {
@@ -215,31 +313,31 @@ func judgeFiles(paths []string, kind prose.Kind, t table, opts []prose.Option) (
 			return nil, fmt.Errorf("read %s: %w", p, err)
 		}
 
-		fileOpts := append(slices.Clone(opts), prose.WithDecisions(t.decisionsAt(p)))
+		fileOpts := append(slices.Clone(opts), proofread.WithDecisions(t.decisionsAt(p)))
 		out = append(out, textFindings(p, string(text), kind, fileOpts)...)
 	}
 
 	return out, nil
 }
 
-func textFindings(name, text string, kind prose.Kind, opts []prose.Option) []finding {
+func textFindings(name, text string, kind proofread.Kind, opts []proofread.Option) []finding {
 	out := []finding{}
 
-	for _, f := range prose.JudgeText(text, kind, opts...) {
+	for _, f := range proofread.JudgeText(text, kind, opts...) {
 		out = append(out, toFinding(name, name+":"+strconv.Itoa(f.Line), kind, f))
 	}
 
 	return out
 }
 
-func toFinding(node, source string, kind prose.Kind, f prose.Finding) finding {
+func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) finding {
 	return finding{
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
 		Decision: string(f.Decision), Message: f.Message, Match: f.Match, URL: f.URL,
 	}
 }
 
-func judgeSymbols(stdin io.Reader, opts []prose.Option) ([]finding, error) {
+func judgeSymbols(stdin io.Reader, opts []proofread.Option) ([]finding, error) {
 	records, err := decode(stdin)
 	if err != nil {
 		return nil, err
@@ -248,15 +346,15 @@ func judgeSymbols(stdin io.Reader, opts []prose.Option) ([]finding, error) {
 	out := []finding{}
 
 	for _, r := range records {
-		symbol := prose.Symbol{
+		symbol := proofread.Symbol{
 			Name:     r.Name,
 			Owner:    r.Owner,
 			Callable: r.Kind == "function" || r.Kind == "method",
 			Doc:      r.Doc,
 		}
 
-		for _, f := range prose.Judge(symbol, opts...) {
-			out = append(out, toFinding(r.Node, r.Source, prose.KindDocComment, f))
+		for _, f := range proofread.Judge(symbol, opts...) {
+			out = append(out, toFinding(r.Node, r.Source, proofread.KindDocComment, f))
 		}
 	}
 
@@ -282,21 +380,21 @@ func decode(stdin io.Reader) ([]record, error) {
 // table is a decisions file: decisions for every file, then decisions for the
 // files each glob matches, in the order the file lists them.
 type table struct {
-	rules map[prose.Rule]prose.Decision
+	rules map[proofread.Rule]proofread.Decision
 	paths []scoped
 }
 
 type scoped struct {
 	glob  string
-	rules map[prose.Rule]prose.Decision
+	rules map[proofread.Rule]proofread.Decision
 }
 
 // decisionsAt returns the decisions for the file at p: t.rules, overridden by
 // each glob that matches p in turn, so the last match wins.
-func (t table) decisionsAt(p string) map[prose.Rule]prose.Decision {
+func (t table) decisionsAt(p string) map[proofread.Rule]proofread.Decision {
 	out := maps.Clone(t.rules)
 	if out == nil {
-		out = map[prose.Rule]prose.Decision{}
+		out = map[proofread.Rule]proofread.Decision{}
 	}
 
 	for _, s := range t.paths {
@@ -310,14 +408,14 @@ func (t table) decisionsAt(p string) map[prose.Rule]prose.Decision {
 
 // turnsOn reports whether t runs rule r for some file: by its default, unless
 // t.rules sets it off, or by a glob's entry.
-func (t table) turnsOn(r prose.Rule, house bool) bool {
+func (t table) turnsOn(r proofread.Rule, house bool) bool {
 	d, set := t.rules[r]
-	if (set && d != prose.DecisionOff) || (!set && !house) {
+	if (set && d != proofread.DecisionOff) || (!set && !house) {
 		return true
 	}
 
 	for _, s := range t.paths {
-		if d, ok := s.rules[r]; ok && d != prose.DecisionOff {
+		if d, ok := s.rules[r]; ok && d != proofread.DecisionOff {
 			return true
 		}
 	}
@@ -332,7 +430,7 @@ func argumentPath(p string) string { return strings.TrimPrefix(filepath.ToSlash(
 
 // readTable reads the decisions file at p, or stdin for "-", and checks it
 // against the rules and against args. An empty p is an empty table.
-func readTable(p string, kind prose.Kind, stdin io.Reader, args []string) (table, error) {
+func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (table, error) {
 	if p == "" {
 		return table{}, nil
 	}
@@ -429,18 +527,18 @@ func parseTable(data []byte) (table, error) {
 
 // ruleDecisions checks each name against the rules and each value against the
 // three decisions.
-func ruleDecisions(in map[string]string) (map[prose.Rule]prose.Decision, error) {
-	known := prose.Rules()
-	out := make(map[prose.Rule]prose.Decision, len(in))
+func ruleDecisions(in map[string]string) (map[proofread.Rule]proofread.Decision, error) {
+	known := proofread.Rules()
+	out := make(map[proofread.Rule]proofread.Decision, len(in))
 
 	for _, name := range slices.Sorted(maps.Keys(in)) {
-		r, d := prose.Rule(name), prose.Decision(in[name])
+		r, d := proofread.Rule(name), proofread.Decision(in[name])
 		if !slices.Contains(known, r) {
 			return nil, fmt.Errorf("unknown rule %q", name)
 		}
 
 		switch d {
-		case prose.DecisionOff, prose.DecisionAdvise, prose.DecisionDeny:
+		case proofread.DecisionOff, proofread.DecisionAdvise, proofread.DecisionDeny:
 		default:
 			return nil, fmt.Errorf("rule %q: unknown decision %q: want off, advise or deny", name, in[name])
 		}

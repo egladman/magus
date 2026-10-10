@@ -1,4 +1,4 @@
-package prose
+package proofread
 
 import (
 	"reflect"
@@ -152,8 +152,8 @@ func TestCatalogDocumentsEveryRuleWithAUniqueCode(t *testing.T) {
 		switch {
 		case doc.Catches == "" || doc.Why == "":
 			t.Errorf("%s: no catches or why", doc.Name)
-		case len(doc.Code) != 7 || doc.Code[:3] != "PRS":
-			t.Errorf("%s: code %q is not PRS and four digits", doc.Name, doc.Code)
+		case len(doc.Code) != 7 || doc.Code[:3] != "PRF":
+			t.Errorf("%s: code %q is not PRF and four digits", doc.Name, doc.Code)
 		case codes[string(doc.Code)] != "":
 			t.Errorf("%s: code %s is %s's", doc.Name, doc.Code, codes[string(doc.Code)])
 		}
@@ -166,7 +166,7 @@ func TestCatalogDocumentsEveryRuleWithAUniqueCode(t *testing.T) {
 			}
 		}
 
-		if got, want := prs.URL(doc.Code), ruleBase+string(doc.Name)+"/"; got != want {
+		if got, want := prf.URL(doc.Code), ruleBase+string(doc.Name)+"/"; got != want {
 			t.Errorf("%s: url %q, want %q", doc.Name, got, want)
 		}
 	}

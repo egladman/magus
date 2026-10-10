@@ -1,4 +1,4 @@
-package prose
+package proofread
 
 import (
 	"fmt"
@@ -45,7 +45,7 @@ func TestBareRulePassesAQualifiedRule(t *testing.T) {
 		"a guard rule":             "A refused write is a guard rule you are about to hit.",
 		"a possessive":             "The guard's rules hold.",
 		"a hyphenated qualifier":   "Declare an additive shell-guard rule.",
-		"a lint rule":              "The prose judge holds the short form to the terse lint rules.",
+		"a lint rule":              "Proofread holds the short form to the terse lint rules.",
 		"a workspace rule":         "A workspace spawn rule may restrict it, as any workspace rule may.",
 		"a command rule":           "The command rule and the write rule both judge it.",
 		"a builtin rule":           "Set a builtin rule to deny.",

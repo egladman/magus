@@ -5,7 +5,7 @@ import "magus";
 import "fs";
 import "../../hack/magusfile/drift" as drift;
 import "../../hack/magusfile/index" as index;
-import "./judge_docs" as judgeDocs;
+import "./proofread" as proofread;
 
 import "magus/spell/go";
 // Imported for dprint only. Listing it in spells would claim **/*.md, which the root lints.
@@ -48,17 +48,17 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 export fun lint(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-vet"](ctx); }
 // Compiles every analyzer package; the module root holds none.
 export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(format); go["go-build"](ctx, {"args": ["./..."]}); }
-// Links judge-docs, so the pull request guard and the prose checks never wait on the compiler.
+// Links proofread, so the pull request guard and the writing checks never wait on the compiler.
 // The guard denies a pull request until this has run, and again once the sources move on.
-export fun judge_build(ctx: magus\Context, args: [str]) > void !> any {
+export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
-    // readsFiles replaces the project baseline. judge_docs.buzz computes the digest, so a
+    // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
     // change to it must relink: a replayed digest from the old code would deny every call.
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "judge_docs.buzz");
-    // Literal, as magus reads outputs statically: judgeDocs\binary and judgeDocs\inputsFile.
-    ctx.writesFiles("gen/judge-docs", "gen/judge-docs.inputs");
-    go["go-build"](ctx, {"args": ["-trimpath", "-o", judgeDocs\binary, "./cmd/judge-docs"]});
-    fs\writeFile(judgeDocs\inputsFile, content: judgeDocs\inputs(".") + "\n");
+    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "proofread.buzz");
+    // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
+    ctx.writesFiles("gen/proofread", "gen/proofread.inputs");
+    go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./cmd/proofread"]});
+    fs\writeFile(proofread\inputsFile, content: proofread\inputs(".") + "\n");
 }
 // Runs the suite; the root merges coverage.out into its coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void {

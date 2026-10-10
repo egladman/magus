@@ -78,9 +78,9 @@ rules that also read Buzz, shell or markdown
 (environment sniffing, registered env vars, diagnostic raise sites, rescanning
 string loops).
 
-## prose
+## proofread
 
-`prose` is not an analyzer, and golangci-lint never loads it. It judges text by
+`proofread` is not an analyzer, and golangci-lint never loads it. It judges text by
 what the text is for, its kind:
 
 | Kind                          | Text                                                                                  |
@@ -93,12 +93,13 @@ what the text is for, its kind:
 | `change-description`          | a pull request: its title on the first line, its description after it                 |
 | `review-reply`                | a review comment, a review's body or a reply in a thread                              |
 
-The magus module never imports `libs/conventions`, and `prose` imports only the
-standard library and `libs/diagnostics`. `cmd/judge-docs` runs it. With no
-`-kind`, or `-kind doc-comment`, it reads the symbols of `magus\symbols()` as
-JSON on stdin, fed by `hack/lint/symbol-docs-follow-prose-rules.buzz`, and a
-finding points at the declaration because an index records no position inside a
-doc. The page and agent-instruction kinds judge the files the arguments name;
+The magus module never imports `libs/conventions`, and `proofread` imports only the
+standard library and `libs/diagnostics`. `cmd/proofread` runs it, and its first
+argument names a kind: `proofread doc-comment` reads the symbols of
+`magus\symbols()` as JSON on stdin, fed by
+`hack/lint/symbol-docs-follow-proofread-rules.buzz`, and a finding points at the
+declaration because an index records no position inside a doc. The page and
+agent-instruction kinds judge the files the arguments name;
 `change-description` and `review-reply` read the text on stdin. A finding from
 text names its file, or the kind it read from stdin, and its line. A Go symbol
 and a TypeScript one meet the same rules. For an `agent-instructions-template`,
@@ -107,7 +108,7 @@ full form shows meets the reference rules and `bare-rule`.
 
 ### Decisions
 
-The judge speaks the decisions of a magus guard rule. Each rule ships a default
+Proofread speaks the decisions of a magus guard rule. Each rule ships a default
 on each kind it judges, `deny` or `advise`, and a decisions table sets any rule
 `off`, `advise` or `deny`, the way `magus\guard.builtins` overrides a built-in
 guard rule. A caller refuses on `deny`, reports `advise` and lets it through, and
@@ -119,7 +120,7 @@ those included.
 House style ships `off`: the rules that encode one repository's conventions
 rather than writing a teammate reads (its glossary, plain-ASCII typography, the
 present tense with no author, credit to tools, the doc-comment budgets, the
-agent-instruction budgets). With no table the judge holds text to shape, tone,
+agent-instruction budgets). With no table proofread holds text to shape, tone,
 claims and the generated-writing tells alone; a repository turns its house style
 on in its table.
 
@@ -143,14 +144,17 @@ matching no file argument, and an unknown key are errors that exit 1 and name
 it. `-only` takes comma-separated rule names and judges by those alone; an
 unknown name, or one the table leaves off for every file, exits 1.
 `-thread-length N` tells `long-thread` how many replies the author already
-posted in the thread. `-catalog` writes every rule as its reference page shows
-it, `{name, code, kinds, decisions, house, catches, why}`, and judges nothing.
+posted in the thread. The flags follow the kind. `proofread rules` writes every
+rule as its reference page shows it, `{name, code, kinds, decisions, house,
+catches, why}`, and judges nothing; `proofread explain <rule or code>` prints one
+rule's catches, reason, default decisions and page as text. A first argument
+that names no subcommand prints the usage and exits 1.
 
 ### Findings
 
 The findings JSON is the contract: any command that writes the same array, a
 team's own style checker or a reviewer it drives, feeds the same consumers, and
-the same decisions table applies to it. judge-docs writes one JSON array on
+the same decisions table applies to it. proofread writes one JSON array on
 stdout and exits 0 whatever it found; a finding is not a failure, and the caller
 decides what one costs.
 
@@ -160,65 +164,65 @@ decides what one costs.
 | `source`   | where: the symbol's index position, or `path:line` (line 0 for a budget with no one line) |
 | `kind`     | the kind judged, one of the seven above                                                   |
 | `rule`     | the rule's name                                                                           |
-| `code`     | the rule's `PRS` code, from its own domain in `libs/diagnostics`                          |
+| `code`     | the rule's `PRF` code, from its own domain in `libs/diagnostics`                          |
 | `decision` | `advise` or `deny`; `off` never appears                                                   |
 | `message`  | the fix, with an example where the rule has one                                           |
 | `match`    | the offending text, or `""` for a budget                                                  |
-| `url`      | the rule's page, `https://eli.gladman.cc/magus/reference/prose/<rule>/`                   |
+| `url`      | the rule's page, `https://eli.gladman.cc/magus/reference/proofread/<rule>/`               |
 
-Codes are numbered by family and never reused: `PRS1xxx` shape, `PRS2xxx` tone,
-`PRS3xxx` claims and hedges, `PRS4xxx` generated-writing tells, `PRS5xxx` house
-style, `PRS6xxx` doc comments, `PRS7xxx` agent instructions, `PRS8xxx` review
+Codes are numbered by family and never reused: `PRF1xxx` shape, `PRF2xxx` tone,
+`PRF3xxx` claims and hedges, `PRF4xxx` generated-writing tells, `PRF5xxx` house
+style, `PRF6xxx` doc comments, `PRF7xxx` agent instructions, `PRF8xxx` review
 replies.
 
 ### Rules
 
 | Rule               | Code    | Kinds                                | Default                              | Reports                                                                          |
 | ------------------ | ------- | ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------- |
-| `comment-block`    | PRS6001 | doc comment                          | off (house)                          | a doc over 250 words                                                             |
-| `comment-sentence` | PRS6002 | doc comment                          | off (house)                          | a doc sentence over 60 words                                                     |
-| `filler`           | PRS4001 | all                                  | deny                                 | throat-clearing ("Note that") and filler adverbs ("simply")                      |
-| `terms`            | PRS5001 | all                                  | off (house)                          | a spelling the glossary replaces ("sub-agent")                                   |
-| `name-suffix`      | PRS6003 | doc comment                          | off (house)                          | a function or method name whose last word is Of or For                           |
-| `aside`            | PRS6004 | doc comment                          | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
-| `history`          | PRS6005 | doc comment                          | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
-| `docstub`          | PRS6006 | doc comment                          | off (house)                          | a one-line doc that only repeats the symbol's name                               |
-| `lead-context`     | PRS1001 | change description                   | deny; advise for a defect            | a lead that is not a paragraph saying what a reader can now do                   |
-| `reply-voice`      | PRS1002 | pages, change description, reply     | deny                                 | a reply opener, a conversation, a bold-label item, a stock label or heading      |
-| `tense`            | PRS5004 | pages, change description            | off (house)                          | the future tense, and the author as the actor of a change                        |
-| `hedge`            | PRS3002 | pages, change description            | deny                                 | a softener on a claim ("might fix", "could potentially")                         |
-| `attribution`      | PRS5005 | pages, change description, reply     | off (house)                          | credit to a tool, or an account of how the work was made                         |
-| `terse-sentence`   | PRS7001 | agent instructions                   | off (house)                          | a sentence over 25 words                                                         |
-| `terse-paragraph`  | PRS7002 | agent instructions                   | off (house)                          | a paragraph or list item over 60 words                                           |
-| `wordy`            | PRS4002 | pages, change description            | deny                                 | a phrase with a shorter equivalent ("in order to")                               |
-| `bare-rule`        | PRS7003 | agent instructions                   | off (house)                          | "rule" with no mechanism named, in either form of a template                     |
-| `second-person`    | PRS1003 | guide                                | deny                                 | we, us, our or ours where a guide addresses you                                  |
-| `step-verb`        | PRS1004 | guide                                | deny                                 | a numbered step that opens with no verb ("1. The target...")                     |
-| `condescension`    | PRS2006 | pages, change description, reply     | deny                                 | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
-| `blame`            | PRS2001 | change description, reply            | deny                                 | a person or a pull request as the subject of a fault; contempt ("sloppy")        |
-| `verdict`          | PRS2002 | change description, reply            | advise                               | a judgment in place of the behavior ("was broken", "a mess")                     |
-| `absolute`         | PRS2003 | change description, reply            | advise                               | never, nobody or nothing about the past ("has never fired")                      |
-| `intent`           | PRS2004 | change description, reply            | advise                               | a motive given to a tool or a person ("guessed", "pretends")                     |
-| `credit`           | PRS2005 | change description                   | advise                               | a removal or replacement that says nothing of what the old design was for        |
-| `claim`            | PRS3001 | change description, reply            | advise                               | a measurement, comparison or completion with no evidence in its sentence or item |
-| `reply-opener`     | PRS8001 | reply                                | deny                                 | a sentence that opens by contradicting ("No,", "As I said")                      |
-| `judgment-as-fact` | PRS8002 | reply                                | advise                               | a recommendation with no reason ("This should be a map.")                        |
-| `stacked-hedge`    | PRS8003 | reply                                | advise                               | two softeners in a sentence, or an apology before the point                      |
-| `long-thread`      | PRS8004 | reply                                | advise                               | the author's fourth or later reply in a thread, given `-thread-length`           |
-| `signpost`         | PRS4003 | pages, change description, reply     | deny                                 | an announcement where the point should be ("Here's the thing")                   |
-| `chatbot`          | PRS4004 | pages, change description, reply     | deny                                 | text addressed to a chat's user ("I hope this helps")                            |
-| `leak`             | PRS4005 | all                                  | deny                                 | a citation marker or an unfilled placeholder                                     |
-| `buzzword`         | PRS4006 | pages, change description, reply     | deny                                 | a word chosen to sound significant ("delve", "tapestry")                         |
-| `buzzword-weak`    | PRS4007 | pages, change description, reply     | advise                               | a buzzword that also has a plain sense ("crucial")                               |
-| `contrast`         | PRS4010 | pages, change description            | deny in a change description; advise | a claim made by denying its opposite ("not just X, it is Y")                     |
-| `vague`            | PRS4008 | pages, change description, reply     | deny                                 | weight or consensus with nothing named ("experts argue")                         |
-| `closer`           | PRS4009 | pages, change description, reply     | deny                                 | a sentence announcing it restates the text ("In conclusion,")                    |
-| `ing-tail`         | PRS4011 | pages, change description            | advise                               | a participle clause claiming significance (", highlighting")                     |
-| `staccato`         | PRS4012 | reference, change description        | deny in a change description; advise | three or more sentences of six words or fewer in a row                           |
-| `dash`             | PRS5002 | pages, change description, reply     | off (house)                          | an em dash, an en dash or a spaced double hyphen                                 |
-| `ascii`            | PRS5003 | pages, change description, reply     | off (house)                          | a curly quote, an ellipsis character or an emoji                                 |
-| `heading-case`     | PRS4013 | reference, guide, agent instructions | advise                               | a heading whose every word after the first is capitalized                        |
-| `template`         | PRS7004 | agent-instructions template          | off (house)                          | a body that does not render, so neither form can be judged                       |
+| `comment-block`    | PRF6001 | doc comment                          | off (house)                          | a doc over 250 words                                                             |
+| `comment-sentence` | PRF6002 | doc comment                          | off (house)                          | a doc sentence over 60 words                                                     |
+| `filler`           | PRF4001 | all                                  | deny                                 | throat-clearing ("Note that") and filler adverbs ("simply")                      |
+| `terms`            | PRF5001 | all                                  | off (house)                          | a spelling the glossary replaces ("sub-agent")                                   |
+| `name-suffix`      | PRF6003 | doc comment                          | off (house)                          | a function or method name whose last word is Of or For                           |
+| `aside`            | PRF6004 | doc comment                          | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
+| `history`          | PRF6005 | doc comment                          | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
+| `docstub`          | PRF6006 | doc comment                          | off (house)                          | a one-line doc that only repeats the symbol's name                               |
+| `lead-context`     | PRF1001 | change description                   | deny; advise for a defect            | a lead that is not a paragraph saying what a reader can now do                   |
+| `reply-voice`      | PRF1002 | pages, change description, reply     | deny                                 | a reply opener, a conversation, a bold-label item, a stock label or heading      |
+| `tense`            | PRF5004 | pages, change description            | off (house)                          | the future tense, and the author as the actor of a change                        |
+| `hedge`            | PRF3002 | pages, change description            | deny                                 | a softener on a claim ("might fix", "could potentially")                         |
+| `attribution`      | PRF5005 | pages, change description, reply     | off (house)                          | credit to a tool, or an account of how the work was made                         |
+| `terse-sentence`   | PRF7001 | agent instructions                   | off (house)                          | a sentence over 25 words                                                         |
+| `terse-paragraph`  | PRF7002 | agent instructions                   | off (house)                          | a paragraph or list item over 60 words                                           |
+| `wordy`            | PRF4002 | pages, change description            | deny                                 | a phrase with a shorter equivalent ("in order to")                               |
+| `bare-rule`        | PRF7003 | agent instructions                   | off (house)                          | "rule" with no mechanism named, in either form of a template                     |
+| `second-person`    | PRF1003 | guide                                | deny                                 | we, us, our or ours where a guide addresses you                                  |
+| `step-verb`        | PRF1004 | guide                                | deny                                 | a numbered step that opens with no verb ("1. The target...")                     |
+| `condescension`    | PRF2006 | pages, change description, reply     | deny                                 | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
+| `blame`            | PRF2001 | change description, reply            | deny                                 | a person or a pull request as the subject of a fault; contempt ("sloppy")        |
+| `verdict`          | PRF2002 | change description, reply            | advise                               | a judgment in place of the behavior ("was broken", "a mess")                     |
+| `absolute`         | PRF2003 | change description, reply            | advise                               | never, nobody or nothing about the past ("has never fired")                      |
+| `intent`           | PRF2004 | change description, reply            | advise                               | a motive given to a tool or a person ("guessed", "pretends")                     |
+| `credit`           | PRF2005 | change description                   | advise                               | a removal or replacement that says nothing of what the old design was for        |
+| `claim`            | PRF3001 | change description, reply            | advise                               | a measurement, comparison or completion with no evidence in its sentence or item |
+| `reply-opener`     | PRF8001 | reply                                | deny                                 | a sentence that opens by contradicting ("No,", "As I said")                      |
+| `judgment-as-fact` | PRF8002 | reply                                | advise                               | a recommendation with no reason ("This should be a map.")                        |
+| `stacked-hedge`    | PRF8003 | reply                                | advise                               | two softeners in a sentence, or an apology before the point                      |
+| `long-thread`      | PRF8004 | reply                                | advise                               | the author's fourth or later reply in a thread, given `-thread-length`           |
+| `signpost`         | PRF4003 | pages, change description, reply     | deny                                 | an announcement where the point should be ("Here's the thing")                   |
+| `chatbot`          | PRF4004 | pages, change description, reply     | deny                                 | text addressed to a chat's user ("I hope this helps")                            |
+| `leak`             | PRF4005 | all                                  | deny                                 | a citation marker or an unfilled placeholder                                     |
+| `buzzword`         | PRF4006 | pages, change description, reply     | deny                                 | a word chosen to sound significant ("delve", "tapestry")                         |
+| `buzzword-weak`    | PRF4007 | pages, change description, reply     | advise                               | a buzzword that also has a plain sense ("crucial")                               |
+| `contrast`         | PRF4010 | pages, change description            | deny in a change description; advise | a claim made by denying its opposite ("not just X, it is Y")                     |
+| `vague`            | PRF4008 | pages, change description, reply     | deny                                 | weight or consensus with nothing named ("experts argue")                         |
+| `closer`           | PRF4009 | pages, change description, reply     | deny                                 | a sentence announcing it restates the text ("In conclusion,")                    |
+| `ing-tail`         | PRF4011 | pages, change description            | advise                               | a participle clause claiming significance (", highlighting")                     |
+| `staccato`         | PRF4012 | reference, change description        | deny in a change description; advise | three or more sentences of six words or fewer in a row                           |
+| `dash`             | PRF5002 | pages, change description, reply     | off (house)                          | an em dash, an en dash or a spaced double hyphen                                 |
+| `ascii`            | PRF5003 | pages, change description, reply     | off (house)                          | a curly quote, an ellipsis character or an emoji                                 |
+| `heading-case`     | PRF4013 | reference, guide, agent instructions | advise                               | a heading whose every word after the first is capitalized                        |
+| `template`         | PRF7004 | agent-instructions template          | off (house)                          | a body that does not render, so neither form can be judged                       |
 
 "Pages" are reference pages, guides and agent instructions. A guide and agent
 instructions take every reference and change-description rule but

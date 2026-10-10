@@ -1,4 +1,4 @@
-// Package prose judges prose: the doc comment and name of one symbol a SCIP
+// Package proofread judges written text: the doc comment and name of one symbol a SCIP
 // index describes, a hand-written Markdown file, a skill, or a pull request's
 // title and description. It parses no programming language, so every
 // indexer's symbols meet the same rules.
@@ -7,7 +7,7 @@
 // a line still indented is preformatted unless it continues a list item, and a
 // fenced block is code. Markdown is read the same way once what is not prose
 // is blanked (see [JudgeText]). Only the prose that remains is judged.
-package prose
+package proofread
 
 import (
 	"maps"
@@ -243,7 +243,7 @@ type Finding struct {
 	// itself and no table names it: a rule whose words are sure in one reading
 	// and a guess in another reports the guess that way.
 	Decision Decision
-	// Code is the rule's PRS code, and URL the page that documents it.
+	// Code is the rule's PRF code, and URL the page that documents it.
 	Code diagnostics.Code
 	URL  string
 }
@@ -362,7 +362,7 @@ func (o options) settle(c check, f Finding, d Decision) Finding {
 
 	f.Rule = c.rule
 	f.Code = ruleTexts[c.rule].code
-	f.URL = prs.URL(f.Code)
+	f.URL = prf.URL(f.Code)
 
 	return f
 }

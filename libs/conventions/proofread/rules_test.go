@@ -1,4 +1,4 @@
-package prose
+package proofread
 
 import (
 	"strings"
