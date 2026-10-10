@@ -67,7 +67,7 @@ func TestReplyVoiceReportsTextAnsweringAnUnseenPrompt(t *testing.T) {
 		{"a stock heading in a pull request", KindChangeDescription, pr("## Testing\n\nRan the suite."), []string{"4:Testing"}},
 		{"stock headings", KindChangeDescription, pr("## Summary\n\n## Background\n\n## Description:"),
 			[]string{"4:Summary", "6:Background", "8:Description:"}},
-		// docs/decisions/0007-writing-a-teammate-reads.md names a description's sections.
+		// docs/decisions/0008-writing-a-teammate-reads.md names a description's sections.
 		{"named sections in a pull request", KindChangeDescription,
 			pr("## What changes\n\n## Why this approach\n\n## Evidence\n\n## How we got here\n\n## Not verified\n\n## Reading guide"), nil},
 		{"a stock heading in a reply", KindReviewReply, "## Summary\n\nThe map races.", []string{"1:Summary"}},

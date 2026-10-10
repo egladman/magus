@@ -11,7 +11,7 @@ import (
 // on a change: a pull request and a reply in its review. Text loses its tone on
 // the way to a reader, who fills the gap with intent the writer never had, so
 // each rule names the posture it catches and how to state the same fact.
-// docs/decisions/0007-writing-a-teammate-reads.md records the evidence.
+// docs/decisions/0008-writing-a-teammate-reads.md records the evidence.
 
 const (
 	// RuleBlame reports a person or past work as the subject of a fault, and
