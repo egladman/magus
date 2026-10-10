@@ -1,8 +1,8 @@
 package sandbox
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -63,7 +63,7 @@ func EmitDenyHint(p *Policy, access filesystem.Access, target string) {
 	if p != nil {
 		lease = p.Lease
 	}
-	interactive.Emit(os.Stderr, denyHint(lease, access, target))
+	interactive.Hint(context.Background(), denyHint(lease, access, target))
 }
 
 // shimMarker pairs a PATH-shim runtime manager with the env var it reads at
@@ -122,5 +122,5 @@ func EmitShimHint(p *Policy, cmd string) {
 	if !ok {
 		return
 	}
-	interactive.Emit(os.Stderr, shimHint(cmd, manager, envVar))
+	interactive.Hint(context.Background(), shimHint(cmd, manager, envVar))
 }

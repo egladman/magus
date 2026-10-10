@@ -1,12 +1,11 @@
 package sandbox
 
 import (
-	"io"
-	"os"
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -36,20 +35,17 @@ func TestDenyHint(t *testing.T) {
 	assert.NotContains(t, leased, "magus config set")
 }
 
-// captureStderr runs fn with os.Stderr redirected. Tests using it are not parallel:
-// they swap a process-wide file and flip the process-wide hints switch.
+// captureStderr runs fn with the process logger writing to a buffer and returns it. Tests
+// using it are not parallel: they swap the process-wide logger and flip the
+// process-wide hints switch. A hint renders as a record carrying notice=hint.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stderr
-	os.Stderr = w
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
 	fn()
-	os.Stderr = orig
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
+	return buf.String()
 }
 
 func TestEmitDenyHint(t *testing.T) {
@@ -58,7 +54,7 @@ func TestEmitDenyHint(t *testing.T) {
 	emit := func() { EmitDenyHint(nil, filesystem.Exec, "/usr/bin/curl") }
 
 	got := captureStderr(t, emit)
-	assert.Contains(t, got, "hint:")
+	assert.Contains(t, got, "notice=hint")
 	assert.Contains(t, got, "magus config set key=sandbox.allow.curl.path,value=/usr/bin/curl")
 
 	interactive.SetHintsEnabled(false)
@@ -119,7 +115,7 @@ func TestEmitShimHint(t *testing.T) {
 		EnvDropped: []string{"MISE_DATA_DIR"},
 	}
 	got := captureStderr(t, func() { EmitShimHint(suspect, "go") })
-	assert.Contains(t, got, "hint:")
+	assert.Contains(t, got, "notice=hint")
 	assert.Contains(t, got, "MGS2006")
 	assert.Contains(t, got, "cmd=go missing_var=MISE_DATA_DIR")
 

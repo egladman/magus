@@ -104,7 +104,7 @@ func (m *Magus) warnNearDuplicateServices(seeds []*types.Project, charms []strin
 	if msg == "" {
 		return
 	}
-	interactive.Emit(os.Stderr, types.DiagnosticErrorf(types.NearDuplicateServices, "%s", msg).Error())
+	interactive.Hint(context.Background(), types.DiagnosticErrorf(types.NearDuplicateServices, "%s", msg).Error())
 }
 
 // reachableProjects returns seeds plus every project reachable from them through

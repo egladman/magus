@@ -3,7 +3,6 @@ package bindings
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/egladman/magus/internal/interactive"
 )
@@ -15,7 +14,7 @@ func emitMagusHint(msg string) {
 	if !interactive.HintsEnabled() {
 		return
 	}
-	interactive.Emit(os.Stderr, msg)
+	interactive.Hint(context.Background(), msg)
 }
 
 // emitMagusLog writes msg at level into the process logger with optional fields.
