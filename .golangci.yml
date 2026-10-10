@@ -325,10 +325,12 @@ linters:
       # this linter; libs/gopherbuzz is excluded below.
       errmsg:
         type: module
-        description: 'judges errors.New and fmt.Errorf text as a fragment chained with ": "'
+        description: 'judges error text (errors.New, fmt.Errorf, Error methods) as a fragment chained with ": "'
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           module: github.com/egladman/magus
+          allow:
+            - {file: libs/diagnostics/diagnostics.go, rule: error-newline, reason: "a coded diagnostic renders its see: line for a person; diagmsg judges it"}
 
       asciistrings:
         type: module
