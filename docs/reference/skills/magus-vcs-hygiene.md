@@ -3,7 +3,7 @@ title: magus-vcs-hygiene
 generated_from: internal/agent/skills/magus-vcs-hygiene/SKILL.md
 description: "Safe version-control operations in a magus workspace (any repo with magusfile.buzz at the root)."
 tags: [agents, skills, magus-vcs-hygiene]
-skill_full_bytes: 9739
+skill_full_bytes: 9885
 skill_short_bytes: 6173
 ---
 
@@ -200,6 +200,14 @@ Targets declare their outputs: the file globs a target regenerates on every run
 (`MAGUS.md`, `gen/` trees, lockfile-adjacent artifacts). magus uses those
 declarations for caching, `magus clean`, and its VCS merge driver. Use the same
 declarations to decide which changed files deserve your attention.
+
+## Contents
+
+- Classify before you read
+- Handling generated files
+- Preparing a commit
+- VCS facts from Buzz
+- Getting back to a recorded state
 
 ## Classify before you read
 

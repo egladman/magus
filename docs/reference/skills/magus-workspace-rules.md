@@ -3,7 +3,7 @@ title: magus-workspace-rules
 generated_from: internal/agent/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent integration to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
-skill_full_bytes: 11032
+skill_full_bytes: 11304
 skill_short_bytes: 8782
 ---
 
@@ -263,6 +263,16 @@ generator overwrites its output without asking.
 | the compiled guard rules | magus | NO edit; grade each by name (deny, advise, off) with `magus\guard.builtins(...)` in the root magusfile |
 | `magus\guard.shell(...)` in the root magusfile | this workspace | YES: additive deny/advise only; strengthen-only |
 | `magus\harness.provider(...)` in the root magusfile | this workspace | YES: wire hosts; adapt a Buzz harness by declaring a `path:` override in `magus.yaml` that points its import at a workspace-owned spell fork (see below) |
+
+## Contents
+
+- Never edit an installed skill
+- Where a local instruction lives
+- Stamp every local instruction
+- Self-improvement: the checklist
+- Adapting a Buzz harness (no magus source edits)
+- Prune on a schedule you already have
+- Graduating an instruction upstream
 
 ## Never edit an installed skill
 

@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 40704
-skill_short_bytes: 29583
+skill_full_bytes: 25852
+skill_short_bytes: 19121
 ---
 
 # magus-multi-agent
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `116` |
 | `knowledge-schema-version` | `16` |
-| `skill-content` | `a9969c483452` |
+| `skill-content` | `384a381c135b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -340,8 +340,8 @@ binds its child to nothing.
      --checkpoint <checkpoint>
    ```
 
-   Or fork from a record with `magus job fork --stdin`, the form that carries goals
-   (see the next section).
+   Or fork from a record with `magus job fork --stdin`, the form that carries goals;
+   [reference.md](reference.md) shows one.
 
    `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
@@ -353,25 +353,9 @@ binds its child to nothing.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
 
-Write paths name FILES: a file, a file the job creates, or a file glob
-(`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob that
-matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/).
-
-Two jobs share one file by claiming declarations in it: `<file>#<declaration>`, such
-as `internal/agent/catalog.go#SkillVersion`.
-
-- A claim names one file, never a glob.
-- The file needs a diff driver (`magus doctor` lists the managed ones); otherwise
-  fork refuses with [MGS3031](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3031/).
-- Two jobs that must edit the SAME declaration still have one owner. Give it to one
-  job, or order them with `--depends-on`.
-
-The check is `<target> <project> [-- args]` with the `magus run` implied (`"test ."`,
-`"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
-
-Fork with `client` (`magus\job.put`) from an agent, or `magus job fork` from a
-terminal. A worker holding a lease forks its own units the same way, naming its
-job with `--parent` and paths inside its own.
+Write paths name FILES or file globs, never a directory. The check is `<target>
+<project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
+declaration in a shared file and forking from a leased worker.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -411,212 +395,27 @@ worker can say so instead of widening silently.
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
 
-The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a
-separate fact. Hosts that isolate workers in per-worker trees routinely branch them
-from an older revision than the tree you partitioned.
-
-- A worker whose spawn title names its job (`<parent>/<role> <job>`) is bound and
-  records its base on its first call. Any other worker runs `magus job exec <its id>`
-  once to record it.
-- The guard binds the caller that ran it, keyed on the host's session and subagent
-  ids. Workers sharing a tree each hold their own lease, and none binds you.
-- The answer is a status on the row: match, revision-match (same revision, different
-  uncommitted patch), diverged, or unknown. A reading names both tokens and the next
-  step.
-- It is a FACT, not a gate: every status records, diverged included.
-- Acting on it is yours. Respawn from the right revision. Or have the worker
-  materialize the files it builds on from the intended one, and re-fork the job
-  with the right checkpoint. Materialize with `git show <rev>:<path> > <path>`, verifying
-  each blob against `git rev-parse <rev>:<path>`.
-
-Name any fact that will READ as drift to the worker's snapshot (a project deleted
-this session, a rename, an index regenerated underneath it). Never write a generic
-"expect drift" line; it primes the
-worker to dismiss real anomalies.
-
-Write paths bound READS too: a worker may read its projects and what they declare
-`depends_on`. When a worker must READ something it must not WRITE, put that path in the
-row's `read_paths` instead of widening `write_paths`. Widening is how two workers end up owning one file.
-
-Ownership ends when EDITING ends, not when the worker exits. A worker done writing a
-contested path announces the release at once, then carries on validating. It shrinks
-the job's `write_paths` with another `client` (`magus\job.put`) write, or messages
-the orchestrator if the host supports it.
-
-That write records each dropped path with its digest at that moment. Hand the digest
-to the job taking the path over. One that no longer matches at verification means the
-waiter built on a tree the releaser never saw.
-
-Moving a live job's boundary is yours. Change its record and run `magus job apply -f
-<file>` (`-f -` reads stdin).
-
-- The record is the whole spec: one write widens or revokes write paths and adds
-  goals, and the job keeps its state.
-- `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes mid-flight is a goal you add this way, so `magus job
-  wait` grades it from a recorded run.
-- A revoked path is recorded as a release with its digest. The worker's next write
-  there is refused, naming the revocation.
-- Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
-  names `magus describe job` and tells it to ask you.
-
-Advance the row on every state change. `magus ls jobs` then shows which live jobs
-claim intersecting `write_paths` and how long since each row was touched. A reported
-overlap is a pair you either intended or must repartition.
-
-magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read of the
-store when it can prove nobody holds it:
-
-- an ancestor ended;
-- the checkout `magus job exec` took it in no longer exists;
-- it is still `declared`, nobody ever took it, and it was not updated within
-  `jobs.stale_after` (default 2h, `0` for never).
-
-Each ended job prints `ended <id>: <reason>` on stderr. So remove a worker's worktree
-only once its job is done, and advance a root you are still using. What magus cannot
-prove it leaves live, and ending those stays yours. A taken job that went quiet reads
-`stale`, one past its timeout `overdue`, each with `magus job exit <id>`.
-
-`--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
-denies every write graded under that lease, and its paths stop blocking other jobs.
-The row stays live until you end it. A job with acceptance criteria needs no bound.
-
-`magus job wait` holds a writing job's `changed_paths` to the diff magus observes since
-its checkpoint:
-
-- Every claimed path must be in that diff, and something in it must be inside the
-  write paths.
-- A diff it cannot read FAILS, so fork writing jobs with a checkpoint.
-- It refuses pass while any descendant is still live.
-- It grades a child against its own symbol goals and its ancestors'.
-
-The guard grades each write of a worker that exported `magus.lease` against these rows
-and denies one outside them, naming the owner. A writer magus cannot attribute is only
-ADVISED, and every uncertainty fails open: a seatbelt, not a sandbox.
-
-So a denied worker COORDINATES and never works around. Ask the orchestrator to
-re-partition, or have the owning job release the path, then retry. Step 1 of Integrate and verify checks the same boundary against
-the checkpoint: the half that does not depend on a worker cooperating.
-
-A read-only job carries an abbreviated row: no write paths, no deny paths. Every row
-ends in pass, fail, or NO-RETURN, and the root writes which: silence is not a pass.
-
-Make acceptance criteria observable: named tests, artifacts, diagnostics, API
-behavior, or review checks. A child that hands work on evaluates its descendants
-before reporting upward.
+After the spawn, the row carries the job. A worker records the base it LANDED on,
+which can differ from the checkpoint you handed it. A denied worker coordinates and
+never works around. Every row ends in pass, fail, or NO-RETURN, and the root writes
+which: silence is not a pass. [reference.md](reference.md) covers bases, read paths,
+releasing a path, moving a live job's boundary, how magus ends abandoned jobs, and
+what `magus job wait` checks.
 
 ## Declare the criteria magus can check for you
 
-A job's acceptance criteria are prose a reader grades. A GOAL is the part magus grades
-itself, from evidence the worker cannot author. `magus job wait` refuses to record pass
-until every one verifies.
-
-- Goals are data: write them in the job record's `goals`, never as flags.
-- `magus job fork` refuses a job that writes and declares neither a check nor a goal.
-- `client` (`magus\job.put`) takes the same `goals` array.
-
-A goal names WHAT it examines and what must be true of it:
-
-| kind     | expects                                         | read from                                      |
-| -------- | ----------------------------------------------- | ---------------------------------------------- |
-| `check`  | `passed`                                        | a recorded run, captured after the declaration |
-| `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
-
-One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}`.
-Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the
-common goal names only its kind and subject.
-
-Reach for `symbol` + `unreferenced` when partitioning a rename: the REMAINDER instruction made
-checkable. Split per project, and the callers in no project belong to no job. Every
-job passes and the rename is unfinished.
-
-- Grade it while the old name is still defined. The graph counts references into a
-  definition; once the definition is gone, `unreferenced` FAILS rather than guess.
-- The job that deletes it declares `absent` beside a check that builds the callers.
-
-Every kind reads what magus already holds, which makes a goal a contract, not an
-attestation. There is no goal for "this command exited 0". Declare a target and use `check`.
-
-The worker's own `changed_paths` is its account, never the evidence. The diff and the
-tree are read in the checkout that took the job, so wait from your own tree while the
-worker's still exists. An observation magus could not MAKE fails the goal.
-
-Ask where a job stands without advancing it:
-
-```sh
-magus describe job <job>
-```
-
-It prints where each goal stands beside the terms: the same grading `magus job wait`
-does, recording nothing. Use it instead of asking a worker how it is going.
-
-SEQUENCE goals with `depends_on` between them; a failed prerequisite propagates. Do
-NOT nest them: a goal that wants children is a JOB that wants splitting.
-
-Run workers non-blocking by default. Block on one only when your next action needs its
-result. An agent spawned only to wait, poll, or repeat the root's discovery is not an
-edit job and spends budget for nothing.
+A GOAL is the part of a job's criteria magus grades itself, from evidence the worker
+cannot author: a check that passed, or paths or symbols changed, present, absent or
+unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
+each verifies. [reference.md](reference.md) has the table and the rename pattern.
 
 ## Observe through the correct control plane
 
-Track the job tree, agent state, messages, and completion in the provider's agent or
-task view. Use it to keep the store aware of descendants.
-
-Watch processes and shared workspace resources with magus:
-
-```sh
-magus status --watch=15s
-```
-
-It shows magus process state, lock holders, and shared-service state and adoption. It
-does not show an agent thinking without running a magus process. Never replace it with
-sleep loops, repeated `ps`, or a waiting agent.
-
-To wait for a process you did not start to end, use your host's own wait or monitor
-tool.
-
-### "How is it going" is a read, never a message
-
-Never message a worker to ask how it is doing. The question costs it the turn it was
-in, and what comes back is its account of itself, not what happened. Three reads answer it without touching the
-worker.
-
-| you want | read |
-| --- | --- |
-| to hand the question to a person | the console link every verb that names a job prints |
-| to watch it happen | `magus job watch <job>` |
-| to know whether it is finished | `magus describe job <job>` |
-
-`magus job watch` prints one line per event until you interrupt it. It merges files
-changed under the job's write paths, the guard's tool calls under its lease, and the
-runs recorded against it. A file is attributed by WRITE PATH and by nothing the worker says, so the worker cannot make it quiet.
-
-Message a worker only to CHANGE what it was handed. Anything you merely want to KNOW
-is one of the three reads above.
-
-A blocked worker RAISES; it never stalls quietly.
-
-- Piping the block to `magus session notify --outcome waiting` (blocked on input) or
-  `--outcome permission` (blocked on approval) opens a durable request in this
-  repository. No other outcome opens one.
-- `magus session attention` lists what is open. `magus session attention -q` prints nothing and exits 1 on an empty
-  queue: the form to test from a loop.
-- Nothing closes a request by itself. The orchestrator, or any human, disposes it
-  with `magus session dispose <id> --reason "<why>"`.
-- A worker that raised one waits for the disposition; it never chooses for itself.
-
-`magus session` is how the root audits what a job RAN, as opposed to what it reported.
-`magus session --since 2h -o json` answers what the fleet has been doing.
-
-Each
-invocation carries its lease, its claimed spawner and parent span, and the targets
-it ran with their outcomes. A worker in its own worktree is still listed.
-
-Re-plan when nesting, dependencies, ownership, failing criteria, locks, or
-services change. Update the jobs before resuming affected work, and never act on a
-guessed or stale PID. A running worker keeps the constraints it was handed.
-Tightening them means cancel and respawn, not a message sent mid-flight.
+Run workers non-blocking; block on one only when your next action needs its result.
+Watch processes with `magus status --watch=15s`. Never message a worker to ask how it
+is going: `magus describe job <job>` grades where it stands, and `magus job watch <job>`
+shows it happening. Message a worker only to CHANGE what it was handed.
+[reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify
 
@@ -703,6 +502,19 @@ Fan out only after the collision check below REPORTS the jobs disjoint; looking
 separate is not that check. With only one coherent write set, keep the work local.
 The root agent owns the goal, the budget, the topology, integration, and final
 verification, and never hands those out.
+
+## Contents
+
+- Coalesce what the write sets allow
+- Run the graph-engineering loop
+- Declare the interface before any job forks
+- Set one topology boundary
+- Seed the partition with magus
+- Prove that jobs do not collide
+- Fork the job, then spawn the worker
+- Declare the criteria magus can check for you
+- Observe through the correct control plane
+- Integrate and verify
 
 ## Coalesce what the write sets allow
 
@@ -1015,22 +827,8 @@ an editor magus cannot attribute.
      --checkpoint <checkpoint>
    ```
 
-   Or fork from a record with `magus job fork --stdin`, the form that carries goals
-   (see the next section). For example:
-
-   ```sh
-   magus job fork --stdin <<'EOF'
-   {"schema_version": 11, "id": "api-store/migrate", "parent": "api-store", "model": "<model>",
-    "criteria": "accounts move to the new store; nothing names the old one",
-    "write_paths": ["db/migrations/*.sql", "api/migrate.go"],
-    "check": {"target": "go-test", "project": "api", "args": ["-run", "TestMigrate"]},
-    "goals": [
-      {"id": "migration", "kind": "paths", "expect": "changed", "paths": ["db/migrations/*.sql"]},
-      {"id": "store", "kind": "symbol", "expect": "present", "symbols": ["AccountStore"]},
-      {"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}
-    ]}
-   EOF
-   ```
+   Or fork from a record with `magus job fork --stdin`, the form that carries goals;
+   [reference.md](reference.md) shows one.
 
    `magus job fork --schema` prints every field and the newest `schema_version`.
 3. Spawn the worker with the description `<parent>/<role> <job>`: two words, the
@@ -1042,32 +840,9 @@ an editor magus cannot attribute.
    - The role is a word for the work (`feat`, `fix`, `review`). A workspace spawn
      rule may restrict it, and its refusal names the list.
 
-Write paths name FILES: a file, a file the job creates, or a file glob
-(`internal/queue/*.go`, `docs/**/*.md`). A directory, a project root, or a glob that
-matches one (`api`, `internal/**`) is refused with [MGS3018](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3018/), because it
-claims every file under it and so overlaps every job editing anything there.
-
-Two jobs share one file by claiming declarations in it: `<file>#<declaration>`, such
-as `internal/agent/catalog.go#SkillVersion`.
-
-- A claim names one file, never a glob.
-- The file needs a diff driver (`magus doctor` lists the managed ones); otherwise
-  fork refuses with [MGS3031](https://eli.gladman.cc/magus/reference/codes/sandbox/MGS3031/).
-- Two jobs that must edit the SAME declaration still have one owner. Give it to one
-  job, or order them with `--depends-on`. Claiming the whole file, or a glob over its directory, is
-  what serializes every other job that needed one function in it.
-
-The check is `<target> <project> [-- args]` with the `magus run` implied (`"test ."`,
-`"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
-
-Fork with `client` (`magus\job.put`) from an agent, or `magus job fork` from a
-terminal: the same store and the same authorization either way, so a
-job forked by hand and one an agent forked are indistinguishable to everything that
-reads them. A worker holding a lease forks its own units the same way, naming its
-job with `--parent` and paths inside its own.
-
-The same checkpoint is what a later incremental re-review diffs from (see the
-magus-change-summary skill); review time and pickup time read the same object.
+Write paths name FILES or file globs, never a directory. The check is `<target>
+<project> [-- args]`, never the gate. [reference.md](reference.md) covers claiming one
+declaration in a shared file and forking from a leased worker.
 
 Render the prompt FROM the row; never type it. `magus describe job <job>` prints the
 job's own criteria, boundary and check, plus what the workspace knows and nobody wrote
@@ -1121,259 +896,27 @@ worker can say so instead of widening silently.
 A worker writes only its own row and the children it forks. Every other store write
 is the orchestrator's; a refused worker reports it as an unresolved risk and stops.
 
-The checkpoint you recorded is what you HANDED the job; the base it LANDED ON is a
-separate fact. Hosts that isolate workers in per-worker trees routinely branch them
-from an older revision than the tree you partitioned, and every diff-since-checkpoint in Integrate and verify
-silently lies when the recorded base is not the real one.
-
-- A worker whose spawn title names its job (`<parent>/<role> <job>`) is bound and
-  records its base on its first call. Any other worker runs `magus job exec <its id>`
-  once to record it.
-- The guard binds the caller that ran it, keyed on the host's session and subagent
-  ids. Workers sharing a tree each hold their own lease, and none binds you. Nothing to pass: the
-  CLI cannot tell a subagent from its parent, which is why the binding is the
-  guard's, and a host that names neither id binds the checkout for every caller like
-  it.
-- The answer is a status on the row: match, revision-match (same revision, different
-  uncommitted patch), diverged, or unknown. A reading names both tokens and the next
-  step.
-- It is a FACT, not a gate: every status records, diverged included, because refusing would leave the orchestrator
-  with no record that a worker went to the wrong base, which is the one case the
-  record exists for.
-- Acting on it is yours. Respawn from the right revision. Or have the worker
-  materialize the files it builds on from the intended one, and re-fork the job
-  with the right checkpoint. Materialize with `git show <rev>:<path> > <path>`, verifying
-  each blob against `git rev-parse <rev>:<path>`. A worker
-  that edits stale content without noticing reports clean validation against a tree
-  nobody ever merges.
-
-Name any fact that will READ as drift to the worker's snapshot (a project deleted
-this session, a rename, an index regenerated underneath it). Never write a generic
-"expect drift" line, which only primes the worker to dismiss real
-anomalies: the specific fact is what keeps unexplained tree state from costing
-an investigation or a helpful revert of something correct.
-
-Write paths bound READS too: a worker may read its projects and what they declare
-`depends_on`. When a worker must READ something it must not WRITE, put that path in the
-row's `read_paths` instead of widening `write_paths`: one list cannot say
-both, and widening the write paths to open a read is how two workers end up owning
-one file.
-
-Ownership ends when EDITING ends, not when the worker exits. A worker done writing a
-contested path announces the release at once, then carries on validating. It shrinks
-the job's `write_paths` with another `client` (`magus\job.put`) write, or messages
-the orchestrator if the host supports it. A waiting job
-starts against the released file while the first is still running tests, which
-is most of a worker's lifetime; holding every path to exit serializes agents on
-time they spend not editing.
-
-That write records each dropped path with its digest at that moment. Hand the digest
-to the job taking the path over. One that no longer matches at verification means the
-waiter built on a tree the releaser never saw.
-
-Moving a live job's boundary is yours. Change its record and run `magus job apply -f
-<file>` (`-f -` reads stdin).
-
-- The record is the whole spec: one write widens or revokes write paths and adds
-  goals, and the job keeps its state. A re-fork would hand a taken job out again as
-  declared.
-- `--dry-run` prints the spec diff and writes nothing.
-- A check you find the job owes mid-flight is a goal you add this way, so `magus job
-  wait` grades it from a recorded run.
-- A revoked path is recorded as a release with its digest. The worker's next write
-  there is refused, naming the revocation.
-- Ending a whole job stays `magus job exit <job>`. A worker never widens: its refusal
-  names `magus describe job` and tells it to ask you.
-
-Advance the row on every state change. `magus ls jobs` then shows which live jobs
-claim intersecting `write_paths` and how long since each row was touched. A reported
-overlap is a pair you either intended or must repartition.
-
-magus ENDS a live job itself, as `no_return` with an `end_reason`, on every read of the
-store when it can prove nobody holds it:
-
-- an ancestor ended;
-- the checkout `magus job exec` took it in no longer exists;
-- it is still `declared`, nobody ever took it, and it was not updated within
-  `jobs.stale_after` (default 2h, `0` for never). A root outlives children still working under it;
-  the guard noting somebody else's write in a job's paths does not count as an
-  update.
-
-Each ended job prints `ended <id>: <reason>` on stderr. So remove a worker's worktree
-only once its job is done, and advance a root you are still using. What magus cannot
-prove it leaves live, and ending those stays yours. A taken job that went quiet reads
-`stale`, one past its timeout `overdue`, each with `magus job exit <id>`.
-
-`--timeout <duration>` on fork is OPTIONAL and unset by default. Past it the guard
-denies every write graded under that lease, and its paths stop blocking other jobs.
-The row stays live until you end it. A job with acceptance criteria needs no bound: the goals end it, and a timeout only helps where a stuck worker
-would otherwise hold paths nobody else can write.
-
-`magus job wait` holds a writing job's `changed_paths` to the diff magus observes since
-its checkpoint:
-
-- Every claimed path must be in that diff, and something in it must be inside the
-  write paths.
-- A diff it cannot read FAILS, so fork writing jobs with a checkpoint.
-- It refuses pass while any descendant is still live.
-- It grades a child against its own symbol goals and its ancestors'.
-
-The guard grades each write of a worker that exported `magus.lease` against these rows
-and denies one outside them, naming the owner. A writer magus cannot attribute is only
-ADVISED, and every uncertainty fails open: a seatbelt, not a sandbox.
-
-So a denied worker COORDINATES and never works around. Ask the orchestrator to
-re-partition, or have the owning job release the path, then retry. Editing
-anyway from an un-enrolled shell, or dropping the lease id to buy advisory
-treatment, turns a denial you could have acted on into a collision nobody sees
-until integration. Step 1 of Integrate and verify checks the same boundary against
-the checkpoint: the half that does not depend on a worker cooperating.
-
-A read-only job carries an abbreviated row: no write paths, no deny paths. Every row
-ends in pass, fail, or NO-RETURN, and the root writes which: silence
-is not a pass, and a worker that dies, stalls, or is killed is a different state
-from one that failed its criteria.
-
-Acceptance criteria must be observable. Prefer named tests, generated
-artifacts, diagnostics, API behavior, or specific review checks over phrases such
-as "works correctly." A child that hands work on remains responsible for evaluating
-its descendants before reporting upward. The root still verifies the combined
-result independently.
+After the spawn, the row carries the job. A worker records the base it LANDED on,
+which can differ from the checkpoint you handed it. A denied worker coordinates and
+never works around. Every row ends in pass, fail, or NO-RETURN, and the root writes
+which: silence is not a pass. [reference.md](reference.md) covers bases, read paths,
+releasing a path, moving a live job's boundary, how magus ends abandoned jobs, and
+what `magus job wait` checks.
 
 ## Declare the criteria magus can check for you
 
-A job's acceptance criteria are prose a reader grades. A GOAL is the part magus grades
-itself, from evidence the worker cannot author. `magus job wait` refuses to record pass
-until every one verifies.
-
-- Goals are data: write them in the job record's `goals`, never as flags.
-- `magus job fork` refuses a job that writes and declares neither a check nor a goal.
-- `client` (`magus\job.put`) takes the same `goals` array.
-- The `--stdin` record above declares a `paths` goal and two `symbol` goals.
-
-A goal names WHAT it examines and what must be true of it:
-
-| kind     | expects                                         | read from                                      |
-| -------- | ----------------------------------------------- | ---------------------------------------------- |
-| `check`  | `passed`                                        | a recorded run, captured after the declaration |
-| `paths`  | `changed`, `present`, `absent`                  | the diff since the checkpoint, or the tree now |
-| `symbol` | `changed`, `present`, `absent`, `unreferenced`  | the knowledge graph, below file granularity    |
-
-One entry reads `{"id": "gone", "kind": "symbol", "expect": "absent", "symbols": ["LegacyAccountStore"]}`.
-Each kind has a default expectation (`passed` for a check, `changed` otherwise), so the
-common goal names only its kind and subject.
-
-Reach for `symbol` + `unreferenced` when partitioning a rename: the REMAINDER instruction made
-checkable. Split per project, and the callers in no project belong to no job. Every
-job passes and the rename is unfinished.
-
-- Grade it while the old name is still defined. The graph counts references into a
-  definition; once the definition is gone, `unreferenced` FAILS rather than guess.
-- The job that deletes it declares `absent` beside a check that builds the callers.
-
-Every kind reads what magus already holds, which makes a goal a contract, not an
-attestation. There is no goal for "this command exited 0", deliberately: magus
-did not record that run and cannot attribute it, so it would be the easiest goal to
-satisfy falsely. Declare a target and use `check`.
-
-The worker's own `changed_paths` is its account, never the evidence. The diff and the
-tree are read in the checkout that took the job, so wait from your own tree while the
-worker's still exists. An observation magus could not MAKE fails the goal: otherwise the cheapest way past
-a goal would be to break the observation.
-
-Ask where a job stands without advancing it:
-
-```sh
-magus describe job <job>
-```
-
-It prints where each goal stands beside the terms: the same grading `magus job wait`
-does, recording nothing. Use it instead of asking a worker how it is going.
-
-SEQUENCE goals with `depends_on` between them; a failed prerequisite propagates. Do
-NOT nest them: a goal that wants children is a JOB that wants splitting, which the instructions above cover. Flat goals keep
-the job tree the only hierarchy with an owner.
-
-Run workers non-blocking by default. Block on one only when your next action needs its
-result. An agent spawned only to wait, poll, or repeat the root's discovery is not an
-edit job and spends budget for nothing.
+A GOAL is the part of a job's criteria magus grades itself, from evidence the worker
+cannot author: a check that passed, or paths or symbols changed, present, absent or
+unreferenced. Write goals in the record's `goals`. `magus job wait` refuses pass until
+each verifies. [reference.md](reference.md) has the table and the rename pattern.
 
 ## Observe through the correct control plane
 
-Track the job tree, agent state, messages, and completion in the provider's agent or
-task view. Use it to keep the store aware of descendants.
-
-Watch processes and shared workspace resources with magus:
-
-```sh
-magus status --watch=15s
-```
-
-It shows magus process state, lock holders, and shared-service state and adoption. It
-does not show an agent thinking without running a magus process. Never replace it with
-sleep loops, repeated `ps`, or a waiting agent.
-
-To wait for a process you did not start to end, use your host's own wait or monitor
-tool: a shell loop holds your tool slot for the whole wait.
-
-### "How is it going" is a read, never a message
-
-Never message a worker to ask how it is doing. The question costs it the turn it was
-in, and what comes back is its account of itself, not what happened. Three reads answer it and none of them needs the
-worker's cooperation: a changed file is the filesystem reporting a fact, a tool
-call is what the guard already recorded, and a gate is graded against evidence
-magus is holding anyway.
-
-| you want | read |
-| --- | --- |
-| to hand the question to a person | the console link every verb that names a job prints |
-| to watch it happen | `magus job watch <job>` |
-| to know whether it is finished | `magus describe job <job>` |
-
-`magus job watch` prints one line per event until you interrupt it. It merges files
-changed under the job's write paths, the guard's tool calls under its lease, and the
-runs recorded against it. A file is attributed by WRITE PATH and by nothing the worker says: the write paths are proven disjoint when the job forks, so the
-path alone names the holder. Where two live jobs do cover one path the line says
-`contested`, names both, and attributes it to neither; there is nothing in a path
-to break that tie with, and naming one would tell you a file moved under a worker
-that never touched it.
-
-Message a worker only to CHANGE what it was handed. Anything you merely want to KNOW
-is one of the three reads above.
-
-A blocked worker RAISES; it never stalls quietly.
-
-- Piping the block to `magus session notify --outcome waiting` (blocked on input) or
-  `--outcome permission` (blocked on approval) opens a durable request in this
-  repository. No other outcome opens one.
-- `magus session attention` lists what is open, keyed by repository identity rather
-  than by checkout path, so a request raised inside a worker's own isolated tree is
-  listed in yours. `magus session attention -q` prints nothing and exits 1 on an empty
-  queue: the form to test from a loop.
-- Nothing closes a request by itself. The orchestrator, or any human, disposes it
-  with `magus session dispose <id> --reason "<why>"`. There is no expiry and no auto-dispose, because a
-  request magus could answer on its own would not have needed a person.
-- A worker that raised one waits for the disposition; it never chooses for itself.
-
-`magus session` is how the root audits what a job RAN, as opposed to what it reported.
-`magus session --since 2h -o json` answers what the fleet has been doing.
-
-Each invocation carries the job it was launched under (the same `magus.lease` channel).
-It also carries its claimed spawner label and parent span, and the targets it finished
-with their outcomes. The store is keyed by repository identity, so a worker in its own
-worktree is still listed.
-Attribution is cooperative and every one of those values is a CLAIM magus records
-rather than corroborates: an empty lease means the invocation claimed none, which
-makes it unattributed, never an error; its OS user says whose account ran it.
-
-Course-correct at explicit checkpoints: after a child proposes new
-descendants, when a worker discovers a new API or generated-output dependency,
-when ownership drifts, when criteria repeatedly fail, and when status shows
-unexpected lock contention or service failure. Pause only the affected branch,
-update the jobs and ordering, then resume work that remains independent. Never
-guess a PID or signal from stale output; use current status and the host's normal
-process controls. A running worker keeps the constraints it was handed.
-Tightening them means cancel and respawn, not a message sent mid-flight.
+Run workers non-blocking; block on one only when your next action needs its result.
+Watch processes with `magus status --watch=15s`. Never message a worker to ask how it
+is going: `magus describe job <job>` grades where it stands, and `magus job watch <job>`
+shows it happening. Message a worker only to CHANGE what it was handed.
+[reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify
 

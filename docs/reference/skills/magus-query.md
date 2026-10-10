@@ -3,7 +3,7 @@ title: magus-query
 generated_from: internal/agent/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 14466
+skill_full_bytes: 14775
 skill_short_bytes: 10345
 ---
 
@@ -293,6 +293,19 @@ tree that no longer exists. Every fact in it has a live command that cannot be
 stale, and those commands scope to a project where the file covers the whole
 workspace. Read it as a LAST RESORT: when no server is reachable and the CLI is
 unavailable too, or when a human explicitly asks what the committed index says.
+
+## Contents
+
+- Act in this order
+- Rewriting a symbol everywhere it appears
+- Query grammar
+- Retrieving prose from the docs
+- Reading results
+- Ownership and blast radius
+- What other sessions already did here
+- Across workspaces and neighbors
+- Do not render the graph yourself
+- Fetching current behavior
 
 ## Act in this order
 

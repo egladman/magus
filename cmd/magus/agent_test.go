@@ -455,6 +455,13 @@ func TestEverySkillFitsTheSkillGuidance(t *testing.T) {
 			lines := strings.Count(r.Body, "\n") + 1
 			assert.LessOrEqual(t, lines, 500, "%s (%s) is %d lines; move enumeration and examples into its full-only arms, or split it", def.Name, v, lines)
 			assert.Equal(t, v == agent.VariantFull, strings.Contains(r.Body, "\n## Contents\n"), "%s (%s): only the full form carries a contents list", def.Name, v)
+			if r.Reference == "" {
+				continue
+			}
+			refLines := strings.Count(r.Reference, "\n") + 1
+			assert.LessOrEqual(t, refLines, 500, "%s reference.md is %d lines", def.Name, refLines)
+			assert.Contains(t, r.Reference, "\n## Contents\n", "%s: a reference file is read in part, so it carries a contents list", def.Name)
+			assert.Contains(t, r.Body, "](reference.md)", "%s: SKILL.md links its reference file, or nothing points a reader at it", def.Name)
 		}
 	}
 }

@@ -3,7 +3,7 @@ title: magus-commit-composition
 generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
-skill_full_bytes: 4190
+skill_full_bytes: 4402
 skill_short_bytes: 3394
 ---
 
@@ -178,6 +178,15 @@ names.
 magus does not rewrite history for you, the same way it reports what a
 change affects without editing it. It shows the seams and proves afterwards that
 nothing was lost; your VCS performs the edit.
+
+## Contents
+
+- Two constraints that decide most groupings
+- Ask the workspace where the seams are
+- Where this stops
+- Before you start, and after you finish
+- What does not belong in a commit at all
+- See also
 
 ## Two constraints that decide most groupings
 

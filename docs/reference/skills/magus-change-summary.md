@@ -3,7 +3,7 @@ title: magus-change-summary
 generated_from: internal/agent/skills/magus-change-summary/SKILL.md
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
 tags: [agents, skills, magus-change-summary]
-skill_full_bytes: 7178
+skill_full_bytes: 7359
 skill_short_bytes: 4922
 ---
 
@@ -189,6 +189,15 @@ magus agent install --tar | tar -xO -f - magus-change-summary-full/SKILL.md
 
 Turn a large workspace's recent change history into a short, evidence-backed
 brief. The output is a decision aid, not a chronological commit dump.
+
+## Contents
+
+- Gather evidence
+- Write the brief
+- Write a changelog entry
+- Answer a granular diff question
+- Resume a review from a checkpoint
+- Hand a change to a second reader
 
 ## Gather evidence
 

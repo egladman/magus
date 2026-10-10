@@ -3,7 +3,7 @@ title: magus-architecture-review
 generated_from: internal/agent/skills/magus-architecture-review/SKILL.md
 description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition."
 tags: [agents, skills, magus-architecture-review]
-skill_full_bytes: 6737
+skill_full_bytes: 7020
 skill_short_bytes: 5261
 ---
 
@@ -199,6 +199,17 @@ magus already measured the workspace: what depends on what, what changes togethe
 where churn and complexity concentrate, who owns what. Query those facts before
 proposing structure; a proposal that cites graph evidence is
 checkable, one from intuition is vibes.
+
+## Contents
+
+- Survey before proposing
+- Then survey the opposite: what is too thin to justify a boundary
+- Sizing a specific refactor
+- Match the existing conventions
+- Audit the domain model itself
+- Say when not to build it
+- Verify the change
+- Do not render the graph yourself
 
 ## Survey before proposing
 

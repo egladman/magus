@@ -3,7 +3,7 @@ title: magus-buzz-lang
 generated_from: internal/agent/skills/magus-buzz-lang/SKILL.md
 description: "Write, fix and debug Buzz, the statically typed language of magusfile.buzz, spells and `magus buzz` scripts."
 tags: [agents, skills, magus-buzz-lang]
-skill_full_bytes: 12601
+skill_full_bytes: 12809
 skill_short_bytes: 10390
 ---
 
@@ -309,6 +309,16 @@ way a TypeScript, Go or Python author would: the checker rejected 22, and of the
 it accepted, 6 failed or printed the wrong thing when run, and every one that called
 its own `main()` ran twice. Work in this order: copy the shapes on this page,
 check, fix the first error, run.
+
+## Contents
+
+- The loop
+- One script with every common shape
+- Coming from TypeScript, Go, Python or Swift
+- Built-in methods
+- Host modules: ask, never guess
+- Test what you write
+- Where Buzz code belongs
 
 ## The loop
 

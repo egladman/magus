@@ -15,9 +15,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -346,7 +348,9 @@ import (
 // magus-upstream-source is new: the last-resort read of magus's code at the binary's
 // commit, which `magus version -o json` now reports in full.
 // 116: magus-multi-agent starts every spawn at the economy tier, proves claims with parallel
-// economy jobs, keeps them short-lived, and judges cost per completed job.
+// economy jobs, keeps them short-lived, and judges cost per completed job. A skill may ship a
+// reference.md beside SKILL.md; magus-multi-agent moves its job-record detail there to fit
+// the 500-line SKILL.md budget, and every full form carries a contents list.
 const SkillVersion = 116
 
 const skillLicense = "GPL-3.0-or-later"
@@ -390,6 +394,21 @@ type AgentSkill struct {
 	// "full", never "short": StampSkill and friends key off this field, not
 	// the request. Meaningless on an unrendered definition from EmbeddedSkills.
 	Variant Variant
+	// Reference is the skill's reference file: the detail SKILL.md links one level deep, so
+	// SKILL.md stays under the host's line budget. Empty when the skill has none. Always
+	// rendered full, with a contents list, in both forms: a reader opens it for the detail.
+	Reference string
+}
+
+// referenceFile is the one reference file a skill may carry beside its SKILL.md, in
+// source and installed alike.
+const referenceFile = "reference.md"
+
+// installedFile is one file an install writes for a skill, relative to the skill's
+// directory.
+type installedFile struct {
+	name string
+	body []byte
 }
 
 // Variant selects which form of a skill body to render.
@@ -827,6 +846,17 @@ func (c *Catalog) computeSkillDigests() map[string]string {
 			out[source.name] = unreadableDigest
 			continue
 		}
+		// The reference is part of what the skill teaches, so editing it must stale the stamp.
+		if ref, err := fs.ReadFile(c.sourceFS, source.referencePath()); err == nil {
+			if _, err := fmt.Fprintf(h, "\n%s\n", referenceFile); err != nil {
+				out[source.name] = unreadableDigest
+				continue
+			}
+			if _, err := h.Write(ref); err != nil {
+				out[source.name] = unreadableDigest
+				continue
+			}
+		}
 		out[source.name] = hex.EncodeToString(h.Sum(nil))[:12]
 	}
 	return out
@@ -846,10 +876,16 @@ func (c *Catalog) EmbeddedSkills() ([]AgentSkill, error) {
 		if err != nil {
 			return nil, err
 		}
-		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: strings.TrimSpace(string(body))})
+		ref, err := fs.ReadFile(c.sourceFS, source.referencePath())
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, err
+		}
+		skills = append(skills, AgentSkill{Name: source.name, Description: source.description, Body: strings.TrimSpace(string(body)), Reference: strings.TrimSpace(string(ref))})
 	}
 	return skills, nil
 }
+
+func (s skillSource) referencePath() string { return path.Join(path.Dir(s.bodyPath), referenceFile) }
 
 // Render renders def's raw template Body for v, returning a new AgentSkill
 // whose Body is the final Markdown and whose Variant records which variant
@@ -867,7 +903,14 @@ func (c *Catalog) Render(def AgentSkill, v Variant) (AgentSkill, error) {
 	if v == VariantFull {
 		rendered = md.WithContents(rendered)
 	}
-	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v}, nil
+	var ref string
+	if def.Reference != "" {
+		if ref, err = applyVariant(def.Name+"/"+referenceFile, def.Reference, VariantFull); err != nil {
+			return AgentSkill{}, err
+		}
+		ref = md.WithContents(ref)
+	}
+	return AgentSkill{Name: def.Name, Description: def.Description, Body: rendered, Variant: v, Reference: ref}, nil
 }
 
 // RenderedSkills returns exactly the entries form installs, in name order: the
@@ -944,6 +987,18 @@ func (c *Catalog) installBytes(skill AgentSkill) []byte {
 	return c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
 }
 
+// installFiles is every file an install writes for skill: SKILL.md, then its reference
+// file when it has one. The reference carries the same generated footer, so a reader of
+// either file sees it is magus's and how to refresh it.
+func (c *Catalog) installFiles(skill AgentSkill) []installedFile {
+	files := []installedFile{{name: "SKILL.md", body: c.installBytes(skill)}}
+	if skill.Reference != "" {
+		body := strings.TrimRight(skill.Reference, "\n") + "\n" + c.footer(skill.Name, skill.Variant)
+		files = append(files, installedFile{name: referenceFile, body: []byte(body)})
+	}
+	return files
+}
+
 // SkillBytes returns the rendered+stamped bytes for one named skill.
 // Pure rendering: callers decide what to do with the bytes (write to a
 // file, embed in a tar, hash, log).
@@ -979,20 +1034,21 @@ func (c *Catalog) SkillTar(dest string, form Form) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.installBytes(skill)
-		hdr := &tar.Header{
-			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
-			Mode:    0o644,
-			Size:    int64(len(body)),
-			ModTime: epoch,
-			Uname:   "",
-			Gname:   "",
-		}
-		if err := tw.WriteHeader(hdr); err != nil {
-			return nil, fmt.Errorf("agent install: tar header: %w", err)
-		}
-		if _, err := tw.Write(body); err != nil {
-			return nil, fmt.Errorf("agent install: tar body: %w", err)
+		for _, f := range c.installFiles(skill) {
+			hdr := &tar.Header{
+				Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, f.name)),
+				Mode:    0o644,
+				Size:    int64(len(f.body)),
+				ModTime: epoch,
+				Uname:   "",
+				Gname:   "",
+			}
+			if err := tw.WriteHeader(hdr); err != nil {
+				return nil, fmt.Errorf("agent install: tar header: %w", err)
+			}
+			if _, err := tw.Write(f.body); err != nil {
+				return nil, fmt.Errorf("agent install: tar body: %w", err)
+			}
 		}
 	}
 	if err := tw.Close(); err != nil {
@@ -1016,7 +1072,9 @@ func (c *Catalog) PlanSkillTree(dir, dest string, form Form) ([]string, error) {
 	}
 	planned := make([]string, 0, len(skills))
 	for _, skill := range skills {
-		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
+		for _, f := range c.installFiles(skill) {
+			planned = append(planned, filepath.Join(dest, skill.Name, f.name))
+		}
 	}
 	return planned, nil
 }
@@ -1068,29 +1126,30 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, form Form) (writt
 		}
 	}
 	for _, skill := range skills {
-		rel := filepath.Join(skill.Name, "SKILL.md")
-		outPath := filepath.Join(dir, dest, rel)
-		if !force {
-			if _, err := os.Stat(outPath); err == nil {
-				return nil, nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
-			} else if !os.IsNotExist(err) {
-				return nil, nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
+		for _, f := range c.installFiles(skill) {
+			rel := filepath.Join(skill.Name, f.name)
+			outPath := filepath.Join(dir, dest, rel)
+			if !force {
+				if _, err := os.Stat(outPath); err == nil {
+					return nil, nil, fmt.Errorf("agent install: %s already exists (use --force to overwrite)", filepath.Join(dest, rel))
+				} else if !os.IsNotExist(err) {
+					return nil, nil, fmt.Errorf("agent install: stat %s: %w", outPath, err)
+				}
 			}
+			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+				return nil, nil, err
+			}
+			// A read error counts as changed: the install is about to overwrite whatever is
+			// there, and claiming "unchanged" for a file magus could not read would be the
+			// one answer that stops a reader looking.
+			if prev, readErr := os.ReadFile(outPath); readErr != nil || !bytes.Equal(prev, f.body) {
+				changed = append(changed, filepath.Join(dest, rel))
+			}
+			if err := os.WriteFile(outPath, f.body, 0o644); err != nil {
+				return nil, nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
+			}
+			written = append(written, filepath.Join(dest, rel))
 		}
-		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-			return nil, nil, err
-		}
-		body := c.installBytes(skill)
-		// A read error counts as changed: the install is about to overwrite whatever is
-		// there, and claiming "unchanged" for a file magus could not read would be the
-		// one answer that stops a reader looking.
-		if prev, readErr := os.ReadFile(outPath); readErr != nil || !bytes.Equal(prev, body) {
-			changed = append(changed, filepath.Join(dest, rel))
-		}
-		if err := os.WriteFile(outPath, body, 0o644); err != nil {
-			return nil, nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
-		}
-		written = append(written, filepath.Join(dest, rel))
 	}
 	return written, changed, nil
 }
@@ -1312,6 +1371,9 @@ func (c *Catalog) skillSourceFiles() ([]string, error) {
 			return nil, err
 		}
 		paths = append(paths, source.bodyPath)
+		if _, err := fs.Stat(c.sourceFS, source.referencePath()); err == nil {
+			paths = append(paths, source.referencePath())
+		}
 	}
 	sort.Strings(paths)
 	return paths, nil
@@ -1812,9 +1874,11 @@ func (c *Catalog) installedCurrent(root string, installs map[HarnessSkillLocatio
 				continue
 			}
 			carried = true
-			got, err := os.ReadFile(filepath.Join(root, loc.Path, entry.Name, "SKILL.md"))
-			if err != nil || !bytes.Equal(got, c.installBytes(entry)) {
-				return false
+			for _, f := range c.installFiles(entry) {
+				got, err := os.ReadFile(filepath.Join(root, loc.Path, entry.Name, f.name))
+				if err != nil || !bytes.Equal(got, f.body) {
+					return false
+				}
 			}
 		}
 	}

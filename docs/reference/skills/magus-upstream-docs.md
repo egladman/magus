@@ -3,7 +3,7 @@ title: magus-upstream-docs
 generated_from: internal/agent/skills/magus-upstream-docs/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-upstream-docs]
-skill_full_bytes: 4688
+skill_full_bytes: 4979
 skill_short_bytes: 3743
 ---
 
@@ -170,6 +170,16 @@ Two places serve the same pages:
   the skill is dogfooded, so prefer it here.
 - Published: `https://eli.gladman.cc/magus/`. Every page is also raw Markdown at
   `<page-url>index.md`.
+
+## Contents
+
+- In a magus workspace, ask the graph for the passage
+- Fast path: start from the index, do not guess URLs
+- URL scheme
+- Where things live (stable IDs route straight to a page)
+- Traversing within the docs
+- The published site follows main, not your build
+- In the magus repo
 
 ## In a magus workspace, ask the graph for the passage
 
