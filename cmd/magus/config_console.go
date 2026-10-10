@@ -3,11 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -133,16 +135,15 @@ func configConsoleTokenCreate(args []string) error {
 	if cf.Code {
 		// The code alone on stdout, for `#code=$(...)`; it is spent on first use.
 		fmt.Println(secret)
-		fmt.Fprintf(os.Stderr, "magus config console token create: a one-time code (id %s) for a %s token living %s; it must be redeemed within %s\n",
-			rec.ID, rec.Grant, rec.TokenTTL, auth.ExchangeCodeTTL)
+		slog.Info(fmt.Sprintf("a one-time code (id %s) for a %s token living %s; it must be redeemed within %s",
+			rec.ID, rec.Grant, rec.TokenTTL, auth.ExchangeCodeTTL), attr.Notice(""), attr.Component("magus config console token create"))
 		return nil
 	}
 	printMinted("magus config console token create", secret, rec)
 	if grant == types.GrantViewer {
-		fmt.Fprintln(os.Stderr, "Grant console=read: it can READ the console and cannot submit jobs, edit memory,")
-		fmt.Fprintln(os.Stderr, "or open a share. It is refused at /mcp.")
+		slog.Info("Grant console=read: it can READ the console and cannot submit jobs, edit memory,\nor open a share. It is refused at /mcp.", attr.Notice(""))
 	} else {
-		fmt.Fprintln(os.Stderr, "Grant console=write: it reaches every console app and is refused at /mcp.")
+		slog.Info("Grant console=write: it reaches every console app and is refused at /mcp.", attr.Notice(""))
 	}
 	return nil
 }

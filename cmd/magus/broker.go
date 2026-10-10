@@ -45,7 +45,7 @@ func brokerCmd(ctx context.Context, args []string) error {
 	case hint.BrokerStop.Leaf():
 		return brokerStop(ctx, args[1:])
 	case hint.BrokerUnits.Leaf():
-		return brokerUnits(args[1:])
+		return brokerUnits(ctx, args[1:])
 	default:
 		brokerUsage()
 		return usagef("magus broker: unknown target %q (want status, stop or units, or nothing to run one)", args[0])
@@ -127,7 +127,7 @@ func brokerServe(ctx context.Context, args []string) error {
 	} else {
 		ln, err = broker.Listen(ctx, addr)
 		if errors.Is(err, broker.ErrRunning) {
-			fmt.Fprintf(os.Stderr, "magus: a broker is already serving %s\n", addr)
+			slog.InfoContext(ctx, "a broker is already serving "+addr, attr.Notice(""), attr.Component("magus"))
 			return nil
 		}
 		if err != nil {
@@ -158,8 +158,8 @@ func brokerServe(ctx context.Context, args []string) error {
 	if f.IdleExit > 0 {
 		exits = "exits after " + idleText(f.IdleExit) + " holding nothing"
 	}
-	fmt.Fprintf(os.Stderr, "magus: broker (pid %d) %s %s: %d slots, %s; %s\n",
-		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits)
+	slog.InfoContext(ctx, fmt.Sprintf("broker (pid %d) %s %s: %d slots, %s; %s",
+		os.Getpid(), from, addr, slots, cache.FormatMB(memMB), exits), attr.Notice(""), attr.Component("magus"))
 
 	ctx, stopNow := context.WithCancel(ctx)
 	defer stopNow()
@@ -234,7 +234,7 @@ func brokerStatus(ctx context.Context, args []string) error {
 		if globalCfg.Broker.Resolved() == types.BrokerOff {
 			why = "runs here never ask one"
 		}
-		fmt.Fprintf(os.Stderr, "no broker is running (broker: %s); %s\n", globalCfg.Broker, why)
+		slog.ErrorContext(ctx, fmt.Sprintf("no broker is running (broker: %s); %s", globalCfg.Broker, why), attr.Notice(""))
 		return errSilent{exitCode: 1}
 	}
 	printBrokerRows(os.Stdout, st, globalCfg.Broker, time.Now())
@@ -259,7 +259,7 @@ func brokerStop(ctx context.Context, args []string) error {
 	}
 	c, err := broker.Dial(ctx, broker.DefaultAddr())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "magus: no broker is running")
+		slog.ErrorContext(ctx, "no broker is running", attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 1}
 	}
 	defer func() { _ = c.Close() }()
@@ -268,7 +268,7 @@ func brokerStop(ctx context.Context, args []string) error {
 		if err != nil {
 			return fmt.Errorf("broker stop: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "magus: stopped %d hosted service(s); the broker is still running\n", n)
+		slog.InfoContext(ctx, fmt.Sprintf("stopped %d hosted service(s); the broker is still running", n), attr.Notice(""), attr.Component("magus"))
 		return nil
 	}
 	st, err := c.Status(ctx)
@@ -284,7 +284,7 @@ func brokerStop(ctx context.Context, args []string) error {
 	} else if err != nil {
 		return fmt.Errorf("broker stop: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "magus: stopped broker (pid %d)\n", st.PID)
+	slog.InfoContext(ctx, fmt.Sprintf("stopped broker (pid %d)", st.PID), attr.Notice(""), attr.Component("magus"))
 	return nil
 }
 
@@ -369,8 +369,7 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 	if pid == 0 || quiet {
 		return
 	}
-	msg := fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
-		pid, idleText(broker.DefaultIdleExit), hint.BrokerStatus)
+	msg := startedBrokerMessage(pid)
 	if output != "" && output != string(outputText) {
 		_ = report.NewLineEncoder(w).Encode(report.Notice{
 			Level:   slog.LevelInfo,
@@ -384,6 +383,28 @@ func announceBroker(w io.Writer, pid int, output string, quiet bool) {
 		return
 	}
 	fmt.Fprintf(w, "magus: %s\n", msg)
+}
+
+func startedBrokerMessage(pid int) string {
+	return fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
+		pid, idleText(broker.DefaultIdleExit), hint.BrokerStatus)
+}
+
+// noticeBroker is announceBroker as a record: the display drops it under -q and -s, and a
+// -o jsonl display turns it into the run.notice announceBroker writes by hand. The pid, log
+// and idle attributes ride along only there, since a pretty display would print them.
+func noticeBroker(ctx context.Context, pid int) {
+	if pid == 0 || global.quiet || global.silent {
+		return
+	}
+	attrs := []slog.Attr{attr.Notice(""), attr.Component("magus")}
+	if global.output == string(FormatJSONL) {
+		attrs = append(attrs,
+			slog.Int("pid", pid),
+			slog.String("log", brokerLogPath()),
+			slog.Int("idle_exit_s", int(broker.DefaultIdleExit/time.Second)))
+	}
+	slog.LogAttrs(ctx, slog.LevelInfo, startedBrokerMessage(pid), attrs...)
 }
 
 var upstreamSourceSkill = agent.MustSkill("magus-upstream-source")
@@ -409,7 +430,7 @@ func newBrokerClient(announce bool) *broker.Client {
 		broker.WithStart(func(ctx context.Context) bool {
 			pid := ensureBroker(ctx)
 			if announce {
-				announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+				noticeBroker(ctx, pid)
 			}
 			return broker.Live(ctx, broker.DefaultAddr())
 		}))
@@ -430,7 +451,7 @@ func processBrokerClient() *broker.Client {
 // brokerUnits is `magus broker units [systemd|launchd]`: print the files a supervisor
 // needs to run the broker, for the person to install. The default is launchd on macOS
 // and systemd elsewhere.
-func brokerUnits(args []string) error {
+func brokerUnits(ctx context.Context, args []string) error {
 	rest, err := cmdParse("broker units", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "usage: magus broker units [systemd|launchd] [flags]")
@@ -475,13 +496,15 @@ func brokerUnits(args []string) error {
 		}
 		fmt.Printf("# %s\n%s", u.Path, u.Content)
 	}
-	fmt.Fprintln(os.Stderr, "\nmagus: write each file above to the path in its header, then:")
+	var enable string
 	switch supervisor {
 	case broker.SupervisorSystemd:
-		fmt.Fprintln(os.Stderr, "  systemctl --user daemon-reload && systemctl --user enable --now magus-broker.socket")
+		enable = "systemctl --user daemon-reload && systemctl --user enable --now magus-broker.socket"
 	case broker.SupervisorLaunchd:
-		fmt.Fprintf(os.Stderr, "  launchctl bootstrap gui/%d %s\n", os.Getuid(), units[0].Path)
+		enable = fmt.Sprintf("launchctl bootstrap gui/%d %s", os.Getuid(), units[0].Path)
 	}
+	slog.InfoContext(ctx, "write each file above to the path in its header, then:",
+		attr.Notice(""), attr.Component("magus"), attr.Next(enable))
 	return nil
 }
 

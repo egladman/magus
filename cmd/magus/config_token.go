@@ -12,11 +12,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -113,9 +115,9 @@ func configTokenGenerate(args []string) error {
 	// The secret goes to stdout alone, once; repeating it on stderr would put it in every
 	// terminal log that captures both.
 	fmt.Printf("%s\n", tok)
-	fmt.Fprintf(os.Stderr, "\nmagus config token generate: wrote %s\n", path)
-	fmt.Fprintln(os.Stderr, "A running server picks this up automatically - no restart needed.")
-	fmt.Fprintln(os.Stderr, "For an MCP client, mint a scoped token instead: "+hint.ConfigMCPConnectorCreate.String())
+	slog.Info("wrote "+path, attr.Notice(""), attr.Component("magus config token generate"))
+	slog.Info("A running server picks this up automatically - no restart needed.", attr.Notice(""))
+	slog.Info("For an MCP client, mint a scoped token instead:", attr.Notice(""), attr.Next(hint.ConfigMCPConnectorCreate.String()))
 	return nil
 }
 
@@ -141,7 +143,7 @@ func configTokenRevoke(args []string) error {
 	if err := auth.RevokeOperator(); err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "magus config token revoke: token removed")
+	slog.Info("token removed", attr.Notice(""), attr.Component("magus config token revoke"))
 	return nil
 }
 

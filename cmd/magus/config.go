@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -178,7 +180,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s: %s = %s\n", cfgPath, key, value)
+	slog.InfoContext(ctx, fmt.Sprintf("wrote %s: %s = %s", cfgPath, key, value), attr.Notice(""))
 	return nil
 }
 

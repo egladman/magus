@@ -95,7 +95,7 @@ func (s *cacheShard) run(t *testing.T, args ...string) (string, error) {
 		globalCfg.Cache.Remote.TrustedKeys = []string{s.trusted}
 	}
 	var err error
-	stderr := captureStderr(t, func() {
+	stderr := capturePrettyNotices(t, func() {
 		err = configCacheCmd(context.Background(), s.root, args)
 	})
 	if magusValue != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
@@ -38,13 +39,13 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	}
 	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus: --open could not derive the viewer origin (%v); continuing without it.\n", err)
+		slog.WarnContext(ctx, fmt.Sprintf("--open could not derive the viewer origin (%v); continuing without it.", err), attr.Notice(""), attr.Component("magus"))
 		return nil, func() {}
 	}
 	bc := journal.NewBroadcaster()
 	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus: --open could not start the log stream server (%v); continuing without it.\n", err)
+		slog.WarnContext(ctx, fmt.Sprintf("--open could not start the log stream server (%v); continuing without it.", err), attr.Notice(""), attr.Component("magus"))
 		return nil, func() {}
 	}
 	url := ls.ViewerURL(base)
@@ -52,9 +53,9 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	// headless box) is the normal case for a long run, and a failure to open must not
 	// cost the reader the link, so the link goes out first and the launch is
 	// best-effort on top of it. --open never blocks or fails a run.
-	fmt.Fprintf(os.Stderr, "watch this run (loopback, stays on your machine):\n  %s\n", url)
+	slog.InfoContext(ctx, "watch this run (loopback, stays on your machine):\n  "+url, attr.Notice(""))
 	if err := openBrowser(url); err != nil {
-		fmt.Fprintf(os.Stderr, "magus: --open could not launch a browser (%v); open the link above yourself.\n", err)
+		slog.WarnContext(ctx, fmt.Sprintf("--open could not launch a browser (%v); open the link above yourself.", err), attr.Notice(""), attr.Component("magus"))
 	}
 	return bc, func() {
 		bc.Close()
