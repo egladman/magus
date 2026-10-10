@@ -61,6 +61,10 @@
   width: 100%;
   max-width: 40rem;
 }
+/* The ways sit in PF's footer, which already spaces itself from the body; and a footer whose actions
+   have not been filled in yet takes no room. */
+.pf-v6-c-empty-state__footer > [data-empty-ways] { margin-block-start: 0; }
+.pf-v6-c-empty-state__footer:has(> .pf-v6-c-empty-state__actions:empty) { display: none; }
 [data-empty-way] {
   display: flex;
   flex-direction: column;
@@ -94,6 +98,13 @@
 /* Stack the ways on a narrow viewport - side by side they are unreadable on a phone. */
 @media (max-width: 40rem) {
   [data-empty-ways] { grid-template-columns: 1fr; }
+}
+/* An inline clipboard copy drops the button's padding, as PF's inline examples do; the hit area is
+   still held to the console's 24px floor. */
+.pf-v6-c-clipboard-copy.pf-m-inline .pf-v6-c-button.pf-m-no-padding {
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  justify-content: center;
 }
 /* A way's button (the demo) wraps rather than overrunning its card: PF buttons are white-space:nowrap. */
 [data-empty-way] .pf-v6-c-button { white-space: normal; }
@@ -668,11 +679,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons hang their svg off the baseline. Center the icon. */
-#console-actions > .pf-v6-c-button { align-items: center; }
-#console-actions > .pf-v6-c-button > .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) { align-items: center; }
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) > :is(.pf-v6-c-button__icon, .pf-v6-c-menu-toggle__icon) { display: inline-flex; align-items: center; line-height: 0; }
 /* Each chrome button reads as a small inset control, NOT a full-height slab: a compact rounded hit area
    centered in the bar. On a phone the mobile block below stretches it to a finger-sized target. */
-#console-actions > .pf-v6-c-button {
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) {
   min-width: 2.25rem;
   justify-content: center;
   padding: var(--pf-t--global--spacer--sm);
@@ -710,7 +721,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   #console-commandbar-btn { margin-inline-end: auto; }
   /* On a phone the chrome buttons ARE the tap target, so stretch them to the row height for a
      finger-sized (~44px) hit area, and match the WIDTH so the button box is a SQUARE. */
-  #console-actions > .pf-v6-c-button {
+  #console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) {
     align-self: stretch;
     width: var(--console-titlebar-h);
     min-width: var(--console-titlebar-h);
@@ -1275,21 +1286,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   white-space: nowrap;
 }
 #console-scope-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-menu-toggle--BorderRadius: 0;
+  --pf-v6-c-menu-toggle--FontSize: var(--console-control-font-size);
   inline-size: auto;
-  padding-inline: var(--pf-t--global--spacer--sm);
   /* The compact tier, which is what the Reference and Notifications buttons beside it already measure. */
   block-size: 100%;
   padding-block: 0;
-  font-size: var(--console-control-font-size);
-  color: var(--pf-t--global--text--color--regular);
-  border: 0;
-  border-radius: 0;
   white-space: nowrap;
 }
-.console-shell-scope__caret { display: flex; align-items: center; color: var(--pf-t--global--icon--color--subtle); }
 /* Below the rail's breakpoint the title bar is fighting for room and the value still names a workspace;
    the caption segment is the part that can go. */
 @media (width < 48rem) {
@@ -2034,9 +2038,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--subtle);
 }
 /* The keycap: one key of a shortcut, drawn as a key. The pressed-edge is a thicker bottom border, not a
-   shadow. .console-cheatsheet-kbd is the name the diff app still writes. */
-.console-shell-keycap,
-.console-cheatsheet-kbd {
+   shadow. */
+.console-shell-keycap {
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
   line-height: 1;
@@ -2049,8 +2052,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   background: var(--pf-t--global--background--color--secondary--default);
   color: var(--pf-t--global--text--color--regular);
 }
-/* compat(until: apps/diff/main.ts writes console-shell-keycap): the Diff app still names its keycaps
-   console-cheatsheet-kbd, so the selector above carries both. */
 
 /* Shortcuts app (apps/shortcuts/main.ts, data-app="shortcuts"): a first-class tab listing EVERY shortcut,
    grouped by area - its name, the token, the keys when some are bound, and a Run button (and an edit

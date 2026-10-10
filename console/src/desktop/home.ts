@@ -10,6 +10,7 @@
 // default, so a card can still never strand you in a window you did not ask for.
 import { openAppWindow } from "../lib/appwindow";
 import { wireMenu } from "../ui/menu";
+import { kebabIcon, menuToggle } from "../ui/menu-toggle";
 import type { PulseView } from "./pulse";
 import {
   DEMO_HINT,
@@ -247,17 +248,12 @@ export function buildLauncher(
     // another card's kebab is pressed, because that press is an outside click to the first.
     const actions = document.createElement("div");
     actions.className = "pf-v6-c-card__actions";
-    const kebab = document.createElement("button");
-    kebab.type = "button";
-    kebab.className = "pf-v6-c-button pf-m-plain";
+    const kebab = menuToggle({
+      variant: "plain",
+      icon: kebabIcon(),
+      ariaLabel: "More actions for " + s.label,
+    });
     kebab.dataset.cardKebab = "";
-    kebab.setAttribute("aria-label", "More actions for " + s.label);
-    const kebabIcon = document.createElement("span");
-    kebabIcon.className = "pf-v6-c-button__icon";
-    kebabIcon.innerHTML =
-      '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
-      '<circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>';
-    kebab.append(kebabIcon);
     const menu = document.createElement("div");
     menu.className = "pf-v6-c-menu console-shell-launcher__menu";
     menu.dataset.cardMenu = "";
@@ -325,7 +321,6 @@ export function buildLauncher(
   // card grid navigates and this would name a control that is not on screen.
   const ways = document.createElement("div");
   ways.dataset.launcherWays = "";
-  ways.className = "pf-v6-c-empty-state__actions";
   ways.setAttribute("data-empty-ways", "");
 
   // The live reading lives in the HEADER, not among the ways. As a third card it wrapped the row to two
@@ -401,7 +396,6 @@ export function buildLauncher(
   connectMessage.dataset.launcherConnectMessage = "";
   connectLine.append(connectTitle, " ", connectMessage);
   const connectActions = document.createElement("div");
-  connectActions.className = "pf-v6-c-empty-state__actions";
   connectActions.dataset.launcherConnectActions = "";
   connectActions.setAttribute("data-empty-ways", "");
   connect.append(connectLine, connectActions);

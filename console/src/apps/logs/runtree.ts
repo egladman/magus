@@ -335,6 +335,10 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   const li = document.createElement("li");
   li.className = "pf-v6-c-tree-view__list-item";
   li.setAttribute("role", "treeitem");
+  // Roving tabindex, on the item as PF's own markup has it: exactly one item in the tree is
+  // tabbable and the arrow keys move which. A tree of 500 rows that each take a Tab stop is unusable
+  // with a keyboard. The row button stays out of the tab order; the item is what takes focus.
+  li.tabIndex = -1;
   const hasKids = !!spec.children && spec.children.length > 0;
 
   if (!hasKids) li.dataset.leaf = "";
@@ -345,9 +349,6 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   node.type = "button";
   node.className = "pf-v6-c-tree-view__node";
   node.dataset.nodeId = spec.id;
-  // Roving tabindex: exactly one node in the tree is tabbable and the arrow keys move which. A tree
-  // of 500 buttons that each take a Tab stop is unusable with a keyboard, and PF's own TreeView
-  // makes the same trade.
   node.tabIndex = -1;
   if (spec.title) node.title = spec.title;
 
@@ -406,14 +407,15 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
   content.append(node);
   li.append(content);
 
-  // aria-selected is what a screen reader hears; pf-m-current is the paint. A row with nothing to
-  // open is not selectable and carries neither.
-  if (spec.select) li.setAttribute("aria-selected", String(spec.id === ctx.state.current));
+  // aria-selected is what a screen reader hears; pf-m-current is the paint. Every item carries it,
+  // as PF's single-select tree does, so a branch with nothing to open reads as unselected rather
+  // than as outside the selection model.
+  li.setAttribute("aria-selected", String(spec.id === ctx.state.current));
   if (spec.id === ctx.state.current) node.classList.add("pf-m-current");
-  // Registered BEFORE the children below, so ctx.order comes out in PAINT order (a row, then its
-  // subtree). The arrow keys walk that array as "the next visible row", which a post-order list -
+  // Registered BEFORE the children below, so ctx.order comes out in PAINT order (an item, then its
+  // subtree). The arrow keys walk that array as "the next visible item", which a post-order list -
   // every child ahead of its own parent - gets exactly backwards.
-  ctx.order.push(node);
+  ctx.order.push(li);
 
   const select = spec.select;
   const markCurrent = (): void => {
@@ -449,7 +451,16 @@ function makeNode(spec: NodeSpec, ctx: TreeCtx): HTMLLIElement {
     if (hasKids) setExpanded(li, !li.classList.contains("pf-m-expanded"), ctx, spec.id);
     activate();
   });
-  node.addEventListener("keydown", (ev) => onTreeKey(ev, li, node, ctx, spec, hasKids, activate));
+  li.addEventListener("keydown", (ev) => {
+    // A nested item's keys bubble through its ancestors; only the item the key landed on answers.
+    if ((ev.target as Element).closest("li") !== li) return;
+    onTreeKey(ev, li, ctx, spec, hasKids, activate);
+  });
+  // A click or programmatic focus makes this item the tab stop, so Shift+Tab from the next control
+  // returns to where the reader was.
+  li.addEventListener("focusin", (ev) => {
+    if ((ev.target as Element).closest("li") === li) seatTabStop(ctx, li);
+  });
   return li;
 }
 
@@ -467,18 +478,18 @@ function setExpanded(li: HTMLLIElement, open: boolean, ctx: TreeCtx, id: string)
 function onTreeKey(
   ev: Event,
   li: HTMLLIElement,
-  node: HTMLButtonElement,
   ctx: TreeCtx,
   spec: NodeSpec,
   hasKids: boolean,
   activate: () => void,
 ): void {
   const k = (ev as KeyboardEvent).key;
-  const visible = ctx.order.filter((n) => n.offsetParent !== null || n === node);
-  const i = visible.indexOf(node);
-  const focus = (n: HTMLButtonElement | undefined): void => {
+  const visible = ctx.order.filter((n) => n.offsetParent !== null || n === li);
+  const i = visible.indexOf(li);
+  const focus = (n: HTMLLIElement | undefined): void => {
     if (!n) return;
     ev.preventDefault();
+    seatTabStop(ctx, n);
     n.focus();
   };
   switch (k) {
@@ -502,7 +513,7 @@ function onTreeKey(
         setExpanded(li, false, ctx, spec.id);
       } else {
         const parent = li.parentElement?.closest<HTMLLIElement>(".pf-v6-c-tree-view__list-item");
-        focus(parent?.querySelector<HTMLButtonElement>(".pf-v6-c-tree-view__node") ?? undefined);
+        focus(parent ?? undefined);
       }
       break;
     case "Home":
@@ -529,8 +540,12 @@ function onTreeKey(
 interface TreeCtx {
   root: HTMLElement;
   state: TreeState;
-  order: HTMLButtonElement[];
+  order: HTMLLIElement[];
   onSelect: (sel: Selection) => void;
+}
+
+function seatTabStop(ctx: TreeCtx, item: HTMLLIElement): void {
+  for (const it of ctx.order) it.tabIndex = it === item ? 0 : -1;
 }
 
 // renderRunTree (re)builds the tree into container from an already-grouped spec. emptyNote lets the
@@ -569,7 +584,8 @@ export function renderRunTree(
   tree.append(list);
   container.append(tree);
   // Give the roving tabindex a home: the current node if it survived the refresh, else the first.
-  const entry = ctx.order.find((n) => n.classList.contains("pf-m-current")) ?? ctx.order[0] ?? null;
+  const entry =
+    ctx.order.find((n) => n.getAttribute("aria-selected") === "true") ?? ctx.order[0] ?? null;
   if (entry) entry.tabIndex = 0;
 }
 
@@ -753,7 +769,7 @@ export function mountCollapsiblePanel(opts: {
     apply("open");
     if (narrow) {
       (
-        aside.querySelector<HTMLElement>('.console-log-runs__tree button[tabindex="0"]') ??
+        aside.querySelector<HTMLElement>('.console-log-runs__tree li[tabindex="0"]') ??
         aside.querySelector<HTMLElement>("input, button")
       )?.focus();
     }

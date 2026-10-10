@@ -1659,7 +1659,7 @@ export function startConsole(
   document.body.append(keybindings.el);
   registerCommand({
     id: "console.settings.keybindings",
-    label: "Edit keybindings",
+    label: "Edit shortcuts",
     group: "General",
     run: () => keybindings.open(),
   });

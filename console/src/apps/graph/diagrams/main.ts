@@ -7,6 +7,7 @@ import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/se
 import { subscribeDefaultHost } from "../../../lib/settings";
 import type { AppInstance } from "../../../desktop/standalone";
 import { h } from "../../../desktop/view";
+import { emptyStateShell } from "../../../ui/empty-state";
 import {
   listDiagrams,
   renderDiagram,
@@ -270,16 +271,11 @@ export function stateView(
     wrap.append(spinner, h("p", undefined, title));
     return wrap;
   }
-  const empty = h("div", "pf-v6-c-empty-state pf-m-sm");
-  const content = h("div", "pf-v6-c-empty-state__content");
-  content.append(h("h2", "pf-v6-c-empty-state__title-text", title));
-  if (body !== undefined) {
-    const text = h("div", "pf-v6-c-empty-state__body");
-    text.append(typeof body === "string" ? h("p", undefined, body) : body);
-    content.append(text);
-  }
-  empty.append(content);
-  return empty;
+  const state = emptyStateShell({ heading: "h2", title, classes: "pf-m-sm" });
+  if (body === undefined) state.body.remove();
+  else state.body.append(typeof body === "string" ? h("p", undefined, body) : body);
+  state.footer.remove();
+  return state.root;
 }
 
 // command is a sentence holding a shell command as a <code> element, never as backticks a screen

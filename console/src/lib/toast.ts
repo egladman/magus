@@ -65,10 +65,12 @@ const CLOSE_PATH =
 export function mountToastGroup(): HTMLElement {
   const found = document.getElementById(GROUP_ID);
   if (found) return found;
-  const group = document.createElement("div");
+  const group = document.createElement("ul");
   group.id = GROUP_ID;
   group.className = "pf-v6-c-alert-group pf-m-toast";
+  group.setAttribute("role", "list");
   group.setAttribute("aria-live", "polite");
+  group.setAttribute("aria-atomic", "false");
   group.setAttribute("aria-relevant", "additions");
   document.body.append(group);
   return group;
@@ -113,7 +115,7 @@ export function pushToast(spec: ToastSpec): ToastHandle {
   }
 
   const variant = VARIANT[spec.kind ?? "ok"];
-  const item = document.createElement("div");
+  const item = document.createElement("li");
   item.className = "pf-v6-c-alert-group__item pf-m-incoming";
   item.dataset.toastKey = key;
 

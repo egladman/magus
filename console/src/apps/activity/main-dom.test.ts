@@ -388,14 +388,24 @@ test("the index tree is named, has one tab stop, and moves with the arrow keys",
 
   const tree = must(host.querySelector<HTMLElement>('[role="tree"]'));
   assert.equal(tree.getAttribute("aria-label"), "Events");
-  const nodes = [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")];
-  assert.equal(nodes.filter((n) => n.tabIndex === 0).length, 1, "one Tab stop for the tree");
+  // The tab stop is the tree item, as in PF's own markup; the row buttons stay out of the tab order.
+  const items = [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')];
+  assert.equal(items.filter((n) => n.tabIndex === 0).length, 1, "one Tab stop for the tree");
+  assert.ok(
+    [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")].every(
+      (n) => n.tabIndex === -1,
+    ),
+  );
+  assert.ok(
+    items.every((li) => li.hasAttribute("aria-selected")),
+    "branches carry aria-selected as well as leaves",
+  );
 
-  const first = must(nodes.find((n) => n.tabIndex === 0));
+  const first = must(items.find((n) => n.tabIndex === 0));
   first.focus();
   first.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   assert.notEqual(document.activeElement, first, "ArrowDown moves to the next visible row");
-  assert.equal(nodes.filter((n) => n.tabIndex === 0).length, 1, "and the tab stop follows");
+  assert.equal(items.filter((n) => n.tabIndex === 0).length, 1, "and the tab stop follows");
 
   const leaf = must(tree.querySelector<HTMLElement>("[data-leaf] .pf-v6-c-tree-view__node"));
   assert.match(leaf.textContent ?? "", /OK|Error/, "the outcome is in the row's text");

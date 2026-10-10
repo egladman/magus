@@ -62,6 +62,7 @@ import { registerCommand, unregisterCommand } from "../../../desktop/commands";
 import { openApp } from "../../../desktop/app-navigation";
 import { h } from "../../../desktop/view";
 import { reportFailure } from "../../../lib/notifications";
+import { emptyStateShell } from "../../../ui/empty-state";
 import { statusIcon, type Status as StatusShape } from "../../../ui/status";
 import {
   renderConnectPrompt,
@@ -645,16 +646,15 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const detail = h("aside", "console-plan-detail");
   detail.setAttribute("aria-label", "Node detail");
 
-  const empty = h("div", "pf-v6-c-empty-state console-plan-empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h2", "pf-v6-c-empty-state__title-text", "Reading the jobs");
-  const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
+  const emptyState = emptyStateShell({
+    heading: "h2",
+    title: "Reading the jobs",
+    classes: "console-plan-empty",
+    ways: true,
+  });
+  const empty = emptyState.root;
   const emptyMessage = h("p", undefined, "");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyBodyWrap.append(emptyMessage, emptyActions);
-  emptyContent.append(emptyTitle, emptyBodyWrap);
-  empty.append(emptyContent);
+  emptyState.body.append(emptyMessage);
 
   root.append(intro, toolbar, tree, treeReopen, stageBox, detail, empty);
   host.append(root);
@@ -669,7 +669,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     edgeLayer,
     nodeLayer,
     detail,
-    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
+    emptySlots: { title: emptyState.title, message: emptyMessage, actions: emptyState.actions },
     treeHead,
     treeHide,
     treeReopen,

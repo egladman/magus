@@ -56,6 +56,7 @@ import {
 } from "../../desktop/connectPrompt";
 import type { AppInstance } from "../../desktop/standalone";
 import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
 import { svgGlyph } from "../../ui/glyph";
 import { statusGlyph, statusIcon, statusText, type Status } from "../../ui/status";
 import { demoNotes } from "./demo";
@@ -274,7 +275,7 @@ function copyRow(value: string, what: string, announce: (msg: string) => void): 
   box.append(h("code", "pf-v6-c-clipboard-copy__text pf-m-code", value));
   const actions = h("span", "pf-v6-c-clipboard-copy__actions");
   const item = h("span", "pf-v6-c-clipboard-copy__actions-item");
-  const btn = h("button", "pf-v6-c-button pf-m-plain");
+  const btn = h("button", "pf-v6-c-button pf-m-plain pf-m-no-padding");
   btn.type = "button";
   btn.setAttribute("aria-label", "Copy " + what);
   const slot = h("span", "pf-v6-c-button__icon");
@@ -317,22 +318,15 @@ function copyRow(value: string, what: string, announce: (msg: string) => void): 
 
 // emptyBlock is a PF small Empty state: a title, a sentence, and optional actions.
 function emptyBlock(title: string, message: string, actions: HTMLElement[] = []): HTMLElement {
-  const root = h("div", "pf-v6-c-empty-state pf-m-sm console-notes-app__hint");
-  const content = h("div", "pf-v6-c-empty-state__content");
-  const header = h("div", "pf-v6-c-empty-state__header");
-  const heading = h("div", "pf-v6-c-empty-state__title");
-  heading.append(h("h2", "pf-v6-c-empty-state__title-text", title));
-  header.append(heading);
-  content.append(header, h("div", "pf-v6-c-empty-state__body", message));
-  if (actions.length > 0) {
-    const footer = h("div", "pf-v6-c-empty-state__footer");
-    const row = h("div", "pf-v6-c-empty-state__actions");
-    row.append(...actions);
-    footer.append(row);
-    content.append(footer);
-  }
-  root.append(content);
-  return root;
+  const state = emptyStateShell({
+    heading: "h2",
+    title,
+    classes: "pf-m-sm console-notes-app__hint",
+  });
+  state.body.textContent = message;
+  if (actions.length > 0) state.actions.append(...actions);
+  else state.footer.remove();
+  return state.root;
 }
 
 // buildScaffold assembles the app: a filtered list beside a reading pane, over a PF
@@ -399,18 +393,12 @@ function buildScaffold(host: HTMLElement): Refs {
   live.setAttribute("role", "status");
   live.setAttribute("aria-live", "polite");
 
-  const empty = h("div", "pf-v6-c-empty-state console-notes-app__empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyHeader = h("div", "pf-v6-c-empty-state__header");
-  const emptyTitleBox = h("div", "pf-v6-c-empty-state__title");
-  const emptyTitle = h("h2", "pf-v6-c-empty-state__title-text");
-  emptyTitleBox.append(emptyTitle);
-  emptyHeader.append(emptyTitleBox);
-  const emptyMessage = h("div", "pf-v6-c-empty-state__body");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyContent.append(emptyHeader, emptyMessage, emptyActions);
-  empty.append(emptyContent);
+  const emptyState = emptyStateShell({
+    heading: "h2",
+    classes: "console-notes-app__empty",
+    ways: true,
+  });
+  const empty = emptyState.root;
 
   panel.append(h("h1", "pf-v6-screen-reader", "Notes"), bar, main, live, empty);
   host.append(panel);
@@ -428,8 +416,12 @@ function buildScaffold(host: HTMLElement): Refs {
     detailBody,
     live,
     empty,
-    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
-    emptyHeader,
+    emptySlots: {
+      title: emptyState.title,
+      message: emptyState.body,
+      actions: emptyState.actions,
+    },
+    emptyHeader: emptyState.header,
   };
 }
 
@@ -491,6 +483,7 @@ export function activate(host: HTMLElement): AppInstance {
     renderEmptyMessage(refs.emptySlots, "Could not read the notes", message);
     refs.empty.classList.add("pf-m-danger");
     const icon = h("div", "pf-v6-c-empty-state__icon");
+    icon.setAttribute("aria-hidden", "true");
     icon.append(statusGlyph("danger"));
     refs.emptyHeader.prepend(icon);
     const retry = glyphButton("Retry", "pf-m-primary");
@@ -537,8 +530,8 @@ export function activate(host: HTMLElement): AppInstance {
 
   // --- the list: one roving tab stop over store headings and note rows -------------------
 
-  const stops = (): HTMLButtonElement[] =>
-    Array.from(refs.list.querySelectorAll<HTMLButtonElement>("[data-roving]")).filter(
+  const stops = (): HTMLElement[] =>
+    Array.from(refs.list.querySelectorAll<HTMLElement>("[data-roving]")).filter(
       (b) => !b.closest("[hidden]"),
     );
 
@@ -553,14 +546,21 @@ export function activate(host: HTMLElement): AppInstance {
 
   refs.list.addEventListener("focusin", (e) => {
     const target = e.target;
-    if (!(target instanceof HTMLButtonElement) || target.dataset.roving === undefined) return;
+    if (!(target instanceof HTMLElement) || target.dataset.roving === undefined) return;
     for (const b of stops()) b.tabIndex = b === target ? 0 : -1;
   });
   refs.list.addEventListener("keydown", (e) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     const all = stops();
-    const here = all.indexOf(document.activeElement as HTMLButtonElement);
+    const here = all.indexOf(document.activeElement as HTMLElement);
     if (here < 0) return;
+    // A note is a list item rather than a button, so its Enter and Space are pressed here; a store
+    // heading is a real button and answers them itself.
+    if ((e.key === "Enter" || e.key === " ") && all[here] instanceof HTMLLIElement) {
+      e.preventDefault();
+      all[here].click();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
     e.preventDefault();
     const last = all.length - 1;
     const next =
@@ -573,15 +573,19 @@ export function activate(host: HTMLElement): AppInstance {
   });
 
   function buildRow(n: Note): HTMLElement {
-    const item = h("li", "pf-v6-c-data-list__item");
-    const row = h("button", "console-notes-app__note");
-    row.type = "button";
+    // PF's clickable data list: the item is the control, so it carries the tab stop and is named by
+    // its title. Enter and Space press it (the list's keydown below), as they would a button.
+    const row = h("li", "pf-v6-c-data-list__item pf-m-clickable console-notes-app__note");
     row.dataset.name = n.name;
     row.dataset.roving = "note:" + n.name;
     if (selected === n.name) {
       row.setAttribute("aria-current", "true");
-      item.classList.add("pf-m-selected");
+      row.classList.add("pf-m-selected");
     }
+    const itemRow = h("div", "pf-v6-c-data-list__item-row");
+    const content = h("div", "pf-v6-c-data-list__item-content");
+    const first = h("div", "pf-v6-c-data-list__cell");
+    const second = h("div", "pf-v6-c-data-list__cell");
 
     const top = h("span", "console-notes-app__note-top");
     // Marked in the LIST, not only once a reader opens it. A capture is quoted material that
@@ -595,7 +599,10 @@ export function activate(host: HTMLElement): AppInstance {
         }),
       );
     }
-    top.append(h("span", "console-notes-app__note-title", n.title || n.name));
+    const titleEl = h("span", "console-notes-app__note-title", n.title || n.name);
+    titleEl.id = "console-notes-title-" + n.scope + "-" + n.name;
+    row.setAttribute("aria-labelledby", titleEl.id);
+    top.append(titleEl);
     const ms = tsMillis(n.modifyTime);
     if (ms !== null) {
       // The age column means ONE thing on every row: when the file was last edited. Staleness
@@ -608,7 +615,8 @@ export function activate(host: HTMLElement): AppInstance {
       );
       top.append(ageEl);
     }
-    row.append(top);
+    first.append(top);
+    content.append(first);
 
     const meta = h("span", "console-notes-app__note-meta");
     const lag = behind(n);
@@ -616,11 +624,15 @@ export function activate(host: HTMLElement): AppInstance {
     const broken = worstAnchor(n);
     if (broken) meta.append(statusPhrase(broken.status, broken.count + " " + broken.label));
     for (const tag of n.tags) meta.append(pfLabel(tag));
-    if (meta.childElementCount > 0) row.append(meta);
+    if (meta.childElementCount > 0) {
+      second.append(meta);
+      content.append(second);
+    }
 
     row.addEventListener("click", () => openNote(n));
-    item.append(row);
-    return item;
+    itemRow.append(content);
+    row.append(itemRow);
+    return row;
   }
 
   const collapsed = (): string[] => collapsedCell.get() ?? [];
@@ -739,7 +751,7 @@ export function activate(host: HTMLElement): AppInstance {
         region.append(hint);
         continue;
       }
-      const ul = h("ul", "pf-v6-c-data-list pf-m-compact pf-m-grid-none");
+      const ul = h("ul", "pf-v6-c-data-list pf-m-compact pf-m-grid");
       ul.setAttribute("role", "list");
       ul.setAttribute("aria-label", copy.title + " notes");
       for (const n of mine) ul.append(buildRow(n));
@@ -1008,7 +1020,7 @@ export function activate(host: HTMLElement): AppInstance {
       const on = row.dataset.name === n.name;
       if (on) row.setAttribute("aria-current", "true");
       else row.removeAttribute("aria-current");
-      row.closest("li")?.classList.toggle("pf-m-selected", on);
+      row.classList.toggle("pf-m-selected", on);
     }
     refs.detail.dataset.open = "";
     const title = renderNote(n);

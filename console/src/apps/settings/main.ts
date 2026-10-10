@@ -699,7 +699,6 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     defaults: kb.defaults,
     keymap: keymapDraft,
   });
-  const stopNaming = nameEditorControls(editor.el);
   let keybindingsContent: HTMLElement = editor.el;
   let disposeProfile = (): void => {};
   if (deps.presets && deps.presetList && deps.presetList.length) {
@@ -1028,7 +1027,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
         buildSection("Install", installSection.el, {
           lede: "Install the console as an app on this device. This acts on your browser, so it applies immediately rather than staging above.",
         }),
-        buildSection("Keybindings", keybindingsContent, { keyboard: true }),
+        buildSection("Shortcuts", keybindingsContent, { keyboard: true }),
         buildSection("Backup", io),
         buildSection("About", buildAbout()),
       ),
@@ -1051,42 +1050,10 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   recompute();
   return () => {
     disposeProfile();
-    stopNaming();
     editor.destroy();
     installSection.destroy();
     tokensSection?.destroy();
   };
-}
-
-// nameEditorControls gives each keybinding row's controls a name that says which command they act on.
-// The editor (desktop/keybindings.ts) repaints its rows whenever the keymap changes, and every row
-// carries the same Record, Clear and reset buttons, so a reader that lists the controls hears the same
-// three names thirty times over. The labels are stamped on every repaint.
-function nameEditorControls(root: HTMLElement): () => void {
-  const stamp = (): void => {
-    for (const row of root.querySelectorAll<HTMLElement>("[data-krow]")) {
-      const label = row.firstElementChild?.textContent ?? row.dataset.command ?? "";
-      const buttons = row.querySelectorAll<HTMLButtonElement>("[data-kactions] button");
-      const verbs = ["", "Clear the shortcut for ", "Reset to default: "];
-      buttons.forEach((btn, i) => {
-        if (i === 0) {
-          const text = btn.textContent?.trim() ?? "Record";
-          btn.setAttribute(
-            "aria-label",
-            (text === "Cancel" ? "Cancel recording the shortcut for " : "Record a shortcut for ") +
-              label,
-          );
-        } else {
-          btn.setAttribute("aria-label", (verbs[i] ?? "") + label);
-        }
-      });
-    }
-  };
-  stamp();
-  if (typeof MutationObserver === "undefined") return () => {};
-  const observer = new MutationObserver(stamp);
-  observer.observe(root, { childList: true, subtree: true });
-  return () => observer.disconnect();
 }
 
 // ensureStylesheet adds the app's page-scoped stylesheet once (idempotent by id).

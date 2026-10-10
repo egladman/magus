@@ -133,7 +133,10 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
+import { must } from "../../lib/guards";
 import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
+import { expandableSection } from "../../ui/expandable";
 import { statusGlyph, statusIcon, statusText, type Status } from "../../ui/status";
 import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
 import {
@@ -911,23 +914,23 @@ export function activate(host: HTMLElement): AppInstance {
   overview.setAttribute("role", "region");
   overview.setAttribute("aria-label", "Changeset overview");
   overviewButton.setAttribute("aria-controls", overview.id);
-  const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
   // A spinner only while the first read is in flight; every other empty state is an answer.
-  const emptyIcon = h("div", "pf-v6-c-empty-state__icon console-diff-empty__spinner");
-  emptyIcon.append(statusGlyph("running"));
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Loading");
-  const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
+  const emptyState = emptyStateShell({
+    heading: "h1",
+    title: "Loading",
+    classes: "console-diff-empty",
+    icon: statusGlyph("running"),
+    ways: true,
+  });
+  const empty = emptyState.root;
+  const emptyIcon = must(emptyState.icon);
+  emptyIcon.classList.add("console-diff-empty__spinner");
   const emptyMessage = h("p", undefined, "Reading the working tree.");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyBodyWrap.append(emptyMessage, emptyActions);
-  emptyContent.append(emptyIcon, emptyTitle, emptyBodyWrap);
-  empty.append(emptyContent);
+  emptyState.body.append(emptyMessage);
   const emptySlots: EmptyStateSlots = {
-    title: emptyTitle,
+    title: emptyState.title,
     message: emptyMessage,
-    actions: emptyActions,
+    actions: emptyState.actions,
   };
 
   // The end of a review, offered once. A merged pull request is where a conversation stops being
@@ -2418,7 +2421,7 @@ export function activate(host: HTMLElement): AppInstance {
     for (const c of COMMANDS) {
       if (!c.key) continue;
       const term = h("dt");
-      term.append(h("kbd", "console-cheatsheet-kbd", c.key === "Escape" ? "Esc" : c.key));
+      term.append(h("kbd", "console-shell-keycap", c.key === "Escape" ? "Esc" : c.key));
       const desc = h("dd", undefined, (state.focus && c.focusShort) || c.short);
       rows.push(term, desc);
     }
@@ -2487,26 +2490,17 @@ export function activate(host: HTMLElement): AppInstance {
     paintSidebar(true);
     const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
-      // The caret turns off this button's own aria-expanded (diff.css): the button IS the
-      // disclosure, so there is no ancestor to carry the state.
-      const g = h("button", "pf-v6-c-button pf-m-link pf-m-inline console-diff-sidebar__group");
-      g.type = "button";
-      g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
-      g.append(
-        buttonIcon(ANGLE_RIGHT),
-        h("span", "pf-v6-c-button__text", `${state.changeset.generated.length} generated`),
+      // PF's Expandable section, opened to match the fold. Its toggle asks for the change and the
+      // sidebar repaints from the answer, so the section is rebuilt rather than flipped in place.
+      const group = expandableSection(`${state.changeset.generated.length} generated`, {
+        open: state.showGenerated,
+        toggleClass: "console-diff-sidebar__group",
+      });
+      group.toggle.addEventListener("click", () => void toggleGenerated());
+      group.body.append(
+        h("p", "console-diff-sidebar__note", "Declared target outputs. Press . to fold them."),
       );
-      g.addEventListener("click", () => void toggleGenerated());
-      generated.append(
-        g,
-        h(
-          "p",
-          "console-diff-sidebar__note",
-          state.showGenerated
-            ? "Declared target outputs. Press . to fold them."
-            : "Declared target outputs, folded. Press . to show them.",
-        ),
-      );
+      generated.append(group.el);
     }
     // What the underline in the list means, said once under it rather than left to be guessed.
     if (state.changeset.primary.some((o) => o.annotation?.visibility === "public")) {
@@ -2541,12 +2535,12 @@ export function activate(host: HTMLElement): AppInstance {
       // The key rides as its own <kbd>, the same chip the Shortcuts overlay and the Actions
       // app use for a physical key - not "[g]" folded into the label, which reads as part
       // of the word rather than a key you can press.
-      go.append("go ", h("kbd", "console-cheatsheet-kbd", "g"));
+      go.append("go ", h("kbd", "console-shell-keycap", "g"));
       go.disabled = !canCollaborate();
       go.addEventListener("click", () => acceptSuggestion(s.id));
       const skip = h("button", "pf-v6-c-button pf-m-secondary pf-m-small console-diff-rail__skip");
       skip.type = "button";
-      skip.append("skip ", h("kbd", "console-cheatsheet-kbd", "x"));
+      skip.append("skip ", h("kbd", "console-shell-keycap", "x"));
       skip.disabled = !canCollaborate();
       skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));
       const buttons = h("span", "console-diff-rail__buttons");

@@ -118,6 +118,24 @@ test("dismiss removes one; clear removes all", () => {
   assert.equal(s.list().length, 0);
 });
 
+test("clear hands back what it dropped, and restore puts it back in time order", () => {
+  const s = createNotificationStore();
+  s.notify({ source: "Share", message: "old", at: 1 });
+  s.notify({ source: "Share", message: "new", at: 3 });
+  const dropped = s.clear();
+  assert.equal(dropped.length, 2);
+  s.notify({ source: "Share", message: "later", at: 5 });
+  s.restore(dropped);
+  assert.deepEqual(
+    s.list().map((n) => n.message),
+    ["later", "new", "old"],
+  );
+  s.restore(dropped); // a second undo adds nothing
+  assert.equal(s.list().length, 3);
+  assert.deepEqual(s.clear().length, 3);
+  assert.deepEqual(s.clear(), [], "clearing nothing drops nothing");
+});
+
 test("link normalization: bare href, full link, and empty", () => {
   const s = createNotificationStore();
   const bare = s.notify({ source: "Dashboard", message: "a", link: "../logs/#ref=x" });

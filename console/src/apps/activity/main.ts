@@ -50,11 +50,12 @@ import {
   consumeLiveToken,
   createServerTransport,
 } from "../../lib/server";
-import { errMessage } from "../../lib/guards";
+import { errMessage, must } from "../../lib/guards";
 import { persisted } from "../../lib/persist";
 import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../../desktop/view";
 import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
 import { statusGlyph, statusMark } from "../../ui/status";
 import {
   renderConnectPrompt,
@@ -97,36 +98,27 @@ function buildScaffold(host: HTMLElement): Refs {
   notice.hidden = true;
   const body = h("div", "console-render-body");
 
-  const empty = h("div", "pf-v6-c-empty-state console-render-empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyHeader = h("div", "pf-v6-c-empty-state__header");
-  const emptyIcon = h("div", "pf-v6-c-empty-state__icon");
-  emptyIcon.setAttribute("aria-hidden", "true");
-  emptyIcon.innerHTML = EMPTY_ICON;
-  const emptyHeading = h("h2", "pf-v6-c-empty-state__title");
-  const emptyTitle = h("span", "pf-v6-c-empty-state__title-text");
-  emptyHeading.append(emptyTitle);
-  emptyHeader.append(emptyIcon, emptyHeading);
-  const emptyBody = h("div", "pf-v6-c-empty-state__body");
+  const iconHolder = document.createElement("template");
+  iconHolder.innerHTML = EMPTY_ICON;
+  const state = emptyStateShell({
+    heading: "h2",
+    classes: "console-render-empty",
+    icon: iconHolder.content,
+    ways: true,
+  });
   const emptyMessage = h("p");
-  emptyBody.append(emptyMessage);
-  const emptyFooter = h("div", "pf-v6-c-empty-state__footer");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyFooter.append(emptyActions);
-  emptyContent.append(emptyHeader, emptyBody, emptyFooter);
-  empty.append(emptyContent);
+  state.body.append(emptyMessage);
 
-  scroll.append(notice, body, empty);
+  scroll.append(notice, body, state.root);
   panel.append(scroll);
   host.append(panel);
   return {
     scroll,
     notice,
     body,
-    empty,
-    emptyIcon,
-    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
+    empty: state.root,
+    emptyIcon: must(state.icon),
+    emptySlots: { title: state.title, message: emptyMessage, actions: state.actions },
   };
 }
 
@@ -189,6 +181,8 @@ function indexBranch(
   const branch = h("li", "pf-v6-c-tree-view__list-item");
   branch.setAttribute("role", "treeitem");
   branch.setAttribute("aria-expanded", String(expanded));
+  branch.setAttribute("aria-selected", "false");
+  branch.tabIndex = -1;
   if (expanded) branch.classList.add("pf-m-expanded");
 
   const bContent = h("div", "pf-v6-c-tree-view__content");
@@ -240,6 +234,7 @@ function indexLeaf(
   leaf.dataset.leaf = "";
   const selected = state.current === index;
   leaf.setAttribute("aria-selected", String(selected));
+  leaf.tabIndex = -1;
   const lContent = h("div", "pf-v6-c-tree-view__content");
   const lNode = h("button", "pf-v6-c-tree-view__node");
   lNode.type = "button";

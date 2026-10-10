@@ -11,16 +11,17 @@ const APPS = [
   { id: "logs", label: "Logs" },
 ];
 
-// The slice of index.html the menu binds to.
+// The slice of index.html the menu binds to. The page carries the names itself; initAppMenu only
+// fills the list and wires the menu.
 function mount(): { btn: HTMLElement; panel: HTMLElement; list: HTMLElement } {
   const host = document.createElement("div");
   host.dataset.appMenuHost = "";
   host.innerHTML =
-    '<button id="console-appmenu-btn" type="button" aria-label="Menu" title="Menu"></button>' +
-    '<div id="console-appmenu" hidden aria-label="Menu"><div class="pf-v6-c-menu__content">' +
+    '<button id="console-appmenu-btn" type="button" aria-label="Applications" title="Applications"></button>' +
+    '<div id="console-appmenu" hidden aria-label="Applications"><div class="pf-v6-c-menu__content">' +
     '<section class="pf-v6-c-menu__group">' +
-    '<h3 class="pf-v6-c-menu__group-title" aria-hidden="true">Menu</h3>' +
-    '<ul role="menu" data-app-list></ul></section>' +
+    '<h2 class="pf-v6-c-menu__group-title" id="console-appmenu-title">Applications</h2>' +
+    '<ul role="menu" aria-labelledby="console-appmenu-title" data-app-list></ul></section>' +
     '<ul role="menu"><li role="none"><a role="menuitem" href="#docs">Documentation</a></li></ul>' +
     "</div></div>";
   document.body.append(host);
@@ -42,13 +43,12 @@ describe("the Applications menu", () => {
     unregisterCommand("console.open.runs");
   });
 
-  test("the group is titled Applications, is not hidden from readers, and names its list", () => {
+  test("filling the list leaves the page's own names alone", () => {
     const { panel, list } = mount();
     initAppMenu(APPS);
     const title = panel.querySelector(".pf-v6-c-menu__group-title");
     assert.equal(title?.textContent, "Applications");
     assert.equal(title?.hasAttribute("aria-hidden"), false);
-    assert.ok(title?.id);
     assert.equal(list.getAttribute("aria-labelledby"), title?.id);
     assert.equal(panel.getAttribute("aria-label"), "Applications");
   });

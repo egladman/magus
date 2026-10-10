@@ -105,18 +105,10 @@
 }
 .console-notes-app__region[hidden] { display: none; }
 
-/* A row is one button inside a PF data-list item. The item supplies the divider and the selected
-   fill; the button supplies the hit area, so the whole row is the target. Hover is a lighter
-   tint than selected, and selected alone also takes the accent rule and the bolder title. */
-.console-notes-app__note {
-  display: block; width: 100%; text-align: start; appearance: none;
-  border: 0; border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
-  background: none; color: inherit; font: inherit; cursor: pointer;
-  padding-block: var(--pf-t--global--spacer--sm); padding-inline: var(--notes-pad);
-  min-block-size: var(--console-control-block-size);
-}
-.console-notes-app__note:hover { background: var(--pf-t--global--background--color--secondary--hover); }
-.console-notes-app__note[aria-current="true"] { border-inline-start-color: var(--console-accent); }
+/* A row is a PF clickable data-list item: the item is the control, so the whole row is the target
+   and PF supplies the hover and selected fills. Selected alone also takes the bolder title. */
+.console-notes-app__note { cursor: pointer; min-block-size: var(--console-control-block-size); }
+.console-notes-app__note .pf-v6-c-data-list__cell { min-inline-size: 0; }
 .console-notes-app__note[aria-current="true"] .console-notes-app__note-title {
   font-weight: var(--pf-t--global--font--weight--body--bold);
 }

@@ -106,11 +106,11 @@ rest of this file says how each rule is built.
 - **Use the PF component when one exists**, and do not re-skin it. Imported now (`patternfly.css`), and
   every one of them is mounted by the console: Alert and Alert group, Backdrop, Badge, Bullseye, Button,
   Card, Check, ClipboardCopy, DataList, DescriptionList, Divider, Drawer, EmptyState, ExpandableSection,
-  Form, FormControl, Gallery, HelperText, Icon, InputGroup, Label and Label group, Menu, ModalBox, Nav,
-  Popover, Progress, Radio, Skeleton, Spinner, Switch, Table (with its grid variant), Tabs,
-  TextInputGroup, ToggleGroup, Toolbar, TreeView. Add the sheet when an app starts using one more (see
-  below), and drop it when the last use goes. Hand-rolled toasts, alerts, menus, tables and help
-  popovers are what `ui/` and `lib/toast.ts` replace:
+  Form, FormControl, Gallery, HelperText, Icon, InputGroup, Label and Label group, Menu, MenuToggle,
+  ModalBox, Nav, NotificationDrawer, Popover, Progress, Radio, Skeleton, Spinner, Switch, Table (with
+  its grid variant), Tabs, TextInputGroup, ToggleGroup, Toolbar, TreeView. Add the sheet when an app
+  starts using one more (see below), and drop it when the last use goes. Hand-rolled toasts, alerts,
+  menus, tables and help popovers are what `ui/` and `lib/toast.ts` replace:
 
   | Need                | Use                                                            |
   | ------------------- | -------------------------------------------------------------- |
@@ -118,8 +118,11 @@ rest of this file says how each rule is built.
   | An in-place message | `inlineAlert` (`ui/alert.ts`)                                  |
   | A state mark        | `statusIcon`, `statusText`, `statusMark` (`ui/status.ts`)      |
   | A menu              | PF Menu markup and `wireMenu` (`ui/menu.ts`)                   |
+  | A menu's trigger    | `menuToggle` (`ui/menu-toggle.ts`), a PF MenuToggle            |
   | A "?" explanation   | `createHelpButton`, `attachHelpPopover` (`ui/help-popover.ts`) |
   | A sortable table    | `SortableTable` (`ui/table.ts`)                                |
+  | An empty state      | `emptyStateShell` (`ui/empty-state.ts`)                        |
+  | A show/hide section | `expandableSection` (`ui/expandable.ts`)                       |
 
 - **One focus ring** (a house rule, below). The global
   `:where(button, a, [role="button"], [tabindex]):focus-visible` rule in `console.css` draws PF's
@@ -154,7 +157,8 @@ decision, with the reason, so a reviewer can tell a rule to keep from a PatternF
   rail does not mix 12px text with 14px controls.
 - **Danger toasts are assertive.** A PF Alert in the toast group inherits the group's polite live
   region. A danger toast adds `role="alert"` (`lib/toast.ts`), so a failure interrupts a screen reader and
-  a success or warning does not.
+  a success or warning does not. The group is PF's own list: `ul.pf-v6-c-alert-group.pf-m-toast`
+  (`role="list"`, `aria-live="polite"`, `aria-atomic="false"`) of `li.pf-v6-c-alert-group__item`.
 - **At most five toasts.** A burst past `MAX_TOASTS` (5) dismisses the oldest rather than walling the
   page. Nothing is lost: the notification history keeps every entry.
 - **Corner radii are 2-4px on containers, and the pill is 4px.** PatternFly's defaults are 6px, 16px,

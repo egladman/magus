@@ -22,7 +22,9 @@ import {
   shortName,
   workspaceScope,
 } from "../lib/scope";
+import { must } from "../lib/guards";
 import { wireMenu } from "./menu";
+import { menuToggle } from "./menu-toggle";
 
 export interface WorkspacePickerOptions {
   // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-app
@@ -65,23 +67,12 @@ export function initWorkspacePicker(
   caption.id = "console-scope-caption";
   caption.textContent = "Workspace";
 
-  const btn = document.createElement("button");
+  // A menu toggle, whose caret is what tells a sighted reader this opens a menu: without it the value
+  // reads as a status readout rather than as something to press.
+  const btn = menuToggle({ text: "", variant: "plain" });
   btn.id = "console-scope-btn";
-  btn.type = "button";
-  btn.className = "pf-v6-c-button pf-m-plain";
-  btn.setAttribute("aria-haspopup", "true");
-  btn.setAttribute("aria-expanded", "false");
-  const label = document.createElement("span");
-  label.className = "console-shell-scope__label";
-  // A caret, because aria-haspopup tells a screen reader this opens a menu and nothing told anyone
-  // else. Without it the value reads as a status readout rather than as something to press.
-  const caret = document.createElement("span");
-  caret.className = "console-shell-scope__caret";
-  caret.innerHTML =
-    '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M6 9l6 6 6-6"/></svg>';
-  btn.append(label, caret);
+  const label = must(btn.querySelector<HTMLElement>(".pf-v6-c-menu-toggle__text"));
+  label.classList.add("console-shell-scope__label");
   wrap.append(caption, btn);
 
   const menu = document.createElement("div");

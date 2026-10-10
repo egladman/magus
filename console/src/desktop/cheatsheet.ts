@@ -40,6 +40,7 @@ export function createCheatsheet(deps: CheatsheetDeps): Cheatsheet {
   const modal = buildModal({
     id: "console-cheatsheet",
     title: "Keyboard shortcuts",
+    description: "Every command the console binds to a key, and the key that runs it.",
     boxClass: "console-shell-cheatsheet",
     onClose: () => hide(),
   });

@@ -350,14 +350,23 @@ test("the highlighted row is the run the detail pane shows", async () => {
   assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
 });
 
-// A run's outcome is a mark with a shape and a word, and a row is a list item holding one button
-// whose selection is aria-current, not a class alone.
+// A run's outcome is a mark with a shape and a word, and a row is PF's clickable data-list item:
+// the item itself is the control, named by its command, whose selection is aria-current, not a
+// class alone.
 test("a row names its outcome in words and marks the current run for assistive tech", async () => {
   serve([output({ failed: true })], [runLog({ status: "STATUS_FAIL" })]);
   const host = await mount();
 
-  const item = must(host.querySelector(".console-runs__list > li"));
-  const row = must(item.querySelector<HTMLElement>("button.console-runs__row"));
+  const row = must(host.querySelector<HTMLElement>(".console-runs__list > li.console-runs__row"));
+  assert.ok(row.classList.contains("pf-m-clickable"));
+  assert.equal(row.tabIndex, 0, "the item takes the tab stop");
+  assert.ok(row.querySelector(".pf-v6-c-data-list__item-row > .pf-v6-c-data-list__item-content"));
+  assert.equal(row.querySelectorAll(".pf-v6-c-data-list__cell").length, 2);
+  assert.equal(
+    row.getAttribute("aria-labelledby"),
+    row.querySelector(".console-runs__row-cmd")?.id,
+    "named by the command it holds",
+  );
   assert.equal(row.getAttribute("aria-current"), "true");
   assert.match(text(row), /Failed/, "the outcome is in the row's text, not only its colour");
   assert.ok(row.querySelector(".pf-v6-c-icon"), "and it has a shape");

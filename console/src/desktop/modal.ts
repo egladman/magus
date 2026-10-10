@@ -12,6 +12,9 @@ export interface ModalOptions {
   // The backdrop's id, which the stylesheets and the tests address the dialog by.
   id: string;
   title: string;
+  // One sentence on what the dialog is for. It sits under the title and is what the dialog is
+  // described by (aria-describedby), so a screen reader hears the purpose without reading the body.
+  description: string;
   // Extra classes for the box, beside PF's.
   boxClass?: string;
   // Called by the close button. Escape and backdrop dismissal stay with the caller, which knows what
@@ -52,11 +55,16 @@ export function buildModal(opts: ModalOptions): Modal {
   close.append(closeBtn);
 
   const head = h("header", "pf-v6-c-modal-box__header");
+  const main = h("div", "pf-v6-c-modal-box__header-main");
   const title = h("h1", "pf-v6-c-modal-box__title");
   title.id = "console-modal-title-" + ++seq;
   title.append(h("span", "pf-v6-c-modal-box__title-text", opts.title));
-  head.append(title);
+  const description = h("div", "pf-v6-c-modal-box__description", opts.description);
+  description.id = title.id.replace("-title-", "-description-");
+  main.append(title, description);
+  head.append(main);
   box.setAttribute("aria-labelledby", title.id);
+  box.setAttribute("aria-describedby", description.id);
 
   const body = h("div", "pf-v6-c-modal-box__body");
   const footer = h("footer", "pf-v6-c-modal-box__footer");

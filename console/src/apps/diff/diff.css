@@ -298,21 +298,6 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* A disclosure's caret is a PF button icon that turns a quarter when its button is expanded. */
-.console-diff-disclosure__toggle .pf-v6-c-button__icon,
-.console-diff-sidebar__group .pf-v6-c-button__icon {
-  transition: transform var(--console-motion-fast) ease-out;
-}
-
-.console-diff-disclosure__toggle[aria-expanded="true"] .pf-v6-c-button__icon,
-.console-diff-sidebar__group[aria-expanded="true"] .pf-v6-c-button__icon {
-  transform: rotate(90deg);
-}
-
-.console-diff-disclosure__body[hidden] {
-  display: none;
-}
-
 .console-diff-main {
   display: grid;
   /* minmax(0, 1fr), not the implicit auto: an auto track is minmax(min-content,
@@ -1673,7 +1658,7 @@
  * composer sits on a single row. The listing sits in a disclosure and is capped: a long pass is
  * exactly when reading the set before it leaves matters most, and it must not push its own send
  * field off screen. */
-.console-diff-composer--batch .console-diff-disclosure__body {
+.console-diff-composer--batch .pf-v6-c-expandable-section__content {
   padding-block-start: var(--pf-t--global--spacer--xs);
 }
 

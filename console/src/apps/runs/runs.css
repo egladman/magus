@@ -149,30 +149,17 @@
 .console-runs__back { display: none; margin-block-end: var(--pf-t--global--spacer--sm); }
 
 /* --- Run list ----------------------------------------------------------------------------------
-   Two lines per row: the outcome and the command that produced the run, then its when, how long and
-   how many. The command is the identity because it is what a person remembers; the invocation id is
-   machine vocabulary and lives in the detail pane. The mark and the text share a two-column grid, so
-   the second line indents to the command without a magic number. */
-.console-runs__row {
-  inline-size: 100%;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+   PF's clickable data list, in its stacked layout (pf-m-grid): two cells per item, so two lines. The
+   outcome and the command that produced the run, then its when, how long and how many. The command is
+   the identity because it is what a person remembers; the invocation id is machine vocabulary and
+   lives in the detail pane. The second line indents past the mark to the command. */
+.console-runs__row { cursor: pointer; }
+.console-runs__list .pf-v6-c-data-list__cell { min-inline-size: 0; }
+.console-runs__row-head {
+  display: flex;
   align-items: center;
   column-gap: var(--pf-t--global--spacer--sm);
-  row-gap: var(--pf-t--global--spacer--xs);
-  min-block-size: 44px;
-  padding-block: var(--pf-t--global--spacer--sm);
-  padding-inline: var(--console-pad);
-  border: 0;
-  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
 }
-.console-runs__row[aria-current="true"] { border-inline-start-color: var(--pf-t--global--color--brand--default); }
-.console-runs__row-head { display: contents; }
 .console-runs__row-cmd {
   min-inline-size: 0;
   overflow: hidden;
@@ -183,7 +170,7 @@
   line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-runs__row-meta {
-  grid-column: 2;
+  padding-inline-start: var(--pf-t--global--spacer--lg);
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--pf-t--global--spacer--sm);

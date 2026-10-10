@@ -24,6 +24,7 @@ import {
 } from "../../desktop/connectPrompt";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
 import { h } from "../../desktop/view";
 import type { AppInstance } from "../../desktop/standalone";
 import type { ToolsView } from "../dashboard/state";
@@ -261,21 +262,14 @@ function build(
   const tableBox = h("div", "console-tools__table");
   tableBox.append(table.el);
 
-  const prompt = h("div", "pf-v6-c-empty-state console-tools__empty");
+  const state = emptyStateShell({ heading: "h2", classes: "console-tools__empty", ways: true });
+  const prompt = state.root;
   prompt.hidden = true;
-  const content = h("div", "pf-v6-c-empty-state__content");
-  const header = h("div", "pf-v6-c-empty-state__header");
-  const titleBox = h("div", "pf-v6-c-empty-state__title");
   const promptSlots: EmptyStateSlots = {
-    title: h("h2", "pf-v6-c-empty-state__title-text"),
-    message: h("div", "pf-v6-c-empty-state__body"),
-    actions: h("div", "pf-v6-c-empty-state__actions"),
+    title: state.title,
+    message: state.body,
+    actions: state.actions,
   };
-  promptSlots.actions.dataset.emptyWays = "";
-  titleBox.append(promptSlots.title);
-  header.append(titleBox);
-  content.append(header, promptSlots.message, promptSlots.actions);
-  prompt.append(content);
 
   page.append(bar, stale, note, tableBox, prompt);
   host.replaceChildren(page);

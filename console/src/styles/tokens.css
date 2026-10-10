@@ -390,15 +390,18 @@
      the basic 8 foreground colors to .a-fg-* classes; logs.css consumes these slots). Red/green/
      yellow overlap the status palette and reuse those tokens so a red error line and a red [fail]
      badge match; blue/magenta/cyan have no status equivalent (PF v6's "info" status is a purple-
-     blue that would collide with magenta), so all three borrow PF's theme-aware nonstatus blue/
-     purple/teal - six distinct, terminal-faithful hues that resolve per theme with no per-mode CSS.
-     New names, logs-scoped. */
+     blue that would collide with magenta), so all three take PF's blue/purple/teal palette steps -
+     six distinct, terminal-faithful hues, restated in the dark block. New names, logs-scoped. */
   --console-ansi-red: var(--console-status-danger);                        /* error text (red)     */
   --console-ansi-green: var(--console-status-ok);                          /* success text (green) */
-  --console-ansi-yellow: var(--console-status-warn);                       /* warning text (gold)  */
-  --console-ansi-blue: var(--pf-t--global--color--nonstatus--blue--300);   /* blue -> true blue    */
-  --console-ansi-magenta: var(--pf-t--global--color--nonstatus--purple--300); /* magenta -> purple */
-  --console-ansi-cyan: var(--pf-t--global--color--nonstatus--teal--300);   /* cyan -> teal         */
+  /* These land on text the reader READS, so each clears WCAG AA's 4.5:1 on the light ground
+     (white 5.6 / 6.9 / 5.3, the grey secondary 4.6 at the least) and, in the dark block, on the
+     dark one. The step PF's nonstatus data-viz tokens give (--...--300) is a chart fill: the gold
+     and the teal measured 1.97:1 as text, the blue 3.2:1. Yellow takes the status text tier. */
+  --console-ansi-yellow: var(--console-status-warn-text);                  /* warning text (brown) */
+  --console-ansi-blue: var(--pf-t--color--blue--50);                       /* blue -> true blue    */
+  --console-ansi-magenta: var(--pf-t--color--purple--50);                  /* magenta -> purple    */
+  --console-ansi-cyan: var(--pf-t--color--teal--60);                       /* cyan -> teal         */
 
   /* --- 6. Graph node-kind palette (categorical) ----------------------------------------
      Derived in OKLCH, not picked: five families one hue each, L = L0 +/- 0.07 per step within a
@@ -480,6 +483,12 @@
      1.84:1. Dark's default step is #ffcc17, 12.09:1 - both tiers agree here and both clear. */
   --console-status-warn-text: var(--pf-t--global--text--color--status--warning--default);
 
+  /* The terminal colours' dark ramp: the same hues a step up the palette, 6.6:1 or better on the
+     dark ground (the light steps above would measure about 2.5:1 there). */
+  --console-ansi-blue: var(--pf-t--color--blue--30);
+  --console-ansi-magenta: var(--pf-t--color--purple--30);
+  --console-ansi-cyan: var(--pf-t--color--teal--30);
+
   /* The earthy card palette's dark ramp (lighter, so the hues read on the dark card). Plain custom
      properties, not theme-aware PF tokens, so they are restated here. */
   --console-clay: #c08768; --console-rust: #bd6f52; --console-moss: #9ba766; --console-sage: #93a985; --console-spruce: #6f9d92;
@@ -546,8 +555,7 @@
   --console-syntax-function: #7fb2e6;
 }
 
-/* Chart series. The latency legend's swatches; tiles/latency.ts draws the lines from the same two
-   PatternFly colours, so a change here has to move there too. */
+/* Chart series. The latency lines (tiles/latency.ts) and their legend swatches both read these. */
 :root {
   --console-series-p50: var(--pf-t--global--color--nonstatus--blue--300);
   --console-series-p95: var(--pf-t--global--color--nonstatus--teal--300);

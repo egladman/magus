@@ -3,6 +3,7 @@
 // standard", for why a control here is a PF component and not a bare button.
 
 import { h } from "../../desktop/view";
+import { expandableSection } from "../../ui/expandable";
 import { svgGlyph } from "../../ui/glyph";
 
 export const ANGLE_LEFT: readonly string[] = ["M15 18l-6-6 6-6"];
@@ -264,28 +265,9 @@ export interface Disclosure {
   set(open: boolean): void;
 }
 
-// disclosure is a show/hide section: a link button carrying aria-expanded over a region. The
-// console does not import PF's Expandable section sheet, so the caret is a button icon that
-// diff.css turns when the section opens.
+// disclosure is a show/hide section: PF's Expandable section, a toggle over a region.
 export function disclosure(text: string, open = false): Disclosure {
-  const el = h("div");
-  const toggle = h(
-    "button",
-    "pf-v6-c-button pf-m-link pf-m-inline console-diff-disclosure__toggle",
-  );
-  toggle.type = "button";
-  toggle.append(buttonIcon(ANGLE_RIGHT), h("span", "pf-v6-c-button__text", text));
-  const body = h("div", "console-diff-disclosure__body");
-  body.id = uid("disclosure");
-  toggle.setAttribute("aria-controls", body.id);
-  const set = (next: boolean): void => {
-    toggle.setAttribute("aria-expanded", String(next));
-    body.hidden = !next;
-  };
-  toggle.addEventListener("click", () => set(toggle.getAttribute("aria-expanded") !== "true"));
-  set(open);
-  el.append(toggle, body);
-  return { el, toggle, body, set };
+  return expandableSection(text, { open, toggleClass: "console-diff-disclosure__toggle" });
 }
 
 export interface Popover {
@@ -387,6 +369,7 @@ export function clipboardCopy(
   const actions = h("span", "pf-v6-c-clipboard-copy__actions");
   const item = h("span", "pf-v6-c-clipboard-copy__actions-item");
   const button = plainIconButton(label, COPY);
+  button.classList.add("pf-m-no-padding");
   let timer: number | undefined;
   button.addEventListener("click", () => {
     onCopy(text.textContent ?? "", () => {

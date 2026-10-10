@@ -42,8 +42,8 @@ async function mount(): Promise<void> {
   await settle();
 }
 
-const rows = (): HTMLButtonElement[] => [
-  ...host.querySelectorAll<HTMLButtonElement>(".console-notes-app__note"),
+const rows = (): HTMLElement[] => [
+  ...host.querySelectorAll<HTMLElement>(".console-notes-app__note"),
 ];
 const search = (): HTMLInputElement => {
   const input = host.querySelector<HTMLInputElement>("input[type=search]");
@@ -75,7 +75,17 @@ test("the list is real lists under store headings, with exactly one tab stop", a
     (b) => b.tabIndex === 0,
   );
   assert.equal(stops.length, 1);
-  assert.equal(rows()[0]?.querySelector("div"), null, "a button holds phrasing content only");
+  // A row is PF's clickable data-list item: the item is the control, named by its title.
+  const first = rows()[0];
+  assert.ok(first?.classList.contains("pf-m-clickable"));
+  assert.ok(
+    first?.querySelector(".pf-v6-c-data-list__item-row > .pf-v6-c-data-list__item-content"),
+  );
+  assert.ok(first?.querySelector(".pf-v6-c-data-list__cell"));
+  assert.equal(
+    first?.getAttribute("aria-labelledby"),
+    first?.querySelector(".console-notes-app__note-title")?.id,
+  );
 });
 
 // A failed assert.equal on two DOM nodes diffs their whole object graphs, which takes the test

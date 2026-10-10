@@ -204,10 +204,11 @@
 }
 
 /* --- Right-docked side panels ---------------------------------------------------------------------
- * ONE frame for Share, Activity and the notification center (.console-shell-notify, whose markup
- * lib/notifications.ts builds): docked between the top chrome and the status bar on the right edge,
- * overlaying the content with no inset reflow. They were three copy-pasted blocks with diverging
- * semantics; panel.ts builds the shared markup (an h2 title, an svg close button, a scrolling body).
+ * ONE frame for Share, Activity and the notification center (.console-shell-notify, a PF Notification
+ * drawer that lib/notifications.ts builds): docked between the top chrome and the status bar on the
+ * right edge, overlaying the content with no inset reflow. They were three copy-pasted blocks with
+ * diverging semantics; panel.ts builds the shared markup (an h2 title, an svg close button, a scrolling
+ * body) and the drawer follows it.
  * Appear and disappear via the `hidden` attribute, so there is no transition for a reduced-motion query
  * to switch off. */
 .console-shell-panel,
@@ -262,8 +263,7 @@
   background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
   pointer-events: none;
 }
-.console-shell-panel__head,
-.console-shell-notify__head {
+.console-shell-panel__head {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -272,8 +272,7 @@
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
   border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
-.console-shell-panel__title,
-.console-shell-notify__title {
+.console-shell-panel__title {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--default);
   font-weight: var(--pf-t--global--font--weight--body--bold);
@@ -289,6 +288,9 @@
   flex-direction: column;
   padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xl);
 }
+/* PF's drawer fills its container's height, which would push this fixed frame past the status bar:
+   top and bottom already size it. */
+.console-shell-notify { height: auto; }
 /* On a phone the side panel spans the full width so the rows have room to read. */
 @media (max-width: 30rem) {
   .console-shell-panel,
@@ -298,8 +300,8 @@
 /* --- Notification center --------------------------------------------------------------------------
  * The title-bar bell (#console-notifybtn) + its pop-out history panel (#console-notifypanel,
  * lib/notifications.ts). The bell is a PF plain icon Button like its neighbors; only its unseen-dot and
- * the panel's rows (which PatternFly has no component for) live here. State is data-* (data-unseen on the
- * bell and on an unseen item); kind is data-kind (ok/warn/error) driving the left accent. */
+ * the drawer's two placements live here. State is data-* (data-unseen on the bell and on an unseen
+ * item); PF's list-item status modifiers carry the colour and icon. */
 #console-notifybtn { position: relative; }
 /* The unseen-dot: a small danger dot in the bell's top-right corner, shown only when an unread error-tier
    notification waits (the bell carries data-unseen). */
@@ -316,94 +318,25 @@
   /* A ring in the bar's colour, so the dot reads against the glyph it overlaps. */
   outline: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--background--color--primary--default);
 }
-/* Header actions: the "Dismiss older" menu beside "Clear all". */
-.console-shell-notify__actions { display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm); }
+/* The drawer is the PF Notification drawer; what is left here is the frame (above), the header's
+   "Dismiss older" menu, which PF's drawer has no placement for, and the description row. The header
+   wraps so three actions still fit the 24rem panel. */
+.console-shell-notify .pf-v6-c-notification-drawer__header { flex-wrap: wrap; row-gap: var(--pf-t--global--spacer--sm); }
 .console-shell-notify__older { position: relative; }
-.console-shell-notify__older-btn {
-  font-size: var(--pf-t--global--font--size--body--sm);
-  --pf-v6-c-button--PaddingBlockStart: var(--pf-t--global--spacer--control--vertical--compact);
-  --pf-v6-c-button--PaddingBlockEnd: var(--pf-t--global--spacer--control--vertical--compact);
-}
 .console-shell-notify__older-menu {
   position: absolute;
   top: calc(100% + var(--pf-t--global--spacer--xs));
   right: 0;
   min-width: 11rem;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  padding: var(--pf-t--global--spacer--xs);
-  background: var(--pf-t--global--background--color--primary--default);
-  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  box-shadow: var(--pf-t--global--box-shadow--lg);
+  z-index: var(--pf-t--global--z-index--xs);
 }
 .console-shell-notify__older-menu[hidden] { display: none; }
-.console-shell-notify__older-item {
-  text-align: left;
-  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
-  font-size: var(--pf-t--global--font--size--body--sm);
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--pf-t--global--text--color--regular);
-  border-radius: var(--pf-t--global--border--radius--small);
-}
-.console-shell-notify__older-item:hover { background: var(--pf-t--global--background--color--secondary--default); }
-.console-shell-notify__list { flex: 1 1 auto; overflow-y: auto; min-height: 0; }
-.console-shell-notify__empty {
-  margin: 0;
-  padding: var(--pf-t--global--spacer--md);
-  font-size: var(--pf-t--global--font--size--body--default);
-  line-height: var(--pf-t--global--font--line-height--body);
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-shell-notify__item {
+/* The description holds the source chip and the entry's action on one wrapping line. */
+.console-shell-notify .pf-v6-c-notification-drawer__list-item-description {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--pf-t--global--spacer--sm);
-  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
-  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  border-left: var(--pf-t--global--border--width--extra-strong) solid transparent;
-}
-.console-shell-notify__item:last-child { border-bottom: none; }
-.console-shell-notify__item[data-unseen] { background: var(--pf-t--global--background--color--secondary--default); }
-/* The outcome leading each row: a status icon in its colour with the word hidden beside it (ui/status.ts),
-   so it reads without the hue. The left accent on an error row is a second cue, never the only one. */
-.console-shell-notify__item-mark { flex: 0 0 auto; margin-top: var(--pf-t--global--spacer--xs); }
-.console-shell-notify__item[data-kind="error"] { border-left-color: var(--pf-t--global--color--status--danger--default); }
-.console-shell-notify__item-body { flex: 1 1 auto; min-width: 0; }
-.console-shell-notify__item-msg {
-  margin: 0;
-  font-size: var(--pf-t--global--font--size--body--default);
-  line-height: var(--pf-t--global--font--line-height--body);
-  color: var(--pf-t--global--text--color--regular);
-  overflow-wrap: anywhere;
-}
-.console-shell-notify__item-meta { display: flex; align-items: center; gap: var(--pf-t--global--spacer--md); margin-top: var(--pf-t--global--spacer--xs); }
-/* The source chip: a quiet, tag-like label naming the app that raised this (not all-caps). */
-.console-shell-notify__item-source {
-  font-size: var(--pf-t--global--font--size--body--sm);
-  padding: 0 var(--pf-t--global--spacer--xs);
-  background: var(--pf-t--global--background--color--secondary--default);
-  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  color: var(--pf-t--global--text--color--subtle);
-  white-space: nowrap;
-}
-.console-shell-notify__item-time { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
-.console-shell-notify__item-link {
-  font-size: var(--pf-t--global--font--size--body--sm);
-  --pf-v6-c-button--PaddingBlockStart: var(--pf-t--global--spacer--control--vertical--compact);
-  --pf-v6-c-button--PaddingBlockEnd: var(--pf-t--global--spacer--control--vertical--compact);
-}
-.console-shell-notify__item-dismiss {
-  flex: 0 0 auto;
-  --pf-v6-c-button--PaddingInlineStart: var(--pf-t--global--spacer--xs);
-  --pf-v6-c-button--PaddingInlineEnd: var(--pf-t--global--spacer--xs);
-  min-block-size: var(--pf-t--global--spacer--lg);
-  min-inline-size: var(--pf-t--global--spacer--lg);
-  color: var(--pf-t--global--text--color--subtle);
 }
 
 /* --- Keybindings editor --------------------------------------------------------------------------

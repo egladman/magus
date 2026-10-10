@@ -198,11 +198,22 @@ test("a tree row's outcome is a word, selection is aria-selected, and the tree i
   assert.ok(must(tree.parentElement).classList.contains("pf-m-compact"));
   assert.ok(must(tree.parentElement).classList.contains("pf-m-truncate"));
   assert.equal(
-    [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")].filter(
-      (n) => n.tabIndex === 0,
-    ).length,
+    [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')].filter((li) => li.tabIndex === 0)
+      .length,
     1,
-    "one Tab stop",
+    "one Tab stop, on the tree item",
+  );
+  assert.ok(
+    [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")].every(
+      (n) => n.tabIndex === -1,
+    ),
+    "the row buttons stay out of the tab order",
+  );
+  assert.ok(
+    [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')].every((li) =>
+      li.hasAttribute("aria-selected"),
+    ),
+    "every item, branches included, carries aria-selected",
   );
 
   const withStatus = [...tree.querySelectorAll<HTMLElement>("li")].filter((li) =>
@@ -218,7 +229,7 @@ test("a tree row's outcome is a word, selection is aria-selected, and the tree i
   }
 
   const selectable = must(
-    [...tree.querySelectorAll<HTMLElement>("li[aria-selected]")].find(
+    [...tree.querySelectorAll<HTMLElement>("li[data-leaf][aria-selected]")].find(
       (li) => li.getAttribute("aria-selected") === "false",
     ),
   );

@@ -92,8 +92,8 @@
          the launcher cards, where it is an explicit choice. Wired by console.js's initAppMenu()
          (open/close, aria-expanded, Escape, click-outside, focus return). The word is "Applications"
          in the markup, as it is on the rail this menu stands in for. -->
-    <button id="console-appmenu-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-controls="console-appmenu" aria-expanded="false" aria-haspopup="menu" aria-label="Applications" title="Applications">
-      <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg></span>
+    <button id="console-appmenu-btn" class="pf-v6-c-menu-toggle pf-m-plain" type="button" aria-controls="console-appmenu" aria-expanded="false" aria-haspopup="menu" aria-label="Applications" title="Applications">
+      <span class="pf-v6-c-menu-toggle__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg></span>
     </button>
     <div class="pf-v6-c-menu" id="console-appmenu" hidden aria-label="Applications">
       <div class="pf-v6-c-menu__content">
@@ -205,7 +205,7 @@
         <dt><code>alt+shift+h j k l</code></dt><dd>Move the focused pane itself in that direction.</dd>
         <dt><code>alt+a</code></dt><dd>Focus the pane this one was split from.</dd>
       </dl>
-      <p>Rebind any of them under <b>Settings &gt; Keybindings</b>: Record a new chord, Clear to disable one, or revert to the default.</p>
+      <p>Rebind any of them under <b>Settings &gt; Shortcuts</b>: Record a new chord, Clear to disable one, or revert to the default.</p>
     </details>
     <details data-ref-section>
       <summary>Where your data goes</summary>

@@ -50,6 +50,7 @@ import {
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
 import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
+import { emptyStateShell } from "../../ui/empty-state";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
 import { statusGlyph, statusMark, type Status } from "../../ui/status";
 import { createFilterField, type FilterField } from "../../render/filterField";
@@ -124,7 +125,7 @@ export function activate(host: HTMLElement): AppInstance {
   // Built once and re-attached on each paint, so a repaint with the prompt already on screen keeps
   // the same buttons and the reader's focus.
   const promptSlots: EmptyStateSlots = {
-    title: h("span", "pf-v6-c-empty-state__title-text console-runs__empty-title"),
+    title: h("h2", "pf-v6-c-empty-state__title-text console-runs__empty-title"),
     message: h("p", "console-runs__note"),
     actions: h("div", "pf-v6-c-empty-state__actions"),
   };
@@ -357,7 +358,7 @@ function build(
   filters.append(filtersSummary, facets);
 
   const body = h("div", "console-runs__body");
-  const list = h("ul", "pf-v6-c-data-list pf-m-compact console-runs__list");
+  const list = h("ul", "pf-v6-c-data-list pf-m-compact pf-m-grid console-runs__list");
   list.setAttribute("role", "list");
   list.setAttribute("aria-label", "Runs");
   const detail = h("div", "console-runs__detail");
@@ -478,19 +479,21 @@ function renderList(
       ? document.activeElement.dataset.inv
       : undefined;
   box.replaceChildren();
-  const buttons: HTMLButtonElement[] = [];
+  const items: HTMLElement[] = [];
   for (const row of rows) {
-    const item = h("li", "pf-v6-c-data-list__item pf-m-clickable");
-    const b = h("button", "console-runs__row");
-    b.setAttribute("type", "button");
-    b.dataset.inv = row.inv;
+    // PF's clickable data list: the item is the control, so it carries the tab stop and its name comes
+    // from the command it holds. Enter and Space press it, as they would a button.
+    const item = h("li", "pf-v6-c-data-list__item pf-m-clickable console-runs__row");
+    item.dataset.inv = row.inv;
     const current = row.inv === selected;
     if (current) {
       item.classList.add("pf-m-selected");
-      b.setAttribute("aria-current", "true");
+      item.setAttribute("aria-current", "true");
     }
-    b.tabIndex = current ? 0 : -1;
-    const head = h("span", "console-runs__row-head");
+    item.tabIndex = current ? 0 : -1;
+    const itemRow = h("div", "pf-v6-c-data-list__item-row");
+    const content = h("div", "pf-v6-c-data-list__item-content");
+    const head = h("div", "pf-v6-c-data-list__cell console-runs__row-head");
     // A run with no recorded outcome (interrupted before it wrote one) still gets a mark, so the
     // command column starts on the same x for every row.
     head.append(
@@ -498,8 +501,11 @@ function renderList(
         ? statusMark(OUTCOME[row.status].mark, statusWord(row.status))
         : statusMark("neutral", "No outcome recorded"),
     );
-    head.append(h("span", "console-runs__row-cmd", row.command));
-    const meta = h("span", "console-runs__row-meta");
+    const cmd = h("span", "console-runs__row-cmd", row.command);
+    cmd.id = "console-runs-cmd-" + row.inv;
+    item.setAttribute("aria-labelledby", cmd.id);
+    head.append(cmd);
+    const meta = h("div", "pf-v6-c-data-list__cell console-runs__row-meta");
     // The "how long ago" half is its own <time> carrying the instant, so tickRelativeTimes can
     // advance it in place; the rest of the line never changes and is static beside it.
     const parts: (string | HTMLElement)[] = [];
@@ -510,27 +516,33 @@ function renderList(
     for (const part of parts) {
       meta.append(typeof part === "string" ? h("span", "", part) : part);
     }
-    b.append(head, meta);
-    b.addEventListener("click", () => onPick(row.inv));
-    item.append(b);
+    content.append(head, meta);
+    itemRow.append(content);
+    item.append(itemRow);
+    item.addEventListener("click", () => onPick(row.inv));
     box.append(item);
-    buttons.push(b);
+    items.push(item);
   }
-  if (!buttons.some((b) => b.tabIndex === 0) && buttons[0]) buttons[0].tabIndex = 0;
-  if (focused) buttons.find((b) => b.dataset.inv === focused)?.focus({ preventScroll: true });
+  if (!items.some((b) => b.tabIndex === 0) && items[0]) items[0].tabIndex = 0;
+  if (focused) items.find((b) => b.dataset.inv === focused)?.focus({ preventScroll: true });
   box.onkeydown = (ev: KeyboardEvent) => {
-    const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const at = items.indexOf(document.activeElement as HTMLElement);
     if (at < 0) return;
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      items[at].click();
+      return;
+    }
     let next = at;
-    if (ev.key === "ArrowDown") next = Math.min(buttons.length - 1, at + 1);
+    if (ev.key === "ArrowDown") next = Math.min(items.length - 1, at + 1);
     else if (ev.key === "ArrowUp") next = Math.max(0, at - 1);
     else if (ev.key === "Home") next = 0;
-    else if (ev.key === "End") next = buttons.length - 1;
+    else if (ev.key === "End") next = items.length - 1;
     else return;
     ev.preventDefault();
-    for (const b of buttons) b.tabIndex = -1;
-    buttons[next].tabIndex = 0;
-    buttons[next].focus();
+    for (const b of items) b.tabIndex = -1;
+    items[next].tabIndex = 0;
+    items[next].focus();
   };
 }
 
@@ -676,31 +688,31 @@ function spinner(label: string): SVGElement {
   return svg;
 }
 
-// emptyCard is PF's EmptyState around a title, a body and any actions.
-function emptyCard(title: HTMLElement, body: (string | Node)[], actions: Node[] = []): HTMLElement {
-  const card = h("div", "pf-v6-c-empty-state pf-m-sm console-runs__empty");
-  const content = h("div", "pf-v6-c-empty-state__content");
-  const header = h("div", "pf-v6-c-empty-state__header");
-  const heading = h("h2", "pf-v6-c-empty-state__title");
-  heading.append(title);
-  header.append(heading);
-  content.append(header);
-  const text = h("div", "pf-v6-c-empty-state__body");
-  text.append(...body);
-  content.append(text);
-  if (actions.length > 0) {
-    const footer = h("div", "pf-v6-c-empty-state__footer");
-    const group = h("div", "pf-v6-c-empty-state__actions");
-    group.append(...actions);
-    footer.append(group);
-    content.append(footer);
+// emptyCard is PF's EmptyState around a title, a body and any actions. actions is either the buttons
+// to place in a new group or an existing __actions group to adopt. icon is the status glyph, which
+// goes in __icon.
+function emptyCard(
+  title: HTMLElement,
+  body: (string | Node)[],
+  actions: Node[] | HTMLElement = [],
+  icon?: Node,
+): HTMLElement {
+  const state = emptyStateShell({ heading: "h2", classes: "pf-m-sm console-runs__empty", icon });
+  state.title.replaceWith(title);
+  if (body.length > 0) state.body.append(...body);
+  else state.body.remove();
+  if (Array.isArray(actions) && actions.length === 0) {
+    state.footer.remove();
+  } else if (Array.isArray(actions)) {
+    state.actions.append(...actions);
+  } else {
+    state.actions.replaceWith(actions);
   }
-  card.append(content);
-  return card;
+  return state.root;
 }
 
 function emptyTitle(text: string): HTMLElement {
-  return h("span", "pf-v6-c-empty-state__title-text console-runs__empty-title", text);
+  return h("h2", "pf-v6-c-empty-state__title-text console-runs__empty-title", text);
 }
 
 // renderEmpty distinguishes the four ways this list can be empty, because only one of them is the
@@ -725,9 +737,11 @@ function renderEmpty(
       purpose: "This page reads the runs your local server has kept.",
       onRetry: s.onRetry,
     });
-    item.append(emptyCard(s.promptSlots.title, [s.promptSlots.message], [s.promptSlots.actions]));
+    item.append(emptyCard(s.promptSlots.title, [s.promptSlots.message], s.promptSlots.actions));
   } else if (!s.loaded) {
-    item.append(emptyCard(emptyTitle("Loading runs"), [spinner("Loading runs")]));
+    const loading = emptyCard(emptyTitle("Loading runs"), [], [], spinner("Loading runs"));
+    loading.setAttribute("role", "status");
+    item.append(loading);
   } else if (s.filtered) {
     const clear = h("button", "pf-v6-c-button pf-m-secondary", "Clear filter");
     clear.setAttribute("type", "button");

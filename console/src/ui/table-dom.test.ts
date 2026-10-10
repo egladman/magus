@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { must } from "../lib/guards";
 import { type Column, SortableTable } from "./table";
 
 interface Row {
@@ -105,12 +106,67 @@ describe("SortableTable", () => {
     assert.ok(table?.classList.contains("pf-m-compact"));
     assert.ok(table?.classList.contains("pf-m-sticky-header"));
     assert.equal(table?.querySelector("caption")?.textContent, "All targets");
+    assert.equal(table?.getAttribute("role"), "grid", "PF requires it on a sortable table");
+    assert.ok(table?.classList.contains("pf-m-grid-md"), "a two-column table stacks at md");
     for (const th of t.el.querySelectorAll("th")) {
       assert.equal(th.getAttribute("scope"), "col");
+      assert.equal(th.getAttribute("role"), "columnheader");
+      assert.ok(th.classList.contains("pf-m-nowrap"), "a header never truncates to a sliver");
       assert.ok(th.querySelector("button[type=button]"), "the sort control is a real button");
       assert.equal(th.querySelector("svg")?.getAttribute("aria-hidden"), "true");
     }
-    assert.equal(t.el.querySelector("tbody td")?.getAttribute("data-label"), "Name");
+    const td = t.el.querySelector("tbody td");
+    assert.equal(td?.getAttribute("data-label"), "Name");
+    assert.equal(td?.getAttribute("role"), "cell");
+    assert.equal(t.el.querySelector("tbody")?.getAttribute("role"), "rowgroup");
+    assert.equal(t.el.querySelector("tbody tr")?.getAttribute("role"), "row");
+  });
+
+  test("the grid breakpoint widens with the number of columns", () => {
+    const wide = (n: number): Column<Row>[] =>
+      Array.from({ length: n }, (_, i) => ({
+        key: "c" + i,
+        label: "C" + i,
+        text: (r: Row) => r.name,
+        sort: (r: Row) => r.name,
+      }));
+    const mode = (n: number): string | undefined => {
+      const table = must(new SortableTable(wide(n), opts).el.querySelector("table"));
+      return [...table.classList].find((c) => c.startsWith("pf-m-grid-"));
+    };
+    assert.equal(mode(3), "pf-m-grid-md");
+    assert.equal(mode(6), "pf-m-grid-lg");
+    assert.equal(mode(11), "pf-m-grid-xl");
+  });
+
+  test("the frame names the edges of the table that scroll out of view", () => {
+    const t = new SortableTable(cols, opts);
+    const wrap = must(t.el.querySelector<HTMLElement>(".console-table__wrap"));
+    // Nothing overflows in the test document, so no edge is named.
+    t.setRows(rows);
+    assert.equal(t.el.dataset.more, undefined);
+
+    const metrics = (m: Record<string, number>): void => {
+      for (const [k, v] of Object.entries(m)) {
+        Object.defineProperty(wrap, k, { value: v, configurable: true });
+      }
+    };
+    // 300 wide in a 200 box: the end has more table past it, and scrolling to the far end flips it.
+    metrics({
+      clientWidth: 200,
+      scrollWidth: 300,
+      clientHeight: 50,
+      scrollHeight: 50,
+      scrollLeft: 0,
+    });
+    wrap.dispatchEvent(new Event("scroll"));
+    assert.equal(t.el.dataset.more, "inline-end");
+    metrics({ scrollLeft: 50 });
+    wrap.dispatchEvent(new Event("scroll"));
+    assert.equal(t.el.dataset.more, "inline-start inline-end");
+    metrics({ scrollLeft: 100 });
+    wrap.dispatchEvent(new Event("scroll"));
+    assert.equal(t.el.dataset.more, "inline-start");
   });
 
   test("the table sits directly in one scroll wrapper", () => {
@@ -122,8 +178,7 @@ describe("SortableTable", () => {
 
   test("a header click moves only the sort arrow's direction", () => {
     const t = new SortableTable(cols, opts);
-    const path = (key: string): string =>
-      header(t, key).querySelector("path")?.getAttribute("d") ?? "";
+    const path = (key: string): string => header(t, key).querySelector("path")?.outerHTML ?? "";
     const arrow = (): string => path("name");
     const up = arrow();
     click(t, "name");

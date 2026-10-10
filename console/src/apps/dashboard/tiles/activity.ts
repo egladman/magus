@@ -25,6 +25,7 @@ import { glossaryLink } from "../../../lib/glossary";
 import { logsLink } from "../../../lib/server";
 import { renderLine } from "../../../render/sections";
 import { Card, countBadge, h, scrollRegion, type Tile } from "./card";
+import { menuToggle } from "../../../ui/menu-toggle";
 import { menuButton, type MenuAction } from "./menu";
 
 const PREVIEW_LINES = 120; // most recent captured lines kept in the streaming preview
@@ -87,7 +88,15 @@ export function activityTile(): Tile {
   let openHref = "../logs/";
   const openOne = openButton();
   openOne.addEventListener("click", () => window.open(openHref, "_blank", "noopener"));
-  const picker = menuButton(openButton(), []);
+  const picker = menuButton(
+    menuToggle({
+      variant: "secondary",
+      icon: externalIcon(),
+      text: "Open in log viewer",
+      classes: "console-dashboard-activity__open",
+    }),
+    [],
+  );
   picker.el.hidden = true;
   noteWrap.append(count.el, openOne, picker.el);
   card.noteNode().replaceWith(noteWrap);

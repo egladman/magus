@@ -199,13 +199,13 @@ function treeOf(): HTMLElement {
   const root = document.createElement("div");
   root.innerHTML =
     '<ul role="tree">' +
-    '<li role="treeitem" aria-expanded="true"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node" id="a">A</button></div>' +
+    '<li role="treeitem" id="a" aria-expanded="true" aria-selected="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node">A</button></div>' +
     '<ul role="group">' +
-    '<li role="treeitem"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node" id="a1">A1</button></div></li>' +
+    '<li role="treeitem" id="a1" aria-selected="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node">A1</button></div></li>' +
     "</ul></li>" +
-    '<li role="treeitem" aria-expanded="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node" id="b">B</button></div>' +
+    '<li role="treeitem" id="b" aria-expanded="false" aria-selected="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node">B</button></div>' +
     '<ul role="group">' +
-    '<li role="treeitem"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node" id="b1">B1</button></div></li>' +
+    '<li role="treeitem" id="b1" aria-selected="false"><div class="pf-v6-c-tree-view__content"><button class="pf-v6-c-tree-view__node">B1</button></div></li>' +
     "</ul></li></ul>";
   document.body.append(root);
   return must(root.querySelector<HTMLElement>("ul"));
@@ -215,15 +215,21 @@ function press(el: Element, key: string): void {
   el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 }
 
-test("the tree is one Tab stop, and the arrow keys walk the visible rows", () => {
+test("the tree is one Tab stop on its items, and the arrow keys walk the visible rows", () => {
   const tree = treeOf();
   const reseat = attachTreeKeys(tree);
   reseat();
   const stops = (): string[] =>
-    [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")]
+    [...tree.querySelectorAll<HTMLElement>('li[role="treeitem"]')]
       .filter((n) => n.tabIndex === 0)
       .map((n) => n.id);
   assert.deepEqual(stops(), ["a"]);
+  assert.ok(
+    [...tree.querySelectorAll<HTMLElement>(".pf-v6-c-tree-view__node")].every(
+      (n) => n.tabIndex === -1,
+    ),
+    "the row buttons stay out of the tab order",
+  );
 
   const a = must(document.getElementById("a"));
   a.focus();
@@ -246,4 +252,10 @@ test("the tree is one Tab stop, and the arrow keys walk the visible rows", () =>
   leaf.focus();
   press(leaf, "ArrowLeft");
   assert.equal(document.activeElement?.id, "a");
+
+  // Enter on a focused item presses that item's own row button.
+  let pressed = 0;
+  must(leaf.querySelector("button")).addEventListener("click", () => pressed++);
+  press(leaf, "Enter");
+  assert.equal(pressed, 1);
 });

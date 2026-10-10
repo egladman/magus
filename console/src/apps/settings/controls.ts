@@ -3,9 +3,8 @@
 // Kept apart from main.ts so every row on every tab takes the same markup.
 
 import { h } from "../../desktop/view";
+import { expandableSection } from "../../ui/expandable";
 import { statusIcon, statusText, type Status } from "../../ui/status";
-
-const NS = "http://www.w3.org/2000/svg";
 
 let seq = 0;
 const uid = (prefix: string): string => prefix + "-" + ++seq;
@@ -189,49 +188,11 @@ export function switchControl(onChange: (on: boolean) => void): SwitchControl {
   };
 }
 
-const CHEVRON =
-  "M18.71 5.29a.996.996 0 0 0-1.41 0l-7.29 7.29-7.3-7.29a.987.987 0 0 0-1.41-.02.987.987 0 0 0-.02 1.41l.02.02 7.65 7.65c.29.29.68.44 1.06.44s.77-.15 1.06-.44l7.65-7.65a.996.996 0 0 0 0-1.41Z";
-
-// expandable is a PF expandable section: a link-button toggle over a region, closed by default.
+// expandable is a PF expandable section around content, closed by default.
 export function expandable(toggleText: string, content: HTMLElement): HTMLElement {
-  const id = uid("console-settings-expand");
-  const root = h("div", "pf-v6-c-expandable-section");
-  const toggleBox = h("div", "pf-v6-c-expandable-section__toggle");
-  const button = h("button", "pf-v6-c-button pf-m-link");
-  button.type = "button";
-  button.id = id + "-toggle";
-  button.setAttribute("aria-expanded", "false");
-  button.setAttribute("aria-controls", id);
-  const slot = h("span", "pf-v6-c-button__icon pf-m-start");
-  const icon = h("span", "pf-v6-c-expandable-section__toggle-icon");
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("class", "pf-v6-svg");
-  svg.setAttribute("viewBox", "0 0 20 20");
-  svg.setAttribute("fill", "currentColor");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("width", "1em");
-  svg.setAttribute("height", "1em");
-  const path = document.createElementNS(NS, "path");
-  path.setAttribute("d", CHEVRON);
-  svg.append(path);
-  icon.append(svg);
-  slot.append(icon);
-  button.append(slot, h("span", "pf-v6-c-button__text", toggleText));
-  toggleBox.append(button);
-  const region = h("div", "pf-v6-c-expandable-section__content");
-  region.id = id;
-  region.hidden = true;
-  region.setAttribute("role", "region");
-  region.setAttribute("aria-labelledby", button.id);
-  region.append(content);
-  button.addEventListener("click", () => {
-    const open = button.getAttribute("aria-expanded") !== "true";
-    button.setAttribute("aria-expanded", String(open));
-    region.hidden = !open;
-    root.classList.toggle("pf-m-expanded", open);
-  });
-  root.append(toggleBox, region);
-  return root;
+  const section = expandableSection(toggleText);
+  section.body.append(content);
+  return section.el;
 }
 
 // statusLine fills a live status element with a shape beside its words, or hides it when there is

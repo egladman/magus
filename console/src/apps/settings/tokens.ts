@@ -25,6 +25,7 @@ import {
 } from "../../lib/server";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../../desktop/view";
+import { emptyStateShell } from "../../ui/empty-state";
 import {
   renderConnectPrompt,
   renderEmptyMessage,
@@ -174,7 +175,7 @@ export function buildTokensSection(
     const head = h("tr", "pf-v6-c-table__tr");
     head.setAttribute("role", "row");
     for (const label of ["Class", "Grant", "Name", "ID", "Expires", "Actions"]) {
-      const th = h("th", "pf-v6-c-table__th");
+      const th = h("th", "pf-v6-c-table__th pf-m-nowrap");
       th.setAttribute("role", "columnheader");
       th.scope = "col";
       if (label === "Actions") th.append(h("span", "pf-v6-screen-reader", label));
@@ -277,19 +278,11 @@ function buildLoading(): HTMLElement {
 // buildEmpty builds the shared empty state shell: the PF structure the connect prompt and the
 // console's other empty states fill. The title is an h3 because it sits under the section's h2.
 function buildEmpty(): { root: HTMLElement; slots: EmptyStateSlots } {
-  const root = h("div", "pf-v6-c-empty-state");
-  const content = h("div", "pf-v6-c-empty-state__content");
-  const header = h("div", "pf-v6-c-empty-state__header");
-  const titleBox = h("div", "pf-v6-c-empty-state__title");
+  const state = emptyStateShell({ heading: "h3", ways: true });
   const slots: EmptyStateSlots = {
-    title: h("h3", "pf-v6-c-empty-state__title-text"),
-    message: h("div", "pf-v6-c-empty-state__body"),
-    actions: h("div", "pf-v6-c-empty-state__actions"),
+    title: state.title,
+    message: state.body,
+    actions: state.actions,
   };
-  slots.actions.dataset.emptyWays = "";
-  titleBox.append(slots.title);
-  header.append(titleBox);
-  content.append(header, slots.message, slots.actions);
-  root.append(content);
-  return { root, slots };
+  return { root: state.root, slots };
 }

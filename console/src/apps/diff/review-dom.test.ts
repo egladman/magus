@@ -387,7 +387,7 @@ test("the key legend is the bound commands, and focus mode rewords the keys that
   assert.ok(legend().length >= 18);
   assert.ok(
     [...document.querySelectorAll(".console-diff-toolbar__keys kbd")].every((el) =>
-      el.classList.contains("console-cheatsheet-kbd"),
+      el.classList.contains("console-shell-keycap"),
     ),
   );
   const names = (): string[] =>

@@ -102,7 +102,7 @@ describe("the workspace scope control", () => {
   test("the value carries a caret", () => {
     const { host, picker } = mount();
     picker.setWorkspaces(BOTH);
-    assert.ok(host.querySelector(".console-shell-scope__caret svg"));
+    assert.ok(host.querySelector(".pf-v6-c-menu-toggle__toggle-icon svg"));
   });
 
   test("the menu offers the server-wide view first, then each workspace", () => {

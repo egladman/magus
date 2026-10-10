@@ -145,11 +145,13 @@ test("without #demo and without a server the app says where a populated one live
   const root = document.querySelector<HTMLElement>(".console-diff-layout");
   assert.equal(root?.dataset.phase, "empty");
   assert.equal(
-    document.querySelectorAll(".pf-v6-c-empty-state__footer button").length,
+    [...document.querySelectorAll(".pf-v6-c-empty-state__footer button")].filter((b) =>
+      /demo/i.test(b.textContent ?? ""),
+    ).length,
     0,
     "the per-app demo button is gone",
   );
-  const body = document.querySelector<HTMLElement>(".pf-v6-c-empty-state__body")?.textContent ?? "";
+  const body = document.querySelector<HTMLElement>(".pf-v6-c-empty-state")?.textContent ?? "";
   assert.match(body, /Workspace menu/, "an empty app has to name where a populated one lives");
 
   dispose.deactivate();

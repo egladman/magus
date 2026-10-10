@@ -22,6 +22,7 @@ import { h, helpGlyph, prose, type Tile } from "./card";
 import { logsLink } from "../../../lib/server";
 import { showToast } from "../../../lib/refresh-toast";
 import { reportFailure } from "../../../lib/notifications";
+import { menuToggle } from "../../../ui/menu-toggle";
 import { statusIcon, statusText, type Status } from "../../../ui/status";
 import { menuButton, type MenuAction, type MenuButton } from "./menu";
 import {
@@ -212,16 +213,15 @@ function copyAction(label: string, command: string): MenuAction {
 // in a terminal. The chip is a <button> with a popup, not an <a>: its primary action is "offer the
 // choices", and dressing that as a link would promise navigation it does not perform.
 function failChip(f: FailedTarget, href: string): MenuButton {
-  const btn = h(
-    "button",
-    "pf-v6-c-button pf-m-secondary pf-m-danger pf-m-small console-dashboard-hero__failbtn",
-  );
-  btn.type = "button";
-  btn.append(
-    statusIcon("danger"),
-    statusText("danger", "Failed: "),
-    h("span", "pf-v6-c-button__text", f.label),
-  );
+  const btn = menuToggle({
+    variant: "secondary",
+    small: true,
+    danger: true,
+    icon: statusIcon("danger"),
+    text: f.label,
+    classes: "console-dashboard-hero__failbtn",
+  });
+  btn.querySelector(".pf-v6-c-menu-toggle__text")?.prepend(statusText("danger", "Failed: "));
 
   const actions: MenuAction[] = [];
   if (href) {

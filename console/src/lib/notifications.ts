@@ -18,7 +18,7 @@
 //   - an unwatched run/target failure   -> deep-link: the log viewer at the failing ref
 //   - a sandbox denial                  -> deep-link: the activity trail
 //   - server health degraded/down       -> deep-link: the dashboard
-//   - a new remark on your review       -> deep-link: the diff app
+//   - a new comment on your review      -> deep-link: the diff app
 //   - a rule set or toolchain pin nothing declares (MGS1028) -> deep-link: the diff, unclaimed files
 //
 // That last one earns the bell on the first half of the rule: a linter's rules or a pinned tool version
@@ -52,10 +52,12 @@
 // listener funnels into that store. This mirrors how the apps already talk to the shell through the
 // shared DOM (the #console-conn status dot, dispatchCommand) rather than through shared module state.
 
+import { emptyStateShell } from "../ui/empty-state";
 import { wireMenu } from "../ui/menu";
+import { menuToggle } from "../ui/menu-toggle";
 import { wireDrawerToggle } from "../ui/ref-drawer";
-import { statusMark, type Status } from "../ui/status";
-import { renderTransientToast } from "./toast";
+import { statusGlyph, statusText, type Status } from "../ui/status";
+import { pushToast, renderTransientToast, sourceChip } from "./toast";
 
 export type NotifyKind = "ok" | "warn" | "error";
 
@@ -122,7 +124,10 @@ export interface NotificationStore {
   // leaving the recent tail. It backs the granular "dismiss older than 1h/3h/6h" control, a lighter touch
   // than clear() when a burst of stale notifications has piled up but the recent ones still matter.
   dismissOlderThan(maxAgeMs: number, now?: number): void;
-  clear(): void;
+  // clear drops every entry and returns them, so a caller can offer to put them back with restore.
+  clear(): Notification[];
+  // restore puts entries dropped by clear back in their place by time, skipping any already present.
+  restore(dropped: readonly Notification[]): void;
   subscribe(fn: () => void): () => void;
 }
 
@@ -200,9 +205,18 @@ export function createNotificationStore(): NotificationStore {
       items = items.filter((n) => n.at >= cutoff);
       if (items.length !== before) emit();
     },
-    clear(): void {
-      if (items.length === 0) return;
+    clear(): Notification[] {
+      if (items.length === 0) return [];
+      const dropped = items;
       items = [];
+      emit();
+      return dropped;
+    },
+    restore(dropped: readonly Notification[]): void {
+      const have = new Set(items.map((n) => n.id));
+      const back = dropped.filter((n) => !have.has(n.id));
+      if (back.length === 0) return;
+      items = [...items, ...back].sort((a, b) => b.at - a.at).slice(0, MAX_HISTORY);
       emit();
     },
     subscribe(fn: () => void): () => void {
@@ -394,6 +408,26 @@ function svgBell(): string {
 }
 
 const KIND_STATUS: Record<NotifyKind, Status> = { ok: "success", warn: "warning", error: "danger" };
+const KIND_WORD: Record<NotifyKind, string> = { ok: "Success", warn: "Warning", error: "Danger" };
+
+function svgClose(): SVGElement {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("class", "pf-v6-svg");
+  svg.setAttribute("viewBox", "0 0 20 20");
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("width", "1em");
+  svg.setAttribute("height", "1em");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute(
+    "d",
+    "M17.8 16.2 11.59 10l6.21-6.21c.42-.46.39-1.17-.07-1.59-.43-.4-1.09-.4-1.52 0l-6.2 6.2-6.22-6.19c-.44-.44-1.15-.44-1.59 0-.44.44-.44 1.15 0 1.59l6.2 6.21-6.2 6.2c-.42.46-.39 1.17.07 1.59.43.4 1.09.4 1.52 0L10 11.59l6.2 6.2c.44.44 1.15.44 1.59 0 .44-.45.44-1.16 0-1.6Z",
+  );
+  svg.append(path);
+  return svg;
+}
 
 function relTime(at: number, now: number): string {
   const secs = Math.max(0, Math.round((now - at) / 1000));
@@ -442,54 +476,72 @@ export function mountNotificationCenter(): NotificationCenter {
     actions.insertBefore(bell, gear); // before the gear; insertBefore(node, null) appends if gear absent
   }
 
-  // The history panel: a right-docked overlay pop-out (positioned in overrides.css). It reuses the
-  // Reference panel's pop-out mechanics via wireDrawerToggle rather than inventing a second idiom.
-  const panel = document.createElement("div");
+  // The history panel: a PF Notification drawer, docked as a right-hand overlay pop-out (positioned in
+  // overrides.css). It reuses the Reference panel's pop-out mechanics via wireDrawerToggle rather than
+  // inventing a second idiom.
+  const panel = document.createElement("section");
   panel.id = "console-notifypanel";
-  panel.className = "console-shell-notify";
+  panel.className = "console-shell-notify pf-v6-c-notification-drawer";
   panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "Notifications");
+  panel.setAttribute("aria-labelledby", "console-notifypanel-title");
   panel.hidden = true;
 
   const head = document.createElement("div");
-  head.className = "console-shell-notify__head";
-  const title = document.createElement("span");
-  title.className = "console-shell-notify__title";
+  head.className = "pf-v6-c-notification-drawer__header";
+  const title = document.createElement("h2");
+  title.className = "pf-v6-c-notification-drawer__header-title";
+  title.id = "console-notifypanel-title";
   title.textContent = "Notifications";
 
-  // The header's right-side actions: a "Dismiss older" menu (1h/3h/6h - the granular filter for a pile of
-  // stale entries) beside the heavy-handed "Clear all". Under volume, clearing everything throws away the
-  // recent ones you still care about; the age filter is the lighter touch. The menu reuses the launcher
-  // kebab idiom (button + hidden menu, outside/Escape dismiss) rather than a native <select> so it matches
-  // the console's other popovers.
+  // The header's actions: a "Dismiss older" menu (1h/3h/6h - the granular filter for a pile of stale
+  // entries) beside the heavy-handed "Clear all". Under volume, clearing everything throws away the
+  // recent ones you still care about; the age filter is the lighter touch. Clear all is undoable from
+  // the toast it raises, since one press discards the whole history.
   const actionsGroup = document.createElement("div");
-  actionsGroup.className = "console-shell-notify__actions";
+  actionsGroup.className = "pf-v6-c-notification-drawer__header-action";
 
   const olderWrap = document.createElement("div");
   olderWrap.className = "console-shell-notify__older";
-  const olderBtn = document.createElement("button");
-  olderBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__older-btn";
-  olderBtn.type = "button";
-  olderBtn.textContent = "Dismiss older";
+  const olderBtn = menuToggle({
+    text: "Dismiss older",
+    small: true,
+    classes: "console-shell-notify__older-btn",
+  });
   const olderMenu = document.createElement("div");
-  olderMenu.className = "console-shell-notify__older-menu";
-  olderMenu.setAttribute("role", "menu");
-  olderMenu.setAttribute("aria-label", "Dismiss older notifications");
+  olderMenu.className = "pf-v6-c-menu console-shell-notify__older-menu";
   olderMenu.hidden = true;
+  const olderContent = document.createElement("div");
+  olderContent.className = "pf-v6-c-menu__content";
+  const olderList = document.createElement("ul");
+  olderList.className = "pf-v6-c-menu__list";
+  olderList.setAttribute("role", "menu");
+  olderList.setAttribute("aria-label", "Dismiss older notifications");
   const HOUR_MS = 60 * 60 * 1000;
   for (const [label, hours] of [
     ["Older than 1 hour", 1],
     ["Older than 3 hours", 3],
     ["Older than 6 hours", 6],
   ] as const) {
+    const row = document.createElement("li");
+    row.className = "pf-v6-c-menu__list-item";
+    row.setAttribute("role", "none");
     const mi = document.createElement("button");
-    mi.className = "console-shell-notify__older-item";
+    mi.className = "pf-v6-c-menu__item";
     mi.type = "button";
     mi.setAttribute("role", "menuitem");
-    mi.textContent = label;
+    const main = document.createElement("span");
+    main.className = "pf-v6-c-menu__item-main";
+    const text = document.createElement("span");
+    text.className = "pf-v6-c-menu__item-text";
+    text.textContent = label;
+    main.append(text);
+    mi.append(main);
     mi.addEventListener("click", () => store.dismissOlderThan(hours * HOUR_MS));
-    olderMenu.append(mi);
+    row.append(mi);
+    olderList.append(row);
   }
+  olderContent.append(olderList);
+  olderMenu.append(olderContent);
   olderWrap.append(olderBtn, olderMenu);
   wireMenu(olderMenu, olderBtn);
 
@@ -497,31 +549,54 @@ export function mountNotificationCenter(): NotificationCenter {
   clearBtn.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__clear";
   clearBtn.type = "button";
   clearBtn.textContent = "Clear all";
-  clearBtn.addEventListener("click", () => store.clear());
-  actionsGroup.append(olderWrap, clearBtn);
+  clearBtn.addEventListener("click", () => {
+    const dropped = store.clear();
+    if (dropped.length === 0) return;
+    pushToast({
+      source: "Notifications",
+      kind: "info",
+      key: "notifications:cleared:" + Date.now(),
+      message:
+        "Cleared " + dropped.length + (dropped.length === 1 ? " notification." : " notifications."),
+      actions: [{ label: "Undo", run: () => store.restore(dropped) }],
+    });
+  });
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "pf-v6-c-button pf-m-plain";
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Close notifications");
+  const closeIcon = document.createElement("span");
+  closeIcon.className = "pf-v6-c-button__icon";
+  closeIcon.append(svgClose());
+  closeBtn.append(closeIcon);
+  const closeBox = document.createElement("div");
+  closeBox.className = "pf-v6-c-notification-drawer__header-action-close";
+  closeBox.append(closeBtn);
+
+  actionsGroup.append(olderWrap, clearBtn, closeBox);
   head.append(title, actionsGroup);
 
-  const listEl = document.createElement("div");
-  listEl.className = "console-shell-notify__list";
-  listEl.setAttribute("role", "list");
+  const bodyEl = document.createElement("div");
+  bodyEl.className = "pf-v6-c-notification-drawer__body";
 
-  panel.append(head, listEl);
+  panel.append(head, bodyEl);
   // Anchor the panel in the title-bar control group so it drops directly under the bell (positioned in
   // overrides.css, like the Applications menu). Fall back to the body if the control group is absent.
   (actions ?? document.body).append(panel);
 
-  const svgClose =
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-
   const renderList = (): void => {
     const items = store.list();
-    listEl.replaceChildren();
+    bodyEl.replaceChildren();
     if (items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "console-shell-notify__empty";
-      empty.textContent =
-        "Nothing to report. Failures, sandbox denials, and server health changes show up here.";
-      listEl.append(empty);
+      const empty = emptyStateShell({
+        heading: "h3",
+        title: "Nothing to report",
+        classes: "pf-m-sm",
+      });
+      empty.body.textContent = "Failures, sandbox denials, and server health changes show up here.";
+      empty.footer.remove();
+      bodyEl.append(empty.root);
       clearBtn.hidden = true;
       olderWrap.hidden = true;
       olderMenu.hidden = true;
@@ -531,37 +606,49 @@ export function mountNotificationCenter(): NotificationCenter {
     clearBtn.hidden = false;
     olderWrap.hidden = false;
     const now = Date.now();
+    const list = document.createElement("ul");
+    list.className = "pf-v6-c-notification-drawer__list";
+    list.setAttribute("role", "list");
     for (const n of items) {
-      const item = document.createElement("div");
-      item.className = "console-shell-notify__item";
+      const status = KIND_STATUS[n.kind];
+      const unseen = n.important && !n.seen;
+      const item = document.createElement("li");
+      item.className =
+        "pf-v6-c-notification-drawer__list-item pf-m-" + status + (unseen ? "" : " pf-m-read");
       item.dataset.kind = n.kind;
-      item.setAttribute("role", "listitem");
-      if (n.important && !n.seen) item.dataset.unseen = "";
+      if (unseen) item.dataset.unseen = "";
 
-      // The outcome as a shape and a word, not only a tint: the left accent and the icon colour say
-      // nothing to a reader who cannot tell the hues apart.
-      const dot = statusMark(KIND_STATUS[n.kind]);
-      dot.className = "console-shell-notify__item-mark";
+      const header = document.createElement("div");
+      header.className = "pf-v6-c-notification-drawer__list-item-header";
+      // The outcome as a shape and a word, not only a tint: the icon is PF's status glyph and the
+      // title opens with the word, hidden, so a reader who cannot tell the hues apart loses nothing.
+      const icon = document.createElement("span");
+      icon.className = "pf-v6-c-notification-drawer__list-item-header-icon";
+      icon.append(statusGlyph(status));
+      const heading = document.createElement("h3");
+      heading.className = "pf-v6-c-notification-drawer__list-item-header-title";
+      heading.append(statusText(status, KIND_WORD[n.kind] + " notification:"), " " + n.message);
+      header.append(icon, heading);
 
-      const body = document.createElement("div");
-      body.className = "console-shell-notify__item-body";
-      const msg = document.createElement("p");
-      msg.className = "console-shell-notify__item-msg";
-      msg.textContent = n.message;
-      body.append(msg);
+      const action = document.createElement("div");
+      action.className = "pf-v6-c-notification-drawer__list-item-action";
+      const dismiss = document.createElement("button");
+      dismiss.className = "pf-v6-c-button pf-m-plain";
+      dismiss.type = "button";
+      dismiss.setAttribute("aria-label", "Dismiss notification: " + n.message);
+      dismiss.title = "Dismiss";
+      const dismissIcon = document.createElement("span");
+      dismissIcon.className = "pf-v6-c-button__icon";
+      dismissIcon.append(svgClose());
+      dismiss.append(dismissIcon);
+      dismiss.addEventListener("click", () => store.dismiss(n.id));
+      action.append(dismiss);
 
-      const meta = document.createElement("div");
-      meta.className = "console-shell-notify__item-meta";
-      // The source chip: a quiet tag naming the app/feature that raised this, so the entry stands on
-      // its own without the message having to restate where it came from.
-      const source = document.createElement("span");
-      source.className = "console-shell-notify__item-source";
-      source.textContent = n.source;
-      meta.append(source);
-      const time = document.createElement("span");
-      time.className = "console-shell-notify__item-time";
-      time.textContent = relTime(n.at, now);
-      meta.append(time);
+      // The description names where the signal came from, so the entry stands on its own without the
+      // message restating it, and carries the entry's action.
+      const description = document.createElement("div");
+      description.className = "pf-v6-c-notification-drawer__list-item-description";
+      description.append(sourceChip(n.source));
       if (n.link) {
         const link = document.createElement("button");
         link.className = "pf-v6-c-button pf-m-link pf-m-inline console-shell-notify__item-link";
@@ -576,21 +663,42 @@ export function mountNotificationCenter(): NotificationCenter {
             });
           } else if (nlink.href) location.assign(nlink.href);
         });
-        meta.append(link);
+        description.append(link);
       }
-      body.append(meta);
 
-      const dismiss = document.createElement("button");
-      dismiss.className = "pf-v6-c-button pf-m-plain console-shell-notify__item-dismiss";
-      dismiss.type = "button";
-      dismiss.setAttribute("aria-label", "Dismiss this notification");
-      dismiss.title = "Dismiss";
-      dismiss.innerHTML = '<span class="pf-v6-c-button__icon">' + svgClose + "</span>";
-      dismiss.addEventListener("click", () => store.dismiss(n.id));
+      const stamp = document.createElement("div");
+      stamp.className = "pf-v6-c-notification-drawer__list-item-timestamp";
+      const time = document.createElement("time");
+      time.dateTime = new Date(n.at).toISOString();
+      time.dataset.time = String(n.at);
+      time.title = new Date(n.at).toLocaleString();
+      time.textContent = relTime(n.at, now);
+      stamp.append(time);
 
-      item.append(dot, body, dismiss);
-      listEl.append(item);
+      item.append(header, action, description, stamp);
+      list.append(item);
     }
+    bodyEl.append(list);
+  };
+
+  // The labels are computed at paint time, and the panel can stay open for minutes without a paint, so
+  // an open panel rewrites each time in place (not a re-render, which would drop focus off the control
+  // a keyboard reader was on).
+  const TICK_MS = 15_000;
+  let ticker: ReturnType<typeof setInterval> | undefined;
+  const tick = (): void => {
+    const now = Date.now();
+    for (const el of bodyEl.querySelectorAll<HTMLElement>("time[data-time]")) {
+      el.textContent = relTime(Number(el.dataset.time), now);
+    }
+  };
+  const startTicking = (): void => {
+    stopTicking();
+    ticker = setInterval(tick, TICK_MS);
+  };
+  const stopTicking = (): void => {
+    if (ticker !== undefined) clearInterval(ticker);
+    ticker = undefined;
   };
 
   const renderBell = (): void => {
@@ -618,12 +726,15 @@ export function mountNotificationCenter(): NotificationCenter {
   const toggle = wireDrawerToggle({
     trigger: bell,
     panel,
-    focusTarget: () => (clearBtn.hidden ? panel : clearBtn),
+    focusTarget: () => (clearBtn.hidden ? closeBtn : clearBtn),
     onOpen: () => {
       renderList();
       store.markAllSeen();
+      startTicking();
     },
+    onClose: stopTicking,
   });
+  closeBtn.addEventListener("click", () => toggle.close());
 
   let seeded = false;
   const seedDemo = (): void => {

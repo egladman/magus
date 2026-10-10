@@ -72,15 +72,6 @@
   padding-inline: var(--console-pad);
 }
 .console-tools__table[hidden] { display: none; }
-/* PF truncates a header to a one-pixel cell with an ellipsis unless the cell is nowrap, which the
-   shared table does not set: eleven columns came out as "T.", "V..." and "P...". PF's own cell
-   properties take the truncation off for this table's header. */
-.console-tools__table .pf-v6-c-table__thead {
-  --pf-v6-c-table--cell--MinWidth: 0;
-  --pf-v6-c-table--cell--MaxWidth: none;
-  --pf-v6-c-table--cell--Overflow: visible;
-  --pf-v6-c-table--cell--TextOverflow: clip;
-}
 
 /* --- Connect prompt -------------------------------------------------------------- */
 .console-tools__empty {

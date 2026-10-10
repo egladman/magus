@@ -329,6 +329,14 @@
 }
 .console-log-runs [data-leaf] .pf-v6-c-tree-view__node-title { font-family: var(--pf-t--global--font--family--mono); }
 .console-log-runs .pf-v6-c-tree-view__node.pf-m-current { font-weight: var(--pf-t--global--font--weight--body--bold); }
+/* The item takes focus, as in PF's markup, but a branch holds its whole subtree: the global ring on
+   the item would box every child. The ring goes on the item's own row instead, inside it so the
+   rail's overflow does not clip it. */
+.console-log-runs .pf-v6-c-tree-view__list-item:focus-visible { outline: none; }
+.console-log-runs .pf-v6-c-tree-view__list-item:focus-visible > .pf-v6-c-tree-view__content {
+  outline: var(--pf-t--global--focus-ring--width--offset) solid var(--pf-t--global--focus-ring--color--default);
+  outline-offset: var(--console-focus-inset);
+}
 
 /* The slim reopen rail, shown only while the aside is hidden but it has content. A column, so a
    caller's count (activity's event count) stacks under the icon instead of squeezing beside it. */

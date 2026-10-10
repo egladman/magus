@@ -1,4 +1,4 @@
-// menu.ts - a button that opens a PF Menu of actions, for the board's two choices of "where to go"
+// menu.ts - a menu toggle that opens a PF Menu of actions, for the board's two choices of "where to go"
 // (a failing target's output or rerun command, a run to open in the log viewer). The keyboard and
 // outside-click behaviour is ui/menu.ts's wireMenu; this builds the markup it needs and keeps the
 // rows replaceable.
@@ -20,8 +20,8 @@ export interface MenuButton {
   dispose(): void;
 }
 
-// menuButton builds the anchor. `button` is the caller's own element, already classed and labelled,
-// so the same helper serves a chip and a secondary button.
+// menuButton builds the anchor. `button` is the caller's own PF MenuToggle (ui/menu-toggle.ts),
+// already labelled, so the same helper serves a chip and a secondary toggle.
 export function menuButton(button: HTMLButtonElement, actions: readonly MenuAction[]): MenuButton {
   const el = h("div", "console-dashboard-menu");
   const menu = h("div", "pf-v6-c-menu");

@@ -20,19 +20,6 @@ export function initAppMenu(items: readonly AppMenuItem[]): () => void {
   const list = panel?.querySelector<HTMLElement>("[data-app-list]");
   if (!btn || !panel || !list) return () => {};
 
-  // The markup ships the group titled "Menu" and aria-hidden, which left the list without a name.
-  // The title is the list's name, so it is read.
-  const title = panel.querySelector<HTMLElement>(".pf-v6-c-menu__group-title");
-  if (title) {
-    title.textContent = "Applications";
-    title.removeAttribute("aria-hidden");
-    title.id ||= "console-appmenu-title";
-    list.setAttribute("aria-labelledby", title.id);
-  }
-  panel.setAttribute("aria-label", "Applications");
-  btn.setAttribute("aria-label", "Applications");
-  btn.title = "Applications";
-
   list.replaceChildren(
     ...items.map((item) => {
       const row = document.createElement("li");

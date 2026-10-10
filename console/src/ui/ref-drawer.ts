@@ -150,12 +150,6 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   const trigger = document.getElementById("console-refbtn");
   if (!drawer || !panel || !bodyEl || !trigger) return;
 
-  // The panel's title is a bare span in the markup, which leaves the region without a heading to
-  // navigate by.
-  const title = panel.querySelector(".console-shell-refdrawer__title");
-  title?.setAttribute("role", "heading");
-  title?.setAttribute("aria-level", "2");
-
   const pinBtn = document.getElementById("console-refpin");
   const closeBtn = document.getElementById("console-refclose");
   const breakoutBtn = document.getElementById("console-refbreakout");

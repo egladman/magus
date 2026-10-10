@@ -251,7 +251,7 @@ test("computePendingChanges: a keybinding rebind is one entry per command, by ef
   assert.deepEqual(changes, [
     {
       key: "keymap:console.tab.close",
-      label: "Keybinding Close pane or tab",
+      label: "Shortcut Close pane or tab",
       before: "mod+w",
       after: "mod+shift+w",
     },
@@ -265,7 +265,7 @@ test("computePendingChanges: dropping an override back to the default is a real 
   assert.deepEqual(changes, [
     {
       key: "keymap:console.tab.close",
-      label: "Keybinding Close pane or tab",
+      label: "Shortcut Close pane or tab",
       before: "mod+shift+w",
       after: "mod+w",
     },
@@ -278,7 +278,7 @@ test("computePendingChanges: disabling a binding reads as None", () => {
   assert.deepEqual(changes, [
     {
       key: "keymap:console.tab.close",
-      label: "Keybinding Close pane or tab",
+      label: "Shortcut Close pane or tab",
       before: "mod+w",
       after: "None",
     },

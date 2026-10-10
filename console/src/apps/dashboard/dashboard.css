@@ -103,6 +103,7 @@ body[data-dash-native] { margin: 0; }
    next to the words. */
 .console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
 .console-dashboard-activity__open .pf-v6-c-button__icon,
+.console-dashboard-activity__open .pf-v6-c-menu-toggle__icon,
 .console-dashboard-insight__refresh .pf-v6-c-button__icon {
   display: inline-flex;
   align-items: center;

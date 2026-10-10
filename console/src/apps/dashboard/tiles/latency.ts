@@ -76,8 +76,8 @@ export function latencyTile(): Tile {
       // warning gold and p99 in the danger red read as the chart reporting trouble. Dash, not just
       // hue, still tells the three lines apart in greyscale or for a colourblind reader.
       series: [
-        { label: "p50", colorVar: "--pf-t--global--color--nonstatus--blue--300" },
-        { label: "p95", colorVar: "--pf-t--global--color--nonstatus--teal--300", dash: [6, 3] },
+        { label: "p50", colorVar: "--console-series-p50" },
+        { label: "p95", colorVar: "--console-series-p95", dash: [6, 3] },
         { label: "p99", colorVar: "--pf-t--global--text--color--regular", dash: [1, 3] },
       ],
       yFormat: (v) => fmtDur(v),

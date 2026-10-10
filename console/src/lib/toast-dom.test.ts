@@ -39,8 +39,19 @@ describe("the toast group", () => {
     assert.ok(g.classList.contains("pf-v6-c-alert-group"));
     assert.ok(g.classList.contains("pf-m-toast"));
     assert.equal(g.getAttribute("aria-live"), "polite");
+    assert.equal(g.getAttribute("aria-atomic"), "false", "an added toast is read alone");
     assert.equal(mountToastGroup(), g, "asking again returns the same group");
     assert.equal(document.querySelectorAll("#console-toasts").length, 1);
+  });
+
+  test("is PF's list: a ul of li items", () => {
+    const g = group();
+    assert.equal(g.tagName, "UL");
+    assert.equal(g.getAttribute("role"), "list");
+    pushToast({ source: "Runs", message: "Done.", kind: "ok", ms: 0 });
+    const [item] = items();
+    assert.equal(item.tagName, "LI");
+    assert.ok(item.parentElement === g);
   });
 
   test("a toast is a PF alert: hidden icon, severity prefix, close button", () => {
