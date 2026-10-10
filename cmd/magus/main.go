@@ -192,7 +192,7 @@ func runCLI() int {
 	// just told magus to stop is both unwanted and the way to get stuck there.
 	if res.rootCtx.Err() == nil {
 		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
-			slog.ErrorContext(res.rootCtx, err.Error(), attr.Notice(""), attr.Component("magus"))
+			slog.ErrorContext(res.rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		}
 	}
 	// Only a stage that succeeded settles: one that failed reports its own failure,
@@ -878,7 +878,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	bindGlobalsAfterSubcommand(rest)
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
-		slog.ErrorContext(rootCtx, fmt.Sprintf("invalid configuration from flags: %v", err), attr.Notice(""), attr.Component("magus"))
+		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
@@ -926,7 +926,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopBroker := trace.phase("startup.broker")
 		pid := ensureBroker(rootCtx)
 		stopBroker()
-		announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+		noticeBroker(rootCtx, pid)
 	}
 
 	runsServer := sub == "server" && isServerRun(subArgs)

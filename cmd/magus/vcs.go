@@ -361,8 +361,8 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		if err := res.VCS.AbortMerge(ctx, root); err != nil {
 			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
 			// caller told "nothing was touched" would go on to do something else in it.
-			slog.ErrorContext(ctx, fmt.Sprintf("could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v", err),
-				attr.Notice(""), attr.Component("vcs resolve"))
+			slog.ErrorContext(ctx, "could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort)",
+				attr.Notice(""), attr.Component("vcs resolve"), attr.Error(err))
 		}
 	}, nil
 }
@@ -639,8 +639,8 @@ func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out se
 	if len(out.Ran) > 0 {
 		regenerate = out.Command()
 	}
-	slog.ErrorContext(ctx, fmt.Sprintf("could not regenerate after this %s: %v", cmp.Or(op.Kind, "operation"), err),
-		attr.Notice(""), attr.Component("magus"))
+	slog.ErrorContext(ctx, "could not regenerate after this "+cmp.Or(op.Kind, "operation"),
+		attr.Notice(""), attr.Component("magus"), attr.Error(err))
 	switch {
 	case op.CommitPending:
 		slog.ErrorContext(ctx, fmt.Sprintf("the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)", regenerate),

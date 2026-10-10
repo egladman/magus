@@ -143,7 +143,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		if err := reportRefsMiss(missLines, opts, miss); err != nil {
 			return err
 		}
-		emitNearest(missLines, res.Nearest)
+		emitNearest(ctx, res.Nearest)
 		return exitForVerdict(ans.Verdict)
 	}
 
@@ -376,7 +376,7 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	if err != nil {
 		// Exit 2, never 1: a scope magus could not resolve is a search that never ran,
 		// and reporting it as "no match" would answer a question nobody asked.
-		slog.ErrorContext(ctx, err.Error(), attr.Notice("magus refs --text"))
+		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 	// A root that cannot be listed at all (missing, not a directory, permission
@@ -385,13 +385,13 @@ func refsTextCmd(ctx context.Context, root, pattern string, scopeArgs []string, 
 	// mid-walk (a live checkout's ordinary churn); this is the coarser check that
 	// the walk never had anything to do in the first place.
 	if _, err := os.ReadDir(searchRoot); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("cannot search %s: %v", searchRoot, err), attr.Notice("magus refs --text"))
+		slog.ErrorContext(ctx, "cannot search "+searchRoot, attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 
 	matches, _, skipped, generated, classified, err := textScan(ctx, searchRoot, pattern, scopes, noGenerated, classify)
 	if err != nil {
-		slog.ErrorContext(ctx, err.Error(), attr.Notice("magus refs --text"))
+		slog.ErrorContext(ctx, "", attr.Notice("magus refs --text"), attr.Error(err))
 		return errSilent{exitCode: 2}
 	}
 

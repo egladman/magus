@@ -387,12 +387,12 @@ func (s *lspServer) replyError(id json.RawMessage, code int, msg string) {
 func (s *lspServer) writeMessage(v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		slog.Error("marshal: "+err.Error(), attr.Notice(""), attr.Component("lsp"))
+		slog.Error("cannot encode a response", attr.Notice(""), attr.Component("lsp"), attr.Error(err))
 		return
 	}
 	fmt.Fprintf(s.writeBuf, "Content-Length: %d\r\n\r\n", len(body))
 	if _, err := s.writeBuf.Write(body); err != nil {
-		slog.Error("write: "+err.Error(), attr.Notice(""), attr.Component("lsp"))
+		slog.Error("cannot write a response", attr.Notice(""), attr.Component("lsp"), attr.Error(err))
 		return
 	}
 	_ = s.writeBuf.Flush()

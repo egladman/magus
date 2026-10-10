@@ -634,7 +634,7 @@ func TestRenderProbeResults(t *testing.T) {
 	render := func(results []probeResult) (string, string, bool) {
 		var out strings.Builder
 		var ok bool
-		errb := capturePrettyNotices(t, func() { ok = renderProbeResults(t.Context(), &out, results) })
+		errb := noticesFrom(t, func() { ok = renderProbeResults(t.Context(), &out, results) })
 		return out.String(), errb, ok
 	}
 

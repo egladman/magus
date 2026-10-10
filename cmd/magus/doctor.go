@@ -330,7 +330,7 @@ func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.
 		}
 		fmt.Printf("fixing %s: %s\n", c.Name, cmdline)
 		if err := dispatchSub(ctx, root, rc, c.Fix[0], c.Fix[1:]); err != nil {
-			slog.ErrorContext(ctx, fmt.Sprintf("%s: %v", c.Name, err), attr.Notice(""), attr.Component("magus doctor --fix"))
+			slog.ErrorContext(ctx, c.Name, attr.Notice(""), attr.Component("magus doctor --fix"), attr.Error(err))
 			failed++
 			continue
 		}

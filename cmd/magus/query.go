@@ -288,7 +288,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	fmt.Printf("matches: %d  (neighborhood budget %d)\n\n", out.MatchCount, out.Budget)
 	if out.MatchCount == 0 {
 		printVerdict(os.Stdout, out.Answer, hint.Refs.With("<name>"))
-		emitNearest(os.Stdout, res.Nearest)
+		emitNearest(ctx, res.Nearest)
 		if err := reportIndexStaleness(os.Stdout, out.Answer); err != nil {
 			return err
 		}
@@ -804,7 +804,8 @@ func openOutputInViewer(ctx context.Context, desc magus.OutputDescriptor, events
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("opening the log viewer for %s; the output rides in the link fragment and never leaves your machine.", desc.Ref), attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not open a browser (%v). Re-run with --print to get the URL.", err), attr.Notice("magus query"))
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus query"), attr.Error(err),
+			attr.Why("Re-run with --print to get the URL."))
 		return errSilent{exitCode: 1}
 	}
 	return nil
@@ -852,7 +853,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 		slog.ErrorContext(ctx, fmt.Sprintf("no node matches %q", pos[0]), attr.Notice("magus explain"))
 		missLines := noticeLines{ctx: ctx, level: slog.LevelError}
 		printVerdict(missLines, res.Answer, hint.Refs.With(pos[0]))
-		emitNearest(missLines, res.Nearest)
+		emitNearest(ctx, res.Nearest)
 		return exitForVerdict(res.Answer.Verdict)
 	}
 	out := res.Out

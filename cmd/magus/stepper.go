@@ -98,7 +98,7 @@ func newStepGate() run.StepGate {
 
 			restore := func() {
 				if err := restoreTTY(); err != nil {
-					slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("magus"))
+					slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 				}
 			}
 
@@ -140,7 +140,7 @@ func newStepGate() run.StepGate {
 			if wantRepl {
 				if replFn := run.StepReplFrom(ctx); replFn != nil {
 					if err := replFn(ctx, name, args, dir); err != nil {
-						slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("repl"))
+						slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("repl"), attr.Error(err))
 					}
 				} else {
 					slog.WarnContext(ctx, "(no REPL available outside a magusfile run)", attr.Notice(""))

@@ -377,7 +377,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	}
 	dir, err := magus.ResolveCacheDir(root)
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("--record: no output store here: %v", err), attr.Notice(""), attr.Component("magus buzz"))
+		slog.WarnContext(ctx, "--record: no output store here", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
 		return
 	}
 	d := cache.OutputDescriptor{
@@ -392,7 +392,7 @@ func recordBuzzRun(ctx context.Context, root, name, code string, args []string, 
 	}
 	stored, err := cache.NewOutputStore(dir).Persist(ctx, buzzRunKey(name, code, args), out, d)
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("--record: %v", err), attr.Notice(""), attr.Component("magus buzz"))
+		slog.WarnContext(ctx, "--record", attr.Notice(""), attr.Component("magus buzz"), attr.Error(err))
 		return
 	}
 	slog.InfoContext(ctx, "ref  "+stored.Ref, attr.Notice(""))

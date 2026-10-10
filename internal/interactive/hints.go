@@ -2,8 +2,6 @@ package interactive
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -60,14 +58,6 @@ func TakeHint(level slog.Level, msg string, attrs ...slog.Attr) (slog.Record, bo
 	r.AddAttrs(attrs...)
 	r.AddAttrs(attr.Hint())
 	return r, true
-}
-
-// Emit writes "hint: <msg>\n" to w when hints are enabled, once per distinct
-// msg; see emitted.
-func Emit(w io.Writer, msg string) {
-	if firstShowing(msg) {
-		fmt.Fprintf(w, "hint: %s\n", msg)
-	}
 }
 
 // firstShowing reports whether msg is a hint to show now: hints are on and msg has not

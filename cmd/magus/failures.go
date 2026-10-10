@@ -203,11 +203,11 @@ func promptFailures(ctx context.Context, root string, h *cache.PrettyHandler) er
 		switch action {
 		case actionRerun:
 			if err := rerunStepped(ctx, root, item); err != nil {
-				slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("magus"))
+				slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			}
 		case actionOutput:
 			if err := showOutput(ctx, root, item); err != nil {
-				slog.ErrorContext(ctx, err.Error(), attr.Notice(""), attr.Component("magus"))
+				slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			}
 		}
 	}

@@ -24,12 +24,12 @@ func stopStalePools(ctx context.Context) error {
 	var failed int
 	for _, p := range stale {
 		if err := proc.Shutdown(ctx, p.Addr); err != nil {
-			slog.ErrorContext(ctx, fmt.Sprintf("stop pool parent pid %d (%s): %v", p.ParentPID, p.Version, err), attr.Notice(""), attr.Component("magus"))
+			slog.ErrorContext(ctx, fmt.Sprintf("stop pool parent pid %d (%s)", p.ParentPID, p.Version), attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			failed++
 			continue
 		}
 		if err := waitSocketGone(ctx, p.Addr, stopTimeout); err != nil {
-			slog.ErrorContext(ctx, fmt.Sprintf("stop pool parent pid %d (%s): %v", p.ParentPID, p.Version, err), attr.Notice(""), attr.Component("magus"))
+			slog.ErrorContext(ctx, fmt.Sprintf("stop pool parent pid %d (%s)", p.ParentPID, p.Version), attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			failed++
 			continue
 		}

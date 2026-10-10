@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -39,13 +38,13 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	}
 	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("--open could not derive the viewer origin (%v); continuing without it.", err), attr.Notice(""), attr.Component("magus"))
+		slog.WarnContext(ctx, "--open could not derive the viewer origin; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return nil, func() {}
 	}
 	bc := journal.NewBroadcaster()
 	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("--open could not start the log stream server (%v); continuing without it.", err), attr.Notice(""), attr.Component("magus"))
+		slog.WarnContext(ctx, "--open could not start the log stream server; continuing without it", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return nil, func() {}
 	}
 	url := ls.ViewerURL(base)
@@ -55,7 +54,7 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	// best-effort on top of it. --open never blocks or fails a run.
 	slog.InfoContext(ctx, "watch this run (loopback, stays on your machine):\n  "+url, attr.Notice(""))
 	if err := openBrowser(url); err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("--open could not launch a browser (%v); open the link above yourself.", err), attr.Notice(""), attr.Component("magus"))
+		slog.WarnContext(ctx, "--open could not launch a browser; open the link above yourself", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 	}
 	return bc, func() {
 		bc.Close()

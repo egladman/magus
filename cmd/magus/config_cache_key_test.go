@@ -2,27 +2,12 @@ package main
 
 import (
 	"encoding/base64"
-	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/egladman/magus/internal/cache"
 )
-
-// capturePrettyNotices returns what fn logs through the default logger, rendered the way
-// a terminal display prints it.
-func capturePrettyNotices(t *testing.T, fn func()) string {
-	t.Helper()
-	var buf strings.Builder
-	prev := slog.Default()
-	slog.SetDefault(slog.New(cache.NewPrettyHandler(&buf, slog.LevelDebug)))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	fn()
-	return buf.String()
-}
 
 // withOutputFlags sets the package-level display flags for one test and restores
 // them, since every command reads them off `global` rather than taking them as
@@ -43,7 +28,7 @@ func TestCacheKeyGenerateTemplateEmitsOnlyTheSeed(t *testing.T) {
 
 	var err error
 	out := captureStdout(t, func() {
-		_ = capturePrettyNotices(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
+		_ = noticesFrom(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)
 
@@ -61,7 +46,7 @@ func TestCacheKeyGenerateTemplateKeepsPublicHalfOnStderr(t *testing.T) {
 	withOutputFlags(t, "template={{.keyid}}", "")
 
 	var err error
-	errOut := capturePrettyNotices(t, func() {
+	errOut := noticesFrom(t, func() {
 		_ = captureStdout(t, func() { err = configCacheKeyGenerate(t.Context(), nil) })
 	})
 	require.NoError(t, err)

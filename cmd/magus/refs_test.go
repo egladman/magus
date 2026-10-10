@@ -185,7 +185,7 @@ func TestEmitDefinitionsText(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout,OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
 	require.NoError(t, err)
 	assert.Equal(t, "symbol: symbol:a F().  (F)\n"+
 		"a.go:3-5  verified\nfunc F() {\n\treturn\n}\n"+
@@ -205,11 +205,11 @@ func TestEmitDefinitionsChangedExitsOne(t *testing.T) {
 		Answer: types.KnowledgeAnswer{Verdict: types.VerdictFound},
 	}
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout,OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Contains(t, got, "a.go:3-5  changed  (edited since indexing; refresh with `")
 
-	got = captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout,OutputOptions{Format: outputName}, out) })
+	got = captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: outputName}, out) })
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 	assert.Equal(t, "b.go:1-2\n", got)
 }
@@ -222,12 +222,12 @@ func TestEmitDefinitionsStaleIndex(t *testing.T) {
 	out := types.KnowledgeDefinitionsOutput{Symbol: "symbol:a F().", Definitions: []types.KnowledgeDefinitionSite{site}, Answer: answer}
 
 	var err error
-	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout,OutputOptions{Format: FormatText}, out) })
+	got := captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
 	require.NoError(t, err)
 	assert.Contains(t, got, staleIndexNotice(answer))
 
 	out.Definitions[0].Status = types.DefinitionUnverified
-	captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout,OutputOptions{Format: FormatText}, out) })
+	captureStdout(t, func() { err = emitDefinitions(context.Background(), os.Stdout, OutputOptions{Format: FormatText}, out) })
 	assert.Equal(t, errSilent{exitCode: 1}, err)
 }
 

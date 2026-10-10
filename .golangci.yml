@@ -346,69 +346,19 @@ linters:
             - {file: "benchmarks/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: "benchmarks/agent/cmd/*/main.go", reason: a standalone benchmark tool with no log display}
             - {file: libs/testkit/environ.go, reason: a test binary's TestMain reports before any display exists}
-            # A RATCHET: every file holding a finding on 2026-10-10 (413 findings in 61
-            # files), exempt until its notices become records. stderrprint reports an
-            # entry whose file is clean; never add one.
-            - {file: cmd/magus/affected.go, reason: staged}
-            - {file: cmd/magus/agent.go, reason: staged}
-            - {file: cmd/magus/attention.go, reason: staged}
-            - {file: cmd/magus/bisect.go, reason: staged}
-            - {file: cmd/magus/bootstrap_exec.go, reason: staged}
-            - {file: cmd/magus/bootstrap_exec_unix.go, reason: staged}
-            - {file: cmd/magus/broker.go, reason: staged}
-            - {file: cmd/magus/buzz.go, reason: staged}
-            - {file: cmd/magus/config.go, reason: staged}
-            - {file: cmd/magus/config_cache.go, reason: staged}
-            - {file: cmd/magus/config_cache_key.go, reason: staged}
-            - {file: cmd/magus/config_console.go, reason: staged}
-            - {file: cmd/magus/config_history.go, reason: staged}
-            - {file: cmd/magus/config_mcp.go, reason: staged}
-            - {file: cmd/magus/config_token.go, reason: staged}
-            - {file: cmd/magus/describe.go, reason: staged}
-            - {file: cmd/magus/describe_modules.go, reason: staged}
-            - {file: cmd/magus/describe_rules.go, reason: staged}
-            - {file: cmd/magus/diff.go, reason: staged}
-            - {file: cmd/magus/doctor.go, reason: staged}
-            - {file: cmd/magus/drift.go, reason: staged}
-            - {file: cmd/magus/failures.go, reason: staged}
-            - {file: cmd/magus/gate_redundancy.go, reason: staged}
-            - {file: cmd/magus/graph.go, reason: staged}
-            - {file: cmd/magus/graph_diff.go, reason: staged}
-            - {file: cmd/magus/graph_registry.go, reason: staged}
-            - {file: cmd/magus/helpers.go, reason: staged}
-            - {file: cmd/magus/init.go, reason: staged}
-            - {file: cmd/magus/init_spell.go, reason: staged}
-            - {file: cmd/magus/interrupt.go, reason: staged}
-            - {file: cmd/magus/live.go, reason: staged}
-            - {file: cmd/magus/lsp.go, reason: staged}
-            - {file: cmd/magus/main.go, reason: staged}
-            - {file: cmd/magus/mcp.go, reason: staged}
-            - {file: cmd/magus/pprof.go, reason: staged}
-            - {file: cmd/magus/probe.go, reason: staged}
-            - {file: cmd/magus/query.go, reason: staged}
-            - {file: cmd/magus/queue.go, reason: staged}
-            - {file: cmd/magus/refs.go, reason: staged}
-            - {file: cmd/magus/run.go, reason: staged}
-            - {file: cmd/magus/server.go, reason: staged}
-            - {file: cmd/magus/server_stale_pools.go, reason: staged}
-            - {file: cmd/magus/shell.go, reason: staged}
-            - {file: cmd/magus/spell.go, reason: staged}
-            - {file: cmd/magus/status.go, reason: staged}
-            - {file: cmd/magus/stepper.go, reason: staged}
-            - {file: cmd/magus/vcs.go, reason: staged}
-            - {file: cmd/magus/where.go, reason: staged}
-            - {file: cmd/magus/x.go, reason: staged}
-            - {file: internal/cache/cache.go, reason: staged}
-            - {file: internal/interp/bindings/host.go, reason: staged}
-            - {file: internal/interp/bindings/pry.go, reason: staged}
-            - {file: internal/interp/bindings/secret_provider.go, reason: staged}
-            - {file: internal/queue/provider/provider.go, reason: staged}
-            - {file: internal/sandbox/hint.go, reason: staged}
-            - {file: internal/sandbox/launch.go, reason: staged}
-            - {file: internal/settle/quiet.go, reason: staged}
-            - {file: pipe.go, reason: staged}
-            - {file: services.go, reason: staged}
-            - {file: std/os.go, reason: staged}
+            - {file: cmd/magus/main.go, reason: "reports flag and config errors before the display exists, and relays a worker's stderr"}
+            - {file: cmd/magus/pprof.go, reason: MAGUS_PPROF starts before the display exists}
+            - {file: cmd/magus/bootstrap_exec.go, reason: runs before the display exists}
+            - {file: cmd/magus/bootstrap_exec_unix.go, reason: runs before the display exists}
+            - {file: cmd/magus/shell.go, reason: "the guard's verdict on stderr is the hook protocol a host reads"}
+            - {file: cmd/magus/queue.go, reason: relays the stderr of the hooks and gates a queue verb runs}
+            - {file: cmd/magus/buzz.go, reason: "relays a script's own output under --check"}
+            - {file: cmd/magus/stepper.go, reason: "a step prompt blocks the run on its answer, so -q must not hide it"}
+            - {file: cmd/magus/interrupt.go, reason: "the first Ctrl-C's answer, which a quiet display would turn into a hang"}
+            - {file: cmd/magus/failures.go, reason: the end-of-run failure prompt and its OSC 52 copy}
+            - {file: internal/cache/cache.go, reason: "relays a target's captured log and the frame around it"}
+            - {file: internal/settle/quiet.go, reason: relays the captured output of a silenced run}
+            - {file: internal/sandbox/launch.go, reason: reports from inside the confined child before any display exists}
           hint: "a notice is slog.InfoContext(ctx, msg, attr.Notice(label)), with attr.Why for a reason and attr.Next for the command; a hint is interactive.Hint"
 
       # A plain Go error is a fragment its callers chain context onto with ": ".

@@ -159,7 +159,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
 			interactive.Hint(ctx, "some projects were not reindexed:")
-			slog.WarnContext(ctx, "  "+rerr.Error(), attr.Notice(""))
+			slog.WarnContext(ctx, "", attr.Notice(""), attr.Error(rerr))
 			refused = reindexRefusals(rerr)
 		}
 	}
@@ -922,7 +922,7 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", out.NodeCount, out.EdgeCount),
 		attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not open a browser (%v).", err), attr.Notice("magus graph export --open"),
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}
@@ -983,7 +983,7 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 	slog.InfoContext(ctx, "opening the graph explorer for this workspace's target graph.\n"+
 		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not open a browser (%v).", err), attr.Notice("magus graph export --open"),
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}
@@ -1013,8 +1013,8 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 		"it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.",
 		nodes, edges, bs.Addr(), origin), attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		slog.WarnContext(ctx, fmt.Sprintf("could not open a browser (%v). Open this yourself (the server is waiting):\n  %s", err, openURL),
-			attr.Notice("magus graph export --open"))
+		slog.WarnContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
+			attr.Why("Open this yourself (the server is waiting):\n  "+openURL))
 	}
 
 	switch outcome := bs.WaitServed(ctx); outcome {
@@ -1194,14 +1194,14 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 			return errSilent{exitCode: 1}
 		}
 	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
-		slog.ErrorContext(ctx, err.Error(), attr.Notice("magus graph export --open --follow"),
+		slog.ErrorContext(ctx, "", attr.Notice("magus graph export --open --follow"), attr.Error(err),
 			attr.Why("start it yourself to see the server's own output: "+hint.ServerStart.String()))
 		return errSilent{exitCode: 1}
 	}
 
 	code, err := mintConsoleLinkCode()
 	if err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not mint a sign-in code for the link: %v", err), attr.Notice("magus graph export --open --follow"))
+		slog.ErrorContext(ctx, "could not mint a sign-in code for the link", attr.Notice("magus graph export --open --follow"), attr.Error(err))
 		return errSilent{exitCode: 1}
 	}
 
@@ -1219,7 +1219,7 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer in live mode (server at %s).\n"+
 		"the explorer connects directly to your local server; your graph never leaves your machine.", hostPort), attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("could not open a browser (%v).", err), attr.Notice("magus graph export --open"),
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
 			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}

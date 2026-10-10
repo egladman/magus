@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -22,7 +21,6 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/sys/mem"
 	"github.com/egladman/magus/types"
@@ -358,43 +356,17 @@ func ensureBroker(ctx context.Context) int {
 	return pid
 }
 
-// announceBroker tells the person that their run left a process behind: which one, what
-// it is for, when it goes away, and that it listens on nothing but its socket. A
-// background process nobody mentions is the surprise this line exists to remove, so it
-// is a notice on stderr rather than a log record a default level filters out.
-//
-// quiet (-q or -s) drops it. Any structured -o gets a run.notice record instead of prose,
-// so a caller parsing stderr meets one record shape.
-func announceBroker(w io.Writer, pid int, output string, quiet bool) {
-	if pid == 0 || quiet {
-		return
-	}
-	msg := startedBrokerMessage(pid)
-	if output != "" && output != string(outputText) {
-		_ = report.NewLineEncoder(w).Encode(report.Notice{
-			Level:   slog.LevelInfo,
-			Message: msg,
-			Attrs: map[string]any{
-				"pid":         pid,
-				"log":         brokerLogPath(),
-				"idle_exit_s": int(broker.DefaultIdleExit / time.Second),
-			},
-		})
-		return
-	}
-	fmt.Fprintf(w, "magus: %s\n", msg)
-}
-
 func startedBrokerMessage(pid int) string {
 	return fmt.Sprintf("started a broker (pid %d) to hold this host's capacity; it opens no network listener and exits after %s holding nothing (`%s` lists it)",
 		pid, idleText(broker.DefaultIdleExit), hint.BrokerStatus)
 }
 
-// noticeBroker is announceBroker as a record: the display drops it under -q and -s, and a
-// -o jsonl display turns it into the run.notice announceBroker writes by hand. The pid, log
-// and idle attributes ride along only there, since a pretty display would print them.
+// noticeBroker tells the person that their run left a process behind, and that it listens
+// on nothing but its socket: a background process nobody mentions is the surprise this
+// removes. The pid, log and idle attributes ride along only under -o jsonl, since a pretty
+// display would print them.
 func noticeBroker(ctx context.Context, pid int) {
-	if pid == 0 || global.quiet || global.silent {
+	if pid == 0 {
 		return
 	}
 	attrs := []slog.Attr{attr.Notice(""), attr.Component("magus")}

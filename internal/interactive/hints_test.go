@@ -3,14 +3,15 @@ package interactive
 import (
 	"bytes"
 	"log/slog"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHintLogsAHintRecordOnce(t *testing.T) {
+// captureHints points slog's default at a text handler on a buffer for the test.
+func captureHints(t *testing.T) *bytes.Buffer {
+	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{
@@ -22,42 +23,40 @@ func TestHintLogsAHintRecordOnce(t *testing.T) {
 		},
 	})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// Hint dedupes by text across the whole process, so each test names its own message.
+func TestHintLogsAHintRecordOnce(t *testing.T) {
+	buf := captureHints(t)
 	msg := "pass --force to replace it: " + t.Name()
 	Hint(t.Context(), msg, attr.Component("spell"))
 	Hint(t.Context(), msg)
 	assert.Equal(t, "level=INFO msg=\""+msg+"\" component=spell notice=hint\n", buf.String())
 }
 
-func TestEmit_DefaultOn(t *testing.T) {
-	var buf bytes.Buffer
-	Emit(&buf, "try `magus run` instead")
-	assert.True(t, strings.HasPrefix(buf.String(), "hint: "), "Emit output = %q; want prefix %q", buf.String(), "hint: ")
-}
-
-func TestEmit_SetHintsEnabledFalse(t *testing.T) {
+func TestHintLogsNothingWithHintsDisabled(t *testing.T) {
+	buf := captureHints(t)
 	SetHintsEnabled(false)
 	t.Cleanup(func() { SetHintsEnabled(true) })
-	var buf bytes.Buffer
-	Emit(&buf, "try `magus run` instead")
-	assert.Zero(t, buf.Len(), "Emit wrote %q with hints disabled; want nothing", buf.String())
+	msg := "try `magus run` instead: " + t.Name()
+	Hint(t.Context(), msg)
+	assert.Empty(t, buf.String())
+
+	SetHintsEnabled(true)
+	Hint(t.Context(), msg)
+	assert.Contains(t, buf.String(), "notice=hint", "a hint withheld while disabled is still shown once enabled")
 }
 
-func TestEmit_SetHintsEnabledTrue(t *testing.T) {
-	SetHintsEnabled(true)
-	var buf bytes.Buffer
-	// A message distinct from the other Emit tests in this file: Emit dedupes by
-	// text across the whole process, and this test wants to confirm re-enabling
-	// hints works, not exercise the dedupe path.
-	Emit(&buf, "try `magus doctor` instead")
-	assert.True(t, strings.HasPrefix(buf.String(), "hint: "), "Emit output = %q; want prefix %q", buf.String(), "hint: ")
-}
+// A handler that refuses info leaves the showing unspent for a later display.
+func TestHintKeepsItsShowingWhenTheHandlerRefusesIt(t *testing.T) {
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	slog.SetDefault(slog.New(slog.NewTextHandler(&bytes.Buffer{}, &slog.HandlerOptions{Level: slog.LevelError})))
+	msg := "read that failure with magus query output: " + t.Name()
+	Hint(t.Context(), msg)
 
-func TestEmit_DedupesRepeatedMessage(t *testing.T) {
-	SetHintsEnabled(true)
-	msg := "this exact hint should only teach once: " + t.Name()
-	var first, second bytes.Buffer
-	Emit(&first, msg)
-	Emit(&second, msg)
-	assert.True(t, strings.HasPrefix(first.String(), "hint: "), "first Emit of a new message must write")
-	assert.Zero(t, second.String(), "second Emit of the same message must be suppressed")
+	buf := captureHints(t)
+	Hint(t.Context(), msg)
+	assert.Contains(t, buf.String(), "notice=hint")
 }
