@@ -145,8 +145,8 @@ func (e *AmbiguousRefError) Error() string {
 		shown = shown[:ambiguousRefsShown]
 		suffix = fmt.Sprintf(", and %d more", len(e.Candidates)-ambiguousRefsShown)
 	}
-	return fmt.Sprintf("output ref %q is ambiguous; it matches %d attempts, starting %s%s."+
-		" Give more of the ref, or name one of those in full (`magus query output <id>`)",
+	return fmt.Sprintf("output ref %q is ambiguous: it matches %d attempts, starting %s%s, "+
+		"give more of the ref or name one of those in full (`magus query output <id>`)",
 		e.Prefix, len(e.Candidates), strings.Join(shown, ", "), suffix)
 }
 

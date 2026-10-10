@@ -55,7 +55,7 @@ func (f *StepFailure) Error() string {
 	if f.Ref == "" {
 		return msg
 	}
-	return fmt.Sprintf("%s; read it with `%s`", msg, hint.QueryOutput.With(f.Ref))
+	return fmt.Sprintf("%s, read it with `%s`", msg, hint.QueryOutput.With(f.Ref))
 }
 
 // failedSteps is a slog.Handler over a run's invocation log that keeps the first failed

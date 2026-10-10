@@ -52,7 +52,7 @@ func TestBoundWorkerCannotWidenItsOwnRow(t *testing.T) {
 	assert.Contains(t, err.Error(), "adj/store is bound to this session")
 	assert.Contains(t, err.Error(), "SHRINK write_paths")
 	assert.Contains(t, err.Error(), "row adj/store is what this targeted")
-	assert.Contains(t, err.Error(), "Ask your orchestrator to make this write")
+	assert.Contains(t, err.Error(), "ask your orchestrator to make this write")
 
 	after, err := NewStore(loc).List()
 	require.NoError(t, err)
@@ -363,7 +363,7 @@ func TestUnstampedActorReadsAndWritesNothing(t *testing.T) {
 		var refused *RefusedError
 		require.ErrorAs(t, err, &refused, name)
 		assert.True(t, strings.HasPrefix(err.Error(), "job: this call arrived with no lease stamped on it"), "%s: %v", name, err)
-		assert.Contains(t, err.Error(), "Send the lease you act under", name)
+		assert.Contains(t, err.Error(), "send the lease you act under", name)
 	}
 
 	after, err := s.List()

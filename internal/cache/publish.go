@@ -326,7 +326,7 @@ type RefNotFoundError struct {
 }
 
 func (e *RefNotFoundError) Error() string {
-	return fmt.Sprintf("no stored output for ref %q; consulted: %s", e.Ref, strings.Join(e.Stores, ", "))
+	return fmt.Sprintf("no stored output for ref %q, consulted %s", e.Ref, strings.Join(e.Stores, ", "))
 }
 
 // Is reports RefNotFoundError as fs.ErrNotExist, so existing not-found handling

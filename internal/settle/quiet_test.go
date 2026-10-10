@@ -83,7 +83,7 @@ func TestSettleQuietlyNamesTheFailingStep(t *testing.T) {
 	assert.Empty(t, seen)
 	var failure *StepFailure
 	require.ErrorAs(t, err, &failure)
-	assert.Equal(t, "generate:rw failed in .: mockery exited 1; read it with `magus query output out2`", err.Error())
+	assert.Equal(t, "generate:rw failed in .: mockery exited 1, read it with `magus query output out2`", err.Error())
 }
 
 // TestSettleQuietlyReplaysAFailureWithNoStep: a run that failed before any step did has

@@ -160,8 +160,8 @@ type DowngradeError struct {
 }
 
 func (e *DowngradeError) Error() string {
-	return fmt.Sprintf("%s was written by %s, newer than this binary, %s, and replacing it would undo what the newer one wrote. "+
-		"Update this binary to at least %s (`%s` for a release, or bring a checkout of magus up to commit %s and rebuild it), "+
+	return fmt.Sprintf("%s was written by %s, newer than this binary, %s, and replacing it would undo what the newer one wrote: "+
+		"update this binary to at least %s (`%s` for a release, or bring a checkout of magus up to commit %s and rebuild it), "+
 		"or rerun this command with a magus at least that new",
 		e.File, e.Recorded, e.Writer, orUnknown(e.Recorded.Version), hint.SelfUpdate, orUnknown(e.Recorded.Commit))
 }
