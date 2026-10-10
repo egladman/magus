@@ -88,8 +88,10 @@ final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitH
     "Goblin Tools", "JSON Patch", "SWE-bench Verified", "VS Code"];
 
 // FIRST_PERSON are the judge's rules a post under blog/ skips: a post is one author's
-// account of what they did and think.
-final FIRST_PERSON = ["reply-voice", "tense", "hedge"];
+// account of what they did and think, in their own voice, so the rules for a generated
+// voice (signpost to staccato) do not hold it either.
+final FIRST_PERSON = ["reply-voice", "tense", "hedge", "signpost", "buzzword", "buzzword-weak",
+    "contrast", "vague", "closer", "ing-tail", "staccato"];
 
 final JUDGE = "libs/conventions/cmd/judge-docs";
 
@@ -168,7 +170,9 @@ fun judge(files: {str: str}, module: str, kind: str) > [Finding] !> any {
     if (files.len() == 0) {
         return [<Finding>];
     }
-    final args = mut ["-kind", kind];
+    // An advisory finding is the reader's to weigh; a lint that failed on one would teach
+    // everyone to stop reading it.
+    final args = mut ["-kind", kind, "-severity", "error"];
     foreach (full in support\sorted(files.keys())) {
         args.append(full);
     }

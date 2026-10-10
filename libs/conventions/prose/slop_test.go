@@ -190,7 +190,7 @@ func TestContrastReportsAClaimMadeByDenyingItsOpposite(t *testing.T) {
 
 func TestVagueReportsWeightOrConsensusWithNothingNamed(t *testing.T) {
 	runTextCases(t, RuleVague, []textCase{
-		{"a measured claim", KindMarkdown, "The benchmark shows a 12% speedup on the Go corpus.", nil},
+		{"a measured claim", KindMarkdown, "The benchmark shows a 12% speedup on the Go benchmarks.", nil},
 		{"stakes that are named", KindMarkdown, "The stakes are a lost cache entry and a rebuild.", nil},
 		{"reviewers", KindMarkdown, "Reviewers argue about names in the thread; the page records the winner.", nil},
 		{"the stakes", KindMarkdown, "The stakes are high.", []string{"1:The stakes are high"}},

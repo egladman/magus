@@ -131,7 +131,7 @@ is an opaque address represented as an int. You obtain such addresses from
 `ffi.alloc` (for memory you own) or `ffi.callback` (for a function pointer), and
 pass them straight into the call.
 
-> Note: prior to this support, a `T*` parameter was silently downgraded to the
+> Note: before this support, a `T*` parameter was silently downgraded to the
 > pointee scalar `T`, passing a _value_ where C expected an _address_. Pointer
 > parameters now always marshal as addresses.
 
