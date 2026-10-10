@@ -63,7 +63,7 @@ func attentionList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "prompt or a wrapper script.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -188,7 +188,7 @@ func attentionDispose(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "matched.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

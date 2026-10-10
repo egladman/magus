@@ -112,7 +112,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

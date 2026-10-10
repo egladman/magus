@@ -119,7 +119,7 @@ func graphPush(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`magus graph pull` cannot read it anonymously.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -259,7 +259,7 @@ func graphPull(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "the node-link JSON `magus graph export -o json` emits.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

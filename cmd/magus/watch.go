@@ -61,7 +61,7 @@ func watchCmd(ctx context.Context, root string, rc runConfig, args []string) err
 		fmt.Fprintln(os.Stderr, "  --ignore type=literal,pattern='bazel-out/[k8]'")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

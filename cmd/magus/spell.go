@@ -86,7 +86,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "against a published pin.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -206,7 +206,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "case the password is read from STDIN.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -298,7 +298,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "replace the built-in; pull never writes magus.yaml.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -465,7 +465,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "spells.registries password resolves through the environment secret provider.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -600,7 +600,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "release publishes for it, computed from this binary with no network.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

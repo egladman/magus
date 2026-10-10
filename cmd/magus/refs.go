@@ -47,7 +47,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "The argument is a symbol node ID (symbol:...) or a name that resolves to")
 			fmt.Fprintln(os.Stderr, "one. Symbols come from a declared SCIP index (see knowledge.symbols in config).")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

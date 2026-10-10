@@ -79,7 +79,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "  magus init spell <name>   scaffold a new spell at spells/<name>/spell.buzz")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

@@ -532,7 +532,7 @@ func sessionLoadUsage(fs *flag.FlagSet) func() {
 		fmt.Fprintln(os.Stderr, "rules and kept as its program, the verdict, the rule behind it, and a digest.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 }
 
@@ -877,7 +877,7 @@ func sessionShow(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "arrive here through `magus session load`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

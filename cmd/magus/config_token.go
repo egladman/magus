@@ -82,7 +82,7 @@ func configTokenGenerate(args []string) error {
 		fmt.Fprintln(os.Stderr, "server picks up a rotated token automatically - no restart needed.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

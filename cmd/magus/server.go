@@ -112,7 +112,7 @@ func serverStatus(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "Exits non-zero when no server is running, so a script can chain on it.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -194,7 +194,7 @@ func serverStart(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nSocket address: --server-address flag > MAGUS_SERVER_ADDRESS env >")
 			fmt.Fprintln(os.Stderr, "server.address in magus.yaml > default ("+proc.ServerDefaultAddr()+")")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -614,7 +614,7 @@ func serverStop(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "complete before the server exits. The broker is a separate process; the")
 			fmt.Fprintln(os.Stderr, "services it hosts are stopped with `"+hint.BrokerStop.With("--services")+"`.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1010,7 +1010,7 @@ func serverReload(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "\nA workspace with a run in flight is left alone: it keeps the config it")
 			fmt.Fprintln(os.Stderr, "started with, and is reported so you know to re-run this once it finishes.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

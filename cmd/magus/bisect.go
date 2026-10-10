@@ -35,7 +35,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "failures on an affected project.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err

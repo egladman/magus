@@ -72,7 +72,7 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "Duration examples: 168h (7 days), 24h (1 day), 1h30m")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -142,7 +142,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "uses, only those used since the last import are kept. The day's first bundle stands.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -216,7 +216,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "verification is refused and named; finding none leaves builds cold and exits 0.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

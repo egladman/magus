@@ -270,7 +270,7 @@ func notesList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "List every note with its anchors. Warnings identify broken notes without hiding them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -355,7 +355,7 @@ func notesGet(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes get <name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Show one note: its anchors, its prose, and when it was last touched.")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -411,7 +411,7 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Open one note in $VISUAL (else $EDITOR). A name that does not exist yet is")
 			fmt.Fprintln(os.Stderr, "created from a scaffold, so the first save already has a valid shape.")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -550,7 +550,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Check every note for malformed frontmatter, an invalid shape, and anchors that")
 			fmt.Fprintln(os.Stderr, "no longer resolve. Errors exit non-zero.")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

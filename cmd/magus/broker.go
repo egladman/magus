@@ -252,7 +252,7 @@ func brokerStop(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "keep going and re-assert their claims on the next broker. With --services,")
 			fmt.Fprintln(os.Stderr, "stop only the services it hosts and leave it running.")
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err

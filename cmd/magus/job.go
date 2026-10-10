@@ -235,7 +235,7 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, `  magus ls jobs -o template='{{range .jobs}}{{.id}}  {{.checkout_root}}{{"\n"}}{{end}}'`)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -675,7 +675,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus describe job refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -901,7 +901,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job fork refactor/pricing --write-paths pricing/total.sh --check 'test .'")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1082,7 +1082,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exec refactor/pricing   # in the worktree you will edit")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1171,7 +1171,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exit scout-a scout-b scout-c")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1297,7 +1297,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job wait refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2125,7 +2125,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job rm refactor/pricing-draft")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2186,7 +2186,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2354,7 +2354,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job prune --dry-run")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

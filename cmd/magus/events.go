@@ -53,7 +53,7 @@ func eventsCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus events --limit 1")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

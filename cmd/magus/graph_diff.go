@@ -42,7 +42,7 @@ func graphDiff(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "With --rev, the base graph is built from that revision's tracked files (domain-only,")
 			fmt.Fprintln(os.Stderr, "using the current config); no export file is needed. --rev and the positional are exclusive.")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

@@ -40,7 +40,7 @@ func describeRules(args []string) error {
 			fmt.Fprintln(os.Stderr, "verdict names its rule in brackets; pass that name to detail one.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

@@ -101,7 +101,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -713,7 +713,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Use --stdin for a one-shot plan of proposed repo-relative paths before editing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -1075,7 +1075,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "project's targets. Read-only - it runs nothing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err

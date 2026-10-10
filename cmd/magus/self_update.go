@@ -147,7 +147,7 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Override with MAGUS_UPDATE_URL to use a private update channel.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	// -y and --yes are one switch, which the registry expresses with AliasOf.
 	uf := gen.BindSelfUpdate(fs)

@@ -155,7 +155,7 @@ func runVersion(ctx context.Context, args []string) error {
 			fmt.Fprintln(os.Stderr, "plus the version of the server when one is running.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err

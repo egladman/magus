@@ -113,7 +113,7 @@ func configConsoleTokenCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "by the console and refused at /mcp. A running server accepts it immediately.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

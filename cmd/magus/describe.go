@@ -139,7 +139,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "A scoped -o markdown index leaves out the workspace-wide routing tables.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -298,7 +298,7 @@ func describeSpells(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.SpellDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -512,7 +512,7 @@ func describeCharms(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "default, and every target that declares it with the argv edit it makes.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -639,7 +639,7 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "works-on-my-machine explainer).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1095,7 +1095,7 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.ProjectDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1409,7 +1409,7 @@ func describeWorkspaces(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.WorkspaceDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1505,7 +1505,7 @@ func describeMCPTools(args []string) error {
 			fmt.Fprintln(os.Stderr, types.MCPToolDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1569,7 +1569,7 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.FileDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
