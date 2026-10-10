@@ -136,8 +136,8 @@ fun cursor_skills() > {str: any} {
     };
 }
 
-// harness_config returns the workspace-local host JSON path and optional defaults
-// merged when the file is first created.
+// harness_config returns the workspace-local host JSON path and optional defaults,
+// each set only where the file lacks it.
 export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
     return cursor_config();
 }
@@ -153,10 +153,19 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     return cursor_entries();
 }
 
+// cursor_env_hint is what the printed config says about MAGUS_LOG_AUDIENCE. Cursor
+// documents no setting for the environment of the commands its agent runs: sessionStart's
+// env reply reaches later hooks only (docs/guides/integrations/agents/cursor.md), so there
+// is no key to print and nothing to guess at.
+fun cursor_env_hint() > str {
+    return "Cursor documents no way to set an environment variable on the commands its agent runs, so this config sets none: set MAGUS_LOG_AUDIENCE=agent in the environment you start Cursor from yourself, so magus prints its agent display there.";
+}
+
 fun cursor_mcp() > {str: any} {
     // User owns Cursor MCP client config. Magus only prints setup guidance.
     return {
-        "hint": "Wire Magus MCP yourself in the project's .cursor/mcp.json as a stdio server: command ./magus, args [\"mcp\"], so each workspace folder starts its own. Magus does not write mcp.json.",
+        "hint": "Wire Magus MCP yourself in the project's .cursor/mcp.json as a stdio server: command ./magus, args [\"mcp\"], so each workspace folder starts its own. Magus does not write mcp.json.\n"
+            + cursor_env_hint(),
         "docs": "docs/guides/integrations/mcp.md",
     };
 }
@@ -258,6 +267,14 @@ test "harness_mcp prints Cursor setup guidance only" {
     assert\isTrue("{mcp["hint"]}".indexOf(".cursor/mcp.json") != null, "points at the project config");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus mcp.json write");
+}
+
+test "the printed config says Cursor has no place for MAGUS_LOG_AUDIENCE" {
+    final hint = "{cursor_mcp()["hint"]}";
+    assert\isTrue(hint.indexOf(cursor_env_hint()) != null, "describe prints it");
+    assert\isTrue(cursor_env_hint().indexOf("MAGUS_LOG_AUDIENCE=agent") != null, "names the variable and its value");
+    assert\isTrue(cursor_env_hint().indexOf("documents no way") != null, "says why it is not in hooks.json");
+    assert\isTrue(cursor_config_defaults()["env"] == null, "hooks.json gains no env key");
 }
 
 test "harness_* contract wrappers return the same pure helpers" {

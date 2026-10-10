@@ -158,11 +158,23 @@ fun codex_mcp() > {str: any} {
     // Codex MCP lives in ~/.codex/config.toml (user-global). Magus does not
     // write it; describe prints a short paste hint. Placeholders avoid Buzz {...}.
     // The relative command resolves in each session's own checkout.
-    final hint = "Paste into ~/.codex/config.toml:\n\n"
+    //
+    // The same file carries shell_environment_policy.set, the values Codex injects into
+    // every subprocess it spawns (learn.chatgpt.com/docs/config-file/config-reference).
+    // This harness merges only .codex/hooks.json, which has no such key, and config.toml
+    // is TOML the JSON merge cannot touch, so the variable rides in the paste. A table
+    // header rather than a dotted key: pasted after [mcp_servers.magus], a dotted key
+    // would land inside that table.
+    final hint = "Paste into ~/.codex/config.toml. The first table registers the MCP server; "
+        + "the second sets MAGUS_LOG_AUDIENCE=agent on every shell command Codex runs, "
+        + "so magus prints its agent display there:\n\n"
         + "[mcp_servers.magus]\n"
         + "command = \"./magus\"\n"
         + "args = [\"mcp\"]\n"
-        + "enabled = true\n";
+        + "enabled = true\n"
+        + "\n"
+        + "[shell_environment_policy.set]\n"
+        + "MAGUS_LOG_AUDIENCE = \"agent\"\n";
     return {
         "hint": hint,
         "docs": "docs/guides/integrations/mcp.md",
@@ -315,6 +327,14 @@ test "harness_mcp is a stdio paste hint for Codex user config.toml" {
     assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
     assert\isTrue("{mcp["hint"]}".indexOf("command = \"./magus\"") != null, "the checkout's own binary");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
+}
+
+test "harness_mcp's paste tells magus an agent reads Codex's shell commands" {
+    final hint = "{codex_mcp()["hint"]}";
+    assert\isTrue(hint.indexOf("[shell_environment_policy.set]\nMAGUS_LOG_AUDIENCE = \"agent\"\n") != null,
+        "Codex's own environment table, as a header so a paste after the MCP table stays out of it");
+    assert\isTrue((hint.indexOf("[mcp_servers.magus]") ?? -1) < (hint.indexOf("[shell_environment_policy.set]") ?? -1),
+        "the MCP table keeps its place at the top of the paste");
 }
 
 test "harness_* contract wrappers return the same pure helpers" {
