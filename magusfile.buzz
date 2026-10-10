@@ -674,7 +674,8 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
 // would deny. It runs the same judgeText: proofread under this repository's
 // decisions table, the word budget the branch's diff earns and the title checks. Advice,
 // such as an area the branch touches that the description never names, is a warning,
-// which fails nothing. --title and --body carry the text; the workflow, not
+// which fails nothing. The output refs a description cites are not checked: this checkout
+// holds none of the author's runs. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(conventions\proofread_build);
@@ -685,7 +686,7 @@ export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
     final text = descriptions\Text{ kind = "change-description", title = parsed.values["--title"] ?? "",
         body = parsed.values["--body"] ?? "" };
     final found = descriptions\judgeText(text, facts: fun () > descriptions\Facts => descriptions\branchDiff(".")(""),
-        judge: descriptions\judgeRunner("."));
+        judge: descriptions\judgeRunner("."), cited: descriptions\skipCited);
     foreach (note in found.advice) {
         magus\log.warn("pr-description: {note}");
     }

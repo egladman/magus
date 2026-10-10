@@ -92,6 +92,8 @@ final bullet = $"^\s*([-*+]|[0-9]+[.)])\s";
 final codeSpan = $"`[^`]*`";
 final sentenceEnd = $"[.!?]+(\s|$)";
 final sourceLine = $":([0-9]+)$";
+final outputRef = $"\bout[0-9a-f]{6,}\b";
+final maxCitedRefs = 10;
 
 // TextCommand is one forge command that posts text to a pull request: the program and the
 // words naming the command, the kind of text it writes, and the flags carrying it. title,
@@ -945,8 +947,10 @@ export object Text {
 // judgeText is this rule's decision over one readable text, the one the guard and the
 // pr-description CI step both reach. judge runs over the body, a description's title on
 // the line above it; a deny finding is a denial and an advise finding advice. facts reads
-// the branch's Facts, and is called only for a description's body.
-export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind: str) > [Judged]) > Findings {
+// the branch's Facts, and is called only for a description's body. cited judges each output
+// ref a description cites (see citedRun): the guard holds the author's runs and passes
+// citedRun; CI's checkout holds none of them and passes skipCited.
+export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > str) > Findings {
     final problems = mut [<str>];
     final advice = mut [<str>];
     var text = t.body ?? "";
@@ -994,7 +998,57 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
             problems.append(problem);
         }
     }
+    if (t.kind == descriptionKind) {
+        foreach (ref in citedRefs(text)) {
+            final problem = cited(ref);
+            if (problem != "") {
+                problems.append(problem);
+            }
+        }
+    }
     return Findings{ denies = problems, advice = advice };
+}
+
+// citedRefs are the distinct output refs text cites outside fenced code. The guard has a
+// time budget and each ref is a store lookup.
+fun citedRefs(text: str) > [str] {
+    final lines = mut [<str>];
+    foreach (block in splitBlocks(text)) {
+        if (block.kind != "code") {
+            foreach (line in block.lines) {
+                lines.append(line);
+            }
+        }
+    }
+    final refs = mut [<str>];
+    foreach (m in outputRef.matchAll(lines.join("\n")) ?? [<[str]>]) {
+        if (refs.len() < maxCitedRefs and refs.indexOf(m[0]) == null) {
+            refs.append(m[0]);
+        }
+    }
+    return refs;
+}
+
+// citedRun is the problem with the run ref names, "" when this checkout holds it and it
+// passed. A `grd` ref is a guard verdict, not a run, and never reaches here.
+export fun citedRun(ref: str) > str {
+    return runProblem(ref, run: magus\output(ref) catch null);
+}
+
+// runProblem is citedRun's verdict over run, the record ref resolved to or null.
+fun runProblem(ref: str, run: magus\OutputRecord?) > str {
+    if (run == null) {
+        return "`{ref}` cites a run this checkout holds no record of: cite one that `magus query output {ref}` shows here";
+    }
+    if (run!.failed) {
+        return "`{ref}` cites a failed run ({run!.project}:{run!.target}): cite a passing run, or say the run failed";
+    }
+    return "";
+}
+
+// skipCited accepts every ref, for a checkout that holds none of the author's runs.
+export fun skipCited(ref: str) > str {
+    return "";
 }
 
 // titleProblems are the checks CI's pr-title step runs on title, less a word the prose
@@ -1039,9 +1093,10 @@ fun describesBranch(p: helpers\Program, c: TextCommand) > bool {
 // textProblems names what is wrong with one call's text. files holds the contents of the
 // text files the guard could read; diff reads the branch's Facts against a base (see
 // branchDiff), and is called only for the checkout's own pull request; judge is the prose
-// judge (see judgeRunner). A value the parser could not render is unknown, and then the
-// whole line is judged for credit and typography in its place.
-export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged]) > Findings {
+// judge (see judgeRunner); cited judges the output refs a description cites (see judgeText).
+// A value the parser could not render is unknown, and then the whole line is judged for
+// credit and typography in its place.
+export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], cited: fun (ref: str) > str) > Findings {
     final c = matchCommand(p)!;
     final title = last(flagValues(p.args, flags: c.title));
     var body = last(flagValues(p.args, flags: c.body));
@@ -1066,7 +1121,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
             }
             return unknownFacts();
         };
-        return judgeText(Text{ kind = c.kind, title = title, body = body }, facts: facts, judge: judge);
+        return judgeText(Text{ kind = c.kind, title = title, body = body }, facts: facts, judge: judge, cited: cited);
     }
     final problems = mut [<str>];
     foreach (f in judge(line, kind: c.kind)) {
@@ -1108,8 +1163,14 @@ fun adviceKey(p: helpers\Program, c: TextCommand) > str {
 // decidePullRequest denies any pull request text a judge or this rule finds a deny in,
 // listing every one with its rule, and advises, once per pull request, on advise findings,
 // a description that departs from the shape or leaves a touched area unnamed. The verdict
-// names the rule, so the trail and a repeated denial tell it apart.
+// names the rule, so the trail and a repeated denial tell it apart. The guard holds the
+// author's runs, so it holds the output refs a description cites to them.
 export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
+    return decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
+}
+
+// decideCiting is decidePullRequest with the check on cited output refs chosen by the caller.
+fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > str) > GuardVerdict {
     final problems = mut [<str>];
     final advice = mut [<str>];
     final denied = mut [<str>];
@@ -1120,7 +1181,7 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
             continue;
         }
         final c = matchCommand(p)!;
-        final found = textProblems(p, line: line, files: files, diff: diff, judge: judge);
+        final found = textProblems(p, line: line, files: files, diff: diff, judge: judge, cited: cited);
         foreach (problem in found.denies) {
             if (problems.indexOf(problem) == null) {
                 problems.append(problem);
@@ -1207,7 +1268,7 @@ fun reporting(f: Judged) > fun (text: str, kind: str) > [Judged] {
 }
 
 fun judged(programs: [helpers\Program], line: str, files: {str: str}) > GuardVerdict {
-    return decidePullRequest(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter());
+    return decideCiting(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(), cited: skipCited);
 }
 
 fun judgedReason(title: str, body: str) > str {
@@ -1215,7 +1276,7 @@ fun judgedReason(title: str, body: str) > str {
 }
 
 fun verdictWith(title: str, body: str, f: Facts) > GuardVerdict {
-    return decidePullRequest(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), judge: passing(), once: helpers\counter());
+    return decideCiting(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), judge: passing(), once: helpers\counter(), cited: skipCited);
 }
 
 // sized is a well-shaped description: a 20-word lead, then n words of bullets of at most
@@ -1287,6 +1348,77 @@ test "an advise finding is told once per pull request and never denies" {
     final again = decidePullRequest(create(goodTitle, body: "The key was broken."), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(verdict), once: once);
     std\assert(again.decision == "allow", message: "said once: {again.reason}");
+}
+
+fun run(ref: str, project: str, target: str, failed: bool) > magus\OutputRecord {
+    return magus\OutputRecord{ ref = ref, project = project, target = target, failed = failed, durationMs = 1, output = "" };
+}
+
+// holding is a cited check over a store holding runs, standing in for this checkout's.
+fun holding(runs: {str: magus\OutputRecord}, asked: mut [str]) > fun (ref: str) > str {
+    return fun (ref: str) > str {
+        asked.append(ref);
+        return runProblem(ref, run: runs[ref]);
+    };
+}
+
+fun citing(body: str, cited: fun (ref: str) > str) > GuardVerdict {
+    return decideCiting(create(goodTitle, body: body), line: "", files: {<str: str>}, diff: facts(unknownFacts()),
+        judge: passing(), once: helpers\counter(), cited: cited);
+}
+
+test "a cited ref this checkout does not hold is denied" {
+    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding({<str: magus\OutputRecord>}, asked: mut [<str>]));
+    std\assert(v.decision == "deny" and v.rule == "pull-request-text", message: v.reason);
+    std\assert(v.reason.indexOf("`out1a2b3c4d5e6f` cites a run this checkout holds no record of") != null, message: v.reason);
+    std\assert(v.reason.indexOf("magus query output out1a2b3c4d5e6f") != null, message: "says how to cite one: {v.reason}");
+}
+
+test "a cited ref that names a failed run is denied with its project and target" {
+    final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: true)};
+    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.reason.indexOf("`out1a2b3c4d5e6f` cites a failed run (libs/cache:go-test)") != null, message: v.reason);
+}
+
+test "a cited ref that names a passing run passes" {
+    final runs = {"out1a2b3c4d5e6f": run("out1a2b3c4d5e6f", project: "libs/cache", target: "go-test", failed: false)};
+    final v = citing("`TestX` passed (out1a2b3c4d5e6f).", cited: holding(runs, asked: mut [<str>]));
+    std\assert(v.decision == "allow", message: v.reason);
+}
+
+test "CI skips the cited refs a checkout cannot hold" {
+    std\assert(citing("`TestX` passed (out1a2b3c4d5e6f).", cited: skipCited).decision == "allow", message: "decideCiting");
+    final found = judgeText(Text{ kind = descriptionKind, title = goodTitle, body = "`TestX` passed (out1a2b3c4d5e6f)." },
+        facts: fun () > Facts => unknownFacts(), judge: passing(), cited: skipCited);
+    std\assert(found.denies.len() == 0, message: "judgeText: {found.denies}");
+}
+
+test "only whole output refs outside fenced code are looked up, each once" {
+    final asked = mut [<str>];
+    final body = "Ran it twice (out1a2b3c4d5e6f), then again (out1a2b3c4d5e6f) beside outface and out12345.\n"
+        + "A guard verdict grd1a2b3c4d5e6f is not a run, and xout1a2b3c4d5e6f is not a ref.\n\n"
+        + "```\nout999999999999\n```\n\nLast: out0a0b0c0d0e0f.";
+    citing(body, cited: holding({<str: magus\OutputRecord>}, asked: asked));
+    std\assert(asked.len() == 2 and asked[0] == "out1a2b3c4d5e6f" and asked[1] == "out0a0b0c0d0e0f", message: "{asked}");
+}
+
+test "a description is looked up for at most ten distinct refs" {
+    final asked = mut [<str>];
+    final refs = mut [<str>];
+    for (var i = 0; i < 14; i = i + 1) {
+        refs.append("out0000{i + 100}");
+    }
+    citing("Cites " + refs.join(" ") + ".", cited: holding({<str: magus\OutputRecord>}, asked: asked));
+    std\assert(asked.len() == 10, message: "{asked.len()}");
+}
+
+test "a review reply is not held to the runs it cites" {
+    final asked = mut [<str>];
+    final v = decideCiting(helpers\request([["gh", "pr", "comment", "412", "--body", "It passed (out1a2b3c4d5e6f)."]]), line: "",
+        files: {<str: str>}, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(),
+        cited: holding({<str: magus\OutputRecord>}, asked: asked));
+    std\assert(v.decision == "allow" and asked.len() == 0, message: "{v.reason} {asked}");
 }
 
 test "proofread reads the title and the description as one pull request" {
@@ -1666,7 +1798,7 @@ test "the example a denial teaches passes proofread and this rule" {
         }
     }
     final found = judgeText(Text{ kind = "change-description", title = lines[0].trim(), body = body.join("\n") },
-        facts: fun () > Facts => shipping(1, lines: 40), judge: judgeRunner("."));
+        facts: fun () > Facts => shipping(1, lines: 40), judge: judgeRunner("."), cited: skipCited);
     std\assert(found.denies.len() == 0 and found.advice.len() == 0, message: "{found.denies} {found.advice}");
 }
 
