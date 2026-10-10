@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/screen"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,7 +218,7 @@ func TestPrettyHandlerGenericMessage(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	r := buildRecord("something happened", slog.String(logattr.Component, "magus"), slog.String("key", "val"))
+	r := buildRecord("something happened", slog.String(attr.ComponentKey, "magus"), slog.String("key", "val"))
 	require.NoError(t, h.Handle(context.Background(), r), "Handle")
 	out := buf.String()
 	assert.Equal(t, "[info] magus: something happened key=val\n", out,
@@ -235,7 +235,7 @@ func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	log := slog.New(h).With(logattr.Component, "knowledge").WithGroup("g").With("path", "a.scip")
+	log := slog.New(h).With(attr.Component("knowledge")).WithGroup("g").With("path", "a.scip")
 	log.Warn("cannot decode symbol index", "error", "EOF")
 	assert.Equal(t, "[warn] knowledge: cannot decode symbol index path=a.scip error=EOF\n", buf.String())
 

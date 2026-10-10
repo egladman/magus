@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -52,7 +52,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{Code: connect.CodeUnauthenticated, Reason: types.BearerRejected, Message: err.Error()})
 			return
 		case err != nil:
-			log.With(logattr.Component, "token").WarnContext(r.Context(), "exchange failed", slog.String("error", err.Error()))
+			log.With(attr.Component("token")).WarnContext(r.Context(), "exchange failed", slog.String("error", err.Error()))
 			rpcerr.FormatJSON.Write(w, r, rpcerr.Error{Code: connect.CodeInternal, Reason: types.TokenRequestInvalid, Message: err.Error()})
 			return
 		}
@@ -61,7 +61,7 @@ func newExchangeHandler(trailDir string, log *slog.Logger) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
 		if err := json.NewEncoder(w).Encode(exchangeResponse{Token: secret, ExpiresAt: tok.Expires.UTC().Format(time.RFC3339)}); err != nil {
-			log.With(logattr.Component, "token").WarnContext(r.Context(), "encode exchange response", slog.String("error", err.Error()))
+			log.With(attr.Component("token")).WarnContext(r.Context(), "encode exchange response", slog.String("error", err.Error()))
 		}
 	})
 }

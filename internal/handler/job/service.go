@@ -23,7 +23,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	jobstore "github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -211,7 +211,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 		}
 		row.LastRun.Invocation = inv
 	}); err != nil {
-		logattr.For("job").DebugContext(ctx, "recording the submitted job's row failed",
+		slog.With(attr.Component("job")).DebugContext(ctx, "recording the submitted job's row failed",
 			slog.String("job", j.Name), slog.String("error", err.Error()))
 	}
 }

@@ -317,6 +317,12 @@ type Log struct {
 	// Normally set via -vv (and implied by -vvv); MAGUS_LOG_STREAM=1 is the env equivalent.
 	// Pointer to distinguish "not set" from explicit false.
 	Stream *bool `json:"stream" yaml:"stream"`
+	// Audience is who reads the log display: human|agent. A human sees each record's
+	// reasoning and every progress note; an agent sees the facts alone, with reasoning
+	// only at -v and no note for a wait under a minute. The run log keeps everything
+	// either way. Empty resolves per invocation: an agent host, a lease in BAGGAGE or a
+	// non-terminal stderr outside CI reads as agent, anything else as human.
+	Audience string `json:"audience" yaml:"audience" validate:"omitempty,oneof=human agent"`
 }
 
 // IsSilent reports whether silent output mode is enabled.
@@ -846,6 +852,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_LOG_LEVEL", "log.level", "info", "Minimum log level: trace, debug, info, warn, error (trace also prints the startup timing table)"},
 		{"MAGUS_LOG_SILENT", "log.silent", "false", "When true, the env equivalent of -s/--silent: suppress progress, bound the failing-project dump, and surface only lines a target marks as a notice"},
 		{"MAGUS_LOG_STREAM", "log.stream", "false", "When true, the env equivalent of -vv: stream every target's output live instead of withholding a passing target's output"},
+		{"MAGUS_LOG_AUDIENCE", "log.audience", "", "Who reads the log display: human (every record with its reasoning) or agent (facts only, reasoning at -v, no wait note under a minute); empty resolves per invocation"},
 		{"MAGUS_CONCURRENCY", "concurrency", "concurrency_profile decides", "Maximum number of concurrently running per-project build steps; overrides concurrency_profile when positive"},
 		{"MAGUS_CONCURRENCY_PROFILE", "concurrency_profile", "balanced", "Default build width relative to the machine: conservative (half the cores), balanced (min(cores,8)), or aggressive (every core, and all usable memory minus a 512 MiB floor). Unset is balanced everywhere; CI asks for aggressive explicitly"},
 		{"MAGUS_BROKER", "broker", "best-effort", "Whether a run asks the broker for this host's capacity and shared services: required refuses a step when none answers (MGS3022, exit 69), best-effort runs unarbitrated and says so once, off never starts or contacts one"},

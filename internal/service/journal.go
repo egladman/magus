@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/spells"
 )
@@ -72,7 +72,7 @@ func (j *Journal) record(key string, stop spells.Command) {
 		err = file.WriteFileAtomic(j.path(key), data, 0o600)
 	}
 	if err != nil {
-		logattr.For("magus").WarnContext(context.Background(), "could not journal a hosted service; a broker crash would leave it running",
+		slog.With(attr.Component("magus")).WarnContext(context.Background(), "could not journal a hosted service; a broker crash would leave it running",
 			slog.String("key", key), slog.String("err", err.Error()))
 	}
 }

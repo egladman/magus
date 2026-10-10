@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -186,7 +186,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	for _, p := range raw {
 		abs, err := filepath.Abs(p)
 		if err != nil {
-			logattr.For("server").Warn("skipping declared workspace (cannot resolve absolute path)",
+			slog.With(attr.Component("server")).Warn("skipping declared workspace (cannot resolve absolute path)",
 				"path", p, "err", err)
 			continue
 		}
@@ -194,7 +194,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 			continue
 		}
 		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
-			logattr.For("server").Warn("skipping declared workspace (not a directory)",
+			slog.With(attr.Component("server")).Warn("skipping declared workspace (not a directory)",
 				"path", abs)
 			continue
 		}
@@ -321,7 +321,7 @@ func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 	w, err := watch.New(ctx, watch.WithRoot(e.root),
 		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
 	if err != nil {
-		logattr.For("server").WarnContext(ctx, "cannot watch a failed workspace; it stays failed until `magus server reload`",
+		slog.With(attr.Component("server")).WarnContext(ctx, "cannot watch a failed workspace; it stays failed until `magus server reload`",
 			slog.String("root", e.root), slog.String("error", err.Error()))
 		return false
 	}
@@ -427,7 +427,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 		}
 		e, err := r.acquire(root)
 		if err != nil {
-			logattr.For("server").WarnContext(ctx, "warm workspace failed (readiness probe may be delayed)",
+			slog.With(attr.Component("server")).WarnContext(ctx, "warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
 			continue
 		}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -81,7 +81,7 @@ func AdmitMachine(ctx context.Context, admit MachineAdmitter, c types.MachineCla
 	if c.Slots == 0 {
 		c.Slots = 1
 	}
-	g := &machineGate{admit: admit, required: required, log: logattr.For("magus")}
+	g := &machineGate{admit: admit, required: required, log: slog.With(attr.Component("magus"))}
 	return g.acquire(ctx, c)
 }
 

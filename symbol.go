@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/spells"
@@ -376,7 +376,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	}
 
 	si := &symbolIndexer{
-		log:         logattr.For("magus"),
+		log:         slog.With(attr.Component("magus")),
 		quiet:       quiet,
 		minInterval: minInterval,
 		now:         time.Now,
@@ -392,7 +392,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
-					logattr.For("magus").DebugContext(ctx, "guard index not written", slog.String("error", gerr.Error()))
+					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", slog.String("error", gerr.Error()))
 				}
 			}
 			if err == nil || ctx.Err() != nil {
@@ -420,7 +420,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 	m.symbolStatus.setWatched(true)
 	go si.loop(wctx, watcher)
 	go si.seed(wctx)
-	logattr.For("magus").DebugContext(ctx, "background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
+	slog.With(attr.Component("magus")).DebugContext(ctx, "background symbol auto-indexing enabled", slog.Int("projects", len(capable)))
 	return func() {
 		m.symbolStatus.setWatched(false)
 		cancel()
@@ -608,7 +608,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 	m.probeCacheOnce.Do(func() {
 		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
 		if err != nil {
-			logattr.For("magus").WarnContext(ctx, "cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
+			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
 			return
 		}
 		m.probeCache = c

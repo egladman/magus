@@ -2,10 +2,11 @@ package interp
 
 import (
 	"context"
+	"log/slog"
 	"slices"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -97,7 +98,7 @@ func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target
 }
 
 func (c *CrossDispatch) runRemote(ctx context.Context, dep *types.Project, ref types.TargetRef) error {
-	logattr.For("interp").DebugContext(ctx, "cross-project dispatch", "target", ref.Ref())
+	slog.With(attr.Component("interp")).DebugContext(ctx, "cross-project dispatch", "target", ref.Ref())
 	// Mark before running: the parent's audit diffs after its body returns, and by then
 	// this child has already written its own outputs.
 	types.ActiveDispatchFromContext(ctx).Mark(dep.Dir)

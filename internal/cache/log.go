@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
 )
 
@@ -919,7 +919,7 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 		attrs = tty.Colorize(attrs, colDim)
 	}
 	msg := r.Message
-	if c := recordStr(r, logattr.Component); c != "" {
+	if c := recordStr(r, attr.ComponentKey); c != "" {
 		msg = c + ": " + msg
 	}
 	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
@@ -931,7 +931,7 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 func formatAttrs(r slog.Record) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
-		if a.Key == logattr.Component || (a.Key == "dir" && r.Level > slog.LevelDebug) {
+		if a.Key == attr.ComponentKey || (a.Key == "dir" && r.Level > slog.LevelDebug) {
 			return true
 		}
 		_, _ = fmt.Fprintf(&b, " %s=%s", a.Key, a.Value.String())

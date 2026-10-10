@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -92,7 +92,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 	for _, fn := range opts {
 		fn(&o)
 	}
-	o.log = o.log.With(logattr.Component, "broker")
+	o.log = o.log.With(attr.Component("broker"))
 	exe, _ := os.Executable()
 	s := &server{
 		opts:       o,

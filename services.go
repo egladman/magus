@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
@@ -80,7 +80,7 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 		// wedged broker cannot hang exit. The reference also rides the connection, so
 		// the broker drops it when this process exits even if this release is lost.
 		if err := b.ReleaseService(relCtx, key); err != nil {
-			logattr.For("magus").DebugContext(relCtx, "releasing a broker-hosted service failed; the broker drops it when this process exits",
+			slog.With(attr.Component("magus")).DebugContext(relCtx, "releasing a broker-hosted service failed; the broker drops it when this process exits",
 				slog.String("key", key), slog.String("err", err.Error()))
 		}
 	}

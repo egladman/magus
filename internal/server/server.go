@@ -49,7 +49,7 @@ import (
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
@@ -203,7 +203,7 @@ func (s *Server) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	bridgeLog, shareLog := log.With(logattr.Component, "bridge"), log.With(logattr.Component, "share")
+	bridgeLog, shareLog := log.With(attr.Component("bridge")), log.With(attr.Component("share"))
 
 	// ONE job store for the server's own readers, the activity feed and the JobService
 	// below. Two stores over one file each take their own mutex, and the merge Update
@@ -873,7 +873,7 @@ func (s *Server) serveUnloaded(ctx context.Context) error {
 	if consoleDir, ok := resolveConsoleDir(u.Root); ok {
 		f.server.Handle("/console/", httpx.GuardRebind(rpcerr.FormatJSON, f.allowed, console.StaticHandler(consoleDir)))
 	}
-	log.With(logattr.Component, "bridge").WarnContext(ctx, "workspace not loaded; serving status and the console only",
+	log.With(attr.Component("bridge")).WarnContext(ctx, "workspace not loaded; serving status and the console only",
 		slog.String("root", u.Root), slog.String("error", u.Err().Message))
 	return s.run(ctx, log, f)
 }

@@ -97,12 +97,13 @@ magus resolves configuration from three layers, highest precedence first: a CLI 
 
 ## log
 
-| Config key   | Environment variable | Flag           | Type              |
-| ------------ | -------------------- | -------------- | ----------------- |
-| `log.format` | `MAGUS_LOG_FORMAT`   | `--log-format` | string            |
-| `log.level`  | `MAGUS_LOG_LEVEL`    | `--log-level`  | string            |
-| `log.silent` | `MAGUS_LOG_SILENT`   | _(env only)_   | bool _(env only)_ |
-| `log.stream` | `MAGUS_LOG_STREAM`   | _(env only)_   | bool _(env only)_ |
+| Config key     | Environment variable | Flag             | Type              |
+| -------------- | -------------------- | ---------------- | ----------------- |
+| `log.audience` | `MAGUS_LOG_AUDIENCE` | `--log-audience` | string            |
+| `log.format`   | `MAGUS_LOG_FORMAT`   | `--log-format`   | string            |
+| `log.level`    | `MAGUS_LOG_LEVEL`    | `--log-level`    | string            |
+| `log.silent`   | `MAGUS_LOG_SILENT`   | _(env only)_     | bool _(env only)_ |
+| `log.stream`   | `MAGUS_LOG_STREAM`   | _(env only)_     | bool _(env only)_ |
 
 ## mcp
 

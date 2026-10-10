@@ -54,7 +54,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
@@ -252,6 +252,9 @@ type dispatchProfile struct {
 	// loaded the machine is, and starting a broker for one would make every read command
 	// spawn a background process.
 	spawnsWork bool
+	// agentHosted marks a command whose stderr only an agent host reads, so its display
+	// takes the agent audience whatever the terminal says (see resolveAudience).
+	agentHosted bool
 }
 
 // isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
@@ -467,7 +470,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
 		// that adopted the call would serve its own. The preload opens the workspace the
 		// host launched it in and hosts the proc server the tools' runs share.
-		return dispatchProfile{needsConfig: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsWorkspace: true, agentHosted: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -680,6 +683,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
+	// Before the first applyDisplay below, so the workspace preload already logs under it.
+	if profile.agentHosted {
+		audienceForced.Store(true)
+	}
 
 	if !profile.needsConfig {
 		// This branch skips the main flag parse entirely, so anything written BEFORE
@@ -947,7 +954,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// Announced rather than silent: a run quietly narrower than requested is as hard
 		// to attribute as one that thrashes.
 		if clamped, was := cache.ClampConcurrency(concurrency); was {
-			logattr.For("magus").Warn("concurrency capped to this machine",
+			slog.With(attr.Component("magus")).Warn("concurrency capped to this machine",
 				slog.Int("requested", concurrency), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			concurrency = clamped

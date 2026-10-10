@@ -29,7 +29,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hostmodules"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/oci"
 	procrun "github.com/egladman/magus/internal/proc/run"
@@ -70,7 +70,7 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 		seen[abs] = true
 		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
 		if err != nil {
-			log.With(logattr.Component, "magus").WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
+			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
 			continue
 		}
 		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
@@ -234,7 +234,7 @@ func ensureKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, 
 			}
 			model = knowledgeSources{
 				cfg: cfg, root: root, cacheDir: cacheDir,
-				spells: spells, graph: graph, projects: projects, tree: tree, log: log.With(logattr.Component, "knowledge"),
+				spells: spells, graph: graph, projects: projects, tree: tree, log: log.With(attr.Component("knowledge")),
 			}
 		})
 		return model, modelErr
@@ -1331,7 +1331,7 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	if log == nil {
 		log = slog.Default()
 	}
-	log = log.With(logattr.Component, "knowledge")
+	log = log.With(attr.Component("knowledge"))
 	if lw, isLazy := ws.(*LazyWorkspace); isLazy && !lw.Opened() && lw.root == root {
 		// The read this probe follows was answered without evaluating the workspace; the
 		// declarations it recorded then answer the probe the same way. A store that cannot
@@ -1386,7 +1386,7 @@ func SymbolIndexTimes(ctx context.Context, ws types.Inspector, root string, cfg 
 	}
 	return symbolIndexTimes(symbolIndexDeclarations(ctx, symbolIngestInputs{
 		cfg: cfg, root: root, cacheDir: resolveCacheDir(root, cfg),
-		projects: projects, spells: spells, log: logattr.For("knowledge"),
+		projects: projects, spells: spells, log: slog.With(attr.Component("knowledge")),
 	})), true
 }
 
@@ -1430,7 +1430,7 @@ func SymbolOccurrences(ctx context.Context, ws types.Inspector, root string, cfg
 	if log == nil {
 		log = slog.Default()
 	}
-	log = log.With(logattr.Component, "knowledge")
+	log = log.With(attr.Component("knowledge"))
 	spells, err := ListSpells(ctx)
 	if err != nil {
 		log.WarnContext(ctx, "occurrence read cannot list spells", slog.String("error", err.Error()))
@@ -2035,7 +2035,7 @@ func PublishedShards(c *oci.Client, ref oci.Reference, artifactType string, log 
 	if log == nil {
 		log = slog.Default()
 	}
-	return &publishedShards{client: c, ref: ref, artifactType: artifactType, log: log.With(logattr.Component, "knowledge")}
+	return &publishedShards{client: c, ref: ref, artifactType: artifactType, log: log.With(attr.Component("knowledge"))}
 }
 
 func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadCloser, error) {

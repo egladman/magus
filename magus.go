@@ -30,7 +30,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/oci"
@@ -800,7 +800,7 @@ func Open(ctx context.Context, root string, opts ...Option) (*Magus, error) {
 		telCfg.LocalCollect = m.metricsCollect // server: record metrics even when export is off
 		built, err := otlp.New(ctx, telCfg)
 		if err != nil {
-			logattr.For("magus").WarnContext(ctx, "telemetry init failed; falling back to no-op", "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "telemetry init failed; falling back to no-op", "err", err)
 			built, _ = otlp.New(ctx, observability.Config{})
 		}
 		tel = built
@@ -1905,13 +1905,13 @@ func (m *Magus) lastPassedBase(ctx context.Context, res types.VCSResolution) (st
 		return "", fmt.Errorf("base %q: %w", BaseLastPassed, err)
 	}
 	if commit, ok := hist.PassedCommit(ref, ""); ok {
-		logattr.For("affected").DebugContext(ctx, "base resolved from run history",
+		slog.With(attr.Component("affected")).DebugContext(ctx, "base resolved from run history",
 			slog.String("ref", ref), slog.String("commit", commit))
 		return commit, nil
 	}
 
 	parent := res.VCS.ParentRef()
-	logattr.For("affected").WarnContext(ctx, "no passing run recorded for this ref; diffing its parent commit instead",
+	slog.With(attr.Component("affected")).WarnContext(ctx, "no passing run recorded for this ref; diffing its parent commit instead",
 		slog.String("ref", ref),
 		slog.String("base", parent),
 		slog.String("history_path", m.cfg.HistoryPath),
@@ -1935,7 +1935,7 @@ func (m *Magus) limiter() *cache.Limiter {
 		// Announced, never silent: a run quietly narrower than asked for is as hard to
 		// attribute as one that thrashes. Said once, at the moment it takes effect.
 		if clamped, was := cache.ClampConcurrency(n); was {
-			logattr.For("magus").WarnContext(context.Background(), "concurrency capped to this machine",
+			slog.With(attr.Component("magus")).WarnContext(context.Background(), "concurrency capped to this machine",
 				slog.Int("requested", n), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			n = clamped

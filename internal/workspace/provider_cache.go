@@ -16,7 +16,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
@@ -87,7 +87,7 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 		if fingerprint != "" {
 			var entry providerCacheEntry
 			if readProviderCache(providerCachePath(cache.Dir, spellName), &entry) && entry.Fingerprint == fingerprint {
-				logattr.For("magus").DebugContext(ctx, "workspace provider replayed from cache",
+				slog.With(attr.Component("magus")).DebugContext(ctx, "workspace provider replayed from cache",
 					slog.String("provider", spellName), slog.String("fingerprint", fingerprint))
 				return entry.Projects, nil
 			}
@@ -113,7 +113,7 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 	// answer describing the new tree under the old tree's key, and the stale answer
 	// would replay until something else changed.
 	if after := providerFingerprint(ctx, root, spellName); after != fingerprint {
-		logattr.For("magus").DebugContext(ctx, "workspace inputs changed while the provider ran; not caching this answer",
+		slog.With(attr.Component("magus")).DebugContext(ctx, "workspace inputs changed while the provider ran; not caching this answer",
 			slog.String("provider", spellName))
 		return provided, nil
 	}
@@ -125,9 +125,9 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 // dropped: the provider is the source of truth, so a lost entry costs a re-run.
 func writeProviderCache(ctx context.Context, path string, entry any) {
 	if data, err := json.Marshal(entry); err != nil {
-		logattr.For("magus").DebugContext(ctx, "provider cache not encodable", slog.String("path", path), slog.String("err", err.Error()))
+		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not encodable", slog.String("path", path), slog.String("err", err.Error()))
 	} else if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
-		logattr.For("magus").DebugContext(ctx, "provider cache not writable", slog.String("path", path), slog.String("err", err.Error()))
+		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not writable", slog.String("path", path), slog.String("err", err.Error()))
 	}
 }
 
@@ -183,7 +183,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 	}
 	declared := sp.Sources()
 	if len(declared) == 0 {
-		logattr.For("magus").WarnContext(ctx, "workspace provider declares no mgs_listRequiredGlobs, so its project set cannot be cached and it runs on every command",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "workspace provider declares no mgs_listRequiredGlobs, so its project set cannot be cached and it runs on every command",
 			slog.String("provider", spellName))
 		return ""
 	}
@@ -191,7 +191,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 	sort.Strings(globs)
 	for _, g := range globs {
 		if _, err := doublestar.Match(g, "probe"); err != nil {
-			logattr.For("magus").WarnContext(ctx, "workspace provider declares a malformed glob, so its project set cannot be cached",
+			slog.With(attr.Component("magus")).WarnContext(ctx, "workspace provider declares a malformed glob, so its project set cannot be cached",
 				slog.String("provider", spellName), slog.String("glob", g), slog.String("err", err.Error()))
 			return ""
 		}
@@ -205,7 +205,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 		// Everything the provider declared is missing, or lives in a directory the walk
 		// prunes (node_modules, gen, a dot-dir). Digesting that would be a constant, so
 		// there would be no observable change that could ever invalidate the entry.
-		logattr.For("magus").WarnContext(ctx, "workspace provider's declared inputs match no files, so its project set cannot be cached",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "workspace provider's declared inputs match no files, so its project set cannot be cached",
 			slog.String("provider", spellName))
 		return ""
 	}

@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -793,7 +793,7 @@ func applyTargetFilter(targets []types.Target, targetName string, defines func(p
 		for _, t := range skipped {
 			names = append(names, label(t.Path))
 		}
-		logattr.For("run").Warn("target not defined in some selected projects; skipping them",
+		slog.With(attr.Component("run")).Warn("target not defined in some selected projects; skipping them",
 			slog.String("target", targetName), slog.String("skipped", strings.Join(names, ", ")))
 	}
 	return served, nil

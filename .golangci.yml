@@ -386,11 +386,12 @@ linters:
             # since the MCP workers re-exec into internal/interp/mcpclient and
             # internal/interp/transform before the CLI starts, 71 since
             # internal/gcpolicy is a dependency-free leaf imported first so its
-            # init runs early, 72 since internal/logattr names the component a
-            # log record carries. Raising it is a sentence in the commit message.
+            # init runs early, 73 since internal/log/attr names a log record's
+            # parts and internal/log/audience filters the display for its reader.
+            # Raising it is a sentence in the commit message.
             - package: github.com/egladman/magus/cmd/magus
               prefix: github.com/egladman/magus/internal/
-              max: 72
+              max: 73
 
       stutter:
         type: module

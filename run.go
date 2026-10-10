@@ -26,7 +26,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	interp "github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
@@ -406,7 +406,7 @@ func checkUndeclaredCharms(ctx context.Context, active []string, declared map[st
 		if err := types.RenamedCharmError(c); err != nil {
 			return err
 		}
-		logattr.For("magus").WarnContext(ctx, "charm not declared by any selected target (typo? a function target may still read it)", "charm", c)
+		slog.With(attr.Component("magus")).WarnContext(ctx, "charm not declared by any selected target (typo? a function target may still read it)", "charm", c)
 	}
 	return nil
 }
@@ -1355,11 +1355,11 @@ func (m *Magus) probeOne(ctx context.Context, s *spells.Spell, tool, dir string)
 	}
 	token, note := spells.VersionToken(probed, t.Key)
 	if note != "" {
-		logattr.For("magus").WarnContext(ctx, "tool-version key degraded; cache key is coarser than declared",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "tool-version key degraded; cache key is coarser than declared",
 			slog.String("spell", s.Name()), slog.String("tool", tool),
 			slog.String("dir", dir), slog.String("note", note))
 	}
-	logattr.For("magus").DebugContext(ctx, "tool-version probe",
+	slog.With(attr.Component("magus")).DebugContext(ctx, "tool-version probe",
 		slog.String("spell", s.Name()), slog.String("tool", tool),
 		slog.String("output", probed), slog.String("token", token))
 	r := toolReading{token: token}
@@ -1666,7 +1666,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				// records once, matching the real run's pool dedup.
 				stepCtx := buzz.WithTargetRuns(stageCtx, buzz.NewTargetRuns())
 				if err := st.handler(stepCtx, p); err != nil {
-					logattr.For("dry-run").WarnContext(ctx, "target evaluation stopped early",
+					slog.With(attr.Component("dry-run")).WarnContext(ctx, "target evaluation stopped early",
 						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
 				}
 			}
@@ -1837,7 +1837,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		if sizeMemory != nil {
 			if sizing := m.claimMemory(&step, p, target, sizeMemory); sizing.Measured() {
 				step.MemorySizing = sizing
-				logattr.For("magus").DebugContext(ctx, "memory claim sized from measured peaks",
+				slog.With(attr.Component("magus")).DebugContext(ctx, "memory claim sized from measured peaks",
 					slog.String("project", p.Path), slog.String("target", target),
 					slog.Int("memory_mb", step.MemoryMB), slog.String("sizing", sizing.String()))
 			}
@@ -1946,7 +1946,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		defer func() {
 			if evs := diag.snapshot(); len(evs) > 0 {
 				if err := knowledge.RecordRuntimeEvents(resolveCacheDir(m.Root(), m.cfg), evs); err != nil {
-					logattr.For("magus").DebugContext(ctx, "could not persist runtime diagnostics", slog.String("error", err.Error()))
+					slog.With(attr.Component("magus")).DebugContext(ctx, "could not persist runtime diagnostics", slog.String("error", err.Error()))
 				}
 			}
 		}()
@@ -2020,7 +2020,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if opts.Race {
 		raceRT = m.buildRaceRuntime()
 		if err := raceRT.Start(ctx); err != nil {
-			logattr.For("magus").WarnContext(ctx, "race detector unavailable", "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "race detector unavailable", "err", err)
 			raceRT = nil
 		} else {
 			ctx = race.WithRuntime(ctx, raceRT)
@@ -2041,7 +2041,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	ctx = interp.WithCrossDispatch(ctx, cross)
 	lim := m.limiter()
 	if opts.Step {
-		logattr.For("magus").InfoContext(ctx, "--step forces Concurrency=1")
+		slog.With(attr.Component("magus")).InfoContext(ctx, "--step forces Concurrency=1")
 		lim = cache.NewLimiter(1)
 	}
 	cacheOpts := []cache.RunOption{cache.WithLimiter(lim), cache.WithMaxFailures(m.cfg.MaxFailures)}
@@ -2145,7 +2145,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 
 	if volatilityRT != nil {
 		if err := volatilityRT.Save(ctx); err != nil {
-			logattr.For("magus").WarnContext(ctx, "failed to save volatility history", "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "failed to save volatility history", "err", err)
 		}
 	}
 
@@ -2167,7 +2167,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if raceRT != nil {
 		writtenByProject := raceRT.WrittenPaths()
 		if err := raceRT.Flush(ctx, opts.report); err != nil {
-			logattr.For("magus").WarnContext(ctx, "race detector flush failed", "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "race detector flush failed", "err", err)
 		}
 		checkMissingDependencies(ctx, m.ws.All(), byPath, writtenByProject, scopeLabel, out)
 	}
@@ -2308,7 +2308,7 @@ func runReplay(ctx context.Context, ws *types.Workspace, projects []*types.Proje
 		// replay reads as slow rather than stalled (MGS3012).
 		cache.ProgressFromContext(ctx).Record(cache.Mark{Project: p.Path, Target: target, What: "race replay"})
 		if err := handler(ctx, byPath[p.Path]); err != nil {
-			logattr.For("magus").WarnContext(ctx, "race-replay handler failed", "project", p.Path, "err", err)
+			slog.With(attr.Component("magus")).WarnContext(ctx, "race-replay handler failed", "project", p.Path, "err", err)
 		}
 	}
 
@@ -2612,7 +2612,7 @@ func invokeSpell(ctx context.Context, p *types.Project, name string, s *spells.S
 		// reran, passed, and the run came back green with the first attempt's output
 		// collapsed, which is precisely the unnoticed volatile target annotateVolatility
 		// exists to prevent, going unnoticed anyway.
-		logattr.For("magus").WarnContext(ctx, "volatile target retried",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "volatile target retried",
 			slog.String("project", p.Path),
 			slog.String("target", volatileTarget),
 			slog.String("status", status),

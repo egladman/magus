@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc/endpoint"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -756,7 +756,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 			s.onJobDone(ctx, req.Args, time.Since(jobStart), err)
 		}
 		if err != nil {
-			logattr.For("proc").WarnContext(ctx, "background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
+			slog.With(attr.Component("proc")).WarnContext(ctx, "background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
 		}
 	}()
 	return nil

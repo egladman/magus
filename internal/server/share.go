@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
@@ -99,7 +99,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			ExpiresAt:  link.ExpiresAt.UTC().Format(time.RFC3339),
 			Superseded: link.Superseded,
 		}); err != nil {
-			log.With(logattr.Component, "share").WarnContext(r.Context(), "encode response", slog.String("error", err.Error()))
+			log.With(attr.Component("share")).WarnContext(r.Context(), "encode response", slog.String("error", err.Error()))
 		}
 	})
 }
@@ -107,7 +107,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 // refuseShare logs a failed share and answers it in the AIP-193 shape the endpoint's guards
 // already answer in, so the console reads one error shape from this route.
 func refuseShare(w http.ResponseWriter, r *http.Request, e rpcerr.Error, log *slog.Logger) {
-	log.With(logattr.Component, "share").WarnContext(r.Context(), "share request failed", slog.String("reason", string(e.Reason)), slog.String("error", e.Message))
+	log.With(attr.Component("share")).WarnContext(r.Context(), "share request failed", slog.String("reason", string(e.Reason)), slog.String("error", e.Message))
 	rpcerr.FormatJSON.Write(w, r, e)
 }
 

@@ -31,10 +31,32 @@ func (c Code) Error() string { return string(c) }
 // Error is a coded diagnostic error: a Code, a human message, and (when built through a Domain) the docs
 // URL to render. A bare literal &Error{Code: X} carries no URL and is meant only as an errors.Is target.
 type Error struct {
-	Code  Code
-	Msg   string
+	Code Code
+	Msg  string
+	// Why is the reasoning behind the diagnostic, for a reader who wants it: what the check
+	// protects, or why the obvious alternative is wrong. It is never part of the rendered
+	// error; a display that has room for it asks [Rationale].
+	Why   string
 	url   string // docs URL, captured at construction by a Domain; empty for a bare errors.Is-target literal
 	cause error  // optional wrapped cause (see Domain.Wrapf), so errors.Is/As reach an underlying sentinel
+}
+
+// WithWhy sets e's [Error.Why] and returns e, so it chains off Errorf and Wrapf.
+func (e *Error) WithWhy(why string) *Error {
+	e.Why = why
+	return e
+}
+
+// Rationale returns the Why of the outermost *Error in err's chain that carries one, or ""
+// when none does. Outermost wins because the error closest to the caller knows the most
+// about what the caller was doing.
+func Rationale(err error) string {
+	for _, e := range codedChain(err) {
+		if e.Why != "" {
+			return e.Why
+		}
+	}
+	return ""
 }
 
 // BuzzError exposes this diagnostic to a Buzz `catch` as structured fields, satisfying

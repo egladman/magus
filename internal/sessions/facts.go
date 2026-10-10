@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // FactHandler turns the execution journal's result events into durable session facts.
@@ -107,7 +107,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 // journal event, so Handle returns before it reaches the lock.
 func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 	h.broken = true
-	logattr.For("magus").WarnContext(ctx, "this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
+	slog.With(attr.Component("magus")).WarnContext(ctx, "this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
 		slog.String("store", h.dir),
 		slog.String("error", err.Error()))
 }

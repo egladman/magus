@@ -7,7 +7,7 @@ import (
 	"io/fs"
 
 	"github.com/egladman/magus/internal/interactive/tty"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
 	"maps"
@@ -453,16 +453,16 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		return err
 	}
 	if !found {
-		logattr.For("spell").DebugContext(ctx, "nothing to install (no manifest with a lockfile)", "dir", dir)
+		slog.With(attr.Component("spell")).DebugContext(ctx, "nothing to install (no manifest with a lockfile)", "dir", dir)
 		return nil
 	}
 	body := func(ctx context.Context) error {
 		switch from, found, err := spell.SeedInstall(ctx, choice, dir); {
 		case err != nil:
-			logattr.For("magus").WarnContext(ctx, "could not seed the dependency tree from another checkout; installing without it",
+			slog.With(attr.Component("magus")).WarnContext(ctx, "could not seed the dependency tree from another checkout; installing without it",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("err", err.Error()))
 		case found:
-			logattr.For("magus").InfoContext(ctx, "seeded the dependency tree from another checkout",
+			slog.With(attr.Component("magus")).InfoContext(ctx, "seeded the dependency tree from another checkout",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("from", from))
 		}
 		_, err := runCommand(ctx, spells.Op{Command: choice.Install.Command}, opts)
@@ -478,10 +478,10 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
 	op, ok := ops[req.Target]
 	if !ok {
-		logattr.For("spell").DebugContext(ctx, "target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
+		slog.With(attr.Component("spell")).DebugContext(ctx, "target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
-	logattr.For("spell").DebugContext(ctx, "dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
+	slog.With(attr.Component("spell")).DebugContext(ctx, "dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
 	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
 	// and the point is to fail with what is actually wrong rather than let the op
 	// fork and report a build failure for a project with nothing wrong with it.

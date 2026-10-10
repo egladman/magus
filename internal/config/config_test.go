@@ -35,6 +35,19 @@ func TestCacheIncludeDefaultsOff(t *testing.T) {
 	assert.False(t, cfg.Cache.IncludeArch(), "cache.include.arch.enabled must default off")
 }
 
+// Empty is valid and means "resolve per invocation"; anything else must name a reader.
+func TestConfigLogAudienceValues(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"", "human", "agent"} {
+		cfg := Defaults()
+		cfg.Log.Audience = v
+		assert.NoError(t, Validate(cfg), "log.audience %q", v)
+	}
+	cfg := Defaults()
+	cfg.Log.Audience = "robot"
+	assert.Error(t, Validate(cfg))
+}
+
 func TestCacheIncludeExplicit(t *testing.T) {
 	t.Parallel()
 	on := Cache{Include: CacheInclude{

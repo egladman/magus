@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/audience"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/std"
@@ -182,7 +183,8 @@ func restoreTerminal() {
 }
 
 // applyDisplay writes the -v/-q/-s flags into globalCfg.Log when given, then installs
-// the process-global slog logger at the level globalCfg.Log names.
+// the process-global slog logger at the level globalCfg.Log names, filtered for the
+// invocation's audience (see resolveAudience).
 func applyDisplay() {
 	// Release the previous handler's region before installing a replacement,
 	// so a second call does not strand the first one's scroll margins.
@@ -244,6 +246,11 @@ func applyDisplay() {
 		displayHandler = ph
 		displayMu.Unlock()
 		h = ph
+	}
+	// -o jsonl notices stay whole: a parser selects what it reads. The run log never passes
+	// through here, so it keeps what the audience filter drops.
+	if global.output != string(FormatJSONL) {
+		h = audience.Wrap(h, invocationAudience(), global.verbose >= 1)
 	}
 	slog.SetDefault(slog.New(dirHandler{h}))
 }

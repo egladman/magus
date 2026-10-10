@@ -121,6 +121,51 @@ func TestInline(t *testing.T) {
 	}
 }
 
+// Why is for a reader who asks for it, so no rendering of the error carries it.
+func TestWhyNeverRenders(t *testing.T) {
+	d := New(testURL)
+	const why = "a stale index answers with symbols that no longer exist"
+	err := d.Errorf(Code("TST0005"), "index is stale").WithWhy(why)
+
+	if got := err.Error(); strings.Contains(got, why) {
+		t.Errorf("Error() = %q, carries the why", got)
+	}
+	if got := Inline(fmt.Errorf("load: %w", err)); got != "load: index is stale (TST0005)" {
+		t.Errorf("Inline = %q", got)
+	}
+	if got := d.Errorf(Code("TST0006"), "outer: %v", err).Error(); strings.Contains(got, why) {
+		t.Errorf("nested Errorf = %q, carries the why", got)
+	}
+}
+
+func TestRationale(t *testing.T) {
+	d := New(testURL)
+	inner := d.Errorf(Code("TST0007"), "inner").WithWhy("inner why")
+	bare := d.Errorf(Code("TST0008"), "bare")
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, ""},
+		{"plain error", errors.New("plain"), ""},
+		{"coded without why", bare, ""},
+		{"coded with why", inner, "inner why"},
+		{"through a fmt wrapper", fmt.Errorf("ctx: %w", inner), "inner why"},
+		{"outer without why falls through", d.Wrapf(Code("TST0009"), inner, "outer"), "inner why"},
+		{"outermost why wins", d.Wrapf(Code("TST0009"), inner, "outer").WithWhy("outer why"), "outer why"},
+		{"joined", errors.Join(errors.New("a"), inner), "inner why"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Rationale(tc.err); got != tc.want {
+				t.Errorf("Rationale = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDomainURLAndFormat(t *testing.T) {
 	d := New(testURL)
 	if got := d.URL(Code("TST0009")); got != "https://example/docs/TST0009.md" {

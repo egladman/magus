@@ -3,10 +3,11 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -106,7 +107,7 @@ func waitForUpstream(ctx context.Context, done <-chan struct{}, waiting, upstrea
 		case <-beat.C:
 			if elapsed := time.Since(started); elapsed >= next {
 				next *= 2
-				logattr.For("magus").InfoContext(ctx, fmt.Sprintf("%s is waiting for %s to finish (%s so far)",
+				slog.With(attr.Component("magus")).InfoContext(ctx, fmt.Sprintf("%s is waiting for %s to finish (%s so far)",
 					displayNodeLabel(waiting), displayNodeLabel(upstream), elapsed.Round(time.Second)))
 			}
 		case <-ctx.Done():

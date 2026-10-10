@@ -12,7 +12,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -98,7 +98,7 @@ func Begin(ctx context.Context, p *types.Project, write bool) *Audit {
 	roots := topmostRoots(descs)
 	snap, err := take(ctx, roots)
 	if err != nil {
-		logattr.For("magus").WarnContext(ctx, "audit snapshot failed",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "audit snapshot failed",
 			slog.String("project", p.Path),
 			slog.Any("err", err))
 		return nil

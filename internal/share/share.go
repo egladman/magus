@@ -30,7 +30,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -345,9 +345,9 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	}()
 
 	if superseded {
-		m.log.With(logattr.Component, "share").InfoContext(ctx, "superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
+		m.log.With(attr.Component("share")).InfoContext(ctx, "superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
-	m.log.With(logattr.Component, "share").InfoContext(ctx, "LAN share opened",
+	m.log.With(attr.Component("share")).InfoContext(ctx, "LAN share opened",
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)

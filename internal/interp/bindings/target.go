@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/service"
@@ -739,7 +739,7 @@ func runBuzzDependencies(callCtx context.Context, targets map[string]vm.Callable
 			// The member's own failure is already on the console; this says why the
 			// composite is carrying on regardless, once, in a line an orchestrator
 			// reading the gate can act on.
-			logattr.For("magus").WarnContext(callCtx, "advisory target failed; the composite carries on",
+			slog.With(attr.Component("magus")).WarnContext(callCtx, "advisory target failed; the composite carries on",
 				slog.String("target", name), slog.String("reason", reason))
 		}
 	}

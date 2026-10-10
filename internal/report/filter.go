@@ -2,9 +2,10 @@ package report
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // Filter restricts which event types reach the channel. Terms: "+type"/bare=include, "-type"=exclude.
@@ -38,7 +39,7 @@ func ParseFilter(terms []string) (*Filter, error) {
 		case '+':
 			name := strings.TrimSpace(t[1:])
 			if name == "" {
-				logattr.For("report").Warn("ignoring malformed filter term", "term", t)
+				slog.With(attr.Component("report")).Warn("ignoring malformed filter term", "term", t)
 				continue
 			}
 			f.include[name] = struct{}{}
@@ -46,7 +47,7 @@ func ParseFilter(terms []string) (*Filter, error) {
 		case '-':
 			name := strings.TrimSpace(t[1:])
 			if name == "" {
-				logattr.For("report").Warn("ignoring malformed filter term", "term", t)
+				slog.With(attr.Component("report")).Warn("ignoring malformed filter term", "term", t)
 				continue
 			}
 			f.exclude[name] = struct{}{}

@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -43,7 +43,7 @@ func EnsureDriver(ctx context.Context, m *magus.Magus) {
 	globs, err := DriverGlobs(ctx, m)
 	if err != nil {
 		// Installing without the carve-outs would route a hand-maintained file to magus.
-		logattr.For("merge-driver").ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
+		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
 		return
 	}
 	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), globs)
@@ -53,14 +53,14 @@ func EnsureDriver(ctx context.Context, m *magus.Magus) {
 		// Every other one (a torn managed section, a stuck lock) leaves the merge driver
 		// unregistered, and nothing else would say so. The command itself still runs.
 		if errors.Is(err, fs.ErrPermission) {
-			logattr.For("merge-driver").DebugContext(ctx, "registration not refreshed in a read-only git dir", slog.String("error", err.Error()))
+			slog.With(attr.Component("merge-driver")).DebugContext(ctx, "registration not refreshed in a read-only git dir", slog.String("error", err.Error()))
 			return
 		}
-		logattr.For("merge-driver").ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
+		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
 		return
 	}
 	if changed {
-		logattr.For("merge-driver").InfoContext(ctx, "refreshed for the workspace's declared outputs", slog.String("vcs", name))
+		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "refreshed for the workspace's declared outputs", slog.String("vcs", name))
 	}
 }
 

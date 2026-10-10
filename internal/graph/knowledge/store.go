@@ -22,7 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/logattr"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/types"
 )
@@ -156,7 +156,7 @@ func NewStore(cacheDir string, immutable bool, maxBytes int64, remote RemoteShar
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Store{dir: StoreDir(cacheDir), immutable: immutable, maxBytes: maxBytes, remote: remote, log: log.With(logattr.Component, "knowledge")}
+	return &Store{dir: StoreDir(cacheDir), immutable: immutable, maxBytes: maxBytes, remote: remote, log: log.With(attr.Component("knowledge"))}
 }
 
 // Sync reconciles freshly-assembled shards against the persisted store and
