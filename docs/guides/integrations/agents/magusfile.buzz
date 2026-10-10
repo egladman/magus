@@ -19,7 +19,10 @@ magus\project({
     "sources": ["*.ts", "*.buzz", "lib/*.buzz", "codex-hooks.json", "*.md", "*.tmpl", "host-e2e/*.json",
                 "host-e2e/*.tmpl",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json",
-                "dprint.json"],
+                "dprint.json",
+                // The Claude Code mod. Only Claude Code's engine can test or type-check
+                // it (`claude plugin test`), so no target here runs on it.
+                "claude-code-mod/**"],
     "targets": {
         "install": {"skip_cache": "composes the spell's install, whose own entry checks the tree; a replay here would skip that check"},
     },
