@@ -914,7 +914,7 @@ export fun decidePullRequest(programs: [helpers\Program], line: str, files: {str
         }
     }
     if (problems.len() > 0) {
-        return magus\guard.deny("This pull request text breaks the description rules:\n  - " + problems.join("\n  - ") + "\n" + fixLine);
+        return magus\guard.deny("this pull request text breaks a description rule: {problems[0]}\n  - " + problems.join("\n  - ") + "\n" + fixLine);
     }
     if (advice.len() > 0 and once(key)) {
         return magus\guard.advise("This pull request description could read better:\n  - " + advice.join("\n  - ") + "\n" + shapeLine);

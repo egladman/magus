@@ -1335,7 +1335,7 @@ func TestOutputGuardNamesTheReplacement(t *testing.T) {
 	kept := Evaluate(strict(testDependencies()), "magus affected ci > run.log").Deny
 	require.NotEmpty(t, kept)
 	assert.Contains(t, kept, "--tee", "keeping output is what --tee is for")
-	assert.Contains(t, kept, "never console text",
+	assert.Contains(t, kept, "keeps the STRUCTURED output",
 		"--tee mirrors STRUCTURED output only; telling an agent to tee console output would write nothing")
 
 	// A verb that mints no ref must not be sent after one: `magus ls` has no run log and
@@ -1477,9 +1477,9 @@ func TestGuardExemptsQueryOutputBehindGlobalFlags(t *testing.T) {
 func TestStageEverythingDenialNamesDirectStaging(t *testing.T) {
 	verdict := Evaluate(strict(testDependencies()), "git add -A")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, hint.VCSAdd.String())
-	assert.Contains(t, verdict.Deny, hint.VCSAdd.With("--dry-run"))
-	assert.Contains(t, verdict.Deny, "git add -- <paths>")
+	assert.Contains(t, verdict.Deny, "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `"+hint.VCSAdd.String()+"`.")
+	assert.Contains(t, verdict.Why, hint.VCSAdd.With("--dry-run"))
+	assert.Contains(t, verdict.Why, "git add -- <paths>")
 	assert.NotContains(t, verdict.Deny, "no `magus vcs` wrapper")
 }
 
@@ -1873,7 +1873,7 @@ func TestGuardDeniesReadAck(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "can record either")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt")
 	}
 }
 
@@ -1897,8 +1897,8 @@ func TestGuardDeniesSessionDispose(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
-		assert.Contains(t, v.Deny, "can record either")
-		assert.Contains(t, v.Deny, "session dispose")
+		assert.Contains(t, v.Deny, "only a person may stamp a read receipt or dispose an attention request")
+		assert.Contains(t, v.Why, "session dispose")
 	}
 }
 
@@ -1947,8 +1947,9 @@ func TestChainedRunDeniesTowardThePipe(t *testing.T) {
 		// Argv and Why are the remedy's stage-split form and its prose, which this test does not pin.
 		assert.Equal(t, hint.Next{ID: "deny-chained-run", Run: tc.pipe, Argv: v.Next[0].Argv, Why: v.Next[0].Why}, v.Next[0], tc.command)
 		assert.Contains(t, v.Deny, tc.pipe, "the full deny names the pipe when no next is served")
-		assert.Contains(t, v.Lead, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
-		assert.Contains(t, v.Lead, "exits red", tc.command)
+		assert.Equal(t, "magus runs chained with `&&` or `;` run one at a time; pipe them instead.", v.Lead, tc.command)
+		assert.Contains(t, v.Why, "disjoint projects runs alongside and still finishes after an upstream fails", "the one way a pipe is not &&")
+		assert.Contains(t, v.Why, "exits red", tc.command)
 
 		served := Evaluate(strict(testDependencies()), tc.pipe)
 		assert.Empty(t, served.Deny, "the served pipe passes the guard: %s", tc.pipe)
@@ -1979,7 +1980,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 		assert.Equal(t, denyRuleChainedRun, v.Rule.Name)
 		require.Len(t, v.Next, 1)
 		assert.Equal(t, tc.pipe, v.Next[0].Run)
-		assert.Contains(t, v.Lead, "when their order does not matter: `"+tc.combined+"`")
+		assert.Contains(t, v.Why, "when their order does not matter: `"+tc.combined+"`")
 		assert.Empty(t, Evaluate(strict(testDependencies()), tc.combined).Deny)
 	}
 
@@ -1987,7 +1988,7 @@ func TestChainedRunNamesTheCombinedCallForOneTarget(t *testing.T) {
 	v := Evaluate(strict(testDependencies()), "magus run lint . && magus run lint:rw docs")
 	require.Len(t, v.Next, 1)
 	assert.Equal(t, "magus run lint . | magus run lint:rw docs", v.Next[0].Run)
-	assert.NotContains(t, v.Lead, "when their order does not matter")
+	assert.NotContains(t, v.Why, "when their order does not matter")
 }
 
 // Every chain a pipe would change keeps the advisory, and says what the pipe would do.
@@ -2117,7 +2118,7 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "holds your tool slot for its whole wait", cmd)
+		assert.Contains(t, v.Deny, "holds your tool slot for the whole wait on a process you did not start", cmd)
 		assert.NotContains(t, v.Deny, "you are told when it finishes", cmd)
 	}
 	own := Evaluate(strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
@@ -2345,8 +2346,8 @@ func TestGuardDeniesBacktickSubstitution(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRule{Name: denyRuleBacktickSubstitution}, v.Rule, cmd)
 		assert.Contains(t, v.Deny, "`$(...)`", "the substitution spelling that cannot pair: %s", cmd)
-		assert.Contains(t, v.Deny, "single quotes", "where a literal backtick belongs: %s", cmd)
-		assert.Contains(t, v.Deny, "Inside double quotes a backtick RUNS a command", cmd)
+		assert.Contains(t, v.Deny, "a backtick inside double quotes runs a command", cmd)
+		assert.Contains(t, v.Why, "single quotes", "where a literal backtick belongs: %s", cmd)
 	}
 }
 
@@ -2490,7 +2491,8 @@ func TestCredentialVerbsAreDeniedToAnAgent(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleCredentialVerb, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "config mcp connector create", "the reason names what a person runs: %s", cmd)
+		assert.Contains(t, v.Deny, "use the token you were given", cmd)
+		assert.Contains(t, v.Why, "config mcp connector create", "the rationale names what a person runs: %s", cmd)
 	}
 	for _, cmd := range []string{
 		"magus config token status",

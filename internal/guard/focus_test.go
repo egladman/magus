@@ -115,7 +115,7 @@ func TestFocusVerdictDeniesUnderALease(t *testing.T) {
 
 	got := focusVerdict(focus, "lease-a", "/ws", "/ws", []string{"web/server.go"})
 	assert.Equal(t, "deny", got.Decision)
-	assert.Contains(t, got.Reason, "read inside the focus lease lease-a was given (app)")
+	assert.Contains(t, got.Reason, "outside the focus lease lease-a was given (app)")
 	// The actor, not the tool: naming the tool reads as permission, and two personas
 	// widened their own row on it.
 	assert.Contains(t, got.Reason, "ask your orchestrator to widen this focus.")

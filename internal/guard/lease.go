@@ -803,11 +803,13 @@ func denyOverdueLease(me types.Job, now int64) string {
 	if !me.Overdue(now) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: stop writing and report what you have; lease %s passed its deadline.\n"+
-		"Lease %s was forked with a timeout, and its deadline %s passed %s ago, so the guard denies every write graded under it. "+
-		"The row is still %s: the orchestrator ends it with `%s` or re-forks it with a new --timeout.",
-		me.ID, me.ID, time.Unix(me.Deadline, 0).UTC().Format(time.RFC3339),
-		time.Duration(now-me.Deadline)*time.Second, me.State, hint.JobExit.With(me.ID))
+	return denial{
+		Say: fmt.Sprintf("magus workspace: lease %s passed its deadline; stop writing and report what you have.", me.ID),
+		Why: fmt.Sprintf("Lease %s was forked with a timeout, and its deadline %s passed %s ago, so the guard denies every write graded under it. "+
+			"The row is still %s: the orchestrator ends it with `%s` or re-forks it with a new --timeout.",
+			me.ID, time.Unix(me.Deadline, 0).UTC().Format(time.RFC3339),
+			time.Duration(now-me.Deadline)*time.Second, me.State, hint.JobExit.With(me.ID)),
+	}.full()
 }
 
 // denyLeaseScopedRebind refuses, under a bound lease, every command that would rewrite
@@ -1414,11 +1416,12 @@ func workerRole(row types.Job, caller job.Caller) string {
 // it; why is the commit's own reason, "" for an operation no worker may run.
 func workerVCSDenial(what, op string, row types.Job, role, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
-	lead := "magus workspace: leave this to the orchestrator: report your worktree path, branch and `git status --short`, and it lands the work from there."
+	lead := "magus workspace: `" + op + "` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`."
 	if why != "" {
 		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
 	} else {
-		why = "Pushing, stashing, reverting, resetting, cleaning, rebasing, merging, cherry-picking, discarding the tree and removing a worktree stay with the orchestrator."
+		why = "The orchestrator lands the work from there. " +
+			"Pushing, stashing, reverting, resetting, cleaning, rebasing, merging, cherry-picking, discarding the tree and removing a worktree stay with the orchestrator."
 	}
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
 		"A worker may commit, with any backend, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+

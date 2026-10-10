@@ -242,10 +242,11 @@ func formatLimit(d time.Duration) string {
 }
 
 const (
-	magusTimeoutWhy        = "coreutils timeout kills magus from outside, so the run log records no cause and the tools it started can outlive it."
-	magusTimeoutFlags      = "`--timeout <dur>` bounds the whole run and cancels its own process tree, `--target-timeout <dur>` caps each target, and `--stall-timeout <dur>` stops a run making no progress."
-	magusTimeoutRead       = "It holds no lock worth waiting on: a held lock refuses at once (MGS3009)."
-	adviseMagusTimeoutBuzz = "magus workspace: `magus buzz` has no timeout of its own, so this wrapper is its only bound. " +
+	magusTimeoutVerdictLead = "coreutils `timeout` kills magus from outside"
+	magusTimeoutWhy         = "coreutils timeout kills magus from outside, so the run log records no cause and the tools it started can outlive it."
+	magusTimeoutFlags       = "`--timeout <dur>` bounds the whole run and cancels its own process tree, `--target-timeout <dur>` caps each target, and `--stall-timeout <dur>` stops a run making no progress."
+	magusTimeoutRead        = "It holds no lock worth waiting on: a held lock refuses at once (MGS3009)."
+	adviseMagusTimeoutBuzz  = "magus workspace: `magus buzz` has no timeout of its own, so this wrapper is its only bound. " +
 		"It kills magus from outside, so nothing records why the script stopped, and the tools it started can outlive it."
 )
 
@@ -269,14 +270,20 @@ func magusTimeoutVerdict(command string, d Dialect) (ShellVerdict, bool) {
 	case "run", "affected":
 		next := boundedRun(t.argv, formatLimit(t.limit))
 		remedy := hint.NextForDenyRemedy(string(denyRuleMagusTimeout), next, "magus stops the run itself and records why.")
-		lead := "Bound the run with magus's own flag instead of `timeout`.\n" + magusTimeoutWhy + "\n" + magusTimeoutFlags
-		deny := "Bound the run with magus's own flag instead of `timeout`: `" + remedy.Run + "`.\n" + magusTimeoutWhy + "\n" + magusTimeoutFlags
-		return ShellVerdict{Deny: deny, Rule: rule}.withRemedy(lead, remedy), true
+		v := ShellVerdict{
+			Deny: magusTimeoutVerdictLead + "; bound the run with magus's own flag: `" + remedy.Run + "`.",
+			Why:  magusTimeoutWhy + "\n" + magusTimeoutFlags,
+			Rule: rule,
+		}
+		return v.withRemedy(magusTimeoutVerdictLead+"; bound the run with magus's own flag.", remedy), true
 	default:
 		remedy := hint.NextForDenyRemedy(string(denyRuleMagusTimeout), t.argv, "it returns on its own.")
-		lead := "Drop the `timeout` wrapper.\n" + magusTimeoutWhy + " " + magusTimeoutRead
-		deny := "Drop the `timeout` wrapper: `" + remedy.Run + "`.\n" + magusTimeoutWhy + " " + magusTimeoutRead
-		return ShellVerdict{Deny: deny, Rule: rule}.withRemedy(lead, remedy), true
+		v := ShellVerdict{
+			Deny: magusTimeoutVerdictLead + "; drop the wrapper: `" + remedy.Run + "`.",
+			Why:  magusTimeoutWhy + " " + magusTimeoutRead,
+			Rule: rule,
+		}
+		return v.withRemedy(magusTimeoutVerdictLead+"; drop the wrapper.", remedy), true
 	}
 }
 

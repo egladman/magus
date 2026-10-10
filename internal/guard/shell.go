@@ -487,9 +487,11 @@ func chainedRunVerdict(deps Dependencies, command string, d Dialect) (ShellVerdi
 	if argv, ok := combinedStage(ch.stages); ok {
 		more = "One call runs the same target on all of them when their order does not matter: `" + hint.NextForDenyRemedy(string(denyRuleChainedRun), argv, "").Run + "`."
 	}
-	deny := "Pipe magus runs instead of chaining them: `" + pipe.Run + "`.\n" + chainedRunPipeNote + "\n" + more
-	lead := "Pipe magus runs instead of chaining them.\n" + chainedRunPipeNote + "\n" + more
-	return ShellVerdict{Deny: deny, Rule: denyRule{Name: denyRuleChainedRun}}.withRemedy(lead, pipe), true
+	return ShellVerdict{
+		Deny: "magus runs chained with `&&` or `;` run one at a time; pipe them: `" + pipe.Run + "`.",
+		Why:  chainedRunPipeNote + "\n" + more,
+		Rule: denyRule{Name: denyRuleChainedRun},
+	}.withRemedy("magus runs chained with `&&` or `;` run one at a time; pipe them instead.", pipe), true
 }
 
 // combinedStage is the one invocation that covers a chain of the same target on several
@@ -655,9 +657,11 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 	}
 	slices.Sort(held)
 	v.Decision, v.Context, v.Rule = "deny", "", ""
-	v.Reason = fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout and this process names no lease, so nothing would grade the edit.\n"+
-		"A magus process cannot see the host session its caller is bound by; name the lease you hold: `%s=<id> magus ...`.",
-		strings.Join(held, ", "), envHookLease)
+	v.Reason = denial{
+		Say: fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
+			strings.Join(held, ", "), envHookLease),
+		Why: "Nothing would grade the edit. A magus process cannot see the host session its caller is bound by.",
+	}.full()
 	return v
 }
 
@@ -1895,42 +1899,46 @@ var (
 	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change. `" + hint.Affected.With("ci") + "` runs it over every project the diff reaches, including ones you never edited.\n" +
 		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
 
-	denyAgentSignOff = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it. Only a person can record either, so every spelling of both is refused.\n" +
-		"Report what is unread instead: `" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
+	denyAgentSignOff    = "only a person may stamp a read receipt or dispose an attention request; report what is unread: `" + hint.Diff.With("--impact") + "`."
+	denyAgentSignOffWhy = "A read receipt records that a PERSON read a change, and disposing an attention request records that a PERSON answered it, so every spelling of both is refused.\n" +
+		"`" + hint.Diff.With("--impact") + "` names every changed file carrying no receipt (`" + hint.Diff.With("-o", "json") + "` puts read_state on each one). Say you cannot ack and hand back the unread list.\n" +
 		"Waiting on a request instead: say you are waiting on its id and hand it back; `" + hint.SessionDispose.With("<id>") + "` is a person's to run."
 
-	denyCredentialVerb = "Use the token you were given. Minting, printing, rotating or revoking a credential is the person's to do: `" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and they run it for you.\n" +
+	denyCredentialVerb    = "minting, printing, rotating or revoking a credential is a person's to do; use the token you were given."
+	denyCredentialVerbWhy = "`" + hint.ConfigMCPConnectorCreate.With("--name", "<client>") + "` mints one holding mcp=write, and the person runs it for you.\n" +
 		"A session that mints a token, or holds a console link's code, holds a grant nobody handed it; the operator token also reaches token management, so whoever reads it can mint any grant."
 
-	denyNotesAuthor = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read.\n" +
-		"If it genuinely belongs in the notes, say so and let the person run it."
+	denyNotesAuthor    = "an agent may not author a note; if it belongs in the notes, say so and let the person run it."
+	denyNotesAuthorWhy = "Notes are human-authored by design, so every spelling of the write is denied: `capture` files a review transcript as a note, which puts a person's name on prose they never read."
 
-	// LEADS with the editor tool, because that is the answer for most of what trips this:
-	// changing a string, a literal or a few lines in one file. The rename branch is named
-	// second and marked as a branch.
+	// Names the editor tool as the remedy, because that is the answer for most of what trips
+	// this: changing a string, a literal or a few lines in one file. The rename branch sits
+	// in the rationale and is marked as a branch.
 	//
-	// It used to lead with `refs --occurrences` and the `.Sum` argument, which is advice
-	// about renaming a SYMBOL across a tree. Read while replacing a literal in one test
-	// file, it names a tool that takes a symbol the reader does not have, and a correct
-	// deny whose remediation does not fit is one the reader learns to route around.
-	denyScriptedRewrite = "Use your editor tool: it reads the file first and reports what it changed.\n" +
+	// Leading with `refs --occurrences` and the `.Sum` argument was advice about renaming a
+	// SYMBOL across a tree. Read while replacing a literal in one test file, it named a tool
+	// that takes a symbol the reader does not have, and a correct deny whose remediation does
+	// not fit is one the reader learns to route around.
+	denyScriptedRewrite    = "a scripted rewrite writes before anyone reads a diff; use your editor tool."
+	denyScriptedRewriteWhy = "Your editor tool reads the file first and reports what it changed.\n" +
 		"Renaming a symbol across the tree instead? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives verified, column-precise sites to edit; run `" + hint.GraphBuild.String() + "` first if it reports not-indexed, which means unknown rather than absent.\n" +
-		"A regex writes before anyone reads a diff, and it cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
+		"A regex cannot tell your `.Sum` from the OTel SDK's. Creating a new file, or writing under a scratch path, is untouched."
 
-	denySedInPlace = "Use your editor tool: it reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
-		"`sed -i` is also not portable: GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
+	denySedInPlace    = "`sed -i` reads differently on GNU and macOS; use your editor tool."
+	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
+		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
-	denyBusyWait = "Do not poll for work you started; you are told when it finishes. Start it and do something else.\n" +
-		"Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
+	denyBusyWait    = "this loop polls for work you started, and you are told when it finishes; start it and do something else."
+	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
 		"Waiting on something outside this machine is what your host's monitor is for."
 
 	// Says only what the guard can prove about a probe of someone else's process: nothing
 	// here announces that process's end to the caller, so the other text would be false.
-	denyBusyWaitForeign = "This loop waits on a process you did not start and holds your tool slot for its whole wait; past the tool timeout it is backgrounded rather than killed, and polls on.\n" +
-		"Waiting on another process is what your host's monitor is for."
+	denyBusyWaitForeign    = "this loop holds your tool slot for the whole wait on a process you did not start; wait with your host's monitor."
+	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on."
 
-	denyProcessPoll = "Use `" + hint.Status.With("--watch=15s") + "`: it reads the project lock continuously (holder PID, command, age).\n" +
-		"`pgrep`, `pidof` and `ps` invent an unbounded poll that answers what the lock message already said."
+	denyProcessPoll    = "`pgrep`, `pidof` and `ps` poll for what the project lock already records; read it: `" + hint.Status.With("--watch=15s") + "`."
+	denyProcessPollWhy = "Status reads the project lock continuously (holder PID, command, age), where the process table invents an unbounded poll."
 
 	// LEADS with the better route, like the pipe and redirect messages it extends,
 	// and spells out the block because the reader cannot lose what they can see.
@@ -1939,17 +1947,17 @@ var (
 		"A range print (`sed -n '1,200p'`) is a filter too: it cuts by POSITION."
 	captureFilterBrief = "magus workspace: a filter over a run capture drops the `output:` ref under `cause:`; `-o jsonl --tee <file>` gives the run a contract."
 
-	denyBacktickSubstitution = "Write a command substitution as `$(...)`, and put a literal backtick in single quotes, as in grep -n '```' README.md.\n" +
-		"Inside double quotes a backtick RUNS a command: it pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
+	denyBacktickSubstitution    = "a backtick inside double quotes runs a command; write a substitution as `$(...)`."
+	denyBacktickSubstitutionWhy = "Put a literal backtick in single quotes, as in grep -n '```' README.md. " +
+		"Inside double quotes a backtick pairs with the next backtick anywhere on the line, and everything between them, file operands and pipes included, becomes that command."
 
-	// Named for what the agent should do instead, not for what it did wrong: the
-	// exact safe replacement is the actionable part. `git add -A` is the single command
-	// most likely to turn a focused change into an unreviewable one: it sweeps every
-	// regenerated output and every unrelated formatting fix a target just wrote into
-	// a commit about something else. Measured: one such call put 69 files (a whole
-	// regenerated docs site plus five untouched source files) into a commit about
-	// four collection methods.
-	denyStageAll = "Stage through the workspace: `" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
+	// `git add -A` is the single command most likely to turn a focused change into an
+	// unreviewable one: it sweeps every regenerated output and every unrelated formatting
+	// fix a target just wrote into a commit about something else. Measured: one such call
+	// put 69 files (a whole regenerated docs site plus five untouched source files) into a
+	// commit about four collection methods.
+	denyStageAll    = "a whole-tree `git add` sweeps in regenerated output; stage through the workspace: `" + hint.VCSAdd.String() + "`."
+	denyStageAllWhy = "`" + hint.VCSAdd.String() + "` keeps a source change with the outputs it produced and REPORTS anything undeclared instead of sweeping it in; `" + hint.VCSAdd.With("--dry-run") + "` stages nothing.\n" +
 		"A hand-picked `git add -- <paths>` is still fine. Targets write declared outputs as they run, so the tree is routinely dirty with files you did not edit."
 
 	// The advisory a chain keeps when a pipe of its stages would change what it does; see
@@ -1969,9 +1977,10 @@ var (
 	// correction is the flag that returns that thing, not the prohibition.
 	// The exit-status fact is the half a reader cannot discover by trying again: the pipe
 	// SUCCEEDS, so a failing gate reads as exit 0 and nothing ever says so.
-	pipeExitNote      = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
-	throwawayCopyDeny = "Run from the workspace and name the project: `" + hint.Run.With("<target>", "<project>") + "`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
-		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
+	pipeExitNote         = "A pipe also takes the exit status from the last stage, so a failing magus reads as exit 0."
+	throwawayCopyDeny    = "a run inside a temp or scratchpad copy leaves the real tree unverified; run from the workspace: `" + hint.Run.With("<target>", "<project>") + "`."
+	throwawayCopyDenyWhy = "A copy judges a tree nobody ships: a green gate there says nothing here, generated files land in the copy, and the cache splits.\n" +
+		"A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy."
 )
 
 // pipeDeny is pipeAnswer for a pipe known only by its verb and filter.
@@ -2030,15 +2039,17 @@ const graphPipeBrief = "magus workspace: a graph read projects its own record: `
 // answer possible where the pipe rule needed several. Silencing and keeping are the only
 // two intents, magus has a lever for each, and both leave the full log on disk either way.
 func redirectDeny(verb, dest string) string {
-	lead := "`" + verb + " " + dest + "`: "
+	subject := "`" + verb + " " + dest + "`"
 	if verb == "" {
-		lead = "redirecting magus output: "
+		subject = "this redirect of magus output"
 	}
-	answer := "`-o json --tee <file>` keeps the STRUCTURED output, never console text, which is not a format anything should parse."
+	say := subject + " keeps console text, not a format to parse; `-o json --tee <file>` keeps the STRUCTURED output."
+	why := "Console text is not a format anything should parse."
 	if strings.HasSuffix(dest, "/dev/null") {
-		answer = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
+		say = subject + " discards the diagnostics a failure prints; `--silent` keeps only those."
+		why = "`--silent` says nothing until something fails, then prints the diagnostics this would have discarded."
 	}
-	return lead + answer + mintedLogNote(verb)
+	return say + "\n" + why + mintedLogNote(verb)
 }
 
 // A deny's remedy is the reader's own command with the refused construct replaced, and
@@ -2143,13 +2154,13 @@ func redirectRemedy(r redirectedMagus) (string, []hint.Next) {
 	var lead, why string
 	switch {
 	case r.file == "/dev/null":
-		lead = "`" + r.verb + " " + r.dest + "`: this discards the diagnostics a failure prints."
+		lead = "`" + r.verb + " " + r.dest + "` discards the diagnostics a failure prints."
 		why = "--silent says nothing until something fails, then prints what the redirect would have discarded."
 		if !magusSilent(r.args) {
 			flags = []string{"--silent"}
 		}
 	case r.stdout && r.file != "" && !magusFlag(r.args, "tee"):
-		lead = "`" + r.verb + " " + r.dest + "`: console text is not a format anything should parse."
+		lead = "`" + r.verb + " " + r.dest + "` keeps console text, which is not a format anything should parse."
 		why = "--tee writes the structured record to the file and still prints it."
 		switch format {
 		case "":
@@ -2258,12 +2269,13 @@ func probesForeignProcess(c hint.Invocation) bool {
 // filterWithoutInputDeny names the tool, since on a pipeline the reader cannot otherwise
 // tell which stage was left without input.
 func filterWithoutInputDeny(tool string) string {
-	lead := "Give `" + tool + "` its input: name a file, pipe into it, or redirect one with `<`."
+	lead := "`" + tool + "` reads a stdin nothing on this line feeds; name a file, pipe into it, or redirect one with `<`.\n"
 	if stdinReaders[tool].operands == operandsNeverInput || stdinReaders[tool].operands == operandsAreCommand {
-		lead = "`" + tool + "` reads only stdin, and its operands are never input: pipe into it or redirect a file with `<`."
+		lead = "`" + tool + "` reads only stdin, which nothing on this line feeds; pipe into it or redirect a file with `<`.\n" +
+			"Its operands are never input. "
 	}
-	return lead + "\n" +
-		"As written it reads the shell's own stdin, which nothing on this line feeds: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
+	return lead +
+		"As written it reads the shell's own stdin: where the harness holds it open, the call hangs past the tool timeout and keeps waiting in the background."
 }
 
 // mintedLogNote names where the output already lives, and ONLY for a verb that mints one.
@@ -2322,9 +2334,9 @@ var (
 // reason is also the rule's Arg, so the two cannot describe different commands.
 func denySharedStash(verb string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "bare `git stash " + verb + "` acts on stash@{0}, which is often another checkout's; name yours: `git stash " + verb + " stash@{N}`.",
+		Deny: "bare `git stash " + verb + "` acts on stash@{0}, often another checkout's entry; name yours as stash@{N}.",
 		Why: "The stash stack belongs to the REPOSITORY rather than your worktree, and " + verb + " applies or destroys the top entry. " +
-			"`git stash list` names each entry's branch.",
+			"`git stash list` names each entry's branch; then run `git stash " + verb + " stash@{N}`.",
 		Rule: denyRule{Name: denyRuleSharedStash, Arg: verb},
 	}
 }
@@ -2576,36 +2588,36 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// whole point is that it holds for EVERY kind of call: the path rule sees file writes, and
 	// these verbs are commands.
 	if notesWriteFires(cmds, parsed, command) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyNotesAuthor, Rule: denyRule{Name: denyRuleNotesAuthor}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyNotesAuthor, Why: denyNotesAuthorWhy, Rule: denyRule{Name: denyRuleNotesAuthor}}); ok {
 			return v
 		}
 	}
 	// Beside the notes rule and for the same reason: both refuse an agent AUTHORING a
 	// human's statement, and both have to hold however the command is spelled.
 	if agentSignOffFires(cmds, parsed, command) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyAgentSignOff, Rule: denyRule{Name: denyRuleAgentSignOff}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyAgentSignOff, Why: denyAgentSignOffWhy, Rule: denyRule{Name: denyRuleAgentSignOff}}); ok {
 			return v
 		}
 	}
 	// A credential rule, so it holds however the line is spelled, before any rule about shape.
 	if credentialVerbFires(cmds, parsed, command) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyCredentialVerb, Rule: denyRule{Name: denyRuleCredentialVerb}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyCredentialVerb, Why: denyCredentialVerbWhy, Rule: denyRule{Name: denyRuleCredentialVerb}}); ok {
 			return v
 		}
 	}
 	// Both rewrite rules promise to leave a scratch file alone, and the promise has to hold
 	// however the path was spelled, including relative to a scratch directory cd'd into.
 	if ruleFires(cmds, parsed, command, sedInPlaceFires, sedInPlaceRe) && !rewriteStaysOutside(deps.scope, command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denySedInPlace, Rule: denyRule{Name: denyRuleSedInPlace}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denySedInPlace, Why: denySedInPlaceWhy, Rule: denyRule{Name: denyRuleSedInPlace}}); ok {
 			return v
 		}
 	}
 	if busyWaitFires(command, d) {
-		reason := denyBusyWait
+		wait := ShellVerdict{Deny: denyBusyWait, Why: denyBusyWaitWhy, Rule: denyRule{Name: denyRuleBusyWait}}
 		if foreignWaitFires(command, d) {
-			reason = denyBusyWaitForeign
+			wait.Deny, wait.Why = denyBusyWaitForeign, denyBusyWaitForeignWhy
 		}
-		if v, ok := held.ends(deps, ShellVerdict{Deny: reason, Rule: denyRule{Name: denyRuleBusyWait}}); ok {
+		if v, ok := held.ends(deps, wait); ok {
 			return v
 		}
 	}
@@ -2614,7 +2626,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	if parsed && processPollFires(work) {
 		// The one-shot read, not --watch: a watch never exits, and a served command that
 		// holds the caller's tool slot until it times out is the poll again.
-		poll := ShellVerdict{Deny: denyProcessPoll, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
+		poll := ShellVerdict{Deny: denyProcessPoll, Why: denyProcessPollWhy, Rule: denyRule{Name: denyRuleProcessPoll}}.withRemedy(
 			"`pgrep`, `pidof` and `ps` answer what the project lock already records.",
 			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
 				"status reads the live pool once and exits, where the process table only guesses at it."))
@@ -2626,7 +2638,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	// waiting in the background. The backtick is judged first because a stray one is how a
 	// filter loses its file operand in the first place.
 	if backtickSubstFires(command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyBacktickSubstitution, Rule: denyRule{Name: denyRuleBacktickSubstitution}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyBacktickSubstitution, Why: denyBacktickSubstitutionWhy, Rule: denyRule{Name: denyRuleBacktickSubstitution}}); ok {
 			return v
 		}
 	}
@@ -2644,7 +2656,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 		captureAdvice = ShellVerdict{Context: captureFilterAdvice, Kind: advisoryCaptureFilter, Brief: captureFilterBrief}
 	}
 	if scriptedRewriteFires(command, d, deps.scope) && !rewriteStaysOutside(deps.scope, command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}}); ok {
 			return v
 		}
 	}
@@ -2692,7 +2704,7 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 	redir := magusRedirect(command, d)
 	// In this order, each graded in turn: a demoted one hands the line to the next.
 	if magusInThrowawayCopy(command, d) {
-		if v, ok := held.ends(deps, ShellVerdict{Deny: throwawayCopyDeny, Rule: denyRule{Name: denyRuleThrowawayCopy}}); ok {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: throwawayCopyDeny, Why: throwawayCopyDenyWhy, Rule: denyRule{Name: denyRuleThrowawayCopy}}); ok {
 			return v
 		}
 	}

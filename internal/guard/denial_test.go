@@ -163,6 +163,17 @@ func TestShapeDenyKeepsTheRationaleInTheStoredVerdict(t *testing.T) {
 	}
 }
 
+// TestShapeDenyShowsEveryLineOfAVerdictWithAWhy pins the split a rule controls: with Why
+// set, the whole Deny is shown, which is how a search denial keeps the graph's answer
+// beside its verdict instead of behind the ref.
+func TestShapeDenyShowsEveryLineOfAVerdictWithAWhy(t *testing.T) {
+	cacheDir := t.TempDir()
+	got, ref, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), string(denyRuleSymbolSearch),
+		"verdict.\nIts answer (1 result):\n  a.go", "the reason.", "", nil, false)
+	require.NotEmpty(t, ref)
+	assert.Equal(t, "verdict.\nIts answer (1 result):\n  a.go\nfull verdict: "+hint.NextForDenial(ref).Run, got)
+}
+
 // TestShapeDenyServesTheRemedyOnEveryFiring pins the layout a remedy adds and that it is
 // journaled, which is what pre-authorizes it: its command inline on every firing, and its
 // why only in the stored verdict. Both firings cite the full-verdict ref, and it resolves.
@@ -190,4 +201,27 @@ func TestShapeDenyServesTheRemedyOnEveryFiring(t *testing.T) {
 		"\nfull verdict: "+hint.NextForDenial(ref).Run, got)
 	assert.Equal(t, remedy, served)
 	assert.Equal(t, "deny-verdict", servedNextPreauthorizes(gate, hint.NextForDenial(ref).Run))
+}
+
+// TestWholeTreeStoresTheBackendsScratchCheckout pins the scratch checkout a whole-tree deny
+// names for its backend. It sits in the stored verdict, and an hg or jj user is never told
+// to add a git worktree, which they cannot follow.
+func TestWholeTreeStoresTheBackendsScratchCheckout(t *testing.T) {
+	for command, want := range map[string]string{
+		"hg purge":         "a throwaway clone",
+		"jj abandon":       "a throwaway clone",
+		"git reset --hard": "a throwaway `git worktree add`",
+	} {
+		v := Evaluate(strict(testDependencies()), command)
+		require.Equal(t, denyRuleWholeTree, v.Rule.Name, command)
+		cacheDir := t.TempDir()
+		shown, _, _ := shapeDeny(t.Context(), hint.NewGate(cacheDir, "s1"), v.RuleName(), v.Deny, v.Why, "", nil, false)
+		stored := storedVerdict(t, cacheDir, shown)
+		assert.Contains(t, shown, "destroys uncommitted work", command)
+		assert.NotContains(t, shown, "throwaway", "the scratch checkout is rationale: %s", command)
+		assert.Contains(t, stored, want, command)
+		if !strings.HasPrefix(command, "git ") {
+			assert.NotContains(t, stored, "git worktree add", command)
+		}
+	}
 }

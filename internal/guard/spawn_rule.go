@@ -98,7 +98,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
 		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: denial{Say: v.Deny, Why: v.Why}.full(), Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}

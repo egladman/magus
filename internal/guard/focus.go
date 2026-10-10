@@ -147,11 +147,13 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 		}
 		owner := focus.Owner(rel)
 		if leaseID != "" {
-			return focusGrade{Decision: "deny", Rel: rel, Reason: fmt.Sprintf(
-				"magus workspace: read inside the focus lease %s was given (%s); "+leaseActorClause("widen this focus")+"\n"+
-					"%s belongs to project %s, which is outside that focus: %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+			return focusGrade{Decision: "deny", Rel: rel, Reason: denial{
+				Say: fmt.Sprintf("magus workspace: %s belongs to project %s, outside the focus lease %s was given (%s); "+leaseActorClause("widen this focus"),
+					rel, owner, leaseID, strings.Join(focus.Seeds, ", ")),
+				Why: fmt.Sprintf("That focus is %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 					leaseActorWhy,
-				leaseID, strings.Join(focus.Seeds, ", "), rel, owner, strings.Join(focus.Projects, ", "))}
+					strings.Join(focus.Projects, ", ")),
+			}.full()}
 		}
 		return focusGrade{
 			Decision: "advise",

@@ -171,9 +171,12 @@ func denyNotesWrite(deps Dependencies, writePath string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: %s is in the NOTES store, which only a person writes; ask them to run `"+hint.NotesEdit.String()+" %s`.\n"+
-		"A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
-		"Read the store with `"+hint.NotesLs.String()+"` and `"+hint.NotesGet.With("<name>")+"`.", path, strings.TrimSuffix(filepath.Base(path), ".md"))
+	return denial{
+		Say: fmt.Sprintf("magus workspace: %s is in the NOTES store, and only a person writes there; ask them to run `"+hint.NotesEdit.String()+" %s`.",
+			path, strings.TrimSuffix(filepath.Base(path), ".md")),
+		Why: "A note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n" +
+			"Read the store with `" + hint.NotesLs.String() + "` and `" + hint.NotesGet.With("<name>") + "`.",
+	}.full()
 }
 
 // resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
@@ -401,11 +404,13 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
 	if me.ReadOnly {
-		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: put what you found in your report instead of writing it; "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
+		return writeGrade{Decision: "deny", Reason: denial{
+			Say: fmt.Sprintf("magus workspace: lease %s is read_only and writes nothing; put what you found in your report instead.", me.ID),
+			Why: fmt.Sprintf("If it must write, "+leaseActorClause("clear read_only and declare write_paths for lease "+me.ID)+"\n"+
 				"Lease %s (%s) is declared read_only, so it has no write boundary at all and %s is outside it. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 				leaseActorWhy,
-			me.ID, criteriaLine(me), rel)}
+				me.ID, criteriaLine(me), rel),
+		}.full()}
 	}
 	// BEFORE the path checks, because a lease that has not exec'd should not be writing anywhere,
 	// not merely outside its write paths. A checkpoint is what says which base the work applies to and
@@ -418,10 +423,12 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 	// exactly when somebody needs to recover from it. A human is unaffected: they never name a
 	// lease, so they never reach this function at all.
 	if me.Registered == 0 {
-		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: run `%s` in this tree, which records the base `"+hint.VCSCheckpoint.With("-o", "name")+"` names for it, then retry this write.\n"+
-				"Lease %s (%s) has not reported the base it landed on, so nothing records which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
-			hint.JobExec.With(me.ID), me.ID, criteriaLine(me))}
+		return writeGrade{Decision: "deny", Reason: denial{
+			Say: fmt.Sprintf("magus workspace: lease %s has not reported the base it landed on; run `%s` in this tree, then retry this write.",
+				me.ID, hint.JobExec.With(me.ID)),
+			Why: fmt.Sprintf("That records the base `"+hint.VCSCheckpoint.With("-o", "name")+"` names for it. Lease %s (%s) has nothing recording which revision your work applies to. Without it a reviewer cannot tell your changes from the ones already there, and a recovery cannot tell where to start.",
+				me.ID, criteriaLine(me)),
+		}.full()}
 	}
 	// A deny naming one declaration of rel is gradeDeniedDeclarations' to judge: at this,
 	// the path, level it would deny every edit to the file.
@@ -430,10 +437,11 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		return adviseMalformedDeclaration(fmt.Errorf("lease %s: %w", me.ID, err))
 	}
 	if denied {
-		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: work inside your own write paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
-				"%s is covered by %q, which your lease %s (%s) declared DENIED. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-			rel, decl, me.ID, criteriaLine(me))}
+		return writeGrade{Decision: "deny", Reason: denial{
+			Say: fmt.Sprintf("magus workspace: %s is covered by %q, a path your lease %s declared DENIED; work inside your own write paths.", rel, decl, me.ID),
+			Why: fmt.Sprintf("Lease %s (%s): if this needs touching, report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
+				me.ID, criteriaLine(me)),
+		}.full()}
 	}
 	_, mine, err := declarationCovering(me.WritePaths, rel)
 	if err != nil {
@@ -465,15 +473,17 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		if g, entered := enter(owner); entered {
 			return g
 		}
-		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own write paths; "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it")+"\n"+
-				"%s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
+		return writeGrade{Decision: "deny", Reason: denial{
+			Say: fmt.Sprintf("magus workspace: %s is owned by lease %s (%s right now); "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it"),
+				rel, owner.ID, owner.State),
+			Why: fmt.Sprintf("Edit inside your own write paths. %s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
 				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
 				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.\n"+
 				leaseActorWhy,
-			rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
-			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
-			enterCall(owner.ID, rel), job.MaxJobEntries)}
+				rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
+				owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
+				enterCall(owner.ID, rel), job.MaxJobEntries),
+		}.full()}
 	}
 	if len(me.WritePaths) == 0 {
 		return writeGrade{}
@@ -485,12 +495,14 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		revoked = fmt.Sprintf("The orchestrator revoked %q from lease %s at %s; it is no longer yours to write. ",
 			r.Path, me.ID, time.Unix(r.ReleasedAt, 0).UTC().Format(time.RFC3339))
 	}
-	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-		"magus workspace: write inside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths")+"\n"+
-			"%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+	return writeGrade{Decision: "deny", Reason: denial{
+		Say: fmt.Sprintf("magus workspace: %s is outside the paths lease %s was given (%s); "+leaseActorClause("widen these write paths"),
+			rel, me.ID, strings.Join(me.WritePaths, ", ")),
+		Why: fmt.Sprintf("%s%s is outside every entry in the write_paths lease %s (%s) declared. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
 			"`%s` shows what the job holds; ask the job's owner, whoever forked it, if it needs %s.\n"+
 			leaseActorWhy,
-		me.ID, strings.Join(me.WritePaths, ", "), revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel)}
+			revoked, rel, me.ID, criteriaLine(me), hint.DescribeJob.With(me.ID), rel),
+	}.full()}
 }
 
 // revokedCovering is the newest revoked release on me that covers rel.
@@ -521,17 +533,20 @@ func gradeDeniedDeclarations(ctx context.Context, checkout string, me types.Job,
 	}
 	changed, placed := changedDeclarations(ctx, checkout, rel, fields)
 	if !placed {
-		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: make this change as an edit whose old text appears once in %s, so magus can see which declaration it lands in, or leave the file alone.\n"+
+		return writeGrade{Decision: "deny", Reason: denial{
+			Say: fmt.Sprintf("magus workspace: magus cannot place this write to %s, where your lease denies declarations; edit with old text that appears once.", rel),
+			Why: fmt.Sprintf("Make this change as an edit whose old text appears once in the file, so magus can see which declaration it lands in, or leave the file alone. "+
 				"Your lease %s (%s) declared %s DENIED, and this write could not be placed in a declaration: no edit to apply, an edit that does not apply to the file on disk, or a file no diff driver reads. Nothing shows it leaves the denied declaration untouched, so it is denied whole. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-			rel, me.ID, criteriaLine(me), quotedClaims(rel, denied))}
+				me.ID, criteriaLine(me), quotedClaims(rel, denied)),
+		}.full()}
 	}
 	for _, decl := range changed {
 		if claim, ok := namingClaim(denied, decl); ok {
-			return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-				"magus workspace: edit other declarations of %s, or report a checkpoint to the orchestrator and ask for the deny to be lifted before you touch this one.\n"+
-					"This edit changes %s in %s, which your lease %s (%s) declared DENIED as %q. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-				rel, decl, rel, me.ID, criteriaLine(me), rel+"#"+claim)}
+			return writeGrade{Decision: "deny", Reason: denial{
+				Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, which your lease %s declared DENIED as %q.", decl, rel, me.ID, rel+"#"+claim),
+				Why: fmt.Sprintf("Edit other declarations of %s, or report a checkpoint to the orchestrator and ask for the deny to be lifted before you touch this one. Lease %s: %s. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
+					rel, me.ID, criteriaLine(me)),
+			}.full()}
 		}
 	}
 	return writeGrade{}
@@ -609,10 +624,11 @@ func gradeEntry(ctx context.Context, deps Dependencies, at location, owner types
 	}
 	if last, seen := holderLastCall(deps, at, owner); seen {
 		if idle := time.Since(last); idle < entryIdle {
-			return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-				"magus workspace: retry once lease %s's holder has been idle for %s; the entry for %s stays open.\n"+
-					"Its holder made a tool call %s ago, so it may be mid-edit on the path you entered. An entry lets one write through while the holder is not working.",
-				owner.ID, entryIdle, entry.Path, idle.Round(time.Second))}, true
+			return writeGrade{Decision: "deny", Reason: denial{
+				Say: fmt.Sprintf("magus workspace: lease %s's holder made a tool call %s ago and may be mid-edit; retry once it has been idle for %s.",
+					owner.ID, idle.Round(time.Second), entryIdle),
+				Why: fmt.Sprintf("The entry for %s stays open. An entry lets one write through while the holder is not working.", entry.Path),
+			}.full()}, true
 		}
 	}
 	_ = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).ConsumeEntry(ctx, owner.ID, rel)
@@ -818,10 +834,10 @@ func denyOtherCheckout(checkout, lease, writePath string) writeGrade {
 	if other == "" || samePath(other, checkout) {
 		return writeGrade{}
 	}
-	return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-		"magus workspace: write %s in %s, the checkout lease %s was taken in.\n"+
-			"%s is in another checkout, %s, and the lease's write paths name files in its own.",
-		filepath.Base(writePath), checkout, lease, writePath, other)}
+	return writeGrade{Decision: "deny", Reason: denial{
+		Say: fmt.Sprintf("magus workspace: %s is in another checkout than lease %s's; write %s in %s.", writePath, lease, filepath.Base(writePath), checkout),
+		Why: fmt.Sprintf("%s is in %s, and the lease's write paths name files in the checkout it was taken in.", writePath, other),
+	}.full()}
 }
 
 // findMagusCheckout is the nearest directory at or above dir holding a magusfile, "" when
@@ -1162,14 +1178,17 @@ func denyVCSOffSwitch(actingLease, writePath string, fields writeFields) writeGr
 	if doc.VCS.Enabled == nil || *doc.VCS.Enabled {
 		return writeGrade{}
 	}
+	say := "ask the person holding this checkout to make it by hand."
 	remedy := "Have the person holding this checkout make the change by hand, outside a lease and outside a spawned run, if the workspace genuinely wants no VCS."
 	actor := "This session carries spawn ancestry and names no lease."
 	if actingLease != "" {
-		remedy = leaseActorClause("turn vcs off")
+		say = leaseActorClause("turn vcs off")
+		remedy = leaseActorWhy
 		actor = fmt.Sprintf("Lease %s is bound to this checkout.", actingLease)
 	}
-	return writeGrade{Decision: "deny", Rule: string(denyRuleVCSOffSwitch), Reason: fmt.Sprintf(
-		"magus workspace: leave vcs.enabled alone here. %s\n"+
-			"%s sets vcs.enabled: false, in a magus.yaml tier this workspace reads. vcs.Resolve (vcs/vcs.go) then resolves no VCS at all, and the guard's own approval authority is HEAD of whatever VCS resolves: with none resolved, no policy edit is ever checked against an approved copy again. %s No write paths anybody hands out include this switch.",
-		remedy, writePath, actor)}
+	return writeGrade{Decision: "deny", Rule: string(denyRuleVCSOffSwitch), Reason: denial{
+		Say: "magus workspace: setting vcs.enabled: false ends every policy approval check; " + say,
+		Why: fmt.Sprintf("%s sets vcs.enabled: false, in a magus.yaml tier this workspace reads. vcs.Resolve (vcs/vcs.go) then resolves no VCS at all, and the guard's own approval authority is HEAD of whatever VCS resolves: with none resolved, no policy edit is ever checked against an approved copy again. %s No write paths anybody hands out include this switch.\n%s",
+			writePath, actor, remedy),
+	}.full()}
 }

@@ -19,13 +19,13 @@ const (
 	exitEchoPipeStatus
 )
 
-// The exit-0 fact leads the second line: it is what turns the echo from noise into a
-// wrong answer, and nothing on screen says so.
+// The exit-0 fact is the verdict: it is what turns the echo from noise into a wrong answer,
+// and nothing on screen says so.
 const (
-	denyExitStatusEcho = "Drop the trailing `echo $?`: the harness already reports a nonzero exit, and success needs no confirmation.\n" +
-		"The echo exits 0, so the line reads as passing whatever ran before it. If a failure must not be masked, join with `&&` or make separate calls."
-	denyPipeStatusEcho = "Drop the `echo ${PIPESTATUS[...]}` and let the line's own exit carry the failure: run the command without the pipe, or put `set -o pipefail` first.\n" +
-		"The echo exits 0, so the line reads as passing whatever the pipeline did."
+	denyExitStatusEcho = "a trailing `echo $?` exits 0 and masks whatever ran before it; drop it.\n" +
+		"The harness already reports a nonzero exit, and success needs no confirmation. If a failure must not be masked, join with `&&` or make separate calls."
+	denyPipeStatusEcho = "an `echo ${PIPESTATUS[...]}` exits 0 and masks what the pipeline did; drop it.\n" +
+		"Let the line's own exit carry the failure: run the command without the pipe, or put `set -o pipefail` first."
 )
 
 func exitEchoDenial(echo exitEcho) string {

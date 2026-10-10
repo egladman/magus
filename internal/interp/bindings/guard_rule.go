@@ -54,11 +54,11 @@ func registerFunctionRule(ctx context.Context, sess *buzz.Session, obs buzz.Dire
 		}
 		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				`%s: called from the magusfile of %s; the rule answers for %s in the workspace, so register it in the root magusfile`, name, path, r.judges)
+				`%s: called from the magusfile of %s; register it in the root magusfile, where a rule answering for %s in the workspace belongs`, name, path, r.judges)
 		}
 		if registered {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				`%s: already registered in this magusfile; a workspace has one such rule, so fold the second one into the first`, name)
+				`%s: already registered in this magusfile, and a workspace has one such rule; fold the second one into the first`, name)
 		}
 		registered = true
 		if reg := workspace.WorkspaceRegistryFromContext(ctx); reg != nil && sess != nil {

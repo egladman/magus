@@ -310,7 +310,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "push-authority", name: "a subagent opens a pull request", input: bash(`gh pr create --title "fix: pin the key" --body "Pins it."`),
 			worker: "root/feat footprint", decision: "deny", reason: "only the main session pushes or opens a pull request"},
 		{rule: "branch-name", name: "the main session pushes an uppercase, underscored name", input: bash("git push origin HEAD:Pin_Key"),
-			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "branch-name: `Pin_Key` is not a name to publish"},
+			checkout: &types.CheckoutState{Branch: "pin-key", Base: "origin/main", RemoteBranches: []string{"origin/main"}}, decision: "deny", reason: "`Pin_Key` is not a branch name to publish"},
 		{rule: "spawn-without-job-row", name: "a spawn titled for no job", input: agentSpawn(map[string]any{
 			"description": "audit the store", "prompt": "Audit it.", "model": "sonnet",
 		}), decision: "deny", reason: "magus job fork <job> --model sonnet"},
@@ -332,8 +332,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
+			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
-		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "A directory named terminals is not a run"},
+		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
 	}
 
 	covered := map[string]bool{}
@@ -803,7 +805,7 @@ func TestJudgeServesADenyRemedyItThenPreauthorizes(t *testing.T) {
 	require.Equal(t, Verdict{
 		SchemaVersion: agent.GuardSchemaVersion,
 		Decision:      "deny",
-		Reason: "`ls jobs >f`: console text is not a format anything should parse." +
+		Reason: "`ls jobs >f` keeps console text, which is not a format anything should parse." +
 			"\nnext:\n  magus ls jobs -o json --tee f" +
 			verdictRefLine + "magus query output " + ref,
 		Rule:      string(denyRuleOutputRedirect),

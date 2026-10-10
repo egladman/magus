@@ -972,7 +972,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 		[]string{"--path", "--lease", lease.ID, "-o", "json"})
 	require.Error(t, err)
 	assert.Contains(t, out.String(), "magus cache dir")
-	assert.Contains(t, out.String(), "magus is the only writer of it")
+	assert.Contains(t, out.String(), "which only magus writes")
 	assert.NotContains(t, out.String(), "registered the base it landed on",
 		"the write-path rules must not answer for this path")
 }

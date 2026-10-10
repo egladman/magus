@@ -12,7 +12,9 @@
 #
 # There is no magusfile here on purpose. Outside a workspace the advisory gate has no
 # base to write markers under and suppresses nothing, so each case below is judged on
-# its own rather than on which case ran before it.
+# its own rather than on which case ran before it. With no cache dir there is also nowhere
+# to store a verdict, so each refusal prints whole; these cases assert the verdict, the
+# first line, and leave the rationale after it to the unit tests.
 
 # --- the refusals: each names the magus verb that replaces it -----------------
 
@@ -20,18 +22,15 @@
 # exits 0 blocks nothing.
 stdin stash.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: whole-tree'
+stdout 'deny \[[a-z-]+\]: whole-tree git stash destroys uncommitted work'
 stdout 'magus run <target> <project>'
-stdout 'whole-tree git stash destroys uncommitted work'
-stdout 'full verdict: '
 
 # An unqualified restore takes whatever sits at the top of a stack the whole repository
-# shares, so the routing is to READ the stack and name an entry.
+# shares, so the verdict says so and routes to naming an entry.
 stdin stash-pop.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Name the entry you meant'
-stdout 'git stash list'
-stdout 'git stash pop stash@'
+stdout 'deny \[[a-z-]+\]: bare `git stash pop` acts on stash@\{0\}'
+stdout 'name yours as stash@\{N\}'
 
 stdin reset-hard.txt
 ! exec magus shell
@@ -47,46 +46,44 @@ stdin clean-fd.txt
 ! exec magus shell
 stdout 'whole-tree git clean destroys'
 
-# Restoring a path from one side of a merge. It reads as a narrow revert, so the reason
-# has to spend its length saying why it is not, and then offer both deliberate forms.
+# Restoring a path from one side of a merge. It reads as a narrow revert, so the verdict
+# says what it discards and names the regenerating resolve; both deliberate forms are in
+# the rationale.
 stdin checkout-merge-head.txt
 ! exec magus shell
-stdout 'deny \[[a-z-]+\]: Restoring a path from MERGE_HEAD overwrites it with ONE side'
-stdout 'magus vcs resolve'
-stdout 'git checkout --ours'
+stdout 'deny \[[a-z-]+\]: restoring a path from MERGE_HEAD discards the other side.*magus vcs resolve'
 
 # Staging everything can be undone, so with no workspace setting it advises rather than
-# refuses, and still names the command to run instead.
+# refuses, and still names the command to run instead. A demoted deny advises with its
+# whole text, rationale included.
 stdin add-all.txt
 exec magus shell
-stdout 'advise \[stage-all\]: Stage through the workspace'
+stdout 'advise \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
 stdout 'magus vcs add'
 
 # `git add .` stages the working directory's subtree, which no vcs add spelling equals, so
 # it gets the prose and both deliberate forms instead.
 stdin add-dot.txt
 exec magus shell
-stdout 'advise \[stage-all\]: Stage through the workspace'
+stdout 'advise \[stage-all\]: a whole-tree `git add` sweeps in regenerated output'
 stdout 'magus vcs add --dry-run'
 stdout 'git add -- <paths>'
 
-# A worktree removal is judged rather than refused outright, so its refusal names each
-# condition it failed and what a removal needs to pass. Outside a workspace the session's
-# own checkout is unknown, which is the condition that fails here.
+# A worktree removal is judged rather than refused outright, so its verdict names the
+# first condition it failed; every condition and what a removal needs to pass are in the
+# rationale. Outside a workspace the session's own checkout is unknown, which is the
+# condition that fails here.
 stdin worktree-remove.txt
 ! exec magus shell
-stdout 'deny \[worktree-remove\]: Removing .*wt is refused'
-stdout '- which checkout this session runs in is unknown'
-stdout 'A removal passes when the worktree is a linked worktree of this repository other than your own, clean, unlocked'
-stdout '--force changes nothing'
+stdout 'deny \[worktree-remove\]: removing .*wt may lose work: which checkout this session runs in is unknown'
 
 # The non-git backends reach the same rule, and the replacement is REWRITTEN for them:
 # an hg user cannot follow advice to add a git worktree, and it would be the first thing
-# they were told.
+# they were told. The scratch-checkout wording sits in the rationale, pinned by
+# TestWholeTreeStoresTheBackendsScratchCheckout.
 stdin hg-purge.txt
 ! exec magus shell
 stdout 'whole-tree hg purge destroys'
-stdout 'throwaway clone'
 ! stdout 'git worktree add'
 
 stdin jj-abandon.txt
@@ -95,7 +92,7 @@ stdout 'whole-tree jj abandon destroys'
 
 stdin jj-workspace-forget.txt
 ! exec magus shell
-stdout 'jj workspace forget drops that workspace'
+stdout 'jj workspace forget drops a working-copy commit'
 
 # A deny anywhere in a compound command outranks an advisory earlier in it, or the
 # refusal is lost to whichever reminder the first command earned.

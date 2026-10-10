@@ -80,7 +80,7 @@ func registerBuiltins(ctx context.Context, obs buzz.DirectObserver, guardMap vm.
 		}
 		if path, ok := interp.ProjectPathFromContext(ctx); ok && path != "" && path != "." {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-				`magus\guard.builtins: called from the magusfile of %s; the settings apply to the whole workspace, so declare them in the root magusfile`, path)
+				`magus\guard.builtins: called from the magusfile of %s; declare the whole workspace's settings in the root magusfile`, path)
 		}
 		if registered {
 			return vm.Null, types.DiagnosticErrorf(types.GuardRuleMisdeclared,

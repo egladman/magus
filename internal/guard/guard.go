@@ -519,9 +519,11 @@ const advisoryStdinClosed hint.MarkerKind = "stdin-closed"
 const stdinClosedNotice = "magus runs your shell commands with stdin at end-of-file; pipe or redirect input explicitly."
 
 // stdinClosedDeny refuses a line that leaves stdin open, for a workspace that raised
-// stdin-closed to deny.
-const stdinClosedDeny = "magus workspace: start the line with `" + stdinClosedPrefix + "` so no command in it waits on stdin; pipe or redirect input explicitly.\n" +
-	"This workspace refuses a shell command that leaves stdin open, since a stray reader of it waits forever."
+// stdin-closed to deny; stdinClosedDenyWhy is its rationale.
+const (
+	stdinClosedDeny    = "magus workspace: this line leaves stdin open; start it with `" + stdinClosedPrefix + "`."
+	stdinClosedDenyWhy = "This workspace refuses a shell command that leaves stdin open, since a stray reader of it waits forever. Pipe or redirect input explicitly."
+)
 
 // closeStdin is line with stdin closed, and false when line already starts by closing it.
 func closeStdin(line string) (string, bool) {
@@ -981,7 +983,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			case "ask":
 				verdict.Decision, verdict.Context, verdict.Reason = "ask", "", reason
 				if !req.RendersAsk {
-					verdict.Decision, verdict.Reason = "deny", reason+"\n"+askUnrendered
+					verdict.Decision, verdict.Reason = "deny", askUnrenderedDeny(commit)
+					whys[verdict.Reason] = reason + "\n" + askUnrendered
 				}
 				verdict.Rule = string(denyRulePushUngated)
 			case "deny":
@@ -1084,6 +1087,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			switch g := deps.grade(ShellVerdict{Context: stdinClosedNotice, Kind: advisoryStdinClosed}); {
 			case g.Deny != "":
 				verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule, verdict.UpdatedCommand = "deny", stdinClosedDeny, "", string(advisoryStdinClosed), ""
+				whys[stdinClosedDeny] = stdinClosedDenyWhy
 			case g.Context != "":
 				notice = markers.Once(advisoryStdinClosed, stdinClosedNotice)
 			}

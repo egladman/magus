@@ -413,7 +413,7 @@ func TestGradeLeasedEditDeniedDeclaration(t *testing.T) {
 		{name: "another declaration", path: run, fields: edit("b()", "b2()")},
 		{name: "above the first declaration", path: run, fields: edit("package run\n", "package run\n\nimport \"fmt\"\n")},
 		{name: "a whole-file write leaving the declaration alone", path: run, fields: writeFields{Content: strings.Replace(claimedGo, "c()", "c2()", 1)}},
-		{name: "the named declaration", path: run, fields: edit("a()", "a2()"), want: `This edit changes func A() { in run.go, which your lease denier (work on denier) declared DENIED as "run.go#A"`},
+		{name: "the named declaration", path: run, fields: edit("a()", "a2()"), want: `this edit changes func A() { in run.go, which your lease denier declared DENIED as "run.go#A"`},
 		{name: "every edit of a sequence is placed", path: run, fields: writeFields{Edits: []textEdit{
 			{OldText: "b()", NewText: "b2()"}, {OldText: "a()", NewText: "a2()"},
 		}}, want: `declared DENIED as "run.go#A"`},

@@ -120,7 +120,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 		}
 	case scriptInterpreter:
 		if scriptRewrites(body) && !allOutside(deps.scope, scriptPaths(body)) {
-			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}})
+			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}})
 		}
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs

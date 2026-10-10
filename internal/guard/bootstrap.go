@@ -276,7 +276,7 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return o.recoveryAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = "magus workspace: not a bootstrap, since " + o.root + " already has a magus binary; rebuild with " + ownRebuild + "."
+		v.Deny = "magus workspace: not a bootstrap: " + o.root + " already has a magus binary; rebuild with " + ownRebuild + "."
 		v.Next, v.Lead = nil, ""
 		return v
 	case o.hasBinary:

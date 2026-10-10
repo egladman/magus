@@ -135,7 +135,7 @@ func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRuleInterpreterRewrite, v.Rule.Name, tt.command)
-		assert.Contains(t, v.Deny, "Use your editor tool on internal/x.go", tt.command)
+		assert.Contains(t, v.Deny, "a script rewrites internal/x.go, a file this tree carries; use your editor tool on it.", tt.command)
 	}
 }
 
