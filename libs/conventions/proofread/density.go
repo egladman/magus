@@ -225,11 +225,11 @@ func gerundSubject(rest string) bool {
 const maxListedWords = 3
 
 // listedNoun reports whether the -ing word at text[from:to] opens a short
-// noun phrase standing as an item of a series rather than a clause: no
-// object or complement follows it, and the item closes at a parenthesis, at
-// the comma before a series' closing "and", or at a comma or the paragraph's
-// end after an item as short and as bare. A clause closed by a period
-// ("causing retries.") stays one.
+// noun phrase standing as an item of a series rather than a clause. No object
+// or complement follows it. The item closes at a parenthesis, at the comma
+// before a series' closing "and", or at a comma or the paragraph's end after
+// an item as short and as bare. A clause closed by a period ("causing
+// retries.") stays one.
 func listedNoun(text string, from, to int) bool {
 	item := text[to:]
 
