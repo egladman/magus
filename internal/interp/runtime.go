@@ -1,7 +1,6 @@
 package interp
 
 import (
-	"cmp"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -14,6 +13,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -185,24 +185,29 @@ func magusRooted(e ast.Node, path []string) bool {
 // than from the tree: the magus\describe namespace, and the members that fork a nested
 // magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
 // does, with no source the target could declare.
-var binaryAnswers = [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+func binaryAnswers() [][]string {
+	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+}
 
-// NestedMagusTargets returns the normalized keys of the exported targets in src whose
+// BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
 // body reaches a binaryAnswers member. The walk follows calls into the file's own helpers
 // and into functions of a Buzz module src imports ("../hack/magusfile/index"), resolved
 // against dirs in order as "<dir>/<path>.buzz" or "<dir>/magusfiles/<path>.buzz" and read
 // through read. A call it cannot follow counts as nothing, so it under-reports
 // the way every static footprint does. A parse failure yields nil.
-func NestedMagusTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
+func BinaryAnswerTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
 	prog, err := parsecache.Shared().ParseEmbedded(src)
 	if err != nil || prog == nil {
 		return nil
 	}
-	w := nestedMagusWalk{dirs: dirs, read: read, modules: map[string]*buzzModule{}, memo: map[string]bool{}}
-	root := w.module("", prog)
+	w := binaryAnswerWalk{
+		dirs: dirs, read: read, answers: binaryAnswers(),
+		modules: map[string]*buzzModule{}, memo: map[string]bool{}, visiting: map[string]bool{},
+	}
+	root := newBuzzModule("", prog)
 	out := map[string]bool{}
 	for name, fd := range root.funcs {
-		if fd.IsExported && w.reaches(root, name, map[string]bool{}) {
+		if fd.IsExported && w.reaches(root, name) {
 			out[types.Normalize(name)] = true
 		}
 	}
@@ -210,22 +215,19 @@ func NestedMagusTargets(src string, dirs []string, read func(path string) ([]byt
 }
 
 type buzzModule struct {
-	path    string
-	funcs   map[string]*ast.FunDecl
-	imports map[string]string // namespace alias -> import path
+	path      string
+	namespace string // the module's `namespace` declaration, "" for none
+	funcs     map[string]*ast.FunDecl
+	imports   map[string]string // bound name -> import path
+	unaliased []string          // import paths bound without `as`, which also bind their namespace
 }
 
-type nestedMagusWalk struct {
-	dirs    []string
-	read    func(path string) ([]byte, error)
-	modules map[string]*buzzModule // by resolved file path; nil records a miss
-	memo    map[string]bool        // hits, by module path + "\x00" + function
-}
-
-func (w *nestedMagusWalk) module(path string, prog *ast.Program) *buzzModule {
-	m := &buzzModule{path: path, funcs: map[string]*ast.FunDecl{}, imports: map[string]string{}}
+func newBuzzModule(file string, prog *ast.Program) *buzzModule {
+	m := &buzzModule{path: file, funcs: map[string]*ast.FunDecl{}, imports: map[string]string{}}
 	for _, stmt := range prog.Stmts {
 		switch s := stmt.(type) {
+		case *ast.NamespaceStmt:
+			m.namespace = s.Name
 		case *ast.FunDecl:
 			m.funcs[s.Name] = s
 		case *ast.ImportStmt:
@@ -235,14 +237,46 @@ func (w *nestedMagusWalk) module(path string, prog *ast.Program) *buzzModule {
 				s.Alias == "_" || len(s.Only) > 0 {
 				continue
 			}
-			m.imports[cmp.Or(s.Alias, filepath.Base(s.Path))] = s.Path
+			if s.Alias != "" {
+				m.imports[s.Alias] = s.Path
+				continue
+			}
+			m.imports[path.Base(s.Path)] = s.Path
+			m.unaliased = append(m.unaliased, s.Path)
 		}
 	}
 	return m
 }
 
+type binaryAnswerWalk struct {
+	dirs     []string
+	read     func(path string) ([]byte, error)
+	answers  [][]string
+	modules  map[string]*buzzModule // by resolved file path; nil records a miss
+	memo     map[string]bool        // final answers, by module path + "\x00" + function
+	visiting map[string]bool        // the call stack, which breaks a recursion cycle
+	cut      bool                   // a cycle cut the current walk short
+}
+
+// imported is the module m binds under name: an alias, the basename of an unaliased
+// import, or the namespace an unaliased import declares (gopherbuzz binds both, as
+// upstream Buzz binds the namespace).
+func (w *binaryAnswerWalk) imported(m *buzzModule, name string) *buzzModule {
+	if p, ok := m.imports[name]; ok {
+		if mod := w.load(p); mod != nil {
+			return mod
+		}
+	}
+	for _, p := range m.unaliased {
+		if mod := w.load(p); mod != nil && mod.namespace == name {
+			return mod
+		}
+	}
+	return nil
+}
+
 // load parses the module an import names, or returns nil when no dir holds it.
-func (w *nestedMagusWalk) load(importPath string) *buzzModule {
+func (w *binaryAnswerWalk) load(importPath string) *buzzModule {
 	for _, dir := range w.dirs {
 		for _, file := range []string{
 			filepath.Join(dir, filepath.FromSlash(importPath)+".buzz"),
@@ -265,7 +299,7 @@ func (w *nestedMagusWalk) load(importPath string) *buzzModule {
 				w.modules[file] = nil
 				continue
 			}
-			m := w.module(file, prog)
+			m := newBuzzModule(file, prog)
 			w.modules[file] = m
 			return m
 		}
@@ -273,18 +307,24 @@ func (w *nestedMagusWalk) load(importPath string) *buzzModule {
 	return nil
 }
 
-// reaches reports whether fn in m reaches a binaryAnswers member. visiting breaks a
-// recursion cycle.
-func (w *nestedMagusWalk) reaches(m *buzzModule, fn string, visiting map[string]bool) bool {
+// reaches reports whether fn in m reaches a binaryAnswers member.
+func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
 	key := m.path + "\x00" + fn
 	if v, ok := w.memo[key]; ok {
 		return v
 	}
-	fd := m.funcs[fn]
-	if fd == nil || fd.Body == nil || visiting[key] {
+	if w.visiting[key] {
+		w.cut = true
 		return false
 	}
-	visiting[key] = true
+	fd := m.funcs[fn]
+	if fd == nil || fd.Body == nil {
+		w.memo[key] = false
+		return false
+	}
+	w.visiting[key] = true
+	outerCut := w.cut
+	w.cut = false
 	found := false
 	ast.Inspect(fd.Body, func(n ast.Node) bool {
 		if found {
@@ -292,28 +332,28 @@ func (w *nestedMagusWalk) reaches(m *buzzModule, fn string, visiting map[string]
 		}
 		switch e := n.(type) {
 		case *ast.MemberExpr:
-			found = slices.ContainsFunc(binaryAnswers, func(path []string) bool { return magusRooted(e, path) })
+			found = slices.ContainsFunc(w.answers, func(path []string) bool { return magusRooted(e, path) })
 		case *ast.CallExpr:
 			switch callee := e.Callee.(type) {
 			case *ast.IdentExpr:
-				found = w.reaches(m, callee.Name, visiting)
+				found = w.reaches(m, callee.Name)
 			case *ast.MemberExpr:
-				alias, isIdent := callee.Object.(*ast.IdentExpr)
-				if !callee.Namespaced || !isIdent || m.imports[alias.Name] == "" {
-					break
-				}
-				if imported := w.load(m.imports[alias.Name]); imported != nil {
-					found = w.reaches(imported, callee.Name, visiting)
+				if name, isIdent := callee.Object.(*ast.IdentExpr); callee.Namespaced && isIdent {
+					if mod := w.imported(m, name.Name); mod != nil {
+						found = w.reaches(mod, callee.Name)
+					}
 				}
 			}
 		}
 		return !found
 	})
-	delete(visiting, key)
-	// Only a hit is final: a miss may be one a cycle cut short.
-	if found {
-		w.memo[key] = true
+	delete(w.visiting, key)
+	// A hit is final. A miss is final unless a cycle cut it short, and the outermost call
+	// of a walk has nothing left on the stack to cut it.
+	if found || !w.cut || len(w.visiting) == 0 {
+		w.memo[key] = found
 	}
+	w.cut = outerCut || (w.cut && !found)
 	return found
 }
 
@@ -485,13 +525,12 @@ const staleStampAge = 24 * time.Hour
 // with a key kept in the user's state dir, and one that does not verify is
 // compiled over.
 //
-// Nil when the compiler cannot be identified or the cache or the key is
-// unavailable, and the load compiles every time.
+// Nil when the cache or the key is unavailable, and the load compiles every time.
 func guardBytecodeStore(root string) buzz.BytecodeStore {
-	stamp := compilerStamp()
-	if root == "" || stamp == "" {
+	if root == "" {
 		return nil
 	}
+	stamp := compilerStamp()
 	base, err := config.UserCacheDir()
 	if err != nil {
 		return nil
@@ -618,25 +657,13 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 	}
 }
 
-// compilerStamp identifies the build that compiles a chunk, so a chunk is only
-// ever run by the compiler that wrote it. It is the executable's Go build ID,
-// which the toolchain derives from the build's inputs and output: a rebuild of
-// the same source matches (a fresh CI binary reuses the last run's chunks) and
-// any other build does not, dirty tree or not. Empty when the executable cannot
-// be read or carries no build ID.
-func compilerStamp() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return readCompilerStamp(exe)
-}
-
-// readCompilerStamp is the stamp the cache keys a nested-magus step on too
-// (proc.BuildStamp), so a chunk and an entry agree on what one build is.
-func readCompilerStamp(exe string) string { return proc.ReadBuildStamp(exe) }
-
-var goBuildID = proc.ReadBuildID
+// compilerStamp identifies the build that compiles a chunk, so a chunk is only ever run
+// by the compiler that wrote it: proc.BinaryBuild, the build a binary-answer step keys on
+// too. A rebuild of the same source matches (a fresh CI binary reuses the last run's
+// chunks) and any other build does not. Where the build ID cannot be read it falls back
+// to the executable file's identity, which still never lets another build's chunk run;
+// at worst it caches per file rather than per build.
+func compilerStamp() string { return proc.BinaryBuild() }
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no

@@ -427,7 +427,12 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 // for: every path it writes is checked against them and parseManifest requires the
 // manifest to name them, so a signed artifact fetched for one key can never file
 // itself under another.
-func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProject, wantHash string) (*Manifest, error) {
+//
+// accept, when not nil, sees the manifest as soon as it arrives, still unauthenticated;
+// false abandons the import with errTierMiss before the blobs after it are written. It
+// can only turn an import away, never vouch for one: an accepted artifact still passes
+// every gate above.
+func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProject, wantHash string, accept func(*Manifest) bool) (*Manifest, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("importArtifact: gzip: %w", err)
@@ -527,6 +532,13 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 			}
 			manifest = stagedMember{tmp: tmp, final: clean}
 			manifestBytes = buf.Bytes()
+			if accept != nil {
+				// A manifest that does not parse fails below, after the signature gate,
+				// as it always has.
+				if early, err := c.parseManifest(manifestBytes, wantProject, wantHash); err == nil && !accept(early) {
+					return nil, errTierMiss
+				}
+			}
 		case rel == logRel || strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
 			// The build log and the portable reference metadata files, both scoped to the entry
 			// being imported so an artifact cannot write over another key's records.

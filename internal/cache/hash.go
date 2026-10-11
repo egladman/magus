@@ -185,10 +185,10 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	if s.SpellDefVersion != "" {
 		writeLine("spellDefVersion:", s.SpellDefVersion)
 	}
-	// Written only for a step that asks the binary for its answer (Step.MagusBuild), so
+	// Written only for a step that asks the binary for its answer (Step.BinaryBuild), so
 	// every other key is unchanged and KeyVersion need not move, as with obs.
-	if s.MagusBuild != "" {
-		writeLine("magus:", s.MagusBuild)
+	if s.BinaryBuild != "" {
+		writeLine("binary:", s.BinaryBuild)
 	}
 
 	tools := append([]string(nil), s.ToolVersions...)

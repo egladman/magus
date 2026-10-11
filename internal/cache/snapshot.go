@@ -314,7 +314,7 @@ func (c *Cache) replayFrom(ctx context.Context, m *Manifest, root, store string)
 // with "no matching files found" for a go:embed of a file the replay is about to
 // restore.
 func replayRecord(rec OutputRecord, dst, store string) error {
-	if replayCurrent(rec, dst) {
+	if outputMatchesRecord(rec, dst, hashFile) {
 		return nil
 	}
 	tmp, err := stagingName(dst)
@@ -339,10 +339,11 @@ func replayRecord(rec OutputRecord, dst, store string) error {
 	return nil
 }
 
-// replayCurrent reports whether dst already is what rec records: the same link target,
-// or a regular file with the recorded bytes and mode. Leaving such a file untouched also
-// keeps its mtime, so nothing keyed on it goes dirty.
-func replayCurrent(rec OutputRecord, dst string) bool {
+// outputMatchesRecord reports whether dst already is what rec records: the same link
+// target, or a regular file with the recorded bytes, read through hash, and mode. A
+// replay leaves such a file untouched, which also keeps its mtime, so nothing keyed on it
+// goes dirty.
+func outputMatchesRecord(rec OutputRecord, dst string, hash func(path string) (string, error)) bool {
 	info, err := os.Lstat(dst)
 	if err != nil {
 		return false
@@ -357,7 +358,7 @@ func replayCurrent(rec OutputRecord, dst string) bool {
 	if rec.Mode != 0 && runtime.GOOS != "windows" && uint32(info.Mode()&0o777) != rec.Mode&0o777 {
 		return false
 	}
-	sum, err := hashFile(dst)
+	sum, err := hash(dst)
 	return err == nil && sum == rec.Blob
 }
 

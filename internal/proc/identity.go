@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"debug/elf"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -146,65 +148,82 @@ var buildVCS = func() (rev string, modified bool, ok bool) {
 	return rev, modified, true
 }
 
-// BuildStamp identifies the build of the running executable (see ReadBuildStamp). An
-// executable with no readable build ID falls back to binaryIdentity, which only separates
-// builds further. Read once per process, like binaryIdentity and for the same reason: a
-// file rebuilt underneath this process must not speak for the code it loaded.
-var BuildStamp = sync.OnceValue(func() string {
+// BinaryBuild identifies the build of the running executable: a 16-hex digest of its Go
+// build ID, which the toolchain derives from the build's inputs, so two builds of the same
+// source share it and any other build does not, dirty tree or not. An executable whose
+// build ID cannot be read falls back to binaryIdentity, which only separates builds
+// further. Never empty. Read once per process, like binaryIdentity and for the same
+// reason: a file rebuilt underneath this process must not speak for the code it loaded.
+func BinaryBuild() string { return binaryBuild() }
+
+var binaryBuild = sync.OnceValue(func() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return binaryIdentity
 	}
-	return cmp.Or(ReadBuildStamp(exe), binaryIdentity)
+	digest, err := buildIDDigest(exe)
+	if err != nil {
+		return binaryIdentity
+	}
+	return cmp.Or(digest, binaryIdentity)
 })
 
-// ReadBuildStamp is a 16-hex digest of exe's Go build ID, which the toolchain derives
-// from the build's inputs: two builds of the same source share it and any other build
-// does not, dirty tree or not. "" when exe carries no readable build ID.
-func ReadBuildStamp(exe string) string {
-	id := ReadBuildID(exe)
-	if id == "" {
-		return ""
+// buildIDDigest is BinaryBuild's digest of exe's build ID: "" with no error when exe
+// carries none.
+func buildIDDigest(exe string) (string, error) {
+	id, err := readBuildID(exe)
+	if err != nil || id == "" {
+		return "", err
 	}
 	sum := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(sum[:])[:16]
+	return hex.EncodeToString(sum[:])[:16], nil
 }
 
-// ReadBuildID reads the build ID the Go linker writes at the start of the text segment,
+// readBuildID reads the build ID the Go linker writes at the start of the text segment,
 // which lies in the file's first 32 KiB (cmd/internal/buildid reads the same window), or
-// from ELF's .note.go.buildid when an external link moved text. "" when exe cannot be
-// read or carries none.
-func ReadBuildID(exe string) string {
+// from ELF's .note.go.buildid when an external link moved text. "" with no error when exe
+// is readable and carries none; an error when it cannot be read or its note is malformed.
+func readBuildID(exe string) (string, error) {
 	f, err := os.Open(exe)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	defer f.Close()
 	head := make([]byte, 32<<10)
-	n, _ := io.ReadFull(f, head)
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return "", err
+	}
 	const marker = "\xff Go build ID: \""
 	if i := bytes.Index(head[:n], []byte(marker)); i >= 0 {
 		rest := head[i+len(marker) : n]
 		if j := bytes.IndexByte(rest, '"'); j > 0 {
-			return string(rest[:j])
+			return string(rest[:j]), nil
 		}
 	}
 	ef, err := elf.NewFile(f)
+	var notELF *elf.FormatError
+	if errors.As(err, &notELF) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", nil
+	}
 	if err != nil {
-		return ""
+		return "", err
 	}
 	note := ef.Section(".note.go.buildid")
 	if note == nil {
-		return ""
+		return "", nil
 	}
 	// namesz, descsz, type, then "Go\x00\x00" and the ID.
 	data, err := note.Data()
-	if err != nil || len(data) < 16 {
-		return ""
+	if err != nil {
+		return "", err
+	}
+	if len(data) < 16 {
+		return "", fmt.Errorf("truncated .note.go.buildid in %s", exe)
 	}
 	size := int(ef.ByteOrder.Uint32(data[4:8]))
 	if len(data) < 16+size {
-		return ""
+		return "", fmt.Errorf("truncated .note.go.buildid in %s", exe)
 	}
-	return string(data[16 : 16+size])
+	return string(data[16 : 16+size]), nil
 }

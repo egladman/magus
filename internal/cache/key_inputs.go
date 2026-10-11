@@ -198,7 +198,7 @@ func ClassDigests(inputs []string) []ClassDigest {
 // probeTools joins those three parts before hashStepInputs labels them.
 //
 // Six more carry a bare value straight after the class label, so the boundary is the
-// class colon: keyVersion, os, arch, target, spellDefVersion, magus. Pairing them matters as
+// class colon: keyVersion, os, arch, target, spellDefVersion, binary. Pairing them matters as
 // much as pairing src does: unpaired, a bumped keyVersion reads as one line vanishing
 // and an unrelated one arriving, double-counting the single thing that moved.
 //
@@ -212,7 +212,7 @@ func splitKeyInput(line string) (identity, value string) {
 		return line, ""
 	}
 	switch class {
-	case "keyVersion", "os", "arch", "target", "spellDefVersion", "magus":
+	case "keyVersion", "os", "arch", "target", "spellDefVersion", "binary":
 		return class, rest
 	case "src": // src:<rel>:<contentHash>:<execBit>; the rel path may itself contain ':'
 		if i := strings.LastIndexByte(rest, ':'); i > 0 {

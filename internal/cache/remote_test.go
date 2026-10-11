@@ -733,3 +733,29 @@ func TestRemoteSummaryToleratesNoBackendAndNoStats(t *testing.T) {
 	_, ok = c.RemoteSummary(t.Context())
 	assert.False(t, ok, "no stats on ctx: a caller outside Magus.Run")
 }
+
+// An artifact the manifest already turns away (a drift gate's outputs no longer read as
+// it recorded them) is abandoned before its blobs land: nothing it carried is written.
+func TestImportTurnedAwayByItsManifestWritesNothing(t *testing.T) {
+	remote, err := NewFSRemoteBackend(t.TempDir())
+	require.NoError(t, err, "NewFSRemoteBackend")
+	pub, seed := genKeypair(t)
+	trusted := [][]byte{pub}
+	rootA, cA := openSigned(t, remote, seed, trusted)
+	rA, _ := buildCanonical(t, rootA, cA)
+	raw, err := os.ReadFile(findBackendArtifact(t, remote, "test__pkg"))
+	require.NoError(t, err)
+
+	_, cB := openSigned(t, remote, nil, trusted)
+	var seen *Manifest
+	_, err = cB.importArtifact(t.Context(), bytes.NewReader(raw), cB.dir, "test/pkg", rA.Hash, func(m *Manifest) bool {
+		seen = m
+		return false
+	})
+	require.ErrorIs(t, err, errTierMiss)
+	require.NotNil(t, seen)
+	require.NotEmpty(t, seen.Outputs)
+	assert.NoFileExists(t, cB.blobPath(seen.Outputs[0].Blob), "the blob after the manifest is never written")
+	_, err = cB.readManifest("test/pkg", rA.Hash)
+	require.ErrorIs(t, err, os.ErrNotExist, "the manifest is not committed")
+}

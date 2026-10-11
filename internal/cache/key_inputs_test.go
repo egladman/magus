@@ -425,10 +425,10 @@ func TestFirstKeyInputChangePairsInputsByIdentity(t *testing.T) {
 			want:     KeyInputChange{Class: "spellDefVersion", Input: "spellDefVersion", Recorded: "aaa111", Live: "bbb222"},
 		},
 		{
-			name:     "magus build",
-			recorded: []string{"magus:0123456789abcdef"},
-			live:     []string{"magus:fedcba9876543210"},
-			want:     KeyInputChange{Class: "magus", Input: "magus", Recorded: "0123456789abcdef", Live: "fedcba9876543210"},
+			name:     "binary build",
+			recorded: []string{"binary:0123456789abcdef"},
+			live:     []string{"binary:fedcba9876543210"},
+			want:     KeyInputChange{Class: "binary", Input: "binary", Recorded: "0123456789abcdef", Live: "fedcba9876543210"},
 		},
 		{
 			name:     "host arch",

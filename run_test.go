@@ -702,6 +702,10 @@ func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
 	p.Outputs = []types.Glob{{Pattern: "gen/**"}}
 	p.TargetOutputs = map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}
 
+	assert.Empty(t, m.buildStep(p, "lint").ForeignOutputs,
+		"a spell op run on its own may be the one writing what its spell provides")
+	// proto's lint is a magusfile export wrapping buf-lint; only the export is carved.
+	p.MagusfileTargets = append(p.MagusfileTargets, "lint", "generate")
 	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs)
 	assert.Empty(t, m.buildStep(p, "generate").ForeignOutputs, "a target never treats its own declaration as foreign")
 
@@ -741,6 +745,11 @@ export fun lint(ctx: magus\Context, args: [str]) > void {}
 	assert.Empty(t, m.buildStep(p, "build").ForeignOutputs)
 	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs,
 		"only the overlapping declaration is foreign; dist/** stays lint's")
+
+	// A chain step in a project that does not resolve could be a writer this step runs, so
+	// a chain walked in part carves out nothing.
+	p.TargetChains["lint"] = []types.ChainStep{{Project: "missing", Target: "generate"}}
+	assert.Empty(t, m.buildStep(p, "lint").ForeignOutputs)
 }
 
 // TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt pins harness gap 8b: docs content-generate
@@ -789,25 +798,25 @@ export fun plain() > void {}
 	p := m.Get(".")
 	require.NotNil(t, p, "root project")
 
-	stamp := proc.BuildStamp()
-	require.NotEmpty(t, stamp)
+	build := proc.BinaryBuild()
+	require.NotEmpty(t, build)
 	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
-		assert.Equal(t, stamp, m.buildStep(p, target).MagusBuild, target)
+		assert.Equal(t, build, m.buildStep(p, target).BinaryBuild, target)
 		_, lines, err := m.ComputeTargetKey(context.Background(), ".", target, nil)
 		require.NoError(t, err, target)
-		assert.Contains(t, lines, "magus:"+stamp, "describe target --cache must mint the key a run does: %s", target)
+		assert.Contains(t, lines, "binary:"+build, "describe target --cache must mint the key a run does: %s", target)
 	}
-	assert.Empty(t, m.buildStep(p, "build").MagusBuild, "a target that never asks the binary keeps its key across rebuilds")
+	assert.Empty(t, m.buildStep(p, "build").BinaryBuild, "a target that never asks the binary keeps its key across rebuilds")
 	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "build", nil)
 	require.NoError(t, err)
-	assert.NotContains(t, lines, "magus:"+stamp)
+	assert.NotContains(t, lines, "binary:"+build)
 }
 
-// TestDriftGateStampsItsOutputsOnlyWithoutWrite: a target that declares outputs and
-// branches on rw is a drift gate when run without rw, so its hit is stamped on its
-// outputs (cache.Step.StampOutputs). Under rw it writes them, and a build that never
-// reads rw keeps restoring its outputs on a hit.
-func TestDriftGateStampsItsOutputsOnlyWithoutWrite(t *testing.T) {
+// TestDriftGateVerifiesItsOutputsOnlyWithoutWrite: a target that declares outputs and
+// branches on rw is a drift gate when run without rw, so its hit must find its outputs as
+// the entry recorded them (cache.Step.VerifyOutputs). Under rw it writes them, and a
+// build that never reads rw keeps restoring its outputs on a hit.
+func TestDriftGateVerifiesItsOutputsOnlyWithoutWrite(t *testing.T) {
 	root := t.TempDir()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -833,10 +842,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 		applyRunKeying(&step, p, nil, nil, charms)
 		return step
 	}
-	assert.True(t, keyed("generate").StampOutputs, "the check form compares its outputs")
-	assert.False(t, keyed("generate", types.CharmReadWrite).StampOutputs, "the rw form writes them")
-	assert.False(t, keyed("build").StampOutputs, "a build that never reads rw restores its outputs")
-	assert.False(t, keyed("lint").StampOutputs, "a target declaring no outputs has none to stamp")
+	assert.True(t, keyed("generate").VerifyOutputs, "the check form compares its outputs")
+	assert.False(t, keyed("generate", types.CharmReadWrite).VerifyOutputs, "the rw form writes them")
+	assert.False(t, keyed("build").VerifyOutputs, "a build that never reads rw restores its outputs")
+	assert.False(t, keyed("lint").VerifyOutputs, "a target declaring no outputs has none to verify")
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a

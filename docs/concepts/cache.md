@@ -235,7 +235,7 @@ the `Step`. magus writes these lines, in this order, into one hash:
   dependent misses transitively.
 - `spellDefVersion`: a fingerprint of the built-in spell definitions, so a magus
   upgrade that changes a spell forces a miss.
-- `magus`: the build of the running magus binary, a digest of its Go build ID, written
+- `binary`: the build of the running magus binary, a digest of its Go build ID, written
   only for a target whose body asks that binary for its answer: a `magus\describe`
   call, or a member that forks a nested magus (`magus\run`, `magus\cmd`,
   `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()` or
@@ -275,7 +275,7 @@ this list, it cannot move the key:
 <tr><td><code>exec:</code>: <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
 <tr><td><code>dep:</code>: each upstream target's resolved key, this same fold applied one level up</td></tr>
 <tr><td><code>spellDefVersion</code>: the built-in spell definitions</td></tr>
-<tr><td><code>magus</code>, <code>tool:</code>: the magus build, for a target that asks it; toolchain versions</td></tr>
+<tr><td><code>binary</code>, <code>tool:</code>: the magus build, for a target that asks it; toolchain versions</td></tr>
 </table>
 </figure>
 
@@ -291,7 +291,7 @@ hashed line above yields a new key, and thus a new (empty) slot:
   (a scanner database refreshing);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
-- a rebuilt magus binary, for a target that asks it for its answer (`magus`);
+- a rebuilt magus binary, for a target that asks it for its answer (`binary`);
 - applying or dropping a charm;
 - renaming the project or target.
 
@@ -642,8 +642,10 @@ some of those belong to a sibling. With `"outputs": ["gen/**"]` on the project a
 record it as found and, on its next hit, write that copy back over whatever
 `generate` has produced since; run just before a drift check, it fails the check
 on every run. So a glob another target declares is never recorded or restored by
-a target that inherits it, unless that target composes the declaring one with
-`ctx.needs`, whose writes land inside its own run. Nothing about the key changes.
+a magusfile target that inherits it, unless that target composes the declaring one
+with `ctx.needs`, whose writes land inside its own run. A spell op run on its own,
+such as `buf::buf-generate`, keeps every glob its spell provides, since it may be the
+one writing them. Nothing about the key changes.
 
 A drift gate's hit has the opposite problem. A target that declares outputs and
 branches on the `rw` charm compares those outputs when run without `rw`: it
@@ -652,7 +654,8 @@ not the committed outputs, so a hit after someone committed a stale output would
 restore the fresh copy and pass without comparing anything. So for that form,
 and only that form, the entry's recorded output digests vouch for the tree: a hit
 replays only while every file the outputs match reads as the entry recorded it.
-A changed, missing or unrecorded file is a miss, and the gate runs its check. A
+A changed, missing or unrecorded file, or one whose mode moved, is a miss, and the
+gate runs its check. A
 tree that still matches replays as before, so a gate in front of a costly or
 rate-limited generator (proto's remote buf plugins) still skips it. The `rw`
 form, and every target that never reads `rw`, restores its outputs on a hit

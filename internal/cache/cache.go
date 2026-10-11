@@ -207,11 +207,12 @@ type Step struct {
 	// go-build target's entry.
 	Spell           string
 	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
-	// MagusBuild is the running binary's build stamp, set only for a step whose body asks
-	// that binary for its answer (a magus\describe call, a nested magus). Such an answer
-	// moves when the binary is rebuilt from changed code, with no file in the tree to key
-	// on. Empty writes no key line, so every other step keeps its key across rebuilds.
-	MagusBuild   string
+	// BinaryBuild identifies the running binary's build (proc.BinaryBuild), set only for a
+	// step whose body asks that binary for its answer (a magus\describe call, a nested
+	// magus). Such an answer moves when the binary is rebuilt from changed code, with no
+	// file in the tree to key on. Empty writes no key line, so every other step keeps its
+	// key across rebuilds.
+	BinaryBuild  string
 	ToolVersions []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
@@ -227,17 +228,17 @@ type Step struct {
 	// and a hit replays only while every stamp still reads the same. A stamped entry
 	// describes one local tree, so it is never fetched from or pushed to a remote.
 	Stamps []string
-	// StampOutputs makes Outputs stamps too: a hit replays only while every file they
-	// match reads as the entry recorded it, and a moved, missing or extra one is a miss.
-	// It is for a target that COMPARES its outputs (a drift gate run without rw), whose
-	// hit would otherwise restore fresh outputs over stale committed ones and pass
-	// without looking. A tree that still matches replays, so a gate keyed on a costly
-	// generator still skips it. Unhashed, and unlike Stamps it leaves the remote tier
-	// on: the entry records every output's digest, so any tier's copy can be checked.
-	StampOutputs bool
-	NoCache      bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay   bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Slots        int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	// VerifyOutputs makes a hit replay only while every file Outputs match reads as the
+	// entry recorded it, mode included; a moved, missing or extra one is a miss. It is for
+	// a target that COMPARES its outputs (a drift gate run without rw), whose hit would
+	// otherwise restore fresh outputs over stale committed ones and pass without looking.
+	// A tree that still matches replays, so a gate keyed on a costly generator still skips
+	// it. Unhashed, and unlike Stamps it leaves the remote tier on: the entry records every
+	// output's digest, so any tier's copy can be checked.
+	VerifyOutputs bool
+	NoCache       bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay    bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Slots         int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -544,7 +545,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
+	return hash, mErr == nil && !c.traceTreeMoved(ctx, s, manifest), nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found

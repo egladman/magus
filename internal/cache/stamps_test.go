@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -47,12 +48,12 @@ func TestStampsGateTheReplay(t *testing.T) {
 	assert.Equal(t, 3, calls)
 }
 
-// TestStampedOutputsGateTheReplay pins the cached drift gate: proto's generate runs
+// TestVerifiedOutputsGateTheReplay pins the cached drift gate: proto's generate runs
 // without rw as a check, and a hit used to restore fresh outputs over stale committed
-// ones and pass without comparing anything. With StampOutputs a hit replays only while
-// the tree's outputs read as the entry recorded them, so a tree that still matches
-// keeps skipping the generator.
-func TestStampedOutputsGateTheReplay(t *testing.T) {
+// ones and pass without comparing anything. With VerifyOutputs a hit replays only while
+// the tree's outputs read as the entry recorded them, mode included, so a tree that
+// still matches keeps skipping the generator.
+func TestVerifiedOutputsGateTheReplay(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
 	gen := filepath.Join(root, "test", "pkg", "gen")
@@ -61,7 +62,7 @@ func TestStampedOutputsGateTheReplay(t *testing.T) {
 	step := makeStep(root)
 	step.Outputs = types.MustParseGlobs("test/pkg/gen/**")
 	step.OutputsDeclared = true
-	step.StampOutputs = true
+	step.VerifyOutputs = true
 	calls := 0
 	fn := func(_ context.Context) error {
 		calls++
@@ -99,10 +100,18 @@ func TestStampedOutputsGateTheReplay(t *testing.T) {
 	assert.False(t, run().Hit, "a deleted output must regenerate through the check")
 	assert.Equal(t, 5, calls)
 
-	step.StampOutputs = false
+	if runtime.GOOS != "windows" {
+		require.NoError(t, os.Chmod(out, 0o755))
+		assert.False(t, run().Hit, "an output whose mode moved is drift too")
+		assert.True(t, run().Hit, "the entry now records the new mode")
+		assert.Equal(t, 6, calls)
+	}
+
+	step.VerifyOutputs = false
+	before := calls
 	require.NoError(t, os.WriteFile(out, []byte("stale"), 0o644))
-	assert.True(t, run().Hit, "an unstamped step restores its outputs, as a build's hit always has")
-	assert.Equal(t, 5, calls)
+	assert.True(t, run().Hit, "an unverified step restores its outputs, as a build's hit always has")
+	assert.Equal(t, before, calls)
 }
 
 // A stamp the tool never writes can never vouch for a tree, so the entry never replays.

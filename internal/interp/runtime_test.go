@@ -1,7 +1,6 @@
 package interp
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -442,34 +441,6 @@ func TestCompilerStampIsStable(t *testing.T) {
 	assert.Equal(t, stamp, compilerStamp())
 }
 
-// CI builds a fresh binary on every run: same bytes, new file, new mtime. Its chunks
-// are the ones the last run compiled.
-func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	body, err := os.ReadFile(exe)
-	require.NoError(t, err)
-	fresh := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(fresh, body, 0o755))
-	long := time.Now().Add(-48 * time.Hour)
-	require.NoError(t, os.Chtimes(fresh, long, long))
-
-	stamp := readCompilerStamp(exe)
-	require.NotEmpty(t, stamp)
-	assert.Equal(t, stamp, readCompilerStamp(fresh))
-
-	id := goBuildID(exe)
-	require.NotEmpty(t, id, "the test binary carries a Go build ID")
-	replacement := []byte(id)
-	replacement[0] ^= 1
-	other := bytes.ReplaceAll(body, []byte(id), replacement)
-	require.False(t, bytes.Equal(body, other), "the test must change the stored build ID")
-	rebuilt := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
-	assert.Equal(t, string(replacement), goBuildID(rebuilt))
-	assert.NotEqual(t, stamp, readCompilerStamp(rebuilt), "another build is another compiler")
-}
-
 // A chunk is code the next load runs. One that does not verify is compiled over,
 // whoever wrote it: here, a valid chunk of other source moved to this source's key.
 func TestGuardLoadRefusesATamperedChunk(t *testing.T) {
@@ -591,7 +562,7 @@ func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
 		filepath.Join("bindings", "magus_vcs.go"):    {"vcs"},
 	}
 	covered := func(path []string) bool {
-		return slices.ContainsFunc(binaryAnswers, func(entry []string) bool {
+		return slices.ContainsFunc(binaryAnswers(), func(entry []string) bool {
 			return len(entry) <= len(path) && slices.Equal(entry, path[:len(entry)])
 		})
 	}
@@ -728,23 +699,36 @@ func isRegistration(call *goast.CallExpr) bool {
 	return false
 }
 
-func TestNestedMagusTargetsFollowsHelpersAndImports(t *testing.T) {
+// An unaliased import binds both its basename and the namespace it declares
+// (branch-stack.buzz declares `namespace branchstack`), so a call through either reaches
+// the module. A helper on a recursion cycle still answers for a later target that calls it.
+func TestBinaryAnswerTargetsFollowsHelpersAndImports(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`namespace lib;
 import "magus";
 export fun page() > str { return magus\describe.graphMarkdown(["."]); }
 export fun plain() > void {}
 `), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "branch-stack.buzz"), []byte(`namespace branchstack;
+import "magus";
+export fun render() > void { magus\run(["."], ["generate"]); }
+`), 0o644))
 	src := `import "magus";
 import "./lib" as lib;
+import "./branch-stack";
 export fun direct(ctx: magus\Context, args: [str]) > void { final r = magus\describe.rule(); }
 export fun viaHelper(ctx: magus\Context, args: [str]) > void { helper(); }
 fun helper() > void { magus\cmd("doctor", []); }
 export fun viaImport(ctx: magus\Context, args: [str]) > void { final p = lib\page(); }
+export fun viaNamespace(ctx: magus\Context, args: [str]) > void { branchstack\render(); }
 export fun recursive(ctx: magus\Context, args: [str]) > void { loop(); }
-fun loop() > void { loop(); }
+fun loop() > void { loop(); spin(); }
+fun spin() > void { loop(); }
+export fun afterCycle(ctx: magus\Context, args: [str]) > void { spin(); helper(); }
 export fun plain(ctx: magus\Context, args: [str]) > void { lib\plain(); magus\log.info("x"); }
 `
-	got := NestedMagusTargets(src, []string{dir}, os.ReadFile)
-	assert.Equal(t, map[string]bool{"direct": true, "via-helper": true, "via-import": true}, got)
+	got := BinaryAnswerTargets(src, []string{dir}, os.ReadFile)
+	assert.Equal(t, map[string]bool{
+		"direct": true, "via-helper": true, "via-import": true, "via-namespace": true, "after-cycle": true,
+	}, got)
 }

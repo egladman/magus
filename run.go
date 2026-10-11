@@ -475,16 +475,26 @@ func targetOutputGlobs(p *types.Project, target string) []types.Glob {
 	return out
 }
 
-// foreignOutputs is every glob another target declares with ctx.writesFiles that one of
-// outputs, target's inherited baseline, can overlap. A member of target's ctx.needs chain
-// is left out: its writes land inside this step's run, so this step's entry keeps
-// recording and restoring them.
+// foreignOutputs is the globs other targets declare with ctx.writesFiles that overlap
+// outputs, target's inherited baseline: the part of the baseline this step must neither
+// record nor restore. A member of target's ctx.needs chain is left out: its writes land
+// inside this step's run, so this step's entry keeps recording and restoring them. A
+// chain walked only in part (a step in a project that does not resolve) carves out
+// nothing, since a member it missed would lose the writes this step's own run made.
 func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.Glob) []types.Glob {
 	composed := map[types.TargetRef]bool{}
-	_ = types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
+	partial := false
+	lookup := func(path string) *types.Project {
+		q := m.Get(path)
+		partial = partial || q == nil
+		return q
+	}
+	if err := types.WalkChain(p, target, lookup, func(v types.ChainVisit) error {
 		composed[types.TargetRef{Project: v.Project.Path, Target: v.Target}] = true
 		return nil
-	})
+	}); err != nil || partial {
+		return nil
+	}
 	var out []types.Glob
 	for _, proj := range m.All() {
 		for name := range proj.TargetOutputs {
@@ -499,35 +509,6 @@ func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.
 		}
 	}
 	return types.CompactGlobs(out)
-}
-
-// outputCheckTargets finds, per project path, the targets that declare outputs and whose
-// body branches on the rw charm: run without rw, such a target is a drift gate that
-// compares its outputs instead of writing them. A source that cannot be read
-// contributes nothing, as in applyTargetDepsAndFootprint.
-func outputCheckTargets(projects []*types.Project) map[string]map[string]bool {
-	out := map[string]map[string]bool{}
-	for _, p := range projects {
-		srcs, err := interp.FindAll(p.Dir)
-		if err != nil {
-			continue
-		}
-		for _, src := range srcs {
-			if src.Engine != "buzz" {
-				continue
-			}
-			for _, n := range describe.Extract(concatSource(src)) {
-				if len(p.TargetOutputs[n.Name]) == 0 || !slices.Contains(n.Charms, types.CharmReadWrite) {
-					continue
-				}
-				if out[p.Path] == nil {
-					out[p.Path] = map[string]bool{}
-				}
-				out[p.Path][n.Name] = true
-			}
-		}
-	}
-	return out
 }
 
 // buildStep assembles the cache.Step for running target on p.
@@ -593,8 +574,10 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
 		// which a check-only target never produces; see OutputsDeclared.
 		step.OutputsDeclared = true
-		step.StampOutputs = m.outputChecks[p.Path][target]
-	} else if len(step.Outputs) > 0 {
+		step.VerifyOutputs = m.driftGates[types.TargetRef{Project: p.Path, Target: target}]
+	} else if len(step.Outputs) > 0 && slices.Contains(p.MagusfileTargets, target) {
+		// Only a magusfile target is carved: a spell op run on its own (buf::buf-generate)
+		// inherits the globs its spell says it provides, and may be the one writing them.
 		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
 	}
 	sources := slices.Clone(step.Sources)
@@ -653,8 +636,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// ctx.observes: an external fact the answer depends on, keyed so the target stays
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
-	if m.nestedMagus[p.Path][target] {
-		step.MagusBuild = proc.BuildStamp()
+	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
+		step.BinaryBuild = proc.BinaryBuild()
 	}
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
@@ -937,7 +920,7 @@ func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observatio
 	// Under rw the gate writes its outputs rather than comparing them, so a hit restoring
 	// them over stale ones is the answer that run would give.
 	if slices.Contains(step.Charms, types.CharmReadWrite) {
-		step.StampOutputs = false
+		step.VerifyOutputs = false
 	}
 }
 

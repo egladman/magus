@@ -339,8 +339,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// dependency on the WRITER, so the writer runs first and the owner's cache key is
 	// computed against the finished bytes.
 	var crossOut []crossOutput
-	nested := map[string]map[string]bool{}
-	defer func() { m.nestedMagus = nested }()
+	binaryAnswerTargets := map[types.TargetRef]bool{}
+	driftGateTargets := map[types.TargetRef]bool{}
+	defer func() { m.binaryAnswerTargets, m.driftGates = binaryAnswerTargets, driftGateTargets }()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -361,11 +362,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), first.Name, first.Replacement, first.Line)
 			}
 			nodes := describe.Extract(source)
-			for name := range interp.NestedMagusTargets(source, []string{p.Dir, m.ws.Root}, readInside(m.ws.Root)) {
-				if nested[p.Path] == nil {
-					nested[p.Path] = map[string]bool{}
-				}
-				nested[p.Path][name] = true
+			for name := range interp.BinaryAnswerTargets(source, []string{p.Dir, m.ws.Root}, confinedReader(m.ws.Root)) {
+				binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: name}] = true
 			}
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
@@ -476,6 +474,11 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						crossOut = append(crossOut, crossOutput{owner: owner, writer: p.Path,
 							glob: types.Glob{Pattern: ref.Glob, Except: ref.Except}})
 					}
+				}
+				// Run without rw, a target that declares outputs and branches on the rw
+				// charm is a drift gate: it compares its outputs instead of writing them.
+				if len(p.TargetOutputs[n.Name]) > 0 && slices.Contains(n.Charms, types.CharmReadWrite) {
+					driftGateTargets[types.TargetRef{Project: p.Path, Target: n.Name}] = true
 				}
 				if !slices.Contains(p.MagusfileTargets, n.Name) {
 					p.MagusfileTargets = append(p.MagusfileTargets, n.Name)
@@ -656,9 +659,10 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	return nil
 }
 
-// readInside reads a file under root and refuses any other, as the interpreter's import
-// confinement does (MGS1047), so a static read never opens what a load would not.
-func readInside(root string) func(path string) ([]byte, error) {
+// confinedReader reads a file under root and refuses any other, as the interpreter's
+// import confinement does (MGS1047), so a static read never opens what a load would not.
+// It does not reuse that confinement, which reports each refusal as a load error.
+func confinedReader(root string) func(path string) ([]byte, error) {
 	return func(path string) ([]byte, error) {
 		if rel, err := filepath.Rel(root, path); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return nil, fs.ErrNotExist

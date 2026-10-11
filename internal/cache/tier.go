@@ -88,7 +88,7 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if err != nil {
 		return nil, err
 	}
-	if t.c.treeMoved(ctx, s, m) {
+	if t.c.traceTreeMoved(ctx, s, m) {
 		return nil, errTierMiss
 	}
 	return &entry{manifest: m, root: t.c.dir}, nil
@@ -187,17 +187,23 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 		return nil, err
 	}
 	counted := &CountingReader{Reader: r}
-	m, err := t.c.importArtifact(ctx, counted, root, s.ProjectPath, hash)
+	// A verified output is checked against the working tree, not against the machine that
+	// stored the entry, so the remote copy vouches as well as a local one. The check runs
+	// on the manifest as it arrives, before any blob is imported for an entry that would
+	// never replay.
+	var accept func(*Manifest) bool
+	if s.VerifyOutputs {
+		accept = func(m *Manifest) bool { return !t.c.traceTreeMoved(ctx, s, m) }
+	}
+	m, err := t.c.importArtifact(ctx, counted, root, s.ProjectPath, hash, accept)
+	if errors.Is(err, errTierMiss) {
+		release()
+		return nil, errTierMiss
+	}
 	if err != nil {
 		release()
 		t.fail(ctx, "import", s, hash, counted.N, false, err)
 		return nil, err
-	}
-	// A stamped output is checked against the working tree, not against the machine
-	// that stored the entry, so the remote copy vouches as well as a local one.
-	if t.c.treeMoved(ctx, s, m) {
-		release()
-		return nil, errTierMiss
 	}
 	return &entry{
 		manifest: m, root: root, remote: t.name(), bytes: counted.N,
