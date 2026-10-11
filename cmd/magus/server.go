@@ -324,7 +324,7 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 	logPath := serverLogPath()
 	pid, err := spawnDetached(serverChildArgs(os.Args[1:]), logPath)
 	if err != nil {
-		slog.ErrorContext(ctx, "server start: could not background the server", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).ErrorContext(ctx, "could not background the server", attr.Error(err))
 		return 1, true
 	}
 	if err := waitServerReady(ctx, addr, serverReadyTimeout); err != nil {
@@ -728,7 +728,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 	if err != nil {
 		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the next
 		// trigger (hook, RPC, or manual submit) will catch up.
-		slog.DebugContext(ctx, "server job: submit failed", slog.String("job", name), slog.String("error", err.Error()))
+		slog.With(attr.Component("server job")).DebugContext(ctx, "submit failed", slog.String("job", name), attr.Error(err))
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncRefused, Detail: err.Error()})
 		return nil
 	}
@@ -761,7 +761,7 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 		err = maintenance.RecordSyncRequest(dir, r)
 	}
 	if err != nil {
-		slog.DebugContext(ctx, "server job: sync request not recorded", slog.String("error", err.Error()))
+		slog.With(attr.Component("server job")).DebugContext(ctx, "sync request not recorded", attr.Error(err))
 	}
 }
 
@@ -955,7 +955,7 @@ func installRefreshHooks(ctx context.Context) {
 		return // this VCS has no hook support
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS refresh hook", attr.Error(err))
 		return
 	}
 	if len(installed) > 0 {
@@ -987,7 +987,7 @@ func installDriftHooks(ctx context.Context) {
 		return // this VCS has no hook support
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS drift-notice hook", attr.Error(err))
 		return
 	}
 	if len(installed) > 0 {
