@@ -864,7 +864,7 @@ var File_magus_notes_v1alpha1_notes_proto protoreflect.FileDescriptor
 
 const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\n" +
-	" magus/notes/v1alpha1/notes.proto\x12\x14magus.notes.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xc3\x01\n" +
+	" magus/notes/v1alpha1/notes.proto\x12\x14magus.notes.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc3\x01\n" +
 	"\x06Anchor\x124\n" +
 	"\x04kind\x18\x01 \x01(\x0e2 .magus.notes.v1alpha1.AnchorKindR\x04kind\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12:\n" +

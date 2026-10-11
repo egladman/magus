@@ -354,7 +354,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:340](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L340).
+Source: [job.proto:343](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L343).
 
 | Field             | Type                                 | # | Description                                                                                                                                            |
 | ----------------- | ------------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------ |

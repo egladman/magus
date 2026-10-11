@@ -21,9 +21,9 @@ import "google/protobuf/timestamp.proto";
 // Verdict is how a probed version sits in its window. Mirrors spells.Verdict.
 enum Verdict {
   VERDICT_UNSPECIFIED = 0;
-  VERDICT_INSIDE = 1;    // satisfies every declared bound
-  VERDICT_TOO_OLD = 2;   // below min; the CLI raises MGS3005
-  VERDICT_TOO_NEW = 3;   // at or above below; the CLI raises MGS3006
+  VERDICT_INSIDE = 1; // satisfies every declared bound
+  VERDICT_TOO_OLD = 2; // below min; the CLI raises MGS3005
+  VERDICT_TOO_NEW = 3; // at or above below; the CLI raises MGS3006
   // VERDICT_UNKNOWN means magus could not make the comparison: the probe failed, its
   // output carried no version, or a bound is unparsable. Never a violation, and
   // deliberately distinct from INSIDE - "we could not check" must not render as "fine".
@@ -32,10 +32,10 @@ enum Verdict {
 
 // Support is where the installed version's release cycle stands. Mirrors spells.Support.
 enum Support {
-  SUPPORT_UNSPECIFIED = 0;  // the spell names no lifecycle product, or no provider is wired
-  SUPPORT_SUPPORTED = 1;    // before its end-of-life date
-  SUPPORT_EOL = 2;          // on or after its end-of-life date
-  SUPPORT_UNANNOUNCED = 3;  // upstream has named no end date
+  SUPPORT_UNSPECIFIED = 0; // the spell names no lifecycle product, or no provider is wired
+  SUPPORT_SUPPORTED = 1; // before its end-of-life date
+  SUPPORT_EOL = 2; // on or after its end-of-life date
+  SUPPORT_UNANNOUNCED = 3; // upstream has named no end date
   // SUPPORT_UNKNOWN means the provider gave nothing to place the version with: it did not
   // answer, it does not know the product, or no cycle carries the version. The response's
   // lifecycle state says which.
@@ -46,24 +46,24 @@ enum Support {
 // states `magus describe tools -o json` prints.
 enum LifecycleState {
   LIFECYCLE_STATE_UNSPECIFIED = 0;
-  LIFECYCLE_STATE_LIVE = 1;       // asked the provider for this response
-  LIFECYCLE_STATE_CACHED = 2;     // replayed a stored answer without asking
-  LIFECYCLE_STATE_OFFLINE = 3;    // MAGUS_OFFLINE forbade asking; a stored answer, or none
-  LIFECYCLE_STATE_UNREACHED = 4;  // asked and not answered; a stored answer, or none
-  LIFECYCLE_STATE_UNWIRED = 5;    // the workspace wires no lifecycle provider
+  LIFECYCLE_STATE_LIVE = 1; // asked the provider for this response
+  LIFECYCLE_STATE_CACHED = 2; // replayed a stored answer without asking
+  LIFECYCLE_STATE_OFFLINE = 3; // MAGUS_OFFLINE forbade asking; a stored answer, or none
+  LIFECYCLE_STATE_UNREACHED = 4; // asked and not answered; a stored answer, or none
+  LIFECYCLE_STATE_UNWIRED = 5; // the workspace wires no lifecycle provider
 }
 
 // Lifecycle says where every Tool's cycle, eol and support came from.
 message Lifecycle {
-  string provider = 1;  // the spell wired as the lifecycle provider, empty when none is
+  string provider = 1; // the spell wired as the lifecycle provider, empty when none is
   LifecycleState state = 2;
-  repeated string sources = 3;  // the URLs the provider read
+  repeated string sources = 3; // the URLs the provider read
   // as_of is the OLDEST upstream last-modified among the answers: the data is no fresher
   // than its stalest source. Unset when nothing was answered.
   google.protobuf.Timestamp as_of = 4;
   // fetched_at is when the provider was asked; on a replay, when the replayed answer was.
   google.protobuf.Timestamp fetched_at = 5;
-  string detail = 6;  // why the provider was not asked or did not answer
+  string detail = 6; // why the provider was not asked or did not answer
 }
 
 // VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a
@@ -78,8 +78,8 @@ message VersionBounds {
 
 // Tool is one binary a spell drives, as this workspace currently sees it.
 message Tool {
-  string bin = 1;    // the binary name, e.g. "go", "node"
-  string spell = 2;  // the spell that declares it, e.g. "go", "typescript"
+  string bin = 1; // the binary name, e.g. "go", "node"
+  string spell = 2; // the spell that declares it, e.g. "go", "typescript"
 
   // installed_version is what the probe extracted, canonical "vX.Y.Z". Empty when the
   // tool is absent or printed nothing version-shaped; that is not a violation, so it
@@ -89,12 +89,12 @@ message Tool {
   // The two declarations, kept SEPARATE rather than pre-merged, because the first
   // question a reader has about a failing bound is who set it. The CLI diagnostic cannot
   // say (Intersect discards provenance); a table has room to.
-  VersionBounds spell_bounds = 4;      // what the spell's ops need to function
-  VersionBounds workspace_bounds = 5;  // what this project declared in its magusfile
-  VersionBounds effective = 6;         // the intersection actually enforced, narrower wins
+  VersionBounds spell_bounds = 4; // what the spell's ops need to function
+  VersionBounds workspace_bounds = 5; // what this project declared in its magusfile
+  VersionBounds effective = 6; // the intersection actually enforced, narrower wins
 
   Verdict verdict = 7;
-  string diagnostic_code = 8;  // "MGS3005"/"MGS3006" when violated, else empty
+  string diagnostic_code = 8; // "MGS3005"/"MGS3006" when violated, else empty
 
   // probe_time is when this version was read. A console page has no build to piggyback on,
   // so the probe behind it may be older than the page; surfacing the age is honest where
@@ -135,7 +135,7 @@ message Tool {
 // Project groups the tools one project drives, since a window is declared per project and
 // the same binary can be held to different bounds in different projects.
 message Project {
-  string path = 1;  // workspace-relative, "." for the root
+  string path = 1; // workspace-relative, "." for the root
   string name = 2;
   repeated Tool tools = 3;
 }
