@@ -113,7 +113,8 @@ func TestMessageTagReportsAComponentTagOrMarker(t *testing.T) {
 
 func TestMessageRulesJudgeOnlyMessages(t *testing.T) {
 	want := []Rule{RuleMessageLength, RuleMessageRationale, RuleMessageCommands, RuleMessageTag}
-	if got := KindRules(KindMessage); !reflect.DeepEqual(got, want) {
+	got := slices.DeleteFunc(KindRules(KindMessage), func(r Rule) bool { return r == RuleSuppressionUnused })
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("KindRules(KindMessage) = %q, want %q", got, want)
 	}
 

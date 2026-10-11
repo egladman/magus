@@ -446,3 +446,94 @@ func TestRunExitsOneOnInputThatIsNotAnArrayOfRecords(t *testing.T) {
 		})
 	}
 }
+
+func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "a.md", "# A\n\nIt simply works.\n")
+
+	var log sarifLog
+
+	runInto(t, []string{"reference", "-format", "sarif", path}, &log)
+
+	if res := log.Runs[0].Results; len(res) != 1 || res[0].RuleID != "filler" ||
+		res[0].Locations[0].PhysicalLocation.ArtifactLocation.URI != path ||
+		res[0].Locations[0].PhysicalLocation.Region.StartLine != 3 {
+		t.Errorf("sarif results = %+v", res)
+	}
+
+	var result rdResult
+
+	runInto(t, []string{"reference", "-format", "rdjson", path}, &result)
+
+	if d := result.Diagnostics; len(d) != 1 || d[0].Code.Value != "PRF4001" || d[0].Location.Path != path ||
+		d[0].Severity != "ERROR" {
+		t.Errorf("rdjson diagnostics = %+v", d)
+	}
+}
+
+func TestRunRejectsAnUnknownFormat(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"reference", "-format", "xml"}, strings.NewReader(""), &out, &errOut)
+	if code != 1 || out.String() != "" || errOut.String() != "proofread: unknown -format \"xml\": want json, sarif or rdjson\n" {
+		t.Errorf("run: got code %d stdout %q stderr %q", code, out.String(), errOut.String())
+	}
+}
+
+func TestRunHoldsAFileToItsBaseline(t *testing.T) {
+	dir := t.TempDir()
+	page := writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n")
+	baselinePath := filepath.Join(dir, "baseline.json")
+
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"reference", "-baseline", baselinePath, page}, strings.NewReader(""), &out, &errOut)
+	if code != 1 || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with -prune to create it") {
+		t.Fatalf("a missing baseline: code %d stdout %q stderr %q", code, out.String(), errOut.String())
+	}
+
+	assertArgs(t, []string{"reference", "-baseline", baselinePath, "-prune", page}, "", "[]\n")
+	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", "[]\n")
+
+	writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n\nIt basically works.\n")
+
+	want := rows(t, row(page, page+":5", "reference", proofread.RuleFiller, proofread.DecisionDeny,
+		"Drop 'basically': state the fact.", "basically").at(5, 4, 13))
+	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", want)
+}
+
+func TestRunNeedsABaselineForPrune(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"reference", "-prune"}, strings.NewReader(""), &out, &errOut)
+	if code != 1 || errOut.String() != "proofread: -prune needs -baseline\n" {
+		t.Errorf("run: got code %d stderr %q", code, errOut.String())
+	}
+}
+
+func TestRunHonorsASuppressionAndReportsAnIdleOne(t *testing.T) {
+	dir := t.TempDir()
+	quiet := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
+	idle := writeFile(t, dir, "idle.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt works.\n")
+
+	comment := "<!-- proofread off filler: quoting the user -->"
+	want := rows(t, row(idle, idle+":3", "reference", proofread.RuleSuppressionUnused, proofread.DecisionDeny,
+		"Remove the suppression of filler: it matches no finding.", comment).at(3, 1, 1+len(comment)))
+
+	assertArgs(t, []string{"reference", quiet}, "", "[]\n")
+	assertArgs(t, []string{"reference", idle}, "", want)
+}
+
+// runInto runs proofread with args and decodes its stdout into into.
+func runInto(t *testing.T, args []string, into any) {
+	t.Helper()
+
+	var out, errOut bytes.Buffer
+
+	if code := run(args, strings.NewReader(""), &out, &errOut); code != 0 || errOut.String() != "" {
+		t.Fatalf("run %v: code %d stderr %q", args, code, errOut.String())
+	}
+
+	if err := json.Unmarshal(out.Bytes(), into); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, out.String())
+	}
+}

@@ -205,6 +205,44 @@ Codes are numbered by family and never reused: `PRF1xxx` shape, `PRF2xxx` tone,
 style, `PRF6xxx` doc comments, `PRF7xxx` agent instructions, `PRF8xxx` review
 replies.
 
+### Output, baselines and suppressions
+
+`-format` picks what proofread writes: `json` (the default) is the array above,
+`sarif` is a SARIF 2.1.0 log for code scanning, and `rdjson` is reviewdog's
+diagnostic result. The SARIF log lists every rule in the driver, gives a deny
+finding the level `error` and an advise finding `warning`, and carries a
+`proofread/v1` partial fingerprint hashed from the rule, the match and the path,
+so a finding that moves down a file is still the same finding. An rdjson
+diagnostic carries a suggestion for each replacement a rule offers. Any other
+format exits 1.
+
+```sh
+proofread reference -format sarif docs/*.md > proofread.sarif
+proofread reference -format rdjson docs/*.md | reviewdog -f=rdjson -reporter=github-pr-review
+```
+
+`-baseline FILE` adopts proofread on text that already has findings. The file
+holds a count per file and rule, `{"version":1,"counts":{"docs/a.md":{"filler":2}}}`.
+A run tolerates up to each count and writes the findings past it: for a file and
+rule that is the last ones in the order proofread lists them. A count is a
+ceiling, so a file that improved reports nothing until `-prune` lowers it.
+`-baseline FILE -prune` rewrites the file to this run's counts and writes no
+findings, and creates it when it is missing; without `-prune` a missing file is an
+error. Commit the file, and run `-prune` as the findings are fixed.
+
+A suppression silences a rule at one place and gives its reason. In Markdown it is
+a comment before the line, `<!-- proofread off filler: quoted from the user -->`,
+and in a doc comment or plain text a line saying `proofread:ignore filler quoted
+from the user`. Each covers its own line and the next, and names one rule or
+several separated by commas. A block runs from an `off` comment to a later
+`<!-- proofread on -->`, which ends every open block, or to
+`<!-- proofread on filler -->`, which ends that rule's. A finding with no line,
+such as `comment-block`, is covered by a suppression of its rule anywhere in the
+text. A suppression with no reason covers nothing, and one that matched no
+finding is stale; `suppression-unused` (PRF1090) reports both, at the
+suppression's own line. A suppression inside a fenced block or a backtick span is
+text, so a page can show the syntax.
+
 ### Rules
 
 | Rule               | Code    | Kinds                                | Default                              | Reports                                                                          |
@@ -229,6 +267,7 @@ replies.
 | `second-person`    | PRF1003 | guide                                | deny                                 | we, us, our or ours where a guide addresses you                                  |
 | `step-verb`        | PRF1004 | guide                                | deny                                 | a numbered step that opens with no verb ("1. The target...")                     |
 | `condescension`    | PRF2006 | pages, change description, reply     | deny                                 | in a guide, a step called easy; elsewhere a word that presumes ("of course")     |
+| `suppression-unused` | PRF1090 | every kind                         | deny                                 | a suppression with no reason, or one that matched no finding                     |
 | `blame`            | PRF2001 | change description, reply            | deny                                 | a person or a pull request as the subject of a fault; contempt ("sloppy")        |
 | `verdict`          | PRF2002 | change description, reply            | advise                               | a judgment in place of the behavior ("was broken", "a mess")                     |
 | `absolute`         | PRF2003 | change description, reply            | advise                               | never, nobody or nothing about the past ("has never fired")                      |

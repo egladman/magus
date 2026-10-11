@@ -24,6 +24,16 @@
 // -thread-length N tells the reply rules how many replies the author already
 // posted in the thread. The flags follow the kind.
 //
+// -format picks the output: json, the array of findings, sarif, a SARIF 2.1.0
+// log for code scanning, or rdjson, reviewdog's diagnostic result with a
+// suggestion for each finding that has replacements. -baseline names a JSON
+// file of finding counts per file and rule: a run writes only the findings
+// past those counts, and -prune rewrites the file to this run's counts and
+// writes none. A text silences a finding in place with a suppression that
+// gives its reason, "<!-- proofread off RULE: REASON -->" in Markdown or
+// "proofread:ignore RULE REASON" in a doc comment, and the suppression-unused
+// rule reports one that matched nothing.
+//
 // This repository's lint rules and its pull request guard and CI step run it.
 // The magus module never imports libs/conventions, so the rules stay this
 // repository's policy.
@@ -126,6 +136,9 @@ func usage() string {
 	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
 	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
 	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
+	b.WriteString("  -format FORMAT     write findings as json (default), sarif or rdjson\n")
+	b.WriteString("  -baseline FILE     write only the findings past the counts FILE holds\n")
+	b.WriteString("  -prune             with -baseline, rewrite FILE to this run's counts and write no findings\n")
 
 	return b.String()
 }
