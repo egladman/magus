@@ -3,8 +3,6 @@ package job
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -35,27 +34,19 @@ const deepTests = "package x\n\nimport \"testing\"\n\nfunc TestDeep(t *testing.T
 
 // testRoot writes pkg/ with sources and the tests above, other/ with sources only, and
 // nested/x/ with a test of its own.
-func testRoot(t *testing.T) string {
+func testRoot(t *testing.T) *testkit.Workspace {
 	t.Helper()
-	root := t.TempDir()
-	for _, f := range [][2]string{
-		{"pkg/a.go", "package pkg\n"},
-		{"pkg/b.go", "package pkg\n"},
-		{"pkg/a_test.go", gradedTests},
-		{"other/o.go", "package other\n"},
-		{"docs/page.md", "page\n"},
-		{"nested/x/deep.go", "package x\n"},
-		{"nested/x/d_test.go", deepTests},
-	} {
-		writeFixture(t, root, f[0], f[1])
-	}
-	return root
-}
-
-func writeFixture(t *testing.T, root, rel, body string) {
-	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(body), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"pkg/a.go":           "package pkg\n",
+		"pkg/b.go":           "package pkg\n",
+		"pkg/a_test.go":      gradedTests,
+		"other/o.go":         "package other\n",
+		"docs/page.md":       "page\n",
+		"nested/x/deep.go":   "package x\n",
+		"nested/x/d_test.go": deepTests,
+	})
+	return w
 }
 
 func goTestCheck(args ...string) *types.LeaseCheck {
@@ -65,7 +56,7 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
 	t.Parallel()
 
-	root := testRoot(t)
+	root := testRoot(t).Root()
 	row := types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")}
 
 	err := RefuseSkippedTests(root, row)
@@ -86,7 +77,7 @@ func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
 func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 	t.Parallel()
 
-	root := testRoot(t)
+	root := testRoot(t).Root()
 	for _, tc := range []struct {
 		name    string
 		check   *types.LeaseCheck
@@ -133,7 +124,7 @@ func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 	t.Parallel()
 
-	root := testRoot(t)
+	root := testRoot(t).Root()
 	narrow := goTestCheck("-run", "NoSuchTest")
 	for _, tc := range []struct {
 		name    string
@@ -176,7 +167,8 @@ func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 	t.Parallel()
 
-	root := testRoot(t)
+	w := testRoot(t)
+	root := w.Root()
 	for rel, name := range map[string]string{
 		"pkg/testdata/fixture/f_test.go": "TestFixture",
 		"vendor/v/v_test.go":             "TestVendored",
@@ -184,9 +176,9 @@ func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 		"_scratch/s_test.go":             "TestScratch",
 		"lib/l_test.go":                  "TestNestedModule",
 	} {
-		writeFixture(t, root, rel, "package x\n\nimport \"testing\"\n\nfunc "+name+"(t *testing.T) {}\n")
+		w.Write(rel, "package x\n\nimport \"testing\"\n\nfunc "+name+"(t *testing.T) {}\n")
 	}
-	writeFixture(t, root, "lib/go.mod", "module lib\n")
+	w.Write("lib/go.mod", "module lib\n")
 
 	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"**/*.go"}, Check: goTestCheck("-run", "NoSuchTest")})
 	require.Error(t, err)
@@ -204,14 +196,15 @@ func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 func TestRefuseSkippedTestsCapsWhatItLists(t *testing.T) {
 	t.Parallel()
 
-	root := testRoot(t)
+	w := testRoot(t)
+	root := w.Root()
 	var many strings.Builder
 	many.WriteString("package big\n\nimport \"testing\"\n\n")
 	for i := range 200 {
 		fmt.Fprintf(&many, "func TestCase%03d(t *testing.T) {}\n", i)
 	}
-	writeFixture(t, root, "big/b.go", "package big\n")
-	writeFixture(t, root, "big/b_test.go", many.String())
+	w.Write("big/b.go", "package big\n")
+	w.Write("big/b_test.go", many.String())
 
 	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-run", "TestCase000")})
 	require.Error(t, err)
@@ -243,7 +236,7 @@ func TestForkAndApplyRefuseASkippingCheck(t *testing.T) {
 	narrow := goTestCheck("-run", "Alpha")
 	paths := []string{"pkg/a.go"}
 
-	s := tmpStore(t, testRoot(t))
+	s := tmpStore(t, testRoot(t).Root())
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths, u.Check = paths, narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "a fork by merge, the tool's put")
 
@@ -268,7 +261,7 @@ func TestForkLetsARowThatAlreadySkipsTakeAnUnrelatedUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	s := tmpStore(t, testRoot(t))
+	s := tmpStore(t, testRoot(t).Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
@@ -281,9 +274,9 @@ func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	root := testRoot(t)
-	writeFixture(t, root, "other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
-	s := tmpStore(t, root)
+	w := testRoot(t)
+	w.Write("other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
+	s := tmpStore(t, w.Root())
 	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
 	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)

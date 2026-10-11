@@ -3,11 +3,11 @@ package job
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -289,24 +289,11 @@ func TestChangedSinceDoesNotAskForRegionsWhenNothingChanged(t *testing.T) {
 // checkpoint's own commits are not read as the holder deleting them, and the result names
 // the base it used beside the checkpoint. A holder on its checkpoint is diffed from it.
 func TestCheckpointObserverDiffsFromTheHoldersBase(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("a\n"), 0o644))
-	base := commitAll(t, root)
-	git := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-		return strings.TrimSpace(string(out))
-	}
-	commit := func(name string) string {
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(name+"\n"), 0o644))
-		git("add", "-A")
-		git("commit", "-q", "-m", name)
-		return git("rev-parse", "HEAD")
-	}
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	root := repo.Root()
+	base := repo.Head()
+	commit := func(name string) string { return repo.Commit(name, map[string]string{name: name + "\n"}) }
+	git := repo.Git
 	git("checkout", "-q", "-b", "plan")
 	checkpoint := commit("plan.txt")
 	row := types.Job{ID: "w", Checkpoint: checkpoint, CheckoutRoot: root}
@@ -540,8 +527,9 @@ func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 func TestMeasureOverlaps(t *testing.T) {
 	t.Parallel()
 
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
-	rev := commitRepo(t, root)
+	repo := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	root := repo.Root()
+	rev := commitRepo(repo)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
 	rows := []types.Job{
 		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api"}},

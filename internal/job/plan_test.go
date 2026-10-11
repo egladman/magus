@@ -347,7 +347,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(tmpLoc(t, gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"})))
+	s := NewStore(tmpLoc(t, gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
 	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
 	}, config.Jobs{}, nil)

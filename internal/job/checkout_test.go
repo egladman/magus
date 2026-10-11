@@ -33,12 +33,15 @@ func writeMarker(t *testing.T, cacheDir, content string) {
 // returns it.
 func loadableRoot(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("jobs:\n  stale_after: 2h\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "job"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "store.go"), []byte("package job\n"), 0o644))
-	return root
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(loadableFiles)
+	return w.Root()
+}
+
+var loadableFiles = map[string]string{
+	"magus.yaml":            "jobs:\n  stale_after: 2h\n",
+	"magusfile.buzz":        "export fun build() {}\n",
+	"internal/job/store.go": "package job\n",
 }
 
 // forkCheck is the check every writing fixture here declares, since a fork refuses a
@@ -159,12 +162,12 @@ func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
 func TestForkRefusesADirectoryWritePath(t *testing.T) {
 	t.Parallel()
 
-	root := loadableRoot(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "lib", "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib", "src"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules", "pkg"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "node_modules", "pkg", "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(loadableFiles)
+	root := w.Root()
+	w.Write("libs/lib/magusfile.buzz", "export fun build() {}\n")
+	require.NoError(t, os.MkdirAll(w.Path("libs", "lib", "src"), 0o755))
+	w.Write("node_modules/pkg/magusfile.buzz", "")
 
 	cases := []struct {
 		name  string
@@ -323,7 +326,6 @@ func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
-	t.Setenv("BAGGAGE", "")
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
@@ -346,7 +348,6 @@ func TestBindRecordIsOwnerOnly(t *testing.T) {
 		t.Skip("no POSIX modes")
 	}
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("BAGGAGE", "")
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 
 	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))

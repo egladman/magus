@@ -183,8 +183,9 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 	t.Parallel()
 
-	root := gitRepo(t, map[string]string{"a.txt": "a\n"})
-	rev := commitRepo(t, root)
+	repo := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	root := repo.Root()
+	rev := commitRepo(repo)
 	short := rev[:9]
 	const digest = "+00112233445566778899aabbccddeeff"
 
@@ -244,8 +245,9 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			root := gitRepo(t, map[string]string{"a.txt": "a\n"})
-			rev := commitRepo(t, root)
+			repo := gitRepo(t, map[string]string{"a.txt": "a\n"})
+			root := repo.Root()
+			rev := commitRepo(repo)
 			for name, body := range tt.edits {
 				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
 			}

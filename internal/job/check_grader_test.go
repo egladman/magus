@@ -30,7 +30,7 @@ func (r *gradeRecorder) forRoot(root string) CheckGrader {
 func graderStore(t *testing.T, verdict CheckVerdict) (*Store, *gradeRecorder) {
 	t.Helper()
 	rec := &gradeRecorder{verdict: verdict}
-	loc := tmpLoc(t, testRoot(t))
+	loc := tmpLoc(t, testRoot(t).Root())
 	loc.Grader = rec.forRoot
 	return NewStore(loc), rec
 }

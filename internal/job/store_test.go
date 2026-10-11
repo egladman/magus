@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -339,7 +340,7 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	t.Parallel()
 
 	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src})
+	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
 	s := tmpStore(t, root)
 	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#A", "run.go#B", "run.go#Gone"}, State: types.StateRunning})
 
@@ -511,9 +512,9 @@ func TestAForkNamingNoStateIsStoredDeclared(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			root := t.TempDir()
-			head := commitAll(t, root)
-			stored, err := tc.fork(t, tmpStore(t, root), head)
+			repo := testkit.NewRepo(t, nil)
+			head := repo.Head()
+			stored, err := tc.fork(t, tmpStore(t, repo.Root()), head)
 			require.NoError(t, err)
 			assert.Equal(t, types.Job{
 				Schema:       types.Schema{Version: types.JobSchemaVersion},

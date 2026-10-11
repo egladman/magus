@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -552,58 +552,43 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 	assert.Equal(t, "ended landed: its work landed on origin/main at base1\n", notices.String())
 }
 
-// git runs one git command in dir with the box's own config shut out, and returns its
-// trimmed output.
-func git(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git %v: %s", args, out)
-	return strings.TrimSpace(string(out))
-}
-
 // Two jobs whose branches were squashed into ONE base commit both end, judged by content
 // alone: no ancestry joins either branch to the squash. A job whose commit is not on the
 // base, and one whose change was never committed, both stay exited.
 func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
-	root := gitRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
-	seedRev := commitRepo(t, root)
-	worktree := func(name, file, body string, commit bool) string {
-		dir := filepath.Join(t.TempDir(), name)
-		git(t, root, "worktree", "add", "-q", "-b", name, dir, seedRev)
-		require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(body), 0o644))
+	repo := gitRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n", "c.go": "package c\n", "d.go": "package d\n"})
+	root := repo.Root()
+	seedRev := commitRepo(repo)
+	worktree := func(name, file, body string, commit bool) *testkit.Repo {
+		wt := repo.AddWorktree(name)
+		wt.Write(file, body)
 		if commit {
-			git(t, dir, "commit", "-q", "-am", name)
+			wt.Git("commit", "-q", "-am", name)
 		}
-		return dir
+		return wt
 	}
 	wa := worktree("job-a", "a.go", "package a // landed\n", true)
 	wb := worktree("job-b", "b.go", "package b // landed\n", true)
 	wc := worktree("job-c", "c.go", "package c // not merged\n", true)
 	wd := worktree("job-d", "d.go", "package d // uncommitted\n", false)
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("package a // landed\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "b.go"), []byte("package b // landed\n"), 0o644))
-	git(t, root, "commit", "-q", "-am", "squash of job-a and job-b")
-	squash := git(t, root, "rev-parse", "HEAD")
-	git(t, root, "update-ref", "refs/remotes/origin/main", squash)
+	repo.Commit("squash of job-a and job-b", map[string]string{"a.go": "package a // landed\n", "b.go": "package b // landed\n"})
+	squash := repo.Head()
+	repo.Git("update-ref", "refs/remotes/origin/main", squash)
 
 	s := tmpStore(t, root)
 	var notices strings.Builder
 	s.notices = &notices
-	exited := func(id, dir, file string) types.Job {
-		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: dir,
+	exited := func(id string, wt *testkit.Repo, file string) types.Job {
+		return types.Job{ID: id, State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
 			WritePaths: []string{file}, Result: &types.JobResult{ChangedPaths: []string{file}}, Updated: 1}
 	}
 	plant(t, s, exited("job-a", wa, "a.go"), exited("job-b", wb, "b.go"), exited("job-c", wc, "c.go"), exited("job-d", wd, "d.go"))
 
 	got := states(t, s)
-	for id, dir := range map[string]string{"job-a": wa, "job-b": wb} {
-		head := git(t, dir, "rev-parse", "HEAD")
+	for id, wt := range map[string]*testkit.Repo{"job-a": wa, "job-b": wb} {
+		dir := wt.Root()
+		head := wt.Head()
 		assert.Equal(t, types.StateNoReturn, got[id].State, id)
 		var base, short string
 		_, err := fmt.Sscanf(got[id].EndReason, "its work landed on origin/main at %s the 1 changed path(s) at %s", &base, &short)
@@ -701,12 +686,12 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 		"api.go": "package a\n\nfunc Api() {}\n", "keep.go": "package a\n\nfunc Keep() {}\n",
 		"legacy.go": "package a\n\nfunc Legacy() {}\n",
 	})
-	checkpoint := commitRepo(t, repo)
-	worker := filepath.Join(t.TempDir(), "worker")
-	git(t, repo, "worktree", "add", "-q", "-b", "worker", worker, checkpoint)
-	require.NoError(t, os.WriteFile(filepath.Join(worker, "api.go"), []byte("package a\n\nfunc Api() { Keep() }\n"), 0o644))
+	checkpoint := commitRepo(repo)
+	workerTree := repo.AddWorktree("worker")
+	worker := workerTree.Root()
+	workerTree.Write("api.go", "package a\n\nfunc Api() { Keep() }\n")
 	require.NoError(t, os.Remove(filepath.Join(worker, "legacy.go")))
-	require.NoError(t, os.WriteFile(filepath.Join(worker, "new.go"), []byte("package a\n"), 0o644))
+	workerTree.Write("new.go", "package a\n")
 	changed := []string{"api.go", "legacy.go", "new.go"}
 
 	// Legacy is gone and LegacyAdapter survives, which a fuzzy lookup of Legacy lands on.
@@ -785,7 +770,7 @@ func TestWaitGradesEveryGoal(t *testing.T) {
 
 			status, err := Wait(t.Context(), NewStore(loc), "goal", &result,
 				func(context.Context, string) (types.JobAttempt, error) { return tc.run, nil },
-				CheckpointObserver(repo, read))
+				CheckpointObserver(repo.Root(), read))
 			require.NoError(t, err)
 			require.Len(t, status.Gates, 1)
 			rows, err := NewStore(loc).List()

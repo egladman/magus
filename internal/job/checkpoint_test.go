@@ -2,12 +2,12 @@ package job
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -22,27 +22,8 @@ const madeUpRevision = "34b41fd546ba8fa9c71a6a64e4ea0f3e93d5a7bc"
 // commit's full revision.
 func committedRepo(t *testing.T) (root, head string) {
 	t.Helper()
-	root = loadableRoot(t)
-	return root, commitAll(t, root)
-}
-
-// commitAll makes root a git repository holding whatever root holds in one commit, and
-// returns that commit's full revision.
-func commitAll(t *testing.T, root string) string {
-	t.Helper()
-	git := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-		return strings.TrimSpace(string(out))
-	}
-	git("init", "-q")
-	git("add", "-A")
-	git("commit", "-q", "--allow-empty", "-m", "seed")
-	return git("rev-parse", "HEAD")
+	repo := testkit.NewRepo(t, loadableFiles)
+	return repo.Root(), repo.Head()
 }
 
 func checkpointMerge(token string) func(*types.Job) {
