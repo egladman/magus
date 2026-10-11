@@ -164,7 +164,7 @@ func addPathRules(rulesetFD int, rules []filesystem.Rule, handledFS uint64) erro
 			}
 		}
 		if err != nil && !errors.Is(err, syscall.ENOENT) {
-			return fmt.Errorf("sandbox: landlock_add_rule %s: %w", r.Path, err)
+			return fmt.Errorf("add the landlock rule for %s: %w", r.Path, err)
 		}
 	}
 	return nil
