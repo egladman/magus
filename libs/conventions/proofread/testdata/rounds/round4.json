@@ -65,7 +65,7 @@
   }
  },
  "agreement_then": "at most 4 disagreements in 40 (scored as n/10), or alpha >= 0.80",
- "scored_with": "proofread calibrate round score -replay under the default gates; equal to the round's own scores.json in every count, rate and gate",
+ "scored_with": "proofread calibrate round score -replay under the default gates and the notes requirement; equal to the round's own scores.json in every count and rate, and in every gate but agreement_gate for absolute, issue-repro and participles (one disagreement each with no note) and advise_gate for participles; unnoted_ids lists the disagreements to annotate",
  "gates": {
   "advise": {
    "wilson_z": 1.96,
@@ -76,13 +76,12 @@
   "agreement": "at most 4 disagreements in 40, or Krippendorff alpha >= 0.80, a note on every disagreement",
   "report": "per source; gate on the worst source"
  },
- "advise_passed": [
-  "participles"
- ],
+ "advise_passed": [],
  "deny_passed": [],
  "promoted": [],
  "caveats": [
-  "participles passed on paper, but its finding did not name the clauses it counted, and a bot footer in most of its texts carried the rate over the cap in 10 of its correct labels, so it was not promoted"
+  "participles passed advise on paper when the round was scored, before the agreement gate required a note on every disagreement; replayed with that requirement its agreement gate fails on one disagreement without a note",
+  "participles also did not name the clauses it counted, and a bot footer in most of its texts carried the rate over the cap in 10 of its correct labels, so it was not promoted"
  ],
  "rules": {
   "absolute": {
@@ -113,10 +112,14 @@
     "precision": 0.15,
     "wilson_lb": 0.0706,
     "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0022"
+    ],
     "raw_agreement": 0.975,
     "alpha": 0.9093,
     "precision_gate": false,
-    "agreement_gate": true,
+    "agreement_gate": false,
     "by_source": {
      "aidev-commit": {
       "n": 8,
@@ -124,18 +127,20 @@
       "precision": 0.25,
       "wilson_lb": 0.0715,
       "disagreements": 0,
-      "raw_agreement": 1.0,
-      "alpha": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
       "precision_gate": false,
       "agreement_gate": true
      },
      "aidev-pr": {
       "n": 8,
       "correct": 0,
-      "precision": 0.0,
-      "wilson_lb": 0.0,
+      "precision": 0,
+      "wilson_lb": 0,
       "disagreements": 0,
-      "raw_agreement": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
       "alpha": null,
       "precision_gate": false,
       "agreement_gate": true
@@ -146,8 +151,9 @@
       "precision": 0.25,
       "wilson_lb": 0.0715,
       "disagreements": 0,
-      "raw_agreement": 1.0,
-      "alpha": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
       "precision_gate": false,
       "agreement_gate": true
      },
@@ -157,19 +163,24 @@
       "precision": 0.2857,
       "wilson_lb": 0.0822,
       "disagreements": 0,
-      "raw_agreement": 1.0,
-      "alpha": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
       "precision_gate": false,
       "agreement_gate": true
      },
      "git-commit": {
       "n": 9,
       "correct": 0,
-      "precision": 0.0,
-      "wilson_lb": 0.0,
+      "precision": 0,
+      "wilson_lb": 0,
       "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0022"
+      ],
       "raw_agreement": 0.8889,
-      "alpha": 0.0,
+      "alpha": 0,
       "precision_gate": false,
       "agreement_gate": false
      }
@@ -195,6 +206,7 @@
     "precision": null,
     "wilson_lb": null,
     "disagreements": 0,
+    "unnoted_disagreements": 0,
     "raw_agreement": null,
     "alpha": null,
     "precision_gate": false,
@@ -235,6 +247,11 @@
     "precision": 0.55,
     "wilson_lb": 0.3983,
     "disagreements": 5,
+    "unnoted_disagreements": 2,
+    "unnoted_ids": [
+     "r4-0063",
+     "r4-0095"
+    ],
     "raw_agreement": 0.875,
     "alpha": 0.7492,
     "precision_gate": false,
@@ -246,6 +263,7 @@
       "precision": 0.7143,
       "wilson_lb": 0.3589,
       "disagreements": 1,
+      "unnoted_disagreements": 0,
       "raw_agreement": 0.8571,
       "alpha": 0.7111,
       "precision_gate": false,
@@ -257,6 +275,10 @@
       "precision": 0.6667,
       "wilson_lb": 0.3,
       "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0063"
+      ],
       "raw_agreement": 0.8333,
       "alpha": 0.5926,
       "precision_gate": false,
@@ -268,8 +290,9 @@
       "precision": 0.8571,
       "wilson_lb": 0.4869,
       "disagreements": 0,
-      "raw_agreement": 1.0,
-      "alpha": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
       "precision_gate": false,
       "agreement_gate": true
      },
@@ -279,6 +302,10 @@
       "precision": 0.2857,
       "wilson_lb": 0.0822,
       "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0095"
+      ],
       "raw_agreement": 0.8571,
       "alpha": 0.7111,
       "precision_gate": false,
@@ -290,8 +317,9 @@
       "precision": 0.1667,
       "wilson_lb": 0.0301,
       "disagreements": 0,
-      "raw_agreement": 1.0,
-      "alpha": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
       "precision_gate": false,
       "agreement_gate": true
      },
@@ -301,6 +329,7 @@
       "precision": 0.5714,
       "wilson_lb": 0.2505,
       "disagreements": 2,
+      "unnoted_disagreements": 0,
       "raw_agreement": 0.7143,
       "alpha": 0.4583,
       "precision_gate": false,
@@ -334,6 +363,11 @@
     "precision": 0.1765,
     "wilson_lb": 0.0619,
     "disagreements": 2,
+    "unnoted_disagreements": 2,
+    "unnoted_ids": [
+     "r4-0015",
+     "r4-0077"
+    ],
     "raw_agreement": 0.8824,
     "alpha": 0.6827,
     "precision_gate": false,
@@ -345,6 +379,11 @@
       "precision": 0.1765,
       "wilson_lb": 0.0619,
       "disagreements": 2,
+      "unnoted_disagreements": 2,
+      "unnoted_ids": [
+       "r4-0015",
+       "r4-0077"
+      ],
       "raw_agreement": 0.8824,
       "alpha": 0.6827,
       "precision_gate": false,
@@ -381,10 +420,14 @@
     "precision": 0.65,
     "wilson_lb": 0.4951,
     "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0108"
+    ],
     "raw_agreement": 0.975,
     "alpha": 0.9448,
     "precision_gate": false,
-    "agreement_gate": true,
+    "agreement_gate": false,
     "by_source": {
      "aidev-pr-as-issue": {
       "n": 40,
@@ -392,10 +435,14 @@
       "precision": 0.65,
       "wilson_lb": 0.4951,
       "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0108"
+      ],
       "raw_agreement": 0.975,
       "alpha": 0.9448,
       "precision_gate": false,
-      "agreement_gate": true
+      "agreement_gate": false
      }
     },
     "worst_source": {
@@ -425,10 +472,11 @@
    "score": {
     "n": 1,
     "correct": 0,
-    "precision": 0.0,
-    "wilson_lb": 0.0,
+    "precision": 0,
+    "wilson_lb": 0,
     "disagreements": 0,
-    "raw_agreement": 1.0,
+    "unnoted_disagreements": 0,
+    "raw_agreement": 1,
     "alpha": null,
     "precision_gate": false,
     "agreement_gate": true,
@@ -436,10 +484,11 @@
      "aidev-agent-comment": {
       "n": 1,
       "correct": 0,
-      "precision": 0.0,
-      "wilson_lb": 0.0,
+      "precision": 0,
+      "wilson_lb": 0,
       "disagreements": 0,
-      "raw_agreement": 1.0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
       "alpha": null,
       "precision_gate": false,
       "agreement_gate": true
@@ -472,10 +521,14 @@
     "precision": 0.9,
     "wilson_lb": 0.7695,
     "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0140"
+    ],
     "raw_agreement": 0.975,
     "alpha": 0.8454,
     "precision_gate": true,
-    "agreement_gate": true,
+    "agreement_gate": false,
     "by_source": {
      "aidev-pr": {
       "n": 40,
@@ -483,10 +536,14 @@
       "precision": 0.9,
       "wilson_lb": 0.7695,
       "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0140"
+      ],
       "raw_agreement": 0.975,
       "alpha": 0.8454,
       "precision_gate": true,
-      "agreement_gate": true
+      "agreement_gate": false
      }
     },
     "worst_source": {
@@ -495,19 +552,8 @@
      "wilson_lb": 0.7695,
      "pass": true
     },
-    "advise_gate": true,
-    "spot_check": [
-     "r4-0151",
-     "r4-0071",
-     "r4-0104",
-     "r4-0156",
-     "r4-0046",
-     "r4-0078",
-     "r4-0101",
-     "r4-0173",
-     "r4-0118",
-     "r4-0145"
-    ]
+    "advise_gate": false,
+    "spot_check": []
    }
   }
  },
