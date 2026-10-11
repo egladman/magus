@@ -365,6 +365,7 @@ type options struct {
 	only         []Rule
 	decisions    map[Rule]Decision
 	threadLength int
+	anchored     bool
 	voice        *Voice
 }
 
@@ -392,6 +393,11 @@ func WithDecisions(table map[Rule]Decision) Option {
 // WithThreadLength tells the [KindReviewReply] rules how many replies the
 // author already posted in the thread the judged reply joins.
 func WithThreadLength(n int) Option { return func(o *options) { o.threadLength = n } }
+
+// WithAnchored tells the [KindReviewReply] rules the reply is posted on a line
+// of the diff, as an inline review comment or a reply in its thread. The line
+// is what the reply refers to, so [RuleNonspecific] judges nothing.
+func WithAnchored() Option { return func(o *options) { o.anchored = true } }
 
 // input is what a rule reads.
 type input struct {

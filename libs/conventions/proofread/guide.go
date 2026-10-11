@@ -15,8 +15,17 @@ import (
 
 // projectVoice is the first person plural. A concept page may argue as the
 // project ("we believe"); a guide speaks to the one following it. "US" in
-// capitals is a country or a locale, not the pronoun.
-var projectVoice = regexp.MustCompile(`\b(?:[Ww]e|[Uu]s|[Oo]urs?|[Ll]et's)\b`)
+// capitals is a country or a locale, not the pronoun, and "Let's" is a
+// tutorial taking the reader along, which a guide may do.
+var projectVoice = regexp.MustCompile(`\b(?:[Ww]e|[Uu]s|[Oo]urs?)\b`)
+
+// projectSpeaking is "we" as the project stating what it offers or advises
+// ("we support", "we do not recommend", "we ship"), which no reader can take
+// as a step of theirs. A reader-we in a step ("Now we run the build") is not
+// one, nor is the project's account of its own design ("we keep our cache").
+var projectSpeaking = regexp.MustCompile(`^[Ww]e(?:'d| would)?\s+(?:(?:also|only|still|currently|strongly|` +
+	`officially|generally|do not|don't|no longer)\s+)?(?:support|recommend|suggest|advise|encourage|discourage|` +
+	`ship|release|publish|provide|offer|maintain|accept|welcome|deprecate|guarantee)(?:s|ed)?\b`)
 
 // readerApart is the reader named beside the project, or the writer in the
 // first person singular: either way "we" cannot be read as the reader. "you
@@ -25,8 +34,9 @@ var readerApart = regexp.MustCompile(`\b(?:[Yy]ou|[Yy]our|[Tt]he reader(?:'s)?|I
 
 // secondPerson reports the project's voice in a guide. A "we" that tense
 // reports, as the actor of a change or in "we'll", is left to it, and so is
-// one in a heading or a link's text, which titles a page, or in a sentence
-// that keeps the reader apart from the project.
+// one in a heading or a link's text, which titles a page, one stating what the
+// project offers or advises, or one in a sentence that keeps the reader apart
+// from the project.
 func secondPerson(in input) []Finding {
 	var out []Finding
 
@@ -41,7 +51,7 @@ func secondPerson(in input) []Finding {
 		}
 
 		for _, at := range projectVoice.FindAllStringIndex(para.text, -1) {
-			if within(at[0], taken) || inLinkText(para.text, at[0]) ||
+			if within(at[0], taken) || inLinkText(para.text, at[0]) || projectSpeaking.MatchString(para.text[at[0]:]) ||
 				readerApart.MatchString(sentenceHolding(para.text, at[0])) {
 				continue
 			}

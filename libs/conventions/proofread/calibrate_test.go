@@ -87,6 +87,20 @@ func TestLoadCasesAcceptsTheLabelACaseCarriedBeforeAMove(t *testing.T) {
 	}
 }
 
+func TestAnAnchoredCaseIsJudgedAsAnInlineComment(t *testing.T) {
+	fsys := fstest.MapFS{"nonspecific.txtar": {Data: []byte("-- fp/review-reply --\nThis is incorrect.\n" +
+		"-- pass/review-reply anchored --\nThis is incorrect.\n")}}
+
+	got, err := LoadCases(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 2 || got[0].Anchored || !got[1].Anchored || !got[0].Fires() || got[1].Fires() {
+		t.Errorf("cases = %+v; want the top-level one to fire and the anchored one not", got)
+	}
+}
+
 func TestLoadCasesJudgesAChangeDescriptionLineUnderALead(t *testing.T) {
 	fsys := fstest.MapFS{"claim.txtar": {Data: []byte("-- hit/change-description --\n- Fixes it.\n" +
 		"-- pass/review-reply thread=2 --\nIt holds.\n")}}

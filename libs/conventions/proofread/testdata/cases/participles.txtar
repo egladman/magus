@@ -1,5 +1,14 @@
 Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 A text whose present participial clauses run over the rate per 1000 words. Each case is a whole text of 200 words or more.
+
+Moved 2026-10-11, was: hit. In ten of these texts the clause that carried the rate over the
+cap was the coding agent's appended tip ("You can make the coding agent smarter by ..."),
+which proofread now blanks as platform text; labeling round 4 found the same artifact. The
+author's own clauses stay under the cap, so each is a pass: the texts titled "Add an
+inclusion mode ...", "Add container support ...", "Fix #171 ...", "perf: optimize the
+stochastic RSI ...", "Add a local extension search ...", "Add methods for the active
+database ...", "Check that the base branch exists ...", "Enable the code checks workflow
+...", "Remove the tile view ..." and "Ask the user before deleting ...".
 -- hit/reference whole --
 The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The worker reads the key, using the lock it holds, keeping the order.
 -- hit/reference whole --
@@ -12,7 +21,7 @@ The cache stores each blob under a key that the run derives from its inputs. The
 The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. Running the suite takes a minute. Reading the key takes less.
 -- pass/reference whole --
 The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. It reads every input, including the lock, according to the key.
--- hit/change-description whole --
+-- pass/change-description whole --
 Add an inclusion mode as an alternative to exclusion-only filtering
 
 Users can now list the folders they want instead of keeping long exclusion lists, making the plugin more flexible for different workflows.
@@ -34,7 +43,7 @@ Both events fire for the same code, resulting in duplicate CI runs that use up r
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 Add container support with a management UI
 
 This adds a compose configuration and a management UI integration, addressing the need for containerized deployment on home storage servers.
@@ -42,7 +51,7 @@ This adds a compose configuration and a management UI integration, addressing th
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 Fix #171: make embeddings deterministic with single-threaded execution
 
 This worked in 4.9.1 but fails in 5.0, producing different embeddings for identical inputs.
@@ -50,7 +59,7 @@ This worked in 4.9.1 but fails in 5.0, producing different embeddings for identi
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 perf: optimize the stochastic RSI stream hub
 
 This completes phase 4 of the streaming performance work, fixing critical quadratic complexity issues in the stream hub.
@@ -66,7 +75,7 @@ This extends the app service infrastructure to support containers, enabling depl
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 Add a local extension search pattern
 
 This adds the local search pattern to the extensions view, allowing users to filter extensions installed on this machine.
@@ -74,7 +83,7 @@ This adds the local search pattern to the extensions view, allowing users to fil
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 Add methods for the active database to the connection sharing API
 
 Total changes: 95 lines across 4 files, maintaining a minimal footprint and surgical precision.
@@ -140,7 +149,7 @@ Fix a wait-for-text timeout regression in the browser test helper
 The first strategy never found the title, causing the retry helper to exhaust its retries after about 4 seconds and throw, making the race resolve early. The change keeps backward compatibility while it fixes the regression, improving text detection to cover title elements.
 
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
--- hit/change-description whole --
+-- pass/change-description whole --
 Check that the base branch exists on the remote before invoking the agent
 
 This adds a remote branch check for the base ref, addressing the TODO that was preventing server 500 errors.
@@ -148,7 +157,7 @@ This adds a remote branch check for the base ref, addressing the TODO that was p
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole --
 Enable the code checks workflow for a prototype branch
 
 This enables the code checks workflow on the prototype branch, providing the same automated checks the main branch has.
@@ -186,7 +195,7 @@ Add a logos section for one incubating project
 This adds a section for the operator's logos, preparing the docs for the upcoming logo files. It sits after the notebook logos, maintaining the grouping with other subprojects.
 
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
--- hit/change-description whole --
+-- pass/change-description whole --
 Remove the tile view and tile; use view arrangement instead
 
 The arrangement property gives built-in mouse and keyboard sizing and moving of views, making the specialized tile view unnecessary.
@@ -234,7 +243,7 @@ Fix: separate the access token and the ID token to follow the token standards
 With the password grant, both tokens were identical, violating the token standards. Each token is generated and signed on its own, resulting in different values. Existing tokens will have an empty ID token field, which is backward compatible.
 
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
--- hit/change-description whole --
+-- pass/change-description whole --
 Ask the user before deleting a study pad with orphaned bookmarks
 
 - "Delete label only" removes only the label, preserving orphaned bookmarks

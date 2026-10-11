@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A guide is followed step by step by the person reading it; "we" blurs who acts. A "we" the tense rule already reports is left to it, so one word gives one finding. Measured 2026-10-11 over the adjudicated labeling round 2: 18.9% precision (7 of 37) before, 25.0% (7 of 28) after. A heading, a link's text, and a sentence that names the reader beside the project ("you keep the wiring, and we do not force it") or speaks as "I" are left alone. The rest came from READMEs, essays and design pages judged as guides, where "we" names the authors; no guide in this repository fired. It stays off until a fresh labeling round measures it.
+A guide is followed step by step by the person reading it; "we" blurs who acts. A "we" the tense rule already reports is left to it, so one word gives one finding. Measured 2026-10-11 over the adjudicated labeling round 2: 18.9% precision (7 of 37) before, 25.0% (7 of 28) after. A heading, a link's text, and a sentence that names the reader beside the project ("you keep the wiring, and we do not force it") or speaks as "I" are left alone. The rest came from READMEs, essays and design pages judged as guides, where "we" names the authors; no guide in this repository fired, and 13 such cases were retired from its labeled set. A guide may say "Let's", taking the reader along as a tutorial does, and "we" may state what the project offers or advises ("we support", "we do not recommend"); a "we" doing a step ("Now we run the build") is still reported. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 

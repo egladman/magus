@@ -13,14 +13,21 @@ This is unclear, e.g. what happens on a miss.
 This is redundant because the caller already sorts.
 Thanks, looks good.
 Does the caller hold the lock here?
--- fp/review-reply --
+-- pass/review-reply anchored was=fp:round2:d0020 --
 It's redundant.
+-- pass/review-reply anchored was=fp:round2:d0150 --
 not needed, remove
+-- pass/review-reply anchored was=fp:round2:d0167 --
 I find this unnecessary.
+-- pass/review-reply anchored was=fp:round2:d0216 --
 It is pointless.
+-- pass/review-reply anchored was=fp:round2:d0228 --
 This is incorrect.
+-- pass/review-reply anchored was=fp:round2:d0504 --
 It looks hacky...
+-- pass/review-reply anchored was=fp:round2:d0534 --
 Drop this, it's redundant
+-- pass/review-reply anchored was=fp:round2:d0679 --
 Do not change this
 -- pass/review-reply --
 that test is pretty useless honestly

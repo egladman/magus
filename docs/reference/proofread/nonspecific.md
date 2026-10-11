@@ -1,17 +1,17 @@
 ---
 title: "nonspecific"
-description: "A deny rule by default: it refuses a review reply that judges or asks for a change and names no code, path, line, example or reason."
+description: "A deny rule by default: it refuses a top-level review comment that judges or asks for a change and names no code, path, line, example or reason."
 tags: [proofread, rules, nonspecific, advise]
 aliases: [reference/prose/nonspecific]
 ---
 
 # nonspecific
 
-A deny rule by default: it refuses a review reply that judges or asks for a change and names no code, path, line, example or reason.
+A deny rule by default: it refuses a top-level review comment that judges or asks for a change and names no code, path, line, example or reason.
 
 ## What it catches
 
-A review reply that judges or asks for a change and names no code, path, line, example or reason.
+A top-level review comment that judges or asks for a change and names no code, path, line, example or reason.
 
 ## Dimension
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific and inconsiderate, and over half of their respondents had received it in the past year; Bosu et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 written by bots. It advises: an inline comment already sits on its line, which the rule cannot see. Measured 2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of 43) before, 27.3% (3 of 11) after. Most firings named what they judged in a noun phrase ("the indentation", "this logic") or by the noun the judgment modifies ("redundant docstrings"), so only a verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the line they judge. It stays off until a fresh labeling round measures it.
+Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific and inconsiderate, and over half of their respondents had received it in the past year; Bosu et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 written by bots. It judges top-level comments only: an inline comment, or a reply in its thread, sits on the line it judges, which is its referent, and the caller says so with -anchored. The anchor gives the place, not the reason, so an anchored bare verdict still lacks the suggestion Gunawardena et al. count, and the rule leaves it alone. Measured 2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of 43) before, 27.3% (3 of 11) after. Most firings named what they judged in a noun phrase ("the indentation", "this logic") or by the noun the judgment modifies ("redundant docstrings"), so only a verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the line they judge. It advises, and stays off until a fresh labeling round measures it.
 
 ## Default decision
 

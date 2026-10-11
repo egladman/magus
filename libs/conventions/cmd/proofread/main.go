@@ -22,7 +22,8 @@
 // house style runs only where it names it. -only takes comma-separated rule
 // names. A rule, a decision or a glob proofread cannot use is an error.
 // -thread-length N tells the reply rules how many replies the author already
-// posted in the thread. -voice FILE judges with a voice file, which runs the
+// posted in the thread, and -anchored that the reply sits on a line of the
+// diff, which nonspecific then takes as its referent. -voice FILE judges with a voice file, which runs the
 // voice-drift rule and may hold tense to advice on a change description. The
 // flags follow the kind.
 //
@@ -169,6 +170,7 @@ func usage() string {
 	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
 	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
 	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
+	b.WriteString("  -anchored          the reply sits on a line of the diff: an inline comment or a reply in its thread\n")
 	b.WriteString("  -voice FILE        judge with the voice file proofread voice build wrote\n")
 	b.WriteString("  -format FORMAT     write findings as json (default), sarif, rdjson or text\n")
 	b.WriteString("  -fail-on DECISION  exit 1 when a finding at or above deny, advise or never remains (default never)\n")
@@ -251,6 +253,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
+	anchored := fs.Bool("anchored", false, "the reply is posted on a line of the diff, an inline comment or a reply in its thread")
 	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
 	format := fs.String("format", "json", "write findings as `json`, sarif, rdjson or text")
 	failOn := fs.String("fail-on", "never", "exit 1 when a finding at or above this `decision` remains: deny, advise or never")
@@ -286,6 +289,9 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	opts := []proofread.Option{proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength)}
+	if *anchored {
+		opts = append(opts, proofread.WithAnchored())
+	}
 
 	if *voicePath != "" {
 		v, err := readVoiceFile(*voicePath)

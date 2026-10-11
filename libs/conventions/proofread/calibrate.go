@@ -50,6 +50,9 @@ type Case struct {
 	// ThreadLength is the count of replies the author already posted, for a
 	// review-reply case.
 	ThreadLength int
+	// Anchored marks a review-reply case posted on a line of the diff, judged
+	// as the guard judges one, with [WithAnchored].
+	Anchored bool
 	// Voice is what the case file's author sections measure, or nil when it
 	// has none.
 	Voice *Voice
@@ -240,6 +243,8 @@ func parseHeader(header string, c check) (Case, bool, error) {
 			}
 
 			out.ThreadLength = n
+		case "anchored":
+			out.Anchored = true
 		case "was":
 			// The label a case carried in a labeling round before a fix moved it, as
 			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
@@ -270,6 +275,9 @@ func ruleCheck(rule Rule) (check, bool) {
 // rule leaves a span to another that reports it.
 func (c Case) Fires() bool {
 	opts := []Option{WithThreadLength(c.ThreadLength), WithVoice(c.Voice)}
+	if c.Anchored {
+		opts = append(opts, WithAnchored())
+	}
 
 	if ch, ok := ruleCheck(c.Rule); ok && ch.defaultDecision(c.Kind) == DecisionOff {
 		opts = append(opts, WithDecisions(map[Rule]Decision{c.Rule: DecisionDeny}))
