@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A softener qualifying a claim.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/reference --
 The flag may help a slow runner.
 It aims to be fast and is arguably simpler.
@@ -94,3 +95,59 @@ The front end then tries to build a link from the account name, but none is retu
 - [ ] Identify the root cause: the `classify` method tries to call `.klass` on polymorphic reflections.
 -- pass/commit-message --
 - Addresses feedback: 'probably makes sense instead to fail the check'
+-- hit/commit-message --
+This method should probably be moved to the library as a high level version of get_sessions()
+These changes aim to resolve issues like unexpected gaps appearing during
+These changes aim to enhance the maintainability of the codebase by removing unnecessary dependencies.
+These changes aim to enhance the CI process by ensuring integration tests for the sync provider are executed, improving overall test coverage.
+- This change aims to enhance the functionality and flexibility of the test context setup.
+test: fix hopefully
+- All changes aim to enhance the robustness and reliability of runbook operations.
+These changes aim to enhance the maintainability and clarity of the sync backend implementation, aligning with recent updates in the RPC handling logic.
+These changes aim to strengthen the validation logic for species settings and enhance the reliability of the testing framework.
+This update aims to enhance the clarity of the documentation, making it easier for users to follow the content related to container orchestrators.
+These changes aim to enhance the testing setup for synchronization features and ensure proper configuration for the test environment.
+This enhancement aims to streamline response handling and improve testability within the API framework.
+These changes aim to
+These changes aim to improve the efficiency and reliability of species settings tests, ensuring that edge cases are properly handled and that tests run more quickly.
+These changes aim to standardize the endpoint naming and improve clarity in the sync provider implementation.
+Hopefully fix for the settings classes
+These changes aim to optimize memory management and synchronization in species tracking, ensuring better performance and reliability.
+These changes aim to improve clarity and maintainability of the documentation and changelog in relation to the recent updates in the sync backend.
+These changes aim to enhance the reliability of species settings management and streamline the testing process for better maintainability.
+These additions aim to improve code modularity, enhance
+-- hit/change-description --
+This PR aims to implement auto-focus functionality for the target name field when users click the edit button on goal targets.
+This update aims to enhance the clarity of the documentation, making it easier for users to follow the content related to container orchestrators.
+- **Division by zero**: Zero chunk sizes could potentially cause crashes in chunk calculations
+The rule aims to improve code readability and consistency across the frontend codebase by standardizing how dynamic class names are handled.
+This aims to eliminate repetitive, anxiety-inducing, and promotional content.
+This PR fixes issue #123 where knowledge added to agents doesn't seem to be effective, while knowledge in task descriptions works.
+Secondary sessions would only look at timeline events for prompts, missing potentially valuable problem statement context that could improve the session's understanding of the user's intent.
+This change aims to provide clearer guidance on integrating monitoring within scheduled pipelines, ensuring users can effectively manage alerts.
+This update aims to ensure our codebase consistently meets `lint -- -D warnings` and minimizes unnecessary string allocations.
+This change aims to guide developers towards a more object-oriented structure for new features and improvements.
+- **Before**: Attackers could potentially access files outside cache directories
+-- fp/change-description --
+- `pkg lint` *(fails: This package doesn't seem to be present in your lockfile)*
+- `pkg build` *(fails: package doesn't seem to be present in lockfile)*
+- Any other important info that could help to test that PR
+TASK DESCRIPTION: The user aims to modify the `product.json` file using a method that minimizes diffs and preserves the original formatting.
+USER INTENT: The user aims to implement a new "hello world" command in their project.
+USER INTENT: The user aims to create a simple "Hello World" extension.
+-- fp/change-description whole --
+docs: interpolate the product name
+
+**Potential negative side effects:**
+- The preprocessor runs on all markdown content, so any unintended `{{}}` patterns in documentation could be affected
+- Global string replacement could theoretically impact code examples that contain these patterns
+-- fp/change-description whole --
+feat: use the public field type
+
+**User**: You seem to have avoided using `from_bytes_unchecked` for all these little field element constants. This is a mistake.
+
+**Assistant**: [Fixed to use the public field type]
+-- fp/change-description whole --
+fix: block side-by-side installs of the preview
+
+User: I tested the pipeline build and all of my requirements seem to have been met (fuller testing tomorrow) aside from one weird case.

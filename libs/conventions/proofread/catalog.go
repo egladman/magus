@@ -256,10 +256,12 @@ var coreTexts = map[Rule]ruleText{
 			"a negation other than a copula (\"don't just\"), before a literal or as recency (\"Just " +
 			"pushed\"), and \"This function\" outside a doc comment, where it points at code. Measured " +
 			"2026-10-11 over the adjudicated labeling round: 86.2% precision (50 of 58) before, 100% (49 " +
-			"of 49, lower bound 0.93) after, which supports its declared deny. Also exempt now: " +
+			"of 49) after on the same cases, which the exceptions were tuned on. Also exempt now: " +
 			"lowercase \"really\" meaning in fact (\"should really bind\"), \"Just\" before a determiner " +
 			"or \"not\", a selling word in a comparison (\"a more comprehensive check\"; this loses " +
-			"\"a more powerful parser\"), and a word mentioned after \"the filler\".",
+			"\"a more powerful parser\"), and a word mentioned after \"the filler\". On fresh text it " +
+			"held 32 of 40 (lower bound 0.65, validation round 3), under the advise gate, so it ships " +
+			"off until it clears 0.70.",
 	},
 	RuleWordy: {
 		code:      "PRF4002",

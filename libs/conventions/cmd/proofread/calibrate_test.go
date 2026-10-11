@@ -164,7 +164,7 @@ func TestCalibrateGatesAHouseRuleWithNoDenyLine(t *testing.T) {
 }
 
 func TestCalibrateRatesASampleByGroup(t *testing.T) {
-	sample := `{"user_type":"User","body":"Actually, it simply races."}
+	sample := `{"user_type":"User","body":"Crucially, it is a valuable race."}
 {"user_type":"User","body":"The map races."}
 
 {"user_type":"Bot","body":"Great question, the key sorts.","is_reply":true}
@@ -185,14 +185,14 @@ func TestCalibrateRatesASampleByGroup(t *testing.T) {
 	}
 
 	texts := map[string]int{}
-	filler := map[string]int{}
+	weak := map[string]int{}
 
 	for _, g := range groups {
 		texts[g.Group] = g.Texts
 
 		for _, r := range g.Rules {
-			if r.Rule == proofread.RuleFiller {
-				filler[g.Group] = r.Findings
+			if r.Rule == proofread.RuleBuzzwordWeak {
+				weak[g.Group] = r.Findings
 			}
 		}
 	}
@@ -201,8 +201,8 @@ func TestCalibrateRatesASampleByGroup(t *testing.T) {
 		t.Errorf("texts per group = %v, want %v", texts, want)
 	}
 
-	if filler["User"] != 2 {
-		t.Errorf("filler findings for User = %d, want 2", filler["User"])
+	if weak["User"] != 2 {
+		t.Errorf("buzzword-weak findings for User = %d, want 2", weak["User"])
 	}
 }
 

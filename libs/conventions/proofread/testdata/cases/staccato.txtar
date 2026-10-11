@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A run of short sentences.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/reference --
 It had no preference for symmetry. No aesthetic prior. No nostalgia for human taste.
 The cache is fast. The key is stable. Replays hit. Nothing else changed.
@@ -113,3 +114,39 @@ Package `app.job.v1`, defined in `proto/app/job/v1/job.proto`. Source: [job.prot
 Package `app.notes.v1`, defined in `proto/app/notes/v1/notes.proto`. Source: [notes.proto:32](../../proto/notes.proto). Part of the [server API](../../index.md).
 Package `app.insight.v1`, defined in `proto/app/insight/v1/insight.proto`. Source: [insight.proto:26](../../proto/insight.proto). Part of the [server API](../../index.md).
 Package `app.activity.v1`, defined in `proto/app/activity/v1/activity.proto`. Source: [activity.proto:175](../../proto/activity.proto). Part of the [server API](../../index.md).
+-- hit/change-description --
+All acceptance criteria met. Code quality verified. Tests passing. Documentation complete.
+**No reading required. No learning curve. Zero friction.**
+Added auth.defaults.yaml for the auth library's configuration. Better environment variable handling. Improved config validation patterns. More consistent defaults across environments.
+**None!** All improvements are optional additions. Existing tests continue to work unchanged.
+Bot PR. Little magnets example with bindings. Not bad!
+-- hit/change-description whole --
+docs: add missing translations
+
+Thank you for the great article. I'm studying the API.
+I found some missing translations.
+As I continue my studies, I plan to add some missing translation pages.
+-- fp/change-description --
+Enable RateLimitedScheduler in all cases. Pass NoopRatelimiter when EnableRateLimiter is disabled. Also disable EnableRateLimiterShadowMode when EnableRateLimiter disabled. Shadow mode is not relevant when NoopRatelimiter is used.
+This PR verifies all 17 network statistics formulas against canonical literature (Smith et al. 2010, Jones et al. 2013, Lee et al. 2014, Park et al. 2014) and documents them with precise notation.
+**User**: Err I don't think that hash_to_curve returns a Normal point. It should be NonNormal. It comes from a projective point. Don't normalize it aggressively.
+-- fp/change-description whole --
+fix: drop the obsolete host extensions
+
+**"HostExtensions is obsolete. Use Host.CreateBuilder instead. For more information, visit https://example.com/deprecate/008."**:
+`public static class HostExtensions { }`
+-- fp/change-description whole --
+docs: document the train flags
+
+Curricula are passed through `-p` args. some commands support multiple of each. docs and
+tests updated
+- play, eval and train docs are improved
+- `game train -p facility_2 -p random` will specify a
+curriculum that rotates through both
+-- fp/change-description whole --
+refactor: split the layout hotspots
+
+Context
+Repo: graph-viewer. Current working branch: feature/layout.
+Tech: UI 18, layout engine. Tests: unit under docs.
+Existing cleanup plan: CLEANUP.md with thresholds and guardrails.

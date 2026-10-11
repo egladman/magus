@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A motive given to a tool or a person.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/change-description --
 - magus guessed where it ran.
 -- hit/review-reply --
@@ -69,3 +70,10 @@ As a style preference, I don't care much for headings without at least an introd
 - Common runtime flags: --force (-f), --pretend (-p), --quiet (-q), --skip (-s).
 The test suite I added should help identify where the real issue lies.
 - b) Where the complexity lies
+-- hit/review-reply --
+the PR description is lies
+-- fp/review-reply --
+compare-and-exchange doesn't care about -0.0/0.0 etc).
+-- fp/change-description --
+- Unit conversion (ms to seconds) and the `duration` parameter are educated guesses based on code patterns, not documentation
+- Global name guesses (`MissingGlobalName.guessed_name`)

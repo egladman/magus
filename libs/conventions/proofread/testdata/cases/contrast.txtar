@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A claim made by denying its opposite.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/change-description --
 - It is not just a cache; it is the ledger.
 - Not because the test is slow. Because the key races.
@@ -105,3 +106,13 @@ It considers moves that merge not only within a layer but also across layers.
 If the `alias` is not provided, it is derived from the base name of the path.
 -- pass/reference --
 If the intended owner is not in that list, it is not a project yet.
+-- hit/guide --
+These are not operations a target composes; they are the contract the remote-cache subsystem calls.
+This is not a loophole, it is the point of the version number.
+Those commits are not sloppiness; they are the fixed point of the loop.
+-- hit/reference --
+A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's attention is scarce.
+-- fp/change-description whole --
+ci: assign authors only on main
+
+By applying this change, the author assign will only be triggered for pull requests targeting the main branch. This will help reduce redundant runs and optimize our CI usage. -> oh it is not for reduce system resource, it is for us, reviewers.

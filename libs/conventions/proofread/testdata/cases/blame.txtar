@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A person or past work named as the subject of a fault.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/change-description --
 - The author should have pinned the key.
 - #341 forgot to regenerate the index.
@@ -99,3 +100,41 @@ docs: clarify monorepo task loading is lazy, not eager
 This should be 'You should have received a copy of the license along with the program.' to match the project name.
 The docs already give the scaffolding commands, and worst case if they forgot to change it they'd just run the commands by hand.
 Moved the computation to be lazy in the emitter, so the interpreter pays nothing.
+-- hit/review-reply --
+i keep finding crazy bits like this; if we're going to use the assistant for anything we need to review the output super carefully.
+Nevertheless this a really, really stupid idea.
+this test is insanely complicated
+Yeah I fully expected crazy.
+You forgot to show the clear button at the top right of the text box.
+yeah i think globbing is good enough for me and we don't need to do crazy things like regexp detection..
+you forgot to finish this docstring
+you should have challenged me!
+`.` is sloppy.
+You failed to follow the existing list tests' pattern of comparing the whole result collections
+NEVER make sloppy checks like this, the tests should be strict
+This is insane overkill; you should be able to access the list directly.
+insane, closing
+It's kind of crazy the toolkit doesn't offer an `isCollapsed` function on the splitter.
+You forgot to delete these lines when you got rid of the `ipa` module.
+I think this comment is correct, it's a mistake - whoever wrote this probably mistook the second parameter to be the end of the substring - not the length.
+You forgot to remove this comment about `trim_output`.
+you forgot to add `icon_hold_action` and `icon_double_tap_action` here
+this is stupid
+You forgot to format your code.
+This still isn't working, you forgot to include the type definitions.
+You forgot to implement the IsValidVariableName method.
+Pretty insane tbh.
+revert this stupid change
+I think you forgot to call `job.start()`, right?
+stop adding crazy logic everywhere
+this is dumb.
+that's dumb.
+The assistant was doing some crazy stuff here around setting the current directory inside test cases.
+-- hit/commit-message --
+some components have braindead dependencies...
+undo stupid llm
+Do this a less stupid way
+-- fp/review-reply --
+I'm not crazy about these but they can be useful to observe how model generations change over training.
+This is perhaps overly defensive, but also not entirely crazy.
+I'm sure whoever wrote it was a really smart handsome guy who believed in making sure our code works great in every possible case

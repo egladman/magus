@@ -181,7 +181,7 @@ func TestRecordCountsFixedSuppressedAndReportedAcrossRuns(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", state)
 
 	dir := t.TempDir()
-	page := writeFile(t, dir, "a.md", "# A\n\nIt simply works. It basically works.\n")
+	page := writeFile(t, dir, "a.md", "# A\n\nIt is crucial. It is valuable.\n")
 
 	record := func() {
 		t.Helper()
@@ -213,24 +213,24 @@ func TestRecordCountsFixedSuppressedAndReportedAcrossRuns(t *testing.T) {
 		t.Fatalf("after one run: stats = %+v, want none, since nothing was seen twice", rows)
 	}
 
-	writeFile(t, dir, "a.md", "# A\n\nIt basically works.\n")
+	writeFile(t, dir, "a.md", "# A\n\nIt is valuable.\n")
 	record()
 
-	want := []ruleStat{{Rule: "filler", Fixed: 1, Reported: 1, NotUsefulRate: 0.5, Flag: flagShipOff}}
+	want := []ruleStat{{Rule: "buzzword-weak", Fixed: 1, Reported: 1, NotUsefulRate: 0.5, Flag: flagShipOff}}
 	if rows := stats(); !reflect.DeepEqual(rows, want) {
 		t.Fatalf("after fixing one: stats = %+v, want %+v", rows, want)
 	}
 
-	writeFile(t, dir, "a.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt basically works.\n")
+	writeFile(t, dir, "a.md", "# A\n\n<!-- proofread off buzzword-weak: quoting the user -->\nIt is valuable.\n")
 	record()
 
-	want = []ruleStat{{Rule: "filler", Fixed: 1, Suppressed: 1, NotUsefulRate: 0.5, Flag: flagShipOff}}
+	want = []ruleStat{{Rule: "buzzword-weak", Fixed: 1, Suppressed: 1, NotUsefulRate: 0.5, Flag: flagShipOff}}
 	if rows := stats(); !reflect.DeepEqual(rows, want) {
 		t.Fatalf("after suppressing the other: stats = %+v, want %+v", rows, want)
 	}
 
 	code, out, _ := runArgs(t, []string{"stats", "-format", "text"}, "")
-	if code != exitOK || out != "filler               fixed 1  suppressed 1  reported 0  not useful 50.0%  ship-off\n" {
+	if code != exitOK || out != "buzzword-weak        fixed 1  suppressed 1  reported 0  not useful 50.0%  ship-off\n" {
 		t.Errorf("stats -format text: code %d stdout %q", code, out)
 	}
 
@@ -239,7 +239,7 @@ func TestRecordCountsFixedSuppressedAndReportedAcrossRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if strings.Contains(string(raw), "basically") || strings.Contains(string(raw), "simply") {
+	if strings.Contains(string(raw), "valuable") || strings.Contains(string(raw), "crucial") {
 		t.Errorf("the state file holds the judged text:\n%s", raw)
 	}
 }
@@ -247,8 +247,8 @@ func TestRecordCountsFixedSuppressedAndReportedAcrossRuns(t *testing.T) {
 func TestRecordKeepsTextsApartByPath(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	a := writeFile(t, t.TempDir(), "a.md", "# A\n\nIt simply works.\n")
-	b := writeFile(t, t.TempDir(), "b.md", "# B\n\nIt simply works.\n")
+	a := writeFile(t, t.TempDir(), "a.md", "# A\n\nIt is crucial.\n")
+	b := writeFile(t, t.TempDir(), "b.md", "# B\n\nIt is crucial.\n")
 
 	for _, p := range []string{a, b} {
 		runArgs(t, []string{"reference", "-record", p}, "")
@@ -264,7 +264,7 @@ func TestRecordKeepsTextsApartByPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if want := []ruleStat{{Rule: "filler", Fixed: 1}}; !reflect.DeepEqual(rows, want) {
+	if want := []ruleStat{{Rule: "buzzword-weak", Fixed: 1}}; !reflect.DeepEqual(rows, want) {
 		t.Errorf("stats = %+v, want only a.md's finding fixed: %+v", rows, want)
 	}
 }

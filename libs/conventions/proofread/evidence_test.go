@@ -64,7 +64,15 @@ func TestCatalogShipsTheCeiling(t *testing.T) {
 		}
 	}
 
-	if got := JudgeText("Simply ask.\n", KindReference); len(got) != 1 || got[0].Decision != DecisionAdvise {
-		t.Errorf("filler ships as %v, want one advise finding", got)
+	var blame []Finding
+
+	for _, f := range JudgeText("This is dumb.\n", KindReviewReply) {
+		if f.Rule == RuleBlame {
+			blame = append(blame, f)
+		}
+	}
+
+	if len(blame) != 1 || blame[0].Decision != DecisionAdvise {
+		t.Errorf("blame ships as %v, want one advise finding", blame)
 	}
 }

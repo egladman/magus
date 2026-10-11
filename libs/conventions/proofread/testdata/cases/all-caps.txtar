@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Words in capitals for emphasis in a review reply.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/review-reply --
 Do NOT merge this.
 THIS IS WRONG.
@@ -55,3 +56,44 @@ The check should properly test that TV mode is enabled AND there is mouse moveme
 Now the function only removes 'cls' when it's the first parameter AND it's a type object.
 The `activated` output already uses conjunction (AND) when both membership and stop-time checks exist.
 Now the workflow will only run when the label is present AND the PR is not in draft status.
+-- hit/review-reply --
+NO AS ANY
+yes let's try adding it ONLY for this library as there are some build failures in the pipeline and we need to see if this will address the issue.
+- Semantically correct - a formula with the latest version installed but not linked IS outdated
+REVERT IT.
+**fuzz test** (595 lines): Comprehensive testing of ALL 10 operation types including:
+**Security Issue: The save action allows authenticated users to modify schema file paths for ANY project without verifying the project belongs to their organization.**
+Both scripts should have reproducible output, and you MUST insert the expected output as a HEREDOC in both scripts.
+Added a mock logger and assertions to verify that canceled and deadline errors are NOT logged as ERROR level.
+- The two event types are NOT exported from the SDK root; importing them from the package root will fail.
+NEVER DO THIS AGAIN
+The `or` operator meant ANY value not starting with `(` would get quoted, breaking JSON parsing for valid structured data.
+DO NOT use interpolated strings for resources, use the generated format method
+BUT only set this value if we are running the script tests.
+Should I change both to NOT fetch (like `build.rb`) or keep the current consistent fetching behavior?
+DON'T cache negative results during failures (isAllowed = false from fallback)
+The API does NOT return a 422 error when location fields are included with `in_reply_to`.
+You can solve this inside the project files of the two projects, but you DID NOT DO IT!!
+This is NOT AT ALL what I asked you to do, and is also wrong.
+This change ONLY needs to take effect in cases where the `PREFIX` is `/usr/local`, too.
+Do NOT add methods for each cloud.
+- When NOT to use them (template parameters like `#if (IncludeSampleContent)`)
+IF the version was not incremented, publish should NOT happen, so we should not skip this step.
+The Force parameter cannot work with ISO files due to the safety check on line 110 that prevents execution when ANY ISO files exist.
+- Enhanced tests to verify both CSS filter behavior AND dark mode media query activation
+Surely that will just mean the command line will include BOTH `-bg` AND `-bga`?
+The webhook MUST be deregistered with the provider as well if it's auto-setup
+**Hex format for unknown types**: This does NOT support round-tripping.
+-- fp/review-reply --
+The logical AND operator (&&) should be reversed to properly test the command first, then echo the result based on success/failure.
+- Inspects every task and tracks it only if it's non-sealed AND NOT vendor-owned AND has a vendor base class
+The filter uses an AND between id > and position >, which only matches rows where both are greater.
+**Clarify “THIS WILL FAIL …” comments**
+NULL/NOT NULL constraints not currently checked.
+based on discussion above, I think this should instead be changed to CHECK-NOT: internal error 99999
+Logic error: the condition checks if input is NOT generic OR NOT optional, but then returns `input.optional`.
+Workflow dispatch inputs MUST be empty.
+- Database schema: `schema: Json` (NOT NULL, line 132 in database.types.ts)
+-- fp/review-reply whole --
+> in the generated template, it tries to suffix the unique name for the deployment, BUT, only the first 24 characters are used.
+> result is we get a duplicate storage account error trying to deploy to a new environment.

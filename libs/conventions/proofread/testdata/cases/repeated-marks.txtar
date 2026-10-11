@@ -1,5 +1,6 @@
 Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A run of question or exclamation marks in a review reply.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
 -- hit/review-reply --
 Is this locked??
 It deletes the cache?!
@@ -49,3 +50,38 @@ style: Double negation check (!!hit.entries) is redundant with the length check.
 Let the pool scale with the host: e.g., const max = Math.min(8, (os.availableParallelism?.() ?? 4));
 **Normalize and dedupe the output list; use ?? and enforce stable order.**
 **suggestion:** Prefer nullish coalescing (??) over || for numeric defaults
+-- hit/review-reply --
+Fix them and do not introduce more!!
+Shouldn't we set the least privilege in the default workflow and change them if necessary in the separate jobs!?
+What user story??
+what's the replacement for this??
+who throws this ElementNotFound exception???
+I see you're doing a good job at reviewing!!
+Thanks!!
+Is this file needed???
+should this file really be included??
+do not redefine this function, instead import it from the models package since we already have this???
+I don't even see where the context is destroyed?!?
+Should this be included?!
+You can solve this inside the project files of the two projects, but you DID NOT DO IT!!
+Fixed!!
+Apparently we (maybe me?) just forgot to add tests when initially implementing this?!
+Why did it flatten the error type???
+WHAT?!
+nice!!!
+return the error reporter for these, never set to 0 silently!!!
+why did you delete the comment??
+Don't do this string matching!?
+No???
+instead of returning the raw response can you please create a model in models.py similar to the result model??
+Seems more or less the same!?
+you eliminated the default credential??
+Interesting idea!!
+why not just for all files in this directory??
+??
+Should these be manually updated??
+WTH Where did you get that from????
+No need for the ignore file to ignore itself??
+Excellent!!
+Can't we use that??
+What is that file??

@@ -13,6 +13,8 @@ import (
 
 const (
 	fillerSimply = "Drop 'simply': state the fact."
+	weakCrucial  = "Replace 'crucial' with what is actually so."
+	leakTBD      = "Remove 'TBD': it is left over from a tool or a template."
 	termsMessage = "Write 'subagent', not 'sub-agent'."
 	nameSuffix   = "Rename 'configFor': no function or method name ends in the word Of or For."
 )
@@ -127,9 +129,9 @@ func houseTable(t *testing.T, rules ...proofread.Rule) string {
 }
 
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
-	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve simply returns the path."}]`
+	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve returns the path. TBD."}]`
 
-	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing("")), "")
+	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD")), "")
 }
 
 func TestRunWritesAnEmptyArrayWhenNothingIsFound(t *testing.T) {
@@ -144,12 +146,12 @@ func TestRunWritesAnEmptyArrayForAnEmptyInput(t *testing.T) {
 
 func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 	in := `[` +
-		`{"node":"b","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."},` +
-		`{"node":"a","name":"Open","kind":"function","doc":"Open simply opens."}]`
+		`{"node":"b","name":"Run","kind":"function","doc":"Run hands work to a sub-agent. TBD."},` +
+		`{"node":"a","name":"Open","kind":"function","doc":"Open opens. TBD."}]`
 	want := rows(t,
-		row("b", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing(""),
 		row("b", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent"),
-		row("a", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing(""),
+		row("b", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD"),
+		row("a", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD"),
 	)
 
 	assertArgs(t, []string{"doc-comment", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
@@ -180,13 +182,13 @@ func TestRunJudgesANameSuffixOnlyOnACallable(t *testing.T) {
 
 func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 	dir := t.TempDir()
-	a := writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n")
+	a := writeFile(t, dir, "a.md", "# A\n\nIt is crucial.\n")
 	b := writeFile(t, dir, "b.md", "- **Cache:** on\n")
 
 	want := rows(t,
 		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionDeny,
 			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**").at(1, 3, 13),
-		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").at(3, 4, 10).replacing(""),
+		row(a, a+":3", "reference", proofread.RuleBuzzwordWeak, proofread.DecisionAdvise, weakCrucial, "crucial").at(3, 7, 14),
 	)
 
 	assertArgs(t, []string{"reference", b, a}, "", want)
@@ -203,12 +205,14 @@ func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 
 func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "guide.md", "# Guide\n\nThen we run it.\n")
+	// second-person ships off while its labeled precision is short, so the table turns it on.
+	decisions := writeFile(t, t.TempDir(), "d.json", `{"rules":{"second-person":"deny"}}`)
 
 	want := rows(t, row(path, path+":3", "guide", proofread.RuleSecondPerson, proofread.DecisionDeny,
 		"Address the reader as you, not 'we': a guide speaks to the person following it, "+
 			"and names magus or the project where it means them.", "we").at(3, 6, 8))
 
-	assertArgs(t, []string{"guide", path}, "", want)
+	assertArgs(t, []string{"guide", "-decisions", decisions, path}, "", want)
 }
 
 func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
@@ -247,14 +251,14 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 }
 
 func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
-	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."}]`
+	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run hands work to a sub-agent. TBD."}]`
 
-	filler := row("n", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing("")
+	leak := row("n", "", "doc-comment", proofread.RuleLeak, proofread.DecisionDeny, leakTBD, "TBD")
 	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent")
 	decisions := houseTable(t, proofread.RuleTerms, proofread.RuleCommentBlock)
 
-	assertArgs(t, []string{"doc-comment"}, doc, rows(t, filler))
-	assertArgs(t, []string{"doc-comment", "-decisions", decisions}, doc, rows(t, filler, terms))
+	assertArgs(t, []string{"doc-comment"}, doc, rows(t, leak))
+	assertArgs(t, []string{"doc-comment", "-decisions", decisions}, doc, rows(t, terms, leak))
 	assertArgs(t, []string{"doc-comment", "-decisions", decisions, "-only", "terms, comment-block"}, doc, rows(t, terms))
 }
 
@@ -274,9 +278,9 @@ func TestRunAppliesPathDecisionsToTheFilesTheyMatch(t *testing.T) {
 }
 
 func TestRunReadsTheDecisionsFromStdinForFiles(t *testing.T) {
-	page := writeFile(t, t.TempDir(), "page.md", "It simply works.\n")
+	page := writeFile(t, t.TempDir(), "page.md", "It is crucial.\n")
 
-	assertArgs(t, []string{"reference", "-decisions", "-", page}, `{"rules":{"filler":"off"}}`, "[]\n")
+	assertArgs(t, []string{"reference", "-decisions", "-", page}, `{"rules":{"buzzword-weak":"off"}}`, "[]\n")
 }
 
 func TestRunWritesTheRules(t *testing.T) {
@@ -310,7 +314,7 @@ func TestRunExplainsARuleByNameOrCode(t *testing.T) {
 		for _, line := range []string{
 			want,
 			"\nDefault decisions:\n",
-			"  doc-comment                  advise\n",
+			"  doc-comment                  off\n",
 			"\nPage: https://eli.gladman.cc/magus/reference/proofread/filler/\n",
 		} {
 			if !strings.Contains(out.String(), line) {
@@ -461,13 +465,13 @@ func TestRunExitsTwoOnInputThatIsNotAnArrayOfRecords(t *testing.T) {
 }
 
 func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
-	path := writeFile(t, t.TempDir(), "a.md", "# A\n\nIt simply works.\n")
+	path := writeFile(t, t.TempDir(), "a.md", "# A\n\nIt is crucial.\n")
 
 	var log sarifLog
 
 	runInto(t, []string{"reference", "-format", "sarif", path}, &log)
 
-	if res := log.Runs[0].Results; len(res) != 1 || res[0].RuleID != "filler" ||
+	if res := log.Runs[0].Results; len(res) != 1 || res[0].RuleID != "buzzword-weak" ||
 		res[0].Locations[0].PhysicalLocation.ArtifactLocation.URI != path ||
 		res[0].Locations[0].PhysicalLocation.Region.StartLine != 3 {
 		t.Errorf("sarif results = %+v", res)
@@ -477,7 +481,7 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 
 	runInto(t, []string{"reference", "-format", "rdjson", path}, &result)
 
-	if d := result.Diagnostics; len(d) != 1 || d[0].Code.Value != "PRF4001" || d[0].Location.Path != path ||
+	if d := result.Diagnostics; len(d) != 1 || d[0].Code.Value != "PRF4007" || d[0].Location.Path != path ||
 		d[0].Severity != "WARNING" {
 		t.Errorf("rdjson diagnostics = %+v", d)
 	}
@@ -494,7 +498,7 @@ func TestRunRejectsAnUnknownFormat(t *testing.T) {
 
 func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 	dir := t.TempDir()
-	page := writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n")
+	page := writeFile(t, dir, "a.md", "# A\n\nIt is crucial.\n")
 	baselinePath := filepath.Join(dir, "baseline.json")
 
 	var out, errOut bytes.Buffer
@@ -507,10 +511,10 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 	assertArgs(t, []string{"reference", "-baseline", baselinePath, "-prune", page}, "", "[]\n")
 	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", "[]\n")
 
-	writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n\nIt basically works.\n")
+	writeFile(t, dir, "a.md", "# A\n\nIt is crucial.\n\nIt is valuable.\n")
 
-	want := rows(t, row(page, page+":5", "reference", proofread.RuleFiller, proofread.DecisionAdvise,
-		"Drop 'basically': state the fact.", "basically").at(5, 4, 13).replacing(""))
+	want := rows(t, row(page, page+":5", "reference", proofread.RuleBuzzwordWeak, proofread.DecisionAdvise,
+		"Replace 'valuable' with what is actually so.", "valuable").at(5, 7, 15))
 	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", want)
 }
 
@@ -525,12 +529,12 @@ func TestRunNeedsABaselineForPrune(t *testing.T) {
 
 func TestRunHonorsASuppressionAndReportsAnIdleOne(t *testing.T) {
 	dir := t.TempDir()
-	quiet := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
-	idle := writeFile(t, dir, "idle.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt works.\n")
+	quiet := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off buzzword-weak: quoting the user -->\nIt is crucial.\n")
+	idle := writeFile(t, dir, "idle.md", "# A\n\n<!-- proofread off buzzword-weak: quoting the user -->\nIt works.\n")
 
-	comment := "<!-- proofread off filler: quoting the user -->"
+	comment := "<!-- proofread off buzzword-weak: quoting the user -->"
 	want := rows(t, row(idle, idle+":3", "reference", proofread.RuleSuppressionUnused, proofread.DecisionDeny,
-		"Remove the suppression of filler: it matches no finding.", comment).at(3, 1, 1+len(comment)))
+		"Remove the suppression of buzzword-weak: it matches no finding.", comment).at(3, 1, 1+len(comment)))
 
 	assertArgs(t, []string{"reference", quiet}, "", "[]\n")
 	assertArgs(t, []string{"reference", idle}, "", want)
@@ -538,11 +542,11 @@ func TestRunHonorsASuppressionAndReportsAnIdleOne(t *testing.T) {
 
 func TestRunWritesTextAndACountOnStderr(t *testing.T) {
 	dir := t.TempDir()
-	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
 
 	code, out, errOut := runArgs(t, []string{"reference", "-format", "text", bad}, "")
-	wantOut := bad + ":3:4: PRF4001 filler [advise] " + fillerSimply + "\n"
+	wantOut := bad + ":3:7: PRF4007 buzzword-weak [advise] " + weakCrucial + "\n"
 
 	if code != exitOK || out != wantOut || errOut != "proofread: 1 finding (0 deny, 1 advise)\n" {
 		t.Errorf("a finding: code %d stdout %q stderr %q, want stdout %q", code, out, errOut, wantOut)
@@ -556,11 +560,11 @@ func TestRunWritesTextAndACountOnStderr(t *testing.T) {
 
 func TestRunFailsOnlyAtTheBar(t *testing.T) {
 	dir := t.TempDir()
-	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
-	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
-	advise := writeFile(t, dir, "advise.json", `{"rules":{"filler":"advise"}}`)
-	deny := writeFile(t, dir, "deny.json", `{"rules":{"filler":"deny"}}`)
+	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off buzzword-weak: quoting the user -->\nIt is crucial.\n")
+	advise := writeFile(t, dir, "advise.json", `{"rules":{"buzzword-weak":"advise"}}`)
+	deny := writeFile(t, dir, "deny.json", `{"rules":{"buzzword-weak":"deny"}}`)
 
 	cases := []struct {
 		name string
@@ -588,7 +592,7 @@ func TestRunFailsOnlyAtTheBar(t *testing.T) {
 
 func TestRunFailsOnlyOnFindingsPastTheBaseline(t *testing.T) {
 	dir := t.TempDir()
-	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt is crucial.\n")
 	baselinePath := filepath.Join(dir, "baseline.json")
 
 	runArgs(t, []string{"reference", "-baseline", baselinePath, "-prune", bad}, "")
