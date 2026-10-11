@@ -162,7 +162,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 		stdout := captureStdout(t, func() {
 			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatJSON}}))
 		})
-		assert.Contains(t, stdout, `"failed_need": "lint-go"`)
+		assert.Contains(t, stdout, `"failed_need_target": "lint-go"`)
 		assert.Contains(t, stdout, `"failed_need_ref": "`+memberRef+`"`)
 	})
 
@@ -217,14 +217,14 @@ magus\project({"targets": {
 		d := byTarget(target)
 		assert.Contains(t, d.ErrMsg, "ctx.needs: ", target)
 		assert.Contains(t, d.ErrMsg, "golangci found 3 issues", target)
-		assert.Equal(t, "lint-go", d.FailedNeed, target, "the deepest member, not lint-all")
+		assert.Equal(t, "lint-go", d.FailedNeedTarget, target, "the deepest member, not lint-all")
 		require.NotEmpty(t, d.FailedNeedRef, target)
 
 		_, member, err := m.OutputByRef(ctx, d.FailedNeedRef)
 		require.NoError(t, err, target)
 		assert.True(t, member.Failed)
 		assert.Equal(t, "lint-go", member.Target)
-		assert.Empty(t, member.FailedNeed, "the throwing member composes nothing")
+		assert.Empty(t, member.FailedNeedTarget, "the throwing member composes nothing")
 	}
 }
 
@@ -235,7 +235,7 @@ func TestOutputImportNamesOnlyAShapedFailedNeedRef(t *testing.T) {
 			Schema: types.Schema{Version: types.StoredOutputSchemaVersion},
 			OutputDescriptor: types.OutputDescriptor{
 				Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
-				FailedNeed: "lint-go\x1b[2J", FailedNeedRef: ref,
+				FailedNeedTarget: "lint-go\x1b[2J", FailedNeedRef: ref,
 			},
 		})
 		require.NoError(t, err)

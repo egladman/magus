@@ -436,7 +436,7 @@ func noticeFailedNeed(ctx context.Context, d magus.OutputDescriptor) {
 	if d.FailedNeedRef == "" {
 		return
 	}
-	slog.InfoContext(ctx, fmt.Sprintf("the failing step is %s, a ctx.needs member; its output is under its own ref:", d.FailedNeed),
+	slog.InfoContext(ctx, fmt.Sprintf("the failing step is %s, a ctx.needs member; its output is under its own ref:", d.FailedNeedTarget),
 		attr.Notice(""), attr.Component("magus query output"), attr.Next(hint.QueryOutput.With(d.FailedNeedRef)))
 }
 
@@ -689,7 +689,7 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 		fmt.Printf("error:   %s\n", desc.ErrMsg)
 	}
 	if desc.FailedNeedRef != "" {
-		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeed, hint.QueryOutput.With(desc.FailedNeedRef))
+		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeedTarget, hint.QueryOutput.With(desc.FailedNeedRef))
 	}
 	if desc.Attempt != "" {
 		fmt.Printf("attempt: %s\n", desc.Attempt)

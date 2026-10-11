@@ -333,7 +333,7 @@ func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 	return OutputDescriptor{
 		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
 		Failed: d.Failed, ErrMsg: d.ErrMsg, TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
-		FailedNeed: d.FailedNeed, FailedNeedRef: d.FailedNeedRef,
+		FailedNeedTarget: d.FailedNeedTarget, FailedNeedRef: d.FailedNeedRef,
 		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
 		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,

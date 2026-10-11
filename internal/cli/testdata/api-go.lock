@@ -407,7 +407,6 @@ github.com/egladman/magus/libs/testkit.Projects func(paths ...string) []*github.
 github.com/egladman/magus/libs/testkit.Repo type struct
 github.com/egladman/magus/libs/testkit.Repo.AddWorktree method(ptr) func(branch string) *Repo
 github.com/egladman/magus/libs/testkit.Repo.Commit method(ptr) func(message string, files map[string]string) string
-github.com/egladman/magus/libs/testkit.Repo.Executable method func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Repo.Git method(ptr) func(args ...string) string
 github.com/egladman/magus/libs/testkit.Repo.Head method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Repo.Magusfile method func(body string) string
@@ -415,6 +414,7 @@ github.com/egladman/magus/libs/testkit.Repo.Path method func(rel ...string) stri
 github.com/egladman/magus/libs/testkit.Repo.Root method func() string
 github.com/egladman/magus/libs/testkit.Repo.Workspace embedded *Workspace
 github.com/egladman/magus/libs/testkit.Repo.Write method func(rel string, body string) string
+github.com/egladman/magus/libs/testkit.Repo.WriteExecutable method func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Repo.WriteTree method func(files map[string]string)
 github.com/egladman/magus/libs/testkit.TB type interface
 github.com/egladman/magus/libs/testkit.TB.Cleanup imethod func(func())
@@ -424,11 +424,11 @@ github.com/egladman/magus/libs/testkit.TB.Setenv imethod func(key string, value 
 github.com/egladman/magus/libs/testkit.TB.Skip imethod func(args ...any)
 github.com/egladman/magus/libs/testkit.TB.TempDir imethod func() string
 github.com/egladman/magus/libs/testkit.Workspace type struct
-github.com/egladman/magus/libs/testkit.Workspace.Executable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Magusfile method(ptr) func(body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Path method(ptr) func(rel ...string) string
 github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
+github.com/egladman/magus/libs/testkit.Workspace.WriteExecutable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
 github.com/egladman/magus/libs/testkit/fakespell.Register func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/types.ActiveDispatch type struct
@@ -2643,8 +2643,8 @@ github.com/egladman/magus/types.OutputDescriptor.DurationMs field int64 "json:\"
 github.com/egladman/magus/types.OutputDescriptor.ErrMsg field string "json:\"error,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.ExtraArgs field []string "json:\"extra_args,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.Failed field bool "json:\"failed\""
-github.com/egladman/magus/types.OutputDescriptor.FailedNeed field string "json:\"failed_need,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.FailedNeedRef field string "json:\"failed_need_ref,omitempty\""
+github.com/egladman/magus/types.OutputDescriptor.FailedNeedTarget field string "json:\"failed_need_target,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.Inv field string "json:\"inv,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.Key field string "json:\"key,omitempty\""
 github.com/egladman/magus/types.OutputDescriptor.KeyVersion field int "json:\"key_version,omitempty\""

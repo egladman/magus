@@ -335,7 +335,7 @@ func (m *Magus) OutputRecordByRef(ctx context.Context, ref string) (types.Stored
 // ReadOutputRecords checks every JSON Lines record in r, then hands each to each; it
 // writes nothing, and any bad line is an error naming it before each sees a record.
 // Fields come back as sent, so a caller printing them uses [cache.NeutralizeTerminal]; the
-// exceptions are failed_need, which comes back neutralized, and failed_need_ref, which
+// exceptions are failed_need_target, which comes back neutralized, and failed_need_ref, which
 // comes back empty unless it is a ref magus mints.
 func ReadOutputRecords(r io.Reader, each func(types.StoredOutput) error) error {
 	return readOutputRecords(r, cache.DefaultImportLimits, each)
@@ -383,8 +383,8 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	// The member a failure points at is advice, not identity: a forged one is made harmless
 	// rather than refusing the record, whose captured output is still worth reading. It is
 	// shown on one line, so a line break is escaped along with the other controls.
-	need, _ := cache.NeutralizeTerminal([]byte(rec.FailedNeed), false)
-	rec.FailedNeed = lineBreaks.Replace(string(need))
+	need, _ := cache.NeutralizeTerminal([]byte(rec.FailedNeedTarget), false)
+	rec.FailedNeedTarget = lineBreaks.Replace(string(need))
 	if !cache.IsMintedRef(rec.FailedNeedRef) {
 		rec.FailedNeedRef = ""
 	}
@@ -392,7 +392,7 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	err := cache.CheckImportedDescriptor(cache.OutputDescriptor{
 		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
 		TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
-		FailedNeed: d.FailedNeed, FailedNeedRef: d.FailedNeedRef,
+		FailedNeedTarget: d.FailedNeedTarget, FailedNeedRef: d.FailedNeedRef,
 		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
 	}, rec.ClassDigests)

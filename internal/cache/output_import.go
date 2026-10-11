@@ -85,8 +85,8 @@ var (
 const maxFieldBytes = 512
 
 // CheckImportedDescriptor reports the first field of d or classes in a shape no magus
-// writes, or nil; ErrMsg is free text and is left to NeutralizeTerminal. FailedNeed and
-// FailedNeedRef are advice the caller makes harmless first (neutralizing the target,
+// writes, or nil; ErrMsg is free text and is left to NeutralizeTerminal. FailedNeedTarget
+// and FailedNeedRef are advice the caller makes harmless first (neutralizing the target,
 // dropping a ref that is not minted); only the target's length is checked here.
 func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	if !fullKeyPattern.MatchString(d.Key) {
@@ -119,7 +119,7 @@ func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 		return errors.New("project is empty")
 	}
 	names := []struct{ name, value string }{
-		{"project", d.Project}, {"target", d.Target}, {"failed_need", d.FailedNeed}, {"spell", d.Spell}, {"magus_version", d.MagusVersion},
+		{"project", d.Project}, {"target", d.Target}, {"failed_need_target", d.FailedNeedTarget}, {"spell", d.Spell}, {"magus_version", d.MagusVersion},
 	}
 	for _, a := range d.ExtraArgs {
 		names = append(names, struct{ name, value string }{"extra_args", a})

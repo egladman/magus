@@ -52,7 +52,7 @@ func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 	// of one, and the target is neutralized like the error. The command reads the member's
 	// output wherever the record came from, not here.
 	if cache.IsMintedRef(d.FailedNeedRef) {
-		target, _ := cache.NeutralizeTerminal([]byte(d.FailedNeed), false)
+		target, _ := cache.NeutralizeTerminal([]byte(d.FailedNeedTarget), false)
 		fmt.Fprintf(w, "  failed:   ctx.needs %s; where the record was made, read it with %s\n", target, hint.QueryOutput.With(d.FailedNeedRef))
 	}
 	if d.Attempt != "" {

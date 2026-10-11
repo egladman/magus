@@ -88,13 +88,13 @@ type OutputDescriptor struct {
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
 
-	// FailedNeed is the target of the ctx.needs member a composed target failed on, and
+	// FailedNeedTarget is the target of the ctx.needs member a composed target failed on, and
 	// FailedNeedRef the ref that member's own run recorded: the deepest one when members
 	// compose further.
 	// ErrMsg restates the member's error, but the member's output (the compiler or linter
 	// findings) lives only under its ref.
-	FailedNeed    string `json:"failed_need,omitempty"`
-	FailedNeedRef string `json:"failed_need_ref,omitempty"`
+	FailedNeedTarget string `json:"failed_need_target,omitempty"`
+	FailedNeedRef    string `json:"failed_need_ref,omitempty"`
 
 	// Ref is the key-derived portable id shared by every attempt of the step; the
 	// fields below carry the identity it derives from.

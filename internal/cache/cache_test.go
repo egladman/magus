@@ -1828,11 +1828,11 @@ func TestRunRecordsTheFailedNeedOnTheDescriptor(t *testing.T) {
 	_, d, err := c.outputs.ByRef(res.Ref)
 	require.NoError(t, err)
 	assert.Equal(t, OutputDescriptor{
-		Failed:        true,
-		ErrMsg:        "ctx.needs: lint findings",
-		FailedNeed:    "lint-go",
-		FailedNeedRef: "outdddddddddddd",
-	}, OutputDescriptor{Failed: d.Failed, ErrMsg: d.ErrMsg, FailedNeed: d.FailedNeed, FailedNeedRef: d.FailedNeedRef},
+		Failed:           true,
+		ErrMsg:           "ctx.needs: lint findings",
+		FailedNeedTarget: "lint-go",
+		FailedNeedRef:    "outdddddddddddd",
+	}, OutputDescriptor{Failed: d.Failed, ErrMsg: d.ErrMsg, FailedNeedTarget: d.FailedNeedTarget, FailedNeedRef: d.FailedNeedRef},
 		"the error text is not rewritten; the member rides beside it")
 }
 
@@ -1844,7 +1844,7 @@ func TestRunRecordsNoFailedNeedForAnOrdinaryFailure(t *testing.T) {
 
 	_, d, err := c.outputs.ByRef(res.Ref)
 	require.NoError(t, err)
-	assert.Empty(t, d.FailedNeed)
+	assert.Empty(t, d.FailedNeedTarget)
 	assert.Empty(t, d.FailedNeedRef)
 }
 

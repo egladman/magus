@@ -1004,7 +1004,7 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	}
 	read := hint.QueryOutput.With(d.Attempt)
 	if d.FailedNeedRef != "" {
-		read = hint.QueryOutput.With(d.FailedNeedRef) + " (" + d.FailedNeed + ", the ctx.needs member that failed)"
+		read = hint.QueryOutput.With(d.FailedNeedRef) + " (" + d.FailedNeedTarget + ", the ctx.needs member that failed)"
 	}
 	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
 		d.Attempt, msg, read))
@@ -1043,7 +1043,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
-		d.FailedNeed, d.FailedNeedRef = asNeedFailure(runErr)
+		d.FailedNeedTarget, d.FailedNeedRef = asNeedFailure(runErr)
 	}
 
 	var ref string
