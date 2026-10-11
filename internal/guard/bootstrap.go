@@ -262,6 +262,11 @@ type ownBuildOutcome struct {
 	// to load with MGS1021, advised through as recoveryAdvisory.
 	recovery         bool
 	recoveryAdvisory ShellVerdict
+	// staleBootstrap is the bootstrap, alone on its line, in a root whose ./magus cannot
+	// load the tree: the binary the "already has a binary" deny points at is the very one
+	// that needs replacing.
+	staleBootstrap         bool
+	staleBootstrapAdvisory ShellVerdict
 	// lease is the lease the call acts under, "" for the orchestrator or a person. A
 	// worker never builds the binary: there is one per base, and the main session places it.
 	lease string
@@ -278,6 +283,8 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
 	case o.recovery:
 		return o.recoveryAdvisory
+	case o.staleBootstrap:
+		return o.staleBootstrapAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
 		v.Why = denial{Say: v.Deny, Why: v.Why}.full()
 		v.Deny = "magus workspace: not a bootstrap: " + o.root + " already has a magus binary; rebuild with " + ownRebuild + "."
@@ -373,6 +380,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	workspaceShell := matchWorkspaceShell(deps.ShellRules, command, d)
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
+	staleBootstrap := call.bootstrapsMagus() && bootstrapLine(command, d) && hasMagusBinary(root) && cannotLoad(ctx, deps, root)
 	return &ownBuildOutcome{
 		lease:         deps.lease,
 		root:          root,
@@ -392,6 +400,12 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 		recoveryAdvisory: strengthenWithWorkspace(ShellVerdict{
 			Context: "magus workspace: recovery allowed because " + where + " cannot load its own sources (MGS1021): relink and regenerate only, then rebuild with " + ownRebuild + ".",
 			Why:     "No magus target can run until the checkout loads its own sources again, so only the go commands that repair it are let through.",
+			Rule:    rule,
+		}, workspaceShell),
+		staleBootstrap: staleBootstrap,
+		staleBootstrapAdvisory: strengthenWithWorkspace(ShellVerdict{
+			Context: "magus workspace: bootstrap allowed because ./magus in " + where + " is older than the tree and cannot load it (MGS1021): the bootstrap replaces it.",
+			Why:     "A binary that cannot load the tree cannot rebuild itself, so the bootstrap is the one go command allowed here: " + bootstrapWhy,
 			Rule:    rule,
 		}, workspaceShell),
 	}

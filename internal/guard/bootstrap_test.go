@@ -269,3 +269,66 @@ func TestJudgeAllowsTheRelinkWhileTheWorkspaceCannotLoad(t *testing.T) {
 	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
 	assert.Contains(t, v.Context, "cannot load its own sources")
 }
+
+// ./magus exists but predates the tree, so "already has a magus binary; rebuild with
+// ./magus run go-build ." sends the reader to the one tool that cannot run. The exact
+// bootstrap passes then, and nothing else does.
+func TestRankOwnBuildAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
+	built := checkoutFixture(t, ownModule, true)
+	loads := 0
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, `unknown built-in rule "architecture-unbriefed"`)
+
+	v := judgeOwnBuildWith(loadingAs(stale, &loads), built, bootstrapCommand)
+
+	assert.Empty(t, v.Deny)
+	assert.Equal(t, denyRuleRawTool, v.Rule.Name)
+	assert.Contains(t, v.Context, "bootstrap allowed")
+	assert.Contains(t, v.Context, "cannot load it")
+	assert.Equal(t, 1, loads)
+}
+
+// The allowance is the bootstrap and only the bootstrap: a missing prefix, a second prefix,
+// a second command or any other go call keeps the deny it had.
+func TestRankOwnBuildDeniesEverythingButTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
+	built := checkoutFixture(t, ownModule, true)
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
+	for _, command := range []string{
+		"go run -trimpath ./cmd/magus run go-build --no-cache .",
+		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .",
+		"CGO_ENABLED=0 " + bootstrapCommand,
+		bootstrapCommand + " && go vet ./...",
+		"go test ./...",
+	} {
+		loads := 0
+		v := judgeOwnBuildWith(loadingAs(stale, &loads), built, command)
+		assert.Equal(t, denyRuleRawTool, v.Rule.Name, command)
+		assert.NotEmpty(t, v.Deny, command)
+	}
+}
+
+// A tree the binary loads, or fails on for another reason, keeps "not a bootstrap".
+func TestRankOwnBuildDeniesTheBootstrapWhenTheBinaryLoadsTheTree(t *testing.T) {
+	built := checkoutFixture(t, ownModule, true)
+	for name, loadErr := range map[string]error{
+		"loads":        nil,
+		"syntax error": errors.New("magusfile: syntax error"),
+		"other code":   types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"),
+	} {
+		loads := 0
+		v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, bootstrapCommand)
+		assert.Contains(t, v.Deny, "already has a magus binary", name)
+	}
+}
+
+func TestJudgeAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
+	testkit.Isolate(t)
+	built := checkoutFixture(t, ownModule, true)
+	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
+	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"` + bootstrapCommand + `"}}`
+	loads := 0
+
+	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})
+
+	assert.Equal(t, verdictWithRule("advise", string(denyRuleRawTool)), unworded(v))
+	assert.Contains(t, v.Context, "older than the tree")
+}

@@ -162,6 +162,8 @@ func TestExplainStaleBinary_AnnotatesAMissingObjectMember(t *testing.T) {
 
 func TestIsStaleBinary(t *testing.T) {
 	missingMember := errors.New(`magusfile: exec magusfile.buzz: object guard has no field or method "builtins"`)
+	unknownRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`magus\guard.builtins: "architecture-unbriefed": unknown built-in rule "architecture-unbriefed"`)
 	for name, tc := range map[string]struct {
 		err  error
 		want bool
@@ -172,6 +174,8 @@ func TestIsStaleBinary(t *testing.T) {
 		"an undefined type":            {buzzErr("BZZ1002", `undefined type "Secret"`), true},
 		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
 		"a missing object member":      {missingMember, true},
+		"an unknown built-in rule":     {unknownRule, true},
+		"another misdeclared rule":     {types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"), false},
 		"one stale branch of a join":   {errors.Join(errors.New("other"), missingMember), true},
 		"no stale branch in a join":    {errors.Join(errors.New("a"), errors.New("b")), false},
 		"an already annotated failure": {types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "old"), true},
@@ -180,6 +184,24 @@ func TestIsStaleBinary(t *testing.T) {
 			assert.Equal(t, tc.want, IsStaleBinary(tc.err))
 		})
 	}
+}
+
+// An unknown built-in rule is the same binary-older-than-tree skew as a missing type, so it
+// must annotate as MGS1021 and name the rebuild instead of reading as a typo.
+func TestExplainStaleBinary_AnnotatesAnUnknownBuiltinRule(t *testing.T) {
+	err := fmt.Errorf("magusfile: exec magusfile.buzz: %w", types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "architecture-unbriefed"; `+"`magus describe rules` lists every name"))
+
+	got := ExplainStaleBinary(err, "v0.5.0", "")
+	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, got.Error(), "this magus is out of date")
+	assert.Contains(t, got.Error(), "Fix it:")
+	assert.True(t, IsStaleBinary(err))
+}
+
+func TestExplainStaleBinary_LeavesAnotherMisdeclaredRuleAlone(t *testing.T) {
+	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty")
+	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
 }
 
 // TestExplainStaleBinary_LeavesEverythingElseAlone is the half that keeps this honest.

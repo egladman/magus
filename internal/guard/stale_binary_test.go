@@ -265,6 +265,22 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 	assert.Contains(t, stored, "\n"+onePerBase+"\n")
 }
 
+// A worker never gets the stale-binary bootstrap either: the main session places ./magus.
+func TestBootstrapWhileStaleIsTheMainSessionsNotAWorkers(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetLeases()[0])
+	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
+	ownCheckout(t, ctx, true)
+	loads := 0
+	deps := loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads)
+	line := "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+
+	orchestrator := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1"})
+	assert.Equal(t, "advise", orchestrator.Decision, orchestrator.Reason)
+
+	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
+	assert.Equal(t, "deny", worker.Decision, worker.Reason)
+}
+
 // Each hook row records the magus that judged the call and the directory the host said it
 // ran in, so a verdict can be tied to the build that reached it.
 func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
