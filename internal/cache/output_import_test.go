@@ -68,9 +68,7 @@ func TestOutputImportRejectsForgedIdentity(t *testing.T) {
 		"bad inv":              func(d *OutputDescriptor) { d.Inv = "inv;ls" },
 		"control in extra arg": func(d *OutputDescriptor) { d.ExtraArgs = []string{"-run\x07"} },
 		"negative duration":    func(d *OutputDescriptor) { d.DurationMs = -1 },
-		"escape in need":       func(d *OutputDescriptor) { d.FailedNeed = "lint\x1b]0;t\x07" },
-		"command in need ref":  func(d *OutputDescriptor) { d.FailedNeedRef = "out0123456789ab; ls" },
-		"short need ref":       func(d *OutputDescriptor) { d.FailedNeedRef = "out01" },
+		"long need":            func(d *OutputDescriptor) { d.FailedNeed = strings.Repeat("n", maxFieldBytes+1) },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -81,7 +79,7 @@ func TestOutputImportRejectsForgedIdentity(t *testing.T) {
 	}
 	withNeed := validImportedDescriptor()
 	withNeed.FailedNeed, withNeed.FailedNeedRef = "lint-go", "out0123456789ab"
-	require.NoError(t, CheckImportedDescriptor(withNeed, nil), "a minted member ref is kept")
+	require.NoError(t, CheckImportedDescriptor(withNeed, nil), "a member and its ref are advice, not refused")
 	assert.Error(t, CheckImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src\n", Digest: "0123456789ab"}}))
 	assert.Error(t, CheckImportedDescriptor(validImportedDescriptor(), []ClassDigest{{Class: "src", Digest: "zz"}}))
 }

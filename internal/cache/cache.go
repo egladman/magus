@@ -545,7 +545,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && !c.traceTreeMoved(ctx, s, manifest), nil
+	return hash, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
@@ -1043,7 +1043,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
-		d.FailedNeed, d.FailedNeedRef = failedNeed(runErr)
+		d.FailedNeed, d.FailedNeedRef = asNeedFailure(runErr)
 	}
 
 	var ref string

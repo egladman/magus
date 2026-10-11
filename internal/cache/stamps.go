@@ -41,10 +41,10 @@ func (c *Cache) stampDigests(ctx context.Context, root string, stamps []string) 
 	return out
 }
 
-// traceTreeMoved reports whether the tree no longer reads as m recorded it, through a
+// treeMoved reports whether the tree no longer reads as m recorded it, through a
 // stamp or a verified output; either makes m unfit to replay, so its tier answers a miss.
 // What moved is logged as a cache.stamp debug record.
-func (c *Cache) traceTreeMoved(ctx context.Context, s *Step, m *Manifest) bool {
+func (c *Cache) treeMoved(ctx context.Context, s *Step, m *Manifest) bool {
 	moved := c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, m.Stamps)
 	outputs, err := c.movedOutputs(ctx, s, m)
 	moved = append(moved, outputs...)

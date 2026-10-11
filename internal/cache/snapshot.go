@@ -340,9 +340,9 @@ func replayRecord(rec OutputRecord, dst, store string) error {
 }
 
 // outputMatchesRecord reports whether dst already is what rec records: the same link
-// target, or a regular file with the recorded bytes, read through hash, and mode. A
-// replay leaves such a file untouched, which also keeps its mtime, so nothing keyed on it
-// goes dirty.
+// target, or a regular file with the recorded bytes, read through hash, and executable
+// bit. A replay leaves such a file untouched, which also keeps its mtime, so nothing
+// keyed on it goes dirty.
 func outputMatchesRecord(rec OutputRecord, dst string, hash func(path string) (string, error)) bool {
 	info, err := os.Lstat(dst)
 	if err != nil {
@@ -355,7 +355,10 @@ func outputMatchesRecord(rec OutputRecord, dst string, hash func(path string) (s
 	if !info.Mode().IsRegular() || info.Size() != rec.Size {
 		return false
 	}
-	if rec.Mode != 0 && runtime.GOOS != "windows" && uint32(info.Mode()&0o777) != rec.Mode&0o777 {
+	// Only the owner's executable bit: the rest of the mode follows the umask of the
+	// machine that wrote the file, and a remote entry recorded under another umask would
+	// otherwise never verify.
+	if rec.Mode != 0 && runtime.GOOS != "windows" && uint32(info.Mode())&0o100 != rec.Mode&0o100 {
 		return false
 	}
 	sum, err := hash(dst)

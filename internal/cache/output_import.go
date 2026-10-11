@@ -85,7 +85,9 @@ var (
 const maxFieldBytes = 512
 
 // CheckImportedDescriptor reports the first field of d or classes in a shape no magus
-// writes, or nil; ErrMsg is free text and is left to NeutralizeTerminal.
+// writes, or nil; ErrMsg is free text and is left to NeutralizeTerminal. FailedNeed and
+// FailedNeedRef are advice the caller makes harmless first (neutralizing the target,
+// dropping a ref that is not minted); only the target's length is checked here.
 func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	if !fullKeyPattern.MatchString(d.Key) {
 		return fmt.Errorf("key %q is not a full cache key (64 lowercase hex)", d.Key)
@@ -98,9 +100,6 @@ func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	}
 	if d.Inv != "" && !LooksLikeInvocationID(d.Inv) {
 		return fmt.Errorf("inv %q is not an invocation id", d.Inv)
-	}
-	if d.FailedNeedRef != "" && !IsMintedRef(d.FailedNeedRef) {
-		return fmt.Errorf("failed_need_ref %q is not a ref", d.FailedNeedRef)
 	}
 	if d.Revision != "" && !revisionPattern.MatchString(d.Revision) {
 		return fmt.Errorf("revision %q is not a hex revision", d.Revision)

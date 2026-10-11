@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
@@ -361,6 +362,9 @@ func readOutputRecords(r io.Reader, limits cache.ImportLimits, each func(types.S
 	return nil
 }
 
+// lineBreaks spells out the two controls NeutralizeTerminal lets through.
+var lineBreaks = strings.NewReplacer("\n", "<U+000A>", "\t", "<U+0009>")
+
 func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 	var rec types.StoredOutput
 	if err := json.Unmarshal(raw, &rec); err != nil {
@@ -377,9 +381,10 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 		return types.StoredOutput{}, errors.New("output record carries both output and output_base64")
 	}
 	// The member a failure points at is advice, not identity: a forged one is made harmless
-	// rather than refusing the record, whose captured output is still worth reading.
+	// rather than refusing the record, whose captured output is still worth reading. It is
+	// shown on one line, so a line break is escaped along with the other controls.
 	need, _ := cache.NeutralizeTerminal([]byte(rec.FailedNeed), false)
-	rec.FailedNeed = string(need)
+	rec.FailedNeed = lineBreaks.Replace(string(need))
 	if !cache.IsMintedRef(rec.FailedNeedRef) {
 		rec.FailedNeedRef = ""
 	}

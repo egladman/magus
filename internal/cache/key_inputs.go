@@ -200,7 +200,10 @@ func ClassDigests(inputs []string) []ClassDigest {
 // Six more carry a bare value straight after the class label, so the boundary is the
 // class colon: keyVersion, os, arch, target, spellDefVersion, binary. Pairing them matters as
 // much as pairing src does: unpaired, a bumped keyVersion reads as one line vanishing
-// and an unrelated one arriving, double-counting the single thing that moved.
+// and an unrelated one arriving, double-counting the single thing that moved. `binary`
+// was once labelled `magus`; key inputs stored under the old label are their own
+// identity, so an old entry compared under --against reads as that line removed and the
+// binary line added.
 //
 // Everything else is its own identity and can only be present or absent, which is the
 // whole difference it can express: charm, arg, obs, exec and dep have no value slot at

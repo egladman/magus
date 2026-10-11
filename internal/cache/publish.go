@@ -278,7 +278,7 @@ func (c *Cache) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDesc
 	if c.remote == nil {
 		// Name the one store that was consulted rather than a bare not-exist, so the
 		// message never implies a remote lookup that could not have happened.
-		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{"local cache"}}
+		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{LocalStore}}
 	}
 	data, bundle, err := c.fetchBundle(ctx, ref)
 	if err == nil {
@@ -289,7 +289,7 @@ func (c *Cache) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDesc
 		return data, bundle.Descriptor, nil
 	}
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{"local cache", "remote published outputs"}}
+		return nil, OutputDescriptor{}, &RefNotFoundError{Ref: ref, Stores: []string{LocalStore, "remote published outputs"}}
 	}
 	return nil, OutputDescriptor{}, err
 }
@@ -317,31 +317,34 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 	}
 }
 
+// LocalStore names this checkout's output store in a [RefNotFoundError].
+const LocalStore = "local cache"
+
 // RefNotFoundError reports a ref that resolved in none of the stores consulted, and
 // names them. "Not found" is only actionable if the reader knows where magus looked;
 // a foreign ref that was never published looks identical to a mistyped one otherwise.
 type RefNotFoundError struct {
 	Ref    string
 	Stores []string
-	// Checkout is another checkout the session store says ran Ref and whose store was not
-	// read: gone from disk, or with a config that does not load. Empty when none is
-	// recorded, or when every recorded one was read (Stores names it) and missed. A ref
-	// lives in the store of the checkout that ran it, so naming that checkout is the
+	// UnreadCheckout is another checkout the session store says ran Ref and whose store
+	// was not read: gone from disk, or with a config that does not load. Empty when none
+	// is recorded, or when every recorded one was read (Stores names it) and missed. A
+	// ref lives in the store of the checkout that ran it, so naming that checkout is the
 	// whole remedy.
-	Checkout string
-	// CheckoutGone reports that Checkout is no longer on disk.
-	CheckoutGone bool
+	UnreadCheckout string
+	// UnreadCheckoutGone reports that UnreadCheckout is no longer on disk.
+	UnreadCheckoutGone bool
 }
 
 func (e *RefNotFoundError) Error() string {
 	msg := fmt.Sprintf("no stored output for ref %q, consulted %s", e.Ref, strings.Join(e.Stores, ", "))
 	switch {
-	case e.Checkout == "":
+	case e.UnreadCheckout == "":
 		return msg + fmt.Sprintf("; if another checkout ran it, read it there with `magus query output %s`", e.Ref)
-	case e.CheckoutGone:
-		return msg + fmt.Sprintf("; it was recorded by %s, which is no longer on disk; if that checkout is restored, `cd %s && magus query output %s` reads it", e.Checkout, e.Checkout, e.Ref)
+	case e.UnreadCheckoutGone:
+		return msg + fmt.Sprintf("; it was recorded by %s, which is no longer on disk; if that checkout is restored, `cd %s && magus query output %s` reads it", e.UnreadCheckout, e.UnreadCheckout, e.Ref)
 	default:
-		return msg + fmt.Sprintf("; it was recorded by %s; read it there with `cd %s && magus query output %s`", e.Checkout, e.Checkout, e.Ref)
+		return msg + fmt.Sprintf("; it was recorded by %s; read it there with `cd %s && magus query output %s`", e.UnreadCheckout, e.UnreadCheckout, e.Ref)
 	}
 }
 

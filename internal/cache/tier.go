@@ -88,7 +88,7 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if err != nil {
 		return nil, err
 	}
-	if t.c.traceTreeMoved(ctx, s, m) {
+	if t.c.treeMoved(ctx, s, m) {
 		return nil, errTierMiss
 	}
 	return &entry{manifest: m, root: t.c.dir}, nil
@@ -193,7 +193,7 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 	// never replay.
 	var accept func(*Manifest) bool
 	if s.VerifyOutputs {
-		accept = func(m *Manifest) bool { return !t.c.traceTreeMoved(ctx, s, m) }
+		accept = func(m *Manifest) bool { return !t.c.treeMoved(ctx, s, m) }
 	}
 	m, err := t.c.importArtifact(ctx, counted, root, s.ProjectPath, hash, accept)
 	if errors.Is(err, errTierMiss) {

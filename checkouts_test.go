@@ -30,10 +30,10 @@ func linkedWorktrees(t *testing.T, names ...string) (primary string, worktrees [
 	return repo.Root(), worktrees
 }
 
-// recordRun files, in the session store of the repository repoRoot belongs to, the fact
+// recordSessionRun files, in the session store of the repository repoRoot belongs to, the fact
 // `magus session` would hold for a target that ran in workspace and printed ref: the only
 // thing that ties a ref to the checkout whose store has it.
-func recordRun(t *testing.T, repoRoot, workspace, ref string) {
+func recordSessionRun(t *testing.T, repoRoot, workspace, ref string) {
 	t.Helper()
 	dir, err := sessions.Dir(repoRoot)
 	require.NoError(t, err)
@@ -42,9 +42,9 @@ func recordRun(t *testing.T, repoRoot, workspace, ref string) {
 	require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{Target: "lint", Project: ".", Outcome: sessions.OutcomeFail, Ref: ref}))
 }
 
-// persistRun puts a failed run's output and key inputs in workspace's own output store and
+// persistedRunRef puts a failed run's output and key inputs in workspace's own output store and
 // returns the ref it prints.
-func persistRun(t *testing.T, workspace string) string {
+func persistedRunRef(t *testing.T, workspace string) string {
 	t.Helper()
 	dir, err := ResolveCacheDir(workspace)
 	require.NoError(t, err)
@@ -82,8 +82,8 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 	testkit.Isolate(t)
 	_, trees := linkedWorktrees(t, "worker", "orchestrator")
 	worker, orchestrator := trees[0], trees[1]
-	ref := persistRun(t, orchestrator)
-	recordRun(t, worker, orchestrator, ref)
+	ref := persistedRunRef(t, orchestrator)
+	recordSessionRun(t, worker, orchestrator, ref)
 	holderCache, err := ResolveCacheDir(orchestrator)
 	require.NoError(t, err)
 	before := fileFingerprints(t, holderCache)
@@ -132,6 +132,32 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled, "an ended context stops the search of other checkouts")
 }
 
+// A portable ref is the same in every checkout that ran the key. The key inputs belong with
+// the descriptor the caller already read: a checkout whose descriptor resolves but whose run
+// predates key-input persistence answers "no lines", and the search must not carry on to
+// another checkout's lines for the same ref.
+func TestOutputKeyInputsStopAtTheCheckoutWhoseDescriptorResolved(t *testing.T) {
+	primary, trees := linkedWorktrees(t, "worker", "orchestrator")
+	worker, orchestrator := trees[0], trees[1]
+	ref := persistedRunRef(t, primary)
+
+	dir, err := ResolveCacheDir(orchestrator)
+	require.NoError(t, err)
+	d, err := cache.NewOutputStore(dir).Persist(context.Background(), strings.Repeat("ab", 32), []byte("lint log\n"),
+		cache.OutputDescriptor{Project: ".", Target: "lint", Failed: true})
+	require.NoError(t, err)
+	require.Equal(t, ref, d.Ref, "the same key mints the same portable ref")
+	recordSessionRun(t, worker, orchestrator, ref)
+
+	ctx := t.Context()
+	opened, err := Inspect(ctx, worker)
+	require.NoError(t, err)
+
+	_, err = opened.(*Magus).OutputKeyInputs(ctx, ref)
+
+	assert.ErrorIs(t, err, fs.ErrNotExist)
+}
+
 // A miss says which checkout to read the ref in when the session store knows one whose
 // store was not read: it may be gone with its worktree. One that was read and missed (the
 // output aged out) is named among the stores consulted, never as where to read it. An
@@ -146,8 +172,8 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 		agedRef  = "outa9ed00000002"
 		otherRef = "outfeed00000003"
 	)
-	recordRun(t, worker, gone, goneRef)
-	recordRun(t, worker, orchestrator, agedRef)
+	recordSessionRun(t, worker, gone, goneRef)
+	recordSessionRun(t, worker, orchestrator, agedRef)
 
 	ctx := t.Context()
 	opened, err := Inspect(ctx, worker)
@@ -166,22 +192,25 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 			err := lookup(goneRef)
 			require.ErrorIs(t, err, fs.ErrNotExist)
 			require.ErrorAs(t, err, &missing)
-			assert.Equal(t, gone, missing.Checkout)
-			assert.True(t, missing.CheckoutGone)
+			assert.Equal(t, gone, missing.UnreadCheckout)
+			assert.True(t, missing.UnreadCheckoutGone)
+			var again *cache.RefNotFoundError
+			require.ErrorAs(t, err, &again)
+			assert.Same(t, missing, again, "the miss is one error, not rebuilt on every unwrap")
 			assert.Contains(t, err.Error(), "recorded by "+gone+", which is no longer on disk")
 			assert.Contains(t, err.Error(), "`cd "+gone+" && magus query output "+goneRef+"`")
 
 			err = lookup(agedRef)
 			require.ErrorIs(t, err, fs.ErrNotExist)
 			require.ErrorAs(t, err, &missing)
-			assert.Empty(t, missing.Checkout, "its store was read and missed, so reading it there cannot help")
+			assert.Empty(t, missing.UnreadCheckout, "its store was read and missed, so reading it there cannot help")
 			assert.Contains(t, err.Error(), "checkout "+orchestrator, "the store read is named among those consulted")
 			assert.NotContains(t, err.Error(), "cd "+orchestrator)
 
 			err = lookup(otherRef)
 			require.ErrorIs(t, err, fs.ErrNotExist)
 			require.ErrorAs(t, err, &missing)
-			assert.Empty(t, missing.Checkout)
+			assert.Empty(t, missing.UnreadCheckout)
 			assert.Contains(t, err.Error(), "if another checkout ran it, read it there with `magus query output "+otherRef+"`")
 		})
 	}
@@ -196,8 +225,8 @@ func TestRecordedCheckoutsLeaveOutThisCheckoutThroughASymlink(t *testing.T) {
 	alias := filepath.Join(t.TempDir(), "worker-link")
 	require.NoError(t, os.Symlink(worker, alias))
 	const ref = "outbeef00000004"
-	recordRun(t, worker, alias, ref)
-	recordRun(t, worker, orchestrator, ref)
+	recordSessionRun(t, worker, alias, ref)
+	recordSessionRun(t, worker, orchestrator, ref)
 
 	opened, err := Inspect(t.Context(), worker)
 	require.NoError(t, err)
@@ -224,7 +253,7 @@ func TestRecordedRefMatchesOnlyRefShapedPrefixes(t *testing.T) {
 
 // An imported record's failed_need and failed_need_ref survive the read when real; a
 // forged pair is made harmless (the target neutralized, the ref dropped unless minted)
-// and the record is still read, and an oversized target is refused by the descriptor check.
+// and the record is still read; only an oversized target is refused, by the descriptor check.
 func TestOutputImportReadsTheFailedNeed(t *testing.T) {
 	got, err := readRecords(outputRecordLine(t, func(r map[string]any) {
 		r["failed_need"] = "lint-go"
@@ -241,6 +270,11 @@ func TestOutputImportReadsTheFailedNeed(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, [2]string{"lint<U+001B>]0;t<U+0007>", ""}, [2]string{got[0].FailedNeed, got[0].FailedNeedRef})
+
+	got, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["failed_need"] = "lint\n" }))
+	require.NoError(t, err, "a line break in the member is escaped, not refused")
+	require.Len(t, got, 1)
+	assert.Equal(t, "lint<U+000A>", got[0].FailedNeed)
 
 	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["failed_need"] = strings.Repeat("n", 513) }))
 	assert.ErrorContains(t, err, "line 1: failed_need: longer than")

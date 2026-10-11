@@ -18,18 +18,13 @@ import (
 )
 
 // readRef reads ref through read from this checkout's output store and, on a miss, from
-// the other checkouts that may hold it (see [Magus.readFromOtherCheckouts]).
+// the other checkouts that may hold it ([Magus.searchOtherCheckouts]), with a notice
+// naming the checkout that answered, since its output was not this checkout's.
 func (m *Magus) readRef(ctx context.Context, ref string, read func(cacheDir string) error) error {
 	err := read(resolveCacheDir(m.ws.Root, m.cfg))
 	if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	return m.readFromOtherCheckouts(ctx, ref, read)
-}
-
-// readFromOtherCheckouts is [Magus.searchOtherCheckouts] with a notice naming the checkout
-// that answered, since its output was not this checkout's.
-func (m *Magus) readFromOtherCheckouts(ctx context.Context, ref string, read func(cacheDir string) error) error {
 	from, err := m.searchOtherCheckouts(ctx, ref, read)
 	if err == nil {
 		slog.InfoContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, from),
@@ -48,7 +43,9 @@ func (m *Magus) readFromOtherCheckouts(ctx context.Context, ref string, read fun
 // A miss is a *refMiss, which unwraps to the *cache.RefNotFoundError `magus query`
 // renders under MGS8001. Any other error from read, or ctx ending, ends the search.
 func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(cacheDir string) error) (string, error) {
-	miss := &refMiss{ref: ref}
+	var unread string
+	var unreadGone bool
+	var consulted []string
 	recorded := m.recordedCheckouts(ref)
 	candidates := recorded
 	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok && !slices.Contains(recorded, primary) {
@@ -61,17 +58,19 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 		}
 		// Only a recorded checkout whose store goes unread is worth naming: one read here
 		// already missed, and the primary fallback never claimed the ref.
-		nameable := miss.checkout == "" && slices.Contains(recorded, root)
+		nameable := unread == "" && slices.Contains(recorded, root)
 		if _, err := os.Stat(root); err != nil {
 			if nameable {
-				miss.checkout, miss.gone = root, true
+				unread, unreadGone = root, true
 			}
 			continue
 		}
+		// The other checkout's own config decides where its store lives, so this
+		// checkout's loaded config does not apply.
 		dir, err := ResolveCacheDir(root)
 		if err != nil {
 			if nameable {
-				miss.checkout = root
+				unread = root
 			}
 			continue
 		}
@@ -80,7 +79,7 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 		}
 		err = read(dir)
 		if errors.Is(err, fs.ErrNotExist) {
-			miss.consulted = append(miss.consulted, root)
+			consulted = append(consulted, root)
 			continue
 		}
 		if err != nil {
@@ -88,6 +87,11 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 		}
 		return root, nil
 	}
+	miss := &refMiss{
+		err:       &cache.RefNotFoundError{Ref: ref, Stores: []string{cache.LocalStore}, UnreadCheckout: unread, UnreadCheckoutGone: unreadGone},
+		consulted: consulted,
+	}
+	miss.foldInto(miss.err)
 	return "", miss
 }
 
@@ -95,26 +99,21 @@ func (m *Magus) searchOtherCheckouts(ctx context.Context, ref string, read func(
 // resolved, with what the search learned about who has it: a ref lives in the output store
 // of the checkout that ran it, so another worktree of the repository reads it there.
 type refMiss struct {
-	ref       string
-	checkout  string   // see cache.RefNotFoundError.Checkout
-	gone      bool     // checkout is no longer on disk
-	consulted []string // other checkouts whose store was read and did not hold ref
+	// err is the miss as the error `magus query` renders under MGS8001, built once so
+	// errors.As hands back the same value every time.
+	err       *cache.RefNotFoundError
+	consulted []string // other checkouts whose store was read and did not hold the ref
 }
 
-func (r *refMiss) Error() string { return r.Unwrap().Error() }
+func (r *refMiss) Error() string { return r.err.Error() }
 
-// Unwrap is the miss as the error `magus query` renders under MGS8001; it is
-// fs.ErrNotExist to errors.Is.
-func (r *refMiss) Unwrap() error {
-	e := &cache.RefNotFoundError{Ref: r.ref, Stores: []string{"local cache"}}
-	r.foldInto(e)
-	return e
-}
+// Unwrap is fs.ErrNotExist to errors.Is.
+func (r *refMiss) Unwrap() error { return r.err }
 
 // foldInto adds the miss to e, an error a lookup that ran after this one built, so its
 // message names the checkouts too. Their stores follow e's first, this checkout's.
 func (r *refMiss) foldInto(e *cache.RefNotFoundError) {
-	e.Checkout, e.CheckoutGone = r.checkout, r.gone
+	e.UnreadCheckout, e.UnreadCheckoutGone = r.err.UnreadCheckout, r.err.UnreadCheckoutGone
 	if len(e.Stores) == 0 {
 		return
 	}
