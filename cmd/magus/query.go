@@ -420,10 +420,10 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	if err == nil && desc.Failed && desc.ErrMsg != "" {
 		// A failure's reason often lives only in the descriptor (a drift check prints
-		// nothing), and only json showed it. It follows the bytes on stderr, neutralized
-		// as an imported record's is, so stdout stays exactly what the run wrote.
+		// nothing), and only json showed it. It follows the bytes as a notice on stderr,
+		// neutralized as an imported record's is, so stdout stays exactly what the run wrote.
 		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(desc.ErrMsg, "\n")), false)
-		fmt.Fprintf(os.Stderr, "error: %s\n", msg)
+		slog.ErrorContext(ctx, string(msg), attr.Notice(""), attr.Component("magus query output"))
 	}
 	return err
 }

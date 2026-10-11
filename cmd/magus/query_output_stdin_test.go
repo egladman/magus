@@ -126,7 +126,7 @@ func TestQueryOutputTextPrintsAFailedRunsErrorToStderr(t *testing.T) {
 	})
 
 	assert.Empty(t, stdout, "stdout stays the bytes the run wrote, and this run wrote none")
-	assert.Contains(t, stderr, "error: ")
+	assert.Contains(t, stderr, "magus query output: ", "the error is a notice through the display, so -q and -s govern it")
 	assert.Contains(t, stderr, "generated files differ: run `magus run generate:rw`")
 	assert.NotContains(t, stderr, "\x1b", "a recorded error is neutralized before it reaches the terminal")
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // stampAbsent is the digest of a stamp that does not exist, so a deleted stamp and an
@@ -51,7 +53,7 @@ func (c *Cache) traceTreeMoved(ctx context.Context, s *Step, m *Manifest) bool {
 	}
 	attrs := []any{slog.String("project", s.ProjectPath), slog.String("target", s.Target), slog.Any("moved", moved)}
 	if err != nil {
-		attrs = append(attrs, slog.String("error", err.Error()))
+		attrs = append(attrs, attr.Error(err))
 	}
 	slog.DebugContext(ctx, "cache.stamp", attrs...)
 	return true
