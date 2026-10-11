@@ -73,6 +73,20 @@ func TestLoadCasesReadsHeadersLinesAndWholeSections(t *testing.T) {
 	}
 }
 
+func TestLoadCasesAcceptsTheLabelACaseCarriedBeforeAMove(t *testing.T) {
+	noted := fstest.MapFS{"absolute.txtar": {Data: []byte("-- pass/change-description was=fp:round4:r4-0022 --\n- Nobody declared it.\n")}}
+	if got, err := LoadCases(noted); err != nil || len(got) != 1 || got[0].Label != LabelPass {
+		t.Errorf("LoadCases(was=fp:round4:r4-0022) = %+v, %v; want one pass case", got, err)
+	}
+
+	for _, bad := range []string{"was=fp:round4", "was=fp::r4-0022", "was="} {
+		fsys := fstest.MapFS{"absolute.txtar": {Data: []byte("-- pass/change-description " + bad + " --\n- Nobody declared it.\n")}}
+		if _, err := LoadCases(fsys); err == nil {
+			t.Errorf("LoadCases(%s) = nil error; want a malformed note refused", bad)
+		}
+	}
+}
+
 func TestLoadCasesJudgesAChangeDescriptionLineUnderALead(t *testing.T) {
 	fsys := fstest.MapFS{"claim.txtar": {Data: []byte("-- hit/change-description --\n- Fixes it.\n" +
 		"-- pass/review-reply thread=2 --\nIt holds.\n")}}

@@ -1,8 +1,3 @@
-// proofread-case-moves fails a labeled case that sat in an fp section at the merge base and
-// sits in a pass section now, unless the pass section's header carries
-// `was: fp <round> <id>`. Moving a fixed false positive into pass is a regression test for a
-// tuning case and a bias for a held-out one: it takes a firing out of the denominator while the
-// case stays held out, so the move has to say where the case came from.
 namespace casemoves;
 
 import "assert";
@@ -27,6 +22,9 @@ export fun reads() > [str] {
     return ["libs/conventions/proofread/testdata/cases/*.txtar"];
 }
 
+// check fails a case that sat in an fp section at the merge base and sits in a pass section
+// now, unless that section's header carries `was=fp:<round>:<id>`. A fixed false positive
+// moved into pass takes a firing out of the denominator, so the move says where it came from.
 export fun check(files: [Path]) > [Finding] !> any {
     final base = mergeBase();
     if (base == "") {
@@ -48,8 +46,8 @@ export fun checkAgainst(files: [Path], before: fun (p: str) > str?) > [Finding] 
         }
         foreach (moved in moves(was!, now: support\read(f))) {
             found.append(Finding{ path = f.value, line = moved.line,
-                message = "this case was an fp at the merge base and is a pass now with no was: note: " + brief(moved.value),
-                fix = "Put `was: fp <round> <id>` on the section header, as in `-- pass/<kind> was: fp round4 c17 --`, naming the round and case id the fp carried." });
+                message = "this case was an fp at the merge base and is a pass now with no was= note: " + brief(moved.value),
+                fix = "Put `was=fp:<round>:<id>` on the section header, as in `-- pass/<kind> was=fp:round4:c17 --`, naming the round and case id the fp carried." });
         }
     }
     return found;
@@ -106,19 +104,15 @@ export fun moves(was: str, now: str) > [Text] {
     return found;
 }
 
-// hasNote reports whether a header carries `was: fp <round> <id>`.
+// hasNote reports whether a header carries the attribute `was=fp:<round>:<id>`.
 export fun hasNote(header: str) > bool {
-    final words = fields(header);
-    var at = -1;
-    var i = 0;
-    while (i < words.len()) {
-        if (words[i] == "was:") {
-            at = i;
-            break;
+    foreach (w in fields(header)) {
+        if (w.startsWith("was=")) {
+            final parts = w.sub(4).split(":");
+            return parts.len() == 3 and parts[0] == "fp" and parts[1] != "" and parts[2] != "";
         }
-        i = i + 1;
     }
-    return at >= 0 and at + 3 < words.len() and words[at + 1] == "fp";
+    return false;
 }
 
 fun fields(header: str) > [str] {
@@ -219,18 +213,18 @@ test "a case moved from fp to pass with no note is reported at its line" {
     assert\equal(got[0].line, want: 11, message: "its line in the new file");
 }
 
-test "a move whose section header carries was: fp, a round and an id passes" {
+test "a move whose section header carries was=fp, a round and an id passes" {
     final now = "-- fp/change-description --\n- It never fired.\n"
-        + "-- pass/change-description was: fp round4 c17 --\n- The cache check never worked.\n";
+        + "-- pass/change-description was=fp:round4:c17 --\n- The cache check never worked.\n";
     assert\equal(moves(baseFile, now: now).len(), want: 0, message: "noted");
 }
 
 test "a whole section moved without a note is one case, and an incomplete note does not count" {
     final now = "-- pass/review-reply whole --\nNobody ran it.\nNothing checked it.\n";
     assert\equal(moves(baseFile, now: now).len(), want: 1, message: "whole section");
-    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was: fp round4 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "no id");
-    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was: hit round4 c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "not an fp");
-    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was: fp round4 c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 0, message: "whole, noted");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=fp:round4 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "no id");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=hit:round4:c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "not an fp");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=fp:round4:c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 0, message: "whole, noted");
 }
 
 test "a text that stays fp, a new pass case and a hit moved to pass are not moves" {
@@ -257,6 +251,6 @@ test "a finding names the file, the line and the note to add" {
     assert\equal(got.len(), want: 1, message: "one finding");
     assert\equal(got[0].path, want: path, message: "path");
     assert\equal(got[0].line, want: 2, message: "line");
-    assert\equal(got[0].message, want: "this case was an fp at the merge base and is a pass now with no was: note: - It never fired.", message: "message");
-    assert\equal(got[0].fix.indexOf("was: fp <round> <id>") != null, want: true, message: "the fix shows the note");
+    assert\equal(got[0].message, want: "this case was an fp at the merge base and is a pass now with no was= note: - It never fired.", message: "message");
+    assert\equal(got[0].fix.indexOf("was=fp:<round>:<id>") != null, want: true, message: "the fix shows the note");
 }

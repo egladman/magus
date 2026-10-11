@@ -240,6 +240,12 @@ func parseHeader(header string, c check) (Case, bool, error) {
 			}
 
 			out.ThreadLength = n
+		case "was":
+			// The label a case carried in a labeling round before a fix moved it, as
+			// fp:<round>:<id>; hack/lint holds a moved fp to it, and calibrate ignores it.
+			if parts := strings.Split(value, ":"); len(parts) != 3 || slices.Contains(parts, "") {
+				return Case{}, false, fmt.Errorf("was=%q is not <label>:<round>:<id>", value)
+			}
 		default:
 			return Case{}, false, fmt.Errorf("unknown attribute %q", attr)
 		}

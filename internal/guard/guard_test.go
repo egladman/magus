@@ -354,6 +354,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
 		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
 		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
+		{rule: "sealed-read", name: "a cat of a sealed proofread set", input: bash("cat ~/.cache/proofread/calibration/sealed/round5/candidates.jsonl"),
+			decision: "deny", reason: "stays sealed until its round is scored"},
+		{rule: "sealed-read", name: "a read of the open labels beside it", input: bash("cat ~/.cache/proofread/calibration/labels/round4/counts.json"), decision: "pass"},
 	}
 
 	covered := map[string]bool{}

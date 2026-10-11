@@ -41,6 +41,7 @@ import "hack/lint/markdown-carries-no-mermaid" as nomermaid;
 import "hack/lint/markdown-proofread" as markdownproofread;
 import "hack/lint/package-install-targets-never-replay" as installs;
 import "hack/lint/package-manifests-carry-no-scripts" as manifestscripts;
+import "hack/lint/proofread-case-moves-name-their-origin" as casemoves;
 import "hack/lint/provider-io-is-buzz" as providerio;
 import "hack/lint/prose-names-targets-that-exist" as prosetargets;
 import "hack/lint/published-magus-is-built-first-and-verified-by-digest" as publishedmagus;
@@ -90,6 +91,7 @@ export fun rules() > [Rule] {
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
         Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
+        Rule{ name = "proofread-case-moves-name-their-origin", reads = casemoves\reads(), check = casemoves\check },
     ];
 }
 
