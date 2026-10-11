@@ -128,6 +128,10 @@ var defaults = map[string]Decision{
 	"stdin-closed":       Advise,
 	"timed-magus":        Advise,
 	"unleased-write":     Advise,
+
+	"workspace-command-failed": Advise,
+	"workspace-spawn-failed":   Advise,
+	"workspace-write-failed":   Advise,
 }
 
 // Defaults returns every compiled rule's name mapped to the decision it takes when the

@@ -49,7 +49,8 @@ func TestEveryRuleIsCatalogued(t *testing.T) {
 // TestEveryRuleSiteNamesACataloguedRule closes the roads around the constants: a verdict
 // filed under a name spelled at the site, under a constant of another type, or under an
 // advisory kind the catalog lacks. A site is a Verdict's Rule, a ShellVerdict's Kind, a
-// field or parameter of type denyRuleName, and a conversion to one. Each must name a
+// field of type denyRuleName, a parameter of that type or of hint.MarkerKind, and a
+// conversion to one. Each must name a
 // catalogued rule, a workspace rule or nothing; a value computed at run time arrives
 // through one of these sites from a constant they cover.
 func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
@@ -274,7 +275,7 @@ func ruleSourceOf(t *testing.T) ruleSource {
 				i := 0
 				for _, field := range decl.Type.Params.List {
 					for range max(1, len(field.Names)) {
-						if isDenyRuleName(field.Type) {
+						if isDenyRuleName(field.Type) || isMarkerKind(field.Type) {
 							params[decl.Name.Name] = append(params[decl.Name.Name], i)
 						}
 						i++
