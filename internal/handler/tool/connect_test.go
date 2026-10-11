@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type fakeWS struct{ projects []*types.Project }
+type projectWorkspace struct{ projects []*types.Project }
 
-func (f fakeWS) All() []*types.Project { return f.projects }
+func (f projectWorkspace) All() []*types.Project { return f.projects }
 
 // probedProject builds a project whose spell probes through an injected function, so the
 // cache, the TTL, and the failure paths are exercised without forking anything. The
@@ -48,7 +48,7 @@ func list(t *testing.T, s *Service, project string) *toolv1.ListToolsResponse {
 // A project whose spells declare no probe contributes no rows, so the view never shows
 // a tool magus cannot actually ask about.
 func TestListToolsSkipsProjectsWithNoProbedTools(t *testing.T) {
-	s := NewService(fakeWS{projects: []*types.Project{{Path: ".", Name: "root"}}})
+	s := NewService(projectWorkspace{projects: []*types.Project{{Path: ".", Name: "root"}}})
 	assert.Empty(t, list(t, s, "").Projects)
 }
 
@@ -59,7 +59,7 @@ func TestListToolsCarriesBothDeclarationsAndTheIntersection(t *testing.T) {
 	p := probedProject("console", "typescript", "node",
 		spells.VersionBounds{Min: "18"}, spells.VersionBounds{Min: "22", Below: "25"},
 		func() (string, error) { return "v26.5.0", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	msg := list(t, s, "")
 	require.Len(t, msg.Projects, 1)
@@ -114,7 +114,7 @@ func TestListToolsFlagsViolationsAndRendersWindows(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
 			p := probedProject("console", "typescript", "node", tc.supported, tc.ws, tc.out, &calls)
-			row := list(t, NewService(fakeWS{projects: []*types.Project{p}}), "").Projects[0].Tools[0]
+			row := list(t, NewService(projectWorkspace{projects: []*types.Project{p}}), "").Projects[0].Tools[0]
 			assert.Equal(t, tc.violation, row.Violation)
 			assert.Equal(t, tc.violation, row.DiagnosticCode != "", "the flag and the diagnostic code are one rule")
 			assert.Equal(t, tc.effective, row.EffectiveWindow)
@@ -128,7 +128,7 @@ func TestListToolsServesTheCacheWithinTheTTL(t *testing.T) {
 	calls := 0
 	p := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{},
 		func() (string, error) { return "v22.14.0", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	first := list(t, s, "").Projects[0].Tools[0]
 	second := list(t, s, "").Projects[0].Tools[0]
@@ -143,7 +143,7 @@ func TestListToolsReprobesAfterTheTTL(t *testing.T) {
 	calls := 0
 	p := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{},
 		func() (string, error) { return "v22.14.0", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 	s.ttl = time.Nanosecond
 
 	list(t, s, "")
@@ -158,7 +158,7 @@ func TestListToolsCachesAFailedProbe(t *testing.T) {
 	calls := 0
 	p := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{Min: "22"},
 		func() (string, error) { return "", errors.New("exec: node: not found") }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	row := list(t, s, "").Projects[0].Tools[0]
 	list(t, s, "")
@@ -175,7 +175,7 @@ func TestListToolsReportsUnreadableOutputAsUnknown(t *testing.T) {
 	calls := 0
 	p := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{Min: "22"},
 		func() (string, error) { return "nightly", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	row := list(t, s, "").Projects[0].Tools[0]
 	assert.Equal(t, toolv1.Verdict_VERDICT_UNKNOWN, row.Verdict)
@@ -202,7 +202,7 @@ func TestListToolsKeysTheCacheBySpell(t *testing.T) {
 	}
 	p := &types.Project{Path: "console", Name: "console", Dir: "/tmp/console",
 		ResolvedSpells: []*spells.Spell{prober("typescript"), prober("bundler")}}
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	tools := list(t, s, "").Projects[0].Tools
 	require.Len(t, tools, 2)
@@ -218,7 +218,7 @@ func TestListToolsSkipsAToolWithNoArgvToRun(t *testing.T) {
 	sp := spells.NewSpell("typescript", spells.WithTools(map[string]spells.Tool{
 		"node": {Key: spells.VersionKey{Const: "pinned-1"}},
 	}))
-	s := NewService(fakeWS{projects: []*types.Project{{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}}})
+	s := NewService(projectWorkspace{projects: []*types.Project{{Path: "console", Dir: "/tmp/console", ResolvedSpells: []*spells.Spell{sp}}}})
 	assert.Empty(t, list(t, s, "").Projects)
 }
 
@@ -227,7 +227,7 @@ func TestListToolsFiltersToOneProject(t *testing.T) {
 	calls := 0
 	a := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, &calls)
 	b := probedProject("docs", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{a, b}})
+	s := NewService(projectWorkspace{projects: []*types.Project{a, b}})
 
 	msg := list(t, s, "docs")
 	require.Len(t, msg.Projects, 1)
@@ -237,7 +237,7 @@ func TestListToolsFiltersToOneProject(t *testing.T) {
 // A project that does not exist is a client error. Returned as an empty list it would be
 // indistinguishable from a project that declares no tool.
 func TestListToolsRejectsAnUnknownProject(t *testing.T) {
-	s := NewService(fakeWS{projects: []*types.Project{{Path: ".", Name: "root"}}})
+	s := NewService(projectWorkspace{projects: []*types.Project{{Path: ".", Name: "root"}}})
 	_, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{Parent: "nope"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
@@ -248,7 +248,7 @@ func TestListToolsRejectsAnUnknownProject(t *testing.T) {
 func TestListToolsStopsProbingWhenTheRequestIsAbandoned(t *testing.T) {
 	calls := 0
 	p := probedProject("console", "typescript", "node", spells.VersionBounds{}, spells.VersionBounds{}, func() (string, error) { return "v22.14.0", nil }, &calls)
-	s := NewService(fakeWS{projects: []*types.Project{p}})
+	s := NewService(projectWorkspace{projects: []*types.Project{p}})
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -303,7 +303,7 @@ func TestBoundsNilWhenUnconstrained(t *testing.T) {
 // lifecycleWS is a workspace that answers its lifecycle provider from a function, counting
 // how often it was asked.
 type lifecycleWS struct {
-	fakeWS
+	projectWorkspace
 	calls  *int
 	answer func() (types.LifecycleStatus, []spells.Lifecycle, error)
 }
@@ -330,7 +330,7 @@ var liveGo = types.LifecycleStatus{
 func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
-		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.25.3 darwin/arm64")}},
+		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.25.3 darwin/arm64")}},
 		calls:  &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return liveGo, []spells.Lifecycle{{Key: "go", Cycles: []spells.ReleaseCycle{{Cycle: "1.25", EOL: "2026-08-19"}}}}, nil
@@ -356,7 +356,7 @@ func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
 func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
-		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
+		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
 		calls:  &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleUnreached, Detail: "no route to host"}, nil, nil
@@ -375,7 +375,7 @@ func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
 func TestListToolsSurfacesAMalformedAnswer(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
-		fakeWS: fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
+		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
 		calls:  &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return types.LifecycleStatus{}, nil, errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is ""`)
@@ -389,7 +389,7 @@ func TestListToolsSurfacesAMalformedAnswer(t *testing.T) {
 
 // A workspace that cannot ask reads as one with nothing wired: empty columns, no unknowns.
 func TestListToolsWithNoProviderLeavesTheColumnsEmpty(t *testing.T) {
-	s := NewService(fakeWS{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}})
+	s := NewService(projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}})
 	msg := list(t, s, "")
 	assert.Equal(t, toolv1.LifecycleState_LIFECYCLE_STATE_UNWIRED, msg.Lifecycle.State)
 	row := msg.Projects[0].Tools[0]

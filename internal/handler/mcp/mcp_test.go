@@ -58,15 +58,15 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 	return m
 }
 
-// fakeTel records MCP calls for assertions. It embeds the wide Provider
+// recordingTelemetry records MCP calls for assertions. It embeds the wide Provider
 // interface so only RecordMCPCall needs an implementation; wrap touches no
 // other method, so the nil embedded value is never dereferenced.
-type fakeTel struct {
+type recordingTelemetry struct {
 	observability.Provider
 	calls []observability.MCPCall
 }
 
-func (f *fakeTel) RecordMCPCall(_ context.Context, c observability.MCPCall) {
+func (f *recordingTelemetry) RecordMCPCall(_ context.Context, c observability.MCPCall) {
 	f.calls = append(f.calls, c)
 }
 
@@ -88,7 +88,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	req := callRequest("client", map[string]any{"script": "magus\\query"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
-		tel := &fakeTel{}
+		tel := &recordingTelemetry{}
 		const out = "hello world result"
 		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
@@ -109,7 +109,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
-		tel := &fakeTel{}
+		tel := &recordingTelemetry{}
 		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
@@ -195,7 +195,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	// adapt() turns a soft failure into an IsError result with a nil err. The trail (and the
 	// metric) must record it as error, not ok: the regression the review caught.
 	dir := t.TempDir()
-	tel := &fakeTel{}
+	tel := &recordingTelemetry{}
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "a"} }
 	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
@@ -296,14 +296,14 @@ func TestAgentFromRequest(t *testing.T) {
 	assert.Equal(t, "unknown", agentFromRequest(mk("", "")))      // nothing to identify
 }
 
-// fakeDriver is a SpellDriver that returns a canned response for adapt tests.
-type fakeDriver struct {
+// cannedDriver is a SpellDriver that returns a canned response for adapt tests.
+type cannedDriver struct {
 	resp spells.InvokeResponse
 	err  error
 }
 
-func (f fakeDriver) Name() string { return "fake" }
-func (f fakeDriver) Invoke(context.Context, spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (f cannedDriver) Name() string { return "canned" }
+func (f cannedDriver) Invoke(context.Context, spells.InvokeRequest) (spells.InvokeResponse, error) {
 	return f.resp, f.err
 }
 
@@ -311,7 +311,7 @@ func TestAdapt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error becomes a soft IsError result, not a transport error", func(t *testing.T) {
-		h := adapt(fakeDriver{err: errors.New("boom")})
+		h := adapt(cannedDriver{err: errors.New("boom")})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.True(t, res.IsError)
@@ -319,7 +319,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("structured Data is marshaled to JSON text", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
+		h := adapt(cannedDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.False(t, res.IsError)
@@ -327,7 +327,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("plain Text is returned verbatim when Data is nil", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: spells.InvokeResponse{Text: "just text"}})
+		h := adapt(cannedDriver{resp: spells.InvokeResponse{Text: "just text"}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "just text", allText(res))
@@ -341,13 +341,13 @@ func TestAdapt(t *testing.T) {
 func TestUnregisteredDrivers(t *testing.T) {
 	t.Parallel()
 
-	// fakeDriver.Name() is "fake": no Registry entry named "fake" exists here, so it
+	// cannedDriver.Name() is "canned": no Registry entry named "canned" exists here, so it
 	// must be reported.
-	got := unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "other"}})
-	assert.Equal(t, []string{"fake"}, got)
+	got := unregisteredDrivers([]spells.Driver{cannedDriver{}}, []ToolDescriptor{{Name: "other"}})
+	assert.Equal(t, []string{"canned"}, got)
 
 	// A driver with a matching Registry entry is not reported.
-	got = unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "fake"}})
+	got = unregisteredDrivers([]spells.Driver{cannedDriver{}}, []ToolDescriptor{{Name: "canned"}})
 	assert.Empty(t, got)
 }
 
@@ -434,7 +434,7 @@ func TestJSONResult(t *testing.T) {
 func TestDeclaredParamsRefusesAnUndeclaredParam(t *testing.T) {
 	t.Parallel()
 
-	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(fakeDriver{resp: spells.InvokeResponse{Text: "ran"}}))
+	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(cannedDriver{resp: spells.InvokeResponse{Text: "ran"}}))
 	res, err := h(context.Background(), callRequest("demo", map[string]any{"script": "x", "input": 1}))
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
@@ -451,7 +451,7 @@ func TestWrapMeasuresEveryByteSent(t *testing.T) {
 	t.Parallel()
 
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
-	tel := &fakeTel{}
+	tel := &recordingTelemetry{}
 	h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return jsonResult(map[string]any{"ok": true})
 	})

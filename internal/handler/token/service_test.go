@@ -31,9 +31,9 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// fakeShare stands in for *share.Manager: a fixed active share (or none), recording whether
+// recordingShare stands in for *share.Manager: a fixed active share (or none), recording whether
 // CloseIf fired and with what id.
-type fakeShare struct {
+type recordingShare struct {
 	info        share.TokenInfo
 	active      bool
 	closed      bool
@@ -41,9 +41,9 @@ type fakeShare struct {
 	closeIfFail bool // CloseIf reports a lost race and closes nothing
 }
 
-func (f *fakeShare) Active() (share.TokenInfo, bool) { return f.info, f.active }
+func (f *recordingShare) Active() (share.TokenInfo, bool) { return f.info, f.active }
 
-func (f *fakeShare) CloseIf(id string) bool {
+func (f *recordingShare) CloseIf(id string) bool {
 	f.closeIfArg = id
 	if f.closeIfFail || !f.active || f.info.ID != id {
 		return false
@@ -52,8 +52,8 @@ func (f *fakeShare) CloseIf(id string) bool {
 	return true
 }
 
-func liveShare(id string) *fakeShare {
-	return &fakeShare{active: true, info: share.TokenInfo{ID: id, Created: time.Now(), Expires: time.Now().Add(15 * time.Minute)}}
+func liveShare(id string) *recordingShare {
+	return &recordingShare{active: true, info: share.TokenInfo{ID: id, Created: time.Now(), Expires: time.Now().Add(15 * time.Minute)}}
 }
 
 func newIsolatedService(t *testing.T, view shareView) *Service {

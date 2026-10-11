@@ -16,21 +16,21 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeThreadWorkspace answers the three reads the thread route makes: where the review is, the
+// threadWorkspace answers the three reads the thread route makes: where the review is, the
 // patch, and the annotated changeset for the paths in it.
-type fakeThreadWorkspace struct{ patch string }
+type threadWorkspace struct{ patch string }
 
-func (fakeThreadWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
+func (threadWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Branch: "feat/x"}
 }
 
-func (w fakeThreadWorkspace) WorkingDiff(context.Context, []string) (string, error) {
+func (w threadWorkspace) WorkingDiff(context.Context, []string) (string, error) {
 	return w.patch, nil
 }
 
 // DiffWith refuses a call that does not set SkipOrder: a thread record reads the code around one
 // thread and must never pay for the reading order of the whole changeset.
-func (fakeThreadWorkspace) DiffWith(_ context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+func (threadWorkspace) DiffWith(_ context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
 	if !opts.SkipOrder {
 		return types.Diff{}, errors.New("the thread asked for the reading order")
 	}
@@ -60,7 +60,7 @@ func TestThreadRouteServesTheRecordForAThread(t *testing.T) {
 		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
 	})
 	h := NewThreadHandler(ThreadOptions{
-		Workspace: fakeThreadWorkspace{patch: threadRoutePatch},
+		Workspace: threadWorkspace{patch: threadRoutePatch},
 		Anchors: func(_ context.Context, rev types.Diff) ([]review.AnchorHit, error) {
 			return []review.AnchorHit{{Note: "new-is-cheap", Kind: notes.AnchorFile, Target: "a.go", Matched: rev.Files[0].Path}}, nil
 		},
@@ -104,7 +104,7 @@ func TestThreadRouteAnswersAReplyIdWithTheThreadId(t *testing.T) {
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 		map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "see the cache"},
 	})
-	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t2")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -120,7 +120,7 @@ func TestThreadRouteNamesWhatItCouldNotJoin(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 	})
-	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	w := getThread(h, "?id=t1")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -136,7 +136,7 @@ func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
 	withReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 	})
-	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{patch: threadRoutePatch}}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{patch: threadRoutePatch}}, nil)
 
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "").Code, "no id")
 	assert.Equal(t, http.StatusBadRequest, getThread(h, "?id=%20").Code, "a blank id")
@@ -151,7 +151,7 @@ func TestThreadRouteRefusesWhatItCannotAnswer(t *testing.T) {
 
 func TestThreadRouteWithNoReviewOpenIsNotFound(t *testing.T) {
 	// No provider is wired here, so no review can be found.
-	h := NewThreadHandler(ThreadOptions{Workspace: fakeThreadWorkspace{}}, nil)
+	h := NewThreadHandler(ThreadOptions{Workspace: threadWorkspace{}}, nil)
 	assert.Equal(t, http.StatusNotFound, getThread(h, "?id=t1").Code)
 
 	assert.Equal(t, http.StatusNotFound, getThread(NewThreadHandler(ThreadOptions{}, nil), "?id=t1").Code,
@@ -165,7 +165,7 @@ func TestThreadRouteReportsAnAnchorsFailure(t *testing.T) {
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why new?"},
 	})
 	h := NewThreadHandler(ThreadOptions{
-		Workspace: fakeThreadWorkspace{patch: threadRoutePatch},
+		Workspace: threadWorkspace{patch: threadRoutePatch},
 		Anchors: func(context.Context, types.Diff) ([]review.AnchorHit, error) {
 			return nil, errors.New("note anchors: knowledge.notes.shared escapes the workspace")
 		},

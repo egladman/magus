@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeSource is a graphSource returning canned knowledge/target graphs.
-type fakeSource struct{}
+// cannedGraphs is a graphSource returning canned knowledge/target graphs.
+type cannedGraphs struct{}
 
-func (fakeSource) Graph(_ context.Context, flavor, _ string) (types.KnowledgeGraphOutput, error) {
+func (cannedGraphs) Graph(_ context.Context, flavor, _ string) (types.KnowledgeGraphOutput, error) {
 	return types.KnowledgeGraphOutput{
 		Definition:    "test graph (" + flavor + ")",
 		SchemaVersion: types.KnowledgeSchemaVersion,
@@ -37,7 +37,7 @@ func (fakeSource) Graph(_ context.Context, flavor, _ string) (types.KnowledgeGra
 	}, nil
 }
 
-func (fakeSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
+func (cannedGraphs) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	return types.TargetGraphOutput{
 		Definition: "magusfile.buzz",
 		Projects: []types.TargetGraphProject{
@@ -47,7 +47,7 @@ func (fakeSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) 
 	}, nil
 }
 
-func newHandler() http.Handler { return NewGraphHandler(fakeSource{}, nil) }
+func newHandler() http.Handler { return NewGraphHandler(cannedGraphs{}, nil) }
 
 func get(t *testing.T, h http.Handler, target string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -101,7 +101,7 @@ func TestGraph_SnakeCaseFieldNames(t *testing.T) {
 	}
 }
 
-type declaredCallSource struct{ fakeSource }
+type declaredCallSource struct{ cannedGraphs }
 
 func (declaredCallSource) Graph(context.Context, string, string) (types.KnowledgeGraphOutput, error) {
 	return types.KnowledgeGraphOutput{

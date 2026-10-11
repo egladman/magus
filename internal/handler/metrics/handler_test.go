@@ -16,18 +16,18 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-type fakeCollector struct {
+type cannedCollector struct {
 	rm  metricdata.ResourceMetrics
 	err error
 }
 
-func (f fakeCollector) Collect(context.Context) (metricdata.ResourceMetrics, error) {
+func (f cannedCollector) Collect(context.Context) (metricdata.ResourceMetrics, error) {
 	return f.rm, f.err
 }
 
-type fakeStatus struct{ rep types.StatusSnapshot }
+type cannedStatus struct{ rep types.StatusSnapshot }
 
-func (f fakeStatus) StatusSnapshot(context.Context) types.StatusSnapshot { return f.rep }
+func (f cannedStatus) StatusSnapshot(context.Context) types.StatusSnapshot { return f.rep }
 
 func fixtureRM() metricdata.ResourceMetrics {
 	return metricdata.ResourceMetrics{
@@ -44,7 +44,7 @@ func fixtureRM() metricdata.ResourceMetrics {
 
 func TestGetMetrics(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	svc := NewService(fakeCollector{rm: fixtureRM()}, fakeStatus{}, WithClock(func() time.Time { return at }))
+	svc := NewService(cannedCollector{rm: fixtureRM()}, cannedStatus{}, WithClock(func() time.Time { return at }))
 
 	resp, err := svc.GetMetrics(context.Background(), connect.NewRequest(&metricsv1.GetMetricsRequest{}))
 	require.NoError(t, err)
@@ -56,10 +56,10 @@ func TestGetMetrics(t *testing.T) {
 
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	stat := fakeStatus{rep: types.StatusSnapshot{Pool: &types.StatusOutput{
+	stat := cannedStatus{rep: types.StatusSnapshot{Pool: &types.StatusOutput{
 		Running: 3, Capacity: 8, Queued: 2,
 	}}}
-	svc := NewService(fakeCollector{rm: fixtureRM()}, stat,
+	svc := NewService(cannedCollector{rm: fixtureRM()}, stat,
 		WithClock(func() time.Time { return at }),
 		WithRingCapacity(4),
 	)
@@ -82,7 +82,7 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 // by a spike, so this is the difference between "we did not look" and "nothing happened".
 func TestSampleOnceLeavesFailedReadsUnset(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	svc := NewService(fakeCollector{err: errors.New("collect boom")}, fakeStatus{},
+	svc := NewService(cannedCollector{err: errors.New("collect boom")}, cannedStatus{},
 		WithClock(func() time.Time { return at }))
 	svc.sampleOnce(context.Background())
 
@@ -96,7 +96,7 @@ func TestSampleOnceLeavesFailedReadsUnset(t *testing.T) {
 
 func TestStreamMetricsSendsBackfillThenSnapshot(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
-	svc := NewService(fakeCollector{rm: fixtureRM()}, fakeStatus{},
+	svc := NewService(cannedCollector{rm: fixtureRM()}, cannedStatus{},
 		WithClock(func() time.Time { return at }),
 		WithTick(5*time.Millisecond),
 		WithRingCapacity(4),
