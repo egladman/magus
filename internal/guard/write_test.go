@@ -756,6 +756,17 @@ func TestGradeLeasedWriteFlagsADivergedBase(t *testing.T) {
 	require.Equal(t, "advise", got.Decision, "a deliberate rebase must not be blocked")
 	assert.Contains(t, got.Context, "rev-somewhere-else")
 	assert.Contains(t, got.Context, "rev-a", "the advisory names both bases so the reader can tell which moved")
+
+	// The verdict was recorded at registration; the checkout's revision now is what the
+	// advisory reads, so a worker that switched onto its checkpoint since is not advised.
+	on := func(revision string) Dependencies {
+		return Dependencies{Revision: func(context.Context, string, string) string { return revision }}
+	}
+	assert.Empty(t, gradeLeasedWrite(ctx, on(fleet[1].Checkpoint), "lease-b", filepath.Join(root, "cmd/magus/diff.go")).Decision,
+		"a checkout on its checkpoint")
+	moved := gradeLeasedWrite(ctx, on("rev-third"), "lease-b", filepath.Join(root, "cmd/magus/diff.go"))
+	require.Equal(t, "advise", moved.Decision, "a checkout still off its checkpoint")
+	assert.Contains(t, moved.Context, "landed on rev-third, not its checkpoint rev-a", "names where the checkout is now")
 }
 
 // TestAdviseUnleasedWorker is the teaching case for a fleet running unrecorded: a process

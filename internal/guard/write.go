@@ -308,7 +308,11 @@ func gradeLeasedEdit(ctx context.Context, deps Dependencies, actingLease, writeP
 			return writeGrade{Decision: "deny", Reason: reason}
 		}
 		owners := owningLeases(leases, live)
-		g := gradeAgainstOwnLease(me, owners, rel, func(owner types.Job) (writeGrade, bool) {
+		var revision string
+		if me.BaseVerdict == types.BaseDiverged {
+			revision = deps.revision(ctx, checkout, "")
+		}
+		g := gradeAgainstOwnLease(me, revision, owners, rel, func(owner types.Job) (writeGrade, bool) {
 			return gradeEntry(ctx, deps, location, owner, rel)
 		})
 		if g.Decision == "deny" {
@@ -406,8 +410,9 @@ func adviseUnleasedWorker(actingLease string) writeGrade {
 // declaration exists to catch. An EMPTY write set is not a boundary of size zero, it is a
 // boundary nobody declared, so it scopes nothing. owners are the live leases that claim
 // their paths, see owningLeases. enter grades a write into another lease's path against the
-// entries that lease carries, reporting whether one covered it.
-func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool)) writeGrade {
+// entries that lease carries, reporting whether one covered it. revision is the revision the
+// lease's checkout is on now, "" when unread.
+func gradeAgainstOwnLease(me types.Job, revision string, owners []types.Job, rel string, enter func(owner types.Job) (writeGrade, bool)) writeGrade {
 	// Ahead of the exec rule below: a read-only lease has no base to exec against for
 	// a write it is not supposed to be making, so asking it to checkpoint first and then
 	// denying the write anyway would be two refusals for one mistake.
@@ -464,11 +469,13 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		}
 		// Advisory rather than a block: an orchestrator may have rebased the plan deliberately,
 		// and magus cannot tell that from a worker that wandered. What it can do is refuse to let
-		// the divergence stay silent until the merge finds it.
-		if me.BaseVerdict == types.BaseDiverged {
+		// the divergence stay silent until the merge finds it. The recorded verdict is as old
+		// as the registration, so a checkout now on the checkpoint is not advised.
+		checkpoint, _ := types.ParseCheckpointToken(me.Checkpoint)
+		if me.BaseVerdict == types.BaseDiverged && !job.SameRevision(revision, checkpoint) {
 			return writeGrade{Decision: "advise",
 				Context: fmt.Sprintf("magus workspace: lease %s landed on %s, not its checkpoint %s; re-checkpoint and re-exec, or reconcile with the orchestrator before writing more.",
-					me.ID, me.ReportedBase, me.Checkpoint),
+					me.ID, cmp.Or(revision, me.ReportedBase), me.Checkpoint),
 				Why: "You are working from a different base than the plan assumes, so your changes may not apply where it expects them. Re-checkpoint and re-exec if you moved on purpose."}
 		}
 		return writeGrade{}

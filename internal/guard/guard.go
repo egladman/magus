@@ -1972,7 +1972,7 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 		return ctx
 	}
 	i := slices.IndexFunc(snap.Rows, func(row types.Job) bool { return row.ID == agentJob })
-	if i < 0 || !snap.Rows[i].State.Live() || snap.Rows[i].Registered != 0 {
+	if i < 0 || !snap.Rows[i].State.Live() || snap.Rows[i].Registered != 0 && !baseStale(ctx, deps, at, snap.Rows[i]) {
 		return ctx
 	}
 	base := deps.checkoutBase(ctx, at.workspace)
@@ -1981,7 +1981,7 @@ func withRegisteredBase(ctx context.Context, deps Dependencies, at location, age
 	}
 	snap = snap.Clone()
 	row := &snap.Rows[i]
-	row.Registered, row.ReportedBase, row.CheckoutRoot = time.Now().Unix(), base, ""
+	row.Registered, row.ReportedBase, row.BaseVerdict, row.CheckoutRoot = time.Now().Unix(), base, "", ""
 	if abs, err := filepath.Abs(at.workspace); err == nil && at.workspace != "" {
 		row.CheckoutRoot = abs
 	}

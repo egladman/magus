@@ -904,6 +904,51 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	}, got)
 }
 
+// An isolated worker registers on its first call, at the revision its worktree was created
+// on, and only then switches to the branch it was handed. The registration follows it there
+// rather than staying frozen on a diverged creation base; a worker whose own commit moved
+// a matching checkout is not re-registered, since its commit would read as a divergence.
+func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
+	const created, checkpoint = "24114cc", "07e1c16"
+	for _, tc := range []struct {
+		name               string
+		verdict            types.JobBaseVerdict
+		reported, revision string
+		wantBase           string
+		wantVerdict        types.JobBaseVerdict
+	}{
+		{"switched onto its checkpoint", types.BaseDiverged, created, checkpoint, checkpoint, types.BaseMatch},
+		{"switched onto another base", types.BaseDiverged, created, "5ee1abc", "5ee1abc", types.BaseDiverged},
+		{"still where it registered", types.BaseDiverged, created, created, created, types.BaseDiverged},
+		{"a commit on its checkpoint", types.BaseMatch, checkpoint, "c0ffee1", checkpoint, types.BaseMatch},
+		{"no revision to read", types.BaseDiverged, created, "", created, types.BaseDiverged},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Checkpoint: checkpoint}
+			ctx, root := fleetFixture(t, row)
+			at := hookLocation(ctx, Dependencies{})
+			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			_, err := store.Exec(ctx, row.ID, tc.reported)
+			require.NoError(t, err)
+			deps := Dependencies{
+				Revision: func(_ context.Context, dir, rev string) string {
+					assert.Equal(t, []string{root, ""}, []string{dir, rev}, "the revision is read from the worker's checkout")
+					return tc.revision
+				},
+				CheckoutBase: func(context.Context, string) string { return tc.revision },
+			}
+
+			wrote := registerAgentBase(ctx, deps, at, row.ID)
+
+			rows, err := store.List()
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, []any{tc.wantBase != tc.reported, tc.wantBase, tc.wantVerdict},
+				[]any{wrote, rows[0].ReportedBase, rows[0].BaseVerdict})
+		})
+	}
+}
+
 // The command and path glue forward one field of the event, not the envelope, so the
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.

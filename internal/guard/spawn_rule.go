@@ -591,8 +591,9 @@ func releaseEndedBinding(ctx context.Context, at location, who hookAttribution, 
 }
 
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
-// job it was spawned for, as `magus job exec` would, when that job has reported none.
-// Reports whether it wrote, so the caller re-reads the rows it graded against.
+// job it was spawned for, as `magus job exec` would, when that job has reported none or
+// its recorded base is stale (see [baseStale]). Reports whether it wrote, so the caller
+// re-reads the rows it graded against.
 //
 // Done by the child's own call, not at spawn: the host picks the child's checkout, and
 // only the child's hooks run in it. Without it an attributed worker's first write is
@@ -606,7 +607,7 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if row.ID != agentJob {
 			continue
 		}
-		if !row.State.Live() || row.Registered != 0 {
+		if !row.State.Live() || row.Registered != 0 && !baseStale(ctx, deps, at, row) {
 			return false
 		}
 		base := deps.checkoutBase(ctx, at.workspace)
@@ -617,6 +618,23 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		return err == nil
 	}
 	return false
+}
+
+// baseStale reports a registered row whose recorded base diverged from its checkpoint and
+// whose checkout has since moved to another revision: an isolated worker registers on its
+// first call, at whatever its worktree was created on, and only then switches to the
+// branch it was handed.
+//
+// Only a diverged row is refreshed. Revisions are compared exactly, so re-registering a
+// worker that committed on its checkpoint would read its own commit as a divergence.
+// Revisions only, through the cheap seam: the dirty digest moves on every edit.
+func baseStale(ctx context.Context, deps Dependencies, at location, row types.Job) bool {
+	if row.BaseVerdict != types.BaseDiverged {
+		return false
+	}
+	live := deps.revision(ctx, at.workspace, "")
+	reported, _ := types.ParseCheckpointToken(row.ReportedBase)
+	return live != "" && !job.SameRevision(live, reported)
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id
