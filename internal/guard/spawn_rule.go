@@ -567,6 +567,29 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 	}
 }
 
+// releaseEndedBinding is b with a binding to a job that ended in a verdict (pass, fail or
+// no_return) released, and the caller's record dropped when write is set. A wait ends a
+// job from its orchestrator's session, so releaseOnEnd never sees the holder's call; the
+// holder's own next call releases it instead. An exited row still holds: a rejected wait
+// sends the holder back to the same paths.
+func releaseEndedBinding(ctx context.Context, at location, who hookAttribution, b job.Binding, write bool) job.Binding {
+	if b.Job == "" || b.Gone {
+		return b
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return b
+	}
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == b.Job })
+	if i < 0 || !rows[i].State.Terminal() {
+		return b
+	}
+	if write {
+		job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Release(who.caller(), b.Job)
+	}
+	return job.Binding{}
+}
+
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
 // job it was spawned for, as `magus job exec` would, when that job has reported none.
 // Reports whether it wrote, so the caller re-reads the rows it graded against.

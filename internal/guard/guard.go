@@ -719,7 +719,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if hasInput && !req.Observe && !req.DryRun {
 		started = beginJudgment(stateAt.cacheDir, who.factsKey(), time.Now())
 	}
-	binding := boundJob(who, location)
+	binding := releaseEndedBinding(ctx, location, who, boundJob(who, location), !req.DryRun && !req.Observe)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
 	deps.lease = actingLease
 	// A subagent's first call registers its checkout. A command line runs where the call

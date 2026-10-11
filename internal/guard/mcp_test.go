@@ -165,6 +165,8 @@ func TestBuildCall(t *testing.T) {
 		"a register":        {clientScript(imp + `magus\job.register("a/b", reported_base: "abc");`), "client op=register id=a/b"},
 		"a clear":           {clientScript(imp + `magus\job.clear();`), "client op=clear"},
 		"a wait":            {clientScript(imp + `magus\job.wait("a/b");`), "magus job wait a/b"},
+		"an exit":           {clientScript(imp + `magus\job.exit("a/b", result: {"summary": "done"});`), "magus job exit a/b"},
+		"a computed exit":   {clientScript(imp + `final id = "a/b"; magus\job.exit(id);`), "magus job exit %unread%"},
 		"a nested job fork": {clientScript(imp + `magus\cmd("job", ["fork", "a/b", "--write-paths", "x/**"]);`), "magus job fork a/b --write-paths x/**"},
 		"a job read":        {clientScript(imp + `magus\job.list();`), "client"},
 		"two writes": {

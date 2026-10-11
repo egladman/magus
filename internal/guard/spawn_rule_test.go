@@ -1108,7 +1108,8 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 
 // A job that has exited or ended holds its caller to nothing, so the next exec takes the
 // next job with nothing to give up first. Exited is live, yet nobody is required to wait
-// on it, so a caller held to it could be stuck for good.
+// on it, so a caller held to it could be stuck for good. A job a verdict ended has
+// released its caller by the time the exec is graded.
 func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
@@ -1120,7 +1121,11 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 			bindCaller(t, ctx, who, held.ID)
 
 			v := Judge(ctx, Dependencies{}, Request{Input: "magus job exec next-job", Host: who.Host, Session: who.Session, Agent: who.Agent})
-			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, gradedAs(v))
+			want := graded{}
+			if state.Live() {
+				want = graded{Lease: held.ID, From: types.LeaseSourceAgent}
+			}
+			assert.Equal(t, want, gradedAs(v))
 			assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, hookLocation(ctx, Dependencies{})))
 		})
 	}
