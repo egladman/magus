@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/spell"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -294,9 +295,10 @@ func TestMagusModulesSharesDescribeCore(t *testing.T) {
 // TestMagusModulesEndToEnd drives the host methods from a real magusfile, proving
 // they're wired onto the magus namespace and return usable typed objects.
 func TestMagusModulesEndToEnd(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final mods = magus\describe.module();
     if (mods.len() == 0) { magus\fatal("describe.module() returned nothing"); }
@@ -316,16 +318,17 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 // strings carry the Mustache verbatim (a double-quoted "{{x}}" would collide with
 // Buzz's own {expr} interpolation).
 func TestTemplatePartialsEndToEnd(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", "import \"magus\";\n"+
-		"import \"template\";\n"+
-		"export fun check(ctx: magus\\Context, args: [str]) > void !> any {\n"+
-		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n"+
-		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n"+
-		"    final got = template\\renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n"+
-		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n"+
-		"    if (got != want) { magus\\fatal(\"renderPartials mismatch: got \" + got); }\n"+
+	w.Magusfile("import \"magus\";\n" +
+		"import \"template\";\n" +
+		"export fun check(ctx: magus\\Context, args: [str]) > void !> any {\n" +
+		"    final page = `{{>header}}[{{body}}]{{>footer}}`;\n" +
+		"    final partials = {\"header\": `<h>{{title}}</h>`, \"footer\": `<f/>`};\n" +
+		"    final got = template\\renderPartials(page, {\"title\": \"magus\", \"body\": \"hi & <b>\"}, partials);\n" +
+		"    final want = \"<h>magus</h>[hi &amp; &lt;b&gt;]<f/>\";\n" +
+		"    if (got != want) { magus\\fatal(\"renderPartials mismatch: got \" + got); }\n" +
 		"}")
 	_, err := interp.RunDir(context.Background(), dir, "check", nil)
 	require.NoError(t, err, "template.renderPartials end-to-end")
@@ -699,10 +702,10 @@ export fun mgs_listTargets() > any { return {"build": {"bin": "echo", "args": ["
 import "spells/hello";
 export fun go(ctx: magus\Context, _a: [str]) > void { hello.build(); }`
 
-	proj := filepath.Join(t.TempDir(), "proj")
-	require.NoError(t, os.MkdirAll(filepath.Join(proj, "spells"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(proj, "spells", "hello.buzz"), []byte(spell), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(proj, "magusfile.buzz"), []byte(magusfile), 0o644))
+	w := testkit.NewWorkspace(t)
+	proj := w.Path("proj")
+	w.Write("proj/spells/hello.buzz", spell)
+	w.Write("proj/magusfile.buzz", magusfile)
 	// Parse from the test's cwd, NOT from proj — exactly what workspace
 	// preload does when it visits a sub-project's magusfile.
 	srcs, err := interp.FindAll(proj)
@@ -1388,24 +1391,13 @@ func TestVcsBindings(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")
 	}
-	dir := t.TempDir()
 	// A real repository AT THE TARGET'S DIRECTORY. This used to lean on the process cwd
 	// being inside magus's own checkout, which is exactly the confusion the vcs probes
 	// were fixed for: a target carries its directory on the context and the runtime never
 	// chdirs, so "the process happens to be in a repo" is not the same as "this target is".
-	for _, args := range [][]string{
-		{"git", "init", "-b", "main"},
-		{"git", "config", "user.email", "a@b.c"},
-		{"git", "config", "user.name", "A"},
-		{"git", "config", "commit.gpgsign", "false"},
-		{"git", "commit", "--allow-empty", "-m", "hello"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%v: %s", args, out)
-	}
-	writeMagusfile(t, dir, `
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
+	repo.Magusfile(`
 import "magus";
 import "vcs";
 
@@ -1922,9 +1914,10 @@ test "a Buzz-implemented stdlib module behaves like a Go one" {
 // term.notify's severity does not collide with the log module's copy: both are
 // exported, but each lives behind its own import path.
 func TestTermNotifyEnumResolvesThroughItsOwnNamespace(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "term";
 import "log";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {

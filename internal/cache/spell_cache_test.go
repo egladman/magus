@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -68,24 +69,23 @@ func readTree(t *testing.T, root string) map[string]string {
 
 func sourceRoots(t *testing.T) []SpellCacheRoot {
 	t.Helper()
-	src := t.TempDir()
-	writeTree(t, filepath.Join(src, "gocache"), map[string]string{
-		"ab/ab01-a":      "action",
-		"ab/ab01-d":      "output",
-		"README":         "not an entry",
-		"trim.txt":       "123",
-		"fuzz/x/a1b2c3d": "fuzz",
+	src := testkit.NewWorkspace(t)
+	src.WriteTree(map[string]string{
+		"gocache/ab/ab01-a":      "action",
+		"gocache/ab/ab01-d":      "output",
+		"gocache/README":         "not an entry",
+		"gocache/trim.txt":       "123",
+		"gocache/fuzz/x/a1b2c3d": "fuzz",
+
+		"gomod/example.com/m@v1.0.0/m.go":                      "package m",
+		"gomod/cache/download/example.com/m/@v/v1.0.0.mod":     "module example.com/m",
+		"gomod/cache/download/example.com/m/@v/v1.0.0.ziphash": "h1:abc",
+		"gomod/cache/download/example.com/m/@v/v1.0.0.zip":     "zip bytes",
+		"gomod/cache/download/example.com/m/@v/v1.0.0.lock":    "",
+		"gomod/cache/vcs/0123/HEAD":                            "ref",
 	})
-	writeTree(t, filepath.Join(src, "gomod"), map[string]string{
-		"example.com/m@v1.0.0/m.go":                      "package m",
-		"cache/download/example.com/m/@v/v1.0.0.mod":     "module example.com/m",
-		"cache/download/example.com/m/@v/v1.0.0.ziphash": "h1:abc",
-		"cache/download/example.com/m/@v/v1.0.0.zip":     "zip bytes",
-		"cache/download/example.com/m/@v/v1.0.0.lock":    "",
-		"cache/vcs/0123/HEAD":                            "ref",
-	})
-	require.NoError(t, os.Chmod(filepath.Join(src, "gomod", "example.com", "m@v1.0.0", "m.go"), 0o444))
-	return goRoots(filepath.Join(src, "gocache"), filepath.Join(src, "gomod"))
+	require.NoError(t, os.Chmod(src.Path("gomod", "example.com", "m@v1.0.0", "m.go"), 0o444))
+	return goRoots(src.Path("gocache"), src.Path("gomod"))
 }
 
 func destRoots(t *testing.T) []SpellCacheRoot {
@@ -541,15 +541,14 @@ func TestTrimmedGoBundleBuildsWarm(t *testing.T) {
 		t.Skip("no go on PATH")
 	}
 	pub, seed := genKeypair(t)
-	work := t.TempDir()
-	writeTree(t, filepath.Join(work, "app"), map[string]string{
-		"go.mod":  "module app\n\ngo 1.21\n",
-		"main.go": "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"hi\") }\n",
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
+		"app/go.mod":    "module app\n\ngo 1.21\n",
+		"app/main.go":   "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"hi\") }\n",
+		"other/go.mod":  "module other\n\ngo 1.21\n",
+		"other/main.go": "package main\n\nimport \"encoding/json\"\n\nfunc main() { _, _ = json.Marshal(1) }\n",
 	})
-	writeTree(t, filepath.Join(work, "other"), map[string]string{
-		"go.mod":  "module other\n\ngo 1.21\n",
-		"main.go": "package main\n\nimport \"encoding/json\"\n\nfunc main() { _, _ = json.Marshal(1) }\n",
-	})
+	work := ws.Root()
 	gocache := filepath.Join(work, "gocache")
 	gomod := filepath.Join(work, "gomod")
 	build := func(t *testing.T, cache, dir string) string {

@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -27,14 +27,13 @@ func (githubReview) ReviewOrigin(context.Context) types.ReviewOrigin {
 // withReviewTarget registers a provider that answers the review lookup with target.
 func withReviewTarget(t *testing.T, target map[string]any) {
 	t.Helper()
-	name := "fake-reading-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-reading-review-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target == spells.FindReviewContract {
 				return target, nil
 			}
 			return map[string]any{}, nil
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

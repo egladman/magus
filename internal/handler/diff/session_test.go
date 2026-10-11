@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -529,8 +529,7 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 // failing, which left the reply and publish paths, where the real bugs were, uncovered.
 func withReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
-	name := "fake-status-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-status-review-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -542,7 +541,7 @@ func withReviewProvider(t *testing.T, threads []any) {
 			default: // publish
 				return map[string]any{}, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
@@ -622,8 +621,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 // a reply need not find the root first, and it wins over ID when both arrive.
 func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 	var threads []string
-	name := "fake-reply-recorder-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-reply-recorder-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -634,7 +632,7 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 			default:
 				return nil, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
@@ -664,8 +662,7 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 // comment and answering a reply's own id would open nothing.
 func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 	var asked []string
-	name := "fake-reply-resolver-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-reply-resolver-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -682,7 +679,7 @@ func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 			default:
 				return nil, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

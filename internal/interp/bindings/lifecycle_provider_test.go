@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 )
 
@@ -19,14 +19,12 @@ import (
 // answer, and returns its name and a pointer to the request it last saw.
 func withLifecycleSpell(t *testing.T, answer func() (any, error)) (string, *spells.InvokeRequest) {
 	t.Helper()
-	fakeSpellSeq++
-	name := fmt.Sprintf("fake-lifecycle-%d", fakeSpellSeq)
 	var seen spells.InvokeRequest
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-lifecycle",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			seen = req
 			return answer()
-		})))
+		}))
 	return name, &seen
 }
 

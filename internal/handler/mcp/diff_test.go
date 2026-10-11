@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -369,8 +369,7 @@ func TestTheAgentDiffToolDoesNotOfferReading(t *testing.T) {
 // have something to answer with.
 func withReviewThreads(t *testing.T, threads []any) {
 	t.Helper()
-	name := "fake-mcp-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-mcp-review-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -380,7 +379,7 @@ func withReviewThreads(t *testing.T, threads []any) {
 			default:
 				return nil, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

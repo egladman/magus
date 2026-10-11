@@ -1,9 +1,7 @@
 package run
 
 import (
-	"bytes"
 	"context"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/secret"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -152,43 +151,6 @@ func TestExecDoesNotClassifyAnExitedProcess(t *testing.T) {
 	assert.NotErrorIs(t, err, types.ToolNotOnPath, "sh exists; its own ENOENT is not a missing tool")
 }
 
-// captureStdout redirects os.Stdout to a pipe and returns a function that
-// closes the write end, drains the pipe, and returns the captured bytes.
-// The original os.Stdout is restored via t.Cleanup. Do not call t.Parallel
-// in tests that use this helper.
-func captureStdout(t *testing.T) func() []byte {
-	t.Helper()
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stdout = w
-	t.Cleanup(func() { os.Stdout = orig })
-	return func() []byte {
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		r.Close()
-		return buf.Bytes()
-	}
-}
-
-// captureStderr is the stderr equivalent of captureStdout.
-func captureStderr(t *testing.T) func() []byte {
-	t.Helper()
-	orig := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = w
-	t.Cleanup(func() { os.Stderr = orig })
-	return func() []byte {
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		r.Close()
-		return buf.Bytes()
-	}
-}
-
 // A sandboxed child's environment is the policy's, even an empty one: falling back to
 // the host's would hand every secret in it to the child.
 func TestChildEnvUnderAPolicyNeverInheritsTheHost(t *testing.T) {
@@ -249,7 +211,7 @@ func envValues(env []string, name string) []string {
 // re-executes the running binary, which under go test is this one.
 func TestMain(m *testing.M) {
 	sandbox.MaybeLaunch()
-	os.Exit(m.Run())
+	testkit.Main(m)
 }
 
 // Where the host has landlock, a policy's child is confined by the kernel: cat cannot
@@ -309,10 +271,11 @@ func TestExecWorkdirRespected(t *testing.T) {
 	dir := t.TempDir()
 	resolved, err := filepath.EvalSymlinks(dir)
 	require.NoError(t, err)
-	read := captureStdout(t)
-	_, err = Exec(context.Background(), "pwd", nil, ExecOptions{Dir: dir})
+	out := testkit.CaptureStdout(t, func() {
+		_, err = Exec(context.Background(), "pwd", nil, ExecOptions{Dir: dir})
+	})
 	require.NoError(t, err)
-	got := strings.TrimRight(string(read()), "\n")
+	got := strings.TrimRight(out, "\n")
 	assert.Equal(t, resolved, got, "working dir")
 }
 
@@ -320,20 +283,24 @@ func TestExecStdoutPassthrough(t *testing.T) {
 	if _, err := exec.LookPath("echo"); err != nil {
 		t.Skip("'echo' not available")
 	}
-	read := captureStdout(t)
-	_, err := Exec(context.Background(), "echo", []string{"hello"}, ExecOptions{Dir: t.TempDir()})
+	var err error
+	out := testkit.CaptureStdout(t, func() {
+		_, err = Exec(context.Background(), "echo", []string{"hello"}, ExecOptions{Dir: t.TempDir()})
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "hello\n", string(read()))
+	assert.Equal(t, "hello\n", out)
 }
 
 func TestExecStderrPassthrough(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("'sh' not available")
 	}
-	read := captureStderr(t)
-	_, err := Exec(context.Background(), "sh", []string{"-c", "echo err 1>&2"}, ExecOptions{Dir: t.TempDir()})
+	var err error
+	out := testkit.CaptureStderr(t, func() {
+		_, err = Exec(context.Background(), "sh", []string{"-c", "echo err 1>&2"}, ExecOptions{Dir: t.TempDir()})
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "err\n", string(read()))
+	assert.Equal(t, "err\n", out)
 }
 
 func TestExecNonZeroExit(t *testing.T) {
@@ -432,8 +399,10 @@ func TestExecArgsVerbatim(t *testing.T) {
 	if _, err := exec.LookPath("printf"); err != nil {
 		t.Skip("'printf' not available")
 	}
-	read := captureStdout(t)
-	_, err := Exec(context.Background(), "printf", []string{"%s\n", "*"}, ExecOptions{Dir: t.TempDir()})
+	var err error
+	out := testkit.CaptureStdout(t, func() {
+		_, err = Exec(context.Background(), "printf", []string{"%s\n", "*"}, ExecOptions{Dir: t.TempDir()})
+	})
 	require.NoError(t, err)
-	assert.Equal(t, "*\n", string(read()), "args may have been shell-expanded")
+	assert.Equal(t, "*\n", out, "args may have been shell-expanded")
 }

@@ -27,6 +27,7 @@ import (
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -143,15 +144,15 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			project, cwd := t.TempDir(), t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(project, "magusfile.buzz"), []byte(magusfile), 0o644))
+			project, cwd := testkit.NewWorkspace(t), testkit.NewWorkspace(t)
+			project.Magusfile(magusfile)
 			if tc.projectHelper != "" {
-				require.NoError(t, os.WriteFile(filepath.Join(project, "helper.buzz"), []byte(tc.projectHelper), 0o644))
+				project.Write("helper.buzz", tc.projectHelper)
 			}
-			require.NoError(t, os.WriteFile(filepath.Join(cwd, "helper.buzz"), []byte(tc.cwdHelper), 0o644))
-			t.Chdir(cwd)
+			cwd.Write("helper.buzz", tc.cwdHelper)
+			t.Chdir(cwd.Root())
 
-			src, err := Find(project)
+			src, err := Find(project.Root())
 			require.NoError(t, err)
 			load, err := execBuzzSrc(context.Background(), src, true)
 			if tc.wantErr != "" {
@@ -167,13 +168,11 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 // The search joins `../x` onto the root as root/../x.buzz, a file beside the workspace,
 // which from a worktree is a sibling checkout. It must be refused and never read.
 func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
-	outer := t.TempDir()
-	root := filepath.Join(outer, "ws")
-	require.NoError(t, os.MkdirAll(root, 0o755))
+	outer := testkit.NewWorkspace(t)
+	root := outer.Path("ws")
 	const module = "export fun touch() > void {}\n"
-	above := filepath.Join(outer, "x.buzz")
-	require.NoError(t, os.WriteFile(above, []byte(module), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "inside.buzz"), []byte(module), 0o644))
+	above := outer.Write("x.buzz", module)
+	outer.Write("ws/inside.buzz", module)
 
 	ctx := types.WithWorkspace(t.Context(), rootWorkspace{root: root})
 	oldJoin := strings.ReplaceAll(magusSearchPaths(ctx, root)[0], "?", "../x")
@@ -182,7 +181,7 @@ func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
 
 	load := func(t *testing.T, magusfile string) ([]string, error) {
 		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		outer.Write("ws/magusfile.buzz", magusfile)
 		var reads []string
 		ctx := WithSourceReader(ctx, func(path string) ([]byte, error) {
 			reads = append(reads, path)
@@ -296,10 +295,11 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 		spell.DeclareMagusTypes(sess, nil)
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const magusfile = "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
 		"export fun test(ctx: magus\\Context, args: [str]) > void {}\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	w.Magusfile(magusfile)
 	granted := t.TempDir()
 	probe := filepath.Join(granted, "stat")
 
@@ -363,11 +363,12 @@ func guardLoad(t *testing.T, ctx context.Context, root string) []string {
 // A guard load of the working tree keeps its chunks in the user's cache, never
 // the workspace, where the agents it judges can write.
 func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
-	root, cache := t.TempDir(), t.TempDir()
+	w, cache := testkit.NewWorkspace(t), t.TempDir()
+	root := w.Root()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export final marker = 1;\n"), 0o644))
+	w.Magusfile("export final marker = 1;\n")
 
 	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
 	assert.Equal(t, map[string]bool{filepath.Join(root, "magusfile.buzz"): true}, storedChunks(t, root),

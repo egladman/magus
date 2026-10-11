@@ -134,8 +134,8 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 	require.NoError(t, err, "cache.Open(read)")
 
 	var stdoutOut, stderrOut string
-	stdoutOut = captureStdout(t, func() {
-		stderrOut = captureStderr(t, func() {
+	stdoutOut = testkit.CaptureStdout(t, func() {
+		stderrOut = testkit.CaptureStderr(t, func() {
 			r2, err := c2.Run(context.Background(), step, fn)
 			require.NoError(t, err, "Run(hit)")
 			require.True(t, r2.Hit, "second Run must hit")
@@ -703,7 +703,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	c := collapseCache(t)
 	lp := c.logPath("svc/api", "deadbeef")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
@@ -722,7 +722,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	lp := c.logPath("svc/api", "cafef00d")
 	want := errors.New("boom")
 
-	stderrOut := captureStderr(t, func() {
+	stderrOut := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
@@ -739,38 +739,6 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	data, statErr := os.ReadFile(lp)
 	require.NoError(t, statErr, "collapse failure log should be retained after replay")
 	assert.Contains(t, string(data), "lint: undefined symbol foo")
-}
-
-// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
-}
-
-// captureStderr redirects os.Stderr for the duration of fn and returns what was written.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = orig }()
-
-	fn()
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
 }
 
 // captureLog points the process logger at the pretty display for the duration of fn and
@@ -799,7 +767,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	c.log = slog.New(NewPrettyHandler(&buf, slog.LevelError))
 	lp := c.logPath("svc/api", "deadbeef")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
@@ -821,7 +789,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	lp := c.logPath("svc/api", "cafef00d")
 	want := errors.New("boom")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
@@ -851,7 +819,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 	lp := c.logPath("svc/api", "0badf00d")
 	want := errors.New("boom")
 
-	_ = captureStderr(t, func() {
+	_ = testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
@@ -869,7 +837,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 	c := silentCache(t)
 	lp := c.logPath("svc/api", "feedface")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")

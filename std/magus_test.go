@@ -5,9 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,7 +66,6 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	ctx := proc.WithLease(t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
@@ -465,23 +462,12 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	testkit.Isolate(t)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	root := t.TempDir()
-	git := func(args ...string) string {
-		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%s", out)
-		return strings.TrimSpace(string(out))
-	}
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "api"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\treturn\n}\n"), 0o644))
-	git("init", "-q", "-b", "main")
-	git("add", "-A")
-	git("commit", "-q", "-m", "seed")
-	rev := git("rev-parse", "HEAD")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+	repo := testkit.NewRepo(t, map[string]string{
+		".gitattributes": "*.go diff=golang\n",
+		"api/x.go":       "package api\n\nfunc X() {\n\treturn\n}\n",
+	})
+	root, rev := repo.Root(), repo.Head()
+	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
 	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {

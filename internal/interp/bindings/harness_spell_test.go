@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -78,20 +79,17 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 // that does not export it loads, ships no agent files, and was still offered the shipped
 // agents in Params.
 func TestHarnessSpellWithoutTheAgentsOpGetsNoAgents(t *testing.T) {
-	const id = "agentless-test"
 	var offered []any
-	if _, ok := project.DefaultSpellRegistry().Lookup(id); !ok {
-		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(id, spells.WithInvoker(
-			func(_ context.Context, req spells.InvokeRequest) (any, error) {
-				switch req.Target {
-				case spells.HarnessConfigContract:
-					return map[string]any{"path": ""}, nil
-				case spells.HarnessAgentsContract:
-					offered, _ = req.Params["agents"].([]any)
-				}
-				return nil, nil
-			})))
-	}
+	id := fakespell.Register(t, "agentless-test", spells.WithInvoker(
+		func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.HarnessConfigContract:
+				return map[string]any{"path": ""}, nil
+			case spells.HarnessAgentsContract:
+				offered, _ = req.Params["agents"].([]any)
+			}
+			return nil, nil
+		}))
 	d := loadShippedHarness(t, id)
 	assert.Empty(t, d.Agents)
 	require.Len(t, offered, 1)

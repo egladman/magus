@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
@@ -847,9 +848,10 @@ export fun failing(ctx: magus\Context, args: [str]) > void !> any {
 
 func runUsesTarget(t *testing.T, target string) (trace string, err error) {
 	t.Helper()
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(usesMagusfile), 0o644))
+	w.Magusfile(usesMagusfile)
 
 	_, err = interp.RunDir(context.Background(), dir, target, nil)
 	raw, readErr := os.ReadFile(filepath.Join(dir, "trace.txt"))
@@ -879,7 +881,8 @@ func TestCtxUsesReleasesTheResourceWhenTheBodyThrows(t *testing.T) {
 // A plain call is not a resource: without a fiber there is no suspended half to
 // resume after the body, so magus refuses rather than silently running nothing.
 func TestCtxUsesRefusesANonFiberResource(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 	src := `import "magus";
 fun plain() > void {}
@@ -887,7 +890,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.uses(plain, fun() > void {});
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(src), 0o644))
+	w.Magusfile(src)
 	_, err := interp.RunDir(context.Background(), dir, "build", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "must be a fiber")
@@ -932,9 +935,10 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // Pre-resolving from the declared graph cannot do this. It would run both arms, which
 // for the root `build` target means building a container image on a host build.
 func TestConditionalNeedsDispatchesOnlyTheTakenBranch(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(conditionalNeedsMagusfile), 0o644))
+	w.Magusfile(conditionalNeedsMagusfile)
 
 	_, err := interp.RunDir(context.Background(), dir, "build", nil)
 	require.NoError(t, err)
@@ -969,9 +973,10 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 			Rewrite: func(_ context.Context, _ string, _ map[string]string, args []string) []string { return args }}), "true"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			dir := t.TempDir()
+			w := testkit.NewWorkspace(t)
+			dir := w.Root()
 			t.Chdir(dir)
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(mf), 0o644))
+			w.Magusfile(mf)
 			_, err := interp.RunDir(tc.ctx, dir, "test", nil)
 			require.NoError(t, err)
 			got, err := os.ReadFile(filepath.Join(dir, "narrowed.txt"))
