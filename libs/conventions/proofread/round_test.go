@@ -1,7 +1,12 @@
 package proofread
 
 import (
+	"encoding/json"
+	"fmt"
 	"math"
+	"os"
+	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -91,6 +96,77 @@ func TestNominalAlpha(t *testing.T) {
 				t.Errorf("alpha = %.4f, want %.3f", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestRoundRecordsCarryNoText holds the committed round records to counts:
+// a field that could hold a candidate's text, a label or a note quoting one
+// keeps third-party text out of git only if no record has it.
+func TestRoundRecordsCarryNoText(t *testing.T) {
+	paths, err := filepath.Glob("testdata/rounds/*.json")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no round records: %v", err)
+	}
+
+	textKeys := []string{"text", "sentence", "context", "match", "message", "note", "reason", "label", "thread"}
+	known := Rules()
+
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var rec struct {
+			Round      int                        `json:"round"`
+			RuleCommit string                     `json:"rule_commit"`
+			Seed       json.RawMessage            `json:"seed"`
+			Rules      map[string]json.RawMessage `json:"rules"`
+		}
+		if err := json.Unmarshal(data, &rec); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+
+		if want := fmt.Sprintf("round%d.json", rec.Round); filepath.Base(p) != want || rec.RuleCommit == "" || len(rec.Seed) == 0 {
+			t.Errorf("%s: round %d, rule_commit %q, seed %s; want the file named %s with both recorded or \"unrecorded\"",
+				p, rec.Round, rec.RuleCommit, rec.Seed, want)
+		}
+
+		for name := range rec.Rules {
+			if !slices.Contains(known, Rule(name)) {
+				t.Errorf("%s: rule %q is no rule proofread knows", p, name)
+			}
+		}
+
+		var tree any
+		if err := json.Unmarshal(data, &tree); err != nil {
+			t.Fatal(err)
+		}
+
+		walkJSON(tree, func(key string, v any) {
+			if slices.Contains(textKeys, key) {
+				t.Errorf("%s: field %q could carry a candidate's text or label", p, key)
+			}
+
+			if s, ok := v.(string); ok && len(s) > 400 {
+				t.Errorf("%s: field %q holds %d bytes of text", p, key, len(s))
+			}
+		})
+	}
+}
+
+func walkJSON(v any, visit func(key string, v any)) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, child := range x {
+			visit(k, child)
+			walkJSON(child, visit)
+		}
+	case []any:
+		for _, child := range x {
+			visit("", child)
+			walkJSON(child, visit)
+		}
 	}
 }
 
