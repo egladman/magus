@@ -1,15 +1,6 @@
 ### Fixed
 
-- **`magus job fork` and `magus job apply` refuse a go test check that skips a test of the
-  job's own packages.** A `-run` or `-skip` pattern that leaves out a `Test` function
-  defined beside the job's `.go` write paths is refused, listing the skipped tests and a
-  pattern that covers them. The patterns are read as `go test` reads them, from the files
-  alone: only the `go-test` target is judged, `testdata`, `vendor`, hidden and nested-module
-  directories are not packages of a glob write path, and an update that keeps the check is
-  judged on the packages of the paths it adds.
-- **`magus job fork`, `magus job apply` and `magus\job.put` refuse a check the guard would
-  deny the job's worker.** `go-build .` under the `worker-builds-magus` rule is refused at
-  the fork, quoting the rule's verdict and naming `go::go-vet`, which compiles without
-  building the binary. A workspace whose rules do not load, or a deny `go::go-vet` meets
-  too (a stale binary), is not graded, and the fork says so. The check is judged from the
-  workspace the job store belongs to, whichever directory the process runs in.
+- **`magus job fork`, `job apply` and `magus\job.put` refuse a check the guard would deny
+  the job's worker.** `go-build .` under `worker-builds-magus` is refused at the fork,
+  quoting the verdict and naming `go::go-vet`. A workspace whose rules do not load, or a
+  deny `go::go-vet` meets too, is not graded, and the fork says so.

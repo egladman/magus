@@ -4,19 +4,3 @@
   checkout through the repository's session store, reads that checkout's output store
   without writing to it, and says on stderr which checkout it read. `--attempts`,
   `--identity`, `-o json` and `describe target --cache --against` resolve the same way.
-- **`magus query output <ref>` prints a failed run's error.** The text form writes the
-  recorded error to stderr after the log, so a check that fails with an empty log, such as
-  a generate drift check, says why. Stdout is unchanged.
-
-### Changed
-
-- **Breaking for SDK callers: `OutputByRef`, `OutputAttempts`, `OutputDescriptorByRef` and
-  `OutputKeyInputs` take a `context.Context` first.** A miss now reads other checkouts'
-  stores; the context ends that search and carries the notice naming the checkout read.
-  Pass the caller's context.
-- **A ref that no store holds names the checkout that ran it.** The MGS8001 message gives
-  that checkout and `cd <checkout> && magus query output <ref>`, also when the checkout is
-  gone, and gives the command alone when no checkout recorded the ref. A recorded
-  checkout whose store was read and missed is listed among the stores consulted.
-- **`magus query invocation <id>` shows the project, target and output ref on each result
-  line.**
