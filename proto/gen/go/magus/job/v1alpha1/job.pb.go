@@ -281,8 +281,12 @@ type Job struct {
 	// features a reader must implement to act on it (see ListJobsResponse.read_only).
 	SchemaVersion int32    `protobuf:"varint,38,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	Requires      []string `protobuf:"bytes,37,rep,name=requires,proto3" json:"requires,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
+	// the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
+	// holder's own attempts untouched; this is the second fact beside them.
+	WaiterEvidence *JobIntegration `protobuf:"bytes,39,opt,name=waiter_evidence,json=waiterEvidence,proto3" json:"waiter_evidence,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Job) Reset() {
@@ -581,6 +585,13 @@ func (x *Job) GetRequires() []string {
 	return nil
 }
 
+func (x *Job) GetWaiterEvidence() *JobIntegration {
+	if x != nil {
+		return x.WaiterEvidence
+	}
+	return nil
+}
+
 // JobOrigin is who did something to a row, one field per channel, as the activity trail
 // records an action's origin.
 type JobOrigin struct {
@@ -677,14 +688,24 @@ func (x *JobOrigin) GetCredential() *v1alpha1.Credential {
 
 // JobAttempt is a recorded run of a check, as `magus job wait` found it.
 type JobAttempt struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
-	Ref           string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
-	TimestampMs   int64                  `protobuf:"varint,3,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
-	Project       string                 `protobuf:"bytes,4,opt,name=project,proto3" json:"project,omitempty"`
-	Target        string                 `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
-	Spell         string                 `protobuf:"bytes,6,opt,name=spell,proto3" json:"spell,omitempty"`
-	Failed        bool                   `protobuf:"varint,7,opt,name=failed,proto3" json:"failed,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Found       bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
+	Ref         string                 `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	TimestampMs int64                  `protobuf:"varint,3,opt,name=timestamp_ms,json=timestampMs,proto3" json:"timestamp_ms,omitempty"`
+	Project     string                 `protobuf:"bytes,4,opt,name=project,proto3" json:"project,omitempty"`
+	Target      string                 `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	Spell       string                 `protobuf:"bytes,6,opt,name=spell,proto3" json:"spell,omitempty"`
+	Failed      bool                   `protobuf:"varint,7,opt,name=failed,proto3" json:"failed,omitempty"`
+	// attempt_id names this execution alone, where ref may name its step, which a later run of
+	// the same step takes over.
+	AttemptId string `protobuf:"bytes,8,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
+	// duration_ms is how long the run took. timestamp_ms is when it ENDED, so the run started at
+	// timestamp_ms - duration_ms.
+	DurationMs int64 `protobuf:"varint,9,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the
+	// tree also held uncommitted changes then, so revision alone does not name what it read.
+	Revision      string `protobuf:"bytes,10,opt,name=revision,proto3" json:"revision,omitempty"`
+	Dirty         bool   `protobuf:"varint,11,opt,name=dirty,proto3" json:"dirty,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -764,6 +785,34 @@ func (x *JobAttempt) GetSpell() string {
 func (x *JobAttempt) GetFailed() bool {
 	if x != nil {
 		return x.Failed
+	}
+	return false
+}
+
+func (x *JobAttempt) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
+	}
+	return ""
+}
+
+func (x *JobAttempt) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *JobAttempt) GetRevision() string {
+	if x != nil {
+		return x.Revision
+	}
+	return ""
+}
+
+func (x *JobAttempt) GetDirty() bool {
+	if x != nil {
+		return x.Dirty
 	}
 	return false
 }
@@ -1515,10 +1564,13 @@ func (x *JobGateEvidence) GetOutputRef() string {
 // digest is the file's sha256 when there was a file; "absent" and "dir" are carried through
 // as they are rather than turned into a hash-shaped lie.
 type JobRelease struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Digest        string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
-	ReleasedAt    int64                  `protobuf:"varint,3,opt,name=released_at,json=releasedAt,proto3" json:"released_at,omitempty"` // unix seconds
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Path       string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Digest     string                 `protobuf:"bytes,2,opt,name=digest,proto3" json:"digest,omitempty"`
+	ReleasedAt int64                  `protobuf:"varint,3,opt,name=released_at,json=releasedAt,proto3" json:"released_at,omitempty"` // unix seconds
+	// revoked is a path taken from a job its holder had taken, by a writer other than that
+	// holder: the orchestrator revoking it rather than the worker giving it up.
+	Revoked       bool `protobuf:"varint,4,opt,name=revoked,proto3" json:"revoked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1572,6 +1624,13 @@ func (x *JobRelease) GetReleasedAt() int64 {
 		return x.ReleasedAt
 	}
 	return 0
+}
+
+func (x *JobRelease) GetRevoked() bool {
+	if x != nil {
+		return x.Revoked
+	}
+	return false
 }
 
 // JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
@@ -2033,7 +2092,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\rinvocation_id\x18\x02 \x01(\tR\finvocationId\x12\x1f\n" +
 	"\vconsole_url\x18\x03 \x01(\tR\n" +
 	"consoleUrl\x12)\n" +
-	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xde\v\n" +
+	"\x03job\x18\x04 \x01(\v2\x17.magus.job.v1alpha1.JobR\x03job\"\xab\f\n" +
 	"\x03Job\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
@@ -2083,7 +2142,8 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\aentries\x18# \x03(\v2\x1c.magus.job.v1alpha1.JobEntryR\aentries\x12D\n" +
 	"\vintegration\x18$ \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\vintegration\x12%\n" +
 	"\x0eschema_version\x18& \x01(\x05R\rschemaVersion\x12\x1a\n" +
-	"\brequires\x18% \x03(\tR\brequires\"\xdb\x01\n" +
+	"\brequires\x18% \x03(\tR\brequires\x12K\n" +
+	"\x0fwaiter_evidence\x18' \x01(\v2\".magus.job.v1alpha1.JobIntegrationR\x0ewaiterEvidence\"\xdb\x01\n" +
 	"\tJobOrigin\x12\x12\n" +
 	"\x04user\x18\x01 \x01(\tR\x04user\x12\x10\n" +
 	"\x03uid\x18\x02 \x01(\tR\x03uid\x12\x1f\n" +
@@ -2094,7 +2154,7 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x05agent\x18\x06 \x01(\tR\x05agent\x12C\n" +
 	"\n" +
 	"credential\x18\a \x01(\v2#.magus.activity.v1alpha1.CredentialR\n" +
-	"credential\"\xb7\x01\n" +
+	"credential\"\xa9\x02\n" +
 	"\n" +
 	"JobAttempt\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x12\x10\n" +
@@ -2103,7 +2163,14 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\aproject\x18\x04 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x05 \x01(\tR\x06target\x12\x14\n" +
 	"\x05spell\x18\x06 \x01(\tR\x05spell\x12\x16\n" +
-	"\x06failed\x18\a \x01(\bR\x06failed\"c\n" +
+	"\x06failed\x18\a \x01(\bR\x06failed\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\b \x01(\tR\tattemptId\x12\x1f\n" +
+	"\vduration_ms\x18\t \x01(\x03R\n" +
+	"durationMs\x12\x1a\n" +
+	"\brevision\x18\n" +
+	" \x01(\tR\brevision\x12\x14\n" +
+	"\x05dirty\x18\v \x01(\bR\x05dirty\"c\n" +
 	"\x0eJobGateAttempt\x12\x17\n" +
 	"\agate_id\x18\x01 \x01(\tR\x06gateId\x128\n" +
 	"\aattempt\x18\x02 \x01(\v2\x1e.magus.job.v1alpha1.JobAttemptR\aattempt\"R\n" +
@@ -2160,13 +2227,14 @@ const file_magus_job_v1alpha1_job_proto_rawDesc = "" +
 	"\x0fJobGateEvidence\x12\x17\n" +
 	"\agate_id\x18\x01 \x01(\tR\x06gateId\x12\x1d\n" +
 	"\n" +
-	"output_ref\x18\x02 \x01(\tR\toutputRef\"Y\n" +
+	"output_ref\x18\x02 \x01(\tR\toutputRef\"s\n" +
 	"\n" +
 	"JobRelease\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1f\n" +
 	"\vreleased_at\x18\x03 \x01(\x03R\n" +
-	"releasedAt\"\xc7\x01\n" +
+	"releasedAt\x12\x18\n" +
+	"\arevoked\x18\x04 \x01(\bR\arevoked\"\xc7\x01\n" +
 	"\n" +
 	"JobOverlap\x12\x13\n" +
 	"\x05job_a\x18\x01 \x01(\tR\x04jobA\x12\x13\n" +
@@ -2276,27 +2344,28 @@ var file_magus_job_v1alpha1_job_proto_depIdxs = []int32{
 	7,  // 11: magus.job.v1alpha1.Job.unattributed:type_name -> magus.job.v1alpha1.JobUnattributedWrite
 	8,  // 12: magus.job.v1alpha1.Job.entries:type_name -> magus.job.v1alpha1.JobEntry
 	9,  // 13: magus.job.v1alpha1.Job.integration:type_name -> magus.job.v1alpha1.JobIntegration
-	24, // 14: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
-	5,  // 15: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
-	4,  // 16: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
-	10, // 17: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobGateStatus
-	16, // 18: magus.job.v1alpha1.JobResult.gate_evidence:type_name -> magus.job.v1alpha1.JobGateEvidence
-	13, // 19: magus.job.v1alpha1.JobOverlap.footprint:type_name -> magus.job.v1alpha1.JobOverlapFootprint
-	25, // 20: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
-	26, // 21: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
-	3,  // 22: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
-	18, // 23: magus.job.v1alpha1.ListJobsResponse.overlaps:type_name -> magus.job.v1alpha1.JobOverlap
-	11, // 24: magus.job.v1alpha1.ListJobsResponse.blocked:type_name -> magus.job.v1alpha1.JobBlock
-	12, // 25: magus.job.v1alpha1.ListJobsResponse.read_only:type_name -> magus.job.v1alpha1.JobReadOnly
-	22, // 26: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
-	21, // 27: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
-	23, // 28: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
-	2,  // 29: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
-	28, // [28:30] is the sub-list for method output_type
-	26, // [26:28] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	9,  // 14: magus.job.v1alpha1.Job.waiter_evidence:type_name -> magus.job.v1alpha1.JobIntegration
+	24, // 15: magus.job.v1alpha1.JobOrigin.credential:type_name -> magus.activity.v1alpha1.Credential
+	5,  // 16: magus.job.v1alpha1.JobGateAttempt.attempt:type_name -> magus.job.v1alpha1.JobAttempt
+	4,  // 17: magus.job.v1alpha1.JobEntry.by:type_name -> magus.job.v1alpha1.JobOrigin
+	10, // 18: magus.job.v1alpha1.JobIntegration.gates:type_name -> magus.job.v1alpha1.JobGateStatus
+	16, // 19: magus.job.v1alpha1.JobResult.gate_evidence:type_name -> magus.job.v1alpha1.JobGateEvidence
+	13, // 20: magus.job.v1alpha1.JobOverlap.footprint:type_name -> magus.job.v1alpha1.JobOverlapFootprint
+	25, // 21: magus.job.v1alpha1.JobRun.end_time:type_name -> google.protobuf.Timestamp
+	26, // 22: magus.job.v1alpha1.JobRun.duration:type_name -> google.protobuf.Duration
+	3,  // 23: magus.job.v1alpha1.ListJobsResponse.jobs:type_name -> magus.job.v1alpha1.Job
+	18, // 24: magus.job.v1alpha1.ListJobsResponse.overlaps:type_name -> magus.job.v1alpha1.JobOverlap
+	11, // 25: magus.job.v1alpha1.ListJobsResponse.blocked:type_name -> magus.job.v1alpha1.JobBlock
+	12, // 26: magus.job.v1alpha1.ListJobsResponse.read_only:type_name -> magus.job.v1alpha1.JobReadOnly
+	22, // 27: magus.job.v1alpha1.JobService.ListJobs:input_type -> magus.job.v1alpha1.ListJobsRequest
+	21, // 28: magus.job.v1alpha1.JobService.RunJob:input_type -> magus.job.v1alpha1.RunJobRequest
+	23, // 29: magus.job.v1alpha1.JobService.ListJobs:output_type -> magus.job.v1alpha1.ListJobsResponse
+	2,  // 30: magus.job.v1alpha1.JobService.RunJob:output_type -> magus.job.v1alpha1.RunJobResponse
+	29, // [29:31] is the sub-list for method output_type
+	27, // [27:29] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_magus_job_v1alpha1_job_proto_init() }

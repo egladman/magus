@@ -138,6 +138,10 @@ message Job {
   // features a reader must implement to act on it (see ListJobsResponse.read_only).
   int32 schema_version = 38;
   repeated string requires = 37;
+  // waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
+  // the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
+  // holder's own attempts untouched; this is the second fact beside them.
+  JobIntegration waiter_evidence = 39;
 }
 
 // JobOrigin is who did something to a row, one field per channel, as the activity trail
@@ -161,6 +165,16 @@ message JobAttempt {
   string target = 5;
   string spell = 6;
   bool failed = 7;
+  // attempt_id names this execution alone, where ref may name its step, which a later run of
+  // the same step takes over.
+  string attempt_id = 8;
+  // duration_ms is how long the run took. timestamp_ms is when it ENDED, so the run started at
+  // timestamp_ms - duration_ms.
+  int64 duration_ms = 9;
+  // revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the
+  // tree also held uncommitted changes then, so revision alone does not name what it read.
+  string revision = 10;
+  bool dirty = 11;
 }
 
 // JobGateAttempt is the newest recorded run of one goal's check.
@@ -263,6 +277,9 @@ message JobRelease {
   string path = 1;
   string digest = 2;
   int64 released_at = 3; // unix seconds
+  // revoked is a path taken from a job its holder had taken, by a writer other than that
+  // holder: the orchestrator revoking it rather than the worker giving it up.
+  bool revoked = 4;
 }
 
 // JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
