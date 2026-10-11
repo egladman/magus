@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
@@ -229,7 +230,8 @@ func TestWorkspaceHarnessLoads(t *testing.T) {
 }
 
 func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	writeTestHarness(t, root)
 	result, err := VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
@@ -238,15 +240,16 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	mergeHarness(t, root, "test-host")
 	// The wired commands now have to actually answer, not merely be present: give
 	// them something real to run.
-	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
-	writeStubGuardScript(t, root, "magus-path.buzz", "advise")
+	writeStubGuardScript(w, "magus-command.buzz", "deny")
+	writeStubGuardScript(w, "magus-path.buzz", "advise")
 	result, err = VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 }
 
 func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
   "id": "flat",
@@ -274,7 +277,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	// cursor-hook.buzz's reply dialect is self-contained (see probeEvent), so the
 	// probe only checks that it answers something; magus-checkpoint.buzz renders no
 	// verdict at all and is never probed.
-	writeStubGuardScript(t, root, "cursor-hook.buzz", "ok")
+	writeStubGuardScript(w, "cursor-hook.buzz", "ok")
 	result, err := VerifyHarness(untimedProbes(), root, "flat")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
@@ -340,7 +343,8 @@ func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
 }
 
 func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	registerHarnessSpell(t, "managed", `{
   "schema_version": 2,
   "id": "managed",
@@ -364,7 +368,7 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 
 	// magus-checkpoint.buzz renders no verdict and is never probed; magus-command.buzz
 	// is, so it needs something real behind it now.
-	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
+	writeStubGuardScript(w, "magus-command.buzz", "deny")
 	result, err := VerifyHarness(untimedProbes(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -714,11 +718,10 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 // PlanHarness's own merge mechanics do not need this; only a test that calls
 // VerifyHarness against a command probeHarnessCommands recognizes as guard-shaped
 // does. See harness_probe_test.go for the probe's own tests.
-func writeStubGuardScript(t *testing.T, root, name, output string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "stub-"+name), []byte(output), 0o644))
+func writeStubGuardScript(w *testkit.Workspace, name, output string) {
+	w.Write("stub-"+name, output)
 	const stub = "#!/bin/sh\ncat >/dev/null\nfor a in \"$@\"; do [ -f \"stub-$a\" ] && exec cat \"stub-$a\"; done\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(stub), 0o755))
+	w.Executable("magus", stub)
 }
 
 // writeTestHarness registers the "test-host" fixture as a fake harness spell. root

@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -18,8 +19,7 @@ import (
 // A fixed 3s of its own failed a stand-in shell script on a loaded machine, a hang that was
 // only the machine; and it ignored the one override tests use.
 func TestInterpreterSkewWaitsTheHookBudget(t *testing.T) {
-	slow := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(slow, []byte("#!/bin/sh\nsleep 1\necho 'magus v0.5.0 (abc1234) built 2026-01-01'\n"), 0o755))
+	slow := testkit.NewWorkspace(t).Executable("magus", "#!/bin/sh\nsleep 1\necho 'magus v0.5.0 (abc1234) built 2026-01-01'\n")
 
 	_, skewed := interpreterSkew(t.Context(), slow, "v0.5.0")
 	assert.False(t, skewed, "an answer inside the hook budget is the same build")
@@ -36,12 +36,12 @@ func TestInterpreterSkewWaitsTheHookBudget(t *testing.T) {
 // Advice rather than fail: a build machine runs no hooks and has no ./magus yet, so the
 // state is normal there and only the old ANSWER was wrong.
 func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testing.T) {
-	root := t.TempDir()
-	writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
-	require.NoError(t, os.Remove(filepath.Join(root, "magus")))
+	w := testkit.NewWorkspace(t)
+	writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
+	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}).checkGuardBinary()
+	got := (&runner{ws: rootStubWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}).checkGuardBinary()
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "cannot launch in a live session")
@@ -51,12 +51,12 @@ func TestCheckGuardBinaryAdvisesWhenAWiredCommandNamesAMissingOwnBinary(t *testi
 // The PATH fallback stays healthy for a config that names a bare `magus`, which a magus on
 // PATH does satisfy. Without this the fix would turn every PATH-only checkout red.
 func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T) {
-	root := t.TempDir()
-	writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus buzz -s magus-command.buzz"}]}]}}`)
-	require.NoError(t, os.Remove(filepath.Join(root, "magus")))
+	w := testkit.NewWorkspace(t)
+	writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"magus buzz -s magus-command.buzz"}]}]}}`)
+	require.NoError(t, os.Remove(w.Path("magus")))
 	onPath(t)
 
-	got := (&runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}).checkGuardBinary()
+	got := (&runner{ws: rootStubWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}).checkGuardBinary()
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "no ./magus built")
@@ -66,10 +66,9 @@ func TestCheckGuardBinaryPassesWhenAWiredCommandNamesTheBareBinary(t *testing.T)
 // build ran every hook in a session and rendered no verdict, while this check said
 // "hook would run" it and stopped there.
 func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T) {
-	dir := t.TempDir()
-	stale := filepath.Join(dir, "magus")
-	require.NoError(t, os.WriteFile(stale, []byte("#!/bin/sh\necho 'magus v0.4.3 (abc1234) built 2026-01-01'\n"), 0o755))
-	t.Setenv("PATH", dir)
+	bin := testkit.NewWorkspace(t)
+	stale := fakeMagus(bin, "v0.4.3")
+	t.Setenv("PATH", bin.Root())
 	r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinary()
@@ -84,11 +83,10 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T)
 
 // A binary that cannot say which build it is cannot run the glue either.
 func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T) {
-	root := t.TempDir()
-	bin := filepath.Join(root, "magus")
-	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\nexit 3\n"), 0o755))
+	w := testkit.NewWorkspace(t)
+	bin := w.Executable("magus", "#!/bin/sh\nexit 3\n")
 	withoutPathMagus(t)
-	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
+	r := &runner{ws: rootStubWorkspace{root: w.Root()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
 	got := r.checkGuardBinary()
 
@@ -101,28 +99,26 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T
 // binary the check is allowed to find.
 func onPath(t *testing.T) {
 	t.Helper()
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
-	t.Setenv("PATH", dir)
+	dir := testkit.NewWorkspace(t)
+	dir.Executable("magus", "#!/bin/sh\nexit 0\n")
+	t.Setenv("PATH", dir.Root())
 }
 
-// fakeMagus writes an executable at dir/magus that prints version as `magus version` does.
-func fakeMagus(t *testing.T, dir, version string) string {
-	t.Helper()
-	bin := filepath.Join(dir, "magus")
-	require.NoError(t, os.WriteFile(bin, []byte("#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n"), 0o755))
-	return bin
+// fakeMagus writes an executable magus into w that prints version as `magus version` does.
+func fakeMagus(w *testkit.Workspace, version string) string {
+	return w.Executable("magus", "#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n")
 }
 
 // A call from console/ or docs/, each with a magusfile.buzz and no binary, runs the root's
 // ./magus: the nearest magus.yaml is the root, not the nearest magusfile.
 func TestHookBinaryFromANestedProjectIsTheRootsBinary(t *testing.T) {
-	root := t.TempDir()
-	bin := fakeMagus(t, root, "v0.5.0")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	nested := filepath.Join(root, "console", "src")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	bin := fakeMagus(w, "v0.5.0")
+	w.Write("magus.yaml", "{}\n")
+	nested := w.Path("console", "src")
 	require.NoError(t, os.MkdirAll(nested, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("\n"), 0o644))
+	w.Write("console/magusfile.buzz", "\n")
 	withoutPathMagus(t)
 
 	assert.Equal(t, bin, hookBinaryFrom(nested))
@@ -133,27 +129,28 @@ func TestHookBinaryFromANestedProjectIsTheRootsBinary(t *testing.T) {
 // A worktree nested under another checkout never resolves the parent's binary: its own
 // magus.yaml is the nearest.
 func TestHookBinaryFromAWorktreeNeverClimbsIntoTheParent(t *testing.T) {
-	parent := t.TempDir()
-	fakeMagus(t, parent, "v0.5.0")
-	require.NoError(t, os.WriteFile(filepath.Join(parent, "magus.yaml"), []byte("{}\n"), 0o644))
-	worktree := filepath.Join(parent, ".claude", "worktrees", "job")
+	parent := testkit.NewWorkspace(t)
+	fakeMagus(parent, "v0.5.0")
+	parent.Write("magus.yaml", "{}\n")
+	parent.Write(".claude/worktrees/job/magus.yaml", "{}\n")
+	worktree := parent.Path(".claude", "worktrees", "job")
 	require.NoError(t, os.MkdirAll(filepath.Join(worktree, "console"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(worktree, "magus.yaml"), []byte("{}\n"), 0o644))
 	withoutPathMagus(t)
 
 	assert.Equal(t, "", hookBinaryFrom(filepath.Join(worktree, "console")))
 
-	pathBin := fakeMagus(t, t.TempDir(), "v0.4.3")
+	pathBin := fakeMagus(testkit.NewWorkspace(t), "v0.4.3")
 	t.Setenv("PATH", filepath.Dir(pathBin))
 	assert.Equal(t, pathBin, hookBinaryFrom(filepath.Join(worktree, "console")), "falls to PATH, not to the parent's binary")
 }
 
 // A linked worktree (.git is a file) with no ./magus is an error, whatever PATH holds.
 func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".git"), []byte("gitdir: /elsewhere\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
-	pathBin := fakeMagus(t, t.TempDir(), "v0.5.0")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write(".git", "gitdir: /elsewhere\n")
+	require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
+	pathBin := fakeMagus(testkit.NewWorkspace(t), "v0.5.0")
 	t.Setenv("PATH", filepath.Dir(pathBin))
 	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
@@ -180,12 +177,14 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 // The check resolves the hook from every project directory: one whose hook would run a
 // different build than the one that loaded the tree fails it, naming the directory.
 func TestCheckGuardBinaryFailsWhenAProjectResolvesAnotherBuild(t *testing.T) {
-	root := t.TempDir()
-	fakeMagus(t, root, "v0.5.0")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	stray := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(stray, "magus.yaml"), []byte("{}\n"), 0o644))
-	stale := fakeMagus(t, t.TempDir(), "v0.4.3")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	fakeMagus(w, "v0.5.0")
+	w.Write("magus.yaml", "{}\n")
+	strayWS := testkit.NewWorkspace(t)
+	strayWS.Write("magus.yaml", "{}\n")
+	stray := strayWS.Root()
+	stale := fakeMagus(testkit.NewWorkspace(t), "v0.4.3")
 	t.Setenv("PATH", filepath.Dir(stale))
 	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 	projects := []*types.Project{{Path: ".", Dir: root}, {Path: "stray", Dir: stray}}
@@ -201,11 +200,13 @@ func TestCheckGuardBinaryFailsWhenAProjectResolvesAnotherBuild(t *testing.T) {
 
 // No magus for a project directory is a failure, not a pass: nothing judges calls there.
 func TestCheckGuardBinaryFailsWhenAProjectResolvesNoBinary(t *testing.T) {
-	root := t.TempDir()
-	fakeMagus(t, root, "v0.5.0")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	stray := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(stray, "magus.yaml"), []byte("{}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	fakeMagus(w, "v0.5.0")
+	w.Write("magus.yaml", "{}\n")
+	strayWS := testkit.NewWorkspace(t)
+	strayWS.Write("magus.yaml", "{}\n")
+	stray := strayWS.Root()
 	withoutPathMagus(t)
 	r := &runner{ws: rootStubWorkspace{root: root}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 

@@ -19,18 +19,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// tmpLedger isolates the real user state directory behind XDG_STATE_HOME, the knob
-// internal/ledger's tests and this package's other tests use, and clears BAGGAGE so a
-// test run under a leased worker grades the row it planted rather than that worker's.
+// tmpLedger isolates the real user state directory and BAGGAGE, so a test run under a
+// leased worker grades the row it planted rather than that worker's.
 func tmpLedger(t *testing.T) (cacheDir, root string, store *job.Store) {
 	t.Helper()
+	root = testkit.NewWorkspace(t).Root()
+	cacheDir, store = ledgerIn(t, root)
+	return cacheDir, root, store
+}
+
+// ledgerIn is tmpLedger over a root the caller already has.
+func ledgerIn(t *testing.T, root string) (cacheDir string, store *job.Store) {
+	t.Helper()
 	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, "")
-	cacheDir, root = t.TempDir(), t.TempDir()
+	cacheDir = t.TempDir()
 	// Pinned unbound: these rows are the orchestrator's, and resolving the actor from
 	// the environment would make every write depend on whether this run is leased.
 	actor := job.Actor{}
-	return cacheDir, root, job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
+	return cacheDir, job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Actor: &actor})
 }
 
 // bindCheckout records id as the checkout's binding, as the guard does when a caller whose
@@ -51,9 +57,9 @@ func seed(t *testing.T, s *job.Store, row types.Job) types.Job {
 
 // wireGuardHook plants the one host hook config shape guardHookConfigs looks for, so a
 // case can separate "bound and registered" from "bound, registered and judged".
-func wireGuardHook(t *testing.T, root string) {
+func wireGuardHook(t *testing.T, w *testkit.Workspace) {
 	t.Helper()
-	writeCheckpointHarness(t, root, guardedHarnessConfig())
+	writeCheckpointHarness(t, w, guardedHarnessConfig())
 }
 
 func TestBoundLeasePassesWithNoLeaseBound(t *testing.T) {
@@ -189,9 +195,9 @@ func TestBoundLeaseFailsOnALiveRowWithNoRegisteredBase(t *testing.T) {
 }
 
 func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
-	cacheDir, root := registeredLease(t, "adj/unwired")
+	cacheDir, w := registeredLease(t, "adj/unwired")
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root)
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, w.Root())
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -202,10 +208,10 @@ func TestBoundLeaseAdvisesWhenNothingInvokesTheGuard(t *testing.T) {
 }
 
 func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
-	cacheDir, root := registeredLease(t, "adj/enforcing")
-	wireGuardHook(t, root)
+	cacheDir, w := registeredLease(t, "adj/enforcing")
+	wireGuardHook(t, w)
 
-	got := checkBoundLease(harnessProbeCtx(), cacheDir, root, "test-host")
+	got := checkBoundLease(harnessProbeCtx(), cacheDir, w.Root(), "test-host")
 
 	require.Equal(t, types.Check{
 		Name:    "bound-lease",
@@ -217,14 +223,15 @@ func TestBoundLeasePassesOnALiveRegisteredRowAHostHookJudges(t *testing.T) {
 // registeredLease seeds a live registered row and binds the checkout to it afterwards,
 // which is the state every leg past the ledger reads. Seeding first keeps the writes the
 // orchestrator's however the store resolves its actor.
-func registeredLease(t *testing.T, id string) (cacheDir, root string) {
+func registeredLease(t *testing.T, id string) (cacheDir string, w *testkit.Workspace) {
 	t.Helper()
-	cacheDir, root, store := tmpLedger(t)
+	w = testkit.NewWorkspace(t)
+	cacheDir, store := ledgerIn(t, w.Root())
 	seed(t, store, types.Job{ID: id, State: types.StateRunning, Checkpoint: "abc123"})
 	_, err := store.Exec(context.Background(), id, "abc123")
 	require.NoError(t, err)
 	bindCheckout(t, cacheDir, id)
-	return cacheDir, root
+	return cacheDir, w
 }
 
 func TestCheckJobTreeEndsOrphansAndFlagsStaleJobs(t *testing.T) {

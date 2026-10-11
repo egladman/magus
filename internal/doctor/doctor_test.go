@@ -45,13 +45,9 @@ func TestCheckLanguageCoverage(t *testing.T) {
 func TestCheckCITarget(t *testing.T) {
 	// projectWith writes name→body magusfile(s) into a fresh dir and returns it.
 	projectWith := func(files map[string]string) *types.Project {
-		dir := t.TempDir()
-		for name, body := range files {
-			p := filepath.Join(dir, name)
-			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-			writeFile(t, p, body)
-		}
-		return &types.Project{Dir: dir}
+		w := testkit.NewWorkspace(t)
+		w.WriteTree(files)
+		return &types.Project{Dir: w.Root()}
 	}
 
 	t.Run("no projects skipped", func(t *testing.T) {
@@ -94,9 +90,9 @@ func TestCheckCITarget(t *testing.T) {
 // TestCheckCITarget_FailDetails pins that the failure points the user at how to
 // define ci and references the MGS1001 doc.
 func TestCheckCITarget_FailDetails(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "magusfile.buzz"), "import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n")
-	got := (&runner{}).checkCITarget([]*types.Project{{Dir: dir}})
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\nexport fun build(ctx: magus\\Context, _a: [str]) > void {}\n")
+	got := (&runner{}).checkCITarget([]*types.Project{{Dir: w.Root()}})
 	require.Equal(t, types.CheckFail, got.Status)
 	joined := strings.Join(got.Details, "\n")
 	assert.Contains(t, joined, "ctx.needs", "details should show how to define ci")
@@ -282,8 +278,9 @@ func TestCheckBespokePhaseFragmentTargets(t *testing.T) {
 
 func TestCheckUnreachedFootprintDecls(t *testing.T) {
 	run := func(magusfile string) types.Check {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile(magusfile)
+		root := w.Root()
 		r := &runner{root: root}
 		return r.checkUnreachedFootprintDecls([]*types.Project{{Path: ".", Dir: root}})
 	}
@@ -304,8 +301,9 @@ func TestCheckUnreachedFootprintDecls(t *testing.T) {
 // contacting the provider, so a check that cannot fail here is worth nothing.
 func TestCheckCacheableSecretReads(t *testing.T) {
 	run := func(magusfile string, policies map[string]types.Target) types.Check {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile(magusfile)
+		root := w.Root()
 		r := &runner{root: root}
 		return r.checkCacheableSecretReads([]*types.Project{{Path: ".", Dir: root, TargetPolicies: policies}})
 	}
@@ -350,8 +348,9 @@ func TestCheckCacheableExternalOps(t *testing.T) {
 			}))
 	}
 	run := func(magusfile string, sp *spells.Spell, policies map[string]types.Target) types.Check {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile(magusfile)
+		root := w.Root()
 		r := &runner{root: root}
 		return r.checkCacheableExternalOps([]*types.Project{{
 			Path: ".", Dir: root, TargetPolicies: policies, ResolvedSpells: []*spells.Spell{sp},
@@ -521,8 +520,9 @@ func TestCheckCharmTargetCollision(t *testing.T) {
 
 func TestCheckHasCharmTypos(t *testing.T) {
 	run := func(body string) types.Check {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(body), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile(body)
+		root := w.Root()
 		r := &runner{root: root}
 		return r.checkHasCharmTypos([]*types.Project{{Path: ".", Dir: root}})
 	}
@@ -664,34 +664,34 @@ func TestCheckConfigFile(t *testing.T) {
 	})
 
 	t.Run("valid config", func(t *testing.T) {
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "magus.yaml"), "log:\n  format: json\n")
-		r := &runner{root: root}
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "log:\n  format: json\n")
+		r := &runner{root: w.Root()}
 		got := r.checkConfigFile()
 		assert.Equal(t, types.CheckOK, got.Status, got.Details)
 	})
 
 	t.Run("unknown key", func(t *testing.T) {
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "magus.yaml"), "chace:\n  size_mb: 100\n")
-		r := &runner{root: root}
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "chace:\n  size_mb: 100\n")
+		r := &runner{root: w.Root()}
 		got := r.checkConfigFile()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.NotEmpty(t, got.Details, "expected at least one detail line")
 	})
 
 	t.Run("invalid enum value", func(t *testing.T) {
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, "magus.yaml"), "cache:\n  mode: turbo\n")
-		r := &runner{root: root}
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "cache:\n  mode: turbo\n")
+		r := &runner{root: w.Root()}
 		got := r.checkConfigFile()
 		assert.Equal(t, types.CheckFail, got.Status)
 	})
 
 	t.Run("dotted filename", func(t *testing.T) {
-		root := t.TempDir()
-		writeFile(t, filepath.Join(root, ".magus.yaml"), "log:\n  format: text\n")
-		r := &runner{root: root}
+		w := testkit.NewWorkspace(t)
+		w.Write(".magus.yaml", "log:\n  format: text\n")
+		r := &runner{root: w.Root()}
 		got := r.checkConfigFile()
 		assert.Equal(t, types.CheckOK, got.Status, got.Details)
 	})
@@ -744,65 +744,38 @@ func TestCheckVCSBaseRef(t *testing.T) {
 	})
 
 	t.Run("valid HEAD ref", func(t *testing.T) {
-		root := makeGitRepo(t)
+		root := testkit.NewRepo(t, map[string]string{"README": "hello"}).Root()
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
 		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
 		assert.Equal(t, types.CheckOK, got.Status, got.Details)
 	})
 
 	t.Run("bogus ref fails", func(t *testing.T) {
-		root := makeGitRepo(t)
+		root := testkit.NewRepo(t, map[string]string{"README": "hello"}).Root()
 		t.Setenv("MAGUS_VCS_BASE_REF", "refs/does/not/exist")
 		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
 		assert.Equal(t, types.CheckFail, got.Status)
 	})
 
 	t.Run("detached HEAD ok when base_ref resolves", func(t *testing.T) {
-		root := makeGitRepo(t)
-		runCmd(t, root, "git", "checkout", "--detach", "HEAD")
+		repo := testkit.NewRepo(t, map[string]string{"README": "hello"})
+		repo.Git("checkout", "--detach", "HEAD")
 		t.Setenv("MAGUS_VCS_BASE_REF", "HEAD")
-		got := checkVCSBaseRef(context.Background(), root, types.VCSOptions{})
+		got := checkVCSBaseRef(context.Background(), repo.Root(), types.VCSOptions{})
 		assert.Equal(t, types.CheckOK, got.Status)
 	})
 }
 
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	require.NoErrorf(t, os.WriteFile(path, []byte(content), 0o644), "writeFile %s", path)
-}
-
-func makeGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	runCmd(t, dir, "git", "init", "-b", "main")
-	runCmd(t, dir, "git", "config", "user.email", "test@example.com")
-	runCmd(t, dir, "git", "config", "user.name", "Test")
-	runCmd(t, dir, "git", "config", "commit.gpgsign", "false")
-	runCmd(t, dir, "git", "config", "tag.gpgsign", "false")
-	writeFile(t, filepath.Join(dir, "README"), "hello")
-	runCmd(t, dir, "git", "add", ".")
-	runCmd(t, dir, "git", "commit", "-m", "initial")
-	return dir
-}
-
-func runCmd(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "run %v\n%s", args, out)
-}
-
 func TestCheckSymlinks(t *testing.T) {
 	t.Run("no symlinks", func(t *testing.T) {
-		root := canonicalTempDir(t)
+		root := testkit.NewWorkspace(t).Root()
 		mustMkdir(t, filepath.Join(root, "api"))
 		got := checkSymlinks(root)
 		assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	})
 
 	t.Run("in-tree symlink is ok", func(t *testing.T) {
-		root := canonicalTempDir(t)
+		root := testkit.NewWorkspace(t).Root()
 		mustMkdir(t, filepath.Join(root, "api"))
 		mustSymlink(t, "api", filepath.Join(root, "alias"))
 		got := checkSymlinks(root)
@@ -810,36 +783,29 @@ func TestCheckSymlinks(t *testing.T) {
 	})
 
 	t.Run("escaping symlink fails", func(t *testing.T) {
-		root := canonicalTempDir(t)
-		outside := canonicalTempDir(t)
+		root := testkit.NewWorkspace(t).Root()
+		outside := testkit.NewWorkspace(t).Root()
 		mustSymlink(t, outside, filepath.Join(root, "escape"))
 		got := checkSymlinks(root)
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
 
 	t.Run("dangling symlink to outside fails", func(t *testing.T) {
-		root := canonicalTempDir(t)
+		root := testkit.NewWorkspace(t).Root()
 		mustSymlink(t, "../../nonexistent", filepath.Join(root, "escape"))
 		got := checkSymlinks(root)
 		assert.Equal(t, types.CheckFail, got.Status, got.Message)
 	})
 
 	t.Run("symlinks inside ignore dirs are skipped", func(t *testing.T) {
-		root := canonicalTempDir(t)
-		outside := canonicalTempDir(t)
+		root := testkit.NewWorkspace(t).Root()
+		outside := testkit.NewWorkspace(t).Root()
 		gitDir := filepath.Join(root, ".git")
 		mustMkdir(t, gitDir)
 		mustSymlink(t, outside, filepath.Join(gitDir, "escape"))
 		got := checkSymlinks(root)
 		assert.Equal(t, types.CheckOK, got.Status, "ignore dir not scanned: "+got.Message)
 	})
-}
-
-func canonicalTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err, "eval-symlinks temp dir")
-	return dir
 }
 
 func mustMkdir(t *testing.T, p string) {

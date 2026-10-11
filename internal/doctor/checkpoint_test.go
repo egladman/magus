@@ -3,13 +3,13 @@ package doctor
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +34,7 @@ const doctorHarnessDescriptorJSON = `{
 // fake ./magus every caller of it needs. Callers must pass "test-host" as one of
 // the wired ids the check under test resolves against; nothing discovers it
 // automatically any more.
-func writeDoctorHarness(t *testing.T, root string) {
+func writeDoctorHarness(t *testing.T, w *testkit.Workspace) {
 	t.Helper()
 	var descriptor agent.HarnessDescriptor
 	require.NoError(t, json.Unmarshal([]byte(doctorHarnessDescriptorJSON), &descriptor))
@@ -43,15 +43,14 @@ func writeDoctorHarness(t *testing.T, root string) {
 	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every
 	// caller of guardedHarnessConfig() references this exact script name.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus-command-stand-in.sh"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	w.Executable("magus-command-stand-in.sh", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 	// The probe also checks for AN executable magus before running anything (see
 	// checkProbeEnvironment), purely as a presence gate: it never actually
 	// invokes this file for a "sh magus-command-stand-in.sh" entry, which resolves
-	// against root on its own. Written only if a caller (writeGuardProbeStub, for
-	// the real guard probe) has not already planted a specific one here.
-	magusStub := filepath.Join(root, "magus")
-	if _, err := os.Stat(magusStub); os.IsNotExist(err) {
-		require.NoError(t, os.WriteFile(magusStub, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	// against root on its own. Written only if a caller (a guard probe stub) has not
+	// already planted a specific one here.
+	if _, err := os.Stat(w.Path("magus")); os.IsNotExist(err) {
+		w.Executable("magus", "#!/bin/sh\nexit 0\n")
 	}
 }
 
@@ -61,10 +60,10 @@ func harnessProbeCtx() context.Context {
 	return agent.ContextWithProbeTimeout(context.Background(), testProbeBudget)
 }
 
-func writeCheckpointHarness(t *testing.T, root, body string) {
+func writeCheckpointHarness(t *testing.T, w *testkit.Workspace, body string) {
 	t.Helper()
-	writeDoctorHarness(t, root)
-	plant(t, root, "host/hooks.json", body)
+	writeDoctorHarness(t, w)
+	w.Write("host/hooks.json", body)
 }
 
 func guardedHarnessConfig() string {
@@ -74,21 +73,21 @@ func guardedHarnessConfig() string {
 // The case this check exists for: a host wired for the guard months ago, judging
 // correctly, and silently recording nothing about where work stopped.
 func TestCheckpointWiringAdvisesAGuardedHostThatRecordsNothing(t *testing.T) {
-	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig())
+	w := testkit.NewWorkspace(t)
+	writeCheckpointHarness(t, w, guardedHarnessConfig())
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
 }
 
 func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
-	writeCheckpointHarness(t, root, body)
+	writeCheckpointHarness(t, w, body)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "1 of 1")
@@ -97,11 +96,11 @@ func TestCheckpointWiringPassesOnAHostThatRecordsOne(t *testing.T) {
 // A plugin that calls the command directly counts: the shipped script exists so a host
 // does not have to reimplement the binary lookup, not as the only way in.
 func TestCheckpointWiringAcceptsTheCommandWithoutTheTemplate(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	body := strings.TrimSuffix(guardedHarnessConfig(), "}") + `,"checkpoint":"magus session checkpoint"}`
-	writeCheckpointHarness(t, root, body)
+	writeCheckpointHarness(t, w, body)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status)
 }
@@ -116,11 +115,11 @@ func TestCheckpointWiringStaysQuietWithNoHostAtAll(t *testing.T) {
 }
 
 func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T) {
-	root := t.TempDir()
-	writeDoctorHarness(t, root)
-	plant(t, root, "host/hooks.json", guardedHarnessConfig())
+	w := testkit.NewWorkspace(t)
+	writeDoctorHarness(t, w)
+	w.Write("host/hooks.json", guardedHarnessConfig())
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckAdvice, got.Status)
 	assert.Contains(t, got.Message, "none recording a checkpoint")
@@ -129,25 +128,25 @@ func TestCheckpointWiringReportsGuardedHostMissingManagedCheckpoint(t *testing.T
 // A config that never mentions magus is somebody else's, and reading it as an unrecording
 // magus host would advise every repository with a Claude Code settings file.
 func TestCheckpointWiringFollowsNamedGuardScripts(t *testing.T) {
-	root := t.TempDir()
-	writeDoctorHarness(t, root)
-	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}],"stop":[{"commands":[{"type":"command","command":"magus buzz -s docs/agents/cursor-hook.buzz -- --agent-name cursor"}]}]}}`)
+	w := testkit.NewWorkspace(t)
+	writeDoctorHarness(t, w)
+	w.Write("host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"sh magus-command-stand-in.sh"}]}],"stop":[{"commands":[{"type":"command","command":"magus buzz -s docs/agents/cursor-hook.buzz -- --agent-name cursor"}]}]}}`)
 	// The call as the shipped Cursor glue spells it: an argv list, never the words
 	// "session checkpoint" side by side.
-	plant(t, root, "docs/agents/cursor-hook.buzz", `proc\exec(bin, args: ["session", "checkpoint", "--agent-name", agent], opts: {"quiet": true});`+"\n")
+	w.Write("docs/agents/cursor-hook.buzz", `proc\exec(bin, args: ["session", "checkpoint", "--agent-name", agent], opts: {"quiet": true});`+"\n")
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	assert.Equal(t, types.CheckOK, got.Status, got.Message)
 	assert.Contains(t, got.Message, "1 of 1")
 }
 
 func TestCheckpointWiringIgnoresAConfigThatIsNotMagus(t *testing.T) {
-	root := t.TempDir()
-	writeDoctorHarness(t, root)
-	plant(t, root, "host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./scripts/lint.sh"}]}]}}`)
+	w := testkit.NewWorkspace(t)
+	writeDoctorHarness(t, w)
+	w.Write("host/hooks.json", `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./scripts/lint.sh"}]}]}}`)
 
-	got := checkCheckpointWiring(harnessProbeCtx(), root, "test-host")
+	got := checkCheckpointWiring(harnessProbeCtx(), w.Root(), "test-host")
 
 	require.Equal(t, types.CheckOK, got.Status)
 	assert.Contains(t, got.Message, "skipped")
