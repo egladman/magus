@@ -1009,30 +1009,62 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	require.Len(t, rows, 1)
 }
 
+// denyBuildFromElsewhereRule is a magusfile whose command rule denies a worker the go-build
+// target only when the call runs in a directory named "elsewhere": a stand-in for any answer
+// that depends on where the guard is asked from.
+const denyBuildFromElsewhereRule = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    foreach (c in req.commands) {
+        if (req.role == "worker" and c.args.indexOf("go-build") != null and req.dir.indexOf("elsewhere") != null) {
+            return magus\guard.deny("judged from the wrong directory");
+        }
+    }
+    return magus\guard.allow();
+});
+`
+
 // The grade follows the workspace the store was opened for, not the process's working
 // directory: a daemon serving magus\job.put runs from somewhere else, and a command graded
-// there would be judged for the wrong checkout.
+// there would be judged for the wrong checkout. The rule answers differently from the
+// "elsewhere" directory, so a grade that took the process cwd for the call's directory
+// would deny the check.
 func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := initGitRepo(t)
-	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"} {
+	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"} {
 		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
 	}
 	runGit(t, root, "add", "-A")
 	runGit(t, root, "commit", "-q", "-m", "init")
 	resetWorkspaceMemo(t)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub"), 0o755))
+	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
+	require.NoError(t, os.MkdirAll(elsewhere, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(elsewhere, "magus.yaml"), []byte("{}\n"), 0o644))
 
-	for name, cwd := range map[string]string{"the root": root, "a subdirectory": filepath.Join(root, "sub"), "outside any workspace": t.TempDir()} {
+	// The control: asked without a Dir, from elsewhere, the same request is denied. This is
+	// the grade gradeCheck would reach with no Dir, so the cases below fail without it.
+	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
+		t.Chdir(elsewhere)
+		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
+			Input:      checkCommandPrefix + row.Check.String(),
+			DryRun:     true,
+			Lease:      row.ID,
+			PendingRow: &row,
+		})
+		assert.Equal(t, string(types.GuardDeny), unplaced.Decision)
+		assert.Contains(t, unplaced.Reason, "judged from the wrong directory")
+	})
+
+	for name, cwd := range map[string]string{"the root": root, "elsewhere": elsewhere} {
 		t.Run(name, func(t *testing.T) {
 			t.Chdir(cwd)
 			verdict, notGraded := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
 			assert.Empty(t, notGraded)
-			assert.True(t, verdict.Denied, "the worker is denied the check wherever the process runs")
-			assert.Contains(t, verdict.Reason, "a worker does not build magus")
+			assert.False(t, verdict.Denied, "the check is judged from the workspace, wherever the process runs: %s", verdict.Reason)
 		})
 	}
 }
