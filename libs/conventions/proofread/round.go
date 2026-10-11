@@ -18,8 +18,13 @@ func WilsonLower(correct, n int, z float64) float64 {
 		return 0
 	}
 
+	return wilson(float64(correct)/float64(n), n, z)
+}
+
+// wilson is the lower end of the Wilson score interval on a proportion p
+// observed over n > 0 trials, at the normal quantile z.
+func wilson(p float64, n int, z float64) float64 {
 	nf := float64(n)
-	p := float64(correct) / nf
 	z2 := z * z
 	center := p + z2/(2*nf)
 	margin := z * math.Sqrt(p*(1-p)/nf+z2/(4*nf*nf))

@@ -7,7 +7,6 @@ import (
 	"hash/fnv"
 	"io/fs"
 	"maps"
-	"math"
 	"path"
 	"slices"
 	"strconv"
@@ -411,13 +410,7 @@ const z95 = 1.959963984540054
 
 // wilsonLower is the lower end of the Wilson score interval at 95% on a
 // proportion p observed over n trials, n > 0.
-func wilsonLower(p float64, n int) float64 {
-	nf, z2 := float64(n), z95*z95
-	center := p + z2/(2*nf)
-	margin := z95 * math.Sqrt(p*(1-p)/nf+z2/(4*nf*nf))
-
-	return (center - margin) / (1 + z2/nf)
-}
+func wilsonLower(p float64, n int) float64 { return wilson(p, n, z95) }
 
 // The precision gates of the proofread method: a rule ships advise once at
 // least GateFirings of its firings are labeled and the Wilson 95% lower bound

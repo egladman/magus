@@ -113,7 +113,7 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 - CORRECT: list items or paragraphs of an agent reply that open with a bold label, turning points into fields of a form (`**Cause:**`, `**Fix:**`).
 - WRONG: a bold UI name, a defined term or emphasis inside a running sentence; a bold word in the middle of a line; bold inside a table cell.
 - Known false-positive shapes: bold for emphasis in a sentence. A bold lead that is itself a full sentence of the point is CORRECT when the bold part reads as a field name followed by a value.
-- CORRECT example: "- **Cause:** the spool lock is held. - **Fix:** drop it before the retry."
+- CORRECT example: `- **Cause:** the spool lock is held. - **Fix:** drop it before the retry.`
 - WRONG example: "Press **Rebuild** to clear the parser cache." A UI name.
 
 ### buzzword (PRF4006)
@@ -146,11 +146,11 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 
 ### changelog-heading (PRF1030)
 
-- Catches: a changelog version heading that is not "## [version] - date" or "## [Unreleased]"
+- Catches: a changelog version heading that is not `## [version] - date` or `## [Unreleased]`
 - CORRECT: a version heading in another shape: a version without brackets, a missing date, a different date shape, or a heading with another word in it.
 - WRONG: the heading is not a version heading (a group heading, a fragment title, a heading inside a quoted entry), or the match is inside a code fence. A leading "v" inside the brackets follows the heading shape and is WRONG when the message objects only to the brackets or the date; label by what the message says.
 - Known false-positive shapes: a fragment under `changes/unreleased/` has no version heading and is not judged by it; "## [Unreleased]" is correct as written.
-- CORRECT example: "## 2.7.0 (2031)" where "## [2.7.0] - 2031-04-09" is wanted.
+- CORRECT example: `## 2.7.0 (2031)` where `## [2.7.0] - 2031-04-09` is wanted.
 - WRONG example: "### Fixed", a group heading, not a version.
 
 ### chatbot (PRF4004)

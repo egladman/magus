@@ -29,12 +29,12 @@ You need the `proofread` binary from this repository
 Round data never goes into git. It sits under `$XDG_CACHE_HOME/proofread/calibration/`
 (`~/.cache/proofread/calibration/` when `XDG_CACHE_HOME` is unset):
 
-| Path            | Holds                                                                     |
-| --------------- | ------------------------------------------------------------------------- |
-| `aidev/`        | the AIDev export the sources are cut from                                 |
-| `sources/`      | the JSON-lines sources you build in step 1                                |
-| `labels/roundN` | one round: candidates, counts, freeze record, guideline, labels, scores  |
-| `sealed/`       | held-out sets for confirmatory rounds that no tuner may read              |
+| Path            | Holds                                                                   |
+| --------------- | ----------------------------------------------------------------------- |
+| `aidev/`        | the AIDev export the sources are cut from                               |
+| `sources/`      | the JSON-lines sources you build in step 1                              |
+| `labels/roundN` | one round: candidates, counts, freeze record, guideline, labels, scores |
+| `sealed/`       | held-out sets for confirmatory rounds that no tuner may read            |
 
 Git holds what is not third-party text: the guideline at
 `libs/conventions/proofread/testdata/guideline.md` and one record of counts and scores
@@ -169,8 +169,8 @@ you promote it.
 
 ## 8. Record the round
 
-Commit a record of counts and scores, with no text, as
-`libs/conventions/proofread/testdata/rounds/round5.json`:
+Commit a record of counts and scores, with no text, as `round<N>.json` in
+`libs/conventions/proofread/testdata/rounds/`, N the round's number:
 
 ```sh
 cd "$C/labels/round5"
@@ -205,7 +205,7 @@ a rule's failures, but it never again supports a promotion.
 
 ## Reproduce a past round
 
-Each record under `testdata/rounds/` names its rule commit, its seed and its sources, or
+Each record under `libs/conventions/proofread/testdata/rounds/` names its rule commit, its seed and its sources, or
 says `unrecorded` where the round kept no such fact.
 
 1. Check out the rule commit in a worktree and build `proofread` there.

@@ -302,7 +302,7 @@ func (c *sampleConfig) resolve(rulesList, decisionsPath, kindName string, round 
 
 		n, err := strconv.Atoi(digits)
 		if !named || err != nil || n < 1 {
-			return fmt.Errorf("-out %s is not named round<N>; pass -round", c.outDir)
+			return fmt.Errorf("-out %s is not named round<N>, so pass -round", c.outDir)
 		}
 
 		c.round = n
@@ -313,7 +313,7 @@ func (c *sampleConfig) resolve(rulesList, decisionsPath, kindName string, round 
 	for _, arg := range sources {
 		s := parseSource(arg)
 		if names[s.Name] {
-			return fmt.Errorf("two sources are named %q; name one with NAME=PATH", s.Name)
+			return fmt.Errorf("two sources are named %q, so name one with NAME=PATH", s.Name)
 		}
 
 		names[s.Name] = true
@@ -472,7 +472,7 @@ func (c *sampleConfig) sample() (*roundCounts, error) {
 func refuseResample(dir string) error {
 	for _, name := range []string{freezeFile, candidatesFile, labelsAFile, labelsBFile, adjudicatedFile} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return fmt.Errorf("%s already holds %s; a round is drawn once, so start a new round directory", dir, name)
+			return fmt.Errorf("%s already holds %s, and a round is drawn once: start a new round directory", dir, name)
 		}
 	}
 
@@ -1447,13 +1447,13 @@ func runRoundFreeze(args []string, stdout, stderr io.Writer) int {
 func freeze(dir, guidelinePath, purpose string, g gates) (*freezeRecord, error) {
 	for _, name := range []string{freezeFile, labelsAFile, labelsBFile, adjudicatedFile} {
 		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
-			return nil, fmt.Errorf("%s already holds %s; a round is frozen once, before anyone labels it", dir, name)
+			return nil, fmt.Errorf("%s already holds %s, and a round is frozen once, before anyone labels it", dir, name)
 		}
 	}
 
 	var counts roundCounts
 	if err := readJSONFile(filepath.Join(dir, countsFile), &counts); err != nil {
-		return nil, fmt.Errorf("%w; run round sample first", err)
+		return nil, fmt.Errorf("run round sample first: %w", err)
 	}
 
 	head, err := gitOutput("rev-parse", "HEAD")
@@ -1468,7 +1468,7 @@ func freeze(dir, guidelinePath, purpose string, g gates) (*freezeRecord, error) 
 	}
 
 	if counts.RuleFilesDirty || counts.ToolCommit == "unknown" {
-		return nil, errors.New("the sample was drawn from rule files no commit holds; draw it again from a clean tree")
+		return nil, errors.New("the sample was drawn from rule files no commit holds, so draw it again from a clean tree")
 	}
 
 	if moved, err := gitOutput(append([]string{"diff", "--name-only", counts.ToolCommit, "HEAD", "--"}, rulePathspecs...)...); err != nil {
@@ -1679,8 +1679,8 @@ func checkFrozen(dir string, fr *freezeRecord) error {
 	}
 
 	if len(changed) > 0 {
-		return fmt.Errorf("round %d is void: the rule files changed since its rule commit %s: %s; "+
-			"pass -replay only to reproduce its numbers", fr.Round, fr.RuleCommit, strings.Join(changed, ", "))
+		return fmt.Errorf("round %d is void, since the rule files changed after its rule commit %s (%s), "+
+			"and -replay only reproduces its numbers", fr.Round, fr.RuleCommit, strings.Join(changed, ", "))
 	}
 
 	if fr.Guideline == nil {
@@ -1729,10 +1729,10 @@ func scoreRule(rule string, cands []candidate, a, b map[string]labelRow, final m
 		}
 	}
 
-	rs := &ruleScore{tally: tallyOf(mine, a, b, final, g), BySource: map[string]tally{}, SpotCheck: []string{}}
+	rs := &ruleScore{tally: tallyCandidates(mine, a, b, final, g), BySource: map[string]tally{}, SpotCheck: []string{}}
 
 	for src, cs := range bySource {
-		t := tallyOf(cs, a, b, final, g)
+		t := tallyCandidates(cs, a, b, final, g)
 		rs.BySource[src] = t
 
 		if t.N < g.Source.MinFirings || t.WilsonLB == nil {
@@ -1754,7 +1754,7 @@ func scoreRule(rule string, cands []candidate, a, b map[string]labelRow, final m
 	return rs
 }
 
-func tallyOf(cs []candidate, a, b map[string]labelRow, final map[string]string, g gates) tally {
+func tallyCandidates(cs []candidate, a, b map[string]labelRow, final map[string]string, g gates) tally {
 	t := tally{N: len(cs)}
 	units := make([][]string, 0, len(cs))
 
@@ -1940,7 +1940,7 @@ func readFreeze(p string) (*freezeRecord, error) {
 	}
 
 	if err := readJSONFile(p, &raw); err != nil {
-		return nil, fmt.Errorf("%w; a round is scored only once frozen", err)
+		return nil, fmt.Errorf("a round is scored only once frozen: %w", err)
 	}
 
 	fr := raw.freezeRecord
@@ -2033,7 +2033,7 @@ func gitOutput(args ...string) (string, error) {
 
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("git %s (%s): %w", strings.Join(args, " "), strings.TrimSpace(stderr.String()), err)
 	}
 
 	return strings.TrimSpace(string(out)), nil
