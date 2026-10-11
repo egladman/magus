@@ -50,7 +50,10 @@ var densityTexts = map[Rule]ruleText{
 			"measured 60.0% (24 of 40, lower bound 0.45); its wrong firings counted a coding agent's quoted " +
 			"prompt and pasted summaries, so those are blanked with their words, and nouns, so an -ing word " +
 			"opening a bare item of a series (\", logging methods, and\"), the subject of a verb (\", caching " +
-			"is\") or a bold label is no longer counted.",
+			"is\") or a bold label is no longer counted. Labeling round 6 measured 82.5% (33 of 40, lower bound " +
+			"0.68). Six of its seven wrong firings counted an adjective before its noun (\"existing code\", " +
+			"\"outgoing calls\"), a gerund opening the main clause after an opening element (\"Currently, " +
+			"setting X behaves\") or an item of a series of -ing topics, which are no longer counted.",
 	},
 	RuleNominalizations: {
 		code:      "PRF4021",
@@ -167,10 +170,6 @@ func participleClause(text string, from, to int) bool {
 		return false
 	}
 
-	if strings.HasSuffix(prevWord(text, from), "ing") {
-		return false
-	}
-
 	rest := strings.TrimLeft(text[to:], " ")
 	if rest == "" || strings.ContainsRune(",.;:)!?", rune(rest[0])) {
 		return false
@@ -181,7 +180,141 @@ func participleClause(text string, from, to int) bool {
 		return false
 	}
 
-	return !gerundSubject(rest) && !listedNoun(text, from, to)
+	comma := strings.LastIndexByte(text[:from], ',')
+
+	return !gerundSubject(rest) && !attributive(word, rest) && !opensMainClause(text, comma, to) &&
+		!listedNoun(text, from, to) && !parallelItem(text, comma, to)
+}
+
+// attributiveOnly are -ing words of verbs that take no object, so a noun
+// right after one is the noun it modifies: "existing code", "outgoing calls".
+var attributiveOnly = wordSet("existing", "preexisting", "coexisting", "outgoing", "incoming", "upcoming",
+	"ongoing", "underlying", "corresponding", "resulting", "occurring", "recurring", "working", "competing",
+	"conflicting", "differing", "lingering", "dangling")
+
+// notNouns are words after an -ing word that open no noun phrase:
+// prepositions and adverbs objectWords leaves out ("working around").
+var notNouns = wordSet("and", "or", "but", "around", "through", "across", "without", "against", "via", "under",
+	"after", "before", "between", "within", "toward", "towards", "alongside", "behind", "like", "together",
+	"again", "alone", "fine", "well", "still", "now", "too", "here", "there", "where", "when", "while")
+
+// attributive reports whether word, an -ing word of a verb that takes no
+// object, is followed by a bare noun it modifies rather than a phrase of its
+// own: "existing code unchanged", but "working around the race".
+func attributive(word, rest string) bool {
+	if !attributiveOnly[strings.ToLower(word)] {
+		return false
+	}
+
+	next := phraseWords(rest, 1)
+	if len(next) == 0 {
+		return false
+	}
+
+	return !objectWords[next[0]] && !notNouns[next[0]] && !strings.HasSuffix(next[0], "ly")
+}
+
+// introWords open an element that leads a sentence into its main clause: a
+// subordinate clause ("when the dialog opens") or a prepositional phrase ("on
+// Windows").
+var introWords = wordSet("when", "whenever", "if", "unless", "once", "after", "before", "since", "because",
+	"while", "although", "though", "until", "as", "where", "in", "on", "at", "for", "with", "without",
+	"during", "from", "by", "under", "within", "across", "through", "throughout", "per", "unlike", "upon",
+	"despite", "between", "among", "via")
+
+// clauseBreak ends a sentence or a clause. A period inside a word
+// ("UnitTests.Parallel", "v1.2") ends nothing.
+var clauseBreak = regexp.MustCompile(`[.!?](?:\s|$)|[:;\n]`)
+
+// sentenceRest is text up to the end of its sentence.
+func sentenceRest(text string) string {
+	if at := clauseBreak.FindStringIndex(text); at != nil {
+		return text[:at[0]]
+	}
+
+	return text
+}
+
+// clauseSubjects open a main clause after a comma: "using the cache, we".
+var clauseSubjects = wordSet("we", "i", "you", "it", "they", "he", "she", "this", "these", "the", "a", "an")
+
+// opensMainClause reports whether the -ing word after the comma at
+// text[comma], whose phrase continues at text[to:], opens its sentence's main
+// clause as its subject ("Currently, setting X behaves", "When it is hidden,
+// closing it becomes"), not a tail. Every comma-separated element before it is
+// one word or opens with an [introWords] word. A phrase whose own comma is
+// followed by a subject ("However, using X, we add") is a participial clause.
+func opensMainClause(text string, comma, to int) bool {
+	if comma < 0 {
+		return false
+	}
+
+	start := 0
+	if ends := clauseBreak.FindAllStringIndex(text[:comma], -1); len(ends) > 0 {
+		start = ends[len(ends)-1][1]
+	}
+
+	for _, element := range strings.Split(text[start:comma], ",") {
+		words := strings.Fields(strings.ToLower(strings.Trim(element, " \t\r*_-([")))
+		if len(words) == 0 || len(words) > 1 && !introWords[words[0]] {
+			return false
+		}
+	}
+
+	if _, after, ok := strings.Cut(sentenceRest(text[to:]), ","); ok {
+		if next := phraseWords(after, 1); len(next) == 1 && clauseSubjects[next[0]] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// parallelItem reports whether the -ing phrase after the comma at text[comma]
+// is an item of a series of -ing items its sentence closes with "and" or "or":
+// "cover moving pages, moving to the root, error handling, and missing keys".
+// The item before the comma holds an -ing word past its first word, this item
+// has a complement of its own, and every item between it and the closing
+// "and" is a short bare noun phrase.
+func parallelItem(text string, comma, to int) bool {
+	if comma < 0 {
+		return false
+	}
+
+	before := text[strings.LastIndexAny(text[:comma], ",.;:!?(\n")+1 : comma]
+
+	words := strings.Fields(strings.ToLower(before))
+	if !slices.ContainsFunc(words[min(1, len(words)):], func(w string) bool {
+		w = strings.TrimRight(w, "`*_)")
+
+		return len(w) > 5 && strings.HasSuffix(w, "ing") && !notParticiples[w]
+	}) {
+		return false
+	}
+
+	after := sentenceRest(text[to:])
+
+	// A bare item can take the series as its object: "emphasizing precision,
+	// performance, and testing".
+	items := strings.Split(after, ",")
+	if !slices.ContainsFunc(strings.Fields(strings.ToLower(items[0])), func(w string) bool { return objectWords[w] }) {
+		return false
+	}
+
+	for _, item := range items[1:] {
+		words := strings.Fields(strings.ToLower(item))
+		if len(words) > 0 && (words[0] == "and" || words[0] == "or") {
+			return true
+		}
+
+		if len(words) == 0 || len(words) > maxListedWords || slices.ContainsFunc(words, func(w string) bool {
+			return objectWords[w]
+		}) {
+			return false
+		}
+	}
+
+	return false
 }
 
 // subjectVerbs are the finite verbs that make an -ing phrase before them its
@@ -296,11 +429,11 @@ func phraseWords(s string, n int) []string {
 
 // openerClause reports whether sentence, which opens with the -ing word, is a
 // participial clause closed by a comma before its main clause, rather than a
-// gerund subject ("Running the suite takes a minute.") or a label ("**Adding
-// shortcuts**: tests ..."). A comma inside a parenthesis the phrase opened
-// closes nothing.
+// gerund subject ("Running the suite takes a minute."), an adjective
+// ("Existing code works") or a label ("**Adding shortcuts**: tests ..."). A
+// comma inside a parenthesis the phrase opened closes nothing.
 func openerClause(sentence, word string) bool {
-	if notParticiples[strings.ToLower(word)] {
+	if notParticiples[strings.ToLower(word)] || attributive(word, sentence[len(word):]) {
 		return false
 	}
 
