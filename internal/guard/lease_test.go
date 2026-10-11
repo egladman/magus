@@ -635,6 +635,25 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	}
 }
 
+// TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository pins that a script's scratch
+// repository is not the job's tree: its commit runs, while the job's own repository,
+// reached by any checkout of it, stays refused.
+func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := filepath.Join(r.parent, "scratch")
+	require.NoError(t, os.MkdirAll(scratch, 0o755))
+	r.git(scratch, "init", "-q", "-b", "main")
+
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", scratch}, commit...), wt))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, wt))
+
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main))
+}
+
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
 // reads are recognized past git's global options, and that no option turns a write, or a
 // word an inline alias defines, into one.
