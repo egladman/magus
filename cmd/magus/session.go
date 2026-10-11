@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -82,7 +83,7 @@ func sessionCmd(ctx context.Context, root string, args []string) error {
 }
 
 func sessionUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
+	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--all] [--limit <n>] [--since <when>]")
 	fmt.Fprintln(os.Stderr, "       magus session --brief             # this checkout's state, for a session that lost its history")
 	fmt.Fprintln(os.Stderr, "       magus session show <session-id>")
 	fmt.Fprintln(os.Stderr, "       magus session hints               # uptake per hint id, over the loaded sessions")
@@ -93,8 +94,8 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent magus")
-	fmt.Fprintln(os.Stderr, "invocations did across every worktree of this repository, each with the host")
-	fmt.Fprintln(os.Stderr, "session it ran in when a host delivered one; `session show` reports one host")
+	fmt.Fprintln(os.Stderr, "invocations did in this checkout (--all: every worktree of this repository),")
+	fmt.Fprintln(os.Stderr, "each with the host session it ran in when a host delivered one; `session show` reports one host")
 	fmt.Fprintln(os.Stderr, "session in full, `session attention` lists the blocks agents raised, and")
 	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
 	fmt.Fprintln(os.Stderr, "Humans write it too: `session checkpoint` records where work stands before")
@@ -109,13 +110,14 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
 }
 
-// invocationList shows what recent magus invocations did, folded across every worktree of
-// this repository.
+// invocationList shows what recent magus invocations did in this checkout, or in every
+// worktree of the repository with --all.
 func invocationList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
-	var brief bool
+	var brief, all bool
 	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
+		fs.BoolVar(&all, "all", false, "List invocations from every checkout of this repository, not only this one")
 		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many invocations (0 for all)")
 		fs.StringVar(&since, "since", "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 		fs.BoolVar(&brief, "brief", false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
@@ -150,6 +152,9 @@ func invocationList(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	summaries := sessions.Summarize(fold)
+	if !all {
+		summaries = invocationsIn(summaries, root)
+	}
 	summaries = invocationsSince(summaries, cutoff)
 	if limit > 0 && len(summaries) > limit {
 		summaries = summaries[:limit]
@@ -377,6 +382,9 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 			label += " " + t.Project
 		}
 		label += " (" + t.Outcome
+		if t.Code != "" {
+			label += ", " + t.Code
+		}
 		if t.Replayed {
 			label += ", cached"
 		}
@@ -427,6 +435,39 @@ func parseSince(raw string) (time.Time, error) {
 		return ts, nil
 	}
 	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
+}
+
+// invocationsIn keeps the invocations that ran in the checkout at root. The store is keyed
+// by repository, so every worktree writes to it; an invocation with no recorded Workspace
+// predates the field and stays, because dropping it would hide history rather than scope it.
+func invocationsIn(summaries []sessions.Summary, root string) []sessions.Summary {
+	want := realPath(root)
+	resolved := map[string]string{}
+	out := make([]sessions.Summary, 0, len(summaries))
+	for _, s := range summaries {
+		if s.Workspace == "" {
+			out = append(out, s)
+			continue
+		}
+		got, ok := resolved[s.Workspace]
+		if !ok {
+			got = realPath(s.Workspace)
+			resolved[s.Workspace] = got
+		}
+		if got == want {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// realPath is p with symlinks resolved, so a checkout reached through /tmp and through
+// /private/tmp compares equal. A path that no longer exists keeps its cleaned spelling.
+func realPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 // invocationsSince drops the invocations whose last fact predates cutoff.

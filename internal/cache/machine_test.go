@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -456,8 +457,12 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 		WithMachineAdmission(&fakeAdmitter{budget: b}))
 	require.NoError(t, err)
 
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	ctx = journal.WithInvocationID(ctx, "invrefused")
+
 	var observed []error
-	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
+	_, err = c.RunAll(ctx, []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
 		func(context.Context, Step) error {
 			t.Error("a refused step must not run")
 			return nil
@@ -479,6 +484,46 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	require.Len(t, observed, 1, "the result observers feed -o jsonl's run.target.result and run.diagnostic")
 	assert.ErrorIs(t, observed[0], types.MachineBudgetExhausted)
 	assert.Equal(t, Stats{Error: 1}, c.Stats(), "a refusal counts toward the run's failed total")
+
+	// The session store and `magus session --brief` read failures off result events, so a
+	// refusal that emitted none left them showing a run that never happened.
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, journal.KindResult, events[0].Kind)
+	assert.Equal(t, journal.StatusFail, events[0].Status)
+	assert.Equal(t, string(types.MachineBudgetExhausted), events[0].Code)
+	assert.Equal(t, "test", events[0].Target)
+	assert.Equal(t, "invrefused", events[0].Inv)
+	assert.Empty(t, events[0].Ref, "nothing ran, so nothing was captured")
+	assert.Contains(t, events[0].Text, "build budget is full")
+}
+
+// RunAside has no batch to report the refusal to, so its caller sees only the returned
+// error; the journal is where the record of a run that did nothing lives.
+func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 10_000, 8)
+	held := b.Request(types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&fakeAdmitter{budget: b}))
+	require.NoError(t, err)
+
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a refused step must not run")
+			return nil
+		})
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, journal.StatusFail, events[0].Status)
+	assert.Equal(t, string(types.MachineBudgetExhausted), events[0].Code)
 }
 
 // cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the

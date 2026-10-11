@@ -85,6 +85,7 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		DurationMs: e.DurationMs,
 		Replayed:   e.Status == journal.StatusCached,
 		Ref:        e.Ref,
+		Code:       e.Code,
 		Lease:      h.start.Lease,
 		LeaseFrom:  h.start.LeaseFrom,
 	}); err != nil {

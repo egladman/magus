@@ -255,6 +255,52 @@ func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 	assert.Equal(t, all, invocationsSince(all, time.Time{}))
 }
 
+func TestInvocationsInKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
+	t.Parallel()
+
+	here, elsewhere := t.TempDir(), t.TempDir()
+	all := []sessions.Summary{
+		{Invocation: "here", Workspace: here},
+		{Invocation: "elsewhere", Workspace: elsewhere},
+		{Invocation: "legacy"},
+	}
+	got := invocationsIn(all, here)
+	require.Len(t, got, 2)
+	assert.Equal(t, "here", got[0].Invocation)
+	assert.Equal(t, "legacy", got[1].Invocation, "a fact written before the workspace was recorded cannot be placed, so it stays")
+}
+
+// recordSessionIn files one passing session under the repository's shared store but
+// attributed to workspace, which is how another worktree's run looks from here.
+func recordSessionIn(t *testing.T, root, workspace, inv string) {
+	t.Helper()
+	h := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: workspace, Command: "run build"})
+	require.NotNil(t, h)
+	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
+}
+
+// The store is the repository's, shared by every worktree, so a bare `magus session` read
+// every checkout's invocations and a person could not tell which one was theirs.
+func TestSessionsListsThisCheckoutUnlessAll(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := t.TempDir()
+	recordSessionIn(t, root, root, "invHere")
+	recordSessionIn(t, root, filepath.Join(root, "sibling-worktree"), "invElsewhere")
+
+	here := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
+	})
+	assert.Contains(t, here, "invHere")
+	assert.NotContains(t, here, "invElsewhere")
+
+	every := captureStdout(t, func() {
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"--all"}))
+	})
+	assert.Contains(t, every, "invHere")
+	assert.Contains(t, every, "invElsewhere")
+}
+
 // A store with sessions in it, all older than the window, must not read as a store
 // nothing has ever written to: the second sends a person looking for a broken producer.
 func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {

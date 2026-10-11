@@ -138,6 +138,7 @@ type Event struct {
 	Ref        string `json:"ref,omitempty"`         // target-output ref, for result events
 	DurationMs int64  `json:"duration_ms,omitempty"` // wall-clock duration, for result events
 	Text       string `json:"text,omitempty"`        // output line or message
+	Code       string `json:"code,omitempty"`        // MGS code of a failed result that never ran
 
 	// Set only on the started event (Kind==journal.KindStarted): the run's identity.
 	Command      *Command `json:"command,omitempty"`
@@ -148,7 +149,7 @@ func newEvent(e journal.Event) Event {
 	ev := Event{
 		Ts: e.Ts, Inv: e.Inv, Project: e.Project, Target: e.Target, Kind: e.Kind,
 		Stream: e.Stream, Level: e.Level, Status: e.Status, Ref: e.Ref, DurationMs: e.DurationMs,
-		Text: e.Text, MagusVersion: e.MagusVersion,
+		Text: e.Text, Code: e.Code, MagusVersion: e.MagusVersion,
 	}
 	if e.Command != nil {
 		ev.Command = &Command{

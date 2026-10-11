@@ -230,6 +230,36 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assertBriefIsContextSafe(t, text)
 }
 
+// A refusal ran nothing, so it has no output ref; the code is the whole of what the brief
+// can say about it. Another worktree's later failure must not stand in for this checkout's.
+func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+
+	refused := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "affected ci"})
+	require.NotNil(t, refused)
+	emitJournalEvent(t, refused, journal.Event{
+		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
+		Status: journal.StatusFail, Code: string(types.MachineBudgetExhausted),
+	})
+	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
+	other := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
+	require.NotNil(t, other)
+	emitJournalEvent(t, other, journal.Event{
+		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
+	})
+
+	failures := lastRunFailures(root)
+	require.Len(t, failures, 1)
+	assert.Equal(t, "ci", failures[0].Target)
+	assert.Equal(t, "MGS3009", failures[0].Code)
+	assert.Empty(t, failures[0].Ref)
+
+	var text strings.Builder
+	sessionBrief{Failures: failures}.writeFailures(&text)
+	assert.Contains(t, text.String(), "ci pkg [MGS3009] (")
+}
+
 // A terminal lease has stopped competing for its paths, so a rehydrating session
 // must not be told to bind it.
 func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {

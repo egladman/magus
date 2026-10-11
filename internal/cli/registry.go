@@ -2018,7 +2018,8 @@ without a server, a network, or a shared branch. It is append-only and never
 rewritten; a line left half-written by a killed process is skipped and counted
 rather than failing the read.
 
-The listing takes --limit to bound by count and --since to bound by AGE, as a
+The listing shows this checkout's invocations; --all widens it to every worktree
+of the repository. It takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each invocation's last fact, not its first, so a long one that is still
 working stays listed however long ago it began.
@@ -2035,6 +2036,7 @@ session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
 		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
+		{Name: "all", Kind: FlagBool, Doc: "List invocations from every checkout of this repository, not only this one"},
 		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many invocations (0 for all)"},
 		{Name: "since", Kind: FlagString, Doc: "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},

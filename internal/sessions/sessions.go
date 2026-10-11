@@ -152,7 +152,9 @@ type TargetResult struct {
 	DurationMs int64  `json:"duration_ms,omitempty"`
 	Replayed   bool   `json:"replayed,omitempty"`
 	Ref        string `json:"ref,omitempty"`
-	Lease      string `json:"lease,omitempty"`
+	// Code is the MGS code of a failure that never ran, such as an admission refusal.
+	Code  string `json:"code,omitempty"`
+	Lease string `json:"lease,omitempty"`
 	// LeaseFrom repeats the start's, for the reason Lease does.
 	LeaseFrom types.LeaseSource `json:"lease_from,omitempty"`
 }

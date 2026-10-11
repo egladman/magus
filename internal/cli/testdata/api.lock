@@ -201,6 +201,7 @@ flag run/stdin
 flag run/step
 flag run/timeout
 flag run/upstream
+flag session/all
 flag session/brief
 flag session/limit
 flag session/since

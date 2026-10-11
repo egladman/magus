@@ -1148,6 +1148,22 @@ func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error
 		)...,
 	)
 	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+	emitRefusal(ctx, s, err)
+}
+
+// emitRefusal journals a refusal as a failed result carrying its MGS code, so the
+// invocation's facts, `magus session` and its brief show a run that did nothing. There is
+// no ref: nothing ran, so nothing was captured.
+func emitRefusal(ctx context.Context, s Step, err error) {
+	var code string
+	var coded *types.DiagnosticError
+	if errors.As(err, &coded) {
+		code = string(coded.Code)
+	}
+	journal.Emit(ctx, journal.Event{
+		Project: s.ProjectPath, Target: reproTarget(s), Kind: journal.KindResult,
+		Level: "error", Status: journal.StatusFail, Text: types.CauseText(err), Code: code,
+	})
 }
 
 // ReportedError is a step failure the cache already logged as a cache.error record, so a
@@ -1292,6 +1308,7 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	}
 	ctx, releaseMachine, err := c.claimMachine(ctx, s, stepSlots(s, lim))
 	if err != nil {
+		emitRefusal(ctx, s, err)
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
