@@ -429,6 +429,55 @@ func TestRoundScoreRefusesAnOpenOrUnfrozenRound(t *testing.T) {
 	}
 }
 
+func TestRoundScoreFailsAgreementOnAnUnnotedDisagreement(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "round9")
+
+	// One split in 40 is inside n/10, so only the note can fail the gate.
+	rows := []labeled{{"s", "CORRECT", "WRONG", "CORRECT"}}
+	for range 39 {
+		rows = append(rows, labeled{"s", "CORRECT", "CORRECT", ""})
+	}
+
+	writeLabeledRound(t, dir, rows)
+
+	if err := writeJSONFile(filepath.Join(dir, freezeFile), map[string]any{
+		"round": 9, "rule_commit": "abc123", "rules": []string{"claim"}, "gates": defaultGates(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	score := func() *ruleScore {
+		runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
+
+		var rec scoresRecord
+		if err := readJSONFile(filepath.Join(dir, scoresFile), &rec); err != nil {
+			t.Fatal(err)
+		}
+
+		return rec.Rules["claim"]
+	}
+
+	if c := score(); !c.AgreementGate || c.Unnoted != 0 || len(c.UnnotedIDs) != 0 {
+		t.Fatalf("a noted disagreement: gate %v, unnoted %d %v, want a pass", c.AgreementGate, c.Unnoted, c.UnnotedIDs)
+	}
+
+	bare := []any{labelRow{ID: "r9-0001", Label: "WRONG"}}
+	for i := 2; i <= 40; i++ {
+		bare = append(bare, labelRow{ID: fmt.Sprintf("r9-%04d", i), Label: "CORRECT"})
+	}
+
+	writeJSONL(t, filepath.Join(dir, labelsBFile), bare...)
+
+	c := score()
+	if c.AgreementGate || c.Unnoted != 1 || !slices.Equal(c.UnnotedIDs, []string{"r9-0001"}) {
+		t.Errorf("an unnoted disagreement: gate %v, unnoted %d %v, want a fail naming r9-0001", c.AgreementGate, c.Unnoted, c.UnnotedIDs)
+	}
+
+	if c.Disagreements*10 > c.N {
+		t.Errorf("disagreements %d of %d: the n/10 bar should hold so the note alone fails the gate", c.Disagreements, c.N)
+	}
+}
+
 // git runs git in the current directory, failing the test on an error.
 func git(t *testing.T, args ...string) string {
 	t.Helper()

@@ -1308,7 +1308,8 @@ type denyGate struct {
 }
 
 // agreementGate passes a rule whose disagreements are at most n/PerDisagreement
-// of its n firings, or whose alpha reaches Alpha.
+// of its n firings, or whose alpha reaches Alpha, and whose every disagreement
+// carries a note from both labelers.
 type agreementGate struct {
 	PerDisagreement int     `json:"firings_per_disagreement"`
 	Alpha           float64 `json:"alpha"`
@@ -1549,6 +1550,7 @@ type tally struct {
 	Disagreements int      `json:"disagreements"`
 	// Unnoted counts disagreements one labeler left without a note.
 	Unnoted       int      `json:"unnoted_disagreements"`
+	UnnotedIDs    []string `json:"unnoted_ids,omitempty"`
 	RawAgreement  *float64 `json:"raw_agreement"`
 	Alpha         *float64 `json:"alpha"`
 	PrecisionGate bool     `json:"precision_gate"`
@@ -1705,7 +1707,7 @@ func scoreMethod(g gates) map[string]string {
 		"final_label": "the adjudicated label where adjudicated.jsonl has one, else the label both labelers gave; UNSURE counts as WRONG",
 		"wilson":      fmt.Sprintf("Wilson score interval lower bound, z=%g, on final CORRECT over n", g.Advise.WilsonZ),
 		"alpha":       "Krippendorff alpha, nominal, labelers A and B, null when only one label occurs",
-		"agreement_gate": fmt.Sprintf("disagreements <= n/%d or alpha >= %.2f, and n > 0",
+		"agreement_gate": fmt.Sprintf("no disagreement left without a note by either labeler, and disagreements <= n/%d or alpha >= %.2f, and n > 0",
 			g.Agreement.PerDisagreement, g.Agreement.Alpha),
 		"precision_gate": fmt.Sprintf("Wilson lower bound >= %.2f over >= %d firings", g.Advise.LowerBound, g.Advise.MinFirings),
 		"advise_gate": fmt.Sprintf("precision and agreement gates pooled, and the worst source with >= %d firings also at "+
@@ -1771,6 +1773,7 @@ func tallyCandidates(cs []candidate, a, b map[string]labelRow, final map[string]
 
 			if strings.TrimSpace(la.Note) == "" || strings.TrimSpace(lb.Note) == "" {
 				t.Unnoted++
+				t.UnnotedIDs = append(t.UnnotedIDs, c.ID)
 			}
 		}
 	}
@@ -1789,8 +1792,8 @@ func tallyCandidates(cs []candidate, a, b map[string]labelRow, final map[string]
 
 	lower := proofread.WilsonLower(t.Correct, t.N, g.Advise.WilsonZ)
 	t.PrecisionGate = t.N >= g.Advise.MinFirings && lower >= g.Advise.LowerBound
-	t.AgreementGate = t.Disagreements*g.Agreement.PerDisagreement <= t.N ||
-		t.Alpha != nil && *t.Alpha >= g.Agreement.Alpha
+	t.AgreementGate = t.Unnoted == 0 && (t.Disagreements*g.Agreement.PerDisagreement <= t.N ||
+		t.Alpha != nil && *t.Alpha >= g.Agreement.Alpha)
 
 	return t
 }
