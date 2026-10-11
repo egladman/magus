@@ -443,6 +443,10 @@ type Request struct {
 	DryRun bool
 	// Lease is an explicit --lease; empty resolves through job.LeaseQuery.Resolve.
 	Lease string
+	// Candidate is the row of a lease the store does not carry yet, graded as if it did: it
+	// joins the rows the rules read, and Lease defaults to its id. For a fork that must know
+	// what the guard will say to its holder before the holder exists.
+	Candidate *types.Job
 	// The attribution the caller knows about itself. No verdict reads what it SAYS; Judge
 	// reads only whether installed glue (a non-empty Form) named a Host at all.
 	Host string
@@ -662,6 +666,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		policyDigest = recordPolicy(ctx, deps, location, false)
 	}
 	ctx = withJobStoreRows(ctx, location)
+	if req.Candidate != nil {
+		ctx = withCandidateRow(ctx, *req.Candidate)
+		if req.Lease == "" {
+			req.Lease = req.Candidate.ID
+		}
+	}
 	// Where the gates and the workspace rules keep session state. The rest of location is
 	// what the rules judge against, so a check swaps only the cache dir.
 	stateAt := location
@@ -1719,6 +1729,21 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	}
 	rows, err := listJobRows(job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}))
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+}
+
+// withCandidateRow pins the rows already read with row among them, replacing a stored row
+// of the same id. An unreadable store stays unreadable: a rule must not grade a candidate
+// against rows it never saw.
+func withCandidateRow(ctx context.Context, row types.Job) context.Context {
+	snap, _ := job.SnapshotFromContext(ctx)
+	if snap.Err != nil {
+		return ctx
+	}
+	if row.State == "" {
+		row.State = types.StateDeclared
+	}
+	rows := slices.DeleteFunc(slices.Clone(snap.Rows), func(r types.Job) bool { return r.ID == row.ID })
+	return job.WithSnapshot(ctx, job.Snapshot{Rows: append(rows, row.Clone())})
 }
 
 // jobRowsMemoTTL bounds how long a memoized sweep is trusted. The sweep also ends rows for
