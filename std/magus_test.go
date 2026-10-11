@@ -895,8 +895,7 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 // registration is process-wide, so a test that uses it does not run in parallel.
 func withJobGrader(t *testing.T, forRoot func(root string) job.CheckGrader) {
 	t.Helper()
-	previous := jobGrader
-	RegisterJobGrader(forRoot)
+	previous := RegisterJobGrader(forRoot)
 	t.Cleanup(func() { RegisterJobGrader(previous) })
 }
 

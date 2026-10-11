@@ -25,8 +25,11 @@ var vcsLeaseGate VCSLeaseGate
 // RegisterVCSLeaseGate installs the gate vcs.cmd asks before it runs a version-control
 // command while a lease is acting. internal/guard calls it from init, so every binary that
 // links the guard has it; a later call replaces the gate. Not safe to call while vcs.cmd
-// may run.
-func RegisterVCSLeaseGate(gate VCSLeaseGate) { vcsLeaseGate = gate }
+// may run. It returns the gate it replaced, for a test that swaps in its own to put back.
+func RegisterVCSLeaseGate(gate VCSLeaseGate) (previous VCSLeaseGate) {
+	previous, vcsLeaseGate = vcsLeaseGate, gate
+	return previous
+}
 
 // vcsLeaseRefusal is why vcs.cmd may not run backend with args in dir under the acting
 // lease, nil when it may. With no workspace, no acting lease, or no live row for it there

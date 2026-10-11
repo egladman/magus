@@ -18,9 +18,8 @@ import (
 // withVCSLeaseGate registers gate for the test and restores whatever was registered.
 func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 	t.Helper()
-	prev := vcsLeaseGate
-	RegisterVCSLeaseGate(gate)
-	t.Cleanup(func() { RegisterVCSLeaseGate(prev) })
+	previous := RegisterVCSLeaseGate(gate)
+	t.Cleanup(func() { RegisterVCSLeaseGate(previous) })
 }
 
 // Not parallel: the job store resolves the per-repository state directory, and the
