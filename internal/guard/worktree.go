@@ -248,12 +248,43 @@ func realPath(p string) string {
 	return filepath.Join(realPath(parent), filepath.Base(p))
 }
 
+// samePath reports whether a and b name one place. Strings are compared after symlinks
+// resolve, then the files by device and inode: EvalSymlinks keeps a case variant on a
+// case-insensitive filesystem and a macOS firmlink spelling (/System/Volumes/Data/Users)
+// as written, and git accepts both.
 func samePath(a, b string) bool {
-	return a != "" && b != "" && realPath(a) == realPath(b)
+	if a == "" || b == "" {
+		return false
+	}
+	ra, rb := realPath(a), realPath(b)
+	if ra == rb {
+		return true
+	}
+	ia, err := os.Stat(ra)
+	if err != nil {
+		return false
+	}
+	ib, err := os.Stat(rb)
+	return err == nil && os.SameFile(ia, ib)
 }
 
-// within reports whether p is root or lies under it.
+// within reports whether p is root or lies under it, by the same two tests as samePath.
+// A part of p that does not exist yet lies wherever its nearest existing ancestor does.
 func within(p, root string) bool {
-	rel, err := filepath.Rel(realPath(root), realPath(p))
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	rp, rr := realPath(p), realPath(root)
+	if rel, err := filepath.Rel(rr, rp); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return true
+	}
+	ri, err := os.Stat(rr)
+	if err != nil {
+		return false
+	}
+	for d := rp; ; d = filepath.Dir(d) {
+		if di, err := os.Stat(d); err == nil && os.SameFile(di, ri) {
+			return true
+		}
+		if filepath.Dir(d) == d {
+			return false
+		}
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -1389,13 +1390,17 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 
 func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
 
-// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir. The
-// process knows no session or subagent, so row is graded as a worker: the answer the shell
-// rule gives a caller that names neither.
-func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string) error {
+// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
+// env, the environment the child starts with. The process knows no session or subagent, so
+// row is graded as a worker: the answer the shell rule gives a caller that names neither.
+func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
 	inv := hint.Invocation{Name: backend, Args: args}
 	site, unlocated := argvSite(inv, dir)
-	if unlocated == "" && backend == "git" && recordsCommit(inv) && inOtherRepository(site, row.CheckoutRoot) {
+	relocated := false
+	if backend == "git" && unlocated == "" {
+		site, unlocated, relocated = gitEnvSite(site, env)
+	}
+	if unlocated == "" && !relocated && backend == "git" && recordsCommit(inv) && inOtherRepository(site, row.CheckoutRoot) {
 		return nil
 	}
 	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
@@ -1403,6 +1408,49 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 		return nil
 	}
 	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
+}
+
+// gitLocationVars are the environment variables that move git's repository, work tree or
+// index off the directory it runs in.
+var gitLocationVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"}
+
+// gitEnvSite applies env, the environment git starts with, to site. GIT_DIR names the git
+// directory as --git-dir does, unless the arguments already named one; any other of
+// gitLocationVars leaves the commit unplaced. relocated reports that env set any of them,
+// which rules out the scratch-repository exemption: that exemption reads the repository
+// off the directory alone.
+func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, relocated bool) {
+	for _, name := range gitLocationVars {
+		value, ok := envValue(env, name)
+		if !ok {
+			continue
+		}
+		relocated = true
+		switch {
+		case name != "GIT_DIR":
+			return vcsSite{}, "Its environment sets " + name + ", so where it commits cannot be read.", true
+		case site.gitDir != "":
+		case value == "" || strings.HasPrefix(value, "~"):
+			return vcsSite{}, "The GIT_DIR its environment sets is not one literal path, so where it commits cannot be read.", true
+		case filepath.IsAbs(value):
+			site.gitDir = value
+		default:
+			site.gitDir = filepath.Join(site.dir, value)
+		}
+	}
+	return site, "", relocated
+}
+
+// envValue is name's value in env as exec hands it to a child: the last entry wins, and
+// Windows matches names without regard to case.
+func envValue(env []string, name string) (string, bool) {
+	for i := len(env) - 1; i >= 0; i-- {
+		k, v, ok := strings.Cut(env[i], "=")
+		if ok && (k == name || runtime.GOOS == "windows" && strings.EqualFold(k, name)) {
+			return v, true
+		}
+	}
+	return "", false
 }
 
 // inOtherRepository reports whether a git call at site stands wholly outside checkout, in a
@@ -1682,7 +1730,7 @@ func argvSite(inv hint.Invocation, dir string) (vcsSite, string) {
 // gitDirAssigned reads the git directory a line's environment names: a GIT_DIR assignment
 // as a command prefix, an export, or an `env` word, as written: a relative one resolves
 // where git runs. why says the line names a repository in a way that cannot be placed:
-// GIT_WORK_TREE, a value that is not literal, or more than one.
+// any other of gitLocationVars, a value that is not literal, or more than one.
 func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	f, err := parseFile(command, d)
 	if err != nil {
@@ -1692,7 +1740,7 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	unplaced := false
 	note := func(name, value string, literal bool) {
 		switch name {
-		case "GIT_WORK_TREE":
+		case "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE":
 			unplaced = true
 		case "GIT_DIR":
 			values = append(values, value)
@@ -1731,7 +1779,7 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	})
 	switch {
 	case unplaced || len(values) > 1:
-		return "", "The line names its repository with GIT_DIR or GIT_WORK_TREE in a way that cannot be read as one checkout."
+		return "", "The line names its repository through " + strings.Join(gitLocationVars, ", ") + " in a way that cannot be read as one checkout."
 	case len(values) == 0:
 		return "", ""
 	case values[0] == "" || strings.HasPrefix(values[0], "~"):

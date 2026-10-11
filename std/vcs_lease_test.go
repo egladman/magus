@@ -32,14 +32,14 @@ func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")
-	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, dir string) error {
+	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, dir string, _ []string) error {
 		asked = append(asked, row.ID+" "+backend+" "+args[0]+" "+dir)
 		return refusal
 	})
 
-	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"push"}, "/repo"), "no acting lease, nothing to ask")
-	require.NoError(t, vcsLeaseRefusal(proc.WithLease(ws, "absent"), "git", []string{"push"}, "/repo"), "a lease with no row bounds nothing")
-	assert.ErrorIs(t, vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"push"}, "/repo"), refusal)
+	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"push"}, "/repo", nil), "no acting lease, nothing to ask")
+	require.NoError(t, vcsLeaseRefusal(proc.WithLease(ws, "absent"), "git", []string{"push"}, "/repo", nil), "a lease with no row bounds nothing")
+	assert.ErrorIs(t, vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"push"}, "/repo", nil), refusal)
 	assert.Equal(t, []string{"worker git push /repo"}, asked)
 }
 
@@ -50,8 +50,8 @@ func TestVcsLeaseRefusalFailsClosedWithNoGate(t *testing.T) {
 	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	withVCSLeaseGate(t, nil)
 
-	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo"))
-	err := vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo")
+	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo", nil))
+	err := vcsLeaseRefusal(proc.WithLease(ws, "worker"), "git", []string{"commit", "-m", "x"}, "/repo", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "lease worker is acting and this binary registers no lease-vcs gate")
 	assert.Contains(t, err.Error(), "`git commit -m x`")

@@ -12,12 +12,15 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/proc/environ"
+	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/types"
 )
 
 // VCSLeaseGate decides whether row, the lease a Buzz process acts under, may run the
-// version-control backend with args in dir: nil to run it, or the refusal to raise.
-type VCSLeaseGate func(ctx context.Context, row types.Job, backend string, args []string, dir string) error
+// version-control backend with args in dir, starting with env ("KEY=value" entries, the
+// last of a name winning): nil to run it, or the refusal to raise.
+type VCSLeaseGate func(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error
 
 // vcsLeaseGate is lease-vcs as internal/guard decides it, nil until the guard registers it.
 // It is registered rather than called because the guard imports this package.
@@ -44,12 +47,12 @@ func currentVCSLeaseGate() VCSLeaseGate {
 	return vcsLeaseGate
 }
 
-// vcsLeaseRefusal is why vcs.cmd may not run backend with args in dir under the acting
-// lease, nil when it may. With no workspace, no acting lease, or no live row for it there
-// is no boundary to hold, which is the guard's answer for a shell line too; a store that
-// cannot be read holds no row either. A lease acting with no gate registered is refused:
-// running unguarded is the one answer that cannot be taken back.
-func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir string) error {
+// vcsLeaseRefusal is why vcs.cmd may not run backend with args in dir and env under the
+// acting lease, nil when it may. With no workspace, no acting lease, or no live row for it
+// there is no boundary to hold, which is the guard's answer for a shell line too; a store
+// that cannot be read holds no row either. A lease acting with no gate registered is
+// refused: running unguarded is the one answer that cannot be taken back.
+func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir string, env []string) error {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
 		return nil
@@ -78,7 +81,20 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 		}
 		dir = wd
 	}
-	return gate(ctx, row, backend, args, dir)
+	return gate(ctx, row, backend, args, dir, env)
+}
+
+// childEnv is the environment a command run through runResult starts with, as far as a
+// variable the child reads is concerned: the sandbox's base environment or this
+// process's, the run's env\set changes, then os\with_env overrides. run.Exec adds only
+// magus's own variables past these.
+func childEnv(ctx context.Context) []string {
+	base := os.Environ()
+	if p := sandbox.PolicyFromContext(ctx); p != nil {
+		base = p.BaseEnv
+	}
+	overrides, _ := ctx.Value(withEnvKey{}).([]string)
+	return append(slices.Clip(environ.From(ctx).Apply(base)), overrides...)
 }
 
 // liveRow is lease's live row in the store at loc, false when the store holds none or

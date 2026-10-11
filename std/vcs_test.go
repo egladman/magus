@@ -467,8 +467,14 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	require.NoError(t, err)
 	var asked []string
 	refusal := errors.New("lease-vcs: refused")
-	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, at string) error {
+	var gitEnv []string
+	withVCSLeaseGate(t, func(_ context.Context, row types.Job, backend string, args []string, at string, env []string) error {
 		asked = append(asked, row.ID+" "+backend+" "+strings.Join(args, " ")+" "+at)
+		for _, kv := range env {
+			if strings.HasPrefix(kv, "GIT_DIR=") || strings.HasPrefix(kv, "GIT_INDEX_FILE=") {
+				gitEnv = append(gitEnv, kv)
+			}
+		}
 		return refusal
 	})
 
@@ -480,4 +486,15 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	require.NoError(t, err, "no acting lease, so the gate is not asked")
 	assert.True(t, res.OK)
 	assert.Len(t, asked, 1)
+
+	gitEnv = nil
+	t.Setenv("GIT_INDEX_FILE", "/from/the/process")
+	err = OsWithEnv(proc.WithLease(ws, "worker"), map[string]string{"GIT_DIR": "/from/with_env"},
+		cbFunc(func(ctx context.Context) error {
+			_, err := VcsCmd(ctx, []string{"commit", "-m", "x"}, map[string]any{"quiet": true})
+			return err
+		}))
+	require.ErrorIs(t, err, refusal)
+	assert.Equal(t, []string{"GIT_INDEX_FILE=/from/the/process", "GIT_DIR=/from/with_env"}, gitEnv,
+		"the gate reads the environment the child starts with: the process's, then os\\with_env's")
 }

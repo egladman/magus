@@ -611,9 +611,9 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 // on every backend.
 func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepo(t)
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main, nil))
 	for _, c := range []struct {
 		backend string
 		args    []string
@@ -629,7 +629,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		{"sl", []string{"push", "--to", "main"}, wt},
 		{"jj", []string{"git", "push"}, wt},
 	} {
-		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir)
+		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
@@ -644,13 +644,96 @@ func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
 	scratch := testkit.NewRepo(t, nil).Root()
 
 	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", scratch}, commit...), wt))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, scratch))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", scratch}, commit...), wt, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, scratch, nil))
 
-	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main))
-	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch))
-	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main, nil))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch, nil))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main, nil))
+}
+
+// TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
+// of the job's repository that differ from the registered path as strings: a case variant
+// on a case-insensitive filesystem, macOS's firmlinked data volume, and a symlinked parent.
+// Each names the primary checkout, or a submodule inside the worker's own, and git accepts
+// every one.
+func TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil)
+	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(filepath.Dir(r.main), link))
+	aliases := map[string]func(string) string{
+		"symlinked parent": func(p string) string { return filepath.Join(link, filepath.Base(p)) },
+	}
+	if upper := strings.ToUpper(r.main); sameDir(upper, r.main) {
+		aliases["case variant"] = strings.ToUpper
+	} else {
+		t.Log("the filesystem is case-sensitive, so a case variant names another place")
+	}
+	if data := "/System/Volumes/Data" + realPath(r.main); sameDir(data, r.main) {
+		aliases["firmlink"] = func(p string) string { return "/System/Volumes/Data" + realPath(p) }
+	}
+	for name, alias := range aliases {
+		main, sub := alias(r.main), filepath.Join(alias(wt), "sub")
+		if name == "symlinked parent" {
+			sub = filepath.Join(link, filepath.Base(wt), "sub")
+		}
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, main, nil), "%s: the primary checkout", name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", main}, commit...), scratch.Root(), nil), "%s: -C the primary checkout", name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, sub, nil), "%s: a submodule in the worker's checkout", name)
+		assert.True(t, samePath(main, r.main), name)
+		assert.True(t, within(sub, wt), name)
+		assert.False(t, within(main, wt), name)
+	}
+}
+
+// sameDir reports whether a and b are one existing directory by device and inode.
+func sameDir(a, b string) bool {
+	ia, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	ib, err := os.Stat(b)
+	return err == nil && os.SameFile(ia, ib)
+}
+
+// TestVCSCmdRefusalReadsTheEnvironmentGitStartsWith pins the exemption, and the commit
+// rule behind it, to the environment the child starts with: GIT_DIR or its siblings, set
+// by os\with_env or inherited, move git's repository off the directory it runs in, so a
+// commit run from a scratch repository can land on the job's.
+func TestVCSCmdRefusalReadsTheEnvironmentGitStartsWith(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil).Root()
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	adminDir := filepath.Join(r.main, ".git", "worktrees", "lease-job")
+
+	for name, env := range map[string][]string{
+		"GIT_DIR on the job's repository":  {"GIT_DIR=" + filepath.Join(r.main, ".git")},
+		"GIT_DIR relative to the scratch":  {"GIT_DIR=" + mustRel(t, scratch, filepath.Join(r.main, ".git"))},
+		"GIT_WORK_TREE":                    {"GIT_WORK_TREE=" + r.main},
+		"GIT_COMMON_DIR":                   {"GIT_COMMON_DIR=" + filepath.Join(r.main, ".git")},
+		"GIT_INDEX_FILE":                   {"GIT_INDEX_FILE=" + filepath.Join(r.main, ".git", "index")},
+		"GIT_DIR on the scratch's own dir": {"GIT_DIR=" + filepath.Join(scratch, ".git")},
+		"the last GIT_DIR wins":            {"GIT_DIR=" + filepath.Join(scratch, ".git"), "GIT_DIR=" + filepath.Join(r.main, ".git")},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, env), name)
+	}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, []string{"HOME=/tmp"}), "an environment that moves nothing")
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, wt, []string{"GIT_DIR=" + adminDir}), "GIT_DIR on the worker's own worktree")
+	err := vcsCmdRefusal(ctx, worker, "git", commit, wt, []string{"GIT_DIR=" + filepath.Join(r.main, ".git")})
+	require.Error(t, err, "GIT_DIR moves a commit run in the worker's checkout onto the primary")
+	assert.Contains(t, err.Error(), "It commits in "+r.main)
+}
+
+func mustRel(t *testing.T, base, target string) string {
+	t.Helper()
+	rel, err := filepath.Rel(base, target)
+	require.NoError(t, err)
+	return rel
 }
 
 // TestVCSCmdRefusalExemptsNothingButAnOutsideCommit pins the scratch-repository exemption
@@ -681,11 +764,11 @@ func TestVCSCmdRefusalExemptsNothingButAnOutsideCommit(t *testing.T) {
 		"checkout in a nested repo":  {[]string{"checkout", "--", "."}, nested},
 		"clean in a scratch repo":    {[]string{"clean", "-fdx"}, scratch.Root()},
 	} {
-		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir), name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
 	}
 
 	fresh := testkit.NewRepo(t, nil).Root()
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh, nil))
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
