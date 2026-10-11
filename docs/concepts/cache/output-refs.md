@@ -439,7 +439,9 @@ When a ref cannot be resolved, `magus query` reports a coded
 [diagnostic](../../reference/codes/outputref/README.md) so the error points at the fix:
 
 - [MGS8001](../../reference/codes/outputref/MGS8001.md): the ref is well-formed but no stored output
-  exists: it aged out of the cache, or the ref is mistyped.
+  exists: it aged out of the cache, or the ref is mistyped. A ref another
+  worktree of the repository ran is read from that checkout's store first, and a
+  miss names the checkout that recorded it.
 - [MGS8002](../../reference/codes/outputref/MGS8002.md): a shortened ref prefix matches more than one
   stored output, so the lookup is ambiguous.
 - [MGS8003](../../reference/codes/outputref/MGS8003.md): `magus query output` was given an argument
