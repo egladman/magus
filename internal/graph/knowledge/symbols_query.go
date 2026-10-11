@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -240,7 +241,7 @@ func (s *Store) overlayShards(ctx context.Context, man *manifest) []Shard {
 		sf, err := s.readVerifiedShard(ctx, man, name)
 		if err != nil {
 			// mergeOverlayShard treats an unreadable overlay as absent, and so does this.
-			s.log.DebugContext(ctx, "overlay unreadable", "shard", name, attr.Error(err))
+			s.log.DebugContext(ctx, "overlay unreadable", slog.String("shard", name), attr.Error(err))
 			continue
 		}
 		out = append(out, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})

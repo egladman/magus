@@ -699,7 +699,7 @@ func loadLocalSpell(ctx context.Context, path string) (spells.Descriptor, bool) 
 	if !filepath.IsAbs(path) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not resolve a relative local spell path", "path", path, attr.Error(err))
+			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not resolve a relative local spell path", slog.String("path", path), attr.Error(err))
 			return spells.Descriptor{}, false
 		}
 		path = filepath.Join(cwd, path)
@@ -740,7 +740,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 		// resolution falls through to a normal module import. Only a genuinely
 		// malformed spell is worth logging.
 		if !errors.Is(err, spell.ErrNotASpell) {
-			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not load a local Buzz spell", "path", path, attr.Error(err))
+			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not load a local Buzz spell", slog.String("path", path), attr.Error(err))
 		}
 		return spells.Descriptor{}, false
 	}
