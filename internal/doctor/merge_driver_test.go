@@ -16,7 +16,7 @@ import (
 // the run that settles it, so a stale generated file is visible before it is committed.
 func TestCheckOwedRegeneration(t *testing.T) {
 	root := testkit.NewRepo(t, nil).Root()
-	r := &runner{ws: rootStubWorkspace{root: root}}
+	r := &runner{ws: rootedWorkspace{root: root}}
 
 	assert.Equal(t, types.Check{Name: "owed-regeneration", Status: types.CheckOK,
 		Message: "no merge left a regeneration owed"}, r.checkOwedRegeneration())
@@ -39,10 +39,10 @@ func TestCheckOwedRegeneration(t *testing.T) {
 	}, r.checkOwedRegeneration())
 }
 
-// gitStubWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
-type gitStubWorkspace struct{ rootStubWorkspace }
+// rootedDetectingWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
+type rootedDetectingWorkspace struct{ rootedWorkspace }
 
-func (gitStubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (rootedDetectingWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // A merge driver registered without the diff drivers fails the check naming each missing
 // piece and the command that rewires them; once installed, the same registration passes.
@@ -56,7 +56,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 	root := repo.Root()
 	register := func() { repo.Git("config", "merge.magus.driver", trueExe+" vcs merge-driver %O %A %B %L %P") }
 	register()
-	r := &runner{ws: gitStubWorkspace{rootStubWorkspace{root: root}}}
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
 
 	assert.Equal(t, types.Check{
 		Name:   "merge-driver-loads-workspace",
@@ -92,7 +92,7 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 func TestCheckSettleHooksReportsTheMissingOnes(t *testing.T) {
 	repo := testkit.NewRepo(t, nil)
 	root := repo.Root()
-	r := &runner{ws: gitStubWorkspace{rootStubWorkspace{root: root}}}
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
 	assert.Equal(t, types.Check{Name: "settle-hooks", Status: types.CheckOK,
 		Message: "no merge driver is registered, so no hook is owed"}, r.checkSettleHooks())
 

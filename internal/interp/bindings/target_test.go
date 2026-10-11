@@ -363,7 +363,7 @@ func TestNeedsNamingNoTargetRaises(t *testing.T) {
 // body for the driver: the ctx.needs marker is how the reporter tells a dependent
 // restating that failure from a target failing on its own.
 func TestNeedsMarksADependencyFailureParkedOrInline(t *testing.T) {
-	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, stubErr{} }
+	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, targetFailure{} }
 	targets := map[string]vm.Callable{"types-generate": failing}
 	handle := vm.DirectValue("types_generate", failing)
 	needs := buildBuzzNeeds(targets, map[string]vm.Value{"types-generate": handle}, &externalHandles{})
@@ -458,7 +458,7 @@ func TestRunBuzzDependencies(t *testing.T) {
 	t.Run("target error is wrapped with its name", func(t *testing.T) {
 		targets := map[string]vm.Callable{
 			"go-build": func(context.Context, []vm.Value) (vm.Value, error) {
-				return vm.Null, stubErr{}
+				return vm.Null, targetFailure{}
 			},
 		}
 		err := runBuzzDependencies(context.Background(), targets, []string{"go-build"})
@@ -494,7 +494,7 @@ func (w policyWS) Get(path string) *types.Project {
 // the whole point of the policy: the gate stops paying for a verdict it was never going
 // to act on. Only ctx.needs reaches this path, so `magus run <target>` still fails.
 func TestRunBuzzDependenciesAdvisory(t *testing.T) {
-	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, stubErr{} }
+	failing := func(context.Context, []vm.Value) (vm.Value, error) { return vm.Null, targetFailure{} }
 	targets := map[string]vm.Callable{"coverage-badge": failing, "lint": failing}
 	const reason = "renders from a hand-refreshed per-platform record"
 
@@ -543,11 +543,11 @@ func TestDispatchBuzzExternalNoCoordinator(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// stubErr is a sentinel error used to prove runBuzzDependencies wraps a target failure
+// targetFailure is a sentinel error used to prove runBuzzDependencies wraps a target failure
 // with the target name.
-type stubErr struct{}
+type targetFailure struct{}
 
-func (stubErr) Error() string { return "boom" }
+func (targetFailure) Error() string { return "boom" }
 
 // callSecret invokes one function on magus\secret through the same
 // Session CallValue path host code uses, returning the error.

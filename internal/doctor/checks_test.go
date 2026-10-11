@@ -70,7 +70,7 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 			"generate": {SkipCache: true, SkipCacheReason: "is the drift gate itself"},
 		},
 	}}
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkCacheYield(projects)
 
@@ -92,7 +92,7 @@ func TestCacheYieldStillReportsUndeclaredTargets(t *testing.T) {
 		Path:           ".",
 		TargetPolicies: map[string]types.Target{"generate": {SkipCache: true, SkipCacheReason: "drift gate"}},
 	}, {Path: "docs"}}
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkCacheYield(projects)
 
@@ -110,7 +110,7 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	dir := t.TempDir()
 	writeJournal(t, dir, ranNTimes(".", "go-build:rw", 9))
 
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 	got := r.checkCacheYield(nil)
 
 	require.Equal(t, types.CheckFail, got.Status)
@@ -150,7 +150,7 @@ func deadOutputProject(dir string) *types.Project {
 // while passing on every developer machine, where gen/ had already been built.
 func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 	repo := deadOutputRepo(t, false)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
@@ -168,7 +168,7 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 	repo := deadOutputRepo(t, true)
 	p := deadOutputProject(repo)
 	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
@@ -185,7 +185,7 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 	dir := t.TempDir() // not a repository, so vcs.Resolve finds nothing
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "gen", "a.ts"), []byte("x"), 0o644))
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
 
@@ -206,7 +206,7 @@ func TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave(t *testing.T) {
 	}
 	p := deadOutputProject(dir)
 	p.Outputs = types.MustParseGlobs("src/gen/**", "gen/*.ts", "!gen/hand.ts")
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
@@ -293,10 +293,10 @@ func TestGlobOutputs_CrossesDirectories(t *testing.T) {
 	assert.NotContains(t, hits, deep, "a single star must still not cross a separator")
 }
 
-// The guard probe stubs stand in for the real ./magus: the probe only cares that
+// The guard probe scripts stand in for the real ./magus: the probe only cares that
 // `magus shell -o name` prints a decision on stdout and exits accordingly, never about
 // actual guard rules.
-const denyingProbeStub = "#!/bin/sh\necho deny\nexit 2\n"
+const denyingProbeScript = "#!/bin/sh\necho deny\nexit 2\n"
 
 // testProbeBudget is far above the shipped guardProbeBudget on purpose.
 // These subtests exec a real child process, and this repo is developed across
@@ -328,7 +328,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, no descriptor anywhere -> advice", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeScript)
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckAdvice, c.Status)
@@ -338,7 +338,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeScript)
 		writeCheckpointHarness(t, w, guardedHarnessConfig())
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
@@ -348,7 +348,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, descriptor exposes a missing adapter -> fail", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.WriteExecutable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeScript)
 		writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
@@ -505,7 +505,7 @@ func TestDeclaredOutputFiles(t *testing.T) {
 // untracked), so the check has to skip instead of guess.
 func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.True(t,
@@ -515,9 +515,9 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 		"expected a skip, got %q", got.Message)
 }
 
-type stubWorkspace struct{ types.WorkspaceReader }
+type detectingWorkspace struct{ types.WorkspaceReader }
 
-func (stubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (detectingWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // seedingRepo commits one declared source, one config nothing declares, and one
 // untracked build product. The third is the case the check must NOT report: a fresh
@@ -543,7 +543,7 @@ func seedingProject() *types.Project {
 // request at a time; this answers it in one pass.
 func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 	repo := seedingRepo(t)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -560,7 +560,7 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 // a layout rather than reporting a cost.
 func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 	repo := seedingRepo(t)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -574,7 +574,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 	repo := seedingRepo(t)
 	p := seedingProject()
 	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
 
@@ -586,7 +586,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 // the working tree would answer a different question (it would count build residue).
 func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 	dir := t.TempDir() // not a repository
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -597,7 +597,7 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 // walk skips gen/vendor/node_modules/target wholesale, so a PATTERN aimed inside one
 // matches nothing and keys nothing, and the target replays while those files change.
 func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/*.binpb",
 		"src/**/*.ts",
@@ -617,7 +617,7 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 // walk, so it reaches the cache key from inside a pruned tree normally; reporting it
 // would tell the author to fix something that already works.
 func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/descriptor.binpb",
 		"node_modules/pkg/index.js",
@@ -633,7 +633,7 @@ func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 // against the binary belongs to internal/agent and is tested there.
 func TestCheckAgentSkills(t *testing.T) {
 	t.Run("no catalog supplied -> skipped, not a finding", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
 
 		got := r.checkAgentSkills()
 
@@ -642,7 +642,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("nothing installed -> advice naming the install command", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
 		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
 
 		got := r.checkAgentSkills()
@@ -656,7 +656,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		writeDoctorHarness(t, w)
 		w.Write(".agents/skills/magus-query/SKILL.md", "---\nname: magus-query\n---\nold generated body\n")
-		r := &runner{ws: rootStubWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
 
 		got := r.checkAgentSkills()
@@ -678,7 +678,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		require.NoError(t, err)
 		w.Write(".agents/skills/magus-retired/SKILL.md",
 			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort)))
-		r := &runner{ws: rootStubWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -701,7 +701,7 @@ func TestCheckAgentSkills(t *testing.T) {
 		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
 		require.NoError(t, err)
 		require.NoError(t, os.MkdirAll(w.Path(".agents/skills/magus-retired"), 0o755))
-		r := &runner{ws: rootStubWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -721,7 +721,7 @@ func TestCheckAgentSkills(t *testing.T) {
 // in a nested project's generated MAGUS.md. Harmless until the content changes, and then the root
 // reports the nested project's own generate as an undeclared source mutation.
 func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
 		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("MAGUS.md")},
@@ -738,7 +738,7 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 // A project claiming its OWN output is not the finding: writing what you declared you write is what
 // generate is for, and reporting it would make the check fire on every project in the workspace.
 func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: "docs", Name: "docs", Sources: types.MustParseGlobs("**/*.md"), Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
@@ -751,7 +751,7 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 // A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
 // can overlap is undecidable in general, whether a glob matches one literal path is not.
 func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
 		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("docs/**")},
@@ -927,7 +927,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	probe := spells.Command{Bin: "govulncheck", Args: []string{"-version"}}
 
 	t.Run("same command, no key -> fail", func(t *testing.T) {
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Probe: probe, Observe: probe}))
@@ -941,7 +941,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	t.Run("different args -> ok", func(t *testing.T) {
 		// spells/docker: `trivy version` keys the cache, `trivy version --format json`
 		// is the observation. One binary, two commands, no leak.
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("trivy", spells.Tool{
 			Probe:   spells.Command{Bin: "trivy", Args: []string{"version"}},
@@ -952,7 +952,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	})
 
 	t.Run("same command with a key -> ok", func(t *testing.T) {
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck", spells.Tool{
 			Probe: probe, Observe: probe, Key: spells.VersionKey{UpTo: spells.VersionPatch},
@@ -964,7 +964,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	t.Run("observe with no probe -> ok", func(t *testing.T) {
 		// The shape the go spell carries today, and the one a check reading only
 		// Observe would misreport.
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Observe: probe}))
@@ -979,22 +979,22 @@ func TestCheckJSONCodec(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got.Message, "encoding/json "), got.Message)
 }
 
-// graphStubWorkspace answers Graph() with a fixed error, which is the only thing
+// graphErrorWorkspace answers Graph() with a fixed error, which is the only thing
 // checkGraphCycles reads.
-type graphStubWorkspace struct {
+type graphErrorWorkspace struct {
 	types.WorkspaceReader
 	err error
 }
 
-func (g graphStubWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
+func (g graphErrorWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
 
 func TestCheckGraphCycles(t *testing.T) {
-	ok := (&runner{ws: graphStubWorkspace{}}).checkGraphCycles()
+	ok := (&runner{ws: graphErrorWorkspace{}}).checkGraphCycles()
 	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckOK, Message: "no cycles detected"}, ok)
 
 	// The graph builder is what detects a cycle, so its error IS the finding and has
 	// to reach the report rather than being replaced with a generic message.
-	bad := (&runner{ws: graphStubWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
+	bad := (&runner{ws: graphErrorWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
 	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckFail, Message: "cycle: a -> b -> a"}, bad)
 }
 
@@ -1097,7 +1097,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	// The server passes the workspace through r.ws, leaving r.root empty on that path.
 	t.Run("root comes from the workspace when set", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
+		r := &runner{ws: rootedWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
@@ -1286,7 +1286,7 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 	// An acknowledgment whose shadow is gone is dead config: the reason it carries no
 	// longer describes anything, which is what keeps the opt-out list meaningful.
 	t.Run("every ack is stale", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
 		got := r.checkStaleShadowAcks()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "2 allow_shadow entr(ies) no longer match a real shadow")
@@ -1348,7 +1348,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now.Add(-time.Hour))
 
-		got := (&runner{ws: rootStubWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
@@ -1363,7 +1363,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now)
 
-		got := (&runner{ws: rootStubWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
@@ -1372,18 +1372,18 @@ func TestCheckGuardBinary(t *testing.T) {
 	// judging me?" has no other way to be asked.
 	t.Run("falls back to PATH", func(t *testing.T) {
 		bin := testkit.NewWorkspace(t)
-		fake := bin.WriteExecutable("magus", "#!/bin/sh\n")
+		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
-		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
-		assert.Contains(t, got.Message, fake)
+		assert.Contains(t, got.Message, onPath)
 	})
 
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
-		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
 		assert.Equal(t, types.Check{
 			Status:  types.CheckFail,
 			Details: []string{"build one: magus run build ."},
@@ -1398,7 +1398,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.Write("magus", "not a binary\n")
 
-		got := (&runner{ws: rootStubWorkspace{root: w.Root()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})
@@ -1418,12 +1418,12 @@ func TestResolveGuardBinaryForWiring(t *testing.T) {
 
 	t.Run("falls back to PATH", func(t *testing.T) {
 		bin := testkit.NewWorkspace(t)
-		fake := bin.WriteExecutable("magus", "#!/bin/sh\n")
+		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
 		got, ok := resolveGuardBinaryForWiring(t.TempDir())
 		require.True(t, ok)
-		assert.Equal(t, fake, got)
+		assert.Equal(t, onPath, got)
 	})
 
 	t.Run("nothing to resolve", func(t *testing.T) {

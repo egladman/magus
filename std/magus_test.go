@@ -234,45 +234,45 @@ func raiseOpts(cause any, url string) map[string]any {
 	return o
 }
 
-// fakeAnalyzer is a workspace that can answer the insight lenses, recording the
+// recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
-type fakeAnalyzer struct {
+type recordingAnalyzer struct {
 	types.WorkspaceRepository
 	got       types.InsightOptions
 	failTrend bool
 }
 
-func (f *fakeAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
+func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
 	f.got = o
 	return types.HotspotOutput{Definition: "hot"}, nil
 }
-func (f *fakeAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
+func (f *recordingAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
 	return types.AffinityOutput{}, nil
 }
-func (f *fakeAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
+func (f *recordingAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
 	return types.OwnershipOutput{}, nil
 }
-func (f *fakeAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
+func (f *recordingAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
 	if f.failTrend {
 		return types.TrendOutput{}, errors.New("no history")
 	}
 	return types.TrendOutput{}, nil
 }
-func (f *fakeAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
+func (f *recordingAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
 	return types.VolatilityReport{}, errors.New("no run history")
 }
-func (f *fakeAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
+func (f *recordingAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
 	return types.UnreferencedOutput{}, errors.New("no symbol index")
 }
 
-func (f *fakeAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
+func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
 	return types.DuplicationOutput{}, errors.New("no symbol index")
 }
 
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 
 	report, err := MagusInsight(ctx, nil)
@@ -282,14 +282,14 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
 
-// fakeToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
+// cannedToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
 // to answer in-process rather than forking a nested magus.
-type fakeToolReporter struct {
+type cannedToolReporter struct {
 	types.WorkspaceRepository
 	report types.ToolReport
 }
 
-func (f *fakeToolReporter) Tools(context.Context, ...string) (types.ToolReport, error) {
+func (f *cannedToolReporter) Tools(context.Context, ...string) (types.ToolReport, error) {
 	return f.report, nil
 }
 
@@ -302,7 +302,7 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
 		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
 	}
-	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
+	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &cannedToolReporter{report: want}))
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
@@ -324,7 +324,7 @@ func TestInsightNeedsAWorkspace(t *testing.T) {
 func TestInsightRejectsAnUnknownOption(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
 	for _, opts := range []map[string]any{
 		{"comits": 50.0},
 		{"layoutStyle": "safe"},
@@ -342,7 +342,7 @@ func TestInsightRejectsAnUnknownOption(t *testing.T) {
 func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 	// A Buzz number arrives as float64; an int is what a Go caller would pass.
 	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
@@ -361,7 +361,7 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{Commits: 500})
 	require.NoError(t, err, "volatility and unreferenced failing must not fail the report")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
@@ -505,7 +505,7 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 func TestLedgerNeedsACacheDir(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
 	_, err := MagusListJob(ctx)
 	assert.ErrorContains(t, err, "cache directory")
 }
@@ -829,19 +829,19 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 	require.ErrorContains(t, err, "no stored output")
 }
 
-// fakeCheckoutWorkspace is a workspace rooted at this package's own checkout.
-type fakeCheckoutWorkspace struct {
+// checkoutWorkspace is a workspace rooted at this package's own checkout.
+type checkoutWorkspace struct {
 	types.WorkspaceRepository
 }
 
-func (fakeCheckoutWorkspace) Root() string                 { return "." }
-func (fakeCheckoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (checkoutWorkspace) Root() string                 { return "." }
+func (checkoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // The member and `magus vcs checkpoint` resolve the same tree the same way, so the two
 // cannot describe it differently.
 func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
 	t.Parallel()
-	ctx := types.WithWorkspace(t.Context(), fakeCheckoutWorkspace{})
+	ctx := types.WithWorkspace(t.Context(), checkoutWorkspace{})
 
 	got, gotErr := MagusVCSCheckpoint(ctx)
 

@@ -78,13 +78,13 @@ func writeProbeableHarness(t *testing.T, root, id, command string) {
 }
 
 // probeCommand is the shape a harness wires the command glue in: the workspace's
-// binary running the Buzz file. The binary these tests put at root/magus is a stub,
+// binary running the Buzz file. The binary these tests put at root/magus is a stand-in,
 // so what answers is whatever the test registered for the glue.
 const probeCommand = "./magus buzz -s magus-command.buzz"
 
-// writeFakeMagusBinary satisfies checkProbeEnvironment's presence check with a
+// writeSilentMagus satisfies checkProbeEnvironment's presence check with a
 // binary that answers nothing at all.
-func writeFakeMagusBinary(w *testkit.Workspace) {
+func writeSilentMagus(w *testkit.Workspace) {
 	w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 }
 
@@ -98,7 +98,7 @@ func writeFakeMagusBinary(w *testkit.Workspace) {
 func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	writeFakeMagusBinary(w)
+	writeSilentMagus(w)
 	writeProbeableHarness(t, root, "broken", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "broken")
@@ -114,7 +114,7 @@ func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	writeStubGuardScript(w, "magus-command.buzz", "deny")
+	writeAnsweringMagus(w, "magus-command.buzz", "deny")
 	writeProbeableHarness(t, root, "working", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "working")
@@ -146,7 +146,7 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	writeStubGuardScript(w, "magus-command.buzz", "pass")
+	writeAnsweringMagus(w, "magus-command.buzz", "pass")
 	writeProbeableHarness(t, root, "wrongdecision", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "wrongdecision")
@@ -204,9 +204,9 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 		t.Run(command, func(t *testing.T) {
 			w := testkit.NewWorkspace(t)
 			root := w.Root()
-			writeFakeMagusBinary(w)
+			writeSilentMagus(w)
 			writeProbeableHarness(t, root, "lifecycle", command)
-			// No stub script written at all: if this were probed, it would fail.
+			// No answer script written at all: if this were probed, it would fail.
 
 			result, err := VerifyHarness(untimedProbes(), root, "lifecycle")
 			require.NoError(t, err)

@@ -625,7 +625,7 @@ func TestDisplayPath(t *testing.T) {
 	})
 
 	t.Run("root empty, ws set: falls back to ws.Root()", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: "/repo"}}
+		r := &runner{ws: rootedWorkspace{root: "/repo"}}
 		assert.Equal(t, "internal/doctor/checks.go", r.displayPath("/repo/internal/doctor/checks.go"))
 	})
 
@@ -635,21 +635,21 @@ func TestDisplayPath(t *testing.T) {
 	})
 }
 
-// rootStubWorkspace is a types.WorkspaceReader stub that answers Root() (and,
+// rootedWorkspace is a types.WorkspaceReader that answers Root() (and,
 // when set, Harnesses()) with a fixed value; every other method panics via the
 // embedded nil interface if exercised, which no path in TestDisplayPath does.
-type rootStubWorkspace struct {
+type rootedWorkspace struct {
 	types.WorkspaceReader
 	root      string
 	harnesses []string
 }
 
-func (r rootStubWorkspace) Root() string { return r.root }
+func (r rootedWorkspace) Root() string { return r.root }
 
 // Harnesses satisfies the unexported interface workspaceHarnesses probes for; a
-// zero-value harnesses field means "nothing wired", matching every stub literal
+// zero-value harnesses field means "nothing wired", matching every literal
 // that predates this field.
-func (r rootStubWorkspace) Harnesses() []string { return r.harnesses }
+func (r rootedWorkspace) Harnesses() []string { return r.harnesses }
 
 func TestCheckConfigFile(t *testing.T) {
 	xdgDir := t.TempDir()

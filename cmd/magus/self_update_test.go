@@ -29,7 +29,7 @@ import (
 	"github.com/egladman/magus/internal/selfupdate"
 )
 
-// testFixture holds everything needed to stand up a fake index server and
+// testFixture holds everything needed to stand up a local index server and
 // artifact server for integration tests of selfUpdateCmd.
 type testFixture struct {
 	pub     ed25519.PublicKey
@@ -43,7 +43,7 @@ type testFixture struct {
 	artifactSrv *httptest.Server
 }
 
-// newTestFixture stands up a fake index+artifact pair advertising tag. The
+// newTestFixture stands up a local index+artifact pair advertising tag. The
 // optional manifestVersion argument lets a test make the signed SHA256SUMS
 // "version:" header diverge from the index's Version, to exercise the
 // mismatch guard in selfUpdateCmd; when omitted it defaults to tag.
@@ -66,7 +66,7 @@ func newIndexFixture(t *testing.T, tag string, shape func(served selfupdate.Inde
 		sumsVersion = manifestVersion[0]
 	}
 
-	tarball := makeFakeTarball(t)
+	tarball := makeStandInTarball(t)
 	assetName := fmt.Sprintf("magus_%s_%s_%s_static.tar.gz", tag, runtime.GOOS, releaseArch())
 	sum := sha256.Sum256(tarball)
 	sumHex := hex.EncodeToString(sum[:])
@@ -194,14 +194,14 @@ func setVersion(t *testing.T, v string) {
 	version = v
 }
 
-// makeFakeTarball returns a valid .tar.gz containing a tiny fake magus binary.
-func makeFakeTarball(t *testing.T) []byte {
+// makeStandInTarball returns a valid .tar.gz containing a tiny stand-in magus binary.
+func makeStandInTarball(t *testing.T) []byte {
 	t.Helper()
 	binaryName := "magus"
 	if runtime.GOOS == "windows" {
 		binaryName = "magus.exe"
 	}
-	content := []byte("#!/bin/sh\necho fake magus\n")
+	content := []byte("#!/bin/sh\necho stand-in magus\n")
 
 	var buf bytes.Buffer
 	gw := gzip.NewWriter(&buf)

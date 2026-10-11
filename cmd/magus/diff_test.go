@@ -583,13 +583,13 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 	}, r)
 }
 
-// stubDiffSession is the server's /api/v1/diff/session route, holding every request until the
+// heldDiffSession is the server's /api/v1/diff/session route, holding every request until the
 // test lets go.
 //
 // The holding is what makes the queue observable at all: a server that answers empties the
 // queue as fast as a keyboard can fill it, and every decision in diffBridge is about the case
 // where one has stopped.
-type stubDiffSession struct {
+type heldDiffSession struct {
 	srv     *httptest.Server
 	started chan struct{} // closed once the first request has reached the handler
 	release chan struct{} // closed to let every held request return
@@ -601,9 +601,9 @@ type stubDiffSession struct {
 	got []diffSessionOp
 }
 
-func newStubDiffSession(t *testing.T) *stubDiffSession {
+func newHeldDiffSession(t *testing.T) *heldDiffSession {
 	t.Helper()
-	s := &stubDiffSession{started: make(chan struct{}), release: make(chan struct{})}
+	s := &heldDiffSession{started: make(chan struct{}), release: make(chan struct{})}
 	s.srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var op diffSessionOp
 		if err := json.NewDecoder(r.Body).Decode(&op); err != nil {
@@ -627,17 +627,17 @@ func newStubDiffSession(t *testing.T) *stubDiffSession {
 
 // unblock lets every held request return. Safe to call twice, because the cleanup calls it
 // again after a test already has.
-func (s *stubDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release) }) }
+func (s *heldDiffSession) unblock() { s.releaseOnce.Do(func() { close(s.release) }) }
 
-// bridge is a diffBridge pointed at the stub, skipping the attach round trip the queue has no
+// bridge is a diffBridge pointed at the held session, skipping the attach round trip the queue has no
 // part in.
-func (s *stubDiffSession) bridge() *diffBridge {
-	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: "stub"}
+func (s *heldDiffSession) bridge() *diffBridge {
+	b := &diffBridge{addr: strings.TrimPrefix(s.srv.URL, "http://"), token: "held"}
 	b.start()
 	return b
 }
 
-func (s *stubDiffSession) ops() []diffSessionOp {
+func (s *heldDiffSession) ops() []diffSessionOp {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]diffSessionOp(nil), s.got...)
@@ -670,26 +670,26 @@ func viewedDigests(ops []diffSessionOp) []string {
 // non-blocking send drops the arriving op, which keeps exactly the stale ones and throws away
 // the only true one.
 func TestDiffBridgeQueueKeepsTheNewestCursor(t *testing.T) {
-	stub := newStubDiffSession(t)
-	b := stub.bridge()
+	held := newHeldDiffSession(t)
+	b := held.bridge()
 
 	// The first op is taken by the sender and held in the handler, which is what makes the rest
 	// deterministic: nothing is receiving from the queue while they are pushed.
 	b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: 0})
-	<-stub.started
+	<-held.started
 
 	const pushed = 20
 	for i := 1; i <= pushed; i++ {
 		b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: i})
 	}
-	stub.unblock()
+	held.unblock()
 	b.close()
 
 	want := []int{0}
 	for i := pushed - diffBridgeQueue + 1; i <= pushed; i++ {
 		want = append(want, i)
 	}
-	assert.Equal(t, want, cursorHunks(stub.ops()),
+	assert.Equal(t, want, cursorHunks(held.ops()),
 		"the one in flight, then the newest diffBridgeQueue: the stale head is what gets evicted")
 }
 
@@ -700,11 +700,11 @@ func TestDiffBridgeQueueKeepsTheNewestCursor(t *testing.T) {
 // client will ever be told about. Sharing one evicting queue made a fast reader's marks
 // collateral damage of their own scrolling.
 func TestDiffBridgeNeverDropsAReadMark(t *testing.T) {
-	stub := newStubDiffSession(t)
-	b := stub.bridge()
+	held := newHeldDiffSession(t)
+	b := held.bridge()
 
 	b.SetCursor(types.DiffCursor{Path: "a.go", Hunk: 0})
-	<-stub.started
+	<-held.started
 
 	// Far more cursor moves than the cursor queue holds, with marks interleaved: the overflow
 	// that evicts one must not be able to reach the other.
@@ -717,24 +717,24 @@ func TestDiffBridgeNeverDropsAReadMark(t *testing.T) {
 			b.SetViewed(d, true)
 		}
 	}
-	stub.unblock()
+	held.unblock()
 	b.close()
 
-	assert.Equal(t, want, viewedDigests(stub.ops()),
+	assert.Equal(t, want, viewedDigests(held.ops()),
 		"every mark, in order, however far behind the sender fell")
 }
 
 // TestDiffBridgeCloseDrainsAndTheSenderExits pins the quit path: a mark made on the last
 // keypress leaves, and the goroutine that carried it is gone by the time close returns.
 func TestDiffBridgeCloseDrainsAndTheSenderExits(t *testing.T) {
-	stub := newStubDiffSession(t)
-	b := stub.bridge()
+	held := newHeldDiffSession(t)
+	b := held.bridge()
 
 	b.SetViewed("d0", true)
-	<-stub.started
+	<-held.started
 	b.SetViewed("d1", true)
 	b.SetViewed("d2", false)
-	stub.unblock()
+	held.unblock()
 
 	b.close()
 	select {
@@ -742,7 +742,7 @@ func TestDiffBridgeCloseDrainsAndTheSenderExits(t *testing.T) {
 	default:
 		t.Fatal("the sender goroutine is still running after close returned")
 	}
-	assert.Equal(t, []string{"d0", "d1", "d2"}, viewedDigests(stub.ops()),
+	assert.Equal(t, []string{"d0", "d1", "d2"}, viewedDigests(held.ops()),
 		"a mark made on the last keypress is not lost to the process exiting")
 }
 
@@ -753,11 +753,11 @@ func TestDiffBridgeCloseDrainsAndTheSenderExits(t *testing.T) {
 // it is the only thing that ends the goroutine; abandoning it left one talking to the server
 // about a session the reader had walked away from, with nobody to receive the answer.
 func TestDiffBridgeCloseGivesUpOnAWedgedServer(t *testing.T) {
-	stub := newStubDiffSession(t)
-	b := stub.bridge()
+	held := newHeldDiffSession(t)
+	b := held.bridge()
 
 	b.SetViewed("d0", true)
-	<-stub.started
+	<-held.started
 	b.SetViewed("d1", true)
 
 	start := time.Now()
@@ -775,9 +775,9 @@ func TestDiffBridgeCloseGivesUpOnAWedgedServer(t *testing.T) {
 // TestDiffBridgeSendAfterCloseIsSafe pins why stop is closed instead of the queues: closing a
 // channel the key loop can still send on turns a late keypress into a panic.
 func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
-	stub := newStubDiffSession(t)
-	stub.unblock() // an answering server; this is about the queue, not the wire
-	b := stub.bridge()
+	held := newHeldDiffSession(t)
+	held.unblock() // an answering server; this is about the queue, not the wire
+	b := held.bridge()
 
 	b.SetViewed("d0", true)
 	b.close()
@@ -1129,11 +1129,11 @@ func TestAMarkerInAStringLiteralIsNotADecision(t *testing.T) {
 	assert.True(t, inAComment("# "), "a shell or yaml comment")
 }
 
-// stubAdviceDir builds an advisor directory holding the REAL advice.buzz plus the given
-// stubs, so a test exercises the shipped collect sink rather than a re-implementation of
-// it. The stubs stand in for the advisors themselves, whose findings depend on a git
-// history and a loaded workspace.
-func stubAdviceDir(t *testing.T, stubs map[string]string) string {
+// adviceDirWith builds an advisor directory holding the REAL advice.buzz plus the given
+// advisor scripts, so a test exercises the shipped collect sink rather than a
+// re-implementation of it. The scripts replace the real advisors, whose findings depend on a
+// git history and a loaded workspace.
+func adviceDirWith(t *testing.T, advisors map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
 	src, err := os.ReadFile(filepath.Join("..", "..", adviceDirRel, "advice.buzz"))
@@ -1143,7 +1143,7 @@ func stubAdviceDir(t *testing.T, stubs map[string]string) string {
 	if err := os.WriteFile(filepath.Join(dir, "advice.buzz"), src, 0o600); err != nil {
 		t.Fatalf("write advice.buzz: %v", err)
 	}
-	for name, body := range stubs {
+	for name, body := range advisors {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
@@ -1217,7 +1217,7 @@ fun main() > void !> any {
 `
 
 func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{"echo.buzz": echoAdvisor})
+	dir := adviceDirWith(t, map[string]string{"echo.buzz": echoAdvisor})
 
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"echo.buzz"}, "main")
 	if err != nil {
@@ -1225,7 +1225,7 @@ func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 	}
 	if len(notes) != 0 {
 		// Compile warnings are notes too, so a note here may be a BZZ diagnostic raised by
-		// the shipped advice.buzz rather than anything the stub did.
+		// the shipped advice.buzz rather than anything the advisor did.
 		t.Fatalf("notes = %v, want none", notes)
 	}
 	if len(sections) != 1 {
@@ -1246,7 +1246,7 @@ func TestCollectAdviceEmitsSectionsAndSkipsTheForge(t *testing.T) {
 }
 
 func TestCollectAdviceKeepsARetraction(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{"quiet.buzz": retractingAdvisor})
+	dir := adviceDirWith(t, map[string]string{"quiet.buzz": retractingAdvisor})
 
 	sections, _, err := collectAdvice(context.Background(), dir, []string{"quiet.buzz"}, "main")
 	if err != nil {
@@ -1258,7 +1258,7 @@ func TestCollectAdviceKeepsARetraction(t *testing.T) {
 }
 
 func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{
+	dir := adviceDirWith(t, map[string]string{
 		"echo.buzz":   echoAdvisor,
 		"broken.buzz": brokenAdvisor,
 		"quiet.buzz":  retractingAdvisor,
@@ -1298,7 +1298,7 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 // personas hit it independently and the drive-by contributor named it as the point they
 // nearly abandoned the repo, assuming they had broken something.
 func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{"warned.buzz": warningAdvisor})
+	dir := adviceDirWith(t, map[string]string{"warned.buzz": warningAdvisor})
 
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
 	if err != nil {
@@ -1316,7 +1316,7 @@ func TestCollectAdviceDropsWarningsFromAnAdvisorThatRan(t *testing.T) {
 // BZZ3001 over a crash is usually the explanation for it, which is the whole reason they
 // were ever collected.
 func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{"broken.buzz": brokenAdvisor})
+	dir := adviceDirWith(t, map[string]string{"broken.buzz": brokenAdvisor})
 
 	_, notes, err := collectAdvice(context.Background(), dir, []string{"broken.buzz"}, "main")
 	if err != nil {
@@ -1347,7 +1347,7 @@ func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 	}
 	want := strings.TrimSpace(string(out))
 
-	dir := stubAdviceDir(t, map[string]string{"range.buzz": rangeAdvisor})
+	dir := adviceDirWith(t, map[string]string{"range.buzz": rangeAdvisor})
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"range.buzz"}, "main")
 	if err != nil {
 		t.Fatalf("collectAdvice: %v", err)
@@ -1369,7 +1369,7 @@ func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
 // offline, and under --watch it re-fires on every save), so fetching, and writing
 // refs/remotes/ while doing it, is a report mutating what it reports on.
 func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
-	dir := stubAdviceDir(t, map[string]string{"stale.buzz": staleBaseAdvisor})
+	dir := adviceDirWith(t, map[string]string{"stale.buzz": staleBaseAdvisor})
 
 	sections, notes, err := collectAdvice(context.Background(), dir, []string{"stale.buzz"}, "main")
 	if err != nil {
@@ -1722,7 +1722,7 @@ func TestImpactReviewLines(t *testing.T) {
 // matched against paths relative to it, so a project names its own files the same way its
 // sources and outputs do.
 func TestReviewRequiredMatcher(t *testing.T) {
-	ws := &stubReviewWorkspace{projects: []*types.Project{
+	ws := &projectsWorkspace{projects: []*types.Project{
 		{Path: ".", ReviewRequired: []string{"internal/secret/**"}},
 		{Path: "console", ReviewRequired: []string{"src/auth/*.ts"}},
 	}}
@@ -1739,7 +1739,7 @@ func TestReviewRequiredMatcher(t *testing.T) {
 // A workspace declaring nothing gets no matcher, which the report reads as "single nothing
 // out" rather than as "everything matters".
 func TestReviewRequiredMatcherNilWhenUndeclared(t *testing.T) {
-	ws := &stubReviewWorkspace{projects: []*types.Project{{Path: "."}}}
+	ws := &projectsWorkspace{projects: []*types.Project{{Path: "."}}}
 	assert.Nil(t, reviewRequiredMatcher(ws))
 }
 
@@ -1795,13 +1795,13 @@ func TestImpactReviewLinesDoesNotRepeatRequiredPaths(t *testing.T) {
 	assert.Contains(t, joined, "1 file(s) you have not opened")
 }
 
-// stubReviewWorkspace is the narrow slice of the reader the matcher uses.
-type stubReviewWorkspace struct {
+// projectsWorkspace is the narrow slice of the reader the matcher uses.
+type projectsWorkspace struct {
 	types.WorkspaceReader
 	projects []*types.Project
 }
 
-func (s *stubReviewWorkspace) All() []*types.Project { return s.projects }
+func (s *projectsWorkspace) All() []*types.Project { return s.projects }
 
 // TestScopeAck is the editor-freedom path: a reader who read three files in vim records
 // those three, without claiming the other thirty and without opening magus's viewer.

@@ -55,7 +55,7 @@ func (t *fakeTable) ForEach(fn func(k, v engine.Value)) {
 }
 func (t *fakeTable) Len() int { return len(t.keys) }
 
-// scriptDriver is a fake engine.ReplDriver whose behavior is fully scripted:
+// scriptDriver is an engine.ReplDriver whose behavior is fully scripted:
 // each input line maps to a canned response so REPL loops are deterministic.
 type scriptDriver struct {
 	lang       string
@@ -98,38 +98,38 @@ func (d *scriptDriver) HostBindingNames() []string { return nil }
 
 func (d *scriptDriver) UserGlobals() map[string]engine.Value { return d.globals }
 
-// fakeSession is a scripted engine.Session that also advertises REPL drivers.
-type fakeSession struct {
+// scriptedSession is a scripted engine.Session that also advertises REPL drivers.
+type scriptedSession struct {
 	drivers   []engine.ReplDriver
 	globals   map[string]engine.Value
 	doStrings []string
 	doErr     error
 }
 
-func newFakeSession(drivers ...engine.ReplDriver) *fakeSession {
-	return &fakeSession{drivers: drivers, globals: map[string]engine.Value{}}
+func newScriptedSession(drivers ...engine.ReplDriver) *scriptedSession {
+	return &scriptedSession{drivers: drivers, globals: map[string]engine.Value{}}
 }
 
-func (s *fakeSession) Close() error { return nil }
-func (s *fakeSession) SetGlobal(name string, v engine.Value) {
+func (s *scriptedSession) Close() error { return nil }
+func (s *scriptedSession) SetGlobal(name string, v engine.Value) {
 	s.globals[name] = v
 }
-func (s *fakeSession) GetGlobal(name string) engine.Value {
+func (s *scriptedSession) GetGlobal(name string) engine.Value {
 	if v, ok := s.globals[name]; ok {
 		return v
 	}
 	return engine.NilValue
 }
-func (s *fakeSession) NewTable() engine.Table                  { return &fakeTable{} }
-func (s *fakeSession) LoadString(string) (engine.Value, error) { return engine.NilValue, nil }
-func (s *fakeSession) DoString(code string) error {
+func (s *scriptedSession) NewTable() engine.Table                  { return &fakeTable{} }
+func (s *scriptedSession) LoadString(string) (engine.Value, error) { return engine.NilValue, nil }
+func (s *scriptedSession) DoString(code string) error {
 	s.doStrings = append(s.doStrings, code)
 	return s.doErr
 }
-func (s *fakeSession) Call(engine.CallParams) error { return nil }
+func (s *scriptedSession) Call(engine.CallParams) error { return nil }
 
 // Drivers satisfies engine.DriversProvider so replDrivers picks them up.
-func (s *fakeSession) Drivers() []engine.ReplDriver { return s.drivers }
+func (s *scriptedSession) Drivers() []engine.ReplDriver { return s.drivers }
 
 // runRepl drives Repl over the given input lines and returns stdout/stderr.
 func runRepl(t *testing.T, sess engine.Session, opts ReplOptions, input string) (string, string, error) {
@@ -145,7 +145,7 @@ func runRepl(t *testing.T, sess engine.Session, opts ReplOptions, input string) 
 
 func TestRepl_EOFExitsCleanly(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, errOut, err := runRepl(t, sess, ReplOptions{}, "")
 	require.NoError(t, err)
 	assert.Empty(t, errOut)
@@ -156,7 +156,7 @@ func TestRepl_EOFExitsCleanly(t *testing.T) {
 
 func TestRepl_BannerAndInjectedLocals(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	locals := map[string]engine.Value{"answer": engine.NumberValue(42)}
 	out, _, err := runRepl(t, sess, ReplOptions{Banner: "hello banner", Locals: locals}, "")
 	require.NoError(t, err)
@@ -166,7 +166,7 @@ func TestRepl_BannerAndInjectedLocals(t *testing.T) {
 
 func TestRepl_ExitMetaCommand(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	// .exit returns before evaluating anything; the trailing line is never read.
 	_, _, err := runRepl(t, sess, ReplOptions{}, ".exit\nnever\n")
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestRepl_ExitMetaCommand(t *testing.T) {
 
 func TestRepl_QuitMetaCommand(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, err := runRepl(t, sess, ReplOptions{}, ".quit\n")
 	require.NoError(t, err)
 	assert.Empty(t, drv.evalInputs)
@@ -183,7 +183,7 @@ func TestRepl_QuitMetaCommand(t *testing.T) {
 
 func TestRepl_HelpListsDrivers(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, _, err := runRepl(t, sess, ReplOptions{}, ".help\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, ".buzz")
@@ -198,7 +198,7 @@ func TestRepl_EvaluatesAndPrettyPrintsResult(t *testing.T) {
 			"1 + 1": {vals: []engine.Value{engine.NumberValue(2)}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, errOut, err := runRepl(t, sess, ReplOptions{}, "1 + 1\n")
 	require.NoError(t, err)
 	assert.Empty(t, errOut)
@@ -213,7 +213,7 @@ func TestRepl_NilResultIsNotPrinted(t *testing.T) {
 			"noop": {vals: []engine.Value{engine.NilValue}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, _, err := runRepl(t, sess, ReplOptions{}, "noop\n")
 	require.NoError(t, err)
 	// PrettyPrint renders a value on its own line terminated by a newline, so a
@@ -225,7 +225,7 @@ func TestRepl_NilResultIsNotPrinted(t *testing.T) {
 
 func TestRepl_BlankAndCommentLinesSkipped(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, err := runRepl(t, sess, ReplOptions{}, "\n-- a comment\n")
 	require.NoError(t, err)
 	assert.Empty(t, drv.evalInputs)
@@ -239,7 +239,7 @@ func TestRepl_EvalErrorGoesToStderr(t *testing.T) {
 			"bad": {err: boom},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, errOut, err := runRepl(t, sess, ReplOptions{}, "bad\n")
 	require.NoError(t, err)
 	assert.Contains(t, errOut, "error: boom")
@@ -253,7 +253,7 @@ func TestRepl_BraceBufferingAccumulatesBlock(t *testing.T) {
 			"if x {\ndo()\n}": {vals: []engine.Value{engine.StringValue("done")}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	// The open brace pushes depth positive so the loop buffers instead of
 	// evaluating; the closing "}" returns depth to 0 and the accumulated block runs.
 	out, errOut, err := runRepl(t, sess, ReplOptions{}, "if x {\ndo()\n}\n")
@@ -275,7 +275,7 @@ func TestRepl_IncompleteErrorBuffersMoreInput(t *testing.T) {
 			"partial\nrest": {vals: []engine.Value{engine.StringValue("joined")}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, errOut, err := runRepl(t, sess, ReplOptions{}, "partial\nrest\n")
 	require.NoError(t, err)
 	assert.Empty(t, errOut)
@@ -284,7 +284,7 @@ func TestRepl_IncompleteErrorBuffersMoreInput(t *testing.T) {
 
 func TestRepl_ContinuationPromptShown(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, _, err := runRepl(t, sess, ReplOptions{}, "open {\n")
 	require.NoError(t, err)
 	// The open brace pushes depth positive; the next prompt is the continuation form.
@@ -292,7 +292,7 @@ func TestRepl_ContinuationPromptShown(t *testing.T) {
 }
 
 func TestRepl_NoDriverReportsError(t *testing.T) {
-	sess := newFakeSession() // no drivers advertised
+	sess := newScriptedSession() // no drivers advertised
 	_, errOut, err := runRepl(t, sess, ReplOptions{}, "anything\n")
 	require.NoError(t, err)
 	assert.Contains(t, errOut, "no REPL driver available")
@@ -304,7 +304,7 @@ func TestRepl_LoadExecutesFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("print(1);"), 0o644))
 
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, err := runRepl(t, sess, ReplOptions{}, ".load "+path+"\n")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"print(1);"}, sess.doStrings)
@@ -312,7 +312,7 @@ func TestRepl_LoadExecutesFile(t *testing.T) {
 
 func TestRepl_LoadMissingFileReportsError(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, errOut, err := runRepl(t, sess, ReplOptions{}, ".load /no/such/file.buzz\n")
 	require.NoError(t, err)
 	assert.Contains(t, errOut, "error:")
@@ -322,7 +322,7 @@ func TestRepl_LoadMissingFileReportsError(t *testing.T) {
 func TestRepl_ContextCancelledExitsCleanly(t *testing.T) {
 	isolatePryHistory(t)
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var stdout, stderr strings.Builder
@@ -340,10 +340,10 @@ type scriptError struct{ msg string }
 
 func (e *scriptError) Error() string { return e.msg }
 
-// debugSession is a fakeSession that also implements engine.DebugReader so the
+// debugSession is a scriptedSession that also implements engine.DebugReader so the
 // pry frame/local/upvalue commands have something to introspect.
 type debugSession struct {
-	*fakeSession
+	*scriptedSession
 	frames   []engine.Frame
 	locals   map[string]engine.Value
 	upvalues map[string]engine.Value
@@ -352,7 +352,7 @@ type debugSession struct {
 // stepperSession implements engine.Stepper so the .step/.next/.finish pry
 // commands take their supported branches and return the stepping resume verbs.
 type stepperSession struct {
-	*fakeSession
+	*scriptedSession
 }
 
 func (s *stepperSession) SetStepHook(engine.StepMask, func(engine.StepEvent, engine.Frame)) {}
@@ -374,7 +374,7 @@ func TestPry_StepCommandsSupported(t *testing.T) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
 			isolatePryHistory(t)
-			sess := &stepperSession{fakeSession: newFakeSession(&scriptDriver{lang: "buzz"})}
+			sess := &stepperSession{scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"})}
 			resume, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, tt.command)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantResume, resume)
@@ -411,7 +411,7 @@ func runPry(t *testing.T, sess engine.Session, pctx PryContext, input string) (P
 
 func TestPry_BannerAndContinue(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	pctx := PryContext{File: "prog.buzz", Line: 12, Func: "main"}
 	resume, out, _, err := runPry(t, sess, pctx, ".continue\n")
 	require.NoError(t, err)
@@ -422,7 +422,7 @@ func TestPry_BannerAndContinue(t *testing.T) {
 
 func TestPry_BannerTopLevelNoLine(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	// No line and no func exercises the "(top level)" and location fallbacks.
 	resume, out, _, err := runPry(t, sess, PryContext{File: "prog.buzz"}, ".exit\n")
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestPry_BannerTopLevelNoLine(t *testing.T) {
 
 func TestPry_EOFResumesContinue(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	resume, _, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, "")
 	require.NoError(t, err)
 	assert.Equal(t, ResumeContinue, resume)
@@ -444,7 +444,7 @@ func TestPry_EOFResumesContinue(t *testing.T) {
 // first line typed.
 func TestPry_NoDriverReportsError(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession() // no drivers advertised
+	sess := newScriptedSession() // no drivers advertised
 	resume, _, errOut, err := runPry(t, sess, PryContext{File: "p.buzz"}, "1 + 1\n.exit\n")
 	require.NoError(t, err)
 	assert.Equal(t, ResumeContinue, resume)
@@ -456,7 +456,7 @@ func TestPry_NoDriverReportsError(t *testing.T) {
 // command ran as Buzz source.
 func TestRepl_HeapMetaCommandIsHandled(t *testing.T) {
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, errOut, err := runRepl(t, sess, ReplOptions{}, ".heap\n")
 	require.NoError(t, err)
 	assert.Empty(t, errOut)
@@ -466,7 +466,7 @@ func TestRepl_HeapMetaCommandIsHandled(t *testing.T) {
 
 func TestPry_HelpIsConsumed(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	resume, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".help\n.exit\n")
 	require.NoError(t, err)
 	assert.Equal(t, ResumeContinue, resume)
@@ -477,8 +477,8 @@ func TestPry_HelpIsConsumed(t *testing.T) {
 
 func TestPry_StepNotSupportedResumesContinue(t *testing.T) {
 	isolatePryHistory(t)
-	// fakeSession does not implement engine.Stepper, so .step falls back.
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	// scriptedSession does not implement engine.Stepper, so .step falls back.
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	resume, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".step\n")
 	require.NoError(t, err)
 	assert.Equal(t, ResumeContinue, resume)
@@ -491,7 +491,7 @@ func TestPry_BacktraceWithFrames(t *testing.T) {
 		{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 3, Name: "inner"},
 		{Source: "@b.buzz", ShortSrc: "b.buzz", CurrentLine: 9, Name: "outer"},
 	}
-	sess := &debugSession{fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}), frames: frames}
+	sess := &debugSession{scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}), frames: frames}
 	resume, out, _, err := runPry(t, sess, PryContext{File: "a.buzz"}, ".where\n.exit\n")
 	require.NoError(t, err)
 	assert.Equal(t, ResumeContinue, resume)
@@ -501,7 +501,7 @@ func TestPry_BacktraceWithFrames(t *testing.T) {
 
 func TestPry_BacktraceNoFrames(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".backtrace\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "no frames")
@@ -514,7 +514,7 @@ func TestPry_LocalsListed(t *testing.T) {
 		"alpha": engine.StringValue("x"),
 	}
 	sess := &debugSession{
-		fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}),
+		scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}),
 		frames:      []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
 		locals:      locals,
 	}
@@ -532,7 +532,7 @@ func TestPry_LocalsListed(t *testing.T) {
 func TestPry_LocalsWithUpvalues(t *testing.T) {
 	isolatePryHistory(t)
 	sess := &debugSession{
-		fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}),
+		scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}),
 		frames:      []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
 		locals:      map[string]engine.Value{"loc": engine.NumberValue(1)},
 		upvalues:    map[string]engine.Value{"cap": engine.NumberValue(9)},
@@ -545,7 +545,7 @@ func TestPry_LocalsWithUpvalues(t *testing.T) {
 
 func TestPry_LocalsNoDebugReader(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".locals\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "engine does not expose locals")
@@ -557,7 +557,7 @@ func TestPry_GlobalsListed(t *testing.T) {
 		lang:    "buzz",
 		globals: map[string]engine.Value{"gvar": engine.NumberValue(7)},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".globals\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "gvar")
@@ -566,7 +566,7 @@ func TestPry_GlobalsListed(t *testing.T) {
 func TestPry_GlobalsEmpty(t *testing.T) {
 	isolatePryHistory(t)
 	drv := &scriptDriver{lang: "buzz", globals: map[string]engine.Value{}}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".globals\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "no user globals")
@@ -576,7 +576,7 @@ func TestPry_GlobalsNilMapNotAvailable(t *testing.T) {
 	isolatePryHistory(t)
 	// A nil globals map signals the engine cannot list globals.
 	drv := &scriptDriver{lang: "buzz", globals: nil}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".globals\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "globals not available")
@@ -588,7 +588,7 @@ func TestPry_UpDownFrameNavigation(t *testing.T) {
 		{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 3, Name: "inner"},
 		{Source: "@b.buzz", ShortSrc: "b.buzz", CurrentLine: 9, Name: "outer"},
 	}
-	sess := &debugSession{fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}), frames: frames}
+	sess := &debugSession{scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}), frames: frames}
 	// .down at innermost is a no-op; .up moves to outer; .up again is capped.
 	_, out, _, err := runPry(t, sess, PryContext{File: "a.buzz"}, ".down\n.up\n.up\n.exit\n")
 	require.NoError(t, err)
@@ -603,7 +603,7 @@ func TestPry_PromptReflectsSelectedFrame(t *testing.T) {
 		{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 3, Name: "inner"},
 		{Source: "@b.buzz", ShortSrc: "b.buzz", CurrentLine: 9, Name: "outer"},
 	}
-	sess := &debugSession{fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}), frames: frames}
+	sess := &debugSession{scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}), frames: frames}
 	_, out, _, err := runPry(t, sess, PryContext{File: "a.buzz"}, ".up\n.exit\n")
 	require.NoError(t, err)
 	// After moving up one frame the prompt carries the frame index.
@@ -618,7 +618,7 @@ func TestPry_PpEvaluatesExpression(t *testing.T) {
 			"1 + 2": {vals: []engine.Value{engine.NumberValue(3)}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".pp 1 + 2\n.exit\n")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"1 + 2"}, drv.evalInputs)
@@ -633,7 +633,7 @@ func TestPry_PpEvaluationError(t *testing.T) {
 			"bad": {err: &scriptError{"kaboom"}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, errOut, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".pp bad\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, errOut, "error: kaboom")
@@ -647,7 +647,7 @@ func TestPry_HistoryCommand(t *testing.T) {
 			"x": {vals: []engine.Value{engine.NumberValue(1)}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	// Evaluate x (recorded to history), then request the history listing.
 	_, out, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, "x\n.history\n.exit\n")
 	require.NoError(t, err)
@@ -662,7 +662,7 @@ func TestPry_LoadExecutesFile(t *testing.T) {
 	path := filepath.Join(dir, "prog.buzz")
 	require.NoError(t, os.WriteFile(path, []byte("print(2);"), 0o644))
 
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	_, _, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, ".load "+path+"\n.exit\n")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"print(2);"}, sess.doStrings)
@@ -676,7 +676,7 @@ func TestPry_EvalError(t *testing.T) {
 			"oops": {err: &scriptError{"nope"}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, errOut, err := runPry(t, sess, PryContext{File: "p.buzz"}, "oops\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, errOut, "error: nope")
@@ -685,7 +685,7 @@ func TestPry_EvalError(t *testing.T) {
 func TestPry_BlankAndCommentLinesSkipped(t *testing.T) {
 	isolatePryHistory(t)
 	drv := &scriptDriver{lang: "buzz"}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	_, _, _, err := runPry(t, sess, PryContext{File: "p.buzz"}, "\n-- note\n.exit\n")
 	require.NoError(t, err)
 	assert.Empty(t, drv.evalInputs)
@@ -693,7 +693,7 @@ func TestPry_BlankAndCommentLinesSkipped(t *testing.T) {
 
 func TestPry_ContextCancelledResumesContinue(t *testing.T) {
 	isolatePryHistory(t)
-	sess := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess := newScriptedSession(&scriptDriver{lang: "buzz"})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	var stdout, stderr strings.Builder
@@ -713,7 +713,7 @@ func TestPry_WhereamiWithSource(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("l1\nl2\nl3\nl4\nl5\n"), 0o644))
 
 	frames := []engine.Frame{{Source: path, ShortSrc: path, CurrentLine: 3, Name: "f"}}
-	sess := &debugSession{fakeSession: newFakeSession(&scriptDriver{lang: "buzz"}), frames: frames}
+	sess := &debugSession{scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}), frames: frames}
 	_, out, _, err := runPry(t, sess, PryContext{File: path, Line: 3, Func: "f"}, ".whereami\n.exit\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "From:")
@@ -758,14 +758,14 @@ func TestReplFooterIsInertOffATTY(t *testing.T) {
 	assert.Empty(t, buf.String(), "a non-TTY REPL emits nothing extra")
 }
 
-// fakeDriver is a ReplDriver that only answers UserGlobals, which is all the
+// globalsOnlyDriver is a ReplDriver that only answers UserGlobals, which is all the
 // completer asks of it.
-type fakeDriver struct {
+type globalsOnlyDriver struct {
 	engine.ReplDriver
 	globals map[string]engine.Value
 }
 
-func (d fakeDriver) UserGlobals() map[string]engine.Value { return d.globals }
+func (d globalsOnlyDriver) UserGlobals() map[string]engine.Value { return d.globals }
 
 func testCompleter(globals []string, candidates []string) (*replCompleter, *bytes.Buffer) {
 	g := map[string]engine.Value{}
@@ -775,7 +775,7 @@ func testCompleter(globals []string, candidates []string) (*replCompleter, *byte
 	var out bytes.Buffer
 	return &replCompleter{
 		meta:       []string{".exit", ".quit", ".help", ".load", ".buzz"},
-		driver:     func() engine.ReplDriver { return fakeDriver{globals: g} },
+		driver:     func() engine.ReplDriver { return globalsOnlyDriver{globals: g} },
 		candidates: func() []string { return candidates },
 		out:        &out,
 	}, &out
@@ -1015,7 +1015,7 @@ func TestRepl_HistoryMetaCommand(t *testing.T) {
 			"x": {vals: []engine.Value{engine.NumberValue(1)}},
 		},
 	}
-	sess := newFakeSession(drv)
+	sess := newScriptedSession(drv)
 	out, _, err := runRepl(t, sess, ReplOptions{}, "x\n.history\n")
 	require.NoError(t, err)
 	assert.Contains(t, out, "   1: x")
@@ -1027,13 +1027,13 @@ func TestRepl_HistoryMetaCommand(t *testing.T) {
 func TestRepl_HistoryPersistsAcrossSessions(t *testing.T) {
 	isolatePryHistory(t)
 
-	sess1 := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess1 := newScriptedSession(&scriptDriver{lang: "buzz"})
 	var out1, err1 strings.Builder
 	require.NoError(t, Repl(context.Background(), sess1, ReplOptions{
 		Stdin: strings.NewReader("first line\n"), Stdout: &out1, Stderr: &err1,
 	}))
 
-	sess2 := newFakeSession(&scriptDriver{lang: "buzz"})
+	sess2 := newScriptedSession(&scriptDriver{lang: "buzz"})
 	var out2, err2 strings.Builder
 	require.NoError(t, Repl(context.Background(), sess2, ReplOptions{
 		Stdin: strings.NewReader(".history\n"), Stdout: &out2, Stderr: &err2,
