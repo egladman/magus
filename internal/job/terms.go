@@ -51,6 +51,9 @@ type Terms struct {
 	// RegeneratedOutside is what [RegeneratedOutside] finds for the row: outputs a target
 	// regenerates from sources the holder may edit, in files the holder may not write.
 	RegeneratedOutside []RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
+	// UnrunGates is what [UnrunGates] finds: ci targets over the write paths that nothing
+	// the job is graded on runs.
+	UnrunGates []UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
 	// Affinity is the co-change evidence for the lease's projects against projects it
 	// does NOT own. A WARNING and never a boundary: the skill reads strong hidden
 	// affinity as a reason to reduce parallelism, which is the orchestrator's call to
@@ -102,6 +105,7 @@ type TermsFacts struct {
 	Projects           []string
 	DerivedDenyPaths   []TermsBoundary
 	RegeneratedOutside []RegeneratedOutput
+	UnrunGates         []UnrunGate
 	Affinity           []TermsAffinity
 }
 
@@ -115,7 +119,8 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		Projects:           facts.Projects,
 		DerivedDenyPaths:   facts.DerivedDenyPaths,
 		RegeneratedOutside: facts.RegeneratedOutside,
-		Affinity:           facts.Affinity,
+		UnrunGates:         facts.UnrunGates,
+		Affinity:          facts.Affinity,
 	}
 }
 
@@ -146,6 +151,7 @@ func (b Terms) String() string {
 		writeList(&s, "deny paths the workspace declares", lines)
 	}
 	writeList(&s, regeneratedHeading, regeneratedLines(b.RegeneratedOutside))
+	writeList(&s, unrunHeading, unrunLines(b.UnrunGates))
 
 	if len(b.Affinity) > 0 {
 		lines := make([]string, len(b.Affinity))

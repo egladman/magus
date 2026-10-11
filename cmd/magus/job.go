@@ -749,7 +749,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	facts, unrun := leaseBoundary(ctx, root, row, leases)
+	facts := leaseBoundary(ctx, root, row, leases)
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, root, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
@@ -770,7 +770,6 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
-		job.RenderUnrunGates(os.Stdout, unrun)
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -781,7 +780,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		pointAtConsole(ctx, row.ID)
 		return nil
 	default:
-		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status, UnrunGates: unrun})
+		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
 	}
 }
 
@@ -797,9 +796,6 @@ type describeJobOutput struct {
 	// advances a job and never blocks the holder still working on it. It is the same
 	// grading `job wait` does, so the two cannot disagree.
 	Goals types.JobStatus `json:"goals" yaml:"goals"`
-	// UnrunGates are the ci targets over the write paths that neither the check nor a goal
-	// runs, beside regenerated_outside in what the workspace says about the paths.
-	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
 }
 
 // checkoutBaseToken is the base this checkout is on, in the one form the store compares
@@ -1766,20 +1762,17 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-//
-// The ci targets over the write paths that nothing the job is graded on runs come back
-// beside the facts, because the terms render only the facts.
-func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) (job.TermsFacts, []job.UnrunGate) {
+func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) job.TermsFacts {
 	if len(row.WritePaths) == 0 {
-		return job.TermsFacts{}, nil
+		return job.TermsFacts{}
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}, nil
+		return job.TermsFacts{WorkspaceCold: true}
 	}
 	affected, err := m.AffectedFromPaths(ctx, row.WritePaths)
 	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}, nil
+		return job.TermsFacts{WorkspaceCold: true}
 	}
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
@@ -1789,8 +1782,9 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 		Projects:           affected.Affected,
 		DerivedDenyPaths:   derived,
 		RegeneratedOutside: notes.Regenerated,
+		UnrunGates:         notes.Unrun,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
-	}, notes.Unrun
+	}
 }
 
 // generatedBoundary is the declared output globs, across every project the lease
