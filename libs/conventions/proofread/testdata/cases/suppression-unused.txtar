@@ -18,3 +18,7 @@ It simply works.
 # Page
 
 The syntax is `<!-- proofread off filler -->` before the line.
+-- pass/reference whole --
+# Page
+
+A doc comment writes "proofread:ignore filler REASON" to name the syntax.

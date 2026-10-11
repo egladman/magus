@@ -41,13 +41,13 @@ var (
 const ruleList = `[A-Za-z0-9_-]+(?:\s*,\s*[A-Za-z0-9_-]+)*`
 
 var (
-	// suppressOff matches <!-- proofread off RULES: REASON -->. Group 1 is the
+	// suppressOff matches `<!-- proofread off RULES: REASON -->`. Group 1 is the
 	// comma-separated rules and group 2 the reason, empty when none is given.
 	suppressOff = regexp.MustCompile(`<!--\s*proofread\s+off\s+(` + ruleList + `)\s*(?::\s*(.*?))?\s*-->`)
-	// suppressOn matches <!-- proofread on [RULES] -->, which ends the block a
+	// suppressOn matches `<!-- proofread on [RULES] -->`, which ends the block a
 	// matching off opened. Group 1 is the rules, empty for all of them.
 	suppressOn = regexp.MustCompile(`<!--\s*proofread\s+on(?:\s+(` + ruleList + `))?\s*-->`)
-	// suppressIgnore matches proofread:ignore RULES REASON. Group 1 is the
+	// suppressIgnore matches `proofread:ignore RULES REASON`. Group 1 is the
 	// comma-separated rules and group 2 the reason.
 	suppressIgnore = regexp.MustCompile(`proofread:ignore[ \t]+([A-Za-z0-9_-]+(?:,[A-Za-z0-9_-]+)*)(?:[ \t]+(.*\S))?`)
 	fenceOpen      = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
@@ -81,8 +81,9 @@ type span struct {
 // or by "<!-- proofread on RULE -->" for some of its rules, instead covers
 // every line up to the on comment. A finding with no line, such as a doc
 // comment's budget, is covered by a suppression of its rule anywhere in the
-// text. A suppression with no reason covers nothing. Backtick spans and fenced
-// code blocks hold no suppression, so a page may show the syntax.
+// text. A suppression with no reason covers nothing. Backtick spans, double
+// quotes and fenced code blocks hold no suppression, so a page or a doc
+// comment may show the syntax.
 //
 // With [RuleSuppressionUnused] on, each suppression with no reason, and each
 // with a rule that matched no finding on its lines, is reported once, at its
@@ -173,7 +174,7 @@ func (in input) directives() []*directive {
 			continue
 		}
 
-		masked := blankBackticks(raw)
+		masked := mentionsMasked(raw)
 
 		if at := suppressOff.FindStringSubmatchIndex(masked); at != nil {
 			d := offDirective(raw, at, n)
@@ -211,7 +212,7 @@ func offDirective(raw string, at []int, n int) *directive {
 	return d
 }
 
-// ignoreDirective builds the directive a proofread:ignore at line n is, from
+// ignoreDirective builds the directive a `proofread:ignore` at line n is, from
 // the submatch indices at of suppressIgnore in raw.
 func ignoreDirective(raw string, at []int, n int) *directive {
 	d := &directive{
