@@ -15,8 +15,8 @@ export final inputsFile = "gen/proofread.inputs";
 export final build = "magus run proofread-build libs/conventions";
 
 // sources lists every file proofread is linked from, relative to dir, the
-// libs/conventions module: its go.mod and go.sum and the non-test Go of the two packages
-// it builds.
+// libs/conventions module: its go.mod and go.sum, the non-test Go of the two packages
+// it builds, and the labeled cases the binary embeds for `proofread calibrate`.
 // proofread-build hashes this list and the guard rehashes it, so neither can drift from the other.
 export fun sources(dir: str) > [str] !> any {
     final found = mut ["go.mod", "go.sum"];
@@ -25,6 +25,11 @@ export fun sources(dir: str) > [str] !> any {
             if (name.endsWith(".go") and !name.endsWith("_test.go")) {
                 found.append("{pkg}/{name}");
             }
+        }
+    }
+    foreach (name in fs\listDir("{dir}/proofread/testdata/cases")) {
+        if (name.endsWith(".txtar")) {
+            found.append("proofread/testdata/cases/{name}");
         }
     }
     return found;

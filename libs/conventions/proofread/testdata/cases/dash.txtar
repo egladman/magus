@@ -1,0 +1,13 @@
+A dash between words.
+-- hit/reference --
+The key sorts its inputs — then it hashes them.
+Pages 10–20 cover it.
+-- hit/change-description --
+- Sorts the inputs -- and hashes them.
+-- hit/review-reply --
+Done — pushed.
+-- pass/reference --
+Sort the inputs; then hash them.
+Run `magus run -- -run TestX` to narrow the test.
+The range is 10 to 20.
+A cache-key is stable - see below.

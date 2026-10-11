@@ -1,0 +1,14 @@
+A run of short sentences.
+-- hit/reference --
+It had no preference for symmetry. No aesthetic prior. No nostalgia for human taste.
+The cache is fast. The key is stable. Replays hit. Nothing else changed.
+magus does not decide for you. It answers questions. You decide.
+Run `magus run go-build .` now. Then `magus affected ci` too. It passes.
+-- hit/change-description --
+It is fast. It is small. It is stable.
+-- pass/reference --
+It reads the key. It sorts it. Then the hash runs over the sorted bytes in one pass.
+- Fast. Small. Stable.
+Speed matters here, so the key sorts its inputs before hashing them, and the replay hits.
+## Fast. Small. Stable.
+**3. List.** See what a repository holds.

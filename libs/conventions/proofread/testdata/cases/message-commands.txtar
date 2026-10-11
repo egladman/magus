@@ -1,0 +1,6 @@
+A printed message naming more than one next command.
+-- hit/message --
+run `magus graph build`, then `magus refs X`
+-- pass/message --
+stale graph: run `magus graph build`
+`go.mod` is stale in `libs/x`: run `magus run tidy .`

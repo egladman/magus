@@ -1,0 +1,25 @@
+A numbered step in a guide that does not open with its action. Each case is a whole list.
+-- hit/guide whole --
+1. Run `magus init`.
+2. The target builds.
+3. It prints a ref.
+4. You commit the lock.
+-- hit/guide whole --
+1. Save the key.
+2. `magus ls` lists them.
+3. [The guide](g.md) explains it.
+-- pass/guide whole --
+1. Run `magus init`.
+2. **Add** a target.
+3. Open the page.
+-- pass/guide whole --
+1. The drift gate fails.
+2. You regenerate.
+3. A reviewer reads it.
+-- pass/guide whole --
+- Run it.
+- The cache fills.
+-- pass/guide whole --
+1. Save the key.
+   1. The key is PEM.
+2. Verify it.

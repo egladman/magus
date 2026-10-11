@@ -1,0 +1,15 @@
+Residue of a tool or a template.
+-- hit/change-description --
+- Pins the key.【4:0†source】
+- Owner: [insert team name]
+-- hit/reference --
+Released on 2025-xx-xx.
+See turn0search1 for the source.
+-- hit/doc-comment --
+Pins the key. TBD.
+-- hit/review-reply --
+Done, citeturn0search0.
+-- pass/reference --
+A `contentReference` field names the citation.
+Read [Your own hooks, in Buzz] first.
+Set the date to 2025-10-09.

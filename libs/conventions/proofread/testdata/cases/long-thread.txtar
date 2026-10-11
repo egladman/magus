@@ -1,0 +1,9 @@
+The fourth reply by one author in a thread.
+-- hit/review-reply thread=3 --
+The map is shared.
+-- hit/review-reply thread=7 --
+The map is shared.
+-- pass/review-reply thread=2 --
+The map is shared.
+-- pass/review-reply --
+The map is shared.

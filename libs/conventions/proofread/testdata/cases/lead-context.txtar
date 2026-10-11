@@ -1,0 +1,30 @@
+A change description that does not open with a paragraph naming the goal. Every case is a whole description, its title on the first line.
+-- hit/change-description whole --
+fix: x
+## Summary
+
+Sorts the inputs.
+-- hit/change-description whole --
+fix: x
+- Sorts the inputs.
+-- hit/change-description whole --
+fix: x
+
+This PR sorts the inputs before hashing, because two workers raced on the key.
+-- hit/change-description whole --
+fix: x
+Sorts the inputs before hashing.
+-- hit/change-description whole --
+perf: x
+The server's warm caches lagged behind edits, so the first query rebuilt the graph inline.
+-- pass/change-description whole --
+fix(cache): keep the key stable
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs before hashing.
+
+- Sorts the inputs.
+-- pass/change-description whole --
+perf: x
+The first query after an edit now answers from a graph that is already current.
+-- pass/change-description whole --
+perf: x
+The first query answers from a current graph, which no longer rebuilds inline. Until now it failed under load.

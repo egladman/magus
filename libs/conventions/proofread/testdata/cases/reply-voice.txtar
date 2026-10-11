@@ -1,0 +1,54 @@
+Text answering a prompt the reader never saw.
+-- hit/reference --
+This change adds a flag. Here's how it works.
+- I've moved the cache.
+The cap is 60 words, as discussed.
+- **Status:** Accepted
+-- hit/change-description --
+- Addresses review feedback on the cap.
+- Caps the run, as you asked.
+-- hit/change-description whole --
+fix(cache): keep the key stable
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs before hashing.
+
+## Testing
+
+Ran the suite.
+-- hit/change-description whole --
+fix(cache): keep the key stable
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs before hashing.
+
+**Test plan**
+
+- Ran the suite.
+-- hit/review-reply --
+- **Cache:** sorted
+-- hit/review-reply whole --
+## Summary
+
+The map races.
+-- pass/reference --
+This holds the key stable.
+It is not the run you asked for.
+- **Breaking: the `exclusive` option, with no replacement.** Delete the key.
+- Run it **twice**: once cold.
+The rule refuses "This PR adds" and `Here's`.
+-- pass/reference whole --
+# Cache
+
+## Overview
+
+The cache stores blobs.
+-- pass/change-description whole --
+fix(cache): keep the key stable
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs before hashing.
+
+## What changes
+
+## Why this approach
+
+## Evidence
+
+## Not verified
+-- pass/review-reply --
+I've pushed a fix, as discussed. Here's the trace.

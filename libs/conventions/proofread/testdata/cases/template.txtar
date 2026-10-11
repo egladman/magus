@@ -1,0 +1,10 @@
+A skill template body that does not render. Each line is one body.
+-- hit/agent-instructions-template --
+Run it{{if .Full}}, since.
+Run it{{else}}.
+Run it{{if .Verbose}}, since{{end}}.
+{{range .Steps}}step{{end}}
+-- pass/agent-instructions-template --
+Run it{{if .Full}}, since the cache keys it{{end}}.
+Run it{{if .Full}} first, always{{else}} first{{end}}.
+Run it.

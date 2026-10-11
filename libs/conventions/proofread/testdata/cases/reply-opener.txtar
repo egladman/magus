@@ -1,0 +1,8 @@
+A reply that opens by contradicting.
+-- hit/review-reply --
+No, the map is shared.
+The map is shared. As I said, it needs a lock.
+Wrong, it races.
+-- pass/review-reply --
+Actually, it races.
+No lock guards the map.

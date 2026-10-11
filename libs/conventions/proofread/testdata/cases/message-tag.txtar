@@ -1,0 +1,10 @@
+A printed message opening with a component tag or a marker.
+-- hit/message --
+server: not running
+merge-driver: refreshed
+[AGENT] read the plan
+-- pass/message --
+graph is stale: run `magus graph build`
+Server: not running
+magus workspace: denied
+run `x [TAG]`

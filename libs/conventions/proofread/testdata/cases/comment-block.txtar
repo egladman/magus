@@ -1,0 +1,37 @@
+A doc paragraph over 250 words. The whole sections are doc comments.
+-- hit/doc-comment whole --
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+The cache keys a run on what it reads, so an undeclared input replays a stale verdict.
+-- hit/doc-comment whole --
+word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+
+word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+-- pass/doc-comment whole --
+The cache keys a run on what it reads. A miss reruns it.
+-- pass/doc-comment whole --
+word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+
+word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+-- pass/doc-comment whole --
+Lead:
+
+  - word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+
+  - word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.
+
+  - word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word. word word word word word word word word word word.

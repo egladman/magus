@@ -1,0 +1,10 @@
+A trailing participle claiming significance.
+-- hit/reference --
+The cache stores blobs, highlighting the importance of the key.
+The key sorts, underscoring the design.
+-- hit/change-description --
+- Sorts the inputs, showcasing the new hasher.
+-- pass/reference --
+The key sorts its inputs, then hashes them.
+The sorter is reflecting the input order back to the caller in a test.
+Hash the inputs, ensuring the lock is released.

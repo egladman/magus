@@ -1,0 +1,19 @@
+A removal or replacement that names nothing the old code was for.
+-- hit/change-description --
+- Replaces the per-process cache with a shared one.
+- Drop the inert console skip from the generate passes.
+-- fp/change-description --
+- Drop the orphaned page for a command that no longer exists.
+-- hit/change-description whole --
+refactor(memory): remove the memory store
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs.
+
+- Moves notes.
+-- pass/change-description --
+- Replaces the per-process cache, which suited one worker, with a shared one.
+- Sorts the inputs.
+-- pass/change-description whole --
+refactor: remove the memory store
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs.
+
+The store was built for one session at a time.

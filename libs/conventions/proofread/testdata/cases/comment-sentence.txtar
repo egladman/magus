@@ -1,0 +1,19 @@
+A doc sentence over 60 words.
+-- hit/doc-comment whole --
+The cache keys a run on the cache keys a run on what it reads and the cache keys a run
+on what it reads and the cache keys a run on what it reads and the cache keys a run on
+what it reads and the cache keys a run on what it reads and the cache keys a run on what
+it reads and the cache keys a run on what it reads and the cache keys a run on what it
+reads.
+-- pass/doc-comment --
+The cache keys a run on what it reads. A miss reruns it.
+-- pass/doc-comment whole --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word
+
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word
+-- pass/doc-comment whole --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word
+```
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word
+```
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word.

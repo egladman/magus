@@ -1,0 +1,20 @@
+A spaced hyphen spelling an em-dash in a doc comment.
+-- hit/doc-comment --
+Resolve answers the question the caller asked - not the one it meant.
+Admit refuses a run whose host is underprovisioned - which the caller retries.
+Split cuts the range at one point - three pieces would be two cuts.
+The lock is taken before the check - which is what makes the fast path safe.
+-- hit/doc-comment whole --
+Every rule it applies is derived:
+  - one property per tag - in declaration order
+-- pass/doc-comment --
+The window is 3 - 5 seconds, and residual = 100 - 30 is subtraction.
+Flags reads `a  - b` as one argument.
+See https://example.com/a-b-c for the background.
+-- pass/doc-comment whole --
+Bullets holds the doc-list shapes gofmt formats:
+
+  - the first item
+  - the second item
+-- fp/doc-comment --
+The last index is n - 1, which reads as prose from out here.

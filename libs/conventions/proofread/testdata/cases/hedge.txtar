@@ -1,0 +1,22 @@
+A softener qualifying a claim.
+-- hit/reference --
+The flag may help a slow runner.
+It aims to be fast and is arguably simpler.
+You should probably pin it.
+This could potentially fix the flake.
+Not tested on Linux. It probably holds.
+-- hit/change-description --
+- This might fix the flake.
+- The key can conceivably collide.
+-- pass/reference --
+A workspace may declare its own spells.
+The value may be empty.
+A wait that might still end is never refused.
+Nothing else may make it on your behalf.
+-- pass/change-description --
+- Not measured on Linux, where it might help.
+- Untested on Windows; probably fine.
+-- pass/reference whole --
+## Known limits
+
+It probably holds.

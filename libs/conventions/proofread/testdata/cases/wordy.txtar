@@ -1,0 +1,20 @@
+A phrase with a shorter equivalent.
+-- hit/reference --
+Sort the inputs in order to make the key stable.
+-- hit/reference whole --
+Sort the inputs in order
+to make the key stable.
+-- hit/change-description --
+- Skips the walk due to the fact that the dir is pruned.
+-- hit/guide --
+The reason why the key sorts is replay.
+-- hit/agent-instructions --
+Check whether or not the lock is held.
+Run walks the tiers in order for lookups and stores.
+-- pass/reference --
+Sort the inputs to make the key stable.
+Check whether or not the lock is held.
+The fact is recorded in the journal.
+Run walks the tiers in order for lookups and stores.
+Read the CA at the moment it was written.
+Write "to", not "in order to".

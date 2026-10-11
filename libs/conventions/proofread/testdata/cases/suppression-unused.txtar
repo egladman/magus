@@ -1,0 +1,20 @@
+A suppression comment with no reason, or one that matched no finding.
+-- hit/reference whole --
+# Page
+
+<!-- proofread off filler -->
+It simply works.
+-- hit/reference whole --
+# Page
+
+<!-- proofread off filler: the quote keeps the speaker's word -->
+It works.
+-- pass/reference whole --
+# Page
+
+<!-- proofread off filler: the quote keeps the speaker's word -->
+It simply works.
+-- pass/reference whole --
+# Page
+
+The syntax is `<!-- proofread off filler -->` before the line.

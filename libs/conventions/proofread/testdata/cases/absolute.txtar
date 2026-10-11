@@ -1,0 +1,11 @@
+Never, nobody or nothing said of the past.
+-- hit/change-description --
+- The queue has never merged a pull request.
+- Verdict inheritance never fired.
+-- hit/review-reply --
+A variable nobody listed reaches the test.
+Nothing checked it.
+-- pass/change-description --
+- Resolve never returns nil, and the value is never used.
+-- pass/review-reply --
+Nobody need run it twice.

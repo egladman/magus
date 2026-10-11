@@ -1,0 +1,12 @@
+A short command in a review reply that gives no reason.
+-- hit/review-reply --
+Fix this.
+Please remove the test.
+Delete this test
+-- pass/review-reply --
+Remove the test. It duplicates the one above, so it adds nothing.
+Remove it to reduce noise.
+Move the retry into the client with the backoff it already has.
+Use `sync.Once`.
+Fix is in the next commit.
+Could we drop this?

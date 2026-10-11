@@ -1,0 +1,9 @@
+A review reply sentence that asks the author why they did something.
+-- hit/review-reply --
+Why did you add the lock?
+Looks close. Why would you copy the map?
+**Why are you** sorting twice?
+-- pass/review-reply --
+Why does the cache miss here?
+I see why you added the lock.
+The guide says to avoid "Why did you" openers.

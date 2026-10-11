@@ -54,7 +54,7 @@ export fun proofread_build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(format);
     // readsFiles replaces the project baseline. proofread.buzz computes the digest, so a
     // change to it must relink: a replayed digest from the old code would deny every call.
-    ctx.readsFiles("**/*.go", "go.mod", "go.sum", "proofread.buzz");
+    ctx.readsFiles("**/*.go", "proofread/testdata/cases/*.txtar", "go.mod", "go.sum", "proofread.buzz");
     // Literal, as magus reads outputs statically: proofread\binary and proofread\inputsFile.
     ctx.writesFiles("gen/proofread", "gen/proofread.inputs");
     go["go-build"](ctx, {"args": ["-trimpath", "-o", proofread\binary, "./cmd/proofread"]});

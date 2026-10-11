@@ -1,0 +1,14 @@
+A review reply that judges code or asks for a change and names nothing to act on.
+-- hit/review-reply --
+This is confusing.
+Please fix this.
+This is wrong. It is also redundant.
+-- pass/review-reply --
+This is confusing: `cacheKey` reads twice.
+Passing cacheKey here is wrong.
+This is redundant with internal/cache/key.go.
+This is unclear, see line 42.
+This is unclear, e.g. what happens on a miss.
+This is redundant because the caller already sorts.
+Thanks, looks good.
+Does the caller hold the lock here?

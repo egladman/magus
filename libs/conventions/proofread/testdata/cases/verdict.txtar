@@ -1,0 +1,10 @@
+A judgment in place of the behavior.
+-- hit/change-description --
+- The cache was broken and the parser is a mess.
+-- hit/review-reply --
+That retry is hacky.
+-- fp/change-description --
+- Collects every verdict, so one red run names everything that is wrong.
+-- pass/change-description --
+- Answered from the wrong checkout; a bad plan and a broken test fail.
+- Runs garbage collection after the build.

@@ -1,0 +1,24 @@
+Words that presume the reader finds a step easy or obvious.
+-- hit/guide --
+It is easy: easily done.
+A simple target builds it.
+Then you just run `magus init`.
+Please wait.
+-- hit/reference --
+Of course the key is sorted, as everyone knows.
+-- hit/agent-instructions --
+Clearly, the key is sorted. Obviously it holds.
+-- hit/review-reply --
+This obviously needs a lock.
+-- pass/guide --
+It extracts just the binary you just downloaded, not just the hunks.
+The rule refuses "easy".
+-- pass/guide whole --
+The order is easy to get
+wrong, and you cannot easily audit it.
+-- pass/reference --
+Two names looked obviously correct, and none is obviously the mistake.
+The doc clearly meant to cite a code.
+It is easy.
+-- pass/change-description --
+- It is easy to miss, so a simple check runs; please open an issue.

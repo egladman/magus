@@ -1,0 +1,15 @@
+A callable name ending in the word Of or For. Each section is one symbol.
+-- hit/doc-comment name=configFor callable --
+configFor returns the config a target reads.
+-- hit/doc-comment name=valueOf callable --
+valueOf reads the value a key holds.
+-- hit/doc-comment name=value_of callable --
+value_of reads the value a key holds.
+-- pass/doc-comment name=parseConfig callable --
+parseConfig reads the workspace config.
+-- pass/doc-comment name=ForEach callable --
+ForEach calls fn on every key.
+-- pass/doc-comment name=Offset callable --
+Offset returns the byte offset of the key.
+-- pass/doc-comment name=valueOf --
+valueOf is the value a key holds.

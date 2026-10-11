@@ -1,0 +1,20 @@
+A claim made by denying its opposite.
+-- hit/change-description --
+- It is not just a cache; it is the ledger.
+- Not because the test is slow. Because the key races.
+- The run isn't flaky, it's racy.
+-- hit/reference --
+It is not only a cache but also a ledger.
+This is not a loophole. It is the point of the version.
+It has no flags, no config, just a path.
+It hashes the inputs, no guessing.
+-- hit/guide --
+It is not just a cache; it is the ledger.
+-- hit/agent-instructions --
+It is not just a cache; it is the ledger.
+-- pass/change-description --
+- Pins the key so a replay hits.
+-- pass/reference --
+Not every key is stable.
+The sandbox is not a container; the guard page says why.
+The rule refuses "it is not just X; it is Y".

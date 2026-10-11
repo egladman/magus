@@ -1,0 +1,17 @@
+A claim with no evidence beside it.
+-- hit/change-description --
+- Fixes the flaky cache test.
+- Makes startup much faster.
+-- hit/review-reply --
+Startup drops from 410ms to 260ms.
+It passed 50 of 50 runs. The skills shrink 11 percent.
+Startup drops to 260ms. See `hack/bench/startup.buzz`.
+-- pass/change-description --
+- `TestCacheEvict` passed 50 of 50 runs with `-count=50`.
+- Fixes the flake #512 reported.
+- Startup drops to 260ms since 4762d2e2d.
+- Adds five nesting fixes
+-- pass/review-reply --
+Startup drops to 260ms ([run](https://example.com/run/1)).
+Startup drops to 260ms (grd875434f41d23c346).
+Not measured on Linux, where it may be faster.

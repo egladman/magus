@@ -1,0 +1,15 @@
+A phrase narrating the change rather than the code.
+-- hit/doc-comment --
+Load reads the manifest. It used to read the lock file too.
+Parse returns an error for an empty input; previously it returned nil.
+This now correctly rejects a nil key.
+Keeps the old behavior for callers that pass a path.
+-- pass/doc-comment --
+Sign takes the key that is used to sign every envelope, which is what a verifier checks.
+Walk reads the directory now, before the caller can change it, instead of deferring the read.
+-- pass/doc-comment whole --
+Example keeps its command table verbatim:
+
+	tool --previously-set  rerun with the old flag
+-- fp/doc-comment --
+SignBare pins the case where a purpose after a bare noun reads as a habit, so the key used to sign is reported.

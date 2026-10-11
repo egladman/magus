@@ -1,0 +1,9 @@
+A recommendation stated as fact with no reason.
+-- hit/review-reply --
+This should be a map.
+The retry needs to move into the client.
+-- pass/review-reply --
+This should be a map: lookups dominate.
+This must be locked because two goroutines write it.
+I'd say this should be a map.
+Should this be a map?

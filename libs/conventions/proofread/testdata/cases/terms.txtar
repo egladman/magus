@@ -1,0 +1,11 @@
+A spelling the glossary replaces.
+-- hit/doc-comment --
+It hands the work to a sub-agent.
+Sub-Agents share the lease.
+-- hit/reference --
+Spawn one sub-agent per job.
+-- pass/doc-comment --
+It hands the work to subagents.
+-- pass/reference --
+Spawn one subagent per job.
+The rule refuses the `sub-agent` spelling.

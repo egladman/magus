@@ -1,0 +1,9 @@
+Words in capitals for emphasis in a review reply.
+-- hit/review-reply --
+Do NOT merge this.
+THIS IS WRONG.
+-- pass/review-reply --
+The REST API returns JSON over HTTP.
+Pin the AWS SDK version.
+Set `NOT_NULL` on the column.
+Read MAX_RETRIES first.
