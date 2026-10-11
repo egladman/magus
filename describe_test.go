@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -95,7 +95,7 @@ func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository 
 
 func TestListSpells_ShapeAndOrder(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	name := fakespell.Register(t, "zzz-describe-spells-test", spells.WithTargets("build", "test"))
+	name := register.Spell(t, "zzz-describe-spells-test", spells.WithTargets("build", "test"))
 
 	out, err := ListSpells(context.Background())
 	require.NoError(t, err, "ListSpells")
@@ -117,7 +117,7 @@ func TestListSpells_ShapeAndOrder(t *testing.T) {
 
 func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	name := fakespell.Register(t, "zzz-describe-language-test",
+	name := register.Spell(t, "zzz-describe-language-test",
 		spells.WithLanguage("demo"),
 		spells.WithLanguageExtensions([]string{".demo"}),
 		spells.WithSyntax(&spells.Syntax{
@@ -163,7 +163,7 @@ func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
 
 func TestListSpells_DescribesTypedSpell(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	name := fakespell.Register(t, "zzz-spell-inventory-test",
+	name := register.Spell(t, "zzz-spell-inventory-test",
 		spells.WithSources("**/*.demo"),
 		spells.WithOutputs("out/**"),
 		spells.WithTargets("build", "check", "dynamic"),
@@ -216,7 +216,7 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 
 func TestListTargets_CanonicalCIFirst(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	spellName := fakespell.Register(t, "zzz-targets-spell", spells.WithTargets("zzz-target-a", "zzz-target-b"))
+	spellName := register.Spell(t, "zzz-targets-spell", spells.WithTargets("zzz-target-a", "zzz-target-b"))
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -242,7 +242,7 @@ func TestListTargets_CanonicalCIFirst(t *testing.T) {
 }
 
 func TestEvaluateTarget_Charms(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-charm-spell",
+	spellName := register.Spell(t, "zzz-charm-spell",
 		spells.WithTargets("lint"),
 		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
@@ -264,7 +264,7 @@ func TestEvaluateTarget_Charms(t *testing.T) {
 
 func TestListCharms_InverseIndex(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	spellName := fakespell.Register(t, "zzz-describe-charms-spell",
+	spellName := register.Spell(t, "zzz-describe-charms-spell",
 		spells.WithTargets("lint"),
 		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
@@ -373,11 +373,11 @@ func TestListProjects_Inventory(t *testing.T) {
 // are all absent reports no manifest at all.
 func TestListProjects_Manifests(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	hasSpell := fakespell.Register(t, "zzz-manifest-has", spells.WithManifests(
+	hasSpell := register.Spell(t, "zzz-manifest-has", spells.WithManifests(
 		spells.Manifest{Value: "pyproject.toml"},
 		spells.Manifest{Value: "setup.py"},
 		spells.Manifest{Value: "setup.cfg"}))
-	noneSpell := fakespell.Register(t, "zzz-manifest-none", spells.WithManifests(spells.Manifest{Value: "Cargo.toml"}))
+	noneSpell := register.Spell(t, "zzz-manifest-none", spells.WithManifests(spells.Manifest{Value: "Cargo.toml"}))
 
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
@@ -420,7 +420,7 @@ func TestListProjects_Manifests(t *testing.T) {
 // root's pnpm-lock.yaml even though pnpm-lock.yaml is the earlier-declared candidate.
 func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	nodeSpell := fakespell.Register(t, "zzz-lock-node", spells.WithManifests(
+	nodeSpell := register.Spell(t, "zzz-lock-node", spells.WithManifests(
 		spells.Manifest{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}}))
 
 	w := testkit.NewWorkspace(t)
@@ -474,9 +474,9 @@ func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 // package manager with.
 func TestListProjects_LockfilesAbsent(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	noLocks := fakespell.Register(t, "zzz-lock-none",
+	noLocks := register.Spell(t, "zzz-lock-none",
 		spells.WithManifests(spells.Manifest{Value: "setup.py"}))
-	missingLocks := fakespell.Register(t, "zzz-lock-missing", spells.WithManifests(
+	missingLocks := register.Spell(t, "zzz-lock-missing", spells.WithManifests(
 		spells.Manifest{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}}))
 
 	w := testkit.NewWorkspace(t)
@@ -550,7 +550,7 @@ func TestEvaluateTarget_UnknownProject(t *testing.T) {
 
 func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	spellName := fakespell.Register(t, "zzz-dt-spell",
+	spellName := register.Spell(t, "zzz-dt-spell",
 		spells.WithTargets("my-target"),
 		spells.WithSources("**/*.zzz"),
 	)
@@ -603,7 +603,7 @@ func TestEvaluateProjects_Shape(t *testing.T) {
 
 func TestEvaluateProjects_WorkspaceRootedSources(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	spellName := fakespell.Register(t, "zzz-ep-spell", spells.WithSources("**/*.ep"))
+	spellName := register.Spell(t, "zzz-ep-spell", spells.WithSources("**/*.ep"))
 
 	// Build workspace with root + api project.
 	w := testkit.NewWorkspace(t)
@@ -655,8 +655,8 @@ func TestWorkspace_SingleWorkspace(t *testing.T) {
 // them through.
 func TestClassifyFiles_Classification(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	rootSpell := fakespell.Register(t, "zzz-df-root", spells.WithSources("docs/**/*.md"), spells.WithOutputs("GEN.md", "gen/**"))
-	webSpell := fakespell.Register(t, "zzz-df-web", spells.WithSources("**/*.ts"), spells.WithOutputs("dist/**"))
+	rootSpell := register.Spell(t, "zzz-df-root", spells.WithSources("docs/**/*.md"), spells.WithOutputs("GEN.md", "gen/**"))
+	webSpell := register.Spell(t, "zzz-df-web", spells.WithSources("**/*.ts"), spells.WithOutputs("dist/**"))
 
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
@@ -722,7 +722,7 @@ func TestClassifyFiles_Classification(t *testing.T) {
 func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
 	t.Helper()
 	// Not parallel: mutates the global spell registry.
-	spellName := fakespell.Register(t, "zzz-df-exists", spells.WithSources("**/*.go"))
+	spellName := register.Spell(t, "zzz-df-exists", spells.WithSources("**/*.go"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -811,7 +811,7 @@ func TestClassifyFiles_PathShapesAgree(t *testing.T) {
 // that legitimately declares one of these paths would stop being told it is keyed.
 func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	spellName := fakespell.Register(t, "zzz-df-attrs", spells.WithSources(".gitattributes"))
+	spellName := register.Spell(t, "zzz-df-attrs", spells.WithSources(".gitattributes"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -862,7 +862,7 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 	// walk executed.
 	const customTarget = "zzz-ctx-cancel-target"
 	const customCharm = "zzz-ctx-cancel-charm"
-	spellName := fakespell.Register(t, "zzz-ctx-cancel-spell",
+	spellName := register.Spell(t, "zzz-ctx-cancel-spell",
 		spells.WithTargets(customTarget),
 		spells.WithTargetCharms(map[string][]string{customTarget: {customCharm}}),
 	)

@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -23,7 +23,7 @@ import (
 func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *atomic.Int32) {
 	t.Helper()
 	probes = &atomic.Int32{}
-	spellName := fakespell.Register(t, "zzz-scip-stamp-test-spell",
+	spellName := register.Spell(t, "zzz-scip-stamp-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),

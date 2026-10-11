@@ -13,7 +13,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -103,7 +103,7 @@ func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
 // above call attributeRun themselves and so stay green when nothing calls it.
 func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 	var invoked context.Context
-	spellName := fakespell.Register(t, "zzz-invocation-identity-spell",
+	spellName := register.Spell(t, "zzz-invocation-identity-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			invoked = ctx

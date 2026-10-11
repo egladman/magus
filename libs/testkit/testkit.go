@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// TB is the part of testing.TB that testkit and fakespell call. *testing.T and
+// TB is the part of testing.TB that testkit and register call. *testing.T and
 // *testing.B satisfy it, and so can a small type in a program with no test running (an
 // Example), which cannot implement testing.TB because that interface has a private
 // method.

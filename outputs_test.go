@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -169,7 +169,7 @@ func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 	const trackedBody = "committed\n"
 
-	spellName := fakespell.Register(t, "zzz-clean-tracked-outputs-test-spell",
+	spellName := register.Spell(t, "zzz-clean-tracked-outputs-test-spell",
 		spells.WithTargets("generate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			gen := filepath.Join(req.Dir, "gen")

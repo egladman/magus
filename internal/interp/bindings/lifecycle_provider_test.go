@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 )
 
@@ -20,7 +20,7 @@ import (
 func withLifecycleSpell(t *testing.T, answer func() (any, error)) (string, *spells.InvokeRequest) {
 	t.Helper()
 	var seen spells.InvokeRequest
-	name := fakespell.Register(t, "fake-lifecycle",
+	name := register.Spell(t, "fake-lifecycle",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			seen = req
 			return answer()

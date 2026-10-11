@@ -220,8 +220,8 @@ fake cannot tell you.
   methods to fake whole.
 - Magusfile targets do not run outside this module, so a test that writes one and calls
   `Run` proves nothing. Register a spell from Go with `WithSpell` instead.
-- Register a programmatic spell with `fakespell.Register(tb, name, opts ...spells.Option)`
-  (`libs/testkit/fakespell`), passing `spells.WithTargets` and the like{{if .Full}}. The spell registry is process-global, so parallel
+- Register a programmatic spell with `register.Spell(tb, name, opts ...spells.Option)`
+  (`libs/testkit/register`), passing `spells.WithTargets` and the like{{if .Full}}. The spell registry is process-global, so parallel
   tests that register spells race{{end}}.
 
 ## Audit mode

@@ -27,7 +27,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -119,7 +119,7 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 // needs a live cache (ComputeTargetKey returns types.ErrNoCache on an Inspect workspace).
 func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 	t.Helper()
-	spellName := fakespell.Register(t, "zzz-query-ref-spell", spells.WithTargets("build"))
+	spellName := register.Spell(t, "zzz-query-ref-spell", spells.WithTargets("build"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -205,7 +205,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": ""})
 	firstRev := repo.Head()
 
-	spellName := fakespell.Register(t, "zzz-query-meta-revision-spell", spells.WithTargets("build"),
+	spellName := register.Spell(t, "zzz-query-meta-revision-spell", spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }))
 
 	reg := magus.NewWorkspaceRegistry()
@@ -255,7 +255,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 	for i := range targets {
 		targets[i] = fmt.Sprintf("build%02d", i)
 	}
-	spellName := fakespell.Register(t, "zzz-query-multi-spell", spells.WithTargets(targets...))
+	spellName := register.Spell(t, "zzz-query-multi-spell", spells.WithTargets(targets...))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -304,7 +304,7 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 // unconditional "share it with --publish" hint that follows every other path. A
 // best-effort suggestion must never partially render around an error it hit.
 func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-query-nocache-spell", spells.WithTargets("build"))
+	spellName := register.Spell(t, "zzz-query-nocache-spell", spells.WithTargets("build"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")

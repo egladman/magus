@@ -23,7 +23,7 @@ import (
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -196,7 +196,7 @@ func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
 	root := w.Root()
 	src := w.Write("a.txt", "before\n")
 	w.Magusfile("")
-	spellName := fakespell.Register(t, "zzz-source-mutation-spell",
+	spellName := register.Spell(t, "zzz-source-mutation-spell",
 		spells.WithTargets("touch"),
 		spells.WithSources("*.txt"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
@@ -359,7 +359,7 @@ func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	var m *Magus
 	var freshenErr error
 	var seen types.SymbolIndexFreshness
-	readerSpell := fakespell.Register(t, "zzz-index-reader-spell",
+	readerSpell := register.Spell(t, "zzz-index-reader-spell",
 		spells.WithTargets("lint"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target != "lint" {
@@ -433,7 +433,7 @@ const indexerBin = "zzz-scip-freshness-indexer"
 func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *string) {
 	t.Helper()
 	version := "1.0.0"
-	spellName := fakespell.Register(t, "zzz-scip-freshness-test-spell",
+	spellName := register.Spell(t, "zzz-scip-freshness-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
 		spells.WithOps(map[string]spells.Op{
@@ -456,7 +456,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 		}),
 		spells.WithInvoker(writesTheIndex),
 	)
-	skillsSpell := fakespell.Register(t, "zzz-scip-freshness-skills-spell", spells.WithSources(".claude/skills/**/SKILL.md"))
+	skillsSpell := register.Spell(t, "zzz-scip-freshness-skills-spell", spells.WithSources(".claude/skills/**/SKILL.md"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -769,7 +769,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}
 	}
 	indexer := spells.WithInvoker(writesTheIndex)
-	goSpell := fakespell.Register(t, "zzz-uses-go-spell",
+	goSpell := register.Spell(t, "zzz-uses-go-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.go"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-go"}, Uses: []string{"zzz-uses-go"}}),
@@ -780,7 +780,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}),
 		spells.WithVersionProber(prober), indexer,
 	)
-	tsSpell := fakespell.Register(t, "zzz-uses-ts-spell",
+	tsSpell := register.Spell(t, "zzz-uses-ts-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.ts"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}),
@@ -1094,7 +1094,7 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 // then answered with a line the source no longer held, and status called it up to date.
 func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 	runs := 0
-	spellName := fakespell.Register(t, "zzz-scip-replay-test-spell",
+	spellName := register.Spell(t, "zzz-scip-replay-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),

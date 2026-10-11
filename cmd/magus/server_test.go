@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -344,7 +344,7 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	m, err := magus.Open(context.Background(), root, opts...)
 	require.NoError(t, err, "fixture workspace must open")
 
-	name := fakespell.Register(t, "fake-job-review",
+	name := register.Spell(t, "fake-job-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:

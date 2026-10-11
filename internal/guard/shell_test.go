@@ -14,7 +14,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -833,7 +833,7 @@ func TestParseGuardCommandsUnparsable(t *testing.T) {
 }
 
 func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
-	spellName := fakespell.Register(t, "guard-catalog-test",
+	spellName := register.Spell(t, "guard-catalog-test",
 		spells.WithTargets("verify"),
 		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			if target != "verify" {
@@ -853,7 +853,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 // first by name are both the wrong one: the invocation carries every argument of the
 // second and misses the first's `^$`.
 func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
-	spellName := fakespell.Register(t, "guard-shared-subcommand-test",
+	spellName := register.Spell(t, "guard-shared-subcommand-test",
 		spells.WithTargets("alpha-fuzz", "beta-test"),
 		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			switch target {

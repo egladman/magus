@@ -27,7 +27,7 @@ var publicGoPackages = []string{
 	"github.com/egladman/magus",
 	"github.com/egladman/magus/types",
 	"github.com/egladman/magus/libs/testkit",
-	"github.com/egladman/magus/libs/testkit/fakespell",
+	"github.com/egladman/magus/libs/testkit/register",
 	"github.com/egladman/magus/types/gen/mocks",
 }
 

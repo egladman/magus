@@ -21,7 +21,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -36,7 +36,7 @@ func newPrintingWorkspace(t *testing.T, output string) (*magus.Magus, string) {
 // output; a non-nil runErr is a failed run, whose output is stored all the same.
 func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magus, string) {
 	t.Helper()
-	spellName := fakespell.Register(t, "zzz-output-import", spells.WithTargets("build"),
+	spellName := register.Spell(t, "zzz-output-import", spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprint(stdout, output)

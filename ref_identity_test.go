@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -26,7 +26,7 @@ import (
 // instead of taking as a parameter.
 func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
-	spellName := fakespell.Register(t, "zzz-identify-spell", spells.WithTargets("build"))
+	spellName := register.Spell(t, "zzz-identify-spell", spells.WithTargets("build"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -136,7 +136,7 @@ func TestIdentifyRef_InvalidRefShape(t *testing.T) {
 // (Inspect) workspace can mint no keys at all, so ComputeTargetKey's
 // types.ErrNoCache must propagate rather than silently resolving to "no matches".
 func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-identify-nocache-spell", spells.WithTargets("build"))
+	spellName := register.Spell(t, "zzz-identify-nocache-spell", spells.WithTargets("build"))
 
 	w := testkit.NewWorkspace(t)
 	w.Magusfile("")
@@ -167,7 +167,7 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 		t.Skip("running as root: permission bits do not block reads")
 	}
 
-	spellName := fakespell.Register(t, "zzz-identify-skip-spell",
+	spellName := register.Spell(t, "zzz-identify-skip-spell",
 		spells.WithTargets("build", "broken"),
 		spells.WithTargetSources(map[string][]string{"broken": {"secret.txt"}}),
 	)
@@ -275,7 +275,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		}
 		// Unprefixed glob: baseStep joins it with the project path, mirroring how a
 		// real spell declares sources relative to the project it binds to.
-		spellName := fakespell.Register(b, fmt.Sprintf("zzz-bench-identity-spell-%02d", i),
+		spellName := register.Spell(b, fmt.Sprintf("zzz-bench-identity-spell-%02d", i),
 			spells.WithTargets(targets...),
 			spells.WithSources("**/*.go"),
 		)

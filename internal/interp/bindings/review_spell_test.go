@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -21,7 +21,7 @@ import (
 // succeed on a lookup and refuse a publish, which no real spell can be made to do on demand.
 func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
 	t.Helper()
-	name := fakespell.Register(t, "fake-review",
+	name := register.Spell(t, "fake-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			return answer(req.Target)
 		}))
@@ -216,7 +216,7 @@ func TestReviewCommentsAsksNothingWithoutAnOpenReview(t *testing.T) {
 
 func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	var sent []any
-	name := fakespell.Register(t, "fake-capture",
+	name := register.Spell(t, "fake-capture",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			sent, _ = req.Params["drafts"].([]any)
 			return map[string]any{}, nil
@@ -318,7 +318,7 @@ func TestFindReviewAsksWhoTheCredentialIsOnlyOnce(t *testing.T) {
 	t.Cleanup(func() { rememberViewer("") })
 
 	var asked []bool
-	name := fakespell.Register(t, "fake-viewer",
+	name := register.Spell(t, "fake-viewer",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			asked = append(asked, req.Params["want_viewer"] == true)
 			return map[string]any{"id": "482", "author": "priya", "viewer": "eli"}, nil
@@ -357,7 +357,7 @@ func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
 func capturedVerdict(t *testing.T, at types.ReviewTarget, want types.ReviewVerdict) (sent string, published types.ReviewVerdict) {
 	t.Helper()
 	var got string
-	name := fakespell.Register(t, "fake-verdict",
+	name := register.Spell(t, "fake-verdict",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			got, _ = req.Params["verdict"].(string)
 			return map[string]any{}, nil

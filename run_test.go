@@ -28,7 +28,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -122,7 +122,7 @@ func TestForcesNoCache(t *testing.T) {
 // (magus.WithRace), not replay; otherwise the race detector observes nothing.
 func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 	var calls atomic.Int32
-	spellName := fakespell.Register(t, "zzz-race-test-spell",
+	spellName := register.Spell(t, "zzz-race-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
@@ -158,7 +158,7 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 // failed target result and as an MGS3009 diagnostic, both naming the holder.
 func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	spellName := fakespell.Register(t, "zzz-machine-refusal-spell",
+	spellName := register.Spell(t, "zzz-machine-refusal-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			t.Error("a refused target must not run")
@@ -240,7 +240,7 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 // the refreshed result instead of missing or replaying something stale.
 func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 	var calls atomic.Int32
-	spellName := fakespell.Register(t, "zzz-no-cache-test-spell",
+	spellName := register.Spell(t, "zzz-no-cache-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
@@ -278,7 +278,7 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 // documented safety net a real no-VCS or disabled-VCS workspace gets.
 func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 	var calls atomic.Int32
-	spellName := fakespell.Register(t, "zzz-affected-no-cache-test-spell",
+	spellName := register.Spell(t, "zzz-affected-no-cache-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
@@ -573,7 +573,7 @@ func TestChainSkipCacheStepsSkipsATargetThatMaintainsNoArtifact(t *testing.T) {
 // spell invoker, following TestRun_RaceReexecutesCachedTarget.
 func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 	var composer, gate atomic.Int32
-	spellName := fakespell.Register(t, "zzz-gate-test-spell",
+	spellName := register.Spell(t, "zzz-gate-test-spell",
 		spells.WithTargets("composer", "gate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
@@ -632,7 +632,7 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 	root := w.Root()
 	artifact := filepath.Join(root, "GATE.md")
 	var composer atomic.Int32
-	spellName := fakespell.Register(t, "zzz-gate-first-run-spell",
+	spellName := register.Spell(t, "zzz-gate-first-run-spell",
 		spells.WithTargets("composer", "gate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target == "composer" {
@@ -668,7 +668,7 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 // drift check failed again on the same key until a run happened to miss lint.
 func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
 	var lint atomic.Int32
-	spellName := fakespell.Register(t, "zzz-foreign-output-spell",
+	spellName := register.Spell(t, "zzz-foreign-output-spell",
 		spells.WithTargets("lint", "generate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target == "lint" {
@@ -1194,7 +1194,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 
-	spellName := fakespell.Register(t, "zzz-no-vcs-revision-test-spell",
+	spellName := register.Spell(t, "zzz-no-vcs-revision-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			return nil, nil
@@ -1816,7 +1816,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // came back green. Both targets fail here; exactly one may run twice.
 func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
 	var flaky, steady atomic.Int32
-	spellName := fakespell.Register(t, "zzz-retry-granularity-spell",
+	spellName := register.Spell(t, "zzz-retry-granularity-spell",
 		spells.WithTargets("flaky", "steady"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
@@ -1883,7 +1883,7 @@ func (b *syncBuffer) String() string {
 // collapsed: the unnoticed volatile target the annotation exists to prevent, unnoticed.
 func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 	var calls atomic.Int32
-	spellName := fakespell.Register(t, "zzz-retry-audible-spell",
+	spellName := register.Spell(t, "zzz-retry-audible-spell",
 		spells.WithTargets("flaky"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			if calls.Add(1) == 1 {
@@ -1928,7 +1928,7 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 // sizes its claim from the measured peaks of runs shaped like it, and records its own
 // outcome under that same shape for the next run to read.
 func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-shaped-claim-spell",
+	spellName := register.Spell(t, "zzz-shaped-claim-spell",
 		spells.WithTargets("work"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
 	)
@@ -2133,7 +2133,7 @@ func TestTargetDrivenEnvKeys(t *testing.T) {
 // plain `magus run go::go-vet` shared one cache entry and a failure from one replayed onto
 // the other.
 func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-platform-spell", spells.WithOps(map[string]spells.Op{
+	spellName := register.Spell(t, "zzz-platform-spell", spells.WithOps(map[string]spells.Op{
 		"build": {Command: spells.Command{Bin: "true", EnvKeys: []string{"GOOS"}}},
 	}), spells.WithTargets("build"))
 
@@ -2195,7 +2195,7 @@ func TestCharmsForCI(t *testing.T) {
 // child's own output, reported as MGS3001 against the parent's composer. Nothing in the
 // child ran, which is why the dispatch set never had anything to mark.
 func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-nested-output-spell",
+	spellName := register.Spell(t, "zzz-nested-output-spell",
 		spells.WithTargets("gen"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			return nil, os.WriteFile(filepath.Join(req.Dir, "gen", "own.txt"), []byte("parent"), 0o644)
@@ -2236,7 +2236,7 @@ func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
 // was open while its replay wrote. The glob here is rooted in the nested project, so the
 // boundary keeps the record, and the replay overwrites the child's own bytes.
 func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
-	spellName := fakespell.Register(t, "zzz-direct-hit-audit-spell",
+	spellName := register.Spell(t, "zzz-direct-hit-audit-spell",
 		spells.WithTargets("gen"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
 	)
@@ -2270,7 +2270,7 @@ func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeR
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	spellName = fakespell.Register(t, spellName,
+	spellName = register.Spell(t, spellName,
 		spells.WithTargets("lint"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 			if err := invoke(req); err != nil {

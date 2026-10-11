@@ -15,7 +15,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/libs/testkit/fakespell"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -529,7 +529,7 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 // failing, which left the reply and publish paths, where the real bugs were, uncovered.
 func withReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
-	name := fakespell.Register(t, "fake-status-review",
+	name := register.Spell(t, "fake-status-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -621,7 +621,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 // a reply need not find the root first, and it wins over ID when both arrive.
 func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 	var threads []string
-	name := fakespell.Register(t, "fake-reply-recorder",
+	name := register.Spell(t, "fake-reply-recorder",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -662,7 +662,7 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 // comment and answering a reply's own id would open nothing.
 func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 	var asked []string
-	name := fakespell.Register(t, "fake-reply-resolver",
+	name := register.Spell(t, "fake-reply-resolver",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
