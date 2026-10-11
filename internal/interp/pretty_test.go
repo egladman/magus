@@ -40,12 +40,12 @@ func TestPrettyPrint_BoolValue(t *testing.T) {
 }
 
 func TestPrettyPrint_EmptyTable(t *testing.T) {
-	out := prettyString(&fakeTable{}, PrettyOpts{})
+	out := prettyString(&orderedTable{}, PrettyOpts{})
 	assert.Equal(t, "{}\n", out)
 }
 
 func TestPrettyPrint_IdentKeyRendersUnquoted(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	tbl.RawSetString("name", engine.StringValue("magus"))
 	out := prettyString(tbl, PrettyOpts{})
 	assert.Contains(t, out, "name = ")
@@ -54,14 +54,14 @@ func TestPrettyPrint_IdentKeyRendersUnquoted(t *testing.T) {
 }
 
 func TestPrettyPrint_NonIdentStringKeyIsBracketed(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	tbl.RawSetString("has space", engine.NumberValue(1))
 	out := prettyString(tbl, PrettyOpts{})
 	assert.Contains(t, out, `["has space"]`)
 }
 
 func TestPrettyPrint_NumberKeysSortedBeforeStrings(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	// Insert out of order to prove the printer sorts numeric then string keys.
 	tbl.RawSetString("zeta", engine.StringValue("z"))
 	tbl.RawSetInt(2, engine.StringValue("two"))
@@ -78,9 +78,9 @@ func TestPrettyPrint_NumberKeysSortedBeforeStrings(t *testing.T) {
 }
 
 func TestPrettyPrint_NestedTable(t *testing.T) {
-	inner := &fakeTable{}
+	inner := &orderedTable{}
 	inner.RawSetString("k", engine.NumberValue(1))
-	outer := &fakeTable{}
+	outer := &orderedTable{}
 	outer.RawSetString("child", inner)
 	out := prettyString(outer, PrettyOpts{})
 	assert.Contains(t, out, "child = {")
@@ -88,9 +88,9 @@ func TestPrettyPrint_NestedTable(t *testing.T) {
 }
 
 func TestPrettyPrint_MaxDepthTruncates(t *testing.T) {
-	inner := &fakeTable{}
+	inner := &orderedTable{}
 	inner.RawSetString("deep", engine.NumberValue(1))
-	outer := &fakeTable{}
+	outer := &orderedTable{}
 	outer.RawSetString("child", inner)
 	// MaxDepth 1: the outer table renders, but the nested one is elided.
 	out := prettyString(outer, PrettyOpts{MaxDepth: 1})
@@ -99,7 +99,7 @@ func TestPrettyPrint_MaxDepthTruncates(t *testing.T) {
 }
 
 func TestPrettyPrint_CycleDetection(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	// A table that references itself must render <cycle> rather than recurse.
 	tbl.RawSetString("self", tbl)
 	out := prettyString(tbl, PrettyOpts{})
@@ -118,7 +118,7 @@ func TestPrettyPrint_IntegralFloatFormatting(t *testing.T) {
 }
 
 func TestPrettyPrint_NonIdentNumericKeyNotBracketedAsString(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	tbl.RawSetInt(0, engine.StringValue("first"))
 	out := prettyString(tbl, PrettyOpts{})
 	assert.Contains(t, out, "[0] = ")
@@ -126,7 +126,7 @@ func TestPrettyPrint_NonIdentNumericKeyNotBracketedAsString(t *testing.T) {
 }
 
 func TestPrettyPrint_CustomIndent(t *testing.T) {
-	tbl := &fakeTable{}
+	tbl := &orderedTable{}
 	tbl.RawSetString("a", engine.NumberValue(1))
 	out := prettyString(tbl, PrettyOpts{Indent: "    "})
 	// The custom four-space indent should precede the entry.

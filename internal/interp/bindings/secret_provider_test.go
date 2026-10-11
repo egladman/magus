@@ -14,22 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stubDriver is a spells.Driver that records what it was invoked with and replies with a
-// canned response, so an adapter can be exercised without a Buzz VM. Only
-// ci_provider_test.go still uses it; that file can move to mocks.MockDriver and drop this type.
-type stubDriver struct {
-	resp spells.InvokeResponse
-	err  error
-	got  spells.InvokeRequest
-}
-
-func (d *stubDriver) Name() string { return "stub" }
-
-func (d *stubDriver) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
-	d.got = req
-	return d.resp, d.err
-}
-
 func TestSpellSecretProviderInvokesResolveSecretWithTheReference(t *testing.T) {
 	d := mocks.NewMockDriver(t)
 	// The reference is passed through verbatim; magus never parses it.

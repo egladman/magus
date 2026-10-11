@@ -26,7 +26,7 @@ func withVCSLeaseGate(t *testing.T, gate VCSLeaseGate) {
 // environment is what keeps these rows out of the developer's own store.
 func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 	testkit.Isolate(t)
-	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
 	require.NoError(t, err)
 
@@ -47,7 +47,7 @@ func TestVcsLeaseRefusalAsksTheGateUnderALiveLease(t *testing.T) {
 // unguarded: a binary that links no guard has no way to know the call is allowed.
 func TestVcsLeaseRefusalFailsClosedWithNoGate(t *testing.T) {
 	testkit.Isolate(t)
-	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	withVCSLeaseGate(t, nil)
 
 	require.NoError(t, vcsLeaseRefusal(ws, "git", []string{"commit", "-m", "x"}, "/repo", nil))

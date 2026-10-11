@@ -1,6 +1,7 @@
 package bindings
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -10,10 +11,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// recordingDriver is a spells.Driver that records the last request and answers with resp
+// and err, so the annotator runs without a Buzz VM.
+type recordingDriver struct {
+	resp spells.InvokeResponse
+	err  error
+	got  spells.InvokeRequest
+}
+
+func (d *recordingDriver) Name() string { return "recording" }
+
+func (d *recordingDriver) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+	d.got = req
+	return d.resp, d.err
+}
+
 // An op the spell does not declare is a nil result with no error, and stays a
 // no-op: a provider implements only the verbs its host supports.
 func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
-	drv := &stubDriver{}
+	drv := &recordingDriver{}
 	a := &spellAnnotator{drv: drv}
 
 	require.NoError(t, a.StartGroup(annotate.Group{ID: "g", Title: "t"}))
@@ -29,7 +45,7 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 // build, and the adapter is the only layer that can tell the two apart.
 func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	boom := errors.New("handler raised")
-	a := &spellAnnotator{drv: &stubDriver{err: boom}}
+	a := &spellAnnotator{drv: &recordingDriver{err: boom}}
 
 	for name, err := range map[string]error{
 		"group_start": a.StartGroup(annotate.Group{ID: "g"}),
@@ -45,7 +61,7 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 // every shape but a complete {run, commit} record reads as "no green run",
 // including the raised error, which the annotate ops above must NOT swallow.
 func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
-	drv := &stubDriver{resp: spells.InvokeResponse{Data: map[string]any{
+	drv := &recordingDriver{resp: spells.InvokeResponse{Data: map[string]any{
 		"run":    "https://example/run/7",
 		"commit": "green0123456789",
 	}}}
@@ -54,7 +70,7 @@ func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
 	assert.Equal(t, annotate.GreenRun{Run: "https://example/run/7", Commit: "green0123456789"}, got)
 	assert.Equal(t, "last_green_run", drv.got.Target)
 
-	declines := map[string]*stubDriver{
+	declines := map[string]*recordingDriver{
 		"undeclared op":    {},
 		"a null answer":    {resp: spells.InvokeResponse{Data: nil}},
 		"a raised handler": {err: errors.New("handler raised")},

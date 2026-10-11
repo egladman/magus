@@ -33,7 +33,7 @@ func dirContext(t *testing.T) context.Context {
 	edge("dir:internal/handler/mcp", "dir:internal/httpx", types.RelationImports, nil)
 	edge("dir:internal/httpx", "dir:internal/handler/mcp", types.RelationCalls, map[string]string{types.AttrTransport: "http"})
 	edge("marker:internal/httpx/a.go:12", "dir:internal/handler/mcp", types.RelationReferences, nil)
-	ws := &fakeGraphWorkspace{g: g, cacheDir: t.TempDir(), projects: []*types.Project{
+	ws := &builtGraphWorkspace{g: g, cacheDir: t.TempDir(), projects: []*types.Project{
 		{Path: ".", Layers: map[string]string{"internal/httpx": "transport"}},
 		{Path: "internal/handler", Layers: map[string]string{"internal/handler/**": "handler"}},
 	}}
@@ -204,20 +204,20 @@ func TestDirLayerAndNeighborhoodOptionsAreStrict(t *testing.T) {
 
 // countingGraphs counts the graph builds a sequence of members asks for.
 type countingGraphs struct {
-	*fakeGraphWorkspace
+	*builtGraphWorkspace
 	builds int
 }
 
 func (c *countingGraphs) KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error) {
 	c.builds++
-	return c.fakeGraphWorkspace.KnowledgeGraphWithSymbols(ctx)
+	return c.builtGraphWorkspace.KnowledgeGraphWithSymbols(ctx)
 }
 
 // One evaluation builds the graph once however many members it calls; the next
 // evaluation builds its own.
 func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 	t.Parallel()
-	ws := &countingGraphs{fakeGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*fakeGraphWorkspace)}
+	ws := &countingGraphs{builtGraphWorkspace: types.WorkspaceFromContext(dirContext(t)).(*builtGraphWorkspace)}
 	eval := types.WithEvalMemo(types.WithWorkspace(t.Context(), ws))
 	for range 3 {
 		_, err := MagusDir(eval, "internal/httpx")
@@ -236,7 +236,7 @@ func TestGraphMembersShareOneBuildPerEvaluation(t *testing.T) {
 // outputs are the given paths. Its freshen fails with freshenErr and records whether it ran
 // before the freshness was read.
 type precedentGraphs struct {
-	*fakeGraphWorkspace
+	*builtGraphWorkspace
 	indexes    []types.SymbolIndexStatus
 	outputs    map[string]bool
 	freshenErr error
@@ -294,9 +294,9 @@ func TestPrecedentsReportRowsBesideIndexFreshness(t *testing.T) {
 	errValue(g, "internal/a/gen.go", 2, "generatedFailure")
 	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "libs/x"}, Op: "scip", Language: "go", Freshness: types.SymbolIndexStale}
 	ws := &precedentGraphs{
-		fakeGraphWorkspace: &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()},
-		indexes:            []types.SymbolIndexStatus{stale},
-		outputs:            map[string]bool{"internal/a/gen.go": true},
+		builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()},
+		indexes:             []types.SymbolIndexStatus{stale},
+		outputs:             map[string]bool{"internal/a/gen.go": true},
 	}
 
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
@@ -324,9 +324,9 @@ func TestPrecedentsFreshenEveryIndexBeforeJudgingIt(t *testing.T) {
 	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "docs"}, Op: "scip-buzz", Language: "buzz",
 		Freshness: types.SymbolIndexStale, Detail: "docs changed"}
 	ws := &precedentGraphs{
-		fakeGraphWorkspace: &fakeGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()},
-		indexes:            []types.SymbolIndexStatus{fresh, stale},
-		freshenErr:         errors.New("scip-buzz is not on PATH"),
+		builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()},
+		indexes:             []types.SymbolIndexStatus{fresh, stale},
+		freshenErr:          errors.New("scip-buzz is not on PATH"),
 	}
 
 	got, err := MagusPrecedents(types.WithWorkspace(t.Context(), ws))
@@ -359,9 +359,9 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 	documentedFunc(g, "internal/a/gen.go", "Generated", "Generated exists.")
 	stale := types.SymbolIndexStatus{Project: types.ProjectRef{Path: "console"}, Op: "scip", Language: "typescript", Freshness: types.SymbolIndexStale}
 	ws := &precedentGraphs{
-		fakeGraphWorkspace: &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()},
-		indexes:            []types.SymbolIndexStatus{stale},
-		outputs:            map[string]bool{"internal/a/gen.go": true},
+		builtGraphWorkspace: &builtGraphWorkspace{g: g, cacheDir: t.TempDir()},
+		indexes:             []types.SymbolIndexStatus{stale},
+		outputs:             map[string]bool{"internal/a/gen.go": true},
 	}
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
@@ -385,7 +385,7 @@ func TestSymbolsBesideIndexFreshness(t *testing.T) {
 
 func TestSymbolsReportsNoSymbolsAsAnEmptyList(t *testing.T) {
 	t.Parallel()
-	ws := &precedentGraphs{fakeGraphWorkspace: &fakeGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
+	ws := &precedentGraphs{builtGraphWorkspace: &builtGraphWorkspace{g: knowledge.NewGraph(), cacheDir: t.TempDir()}}
 
 	got, err := MagusSymbols(types.WithWorkspace(t.Context(), ws))
 	require.NoError(t, err)

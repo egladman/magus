@@ -462,7 +462,7 @@ func TestVcsCmdAsksTheLeaseGate(t *testing.T) {
 	testkit.Isolate(t)
 	dir := testkit.NewRepo(t, nil).Root()
 
-	ws := types.WithWorkspace(WithCwd(t.Context(), dir), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: dir})
+	ws := types.WithWorkspace(WithCwd(t.Context(), dir), &ledgerWorkspace{cacheDir: t.TempDir(), root: dir})
 	_, err := MagusPutJob(ws, "worker", map[string]any{"criteria": "ship it", "state": "running"})
 	require.NoError(t, err)
 	var asked []string

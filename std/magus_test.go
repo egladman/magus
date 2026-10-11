@@ -372,17 +372,17 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	require.Error(t, err)
 }
 
-// fakeLedgerWorkspace is a workspace that can back a job Store: it
+// ledgerWorkspace is a workspace that can back a job Store: it
 // carries the cache directory jobStoreFromContext needs beyond
 // types.WorkspaceRepository's own Root.
-type fakeLedgerWorkspace struct {
+type ledgerWorkspace struct {
 	types.WorkspaceRepository
 	cacheDir string
 	root     string
 }
 
-func (f *fakeLedgerWorkspace) CacheDir() string { return f.cacheDir }
-func (f *fakeLedgerWorkspace) Root() string     { return f.root }
+func (f *ledgerWorkspace) CacheDir() string { return f.cacheDir }
+func (f *ledgerWorkspace) Root() string     { return f.root }
 
 // Not parallel: the job store resolves the per-repository state directory, and
 // jobStoreFromContext offers no seam to redirect it, so the environment is the only
@@ -390,7 +390,7 @@ func (f *fakeLedgerWorkspace) Root() string     { return f.root }
 func TestLedgerIsServedInProcess(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running"})
 	require.NoError(t, err)
@@ -406,7 +406,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 // workspace on the context whose store holds something else, and every write refuses.
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
-	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
 	require.NoError(t, err)
 
@@ -469,7 +469,7 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 	root, rev := repo.Root(), repo.Head()
 	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
 		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
 		require.NoError(t, err)
@@ -519,7 +519,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."})
 	require.NoError(t, err)
@@ -538,7 +538,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
@@ -547,7 +547,7 @@ func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", nil)
 	require.NoError(t, err)
 	_, err = MagusPutJob(ctx, "u2", nil)
@@ -564,7 +564,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
-	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
@@ -576,7 +576,7 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 // exactly as it does for `magus job` and the guard.
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
-	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
@@ -594,7 +594,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", stateBase)
 
 	cacheDir, root := t.TempDir(), t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir, root: root})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row"})
 	require.NoError(t, err)
@@ -633,30 +633,30 @@ func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
 	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
 }
 
-// fakeGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
+// builtGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
 // store, which is all the graph members and magus\output read off it.
-type fakeGraphWorkspace struct {
+type builtGraphWorkspace struct {
 	types.WorkspaceRepository
 	g        *knowledge.Graph
 	cacheDir string
 	projects []*types.Project
 }
 
-func (f *fakeGraphWorkspace) All() []*types.Project { return f.projects }
+func (f *builtGraphWorkspace) All() []*types.Project { return f.projects }
 
-func (f *fakeGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (f *builtGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return nil, true
 }
-func (f *fakeGraphWorkspace) CacheDir() string { return f.cacheDir }
+func (f *builtGraphWorkspace) CacheDir() string { return f.cacheDir }
 
 const graphSymbol = "symbol:example.com/x Foo#"
 
@@ -677,7 +677,7 @@ func graphContext(t *testing.T) context.Context {
 			Provenance: "scip count=1 lines=3",
 		})
 	}
-	return types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 }
 
 func TestGraphMembersAreServedInProcess(t *testing.T) {
@@ -752,7 +752,7 @@ func TestImportGraphHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
 		"graphContext holds a symbol but no dir imports another")
 
 	g := knowledge.NewGraph()
-	ctx := types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 	empty, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}, Languages: map[string]string{}}, empty)
@@ -900,7 +900,7 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	})
 
 	root := t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	put := func(check string) error {
 		_, err := MagusPutJob(ctx, "w", map[string]any{"write_paths": []any{"run.go"}, "check": check})
 		return err

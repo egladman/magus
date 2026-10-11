@@ -17,43 +17,43 @@ import (
 	"golang.org/x/term"
 )
 
-// fakeTable is a minimal engine.Table backed by insertion-ordered slices. It
+// orderedTable is a minimal engine.Table backed by insertion-ordered slices. It
 // exists so tests can drive the pretty-printer and REPL result rendering
 // without spinning up a real scripting engine.
-type fakeTable struct {
+type orderedTable struct {
 	keys []engine.Value
 	vals []engine.Value
 }
 
-func (t *fakeTable) IsNil() bool               { return false }
-func (t *fakeTable) String() string            { return "table" }
-func (t *fakeTable) AsString() (string, bool)  { return "", false }
-func (t *fakeTable) AsNumber() (float64, bool) { return 0, false }
-func (t *fakeTable) AsBool() bool              { return true }
-func (t *fakeTable) AsTable() (engine.Table, bool) {
+func (t *orderedTable) IsNil() bool               { return false }
+func (t *orderedTable) String() string            { return "table" }
+func (t *orderedTable) AsString() (string, bool)  { return "", false }
+func (t *orderedTable) AsNumber() (float64, bool) { return 0, false }
+func (t *orderedTable) AsBool() bool              { return true }
+func (t *orderedTable) AsTable() (engine.Table, bool) {
 	return t, true
 }
-func (t *fakeTable) AsFunction() (engine.Value, bool) { return nil, false }
+func (t *orderedTable) AsFunction() (engine.Value, bool) { return nil, false }
 
-func (t *fakeTable) set(k, v engine.Value) {
+func (t *orderedTable) set(k, v engine.Value) {
 	t.keys = append(t.keys, k)
 	t.vals = append(t.vals, v)
 }
 
-func (t *fakeTable) RawSetString(key string, v engine.Value) {
+func (t *orderedTable) RawSetString(key string, v engine.Value) {
 	t.set(engine.StringValue(key), v)
 }
-func (t *fakeTable) RawGetString(string) engine.Value { return engine.NilValue }
-func (t *fakeTable) RawSetInt(key int, v engine.Value) {
+func (t *orderedTable) RawGetString(string) engine.Value { return engine.NilValue }
+func (t *orderedTable) RawSetInt(key int, v engine.Value) {
 	t.set(engine.NumberValue(float64(key)), v)
 }
-func (t *fakeTable) RawGetInt(int) engine.Value { return engine.NilValue }
-func (t *fakeTable) ForEach(fn func(k, v engine.Value)) {
+func (t *orderedTable) RawGetInt(int) engine.Value { return engine.NilValue }
+func (t *orderedTable) ForEach(fn func(k, v engine.Value)) {
 	for i := range t.keys {
 		fn(t.keys[i], t.vals[i])
 	}
 }
-func (t *fakeTable) Len() int { return len(t.keys) }
+func (t *orderedTable) Len() int { return len(t.keys) }
 
 // scriptDriver is an engine.ReplDriver whose behavior is fully scripted:
 // each input line maps to a canned response so REPL loops are deterministic.
@@ -120,7 +120,7 @@ func (s *scriptedSession) GetGlobal(name string) engine.Value {
 	}
 	return engine.NilValue
 }
-func (s *scriptedSession) NewTable() engine.Table                  { return &fakeTable{} }
+func (s *scriptedSession) NewTable() engine.Table                  { return &orderedTable{} }
 func (s *scriptedSession) LoadString(string) (engine.Value, error) { return engine.NilValue, nil }
 func (s *scriptedSession) DoString(code string) error {
 	s.doStrings = append(s.doStrings, code)
@@ -515,8 +515,8 @@ func TestPry_LocalsListed(t *testing.T) {
 	}
 	sess := &debugSession{
 		scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}),
-		frames:      []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
-		locals:      locals,
+		frames:          []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
+		locals:          locals,
 	}
 	_, out, _, err := runPry(t, sess, PryContext{File: "a.buzz"}, ".locals\n.exit\n")
 	require.NoError(t, err)
@@ -533,9 +533,9 @@ func TestPry_LocalsWithUpvalues(t *testing.T) {
 	isolatePryHistory(t)
 	sess := &debugSession{
 		scriptedSession: newScriptedSession(&scriptDriver{lang: "buzz"}),
-		frames:      []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
-		locals:      map[string]engine.Value{"loc": engine.NumberValue(1)},
-		upvalues:    map[string]engine.Value{"cap": engine.NumberValue(9)},
+		frames:          []engine.Frame{{Source: "@a.buzz", ShortSrc: "a.buzz", CurrentLine: 1, Name: "f"}},
+		locals:          map[string]engine.Value{"loc": engine.NumberValue(1)},
+		upvalues:        map[string]engine.Value{"cap": engine.NumberValue(9)},
 	}
 	_, out, _, err := runPry(t, sess, PryContext{File: "a.buzz"}, ".locals\n.exit\n")
 	require.NoError(t, err)

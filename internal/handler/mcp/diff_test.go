@@ -37,7 +37,9 @@ type onePatchWorkspace struct {
 	branch string
 }
 
-func (f *onePatchWorkspace) WorkingDiff(context.Context, []string) (string, error) { return f.patch, nil }
+func (f *onePatchWorkspace) WorkingDiff(context.Context, []string) (string, error) {
+	return f.patch, nil
+}
 
 func (f *onePatchWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Branch: f.branch}

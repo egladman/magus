@@ -191,6 +191,6 @@ func wsProject(path string) *types.Project { return &types.Project{Path: path, D
 // meant to run: the point is whether it CROSSES.
 type passThroughInterceptor struct{}
 
-func (passThroughInterceptor)InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
+func (passThroughInterceptor) InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
 	return invoke(ctx)
 }

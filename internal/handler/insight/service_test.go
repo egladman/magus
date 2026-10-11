@@ -22,7 +22,9 @@ type cannedInsightSource struct {
 	err  error
 }
 
-func (f cannedInsightSource) Insight(context.Context) (types.InsightView, error) { return f.view, f.err }
+func (f cannedInsightSource) Insight(context.Context) (types.InsightView, error) {
+	return f.view, f.err
+}
 
 func get(t *testing.T, src insightSource) (*insightv1.Insight, error) {
 	t.Helper()

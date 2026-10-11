@@ -331,7 +331,7 @@ func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
 		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.25.3 darwin/arm64")}},
-		calls:  &calls,
+		calls:            &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return liveGo, []spells.Lifecycle{{Key: "go", Cycles: []spells.ReleaseCycle{{Cycle: "1.25", EOL: "2026-08-19"}}}}, nil
 		},
@@ -357,7 +357,7 @@ func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
 		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
-		calls:  &calls,
+		calls:            &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleUnreached, Detail: "no route to host"}, nil, nil
 		},
@@ -376,7 +376,7 @@ func TestListToolsSurfacesAMalformedAnswer(t *testing.T) {
 	calls := 0
 	s := NewService(lifecycleWS{
 		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
-		calls:  &calls,
+		calls:            &calls,
 		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
 			return types.LifecycleStatus{}, nil, errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is ""`)
 		},
