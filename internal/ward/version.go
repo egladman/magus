@@ -109,7 +109,6 @@ const DevVersion = "unknown"
 const (
 	buzzUndefinedType    = "BZZ1002"
 	buzzUnresolvedImport = "BZZ2001"
-	guardRuleMisdeclared = "MGS1045"
 )
 
 // BootstrapCommand builds a first binary in a checkout no magus on hand can load; the
@@ -275,24 +274,31 @@ const staleNameNote = "This build does not provide that name; unless it is missp
 // calls. BZZ1009, a namespace the file never imported, is not one: no newer binary
 // supplies a missing import line.
 //
-// A guard rule the build does not know (MGS1045, "unknown built-in rule") is one too: a
-// magusfile written after the binary names a rule the binary predates. Other MGS1045
-// failures are declaration mistakes a rebuild does not fix.
+// A guard rule the build does not know (MGS1045) is one too when no near name is offered:
+// a magusfile written after the binary names a rule the binary predates. A near name is a
+// typo, and a rebuild reports it the same way. Other MGS1045 failures are declaration
+// mistakes a rebuild does not fix.
 func staleShaped(err error) bool {
 	var d *diagnostics.Error
 	if errors.As(err, &d) {
-		code := string(d.Code)
-		if code == guardRuleMisdeclared {
-			return strings.Contains(d.Msg, unknownBuiltinRule)
+		switch d.Code {
+		case types.GuardRuleMisdeclared:
+			return strings.Contains(d.Msg, unknownBuiltinRule) && !strings.Contains(d.Msg, nearNameOffer)
+		case buzzUndefinedType, buzzUnresolvedImport:
+			return true
 		}
-		return code == buzzUndefinedType || code == buzzUnresolvedImport
+		return false
 	}
 	return missingObjectMember.MatchString(err.Error())
 }
 
-// unknownBuiltinRule opens internal/guard/builtin's complaint about a rule name it does
-// not provide.
-const unknownBuiltinRule = "unknown built-in rule"
+// The two phrases of internal/guard/builtin's complaint about a rule name it does not
+// provide. builtin exports no matcher, so TestStaleShapedReadsTheBuiltinComplaint resolves
+// real declarations against it to keep the two from drifting.
+const (
+	unknownBuiltinRule = "unknown built-in rule"
+	nearNameOffer      = "did you mean"
+)
 
 // missingObjectMember matches the checker's complaint that an object lacks a member. It
 // has no BZZ code, so the sentence is the only handle: a magusfile calling a host member

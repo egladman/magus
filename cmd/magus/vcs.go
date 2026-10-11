@@ -586,7 +586,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 // the one command that does.
 func settleLoadFailure(err error) error {
 	if ward.IsStaleBinary(err) {
-		return fmt.Errorf("the workspace did not load because this magus is older than the merged tree, so nothing regenerated; "+
+		return fmt.Errorf("the workspace did not load because this magus is older than the merged tree, so nothing regenerated: "+
 			"build a current ./magus with `%s`, alone on its line, then regenerate: %w", ward.BootstrapCommand, err)
 	}
 	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
@@ -164,6 +165,8 @@ func TestIsStaleBinary(t *testing.T) {
 	missingMember := errors.New(`magusfile: exec magusfile.buzz: object guard has no field or method "builtins"`)
 	unknownRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 		`magus\guard.builtins: "architecture-unbriefed": unknown built-in rule "architecture-unbriefed"`)
+	typoedRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
 	for name, tc := range map[string]struct {
 		err  error
 		want bool
@@ -175,6 +178,7 @@ func TestIsStaleBinary(t *testing.T) {
 		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
 		"a missing object member":      {missingMember, true},
 		"an unknown built-in rule":     {unknownRule, true},
+		"a typoed built-in rule":       {typoedRule, false},
 		"another misdeclared rule":     {types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"), false},
 		"one stale branch of a join":   {errors.Join(errors.New("other"), missingMember), true},
 		"no stale branch in a join":    {errors.Join(errors.New("a"), errors.New("b")), false},
@@ -197,6 +201,33 @@ func TestExplainStaleBinary_AnnotatesAnUnknownBuiltinRule(t *testing.T) {
 	assert.Contains(t, got.Error(), "this magus is out of date")
 	assert.Contains(t, got.Error(), "Fix it:")
 	assert.True(t, IsStaleBinary(err))
+}
+
+// The messages are builtin's own, so a rewording there fails here instead of silently
+// turning every unknown rule stale, or none.
+func TestStaleShapedReadsTheBuiltinComplaint(t *testing.T) {
+	for name, tc := range map[string]struct {
+		declared string
+		want     bool
+	}{
+		"a name nothing is near": {"frobnicate", true},
+		"a typo with a near one": {"read-navigaton", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := builtin.Resolve(map[string]builtin.Setting{tc.declared: {Decision: builtin.Deny}})
+			require.Error(t, err)
+			assert.Equal(t, tc.want, IsStaleBinary(err), err.Error())
+		})
+	}
+}
+
+// A misspelled rule gets a near-name suggestion from the build, and a rebuild reports it
+// the same way, so the stale-binary deny would trap the edit that fixes it.
+func TestExplainStaleBinary_LeavesATypoedBuiltinRuleAlone(t *testing.T) {
+	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
+	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
+	assert.False(t, IsStaleBinary(err))
 }
 
 func TestExplainStaleBinary_LeavesAnotherMisdeclaredRuleAlone(t *testing.T) {
