@@ -72,7 +72,7 @@ func RefuseSkippedTests(root string, row types.Job) error {
 			missed = append(missed, name)
 		}
 		if len(missed) > 0 {
-			packages = append(packages, dir+" ("+strings.Join(missed, ", ")+")")
+			packages = append(packages, dir+" ("+listTests(missed)+")")
 		}
 	}
 	if len(packages) == 0 {
@@ -80,10 +80,10 @@ func RefuseSkippedTests(root string, row types.Job) error {
 	}
 	var fixes []string
 	if len(notRun) > 0 {
-		fixes = append(fixes, fmt.Sprintf("widen -run to `%s|%s` or drop -run", runArg, exactTestPattern(notRun)))
+		fixes = append(fixes, widenRunFix(runArg, notRun))
 	}
 	if len(skipped) > 0 {
-		fixes = append(fixes, fmt.Sprintf("narrow -skip %q so it matches none of `%s` or drop -skip", skipArg, exactTestPattern(skipped)))
+		fixes = append(fixes, narrowSkipFix(skipArg, skipped))
 	}
 	return fmt.Errorf("job: %s's check `%s` leaves out tests defined in the packages of its write paths,"+
 		" so a break they would catch passes unchecked: %s, to fix it %s",
@@ -94,6 +94,40 @@ func RefuseSkippedTests(root string, row types.Job) error {
 // select Go tests.
 func runsGoTest(check *types.LeaseCheck) bool {
 	return check != nil && check.Script == "" && (check.Target == "go-test" || check.Target == "go::go-test")
+}
+
+// maxListedTests is how many test names the refusal prints per package, and maxPastedPattern
+// the longest covering pattern it prints: past either the line stops being something a person
+// reads or pastes.
+const (
+	maxListedTests   = 5
+	maxPastedPattern = 120
+)
+
+// listTests names the first maxListedTests of names and counts the rest.
+func listTests(names []string) string {
+	if len(names) <= maxListedTests {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:maxListedTests], ", "), len(names)-maxListedTests)
+}
+
+// widenRunFix is the advice for tests -run leaves out: the pattern that covers them when it
+// is short enough to paste, else dropping -run, since a package argument forwarded to
+// go-test does not scope the run.
+func widenRunFix(runArg string, notRun []string) string {
+	if covering := runArg + "|" + exactTestPattern(notRun); len(covering) <= maxPastedPattern {
+		return fmt.Sprintf("widen -run to `%s` or drop -run", covering)
+	}
+	return "drop -run, since the tests it leaves out are too many for one pattern and a package argument does not scope go-test"
+}
+
+// narrowSkipFix is widenRunFix for the tests -skip drops.
+func narrowSkipFix(skipArg string, skipped []string) string {
+	if exact := exactTestPattern(skipped); len(skipArg)+len(exact) <= maxPastedPattern {
+		return fmt.Sprintf("narrow -skip %q so it matches none of `%s` or drop -skip", skipArg, exact)
+	}
+	return "drop -skip, since the tests it drops are too many for one pattern and a package argument does not scope go-test"
 }
 
 // exactTestPattern is a pattern matching exactly the named tests.

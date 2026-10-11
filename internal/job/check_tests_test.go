@@ -2,8 +2,10 @@ package job
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -194,6 +196,44 @@ func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 	for _, left := range []string{"TestFixture", "TestVendored", "TestWorktree", "TestScratch", "TestNestedModule"} {
 		assert.NotContains(t, err.Error(), left)
 	}
+}
+
+// A package with hundreds of tests would print them all, in one line. The refusal names the
+// first few per package, counts the rest, and prints a covering pattern only when a person
+// could paste it.
+func TestRefuseSkippedTestsCapsWhatItLists(t *testing.T) {
+	t.Parallel()
+
+	root := testRoot(t)
+	var many strings.Builder
+	many.WriteString("package big\n\nimport \"testing\"\n\n")
+	for i := range 200 {
+		fmt.Fprintf(&many, "func TestCase%03d(t *testing.T) {}\n", i)
+	}
+	writeFixture(t, root, "big/b.go", "package big\n")
+	writeFixture(t, root, "big/b_test.go", many.String())
+
+	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-run", "TestCase000")})
+	require.Error(t, err)
+	msg := err.Error()
+	assert.NotContains(t, msg, "\n", "an error is one line")
+	assert.Contains(t, msg, "big (TestCase001, TestCase002, TestCase003, TestCase004, TestCase005 and 194 more)")
+	assert.NotContains(t, msg, "TestCase006", "only the first few are named")
+	assert.Contains(t, msg, "drop -run", "a pattern for 199 tests is not pasteable")
+	assert.NotContains(t, msg, "widen -run to")
+	assert.Less(t, len(msg), 600)
+
+	few := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")})
+	require.Error(t, few)
+	assert.Contains(t, few.Error(), "pkg (TestBeta, TestGamma_sub)", "a short list is named whole")
+	assert.NotContains(t, few.Error(), "more)")
+	assert.Contains(t, few.Error(), "widen -run to `Alpha|^(TestBeta|TestGamma_sub)$`", "and a short pattern is printed")
+
+	skipped := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-skip", "TestCase")})
+	require.Error(t, skipped)
+	assert.NotContains(t, skipped.Error(), "\n")
+	assert.Contains(t, skipped.Error(), "and 195 more)")
+	assert.Contains(t, skipped.Error(), "drop -skip")
 }
 
 func TestForkAndApplyRefuseASkippingCheck(t *testing.T) {
