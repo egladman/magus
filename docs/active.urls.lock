@@ -717,6 +717,9 @@ reference/rules/unleased-write/
 reference/rules/vcs-off-switch/
 reference/rules/whole-tree/
 reference/rules/worker-check-only/
+reference/rules/workspace-command-failed/
+reference/rules/workspace-spawn-failed/
+reference/rules/workspace-write-failed/
 reference/rules/worktree-remove/
 reference/skills/
 reference/skills/magus-adapt/

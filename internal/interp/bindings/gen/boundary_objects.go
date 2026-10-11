@@ -2559,6 +2559,7 @@ func ObjectRuleDoc(v types.RuleDoc) vm.Value {
 	out.MapSet("name", vm.StrValue(v.Name))
 	out.MapSet("decision", vm.StrValue(v.Decision))
 	out.MapSet("workspace", vm.StrValue(v.Workspace))
+	out.MapSet("fixed", vm.BoolValue(v.Fixed))
 	out.MapSet("catches", vm.StrValue(v.Catches))
 	out.MapSet("why", vm.StrValue(v.Why))
 	return out

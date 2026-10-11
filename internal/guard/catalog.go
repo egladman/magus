@@ -421,6 +421,7 @@ func Rules() []types.RuleDoc {
 	out = append(out, advisoryDocs...)
 	for i := range out {
 		out[i].Decision = string(defaults[out[i].Name])
+		out[i].Fixed = builtin.Fixed(out[i].Name)
 	}
 	slices.SortFunc(out, func(a, b types.RuleDoc) int {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a

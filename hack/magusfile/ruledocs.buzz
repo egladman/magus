@@ -22,6 +22,12 @@ fun describe(r: magus\Rule) > str {
 // override is the section naming a rule's compiled default and the one call that changes
 // it, showing the decision the rule does not already take.
 fun override(r: magus\Rule) > str {
+    if (r.fixed) {
+        return "## Default and override\n\n"
+            + "This rule always takes the decision `" + r.decision + "`. A workspace cannot set it:\n"
+            + "naming it in magus\\guard.builtins fails to load, because the rule is how a workspace\n"
+            + "learns that a rule of its own judged nothing.\n\n";
+    }
     var other = "deny";
     if (r.decision == "deny") {
         other = "advise";
@@ -163,6 +169,13 @@ fun sleepRule() > magus\Rule {
 
 fun pipeRule() > magus\Rule {
     return magus\Rule{ name = "raw-pipe", decision = "advise", catches = "`a | b` piped \"raw\"", why = "" };
+}
+
+test "a fixed rule says a workspace cannot set it" {
+    final fixed = magus\Rule{ name = "workspace-command-failed", decision = "advise", catches = "a rule that judged nothing", why = "", fixed = true };
+    final section = override(fixed);
+    std\assert(section.indexOf("A workspace cannot set it") != null, message: section);
+    std\assert(section.indexOf("magus\\guard.builtins(") == null, message: "no override call to copy: " + section);
 }
 
 test "a deny rule with a why renders its page" {
