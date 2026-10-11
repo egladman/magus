@@ -1250,7 +1250,7 @@ func NewBuzzReplSession(ctx context.Context, dir string, autoload bool) (engine.
 				}
 			}
 		} else if err != nil && !errors.Is(err, ErrNoMagusfile) {
-			slog.With(attr.Component("interp")).WarnContext(ctx, "buzz repl autoload find failed", slog.String("error", err.Error()))
+			slog.With(attr.Component("interp")).WarnContext(ctx, "buzz repl autoload find failed", attr.Error(err))
 		}
 	}
 

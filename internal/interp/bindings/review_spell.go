@@ -171,7 +171,7 @@ func PublishReview(ctx context.Context, at types.ReviewTarget, summary string, w
 		// Coded: a WRITE to an op nobody implemented would otherwise report success and lose
 		// the remarks permanently, which is the asymmetry MGS1102 documents.
 		return "", types.DiagnosticErrorf(types.ReviewOpMissing,
-			"review provider: %s is not implemented by this spell, so nothing was sent",
+			"the review provider's %s is not implemented by this spell, so nothing was sent",
 			spells.PublishReviewContract)
 	}
 	// What came back is not read beyond that. A review posts as ONE request, so a per-draft

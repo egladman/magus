@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -158,7 +159,7 @@ func (e Error) connectError() (*connect.Error, error) {
 // logDropped reports details a renderer left out, so a client missing one can be traced.
 func logDropped(ctx context.Context, err error) {
 	if err != nil {
-		slog.WarnContext(ctx, err.Error())
+		slog.With(attr.Component("rpcerr")).WarnContext(ctx, "left details out of an error response", attr.Error(err))
 	}
 }
 

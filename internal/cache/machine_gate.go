@@ -176,7 +176,7 @@ func (g *machineGate) releaser(id string) func() {
 func (g *machineGate) admitOpen(ctx context.Context, err error) func() {
 	g.lost.Do(func() {
 		g.log.WarnContext(ctx, "host capacity is not arbitrated for this run: no broker answered (broker: best-effort)",
-			slog.String("error", err.Error()))
+			attr.Error(err))
 	})
 	return func() {}
 }
