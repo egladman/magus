@@ -1,0 +1,10 @@
+An agent reply that opens by restating what the person asked.
+-- hit/agent-reply --
+You asked for a smaller cache key, so the key now hashes the sorted inputs.
+Your question was whether the guard runs on a worker. It does.
+To answer your question, the flag is still read.
+So the question is whether the cache can be shared.
+-- pass/agent-reply --
+The guard runs on a worker, as the hook log shows.
+You can run the gate again with `magus affected ci`.
+The key is smaller: it hashes the sorted inputs. You asked for that in the plan.

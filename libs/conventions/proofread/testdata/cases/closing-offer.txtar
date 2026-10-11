@@ -1,0 +1,20 @@
+An agent reply whose last paragraph offers more work or asks leave to go on.
+-- hit/agent-reply --
+The key sorts now. Want me to open the pull request?
+Both fixes are on the branch. Should I push?
+The gate passed. Let me know if you want the docs regenerated too.
+If you'd like, I can also rename the flag.
+Say the word and I'll rebase.
+I can split the commit if you want.
+-- hit/agent-reply whole --
+The rename is pushed, and the old flag is still read.
+
+Would you like me to drop the old flag in a follow-up?
+-- pass/agent-reply --
+The key sorts now, and the pull request is open as #12.
+The branch needs a name before the push, since the guard refuses a `feat/` prefix.
+The style guide asks that "Want me to" be cut from replies.
+-- pass/agent-reply whole --
+Want me to keep the old flag? I kept it, since two callers read it.
+
+The rename is pushed.

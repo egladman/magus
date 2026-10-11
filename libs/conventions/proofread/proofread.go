@@ -235,7 +235,7 @@ var templateCheck = check{rule: RuleTemplate, on: []Kind{KindAgentInstructionsTe
 // Another rule leaves a span to each of these where it reports the span
 // itself, so one span gives one finding; see [input.reports].
 var (
-	fillerCheck      = check{rule: RuleFiller, on: everywhere, judge: filler}
+	fillerCheck      = check{rule: RuleFiller, on: everywhere, advise: agentReply, judge: filler}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
 	tenseCheck       = check{rule: RuleTense, on: proseKinds, house: true, judge: tense}
 )
@@ -252,15 +252,15 @@ var coreChecks = []check{
 	leadContextCheck,
 	{rule: RuleReplyVoice, on: withReply, judge: replyVoice},
 	tenseCheck,
-	{rule: RuleHedge, on: proseKinds, judge: hedge},
+	{rule: RuleHedge, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: hedge},
 	{rule: RuleAttribution, on: withReply, house: true, judge: attribution},
 	{rule: RuleTerseSentence, on: skill, house: true, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: skill, house: true, judge: terseParagraph},
-	{rule: RuleWordy, on: proseKinds, judge: wordy},
+	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: wordy},
 	{rule: RuleBareRule, on: skill, house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
-	{rule: RuleCondescension, on: slices.Concat(withReply, help), judge: condescension},
+	{rule: RuleCondescension, on: slices.Concat(withReply, help, agentReply), judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.

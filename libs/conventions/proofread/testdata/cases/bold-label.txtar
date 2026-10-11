@@ -1,0 +1,20 @@
+An agent reply whose items or paragraphs open with a bold label.
+-- hit/agent-reply --
+- **Cache:** the key now sorts its inputs.
+**Still open:** the Linux run.
+- **Docs**: the reference page is regenerated.
+1. **Guard:** the push from a worker is refused.
+-- hit/agent-reply whole --
+The rename is pushed.
+
+- **Flags:** the old name is still read.
+- **Docs:** the page names the new flag.
+-- pass/agent-reply --
+- The cache key now sorts its inputs.
+The key is **stable** across workers.
+**A bold headline that ends in a period.** The text follows it.
+- The `**Note:**` prefix is what the template writes.
+-- pass/agent-reply whole --
+## Still open
+
+The Linux run has not finished.

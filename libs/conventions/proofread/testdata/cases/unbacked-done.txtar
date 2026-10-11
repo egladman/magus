@@ -1,0 +1,17 @@
+A claim of done, fixed, verified or passing with no command, output ref, file or link beside it.
+-- hit/agent-reply --
+Done. The branch is ready for review.
+Fixed, and the suite is green.
+Both tests pass now.
+Verified on the new base.
+The gate is green after the rebase.
+- Everything is done on the branch.
+-- pass/agent-reply --
+Done: `go test ./cache` passes (out1a2b3c4d5e).
+Verified in internal/cache/hash_test.go.
+Not verified on Linux yet.
+Fixed in 4762d2e2d.
+The gate passes once the queue lands.
+Is the work done?
+The work done so far is in the plan.
+Fixed, see [the run](https://example.com/run/1).

@@ -1,0 +1,11 @@
+An agent reply that lays out labeled options or alternatives.
+-- hit/agent-reply --
+Two options: keep the flag or drop it.
+- **Option A**: keep the old flag.
+We could (a) rebase now or (b) wait for the queue.
+There are three ways forward here, all cheap.
+-- pass/agent-reply --
+I kept the old flag, since two callers still read it.
+The command takes two arguments and three flags.
+Option parsing moved into its own file.
+The `(a)` and `(b)` markers are the list style the page uses.

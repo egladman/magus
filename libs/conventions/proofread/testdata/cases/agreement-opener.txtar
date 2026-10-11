@@ -1,0 +1,12 @@
+An agent reply that opens with praise or agreement.
+-- hit/agent-reply --
+Great question: the key sorts its inputs.
+You're right, the flag is still read.
+Got it. The rename is pushed.
+Agreed: the cache stays off for that target.
+**You were right**, and the brief was the cause.
+-- pass/agent-reply --
+The key sorts its inputs, so two workers agree.
+Right after the rebase, the gate passed.
+The reviewer wrote "you're right" and closed the thread.
+The rename is pushed. You're right that the old flag still needs a notice.

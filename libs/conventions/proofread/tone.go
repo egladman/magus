@@ -3,6 +3,7 @@ package proofread
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -49,6 +50,10 @@ const (
 var (
 	pullRequestOnly = []Kind{KindChangeDescription}
 	replyOnly       = []Kind{KindReviewReply}
+	// agentTone is toneKinds and an agent's reply. verdict and absolute stay off
+	// the reply: over 400 sampled replies they fired on 40 and 73, nearly all a
+	// status ("nothing pushed", "the test was wrong") rather than a posture.
+	agentTone = slices.Concat(toneKinds, agentReply)
 )
 
 // toneChecks are the rules for posture: blame, verdicts, absolutes, intent,
@@ -57,12 +62,12 @@ var (
 // one it means advises: of these, only blame and reply-opener measured no
 // false positive over the last 200 merged pull requests.
 var toneChecks = []check{
-	{rule: RuleBlame, on: toneKinds, judge: blame},
+	{rule: RuleBlame, on: agentTone, advise: agentReply, judge: blame},
 	{rule: RuleVerdict, on: toneKinds, advise: toneKinds, judge: verdict},
 	{rule: RuleAbsolute, on: toneKinds, advise: toneKinds, judge: absolute},
-	{rule: RuleIntent, on: toneKinds, advise: toneKinds, judge: intent},
+	{rule: RuleIntent, on: agentTone, advise: agentTone, judge: intent},
 	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
-	{rule: RuleClaim, on: toneKinds, advise: toneKinds, judge: claim},
+	{rule: RuleClaim, on: agentTone, advise: agentTone, judge: claim},
 	{rule: RuleReplyOpener, on: replyOnly, judge: replyOpening},
 	{rule: RuleJudgmentAsFact, on: replyOnly, advise: replyOnly, judge: judgmentAsFact},
 	{rule: RuleStackedHedge, on: replyOnly, advise: replyOnly, judge: stackedHedge},

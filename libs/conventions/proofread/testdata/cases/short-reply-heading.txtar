@@ -1,0 +1,26 @@
+A heading in an agent reply under 300 words.
+-- hit/agent-reply whole --
+## Status
+
+The key sorts its inputs now, and the rename is pushed.
+-- hit/agent-reply whole --
+The rename is pushed.
+
+### Still open
+
+The Linux run has not finished.
+-- pass/agent-reply --
+The key sorts its inputs now.
+#512 is merged.
+-- pass/agent-reply whole --
+## The cache key
+
+The key hashes every input the run reads, sorted by path, so two workers that read the same files in a different order agree on it. Before this change the order came from the directory walk, which differs between file systems, and a replay on one machine missed a key written on another. The sort costs one pass over the input list, which is short next to the hashing itself. The old keys stay readable for one release, since stores in the field still hold them, and a run that finds one rewrites it under the new key. Nothing else in the cache moved: eviction, the size cap and the signature check read the key as an opaque string and never look inside it. The tests cover a walk in two orders, a store holding both key forms, and a replay across two checkouts of the same commit.
+
+## The flag
+
+The old flag name is still read and prints a notice naming the new one, because two scripts in the release pipeline pass it and the pipeline pins an older binary. Dropping the old name waits until that pin moves past this release. The help text names only the new flag, and the reference page lists the old one under the deprecated names with the release that will remove it. The completion scripts offer only the new name. The notice goes to the error stream so that a script reading the output stream sees no change, and it is printed once per run rather than once per use, so a script that passes the flag in a loop is not flooded. A test pins the notice text and the stream it goes to, and another pins that the old and new names set the same value.
+
+## What is left
+
+The Linux run of the full suite has not finished, and the docs site has not been rendered with the new reference page. Both are queued behind the merge of the parent branch, which holds the generator change the page depends on. Nothing in this branch blocks on them, but the pull request should wait for the Linux run before it merges.

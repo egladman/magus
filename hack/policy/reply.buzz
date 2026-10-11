@@ -1,0 +1,180 @@
+// agent-reply (advise, Stop hook): an agent's end-of-turn reply judged by proofread as
+// agent-reply under this repository's decisions table, its findings handed back to the agent
+// as context. Wired in .claude/settings.json as `magus buzz --embedded hack/policy/reply.buzz`.
+//
+// It never blocks the stop: the hook prints no decision and exits 0 whatever it found. The
+// context it hands back keeps the agent going for one more step, so a reply written in that
+// step (stop_hook_active) is never judged, and the agent cannot be looped. A proofread that is
+// missing or stale says nothing: the hook fires on every turn, and a "build proofread" note
+// on each would cost more than the advice.
+namespace agentpolicy\reply;
+
+import "std";
+import "io";
+import "fs";
+import "proc";
+import "encoding/json";
+import "./hack/policy/proofread" as decisions;
+import "./libs/conventions/proofread" as proofread;
+
+// MAX_FINDINGS caps the findings handed back for one reply, in proofread's order. Every
+// finding past it costs the agent context with less chance of being acted on.
+final MAX_FINDINGS = 5;
+
+final sourceLine = $":([0-9]+)$";
+
+// Stop is what this rule reads of a Stop hook's input: the reply, and whether the agent is
+// already continuing because a Stop hook handed it something.
+export object Stop {
+    reply: str,
+    again: bool,
+}
+
+// Finding is one proofread finding on the reply; line counts from the reply's first line,
+// 0 when the finding has none.
+export object Finding {
+    rule: str,
+    line: int = 0,
+    message: str,
+}
+
+// readStop reads a Stop hook's JSON input. Input it cannot read is a stop with no reply.
+export fun readStop(input: str) > Stop {
+    final doc: {str: any} = json\parse(input) catch {<str: any>};
+    final reply: str = doc["last_assistant_message"] ?? "";
+    final again: bool = doc["stop_hook_active"] ?? false;
+    return Stop{ reply = reply, again = again };
+}
+
+// parseFindings reads proofread's JSON findings, whose source ends in `:<line>`. Output it
+// cannot read is no findings.
+export fun parseFindings(stdout: str) > [Finding] {
+    final rows: [any] = json\parse(stdout) catch [<any>];
+    final found = mut [<Finding>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        var line = 0;
+        final at = sourceLine.match(source);
+        if (at != null) {
+            line = std\parseInt(at![1]) ?? 0;
+        }
+        found.append(Finding{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "" });
+    }
+    return found;
+}
+
+// judge runs the built proofread in workspace over reply, or finds nothing when it is
+// missing, stale or fails.
+export fun judge(workspace: str, reply: str) > [Finding] {
+    final dir = "{workspace}/{proofread\home}";
+    if (proofread\whyStale(dir) != "") {
+        return [<Finding>];
+    }
+    final table = decisions\writeDecisions([<str>]) catch "";
+    if (table == "") {
+        return [<Finding>];
+    }
+    final run = proc\exec("{dir}/{proofread\binary}", args: ["agent-reply", "-decisions", table],
+        opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
+    fs\remove(table) catch void;
+    if (run == null or run!.code != 0) {
+        return [<Finding>];
+    }
+    return parseFindings(run!.stdout);
+}
+
+// advice renders found as the context handed back, or "" when found is empty.
+export fun advice(found: [Finding]) > str {
+    if (found.len() == 0) {
+        return "";
+    }
+    final lines = mut ["proofread judged your last reply as agent-reply. These advise; the stop "
+        + "went through. Apply them in your next reply to the person, and do not repost this one."];
+    foreach (i, f in found) {
+        if (i == MAX_FINDINGS) {
+            lines.append("- and {found.len() - MAX_FINDINGS} more");
+            break;
+        }
+        var at = "";
+        if (f.line > 0) {
+            at = " (line {f.line})";
+        }
+        lines.append("- {f.rule}{at}: {f.message}");
+    }
+    return lines.join("\n");
+}
+
+// output is what the hook prints for stop: the advice as a Stop hook's additionalContext, or
+// "" for a reply made while continuing, an empty reply, or one with nothing to advise.
+export fun output(stop: Stop, judged: fun (reply: str) > [Finding]) > str {
+    if (stop.again or stop.reply.trim() == "") {
+        return "";
+    }
+    final text = advice(judged(stop.reply));
+    if (text == "") {
+        return "";
+    }
+    return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
+}
+
+export fun main(args: [str]) > void !> any {
+    final input = io\stdin.readAll() ?? "";
+    final printed = output(readStop(input), judged: fun (reply: str) > [Finding] => judge(".", reply: reply));
+    if (printed != "") {
+        std\print(printed);
+    }
+}
+
+fun judging(found: [Finding]) > fun (reply: str) > [Finding] {
+    return fun (reply: str) > [Finding] => found;
+}
+
+final offer = Finding{ rule = "closing-offer", line = 3, message = "End on the result instead of 'Want me to'." };
+
+test "a Stop hook's input gives the reply and whether the agent is continuing" {
+    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}");
+    std\assert(stop.reply == "Done." and stop.again, message: "{stop.reply} {stop.again}");
+    final empty = readStop("not json");
+    std\assert(empty.reply == "" and !empty.again, message: "unreadable input is an empty stop");
+}
+
+test "findings go back as Stop context, never as a decision" {
+    final printed = output(Stop{ reply = "Done.", again = false }, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    std\assert(doc["decision"] == null, message: "no decision blocks the stop: {printed}");
+    final hook: {str: any} = doc["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hook["hookEventName"] == "Stop", message: printed);
+    final context: str = hook["additionalContext"] ?? "";
+    std\assert(context.indexOf("- closing-offer (line 3): End on the result") != null, message: context);
+}
+
+test "a reply made while continuing is not judged, so the agent cannot loop" {
+    final printed = output(Stop{ reply = "Done.", again = true }, judged: judging([offer]));
+    std\assert(printed == "", message: printed);
+}
+
+test "nothing to advise prints nothing" {
+    std\assert(output(Stop{ reply = "Done.", again = false }, judged: judging([<Finding>])) == "",
+        message: "no findings");
+    std\assert(output(Stop{ reply = "  ", again = false }, judged: judging([offer])) == "", message: "no reply");
+}
+
+test "advice is capped at MAX_FINDINGS and counts the rest" {
+    final many = mut [<Finding>];
+    for (var i = 0; i < MAX_FINDINGS + 2; i = i + 1) {
+        many.append(offer);
+    }
+    final text = advice(many);
+    std\assert(text.split("\n").len() == MAX_FINDINGS + 2, message: text);
+    std\assert(text.endsWith("- and 2 more"), message: text);
+}
+
+test "proofread's findings are read with their line" {
+    final found = parseFindings("[\{\"source\":\"stdin:4\",\"rule\":\"bold-label\",\"message\":\"Open.\"}]");
+    std\assert(found.len() == 1 and found[0].rule == "bold-label" and found[0].line == 4, message: "{found.len()}");
+    std\assert(parseFindings("not json").len() == 0, message: "unreadable output is no findings");
+}
+
+test "a workspace with no built proofread finds nothing" {
+    std\assert(judge("/nonexistent", reply: "Done.").len() == 0, message: "silent when the judge is missing");
+}

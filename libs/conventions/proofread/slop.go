@@ -57,7 +57,7 @@ var (
 	// to any text a person reads as another person's own words.
 	withReply = slices.Concat(proseKinds, []Kind{KindReviewReply})
 	// everywhere is every kind that holds prose, doc comments included.
-	everywhere = slices.Concat(all, changeText, help, []Kind{KindReviewReply})
+	everywhere = slices.Concat(all, changeText, help, []Kind{KindReviewReply}, agentReply)
 	// notPullRequest is where a tell a change description refuses outright
 	// only advises: a page may state a contrast on purpose.
 	notPullRequest = slices.Concat([]Kind{KindReference, KindGuide, KindAgentInstructions, KindReviewReply}, changeText)
@@ -71,27 +71,33 @@ var (
 
 // slopChecks run after [toneChecks].
 var slopChecks = []check{
-	{rule: RuleSignpost, on: withReply, judge: tellJudge("Drop '%s': state the point itself.", signposts...)},
-	{rule: RuleChatbot, on: withReply, judge: tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)},
-	{rule: RuleLeak, on: everywhere, judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...)},
-	{rule: RuleBuzzword, on: withReply, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
 	{
-		rule: RuleBuzzwordWeak, on: withReply, advise: withReply,
+		rule: RuleSignpost, on: agentWords, advise: agentReply,
+		judge: tellJudge("Drop '%s': state the point itself.", signposts...),
+	},
+	{rule: RuleChatbot, on: withReply, judge: tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)},
+	{
+		rule: RuleLeak, on: everywhere, advise: agentReply,
+		judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...),
+	},
+	{rule: RuleBuzzword, on: agentWords, judge: tellJudge("Replace '%s' with what is actually so.", buzzwords...)},
+	{
+		rule: RuleBuzzwordWeak, on: agentWords, advise: agentWords,
 		judge: tellJudge("Replace '%s' with what is actually so.", weakBuzzwords...),
 	},
 	{
-		rule: RuleContrast, on: proseKinds, advise: notPullRequest,
+		rule: RuleContrast, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(notPullRequest, agentReply),
 		judge: tellJudge("State the positive claim directly: drop the negation in '%s'.", contrasts...),
 	},
-	{rule: RuleVague, on: withReply, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
-	{rule: RuleCloser, on: withReply, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
+	{rule: RuleVague, on: agentWords, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
+	{rule: RuleCloser, on: agentWords, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
 	{
-		rule: RuleIngTail, on: proseKinds, advise: proseKinds,
+		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(proseKinds, agentReply),
 		judge: tellJudge("Make '%s' a sentence with a subject, or cut it.", ingTails...),
 	},
 	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: staccato},
-	{rule: RuleDash, on: withReply, house: true, judge: dash},
-	{rule: RuleASCII, on: withReply, house: true, judge: ascii},
+	{rule: RuleDash, on: agentWords, house: true, judge: dash},
+	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
 	{rule: RuleHeadingCase, on: pageKinds, advise: pageKinds, judge: headingCase},
 }
 
