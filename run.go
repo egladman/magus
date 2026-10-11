@@ -574,7 +574,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
 		// which a check-only target never produces; see OutputsDeclared.
 		step.OutputsDeclared = true
-		step.VerifyOutputs = m.driftGates[types.TargetRef{Project: p.Path, Target: target}]
+		step.VerifyOutputs = m.driftGateTargets[types.TargetRef{Project: p.Path, Target: target}]
 	} else if len(step.Outputs) > 0 && slices.Contains(p.MagusfileTargets, target) {
 		// Only a magusfile target is carved: a spell op run on its own (buf::buf-generate)
 		// inherits the globs its spell says it provides, and may be the one writing them.

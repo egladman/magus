@@ -841,6 +841,31 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 	assert.False(t, keyed("lint").VerifyOutputs, "a target declaring no outputs has none to verify")
 }
 
+// TestDriftGateDetectionIgnoresWhichFileDeclaresWhat: the rw branch may sit in an earlier
+// file than the outputs it guards, and the target is still a drift gate.
+func TestDriftGateDetectionIgnoresWhichFileDeclaresWhat(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("magusfiles/a.buzz", `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    if (ctx.hasCharm("rw")) { return; }
+}
+`)
+	w.Write("magusfiles/b.buzz", `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+}
+`)
+	m, err := Open(context.Background(), w.Root())
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	step := m.buildStep(p, "generate")
+	applyRunKeying(&step, p, nil, nil, nil)
+	assert.True(t, step.VerifyOutputs)
+}
+
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
 // magus.inputs/outputs call with a non-literal (computed) argument is a hard load
 // error, because a computed footprint is invisible to the static cache read.
