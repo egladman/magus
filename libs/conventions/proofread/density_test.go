@@ -48,6 +48,24 @@ func TestParticiplesReportsATextOverTheRate(t *testing.T) {
 		{"a clause naming an issue", padded(14, "The worker reads the key, closing #12, keeping the order."), nil},
 		{"an open task item", padded(14, "The worker reads the key.") +
 			"\n\n- [ ] Have you read the key, using the lock, keeping the order?", nil},
+		{"a tail closed by a period", padded(14, "It fails, causing retries. It stops, wasting time."),
+			[]string{"2 present participial clauses in 218 words, 9.2 per 1000"}},
+		{"a tail ending a list item", padded(14, "") + "\n\n- Fixed the race, ensuring stable output\n" +
+			"- Moved the key, keeping old names", []string{"2 present participial clauses in 222 words, 9.0 per 1000"}},
+		{"a noun in a series", padded(14, "") + "\n\n- Uses timeout constants, logging methods, and restart helpers.\n" +
+			"- Shows short names, ranking scores, and links.", nil},
+		{"a noun before the and closing a series", padded(14, "The guide gives the commands, timing notes, and "+
+			"build tips. The page lists the flags, caching rules, and limits."), nil},
+		{"a noun ending a list item", padded(14, "") + "\n\n- Phase one: bare fixes, logging setup\n" +
+			"- Phase two: modern packaging, logging cleanup", nil},
+		{"a noun closing a parenthesis", padded(14, "It covers ranges (negative ranges, crossing zero) and "+
+			"inputs (empty input, missing keys)."), nil},
+		{"a gerund subject after a comma", padded(14, "In the cache, caching is the default. After a miss, "+
+			"clicking `Retry` should hash again."), nil},
+		{"a bold label", padded(14, "") + "\n\n- **Adding keys**: tests one key, two keys\n" +
+			"- **Saving keys**: tests the store, the cache", nil},
+		{"a comma inside the opener's parenthesis", padded(14, "") + "\n\n- Troubleshooting for build quirks " +
+			"(case issues, stale keys)\n- Tracing for slow runs (cold caches, long hashes)", nil},
 	}
 
 	for _, tc := range cases {

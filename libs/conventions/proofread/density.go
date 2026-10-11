@@ -46,7 +46,11 @@ var densityTexts = map[Rule]ruleText{
 			"longer counted. The rest turn on whether a tail claims a benefit or states a fact (\", " +
 			"renaming the types\"), which the rule cannot read. It stays off until a fresh labeling round " +
 			"measures it. A finding quotes each clause it counted, so its reader can check them, and a " +
-			"platform's footer (Copilot's tips) is not the author's text and is not counted.",
+			"platform's footer (Copilot's tips) is not the author's text and is not counted. Labeling round 5 " +
+			"measured 60.0% (24 of 40, lower bound 0.45); its wrong firings counted a coding agent's quoted " +
+			"prompt and pasted summaries, so those are blanked with their words, and nouns, so an -ing word " +
+			"opening a bare item of a series (\", logging methods, and\"), the subject of a verb (\", caching " +
+			"is\") or a bold label is no longer counted.",
 	},
 	RuleNominalizations: {
 		code:      "PRF4021",
@@ -173,13 +177,128 @@ func participleClause(text string, from, to int) bool {
 	}
 
 	next := strings.Fields(rest)[0]
+	if next == "and" || next == "or" {
+		return false
+	}
 
-	return next != "and" && next != "or"
+	return !gerundSubject(rest) && !listedNoun(text, from, to)
+}
+
+// subjectVerbs are the finite verbs that make an -ing phrase before them its
+// subject ("caching is", "clicking Submit should"): a participial clause
+// takes an object or a complement, never a verb of its own.
+var subjectVerbs = wordSet("is", "was", "isn't", "wasn't", "has", "hasn't", "does", "doesn't", "should",
+	"shouldn't", "will", "won't", "would", "wouldn't", "can", "can't", "cannot", "could", "couldn't", "must",
+	"may", "might", "shall")
+
+// objectWords open an object or a complement, so an -ing word they follow
+// takes one: "using the lock", "making it faster", "leading to a retry".
+var objectWords = wordSet("the", "a", "an", "this", "that", "these", "those", "it", "its", "them", "their",
+	"they", "us", "our", "you", "your", "him", "his", "her", "me", "my", "each", "every", "all", "any",
+	"some", "no", "to", "for", "with", "by", "in", "on", "at", "from", "of", "into", "as", "up", "out",
+	"back", "down", "off", "over", "more", "less", "both", "either", "such", "what", "how", "whether", "if")
+
+// gerundSubject reports whether rest, the words after an -ing word, makes
+// it the subject of a verb: a finite verb right after it, or a modal after
+// the one word it names ("clicking `Submit` should"). Only a modal can follow
+// that word, since "ensuring tokens are" takes a clause as its object.
+func gerundSubject(rest string) bool {
+	words := phraseWords(rest, 3)
+	if len(words) > 0 && subjectVerbs[words[0]] {
+		return true
+	}
+
+	if len(words) < 2 || objectWords[words[0]] {
+		return false
+	}
+
+	switch words[1] {
+	case "is", "was", "has", "does", "isn't", "wasn't", "hasn't", "doesn't":
+		return false
+	}
+
+	return subjectVerbs[words[1]]
+}
+
+// maxListedWords bounds a noun phrase standing as an item of a series:
+// "constants, logging methods, and", "(ranges, crossing zero)".
+const maxListedWords = 3
+
+// listedNoun reports whether the -ing word at text[from:to] opens a short
+// noun phrase standing as an item of a series rather than a clause: no
+// object or complement follows it, and the item closes at a parenthesis, at
+// the comma before a series' closing "and", or at a comma or the paragraph's
+// end after an item as short and as bare. A clause closed by a period
+// ("causing retries.") stays one.
+func listedNoun(text string, from, to int) bool {
+	item := text[to:]
+
+	// A paragraph is one list item, so its end closes the item.
+	closer, after := byte(0), ""
+	if end := strings.IndexAny(item, ",.;:!?()"); end >= 0 {
+		closer, after = item[end], item[end+1:]
+	}
+
+	if strings.IndexByte(".;:!?", closer) >= 0 {
+		return false
+	}
+
+	words := phraseWords(item, maxListedWords)
+	if 1+len(words) > maxListedWords {
+		return false
+	}
+
+	for _, w := range words {
+		if objectWords[w] || w == "and" || w == "or" {
+			return false
+		}
+	}
+
+	// A parenthesis, or the "and" closing a series, makes it an item.
+	if next := phraseWords(after, 1); closer == '(' || closer == ')' ||
+		closer == ',' && len(next) == 1 && (next[0] == "and" || next[0] == "or") {
+		return true
+	}
+
+	// The item before is a bare noun phrase too: "It fails, causing retries"
+	// and "Fixed the race, ensuring order" are clauses.
+	before := text[:from]
+	before = before[:strings.LastIndexByte(before, ',')]
+	before = before[strings.LastIndexAny(before, ",.;:!?(")+1:]
+
+	if countWords(before) > maxListedWords+1 {
+		return false
+	}
+
+	for _, w := range strings.Fields(strings.ToLower(before)) {
+		if objectWords[w] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// phraseWords returns up to n lowercase words opening s, stopping at the
+// punctuation that closes the phrase.
+func phraseWords(s string, n int) []string {
+	if end := strings.IndexAny(s, ",.;:!?()"); end >= 0 {
+		s = s[:end]
+	}
+
+	words := strings.Fields(strings.ToLower(s))
+	if len(words) > n {
+		words = words[:n]
+	}
+
+	return words
 }
 
 // openerClause reports whether sentence, which opens with the -ing word, is a
 // participial clause closed by a comma before its main clause, rather than a
-// gerund subject ("Running the suite takes a minute.").
+// gerund subject ("Running the suite takes a minute.") or a label ("**Adding
+// shortcuts**: tests ..."). A comma inside a parenthesis the phrase opened
+// closes nothing.
 func openerClause(sentence, word string) bool {
 	if notParticiples[strings.ToLower(word)] {
 		return false
@@ -190,7 +309,12 @@ func openerClause(sentence, word string) bool {
 		return false
 	}
 
-	return len(strings.Fields(sentence[:comma])) <= 12
+	head := sentence[:comma]
+	if strings.ContainsRune(head, ':') || strings.Count(head, "(") > strings.Count(head, ")") {
+		return false
+	}
+
+	return len(strings.Fields(head)) <= 12
 }
 
 // nominalSuffix is a word ending in a suffix that turns a verb or an

@@ -9,6 +9,12 @@ inclusion mode ...", "Add container support ...", "Fix #171 ...", "perf: optimiz
 stochastic RSI ...", "Add a local extension search ...", "Add methods for the active
 database ...", "Check that the base branch exists ...", "Enable the code checks workflow
 ...", "Remove the tile view ..." and "Ask the user before deleting ...".
+
+Moved after labeling round 5, was: hit. Two texts counted a noun phrase standing as an item
+of a series, which round 5's adjudicator read as a noun, not a clause: "missing directories"
+closing a parenthesized list in the text titled "Add a workflow directory flag ...", and
+"matching compilation" before the series' "and" in "Make the static label type abstract
+...". With it struck each text is under the cap.
 -- hit/reference whole --
 The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The worker reads the key, using the lock it holds, keeping the order.
 -- hit/reference whole --
@@ -129,7 +135,7 @@ Deleted resources stay soft-deleted for a retention period, continuing to consum
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole was=hit:round2:d0436 --
 Add a workflow directory flag to the compile command
 
 - Tests error cases (absolute paths, missing directories)
@@ -173,7 +179,7 @@ This adds font support for chart legends, allowing users to set family, size and
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- hit/change-description whole --
+-- pass/change-description whole was=hit:round2:d0500 --
 Make the static label type abstract with end-to-end type safety
 
 Previously the label was a type alias for int, allowing subtle bugs where unrelated integers were used as labels.
