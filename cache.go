@@ -455,20 +455,39 @@ func (m *Magus) OutputKeyInputs(ctx context.Context, ref string) ([]string, erro
 	if _, derr := store.DescriptorByRef(ref); derr == nil {
 		return nil, err
 	}
-	_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
-		lines, err = cache.NewOutputStore(dir).KeyInputsByRef(ref)
+	// The search ends at the first checkout whose descriptor resolves, so the lines
+	// always come from the store that holds the descriptor the caller already read.
+	var predates error
+	_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) error {
+		other := cache.NewOutputStore(dir)
+		if _, err := other.DescriptorByRef(ref); err != nil {
+			return err
+		}
+		var err error
+		lines, err = other.KeyInputsByRef(ref)
+		if errors.Is(err, fs.ErrNotExist) {
+			predates = err
+			return nil
+		}
 		return err
 	})
+	if predates != nil {
+		return nil, predates
+	}
 	return lines, err
 }
 
 // LastRecordedRun returns the most recent cache entry recorded for target in projectPath
 // together with the key inputs behind it: the peer `describe target --cache` compares a
 // live key against to explain why a run here would MISS. Wraps fs.ErrNotExist when
-// nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace.
-func (m *Magus) LastRecordedRun(projectPath, target string) (cache.RecordedRun, error) {
+// nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace; the
+// context's error when ctx is already done.
+func (m *Magus) LastRecordedRun(ctx context.Context, projectPath, target string) (cache.RecordedRun, error) {
 	if m.cache == nil {
 		return cache.RecordedRun{}, types.ErrNoCache
+	}
+	if err := ctx.Err(); err != nil {
+		return cache.RecordedRun{}, err
 	}
 	return m.cache.LastRecordedRun(projectPath, target)
 }

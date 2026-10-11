@@ -839,7 +839,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			if !matches {
 				mismatched = true
 			}
-		} else if rec, rerr := m.LastRecordedRun(e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
+		} else if rec, rerr := m.LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
 			// With no peer named, the peer is this machine's own last run of the target.
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every

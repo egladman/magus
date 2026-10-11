@@ -172,7 +172,7 @@ github.com/egladman/magus.Magus.KnowledgeGraph method(ptr) func(ctx context.Cont
 github.com/egladman/magus.Magus.KnowledgeGraphHealthy method(ptr) func() (watching bool, valid bool)
 github.com/egladman/magus.Magus.KnowledgeGraphWithSymbols method(ptr) func(ctx context.Context) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
 github.com/egladman/magus.Magus.KnowledgeGraphWithSymbolsForRef method(ptr) func(ctx context.Context, ref string) (*github.com/egladman/magus/internal/graph/knowledge.Graph, error)
-github.com/egladman/magus.Magus.LastRecordedRun method(ptr) func(projectPath string, target string) (github.com/egladman/magus/internal/cache.RecordedRun, error)
+github.com/egladman/magus.Magus.LastRecordedRun method(ptr) func(ctx context.Context, projectPath string, target string) (github.com/egladman/magus/internal/cache.RecordedRun, error)
 github.com/egladman/magus.Magus.LifecycleProvider method(ptr) func() string
 github.com/egladman/magus.Magus.Lifecycles method(ptr) func(ctx context.Context, installed ...github.com/egladman/magus/types.ToolRow) (github.com/egladman/magus/types.LifecycleStatus, []github.com/egladman/magus/spells.Lifecycle, error)
 github.com/egladman/magus.Magus.ListArtifacts method(ptr) func(ctx context.Context, projectPath string, wsPath string) ([]github.com/egladman/magus/internal/cache.ArtifactVersion, error)
@@ -393,16 +393,16 @@ github.com/egladman/magus.WorkspaceRegistry.ShellRules method(ptr) func() []gith
 github.com/egladman/magus.WorkspaceRegistry.SpawnRule method(ptr) func() github.com/egladman/magus/internal/workspace.SpawnRule
 github.com/egladman/magus.WorkspaceRegistry.WriteRule method(ptr) func() github.com/egladman/magus/internal/workspace.WriteRule
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
-github.com/egladman/magus/libs/testkit.CaptureStderr func(tb testing.TB, fn func()) string
-github.com/egladman/magus/libs/testkit.CaptureStdout func(tb testing.TB, fn func()) string
+github.com/egladman/magus/libs/testkit.CaptureStderr func(tb TB, fn func()) string
+github.com/egladman/magus/libs/testkit.CaptureStdout func(tb TB, fn func()) string
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
-github.com/egladman/magus/libs/testkit.Isolate func(tb testing.TB) string
+github.com/egladman/magus/libs/testkit.Isolate func(tb TB) string
 github.com/egladman/magus/libs/testkit.Isolated func(m *testing.M, keep ...string) IsolatedM
 github.com/egladman/magus/libs/testkit.IsolatedM type struct
 github.com/egladman/magus/libs/testkit.IsolatedM.Run method func() int
 github.com/egladman/magus/libs/testkit.Main func(m *testing.M, keep ...string)
-github.com/egladman/magus/libs/testkit.NewRepo func(tb testing.TB, files map[string]string) *Repo
-github.com/egladman/magus/libs/testkit.NewWorkspace func(tb testing.TB) *Workspace
+github.com/egladman/magus/libs/testkit.NewRepo func(tb TB, files map[string]string) *Repo
+github.com/egladman/magus/libs/testkit.NewWorkspace func(tb TB) *Workspace
 github.com/egladman/magus/libs/testkit.Projects func(paths ...string) []*github.com/egladman/magus/types.Project
 github.com/egladman/magus/libs/testkit.Repo type struct
 github.com/egladman/magus/libs/testkit.Repo.AddWorktree method(ptr) func(branch string) *Repo
@@ -416,6 +416,13 @@ github.com/egladman/magus/libs/testkit.Repo.Root method func() string
 github.com/egladman/magus/libs/testkit.Repo.Workspace embedded *Workspace
 github.com/egladman/magus/libs/testkit.Repo.Write method func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Repo.WriteTree method func(files map[string]string)
+github.com/egladman/magus/libs/testkit.TB type interface
+github.com/egladman/magus/libs/testkit.TB.Cleanup imethod func(func())
+github.com/egladman/magus/libs/testkit.TB.Fatalf imethod func(format string, args ...any)
+github.com/egladman/magus/libs/testkit.TB.Helper imethod func()
+github.com/egladman/magus/libs/testkit.TB.Setenv imethod func(key string, value string)
+github.com/egladman/magus/libs/testkit.TB.Skip imethod func(args ...any)
+github.com/egladman/magus/libs/testkit.TB.TempDir imethod func() string
 github.com/egladman/magus/libs/testkit.Workspace type struct
 github.com/egladman/magus/libs/testkit.Workspace.Executable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Magusfile method(ptr) func(body string) string
@@ -423,7 +430,7 @@ github.com/egladman/magus/libs/testkit.Workspace.Path method(ptr) func(rel ...st
 github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
-github.com/egladman/magus/libs/testkit/fakespell.Register func(tb testing.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
+github.com/egladman/magus/libs/testkit/fakespell.Register func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/types.ActiveDispatch type struct
 github.com/egladman/magus/types.ActiveDispatch.Has method(ptr) func(dir string) bool
 github.com/egladman/magus/types.ActiveDispatch.Mark method(ptr) func(dir string)
