@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -44,7 +45,11 @@ var reviewTexts = map[Rule]ruleText{
 			"et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over " +
 			"the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 " +
 			"written by bots. It advises: an inline comment already sits on its line, which the rule " +
-			"cannot see.",
+			"cannot see. Measured 2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of " +
+			"43) before, 27.3% (3 of 11) after. Most firings named what they judged in a noun phrase (\"the " +
+			"indentation\", \"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), " +
+			"so only a verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline " +
+			"on the line they judge. It stays off until a fresh labeling round measures it.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -116,8 +121,67 @@ var (
 		`"[^"\n]{2,}"|^\s{4}\S`)
 )
 
+var (
+	// namedThing is a determiner opening a noun phrase: "the naming", "this
+	// logic", "an OR condition". A sentence holding one names what it judges.
+	namedThing = regexp.MustCompile(`(?i)\b(?:the|a|an|this|that|these|those|its|their|our|your|my|no|other|` +
+		`any|each|every)\s+([\w'-]+)`)
+
+	// notANoun are the words after a determiner that leave it bare: "this
+	// is", "that should", "fix this up", "a bit".
+	notANoun = wordSet("is", "was", "are", "were", "be", "been", "seems", "seemed", "looks", "looked", "feels",
+		"sounds", "reads", "does", "doesn't", "did", "didn't", "isn't", "wasn't", "aren't", "should", "shouldn't",
+		"would", "could", "will", "won't", "can", "can't", "might", "may", "must", "has", "had", "have", "up", "out",
+		"again", "too", "now", "please", "here", "there", "and", "or", "but", "i", "we", "you", "they", "it", "this",
+		"that", "bit", "little", "one")
+
+	// predicateTail are the words that may follow a judgment said of its
+	// subject ("it is redundant, honestly", "wrong for now"). Any other word
+	// after it is the noun it modifies ("redundant docstrings"), which the
+	// reply names.
+	predicateTail = wordSet("and", "or", "but", "with", "to", "for", "in", "on", "at", "of", "as", "than", "here",
+		"there", "now", "too", "anyway", "honestly", "imo", "tbh", "though", "then", "because", "since", "if", "so",
+		"when", "which", "again", "already", "yet", "overall", "please", "remove", "drop", "delete")
+)
+
+// namesReferent reports whether text, one sentence, names the thing its
+// judgment at at is about: a noun phrase anywhere in it, the noun the
+// judgment modifies, or a clause after it ("strange that we keep two IDs").
+// An inline comment sits on its line, which the rule cannot see, so only a
+// verdict on a bare this, it or that, or on nothing, is reported.
+func namesReferent(text string, at []int) bool {
+	rest := strings.TrimLeft(text[at[1]:], " ")
+	if next := leadingWord(rest); next != "" && !predicateTail[strings.ToLower(next)] {
+		return true
+	}
+
+	unjudged := text[:at[0]] + "," + text[at[1]:]
+
+	for _, m := range namedThing.FindAllStringSubmatch(unjudged, -1) {
+		if !notANoun[strings.ToLower(m[1])] && !judgment.MatchString(m[1]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// leadingWord is the word rest opens with, or "" when it opens with
+// punctuation or is empty.
+func leadingWord(rest string) string {
+	end := strings.IndexFunc(rest, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '\'' && r != '-' && r != '_'
+	})
+	if end < 0 {
+		end = len(rest)
+	}
+
+	return rest[:end]
+}
+
 // nonspecific reports the first judgment in a reply that names nothing to act
-// on. A judgment with a reason beside it in its sentence is left alone.
+// on. A judgment with a reason beside it in its sentence, or one that names
+// what it judges, is left alone.
 func nonspecific(in input) []Finding {
 	for _, ln := range in.source {
 		if specific.MatchString(ln) {
@@ -130,7 +194,7 @@ func nonspecific(in input) []Finding {
 			text := para.text[span[0]:span[1]]
 
 			at := judgment.FindStringIndex(text)
-			if at == nil || reasonGiven.MatchString(text) {
+			if at == nil || reasonGiven.MatchString(text) || namesReferent(text, at) {
 				continue
 			}
 

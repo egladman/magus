@@ -52,6 +52,14 @@ func TestNonspecificReportsAJudgmentNamingNothingToActOn(t *testing.T) {
 		{"a reason", KindReviewReply, "This is redundant because the caller already sorts.", nil},
 		{"praise", KindReviewReply, "Thanks, looks good.", nil},
 		{"a question", KindReviewReply, "Does the caller hold the lock here?", nil},
+		{"a bare verdict on it", KindReviewReply, "Drop this, it's redundant", []string{"1:redundant"}},
+		{"a bare request", KindReviewReply, "Do not change this", []string{"1:change this"}},
+		{"a bit of a verdict", KindReviewReply, "This is a bit confusing.", []string{"1:confusing"}},
+		{"a named subject", KindReviewReply, "The indentation is inconsistent.", nil},
+		{"a demonstrative and its noun", KindReviewReply, "This logic is a bit confusing.", nil},
+		{"the noun it modifies", KindReviewReply, "Removed unnecessary curly braces.", nil},
+		{"a request naming its object", KindReviewReply, "please fix this comment", nil},
+		{"a clause naming what is odd", KindReviewReply, "ok, strange that we keep two IDs.", nil},
 	})
 }
 
