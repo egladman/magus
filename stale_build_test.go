@@ -3,7 +3,6 @@ package magus
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -11,17 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
 // sourceCheckout is a checkout of module holding a binary named magus at its root.
 func sourceCheckout(t *testing.T, module string) (root, exe string) {
 	t.Helper()
-	root = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+module+"\n\ngo 1.26\n"), 0o644))
-	exe = filepath.Join(root, "magus")
-	require.NoError(t, os.WriteFile(exe, []byte("binary"), 0o755))
-	return root, exe
+	w := testkit.NewWorkspace(t)
+	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
+	return w.Root(), w.Executable("magus", "binary")
 }
 
 func builtFrom(module, pkg string) *debug.BuildInfo {

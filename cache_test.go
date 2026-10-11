@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,14 +11,16 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCacheOperationsWithoutOpenCache(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	m, err := Inspect(context.Background(), root)
 	require.NoError(t, err)
 	workspace := m.(*Magus)

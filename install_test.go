@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -23,13 +24,8 @@ import (
 // gets: never replayed, keyed on no source or tool, and not ordered after the installs
 // of the projects it depends on. A target that does anything else keeps its own step.
 func TestADispatchOnlyInstallTargetSchedulesAsItsInstalls(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		path := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("magusfile.buzz", "")
 	for _, p := range []string{"lib", "web"} {
 		write(p+"/package.json", "{}\n")

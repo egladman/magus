@@ -2,14 +2,13 @@ package magus
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
 )
@@ -42,13 +41,8 @@ func noExternals(*knowledge.Graph, string, string) ([]string, int) { return nil,
 // module) still names the declarations a change touched, under the IDs scip-go gives them,
 // and code in a raw string declares nothing.
 func TestParsedGoSymbolsNameTouchedDeclarations(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o600))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("go.mod", "module example.com/m\n\ngo 1.25\n")
 	write("libs/x/go.mod", "// the nested module\nmodule \"example.com/m/libs/x\"\n")
 	write("libs/x/vm/jit_amd64.go", `//go:build amd64

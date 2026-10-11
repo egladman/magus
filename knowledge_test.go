@@ -39,10 +39,9 @@ import (
 // mkGlobalWS writes a single-project workspace with one target and returns its root.
 func mkGlobalWS(t *testing.T, target string) string {
 	t.Helper()
-	root := t.TempDir()
-	src := "export fun " + target + "(args: [str]) > void {}\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(src), 0o644))
-	return root
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("export fun " + target + "(args: [str]) > void {}\n")
+	return w.Root()
 }
 
 func TestBuildGlobalKnowledgeGraph(t *testing.T) {
@@ -1020,8 +1019,9 @@ func TestParseSymbolIndexCachedReparsesOnlyAMovedIndex(t *testing.T) {
 // its symbols are ingested without a symbol-capable spell bound.
 func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.Config) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg", "a"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a", "a.go"), []byte("package a\n\ntype Foo struct{}\n"), 0o644))
 	writeSCIP(t, filepath.Join(root, "idx", "index.scip"))
@@ -1035,7 +1035,6 @@ func indexedWorkspace(t *testing.T) (string, types.WorkspaceRepository, config.C
 // not rebuild @session, so an append costs it nothing: the store is not re-stamped, and
 // nothing is reassembled or rewritten.
 func TestSymbolReadIgnoresSessionStoreAppends(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	ctx := context.Background()
 	root, ws, cfg := indexedWorkspace(t)
 	log := slog.New(slog.DiscardHandler)
@@ -1097,8 +1096,9 @@ func TestQueryKnowledgeGraphEqualsTheMergedQuery(t *testing.T) {
 // seen by the next build rather than served stale.
 func TestBuildKnowledgeGraphAnswersFromTheStore(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("export fun build(args: [str]) > void {}\n")
+	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# Guide\n"), 0o644))
 	ws, err := Inspect(ctx, root)
@@ -1142,9 +1142,10 @@ func TestKnowledgeFastStampsFoldWhatTheEvaluationRead(t *testing.T) {
 	// No VCS: the stamp's VCS inputs are pinned by TestKnowledgeStampsInvalidateExactlyTheirClasses,
 	// and a temp dir no repository claims would otherwise ask git about one.
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	cacheDir := filepath.Join(t.TempDir(), "cache")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// empty\n"), 0o644))
+	w.Magusfile("// empty\n")
 	outside := filepath.Join(t.TempDir(), "site.toml")
 	require.NoError(t, os.WriteFile(outside, []byte("region = \"eu\"\n"), 0o644))
 	settled := time.Now().Add(-time.Hour)
@@ -1188,9 +1189,10 @@ func TestKnowledgeFastStampsFoldWhatTheEvaluationRead(t *testing.T) {
 // moment either moved.
 func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false") // see TestKnowledgeFastStampsFoldWhatTheEvaluationRead
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	cacheDir := filepath.Join(t.TempDir(), "cache")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// empty\n"), 0o644))
+	w.Magusfile("// empty\n")
 	settled := time.Now().Add(-time.Hour)
 	index := filepath.Join(cacheDir, "symbols", "a", "index.scip")
 	require.NoError(t, os.MkdirAll(filepath.Dir(index), 0o755))
@@ -1257,7 +1259,7 @@ func TestRecordedStaleIndexesAnswerWhileTheirEvidenceHolds(t *testing.T) {
 	// vouched for. A LazyWorkspace is one read's view of the tree (it walks once), so the
 	// next read, like every CLI read, holds a new one.
 	before := fastStampsOver(t, root, cacheDir, reads, true)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// edited\n"), 0o644))
+	w.Magusfile("// edited\n")
 	require.NotEqual(t, before, fastStampsOver(t, root, cacheDir, reads, true), "an edited source moves the domain fast stamp")
 	next := NewLazyWorkspace(root, func(context.Context) (*Magus, error) {
 		opens++

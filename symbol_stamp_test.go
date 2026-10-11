@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -36,8 +37,9 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 		spells.WithInvoker(writesTheIndex),
 	)
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	src = filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
 

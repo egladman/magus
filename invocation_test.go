@@ -12,6 +12,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -20,8 +21,9 @@ import (
 )
 
 func TestBeginInvocationWritesLifecycle(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	m, err := Inspect(context.Background(), root)
 	require.NoError(t, err)
 	workspace := m.(*Magus)
@@ -109,8 +111,9 @@ func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
 		}),
 	)
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,7 +11,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -23,15 +23,14 @@ import (
 // project registered at projPath with the given output globs.
 func openTempWorkspace(t *testing.T, projPath string, outputs []string) (*Magus, string) {
 	t.Helper()
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 
 	// An empty magusfile.buzz at the root marks it as the workspace root.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w.Magusfile("")
 
 	// An empty magusfile.buzz in the project directory makes magus discover it.
-	projDir := filepath.Join(root, filepath.FromSlash(projPath))
-	require.NoError(t, os.MkdirAll(projDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644))
+	w.Write(filepath.Join(filepath.FromSlash(projPath), "magusfile.buzz"), "")
 
 	reg := NewWorkspaceRegistry()
 	if len(outputs) > 0 {
@@ -75,13 +74,14 @@ func TestCleanOutputsRemovesMatchedFiles(t *testing.T) {
 // magus.outputs declaration is cleaned by `magus clean --outputs`, not just
 // project-wide outputs: AllOutputs unions the per-target globs back in.
 func TestCleanOutputsCoversPerTargetOutputs(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -104,13 +104,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // carved out of the declaration, so clean leaves it and the merge driver finds no target
 // to regenerate it from, while the generated file beside it goes.
 func TestCleanOutputsKeepsAnExcludedFile(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
@@ -166,11 +167,9 @@ func TestCleanOutputsNoMatchIsNoop(t *testing.T) {
 // The nested case matters because vcs.Resolve finds no marker in a workspace below the
 // checkout root and falls back to VCSSourceDefault.
 func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	const trackedBody = "committed\n"
 
-	const spellName = "zzz-clean-tracked-outputs-test-spell"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(spellName,
+	spellName := fakespell.Register(t, "zzz-clean-tracked-outputs-test-spell",
 		spells.WithTargets("generate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			gen := filepath.Join(req.Dir, "gen")
@@ -179,20 +178,17 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 			}
 			return nil, os.WriteFile(filepath.Join(gen, "untracked.txt"), []byte("scratch\n"), 0o644)
 		}),
-	))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	)
 
 	for _, tc := range []struct{ name, workspace string }{
 		{"workspace at the checkout root", ""},
 		{"workspace nested in a checkout", "sub/ws"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			checkout := t.TempDir()
-			root := filepath.Join(checkout, filepath.FromSlash(tc.workspace))
-			gitRun(t, checkout, "init", "-q")
-			require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(checkout, ".gitignore"), []byte(".magus/\n"), 0o644))
+			checkout := testkit.NewRepo(t, nil)
+			root := checkout.Path(filepath.FromSlash(tc.workspace))
+			checkout.Write(filepath.Join(tc.workspace, "magusfile.buzz"), "")
+			checkout.Write(".gitignore", ".magus/\n")
 			writeCommit(t, checkout, filepath.Join(tc.workspace, "gen", "tracked.txt"), trackedBody)
 
 			reg := NewWorkspaceRegistry()
@@ -218,9 +214,7 @@ func TestCleanCacheKeepsTrackedOutputs(t *testing.T) {
 			require.NoError(t, err, "a tracked output must survive clean")
 			assert.Equal(t, trackedBody, string(got))
 
-			status, err := exec.Command("git", "-C", checkout, "status", "--porcelain").Output()
-			require.NoError(t, err)
-			assert.Empty(t, string(status), "clean must leave the tree as committed")
+			assert.Empty(t, checkout.Git("status", "--porcelain"), "clean must leave the tree as committed")
 
 			_, err = m.LastRecordedRun(".", "generate")
 			assert.ErrorIs(t, err, fs.ErrNotExist, "clean --cache must drop the manifests")
@@ -282,13 +276,8 @@ func TestFindOutputProducerReturnsWriterNotOwner(t *testing.T) {
 // execution half is cmd/magus's TestCrossProjectOutputReplaysFromCache, which has it.
 func writeCrossOutputWorkspace(t *testing.T) (*Magus, string) {
 	t.Helper()
-	root := t.TempDir()
-
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 
 	write("magusfile.buzz", "")
 	write("site/magusfile.buzz", "")
@@ -407,22 +396,21 @@ func TestOutputReadsAreConcurrencySafe(t *testing.T) {
 // out named one by one. An untracked hand file, and one another declaration claims, are
 // not carved.
 func TestCarvedOutputsNamesTrackedHandFilesAmongOutputs(t *testing.T) {
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte(".magus/\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	repo.Write(".gitignore", ".magus/\n")
+	repo.Magusfile(`import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go", "!gen/claimed.go", "!gen/scratch.go");
 }
 export fun other(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/claimed.go");
 }
-`), 0o644))
+`)
 	for _, rel := range []string{"gen/fs.go", "gen/runtime.go", "gen/claimed.go"} {
-		writeCommit(t, root, rel, rel)
+		writeCommit(t, repo, rel, rel)
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "scratch.go"), nil, 0o644))
+	repo.Write("gen/scratch.go", "")
 
 	m, err := Open(t.Context(), root)
 	require.NoError(t, err, "Open")
@@ -457,12 +445,8 @@ func TestAllOutputsNeverAliasesProjectOutputs(t *testing.T) {
 // a run selecting only the writer never built the full graph, so `magus run build`
 // reported success on a workspace `magus graph deps` refused to load.
 func TestCrossOutputMutualRefIsRejectedAtLoad(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("magusfile.buzz", "")
 	write("site/magusfile.buzz", "")
 	write("site/src.md", "source")
@@ -485,13 +469,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // writeWorkspace lays down a workspace from rel-path -> content and returns the root.
 func writeWorkspace(t *testing.T, files map[string]string) string {
 	t.Helper()
-	root := t.TempDir()
-	for rel, content := range files {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
-	return root
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(files)
+	return w.Root()
 }
 
 // crossWriter is a magusfile whose build target writes glob into the sibling project
@@ -653,14 +633,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // whole file was declared in ctx.writesFiles. A file magus only EDITS is not magus's to
 // delete: regeneration rewrites the marked region, not the prose around it.
 func TestCleanSkipsUpdates(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**");
     ctx.modifiesExistingFiles("concepts/spells.md");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -691,13 +672,14 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // authored prose invalidates the target that maintains the generated region) and
 // stays out of the output set (so it is never snapshotted, replayed, or cleaned).
 func TestUpdatesFoldIntoSourcesNotOutputs(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.modifiesExistingFiles("concepts/spells.md");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")

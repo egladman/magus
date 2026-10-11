@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -27,8 +28,9 @@ func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
 	spellName := fakespell.Register(t, "zzz-identify-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -136,8 +138,9 @@ func TestIdentifyRef_InvalidRefShape(t *testing.T) {
 func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
 	spellName := fakespell.Register(t, "zzz-identify-nocache-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -169,8 +172,9 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 		spells.WithTargetSources(map[string][]string{"broken": {"secret.txt"}}),
 	)
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	secret := filepath.Join(root, "secret.txt")
 	require.NoError(t, os.WriteFile(secret, []byte("shh"), 0o644))
 	require.NoError(t, os.Chmod(secret, 0o000))
@@ -257,8 +261,9 @@ func TestRefMatchCommand(t *testing.T) {
 // IdentifyRef now reads directly instead of taking as a parameter.
 func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, filesPerProject int, defaultCharms []string) *Magus {
 	b.Helper()
-	root := b.TempDir()
-	require.NoError(b, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(b)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	for i := 0; i < nProjects; i++ {
@@ -276,8 +281,7 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		)
 
 		projDir := filepath.Join(root, projPath)
-		require.NoError(b, os.MkdirAll(projDir, 0o755))
-		require.NoError(b, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644))
+		w.Write(projPath+"/magusfile.buzz", "")
 		for f := 0; f < filesPerProject; f++ {
 			body := fmt.Sprintf("package p\n\nvar V%d = %d\n", f, f)
 			require.NoError(b, os.WriteFile(filepath.Join(projDir, fmt.Sprintf("f%04d.go", f)), []byte(body), 0o644))
