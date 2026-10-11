@@ -17,7 +17,9 @@ You get `candidates.jsonl`, one proofread finding per line, and `labels-template
 ## General scope rules (apply to every rule)
 
 - Words quoted from another author (a block quote with `>`, an issue pasted into a pull request body, a reviewer's comment reproduced in a reply), code fences, code spans, program output, stack traces, URLs and file names are not the writer's own prose. A match there is WRONG (scope), even when the quoted words show the problem. The writer's own sentence that mentions the quote is judged normally.
-- Platform boilerplate is not the author's prose either: bot footers (a "Generated with ..." line, a co-author trailer, a link to an agent session), pull request template checkboxes and headings left unfilled, a contributor license block, and a CI or bot summary pasted into the body. A match inside it is WRONG (scope), whichever rule matched. For a rule that judges a rate over the whole text, discount the clauses inside the boilerplate and judge by what remains.
+- Platform boilerplate is not the author's prose either: bot footers (a "Generated with ..." line, a co-author trailer, a link to an agent session), pull request template checkboxes and headings left unfilled, a contributor license block, and a CI or bot summary pasted into the body. A match inside it is WRONG (scope), whichever rule matched. For a rule that judges a rate over the whole text, discount the clauses inside the boilerplate and judge by what remains. A coding agent's quoted original prompt or chat prompt is boilerplate too, as is a bot's pasted summary with its footnote links.
+- A rate over the whole text counts the author's words only: boilerplate words leave the per-1000 denominator along with their clauses. Recompute both before you compare with the cap. When the author's own words fall under the rule's minimum length, the text is not judged, so the finding is WRONG (scope).
+- A cap is a ceiling the text may reach: a rate exactly at the cap is not over it, so a finding whose recomputed rate equals the cap is WRONG.
 - A rule that names a phrase as an example ("Note that", "in order to") catches the whole family; judge by the pattern, not the exact words.
 - The kind tells you the genre:
   - `change-description`: a pull request title and body, title on line one.
@@ -388,7 +390,9 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 - Candidates are top-level comments only. A reply anchored to a diff line is judged with `-anchored`, and the rule skips it: the line is its referent. If an anchored comment (one that shows a path and a line) appears anyway, it is WRONG (scope).
 - CORRECT: a top-level comment that judges or asks for a change and names nothing a reader could find from where it sits: no code, path, line, example or reason.
 - WRONG: the comment names the code, a path, a line, an example or a reason you can read in the same comment, or carries a suggestion block.
-- Known false-positive shapes: a top-level comment that names its file or function in a noun phrase; a suggestion block.
+- A symptom the reader can go and find counts as a reason: failing or timed-out tests, a failed CI run or job, a named command that fails, code that does not compile, merge conflicts. A comment that names one is WRONG, however short its request. "It doesn't work" or "something went wrong" names nothing to look at.
+- A retry asked of an agent with nothing named ("please try again", "retry") is a change request that names nothing: CORRECT, unless the comment names what failed.
+- Known false-positive shapes: a top-level comment that names its file or function in a noun phrase; a suggestion block; a comment naming a failing check.
 - CORRECT example: a review summary that says only "Not convinced by this approach, please redo the spool part."
 - WRONG example: "Rename `spoolDir` to `spoolRoot`; every other file uses the second name."
 
@@ -405,10 +409,11 @@ One entry per rule labeled in a round, in alphabetical order. Each opens with th
 
 - Catches: a text that hangs present participial clauses on its sentences at a generated-writing rate
 - The message states the count, the words, the rate per 1000 words and the cap, and quotes each clause it counted. Judge those clauses, not others you find.
-- First strike every counted clause that sits in platform boilerplate (a bot footer, a template line, a pasted summary). If the clauses left no longer put the author's own words over the cap, label WRONG (scope).
+- First strike every counted clause that sits in platform boilerplate (a bot footer, a template line, a pasted summary, a coding agent's quoted prompt), and its words with it. If the clauses left no longer put the author's own words over the cap, label WRONG (scope).
+- Then strike every counted -ing word that opens no clause: a noun or an adjective ("caching rules" in a list of nouns, "missing keys"), a gerund that is the subject of a verb ("clicking Save should ..."), and a label (a bold list label, a test case's name such as "rounding down"). Recheck the rate against the cap with only the clauses left. If they no longer put the text over the cap, label WRONG (parse).
 - A "claimed-significance" clause is a comma plus an -ing tail whose content is a benefit, an effect or a result: ", giving tidier logs", ", wasting retries", ", raising the count to 212". A concrete effect still counts: the rule measures the shape, not the truth of the content.
 - CORRECT: a text of 200 words or more where at least half of the counted clauses left after the strike are claimed-significance tails.
-- WRONG: the count comes mostly from gerunds after a preposition ("by ensuring", "for testing"), from code, logs, front matter or tables, from list items that start with an -ing verb, or from boilerplate.
+- WRONG: the count comes mostly from gerunds after a preposition ("by ensuring", "for testing"), from code, logs, front matter or tables, from list items that start with an -ing verb, from nouns, gerund subjects or labels, or from boilerplate.
 - UNSURE: only when the message quotes no clauses and the text is cut before you can find half of the count.
 - Known false-positive shapes: front matter and generated reference pages counted as prose; gerunds after "by"; a text whose participles sit in a code sample or a bot footer.
 - CORRECT example: a pull request body where most counted clauses end a sentence with ", improving X", ", ensuring Y" or ", enabling Z".
