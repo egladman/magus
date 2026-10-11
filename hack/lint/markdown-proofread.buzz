@@ -632,8 +632,8 @@ test "a guide is held to the guide rules and a concept page is not" {
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
     }
-    assert\equal(where, want: ["docs/guides/a.md:3 [second-person]", "docs/guides/a.md:6 [step-verb]"],
-        message: "guide findings only on the guide");
+    assert\equal(where, want: ["docs/guides/a.md:6 [step-verb]"],
+        message: "guide findings only on the guide; second-person ships off on its labeled precision");
 }
 
 test "a skill's short form is held to the terse rules and its full-only text is not" {
