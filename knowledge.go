@@ -70,7 +70,7 @@ func BuildGlobalKnowledgeGraph(ctx context.Context, ws types.WorkspaceRepository
 		seen[abs] = true
 		g, err := buildRegisteredWorkspace(ctx, abs, refresh, log)
 		if err != nil {
-			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), slog.String("error", err.Error()))
+			log.With(attr.Component("magus")).WarnContext(ctx, "skipping registered workspace in global graph", slog.String("workspace", wr), attr.Error(err))
 			continue
 		}
 		knowledge.UnionInto(merged, knowledge.Qualified(g, workspaceName(abs)))
@@ -1138,7 +1138,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 		case errors.As(err, &decodeErr):
 			// An index that exists but will not decode is a real problem (corrupt output),
 			// not a benign miss; surface it.
-			log.WarnContext(ctx, "cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), attr.Error(err))
 			continue
 		case errors.Is(err, fs.ErrNotExist):
 			// A not-yet-built index (the scip target has not run) is expected and quiet.
@@ -1146,7 +1146,7 @@ func loadKnowledgeSymbols(ctx context.Context, in symbolIngestInputs) map[string
 			continue
 		case err != nil:
 			// Any other read error (permissions) is a misconfig worth surfacing.
-			log.WarnContext(ctx, "cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), attr.Error(err))
 			continue
 		}
 		symbols.FingerprintBodies(in.root, syms)
@@ -1216,7 +1216,7 @@ func decodeSymbolIndex(ctx context.Context, in symbolIngestInputs, decl resolved
 			err = symbols.WriteOccurrenceFile(c.occPath, c.key, occ)
 		}
 		if err != nil {
-			in.log.DebugContext(ctx, "caching a decoded symbol index failed", slog.String("index", decl.path), slog.String("error", err.Error()))
+			in.log.DebugContext(ctx, "caching a decoded symbol index failed", slog.String("index", decl.path), attr.Error(err))
 		}
 	}
 	return syms, occ, nil
@@ -1262,7 +1262,7 @@ func symbolKeysOccurrences(ctx context.Context, in symbolIngestInputs, decl reso
 			return out, nil
 		}
 		if !errors.Is(failed, symbols.ErrOccurrenceFileStale) {
-			in.log.DebugContext(ctx, "occurrence file unreadable, decoding the index", slog.String("index", decl.path), slog.String("error", failed.Error()))
+			in.log.DebugContext(ctx, "occurrence file unreadable, decoding the index", slog.String("index", decl.path), attr.Error(failed))
 		}
 	}
 	_, occ, err := decodeSymbolIndex(ctx, in, decl, c)
@@ -1356,12 +1356,12 @@ func SymbolGaps(ctx context.Context, ws types.Inspector, root string, cfg config
 	}
 	spells, err := ListSpells(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "symbol gap probe cannot list spells", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "symbol gap probe cannot list spells", attr.Error(err))
 		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "symbol gap probe cannot list projects", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "symbol gap probe cannot list projects", attr.Error(err))
 		return nil, false
 	}
 	return symbolGaps(ctx, symbolIngestInputs{
@@ -1457,12 +1457,12 @@ func SymbolsOccurrences(ctx context.Context, ws types.Inspector, root string, cf
 	log = log.With(attr.Component("knowledge"))
 	spells, err := ListSpells(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "occurrence read cannot list spells", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "occurrence read cannot list spells", attr.Error(err))
 		return nil, false
 	}
 	projects, err := ws.ListProjects(ctx)
 	if err != nil {
-		log.WarnContext(ctx, "occurrence read cannot list projects", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "occurrence read cannot list projects", attr.Error(err))
 		return nil, false
 	}
 	return symbolsOccurrences(ctx, symbolIngestInputs{
@@ -1521,7 +1521,7 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 			// from its own Stat, so it stays quiet here rather than being counted twice.
 			continue
 		case errors.As(err, &decodeErr):
-			log.WarnContext(ctx, "cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "cannot decode symbol index", slog.String("project", decl.project), slog.String("index", decl.path), attr.Error(err))
 			gap(decl.project, "does not decode")
 			continue
 		case ctx.Err() != nil:
@@ -1529,7 +1529,7 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 			continue
 		case err != nil:
 			// Any OTHER read error is a hole SymbolGaps cannot see.
-			log.WarnContext(ctx, "cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), slog.String("error", err.Error()))
+			log.WarnContext(ctx, "cannot read symbol index", slog.String("project", decl.project), slog.String("index", decl.path), attr.Error(err))
 			gap(decl.project, "unreadable")
 			continue
 		}
@@ -1573,7 +1573,7 @@ func symbolsOccurrences(ctx context.Context, in symbolIngestInputs, keys []strin
 		slices.SortFunc(read.Files, func(a, b types.SymbolOccurrenceFile) int { return cmp.Compare(a.File, b.File) })
 		read.Files = mergeOccurrenceFiles(read.Files)
 		if err := symbols.VerifyOccurrences(ctx, read.Files, read.Names, readSource); err != nil {
-			log.WarnContext(ctx, "occurrence verification stopped early", slog.String("error", err.Error()))
+			log.WarnContext(ctx, "occurrence verification stopped early", attr.Error(err))
 		}
 		read.Unreadable = slices.Clone(unreadable)
 		reads[key] = read
@@ -1855,7 +1855,7 @@ func loadKnowledgeVCS(ctx context.Context, cfg config.Config, root string, log *
 	}
 	changes, err := res.VCS.ChangesByCommit(ctx, root, vcsMaxCommits(cfg), "")
 	if err != nil {
-		log.WarnContext(ctx, "vcs history scan failed, skipping", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "vcs history scan failed, skipping", attr.Error(err))
 		return nil
 	}
 	return aggregateFileHistory(changes, vcsPathPrefix(root, res.VCS.Claims()))
@@ -1907,7 +1907,7 @@ func loadKnowledgeVCSCached(ctx context.Context, cfg config.Config, root, cacheD
 		err = file.WriteFileAtomic(path, b, 0o644)
 	}
 	if err != nil {
-		log.DebugContext(ctx, "caching vcs history failed", slog.String("error", err.Error()))
+		log.DebugContext(ctx, "caching vcs history failed", attr.Error(err))
 	}
 	return entries
 }
@@ -2099,7 +2099,7 @@ func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadClos
 		art, err := p.client.Artifact(ctx, p.ref, p.artifactType)
 		if err != nil {
 			p.log.DebugContext(ctx, "published graph unreadable",
-				slog.String("ref", p.ref.String()), slog.String("error", err.Error()))
+				slog.String("ref", p.ref.String()), attr.Error(err))
 			return
 		}
 		p.art = art
@@ -2111,7 +2111,7 @@ func (p *publishedShards) GetShard(ctx context.Context, key string) (io.ReadClos
 	if err != nil {
 		if !errors.Is(err, oci.ErrLayerMiss) {
 			p.log.DebugContext(ctx, "published shard fetch failed",
-				slog.String("ref", p.ref.String()), slog.String("key", key), slog.String("error", err.Error()))
+				slog.String("ref", p.ref.String()), slog.String("key", key), attr.Error(err))
 		}
 		return nil, knowledge.ErrShardMiss
 	}

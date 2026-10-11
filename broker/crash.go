@@ -12,6 +12,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // errNoFilePassing is a platform, or a connection, that cannot pass files.
@@ -93,7 +95,7 @@ func (s *server) watchCrash(h hello, hint string, report, stderr *os.File) {
 		}
 		msg := hint
 		if path, err := s.saveCrash(h, body.Bytes()); err != nil {
-			s.opts.log.WarnContext(s.ctx, "could not save a crash report", slog.Int("pid", h.PID), slog.String("error", err.Error()))
+			s.opts.log.WarnContext(s.ctx, "could not save a crash report", slog.Int("pid", h.PID), attr.Error(err))
 		} else if path != "" {
 			msg += "The crash report is saved at " + path + ".\n"
 		}

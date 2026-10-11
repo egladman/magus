@@ -81,7 +81,7 @@ func (m *Magus) newServiceSession(_ context.Context) *service.Session {
 		// the broker drops it when this process exits even if this release is lost.
 		if err := b.ReleaseService(relCtx, key); err != nil {
 			slog.With(attr.Component("magus")).DebugContext(relCtx, "releasing a broker-hosted service failed; the broker drops it when this process exits",
-				slog.String("key", key), slog.String("err", err.Error()))
+				slog.String("key", key), attr.Error(err))
 		}
 	}
 	return service.NewSession(reg, acquire, release)
