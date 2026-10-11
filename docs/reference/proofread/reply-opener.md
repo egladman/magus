@@ -13,6 +13,11 @@ A deny rule by default: it refuses a sentence of a review reply that opens by co
 
 A sentence of a review reply that opens by contradicting ("No,", "As I said").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A contradiction first reads as winning an argument whatever follows it. It measured no false positive, so it denies.

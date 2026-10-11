@@ -13,6 +13,11 @@ A deny rule by default: it refuses a suppression comment that gives no reason or
 
 A suppression comment that gives no reason or that matched no finding.
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A suppression is a claim that a finding is wrong here, and a reviewer can only weigh the claim when the reason is written beside it. One with no reason suppresses nothing. One that matched nothing is left over from text that has since changed, and it would hide the next finding that lands on its lines, so it is reported for removal.
@@ -36,6 +41,8 @@ The code is `PRF1090`. The decision depends on the kind of text judged:
 | `issue`                       | deny    |
 | `release-notes`               | deny    |
 | `changelog`                   | deny    |
+| `agent-reply`                 | deny    |
+| `tool-description`            | deny    |
 
 ## Changing it
 

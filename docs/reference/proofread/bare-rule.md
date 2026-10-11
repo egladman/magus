@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports "rule" i
 
 "rule" in agent instructions with no mechanism named.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: in this repository's skills a rule is only what magus enforces, and the rest is an instruction.

@@ -13,6 +13,11 @@ A deny rule by default: it refuses a change description that does not open with 
 
 A change description that does not open with a paragraph naming what a reader can now do.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A reviewer's first question is what the change is for; a list, a heading or a reply opener in that place answers a different one. A lead under 12 words carries no reason. A lead whose first sentence states a defect and names no outcome only advises: over the 190 leads of the last 200 merged pull requests, 60 opened on the defect, and the outcome may be phrased in words no list holds.

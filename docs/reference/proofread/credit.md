@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a change description
 
 A change description that removes or replaces something and says nothing of what it was for.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 One clause on what the earlier design did well keeps the change from reading as a verdict on its author. Over the last 200 merged pull requests, 16 removed something by a clause of the title or a sentence's opening, and none said what it had been for. It advises until it has fired on real text and every firing was right.

@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a run of question or
 
 A run of question or exclamation marks in a review reply ("??", "!!", "?!").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Repeated marks read as exasperation where one mark asks the same question. Measured 2026-10-10 over the AIDev review comments: 0.17 percent of 39639 written by people and 0.05 percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes.

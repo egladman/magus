@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a doc co
 
 A doc comment phrase narrating the change rather than the code ("used to").
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: a comment describes the code as it stands and leaves its history to version control. A doc with a TODO, FIXME, compat or Deprecated marker is exempt.

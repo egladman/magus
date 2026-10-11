@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a curly 
 
 A curly quote, an ellipsis character or an emoji in prose.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: curly quotes prove nothing about who wrote a text; the rule encodes one repository's ASCII-only policy. Arrows and box drawing stay legal, having no plain spelling.

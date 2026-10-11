@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a bug report with ne
 
 A bug report with neither what happened against what was expected, nor steps to reproduce it.
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A maintainer cannot start on a defect they cannot see. A title with a defect word ("crash", "fails", "regression") that is followed by no "expected", "actual", "observed", "steps to reproduce" or "instead of" sends the first reply to asking for them. It advises: the title is read for the defect and the body for the cue, and either can be phrased another way. Neither of this repository's two issues has a defect title, so it measured no firing.

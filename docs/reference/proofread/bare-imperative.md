@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a short command in a
 
 A short command in a review reply that gives no reason anywhere ("Fix this.").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request opening with "Please", read as less polite than one that gives its reason or asks. A command of five words or fewer counts, unless the reply gives a reason anywhere or the command names code. Measured 2026-10-10 over the AIDev review comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. It advises: between teammates who share the context, a short command can be read as intended.

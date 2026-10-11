@@ -13,6 +13,11 @@ A deny rule by default: it refuses help text over 240 runes.
 
 Help text over 240 runes.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A flag's help wraps in a table of flags, so a long one pushes the next flag off the screen. Over the same 326 strings the median is 69 runes and the 90th percentile 146; 5 run past 240, and the longest is 364.

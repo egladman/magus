@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a functi
 
 A function or method name whose last word is Of or For.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: this repository names a function for what it returns or does, so `valueOf` and `configFor` are renamed.

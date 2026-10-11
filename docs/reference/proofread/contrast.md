@@ -13,6 +13,11 @@ A rule that denies on `change-description` and advises on `reference`, `guide`, 
 
 A claim made by denying its opposite first ("not just X, it is Y").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Negative parallelism argues with a position nobody took. It denies in a change description, where 200 merged pull requests used it 0 times, and advises elsewhere, where the docs use it deliberately 15 times.

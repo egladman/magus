@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a one-li
 
 A one-line doc comment that only repeats the symbol's name.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: a stub satisfies a linter and tells the caller nothing. A doc with a marker is exempt.

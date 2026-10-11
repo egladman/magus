@@ -13,6 +13,11 @@ A deny rule by default: it refuses a phrase with a shorter equivalent ("in order
 
 A phrase with a shorter equivalent ("in order to").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Each phrase has a shorter spelling that says the same. Over the 261 hand-written docs pages it found four sites, which were fixed.

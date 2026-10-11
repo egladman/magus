@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a claim 
 
 A claim in the future tense, or a first-person account of a change.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: this repository describes what the code does, in the present tense, with no author in a description. A team elsewhere writes "we" and "I" in a pull request, so the rule is off unless a decisions table turns it on.

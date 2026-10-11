@@ -13,6 +13,11 @@ A deny rule by default: it refuses a commit body that starts on the line after t
 
 A commit body that starts on the line after the subject.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Git, and every tool built on it, takes the first paragraph as the subject; with no blank line the body joins it and a one-line log shows both. A message that is a subject and trailers ("Key: value" lines) is left alone. None of the 1729 commit messages on main runs the body into the subject.

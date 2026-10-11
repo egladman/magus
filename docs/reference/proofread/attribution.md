@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports credit t
 
 Credit to a tool or an agent, or an account of how the work was produced.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: whether a description names the tools behind it is a team's call. This repository's product is about agents, so its word lists exempt that subject matter on pages; another repository would draw the line elsewhere.

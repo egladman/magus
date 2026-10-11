@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on words in capitals fo
 
 Words in capitals for emphasis in a review reply ("DO NOT", "NEVER").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Capitals read as shouting. An acronym is left alone: the rule reports a run of capital words only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 written by bots, which capitalize ALL and ANY in technical prose too, so the rule does not tell the two apart and only advises.

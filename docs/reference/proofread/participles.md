@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a text that hangs pr
 
 A text that hangs present participial clauses on its sentences at a generated-writing rate.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Reinhart et al. (PNAS 2025) measured GPT-4o using present participial clauses at 5.3 times the human rate. The rule counts a comma before an -ing word that opens a clause, and an -ing word opening a sentence whose comma closes the clause, per 1000 words, over texts of 200 words or more. Measured 2026-10-10: 808 agent pull request bodies from the AIDev set ran 3.9 per 1000 pooled (p50 3.7), and 30 percent run over the cap of 5; this repository's 96 hand-written docs pages ran 1.5 (p90 3.1, 2 percent over) and its 61 commit bodies 0.5 (none over), both written by people and agents together. Review comments ran 0.6 by people and 2.6 by bots, pooled. The docs are a different genre from a pull request, and the rule cannot tell a participle from a gerund without a tagger, so it advises.

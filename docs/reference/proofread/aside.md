@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a spaced
 
 A spaced hyphen spelling an em dash in a doc comment.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: an aside set off by " - " reads as a dash the ASCII policy forbids. A hyphen between digits is arithmetic or a range and passes; one between identifiers stays reported, which held one false positive against 4513 findings.

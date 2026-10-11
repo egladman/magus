@@ -13,6 +13,11 @@ A deny rule by default: it refuses a changelog version heading that is not "## [
 
 A changelog version heading that is not "## [version] - date" or "## [Unreleased]".
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Keep a Changelog heads each release "[version] - date", so a reader and a tool find a release by its number and see when it shipped; "[Unreleased]" carries no date because nothing has shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it.

@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports an em da
 
 An em dash, an en dash or a spaced double hyphen in prose.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: plain-ASCII typography is one repository's policy, ported from its Buzz lint so proofread alone reproduces it. Off unless a decisions table turns it on.

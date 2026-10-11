@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a doc co
 
 A doc comment sentence over 60 words.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: over the same 46664 blocks a sentence's p50 is 17 words, p90 34 and p99 50.

@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a changelog entry th
 
 A changelog entry that names a Go identifier and says little else.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 An entry says what changed for the person using the software, not the mechanism that changed. An entry of fewer than three words around an exported or qualified Go identifier names the mechanism and leaves the effect out. A lowercase name in backticks is a flag, a key or a command, which a user can act on, so it is left alone. It advises: it found nothing in the 682 fragments in changes/unreleased/.

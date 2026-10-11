@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a recommendation in 
 
 A recommendation in a review reply stated as a fact, with no reason given.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 "This should be a map" leaves the author to guess why; the reason, or a label saying it is the writer's call, invites an answer. It advises: a modal also states requirements.

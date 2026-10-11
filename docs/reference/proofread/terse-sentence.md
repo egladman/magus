@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a senten
 
 A sentence of agent instructions over 25 words.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: every word an agent loads costs context in every session. Measured 2026-10-07 over the short form of 18 skills, 1264 sentences ran p50 14 words, p90 30; the cap sits below p90.

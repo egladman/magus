@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a doc co
 
 A doc comment over 250 words.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: measured 2026-10-06 over 46664 comment blocks, a block's p50 is 25 words, p90 72 and p99 168; the cap sits past p99 and catches a design document living in a comment.

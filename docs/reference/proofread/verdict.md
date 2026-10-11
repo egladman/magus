@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a judgment word stan
 
 A judgment word standing in for the behavior it judges ("was broken", "a mess").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A verdict tells the reader what to think in place of what happened. It advises because "broken" and "wrong" also name a broken test or the wrong checkout; it moves to deny only after every firing on real text was right.

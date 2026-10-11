@@ -13,6 +13,11 @@ A deny rule by default: it refuses a message that joins more than one reason (so
 
 A message that joins more than one reason (so, because, a semicolon, ", which").
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 One reason names the cause; a second is an argument the reader did not ask for at the moment of the failure. The ref holds the rest.

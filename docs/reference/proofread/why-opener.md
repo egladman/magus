@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a review reply sente
 
 A review reply sentence that opens "Why did you" or "Why would you".
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Danescu-Niculescu-Mizil et al. (ACL 2013) found a direct question opening with "why" among the strongest cues of an impolite request: it asks the author to defend themselves. Asking what the code needs ("Does this need the lock?") asks the same. Measured 2026-10-10 over the AIDev review comments: 0.16 percent of 39639 written by people and none of 42076 written by bots. It advises: the author may want the reason on record.

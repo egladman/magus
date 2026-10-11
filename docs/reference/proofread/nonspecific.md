@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a review reply that 
 
 A review reply that judges or asks for a change and names no code, path, line, example or reason.
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific and inconsiderate, and over half of their respondents had received it in the past year; Bosu et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 written by bots. It advises: an inline comment already sits on its line, which the rule cannot see.

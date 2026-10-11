@@ -13,6 +13,11 @@ A deny rule by default: it refuses residue of a tool or a template: a citation m
 
 Residue of a tool or a template: a citation marker or an unfilled placeholder.
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 `oaicite`, `[cite: 1]` and `[insert ...]` are unambiguous: no reader is served by them. They show up where text was pasted from a chat, so the rule judges doc comments too.

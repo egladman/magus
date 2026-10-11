@@ -13,6 +13,11 @@ A deny rule by default: it refuses weight or consensus asserted with nothing nam
 
 Weight or consensus asserted with nothing named ("experts argue", "the stakes are high").
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 The reader cannot check a source that is not named. Zero hits over the docs pages, changelog fragments and merged pull requests.

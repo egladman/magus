@@ -13,6 +13,11 @@ A deny rule by default: it refuses a word chosen to sound significant rather tha
 
 A word chosen to sound significant rather than to say what is so ("delve", "tapestry").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 The list holds words with no plain sense in technical text. Zero hits over the docs pages, changelog fragments and merged pull requests.

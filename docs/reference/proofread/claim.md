@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a measurement, a com
 
 A measurement, a comparison or a completion with no evidence in its sentence or bullet.
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A claim a reader cannot check reads as boasting or as a guess. Evidence is a code span naming a test or command, a link, an issue or commit, or an output ref. It advises: over the last 200 merged pull requests it fired in 21, and about half of those state a setting ("a 300s bound") rather than measure. A sentence that states a limit ("Not measured on Linux") is exempt.

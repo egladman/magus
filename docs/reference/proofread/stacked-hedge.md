@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on two softeners in one
 
 Two softeners in one sentence of a review reply, or an apology before its point.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Stacked softeners read as unsure of a point the writer has. It advises: one tell proves nothing.

@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a heading whose ever
 
 A heading whose every word after the first is capitalized.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Title Case headings are a generated-writing tell. It advises: a heading of proper nouns keeps lower-case words and passes, and the full sentence-case policy with its exceptions stays a repository's own.

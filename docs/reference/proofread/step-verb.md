@@ -13,6 +13,11 @@ A deny rule by default: it refuses a numbered step of a guide that does not open
 
 A numbered step of a guide that does not open with its imperative verb.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A reader following a procedure scans for the action. A numbered list counts as a procedure only when one of its items opens with an imperative, so a recap, a precedence order or a list of reasons is left alone.

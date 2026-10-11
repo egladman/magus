@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a paragr
 
 A paragraph or list item of agent instructions over 60 words.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: over the same skills 642 paragraphs and items ran p50 27 words, p90 64; caps near p95 trimmed only 5.5% of the bytes, so the cap sits below p90.

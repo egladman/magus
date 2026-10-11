@@ -13,6 +13,11 @@ A deny rule by default: it refuses a message opening with a component tag ("serv
 
 A message opening with a component tag ("server: ") or carrying a marker such as "[AGENT]".
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A tag names who spoke, which the reader already knows, and pushes the verdict off the start of the line.

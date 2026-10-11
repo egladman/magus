@@ -13,6 +13,11 @@ A deny rule by default: it refuses a sentence of help text over 40 words.
 
 A sentence of help text over 40 words.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A reader scans help in a terminal while deciding what to type. The federal plain-language quick tips ask for no sentence over 40 words. Over the 326 flag usage strings magus binds (median 11 words, 90th percentile 25, longest 56) one runs past it.

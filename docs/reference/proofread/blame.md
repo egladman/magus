@@ -13,6 +13,11 @@ A deny rule by default: it refuses a person or past work as the subject of a fau
 
 A person or past work as the subject of a fault, and contempt for code or a decision.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Text loses its tone on the way to a reader, who fills the gap with intent the writer never had. "Whoever wrote this forgot to" reads as an accusation; "the rename left the old key" states the same fact. It measured no false positive over the last 200 merged pull requests, so it denies. The first person is left alone, since owning a fault reads as candor.

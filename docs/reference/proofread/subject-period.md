@@ -13,6 +13,11 @@ A deny rule by default: it refuses a commit subject ending in a period.
 
 A commit subject ending in a period.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A subject is a title, and a title carries no full stop. A subject ending in "..." is left alone. None of the 1729 commit messages on main ends in one.

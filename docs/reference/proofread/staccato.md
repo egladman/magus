@@ -13,6 +13,11 @@ A rule that denies on `change-description`, `issue`, and `release-notes` and adv
 
 Three or more consecutive sentences of six words or fewer in one paragraph.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A run of fragments reads as a drumbeat. At a cap of 4 words the rule found nothing and missed a real run; at 6 it found that run and docs/scope.md alone. It denies in a change description and advises on a page; a guide's steps and agent instructions are short by rule, so it does not judge them.

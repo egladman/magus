@@ -13,6 +13,11 @@ A deny rule by default: it refuses a commit subject over 100 bytes.
 
 A commit subject over 100 bytes.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A one-line log cuts a long subject off. The cap is 100 bytes, commitlint's header-max-length and the limit this repository's commit hook applies, not git's customary 72, since a semicolon joining two clauses already runs past 72 on main. A " (#123)" a forge appends is not counted. Over the 1729 commit messages on main, 485 run past 100, but 2 of the newest 120 do: the limit arrived with the commit hook. The number is fixed in the rule; a decisions table sets the rule off, advise or deny.

@@ -13,6 +13,11 @@ A deny rule by default: it refuses throat-clearing ("Note that") and filler adve
 
 Throat-clearing ("Note that") and filler adverbs ("simply", "basically").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 The words carry nothing the sentence needs. Written text takes a wider list ("actually", "robust") than doc comments, which keep the narrow one until a sweep clears the wider; the senses that carry meaning ("just" as merely, "very" as the same one) are exempt.

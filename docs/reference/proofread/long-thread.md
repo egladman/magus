@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a review reply that 
 
 A review reply that is its author's fourth or later in a thread.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A long exchange in text reads as a stalemate to the people watching it, and a call settles it faster. It needs the thread length (-thread-length), and stays silent without it.

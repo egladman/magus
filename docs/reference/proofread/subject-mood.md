@@ -13,6 +13,11 @@ A deny rule by default: it refuses a commit subject opening in the past tense, t
 
 A commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making").
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A subject completes "if applied, this commit will ...", so it opens with the verb in the imperative. The rule reads a closed list of about 30 verbs in their past, third-person and gerund forms, not a tagger, so a plural noun that is also a verb ("changes to the key") is reported; the list is the one hack/policy/commits.buzz already denied. Over the 1729 commit messages on main it found nothing, so it denies at no cost.

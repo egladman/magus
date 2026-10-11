@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a participle clause 
 
 A participle clause added to claim significance (", highlighting the importance of").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 The tail asserts significance with no subject to own it. It advises: a participle clause is also ordinary grammar.

@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a motive given to a 
 
 A motive given to a tool or a person ("guessed", "pretends").
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A tool has a mechanism, and a person given a motive in writing reads it as an accusation. It advises: "lies" also says where a file lies.

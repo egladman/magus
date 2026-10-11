@@ -13,6 +13,11 @@ A deny rule by default: it refuses text a chat assistant addressed to its user: 
 
 Text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 "I hope this helps" and "great question" answer a chat the reader never saw. Zero hits over the docs pages, changelog fragments and merged pull requests; the letter patterns ("Dear", "I am writing to") judge only a change description, which is never a letter.

@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports an agent
 
 An agent-instructions template that does not render, so neither of its forms can be judged.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: the template form is internal/agent's. A body that does not render is judged by this rule alone, and passes where it is off.

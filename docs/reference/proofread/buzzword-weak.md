@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a buzzword that also
 
 A buzzword that also has an ordinary sense ("crucial", "landscape").
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 These words are tells in a cluster and plain words alone, so the rule advises: one tell proves nothing.

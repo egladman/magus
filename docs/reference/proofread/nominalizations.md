@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on a text whose verbs a
 
 A text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 Reinhart et al. (PNAS 2025) measured GPT-4o using nominalizations at 2.1 times the human rate. A suffix is a guess at a nominalization, so the rule advises over a whole text and never points at one word. Over texts of 200 words or more, measured 2026-10-10: 808 agent pull request bodies from the AIDev set ran 55.2 per 1000 pooled (p50 49.8), and 79 percent run over the cap of 30; this repository's 96 hand-written docs pages ran 12.2 (p90 20.3, 1 percent over) and its 61 commit bodies 12.6 (2 percent over), both written by people and agents together. Review comments ran 14.5 by people and 35.4 by bots, pooled.

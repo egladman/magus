@@ -13,6 +13,11 @@ A deny rule by default: it refuses an announcement standing where the point shou
 
 An announcement standing where the point should be ("Here's the thing", "Let's dive in").
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A signpost delays the point it promises. It had zero hits in 261 docs pages, 665 changelog fragments and 200 merged pull requests, so it denies at no cost.

@@ -13,6 +13,11 @@ A deny rule by default: it refuses a softener qualifying a claim ("might fix", "
 
 A softener qualifying a claim ("might fix", "could potentially").
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A hedge lets a claim stand with no evidence. A writer who is unsure scopes the claim instead: a sentence under a "Not verified" heading, or one opening with "Not measured" or "Untested", states a limit and is exempt.

@@ -13,6 +13,11 @@ An advisory by default: it explains, and blocks nothing, on never, nobody or not
 
 Never, nobody or nothing as a claim about the past ("has never fired", "nobody checked").
 
+## Dimension
+
+`evidence`: a claim says more or less than what was shown. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 An absolute over every run since a change reads as a verdict on whoever made it; saying when and how often states the same fact. It advises because this repository's docs use "never" 788 times and every sampled use states a contract ("never returns nil").

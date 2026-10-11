@@ -13,6 +13,11 @@ A deny rule by default: it refuses a word that tells the reader how hard a step 
 
 A word that tells the reader how hard a step should feel or what they should already know.
 
+## Dimension
+
+`stance`: the text reads as a verdict on a person, or as addressed to someone else. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 "Simply run" and "of course" tell a reader who is stuck that they should not be. Measured over the guides before the rule, none of 16 lowercase "just" minimized a step, so "just" counts only before a verb the reader carries out, and an "easy" that warns ("easy to get wrong") is left alone.

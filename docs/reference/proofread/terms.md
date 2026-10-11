@@ -13,6 +13,11 @@ A house-style rule, off until a decisions table turns it on: it reports a spelli
 
 A spelling the glossary replaces ("sub-agent").
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 House style: the glossary is one repository's, so the rule is off unless a decisions table turns it on.

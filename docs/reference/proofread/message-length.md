@@ -13,6 +13,11 @@ A deny rule by default: it refuses a message longer than its rune cap, 160 unles
 
 A message longer than its rune cap, 160 unless the caller names one.
 
+## Dimension
+
+`economy`: words that carry nothing. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A message is read in a terminal at the moment something went wrong: about two lines hold a verdict, one command and a ref, and the rationale belongs behind the ref.

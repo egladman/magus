@@ -13,6 +13,11 @@ A deny rule by default: it refuses a message naming more than one backticked com
 
 A message naming more than one backticked command.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A reader runs the first command a message names. A second competes with it, so a message names the one to run first.

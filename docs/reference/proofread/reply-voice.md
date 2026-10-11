@@ -13,6 +13,11 @@ A deny rule by default: it refuses text that answers a prompt the reader never s
 
 Text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 "Great question", "as discussed", a `**Cache:**` bullet or a `Summary` heading is the shape of an answer to a prompt the reader was not shown, so the reader has to reconstruct it. A review reply is one person answering another in a thread they share, so its openers and references to the thread are left alone.

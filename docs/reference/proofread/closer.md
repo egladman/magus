@@ -13,6 +13,11 @@ A deny rule by default: it refuses a sentence that opens by announcing it restat
 
 A sentence that opens by announcing it restates the text above ("In conclusion,").
 
+## Dimension
+
+`structure`: the reader has to reconstruct the order or the purpose. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A summary of a page the reader just read costs a paragraph and adds nothing. Zero hits over the docs pages, changelog fragments and merged pull requests.

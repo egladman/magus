@@ -13,6 +13,11 @@ A deny rule by default: it refuses we, us, our or ours in a guide, which speaks 
 
 We, us, our or ours in a guide, which speaks to the reader as you.
 
+## Dimension
+
+`conventions`: a house or genre convention is broken. A finding is counted on
+the dimension of its rule, the cost it names to the reader.
+
 ## Why
 
 A guide is followed step by step by the person reading it; "we" blurs who acts. A "we" the tense rule already reports is left to it, so one word gives one finding.
