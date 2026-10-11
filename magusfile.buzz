@@ -2074,6 +2074,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
+    // hack/lint/run.buzz's tests run the judge, which a fresh worktree has not built.
+    ctx.needs(conventions\judge_build);
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
