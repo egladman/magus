@@ -195,7 +195,7 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 	if s.VerifyOutputs {
 		accept = func(m *Manifest) bool { return !t.c.treeMoved(ctx, s, m) }
 	}
-	m, err := t.c.importArtifact(ctx, counted, root, s.ProjectPath, hash, accept)
+	m, err := t.c.importArtifact(ctx, counted, root, importRequest{project: s.ProjectPath, hash: hash, accept: accept})
 	if errors.Is(err, errTierMiss) {
 		release()
 		return nil, errTierMiss

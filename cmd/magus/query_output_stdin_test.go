@@ -136,7 +136,7 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	const memberRef = "out0123456789ab"
-	member := cache.WrapNeedFailure(errors.New("golangci exited 1"), "lint-go", memberRef)
+	member := cache.WrapNeedFailure(errors.New("golangci exited 1"), cache.NeedMember{Target: "lint-go", Ref: memberRef})
 	m, ref := newRunningWorkspace(t, "", fmt.Errorf("ctx.needs: %w", member))
 	ctx := withMagus(context.Background(), m)
 	want := "magus query output " + memberRef

@@ -15,19 +15,26 @@ type needFailure struct {
 func (e *needFailure) Error() string { return e.err.Error() }
 func (e *needFailure) Unwrap() error { return e.err }
 
-// WrapNeedFailure marks err as the failure of the ctx.needs member target, whose own run
-// recorded ref, unless err already carries a member's failure from deeper in the
-// composition, which is the one worth reading. It returns err untouched when ref is empty
-// (the member's output was not persisted) or err is nil.
-func WrapNeedFailure(err error, target, ref string) error {
-	if err == nil || ref == "" {
+// NeedMember names a ctx.needs member of a composed target and the ref its own run
+// recorded.
+type NeedMember struct {
+	Target string
+	Ref    string
+}
+
+// WrapNeedFailure marks err as the failure of the ctx.needs member m, unless err already
+// carries a member's failure from deeper in the composition, which is the one worth
+// reading. It returns err untouched when m.Ref is empty (the member's output was not
+// persisted) or err is nil.
+func WrapNeedFailure(err error, m NeedMember) error {
+	if err == nil || m.Ref == "" {
 		return err
 	}
 	var nf *needFailure
 	if errors.As(err, &nf) {
 		return err
 	}
-	return &needFailure{target: target, ref: ref, err: err}
+	return &needFailure{target: m.Target, ref: m.Ref, err: err}
 }
 
 // asNeedFailure returns the target and ref of the ctx.needs member err failed on, or empty

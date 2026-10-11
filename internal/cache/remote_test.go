@@ -748,10 +748,10 @@ func TestImportTurnedAwayByItsManifestWritesNothing(t *testing.T) {
 
 	_, cB := openSigned(t, remote, nil, trusted)
 	var seen *Manifest
-	_, err = cB.importArtifact(t.Context(), bytes.NewReader(raw), cB.dir, "test/pkg", rA.Hash, func(m *Manifest) bool {
+	_, err = cB.importArtifact(t.Context(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash, accept: func(m *Manifest) bool {
 		seen = m
 		return false
-	})
+	}})
 	require.ErrorIs(t, err, errTierMiss)
 	require.NotNil(t, seen)
 	require.NotEmpty(t, seen.Outputs)

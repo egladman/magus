@@ -810,7 +810,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 				}
 				return invoke(workerCtx)
 			}, r.cacheOpts...)
-			return cache.WrapNeedFailure(err, name, res.Ref)
+			return cache.WrapNeedFailure(err, cache.NeedMember{Target: name, Ref: res.Ref})
 		})
 	}
 }
