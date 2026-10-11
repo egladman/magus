@@ -232,7 +232,12 @@ var coreTexts = map[Rule]ruleText{
 			"a test or command, a link, an issue or commit, or an output ref. It advises: over the last 200 " +
 			"merged pull requests it fired in 21, and about half of those state a setting (\"a 300s " +
 			"bound\") rather than measure. A sentence that states a limit (\"Not measured on Linux\") is " +
-			"exempt.",
+			"exempt. Measured 2026-10-11 over the adjudicated labeling round 2: 51.1% precision (23 of 45) " +
+			"before, 74.2% (23 of 31) after. A figure after a determiner or a limit's noun (\"a fixed " +
+			"60ms\", \"a limit of 40%\"), a supposed, quoted or confidence figure (\"99% sure\"), a ratio " +
+			"beside the line counts it comes from, a comparison stating a purpose or an aside (\"to keep " +
+			"it smaller\") and \"fixes\" before a preposition are left alone. It stays off until a fresh " +
+			"labeling round measures it.",
 	},
 	RuleHedge: {
 		code:      "PRF3002",

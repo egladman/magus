@@ -58,25 +58,26 @@ fix: ignore the home config
 Fixes the issue where a config file in the home directory was found and used.
 -- hit/review-reply --
 The wrapped-JSON mode is more reliable with the local model server because it:
--- fp/agent-reply --
+-- pass/agent-reply --
 The 5x multiplier in the test env helper might be too conservative for the CI machines.
 - **Main file reduced**: 3452 → 3095 lines (357 lines, 10.3% reduction)
 -- fp/change-description --
 - Changes are backward compatible with 4KB page sizes
+-- pass/change-description --
 The rebase incorporates recent changes including menu-related fixes and ensures the branch is up to date.
 -- fp/commit-message whole --
 ci: size the runners
 
 * take every core and all but 512 MiB of memory in CI; drop the hosted four-core clamp
--- fp/commit-message whole --
+-- pass/commit-message whole --
 test: re-measure the fixture
 
 * re-measure the fixture with the probe and key fixes in
--- fp/commit-message whole --
+-- pass/commit-message whole --
 refactor: simplify the compare script
 
 - Simplify the video compare script: 620→213 lines (70% reduction)
--- fp/commit-message whole --
+-- pass/commit-message whole --
 docs: hide the coverage chip
 
 Hide the coverage chip, because a 0% badge on unmeasured code is the fastest way to lose trust.
@@ -84,20 +85,21 @@ Hide the coverage chip, because a 0% badge on unmeasured code is the fastest way
 bench: record the run
 
 The ns columns are inconclusive, because the baseline carried 103-121% variance.
--- fp/commit-message whole --
+-- pass/commit-message whole --
 fix: wait on the report
 
 * wait for the stale-build report with a deadline instead of a fixed 60ms
 -- fp/review-reply --
+All shortcuts include bounds checking (duration limits, volume 0-100%, etc.).
+change the blocklist not to trigger on 10s peer exchange messages.
+This keeps metadata and state consistent and prevents drift.
+This eliminates the code duplication.
+The prefix guard prevents a plain version string from matching.
+-- pass/review-reply --
 These are separate functions to keep the generated code size smaller.
 I'm not sure if 16 bytes is sufficient for most keys.
 **Drop the fetch polyfill; the runtime has built-in fetch (less supply-chain surface, fewer bytes)**
 I've made partial fixes to the registration mechanism, but the core issue still needs to be resolved.
 But it adds another arbitrary limit of 40%, and hard-to-maintain magic numbers.
-All shortcuts include bounds checking (duration limits, volume 0-100%, etc.).
 - The comment says “first 12 bytes” and “remaining 12 bytes”; the code slices 10 and then the rest.
-change the blocklist not to trigger on 10s peer exchange messages.
-This keeps metadata and state consistent and prevents drift.
-This eliminates the code duplication.
-The prefix guard prevents a plain version string from matching.
 I am 99% sure it actively does things beyond this.

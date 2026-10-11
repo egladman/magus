@@ -720,13 +720,18 @@ func sentenceBounds(text string) [][2]int {
 }
 
 // firstClaim returns where the first claim in text sits, or nil. A "fixes"
-// with no object is the noun ("five nesting fixes"), not a claim.
+// with no object is the noun ("five nesting fixes"), not a claim, and a
+// figure that states a setting or is derived from counts beside it is no
+// measurement.
 func firstClaim(text string) []int {
 	var first []int
 
 	for _, re := range []*regexp.Regexp{measurement, comparison, completion} {
 		for _, at := range re.FindAllStringIndex(text, -1) {
-			if re == completion && !hasObject(text[at[1]:]) {
+			switch {
+			case re == completion && !hasObject(text[at[1]:]),
+				re == measurement && notMeasured(text, at),
+				re == comparison && (parenthesized(text, at[0]) || purposeBefore.MatchString(text[:at[0]])):
 				continue
 			}
 
@@ -741,10 +746,50 @@ func firstClaim(text string) []int {
 	return first
 }
 
+var (
+	// settingBefore is what makes the figure after it a setting or a size the
+	// writer chose rather than a result: a determiner ("a 300s bound", "the
+	// 5x multiplier", "a fixed 60ms"), a limit's noun ("a limit of 40%"), a
+	// supposition ("if 16 bytes is enough").
+	settingBefore = regexp.MustCompile(`(?i)(?:\b(?:a|an|the|this|that|each|every|per|its|their)` +
+		`(?:\s+(?:fixed|default|hard|flat|single|new|maximum|minimum))?|` +
+		`\b(?:limit|bound|cap|threshold|budget|ceiling|deadline|timeout|maximum|minimum) of|\b(?:if|whether))\s*$`)
+
+	// certaintyAfter makes a percentage the writer's confidence: "99% sure".
+	certaintyAfter = regexp.MustCompile(`^\s*(?:sure|certain|confident)\b`)
+
+	// countedChange is a before and after count of lines or files, which a
+	// reader checks in the diff, so a ratio beside it is derived from them:
+	// "620→213 lines (70% reduction)".
+	countedChange = regexp.MustCompile(`\d+\s*(?:→|->)\s*\d+\s+(?:lines?|files?)\b`)
+
+	// purposeBefore puts a comparison in a design's purpose, not its result:
+	// "to keep the generated code smaller".
+	purposeBefore = regexp.MustCompile(`(?i)\bto (?:keep|make|stay|remain)\b[^.;:,]*$`)
+
+	// notAnObject are the words after a "fixes" that show it is the noun:
+	// "key fixes in", "partial fixes to", "menu fixes and".
+	notAnObject = wordSet("in", "to", "and", "or", "for", "from", "of", "with", "on", "at", "that", "which", "are",
+		"were", "is", "was")
+)
+
+// notMeasured reports whether the measurement at at in text states a setting,
+// a confidence or a ratio derived from counts beside it, or quotes a figure.
+func notMeasured(text string, at []int) bool {
+	before := text[:at[0]]
+	quoted := strings.Count(before, "“") > strings.Count(before, "”") || strings.Count(before, `"`)%2 == 1
+
+	return quoted || settingBefore.MatchString(before) || certaintyAfter.MatchString(text[at[1]:]) ||
+		countedChange.MatchString(text)
+}
+
 func hasObject(rest string) bool {
 	rest = strings.TrimLeft(rest, " ")
+	if rest == "" || !(unicode.IsLetter(rune(rest[0])) || rest[0] == '#' || rest[0] == '`') {
+		return false
+	}
 
-	return rest != "" && (unicode.IsLetter(rune(rest[0])) || rest[0] == '#' || rest[0] == '`')
+	return !notAnObject[strings.ToLower(leadingWord(rest))]
 }
 
 // cited reports evidence in text, the claim's sentence or item as written,
