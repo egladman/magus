@@ -105,14 +105,26 @@ func wordy(in input) []Finding {
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
 		for _, at := range pattern.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
+			want := wordyWant(m)
+
+			var replacements []string
+			for _, q := range quotedWant.FindAllStringSubmatch(want, -1) {
+				replacements = append(replacements, matchCase(q[1], m))
+			}
+
 			out = append(out, Finding{
-				Message: fmt.Sprintf("Write %s, not '%s'.", wordyWant(m), m), Match: m, Line: para.lineAt(at[0]),
+				Message: fmt.Sprintf("Write %s, not '%s'.", want, m), Match: m, Line: para.lineAt(at[0]),
+				Replacements: replacements,
 			})
 		}
 	}
 
 	return out
 }
+
+// quotedWant is a phrase a wordyPhrases want quotes: each is a replacement,
+// and the words outside quotes ("or the count") are advice no text replaces.
+var quotedWant = regexp.MustCompile(`'([^']+)'`)
 
 // wordyWant is what to write in place of the matched phrase m.
 func wordyWant(m string) string {

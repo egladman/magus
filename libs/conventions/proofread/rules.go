@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Budgets measured 2026-10-06 over 46664 comment blocks: a block's p50 is 25
@@ -155,6 +157,7 @@ func filler(in input) []Finding {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop '%s': state the fact.", m), Match: m, Line: para.lineAt(at[0]),
+				Replacements: []string{""},
 			})
 		}
 	}
@@ -190,6 +193,7 @@ func terms(in input) []Finding {
 
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Write '%s', not '%s'.", want, m), Match: m, Line: para.lineAt(at[0]),
+				Replacements: []string{matchCase(want, m)},
 			})
 		}
 	}
@@ -214,3 +218,81 @@ func nameSuffix(in input) []Finding {
 }
 
 func keep(s string) string { return s }
+
+// matchCase capitalizes replacement's first letter when m opens with a
+// capital, so a replacement at the start of a sentence still opens it.
+func matchCase(replacement, m string) string {
+	r, _ := utf8.DecodeRuneInString(m)
+	if !unicode.IsUpper(r) || replacement == "" {
+		return replacement
+	}
+
+	first, n := utf8.DecodeRuneInString(replacement)
+
+	return string(unicode.ToUpper(first)) + replacement[n:]
+}
+
+// asciiFor spells each mark [ascii] reports with its ASCII equivalent. An
+// emoji has none: what it stood for takes words.
+var asciiFor = map[string]string{"‘": "'", "’": "'", "“": `"`, "”": `"`, "…": "..."}
+
+// dashClause are the words that open a clause a comma joins: a dash before
+// one of them separates, where before any other word it introduces.
+var dashClause = wordSet("then", "and", "but", "so", "or", "which", "who", "not", "because", "while", "though",
+	"although", "since", "unless", "until", "where", "when", "yet")
+
+// dashFor is what to write in place of the dash at text[from:to], the spaces
+// around it included: "-" in a numeric range, ", " for one of a pair of
+// dashes in a sentence or before a joined clause, and ": " where the dash
+// introduces what follows.
+func dashFor(text string, from, to int) string {
+	before, after := text[:from], text[to:]
+
+	switch {
+	case before != "" && after != "" && isDigit(before[len(before)-1]) && isDigit(after[0]):
+		return "-"
+	case strings.ContainsAny(sentenceAround(before, after), "—–"), dashClause[strings.ToLower(firstWord(strings.TrimSpace(after)))]:
+		return ", "
+	}
+
+	return ": "
+}
+
+// sentenceAround is the rest of the sentence either side of a dash.
+func sentenceAround(before, after string) string {
+	if at := strings.LastIndexAny(before, ".!?"); at >= 0 {
+		before = before[at+1:]
+	}
+
+	if at := strings.IndexAny(after, ".!?"); at >= 0 {
+		after = after[:at]
+	}
+
+	return before + after
+}
+
+// headingWord is a word of a heading, or a code span, which stays as written.
+var headingWord = regexp.MustCompile("`[^`]*`|[\\p{L}][\\p{L}'-]*")
+
+// sentenceCase lowers the first letter of each word of heading after the
+// first. A word with a capital past its first letter ("GitHub", "API") or a
+// code span is a name and keeps its case; a proper noun spelled like any
+// other word cannot be told apart and is lowered.
+func sentenceCase(heading string) string {
+	first := true
+
+	return headingWord.ReplaceAllStringFunc(heading, func(w string) string {
+		if first || strings.HasPrefix(w, "`") {
+			first = false
+
+			return w
+		}
+
+		_, n := utf8.DecodeRuneInString(w)
+		if strings.IndexFunc(w[n:], unicode.IsUpper) >= 0 {
+			return w
+		}
+
+		return strings.ToLower(w[:n]) + w[n:]
+	})
+}

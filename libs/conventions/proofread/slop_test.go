@@ -2,6 +2,8 @@ package proofread
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -159,6 +161,15 @@ func TestBuzzwordReportsAWordChosenToSoundSignificant(t *testing.T) {
 		{"a phrase read whole", KindReference, "The cache plays a vital role. It serves as a testament to the key.",
 			[]string{"1:plays a vital role", "1:serves as a testament"}},
 		{"a reply", KindReviewReply, "Let me delve into the race.", []string{"1:delve"}},
+		{"commendable", KindChangeDescription, pr("- A commendable fix to the key."), []string{"4:commendable"}},
+		{"underscore as a verb", KindReference, "This underscores the need for a stable key.",
+			[]string{"1:underscores the"}},
+		{"underscore after a modal", KindReviewReply, "It would underscore how the key races.",
+			[]string{"1:would underscore how"}},
+		{"underscore the character", KindReference, "A leading underscore marks the field private.", nil},
+		{"underscores replaced", KindReference, "Replace underscores with hyphens in the name.", nil},
+		{"an underscore before a determiner", KindReference, "Join the words with an underscore the way Go does.", nil},
+		{"an identifier", KindReference, "Set `underscores_the_key` or underscore_the_value.", nil},
 	})
 }
 
@@ -173,6 +184,10 @@ func TestBuzzwordWeakReportsWordsThatAlsoHaveAPlainSense(t *testing.T) {
 		{"additionally", KindReference, "The key sorts. Additionally, it hashes.", []string{"1:Additionally"}},
 		{"mid-sentence additionally", KindReference, "It is, additionally, stable.", nil},
 		{"left to the error tier", KindReference, "It plays a key role.", nil},
+		{"notably", KindChangeDescription, pr("- Notably, the key sorts."), []string{"4:Notably"}},
+		{"the realm of", KindReference, "It is in the realm of caching.", []string{"1:in the realm of"}},
+		{"an authentication realm", KindReference, "Set the realm to EXAMPLE.COM; each realm holds its users.", nil},
+		{"a realm in code", KindReference, "Read `realm_of_user` from `notably`.", nil},
 	})
 }
 
@@ -263,11 +278,71 @@ func TestDashReportsADashBetweenWords(t *testing.T) {
 		{"a flag in code", KindReference, "Run `magus run -- -run TestX` to narrow the test.", nil},
 		{"a plain range", KindReference, "The range is 10 to 20.", nil},
 		{"a hyphenated word", KindReference, "A cache-key is stable - see below.", nil},
-		{"an em dash", KindReference, "The key sorts its inputs — then it hashes them.", []string{"1:—"}},
+		{"an em dash", KindReference, "The key sorts its inputs — then it hashes them.", []string{"1: — "}},
 		{"a double hyphen", KindChangeDescription, pr("- Sorts the inputs -- and hashes them."), []string{"4:inputs -- and"}},
 		{"an en dash", KindReference, "Pages 10–20 cover it.", []string{"1:–"}},
-		{"a reply", KindReviewReply, "Done — pushed.", []string{"1:—"}},
+		{"a reply", KindReviewReply, "Done — pushed.", []string{"1: — "}},
 	})
+}
+
+// fixes renders each finding of rule as `match=>replacements`, the
+// replacements joined by "|".
+func fixes(text string, kind Kind, rule Rule) []string {
+	var out []string
+
+	for _, f := range JudgeText(text, kind, houseOn) {
+		if f.Rule == rule {
+			out = append(out, f.Match+"=>"+strings.Join(f.Replacements, "|"))
+		}
+	}
+
+	return out
+}
+
+func TestSubstitutionRulesOfferTheirReplacement(t *testing.T) {
+	cases := []struct {
+		name string
+		rule Rule
+		text string
+		want []string
+	}{
+		{"a dash before a joined clause", RuleDash, "The key sorts its inputs — then it hashes them.",
+			[]string{" — =>, "}},
+		{"a dash introducing", RuleDash, "Done — pushed.", []string{" — =>: "}},
+		{"a pair of dashes", RuleDash, "The key—sorted once—is stable.", []string{"—=>, ", "—=>, "}},
+		{"a range", RuleDash, "Pages 10–20 cover it.", []string{"–=>-"}},
+		{"a double hyphen", RuleDash, "Sort the inputs -- and hash them.", []string{"inputs -- and=>inputs, and"}},
+		{"curly quotes", RuleASCII, "He said “stable” and it’s so…", []string{"“=>\"", "”=>\"", "’=>'", "…=>..."}},
+		{"an emoji has no ASCII", RuleASCII, "Launch \U0001F680 now.", []string{"\U0001F680=>"}},
+		{"a title-cased heading", RuleHeadingCase, "## Strategic Negotiations And Global Partnerships",
+			[]string{"Strategic Negotiations And Global Partnerships=>Strategic negotiations and global partnerships"}},
+		{"names keep their case", RuleHeadingCase, "## Running The Command On GitHub With API Keys",
+			[]string{"Running The Command On GitHub With API Keys=>Running the command on GitHub with API keys"}},
+		{"a filler word is deleted", RuleFiller, "The key is truly stable.", []string{"truly=>"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := fixes(tc.text, KindReference, tc.rule); !slices.Equal(got, tc.want) {
+				t.Errorf("%s fixes:\n got %q\nwant %q", tc.rule, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestOnlySubstitutionRulesOfferReplacements(t *testing.T) {
+	substitutes := []Rule{RuleWordy, RuleFiller, RuleTerms, RuleDash, RuleASCII, RuleHeadingCase}
+	text := pr("- Whoever wrote this was sloppy; it is crucial, and it has never fired.\n" +
+		"- It plays a vital role. Here's the thing: it is not just a cache, it is a ledger.\n" +
+		"- Note that it is able to sort — then hash.\n")
+
+	for _, kind := range []Kind{KindChangeDescription, KindReference, KindReviewReply} {
+		for _, f := range JudgeText(text, kind, houseOn) {
+			if f.Replacements != nil && !slices.Contains(substitutes, f.Rule) {
+				t.Errorf("%s offers %q on %s", f.Rule, f.Replacements, kind)
+			}
+		}
+	}
 }
 
 func TestASCIIReportsACurlyMarkAnEllipsisOrAnEmoji(t *testing.T) {

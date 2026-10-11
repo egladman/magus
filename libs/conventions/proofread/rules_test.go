@@ -148,12 +148,16 @@ func TestFillerReportsThroatClearingAndFillerAdverbs(t *testing.T) {
 		{
 			name: "throat-clearing",
 			doc:  "Note that the cache keys a run on what it reads.\n",
-			want: []Finding{{Rule: RuleFiller, Message: "Drop 'Note that': state the fact.", Match: "Note that"}},
+			want: []Finding{{Rule: RuleFiller, Message: "Drop 'Note that': state the fact.", Match: "Note that",
+				Replacements: []string{""},
+			}},
 		},
 		{
 			name: "a filler adverb",
 			doc:  "It simply rereads the file.\n",
-			want: []Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply"}},
+			want: []Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply",
+				Replacements: []string{""},
+			}},
 		},
 		{name: "the fact alone", doc: "The cache keys a run on what it reads. A miss reruns it.\n"},
 		{name: "a note that names the notes feature", doc: "It records a note that the queue reads. It is not this function's job.\n"},
@@ -177,13 +181,17 @@ func TestTermsReportsTheHyphenatedSubagent(t *testing.T) {
 		{
 			name: "a hyphenated subagent",
 			doc:  "It hands the work to a sub-agent.\n",
-			want: []Finding{{Rule: RuleTerms, Message: "Write 'subagent', not 'sub-agent'.", Match: "sub-agent"}},
+			want: []Finding{{Rule: RuleTerms, Message: "Write 'subagent', not 'sub-agent'.", Match: "sub-agent",
+				Replacements: []string{"subagent"},
+			}},
 		},
 		{name: "the one spelling", doc: "It hands the work to subagents.\n"},
 		{
 			name: "a capitalized plural",
 			doc:  "Sub-Agents share the lease.\n",
-			want: []Finding{{Rule: RuleTerms, Message: "Write 'subagents', not 'Sub-Agents'.", Match: "Sub-Agents"}},
+			want: []Finding{{Rule: RuleTerms, Message: "Write 'subagents', not 'Sub-Agents'.", Match: "Sub-Agents",
+				Replacements: []string{"Subagents"},
+			}},
 		},
 	}
 

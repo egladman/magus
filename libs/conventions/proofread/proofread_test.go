@@ -42,8 +42,9 @@ func houseDecisions(d Decision) map[Rule]Decision {
 
 // assertFindings reads a want with no Decision as [DecisionDeny], so a case
 // names a decision only where it advises, and fills in each want's code and
-// page from its rule. A want with no Column checks no position, so a case
-// pins a span only where the span is what it tests.
+// page from its rule. A want with no Column checks no position, and one with
+// no Replacements checks none, so a case pins a span or a fix only where it
+// is what the case tests.
 func assertFindings(t *testing.T, got, want []Finding) {
 	t.Helper()
 
@@ -51,6 +52,10 @@ func assertFindings(t *testing.T, got, want []Finding) {
 	for i := range want {
 		if want[i].Column == 0 && i < len(got) {
 			got[i].Column, got[i].EndLine, got[i].EndColumn = 0, 0, 0
+		}
+
+		if want[i].Replacements == nil && i < len(got) {
+			got[i].Replacements = nil
 		}
 
 		if want[i].Decision == "" {

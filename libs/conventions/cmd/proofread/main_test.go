@@ -26,6 +26,13 @@ func (f finding) at(line, column, end int) finding {
 	return f
 }
 
+// replacing gives f the replacements its rule offers for its match.
+func (f finding) replacing(texts ...string) finding {
+	f.Replacements = texts
+
+	return f
+}
+
 func row(node, source, kind string, rule proofread.Rule, decision proofread.Decision, message, match string) finding {
 	f := finding{
 		Node: node, Source: source, Kind: kind, Rule: string(rule), Decision: string(decision),
@@ -122,7 +129,7 @@ func houseTable(t *testing.T, rules ...proofread.Rule) string {
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
 	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve simply returns the path."}]`
 
-	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply")), "")
+	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing("")), "")
 }
 
 func TestRunWritesAnEmptyArrayWhenNothingIsFound(t *testing.T) {
@@ -140,9 +147,9 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 		`{"node":"b","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."},` +
 		`{"node":"a","name":"Open","kind":"function","doc":"Open simply opens."}]`
 	want := rows(t,
-		row("b", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply"),
-		row("b", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent"),
-		row("a", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply"),
+		row("b", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing(""),
+		row("b", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent"),
+		row("a", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing(""),
 	)
 
 	assertArgs(t, []string{"doc-comment", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
@@ -179,7 +186,7 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 	want := rows(t,
 		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionDeny,
 			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**").at(1, 3, 13),
-		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(3, 4, 10),
+		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(3, 4, 10).replacing(""),
 	)
 
 	assertArgs(t, []string{"reference", b, a}, "", want)
@@ -189,7 +196,7 @@ func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n")
 
 	want := rows(t, row(path, path+":7", "agent-instructions-template", proofread.RuleWordy, proofread.DecisionDeny,
-		"Write 'to', not 'in order to'.", "in order to").at(7, 8, 19))
+		"Write 'to', not 'in order to'.", "in order to").at(7, 8, 19).replacing("to"))
 
 	assertArgs(t, []string{"agent-instructions-template", path}, "", want)
 }
@@ -243,8 +250,8 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
 	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."}]`
 
-	filler := row("n", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply")
-	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent")
+	filler := row("n", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing("")
+	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent")
 	decisions := houseTable(t, proofread.RuleTerms, proofread.RuleCommentBlock)
 
 	assertArgs(t, []string{"doc-comment"}, doc, rows(t, filler))
@@ -262,7 +269,7 @@ func TestRunAppliesPathDecisionsToTheFilesTheyMatch(t *testing.T) {
 		`"`+filepath.ToSlash(dir)+`/**":{"filler":"deny"},`+
 		`"`+filepath.ToSlash(dir)+`/blog/*.md":{"filler":"off"}}}`)
 
-	want := rows(t, row(page, page+":1", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(1, 4, 10))
+	want := rows(t, row(page, page+":1", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(1, 4, 10).replacing(""))
 
 	assertArgs(t, []string{"reference", "-decisions", decisions, post, page}, "", want)
 }
@@ -497,7 +504,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 	writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n\nIt basically works.\n")
 
 	want := rows(t, row(page, page+":5", "reference", proofread.RuleFiller, proofread.DecisionDeny,
-		"Drop 'basically': state the fact.", "basically").at(5, 4, 13))
+		"Drop 'basically': state the fact.", "basically").at(5, 4, 13).replacing(""))
 	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", want)
 }
 

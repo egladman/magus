@@ -221,7 +221,12 @@ var leaks = []tell{
 var buzzwords = []tell{
 	anywhere(`(?i)\b(?:delv(?:e|es|ed|ing)|tapestr(?:y|ies)|testament|pivotal|vibrant|intricacies|intricate|` +
 		`garner(?:s|ed|ing)?|bolstered|meticulous(?:ly)?|multifaceted|nestled|breathtaking|groundbreaking|` +
-		`renowned|stunning(?:ly)?|game-chang(?:er|ing)|boasts)\b`),
+		`renowned|stunning(?:ly)?|game-chang(?:er|ing)|boasts|commendabl[ey])\b`),
+	// "underscore" only as a verb: before an object, after a word that makes
+	// it one. A leading underscore and "replace underscores with" are the
+	// character.
+	anywhere(`(?i)\b(?:underscor(?:es|ed|ing)|(?:to|will|would|may|might|can|could|which|this|that|it|further|` +
+		`also|only) underscore)\s+(?:the|this|that|these|those|how|why|what|its|their|our|his|her|a|an)\b`),
 	anywhere(`(?i)\b(?:deep dive|lean(?:s|ed|ing)? into|circle back|moving forward|doubl(?:e|es|ed|ing) down|` +
 		`take a step back|on the same page|evolving landscape|rich tapestry|` +
 		`navigat(?:e|es|ed|ing) (?:the )?(?:challenges|complexit(?:y|ies)|uncertaint(?:y|ies)|landscape)|` +
@@ -233,10 +238,12 @@ var buzzwords = []tell{
 // weakBuzzwords are words the error tier would refuse but for a plain sense
 // they also carry. "key" is reported only before an abstract noun: before any
 // other it is the noun ("cache key"). "role" is left to the error tier, which
-// reads "plays a key role" whole.
+// reads "plays a key role" whole. "realm" is reported only in "the realm of":
+// alone it names an authentication domain.
 var weakBuzzwords = []tell{
 	anywhere(`(?i)\b(?:crucial(?:ly)?|enhanc(?:e|es|ed|ing|ement)|foster(?:s|ed|ing)?|landscape|` +
-		`(?:align|aligns|aligned|aligning) with|valuable|emphasi[sz]ing|enduring|interplay|` +
+		`(?:align|aligns|aligned|aligning) with|valuable|emphasi[sz]ing|enduring|interplay|notably|` +
+		`(?:in|into|within|beyond) the realms? of|` +
 		`key (?:aspect|factor|part|feature|benefit|insight|takeaway|point|difference|advantage|component|` +
 		`element|driver|consideration|challenge))\b`),
 	opening(`(?i)^Additionally\b`),
@@ -332,22 +339,33 @@ func staccato(in input) []Finding {
 
 // dash reports an em dash, an en dash, or a double hyphen set between words.
 // A double hyphen is reported with the words either side, as aside spells a
-// spaced hyphen; a command's `--` goes in a code span.
+// spaced hyphen; a command's `--` goes in a code span. A dash's match takes
+// the spaces around it, so its replacement reads as written.
 func dash(in input) []Finding {
 	const message = "Write a colon, a semicolon, a comma or parentheses instead of '%s'."
 
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		report := func(from, to int) {
+		report := func(from, to int, replacement string) {
 			m := para.text[from:to]
-			out = append(out, Finding{Message: fmt.Sprintf(message, m), Match: m, Line: para.lineAt(from)})
+			out = append(out, Finding{
+				Message: fmt.Sprintf(message, strings.TrimSpace(m)), Match: m, Line: para.lineAt(from),
+				Replacements: []string{replacement},
+			})
 		}
 
 		for i, r := range para.text {
-			if r == '—' || r == '–' {
-				report(i, i+utf8.RuneLen(r))
+			if r != '—' && r != '–' {
+				continue
 			}
+
+			from, to := i, i+utf8.RuneLen(r)
+			if from > 0 && para.text[from-1] == ' ' && to < len(para.text) && para.text[to] == ' ' {
+				from, to = from-1, to+1
+			}
+
+			report(from, to, dashFor(para.text, from, to))
 		}
 
 		for i := 0; ; {
@@ -358,7 +376,8 @@ func dash(in input) []Finding {
 
 			at := i + j + 1
 			if at > 1 && para.text[at-2] != ' ' && at+3 < len(para.text) && para.text[at+3] != ' ' {
-				report(wordBefore(para.text, at), wordAfter(para.text, at+1))
+				from, to := wordBefore(para.text, at), wordAfter(para.text, at+1)
+				report(from, to, para.text[from:at-1]+dashFor(para.text, at-1, at+3)+para.text[at+3:to])
 			}
 
 			i = at + 2
@@ -381,9 +400,15 @@ func ascii(in input) []Finding {
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
 		for _, at := range asciiMarks.FindAllStringIndex(para.text, -1) {
 			m := para.text[at[0]:at[1]]
-			out = append(out, Finding{
+
+			f := Finding{
 				Message: fmt.Sprintf("Write '%s' in plain ASCII: ' \" ... or words.", m), Match: m, Line: para.lineAt(at[0]),
-			})
+			}
+			if r, ok := asciiFor[m]; ok {
+				f.Replacements = []string{r}
+			}
+
+			out = append(out, f)
 		}
 	}
 
@@ -430,7 +455,7 @@ func headingCase(in input) []Finding {
 			m := strings.TrimSpace(ln.body())
 			out = append(out, Finding{
 				Message: "Write the heading in sentence case: only the first word and proper nouns are capitalized.",
-				Match:   m, Line: ln.line,
+				Match:   m, Line: ln.line, Replacements: []string{sentenceCase(m)},
 			})
 		}
 	}

@@ -80,23 +80,28 @@ func TestTerseRulesJudgeTheFrontMatterDescription(t *testing.T) {
 }
 
 func TestWordyNamesTheShorterPhrase(t *testing.T) {
-	cases := []struct{ text, match, want string }{
-		{"Run it in order to replay.", "in order to", "'to'"},
-		{"It is able to replay.", "is able to", "'can'"},
-		{"It fails due to the fact that the key moved.", "due to the fact that", "'because'"},
-		{"Make sure that it runs.", "Make sure that", "'ensure'"},
-		{"In the event that it fails, rerun.", "In the event that", "'if'"},
-		{"Ask whether or not it ran.", "whether or not", "'whether'"},
-		{"It holds a number of keys.", "a number of", "'several' or the count"},
-		{"At this point the cache is warm.", "At this point", "'now'"},
-		{"Note the fact that it ran.", "the fact that", "'that'"},
-		{"Read it prior to a run.", "prior to", "'before'"},
+	cases := []struct {
+		text, match, want string
+		replacements      []string
+	}{
+		{"Run it in order to replay.", "in order to", "'to'", []string{"to"}},
+		{"It is able to replay.", "is able to", "'can'", []string{"can"}},
+		{"It fails due to the fact that the key moved.", "due to the fact that", "'because'", []string{"because"}},
+		{"Make sure that it runs.", "Make sure that", "'ensure'", []string{"Ensure"}},
+		{"In the event that it fails, rerun.", "In the event that", "'if'", []string{"If"}},
+		{"Ask whether or not it ran.", "whether or not", "'whether'", []string{"whether"}},
+		{"It holds a number of keys.", "a number of", "'several' or the count", []string{"several"}},
+		{"At this point the cache is warm.", "At this point", "'now'", []string{"Now"}},
+		{"Note the fact that it ran.", "the fact that", "'that'", []string{"that"}},
+		{"Read it prior to a run.", "prior to", "'before'", []string{"before"}},
+		{"Hash it for the purpose of a replay.", "for the purpose of", "'to' or 'for'", []string{"to", "for"}},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.match, func(t *testing.T) {
 			assertFindings(t, JudgeText(tc.text, KindAgentInstructions, houseOn), []Finding{{
 				Rule: RuleWordy, Message: fmt.Sprintf("Write %s, not '%s'.", tc.want, tc.match), Match: tc.match, Line: 1,
+				Replacements: tc.replacements,
 			}})
 		})
 	}
