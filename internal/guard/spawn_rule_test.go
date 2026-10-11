@@ -969,22 +969,48 @@ func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
 
 // A registration that fails for a reason that passes, here a cancelled wait for a store
 // lock another process holds, is tried again on the next call: remembering it would refuse
-// the worker's writes for as long as the row stands.
+// the worker's writes for as long as the row stands. That holds for a row another checkout
+// holds too: only the store's holder refusal is remembered, never the row's look.
 func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
-	row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
-	ctx, _ := fleetFixture(t, row)
-	at := hookLocation(ctx, Dependencies{})
-	deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+	t.Run("a declared row", func(t *testing.T) {
+		row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+		ctx, _ := fleetFixture(t, row)
+		at := hookLocation(ctx, Dependencies{})
+		deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+
+		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
+			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		})
+		assert.True(t, registerAgentBase(ctx, deps, at, row.ID), "the lapsed try is not remembered as a refusal")
+	})
+	t.Run("a row another checkout holds", func(t *testing.T) {
+		row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+		ctx, _ := fleetFixture(t, row)
+		at := hookLocation(ctx, Dependencies{})
+		reads := 0
+		deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
+
+		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
+			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		})
+		assert.False(t, registerAgentBase(ctx, deps, at, row.ID), "the holder refuses")
+		assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+		assert.Equal(t, 2, reads, "the lapsed try is tried again, the holder's refusal is not")
+	})
+}
+
+// withLapsedLock runs fn with a cancelled context while another process holds the job
+// store's lock.
+func withLapsedLock(t *testing.T, ctx context.Context, at location, fn func(lapsed context.Context)) {
+	t.Helper()
 	path, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Path()
 	require.NoError(t, err)
-
 	lapsed, cancel := context.WithCancel(ctx)
 	cancel()
 	require.NoError(t, file.WithLock(ctx, path+".lock", 0, func() error {
-		assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		fn(lapsed)
 		return nil
 	}))
-	assert.True(t, registerAgentBase(ctx, deps, at, row.ID), "the lapsed try is not remembered as a refusal")
 }
 
 // A checkout's current revision is read once per judgment, however many rules compare

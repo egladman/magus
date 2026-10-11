@@ -12,15 +12,25 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnknownJob reports a registration against an id no row carries, and errNoBase one
-// that named no base. Sentinels rather than bare strings so a door can tell a worker's
-// mistake from a store failure; the wrapped messages carry the id and the next step.
-// ErrUnknownJob is exported because a door branches on it; nothing branches on the
-// other, so it stays inside.
+// ErrUnknownJob reports a registration against an id no row carries, ErrHeldElsewhere one
+// against a running job another checkout holds, and errNoBase one that named no base.
+// Sentinels rather than bare strings so a door can tell a worker's mistake from a store
+// failure; the wrapped messages carry the id and the next step. ErrHeldElsewhere holds
+// until the row changes, so a caller may stop retrying on it, unlike a cancelled context
+// or lock contention. The exported ones are those a door branches on.
 var (
-	ErrUnknownJob = errors.New("job: unknown lease")
-	errNoBase     = errors.New("job: a registration needs the base the worker landed on")
+	ErrUnknownJob    = errors.New("job: unknown lease")
+	ErrHeldElsewhere = errors.New("job: another checkout holds the job")
+	errNoBase        = errors.New("job: a registration needs the base the worker landed on")
 )
+
+// heldError is ErrHeldElsewhere with the message that names the holder, which reads
+// whole without the sentinel's own text.
+type heldError struct{ msg string }
+
+func (e heldError) Error() string { return e.msg }
+
+func (heldError) Unwrap() error { return ErrHeldElsewhere }
 
 // Exec takes a job in this store's checkout: it records the base a worker reports it
 // actually landed on, moves a declared row to running, and returns the row with the
@@ -76,9 +86,9 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 		// checkout already, the forker's or one a hook recorded before anyone took the job,
 		// and it is still the forker's to hand out, not a holder's to keep.
 		if cur.State == types.StateRunning && cur.CheckoutRoot != "" && cur.CheckoutRoot != here {
-			return fmt.Errorf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
+			return heldError{fmt.Sprintf("job: %s is held in %s (%s, updated %s ago), and wait grades the checkout that holds it,"+
 				" its holder gives it up with `%s`, and whoever forked it then hands it out again with `%s`",
-				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)
+				id, cur.CheckoutRoot, cur.State, updatedAgo(*cur), hint.JobExit.With(id), hint.JobApply)}
 		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = compareBase(withFullRevision(cur.Checkpoint, full), withFullRevision(base, full))

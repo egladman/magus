@@ -284,7 +284,7 @@ func TestStoreExecRefusesAJobAnotherCheckoutHolds(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = NewStore(other).Exec(ctx, "u1", baseB)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrHeldElsewhere)
 	for _, want := range []string{"u1", taken.CheckoutRoot, "running", "ago", hint.JobExit.With("u1"), hint.JobApply.String()} {
 		assert.Contains(t, err.Error(), want)
 	}
