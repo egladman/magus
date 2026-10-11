@@ -70,3 +70,6 @@ the build keeps timing out. Try again to fix it.
 -- hit/review-reply --
 @agent something went wrong, please try again
 It failed again, fix it
+-- pass/review-reply whole --
+<!-- This is an auto-generated reply by CodeRabbit -->
+Something went wrong, please try again.
