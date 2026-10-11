@@ -1,0 +1,108 @@
+{
+  "round": 6,
+  "date": "2026-10-11",
+  "frozen": true,
+  "spent": true,
+  "spent_because": "it was scored, and the fix round after it reads its findings",
+  "purpose": "confirm participles after proofread-fix6",
+  "rule_commit": "767f97f52cc86c4b515055303a54cd0456e417f1",
+  "seed": 20261016,
+  "proofread_sha256": "9788af37be622453a735a1ac3d6f8781c635e8c178a6587d46631b9b3d4525a0",
+  "sampler": "proofread calibrate round sample: excludes rounds 1 to 5 and the committed cases, at most 2 firings of a rule per text, 40 per rule, at least 10 per source where a source has them",
+  "candidate_ids": "r6-NNNN",
+  "candidates": 40,
+  "sources": {
+    "aidev-pr": {
+      "texts": 70909,
+      "sha256": "0d2077529320cfb10ad95a461cd2bdf8dac06387a1e6f3196789b009fa2105e4"
+    },
+    "docs-guide": {
+      "texts": 48,
+      "sha256": "c3f0f6cdcd7dde05990f22580e5ad3a482d0968b80b8067e1247951f6421f2ec"
+    },
+    "docs-reference": {
+      "texts": 219,
+      "sha256": "f23a3b56b0b9f2d7c9f96e3b8dfce32f2dcca97b1bd9f9398a6d22b4a0a82270"
+    }
+  },
+  "gates": {
+    "advise": {
+      "wilson_z": 1.96,
+      "lower_bound": 0.7,
+      "min_firings": 30
+    },
+    "deny": {
+      "rounds": 2,
+      "pooled_firings": 60,
+      "max_wrong": 1
+    },
+    "agreement": {
+      "firings_per_disagreement": 10,
+      "alpha": 0.8
+    },
+    "source": {
+      "min_firings": 10
+    }
+  },
+  "scored_with": "proofread calibrate round score at the round's rule commit; the labelers agreed on every candidate, so adjudicated.jsonl carries the agreed labels",
+  "advise_passed": [],
+  "deny_passed": [],
+  "promoted": [],
+  "caveats": [
+    "participles missed advise by one firing: 33 of 40 has a lower bound of 0.680, and 34 would reach 0.709",
+    "five of its seven wrong firings counted an attributive participle or a gerund subject as a clause, one counted a pasted summary's clauses, and one an item in a list of test topics",
+    "the sources are round 5's, so this round cannot pool with round 5 toward a deny"
+  ],
+  "rules": {
+    "participles": {
+      "code": "PRF4020",
+      "counts": {
+        "taken": 40,
+        "seen": 2553,
+        "excluded": 70,
+        "fresh": 2478,
+        "by_source_seen": {
+          "aidev-pr": 2551,
+          "docs-guide": 1,
+          "docs-reference": 1
+        },
+        "by_source_taken": {}
+      },
+      "score": {
+        "n": 40,
+        "correct": 33,
+        "precision": 0.825,
+        "wilson_lb": 0.6805,
+        "disagreements": 0,
+        "unnoted_disagreements": 0,
+        "raw_agreement": 1,
+        "alpha": 1,
+        "precision_gate": false,
+        "agreement_gate": true,
+        "by_source": {
+          "aidev-pr": {
+            "n": 40,
+            "correct": 33,
+            "precision": 0.825,
+            "wilson_lb": 0.6805,
+            "disagreements": 0,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 1,
+            "alpha": 1,
+            "precision_gate": false,
+            "agreement_gate": true
+          }
+        },
+        "worst_source": {
+          "source": "aidev-pr",
+          "n": 40,
+          "wilson_lb": 0.6805,
+          "pass": false
+        },
+        "advise_gate": false,
+        "spot_check": []
+      }
+    }
+  },
+  "data": "$XDG_CACHE_HOME/proofread/calibration/labels/round6/"
+}

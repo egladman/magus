@@ -29,7 +29,7 @@ var evidenceCeiling = map[Rule]Decision{
 	RuleIngTail:          DecisionOff, // 3/17, 0.06
 	RuleClaim:            DecisionOff, // 22/40, 0.40
 	RuleOptionList:       DecisionOff, // 0/1
-	RuleParticiples:      DecisionOff, // round 5: 24/40, 0.45
+	RuleParticiples:      DecisionOff, // round 6: 33/40, 0.68
 
 	RuleVerdict:        DecisionOff,    // 16/40, 0.26
 	RuleJudgmentAsFact: DecisionOff,    // 15/40, 0.24
