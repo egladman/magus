@@ -1,0 +1,180 @@
+// tool-descriptions-follow-proofread-rules holds the description of every MCP tool
+// (internal/handler/mcp/gen/registry.go) and of every shipped skill (the catalog in
+// internal/agent/catalog.go) to libs/conventions/proofread's tool-description kind, under this
+// repository's decisions table (hack/policy/proofread.buzz). A finding the table decides `deny`
+// fails; `advise` is the reader's to weigh.
+namespace tooldesc;
+
+import "assert";
+import "path";
+import "proc";
+import "fs";
+import "encoding/json";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
+import "hack/policy/proofread" as decisions;
+import "libs/conventions/proofread" as proofread;
+
+export final TOOLS = "internal/handler/mcp/gen/registry.go";
+export final SKILLS = "internal/agent/catalog.go";
+
+final JUDGE = "{proofread\home}/{proofread\command}";
+
+// reads keys lint-rules on both sources and on everything the judge is linked from.
+export fun reads() > [str] {
+    return [TOOLS, SKILLS, "hack/policy/proofread.buzz", "libs/conventions/go.mod", "libs/conventions/go.sum",
+        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz"];
+}
+
+// toolLines blanks every line of the registry that is not a tool's own Description: field, so
+// a parameter's description is never read and a line keeps its number.
+export fun toolLines(src: str) > str {
+    final kept = mut [<str>];
+    foreach (line in src.split("\n")) {
+        if (line.trim().startsWith("Description:")) {
+            kept.append(line);
+        } else {
+            kept.append("");
+        }
+    }
+    return kept.join("\n");
+}
+
+// skillLines blanks every line of the catalog that is not a skill entry, and spells the
+// entry's description field the way the registry does, so clihelp\extract reads both.
+export fun skillLines(src: str) > str {
+    final kept = mut [<str>];
+    foreach (line in src.split("\n")) {
+        final entry = line.trim();
+        if (entry.startsWith("\{name: \"") and entry.indexOf(", description: \"") != null) {
+            kept.append(line.replace(", description: \"", with: ", Description: \""));
+        } else {
+            kept.append("");
+        }
+    }
+    return kept.join("\n");
+}
+
+// judge reports each text the table denies. A text stands for its first line in the source.
+export fun judge(file: str, helps: [clihelp\Help], rows: {str: [any]}) > [Finding] {
+    final found = mut [<Finding>];
+    foreach (h in helps) {
+        foreach (r in rows[h.text] ?? [<any>]) {
+            if ((r["decision"] ?? "") != "deny") {
+                continue;
+            }
+            final rule: str = r["rule"] ?? "";
+            final said: str = r["message"] ?? "";
+            final matched: str = r["match"] ?? "";
+            final shown = if (matched == "") "" else ": {matched}";
+            found.append(Finding{ path = file, line = h.line, message = "{said}{shown} [{rule}]",
+                url = r["url"] ?? "",
+                fix = "Reword the description in " + file + "; a tool's registry entry is generated from its std module descriptor." });
+        }
+    }
+    return found;
+}
+
+fun judged(bin: str, table: str, text: str) > [any] !> any {
+    final run = proc\exec(bin, args: ["tool-description", "-decisions", table],
+        opts: {"stdin": text, "quiet": true, "allow_failure": true});
+    if (run.code != 0) {
+        throw "proofread exited {run.code}: " + run.stderr.trim();
+    }
+    final rows: [any] = json\parse(run.stdout);
+    return rows;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    final found = mut [<Finding>];
+    final fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} tool-description, and read why it stopped.";
+    final bin = path\abs("{proofread\home}/{proofread\binary}");
+    final table = decisions\writeDecisions([<str>]);
+    try {
+        foreach (name in [TOOLS, SKILLS]) {
+            final source = support\named(files, p: name);
+            if (source == null) {
+                found.append(support\missing(name));
+                continue;
+            }
+            final text = support\read(source!);
+            final lines = if (name == TOOLS) toolLines(text) else skillLines(text);
+            final helps = clihelp\extract(lines);
+            if (helps.len() == 0) {
+                found.append(Finding{ path = name, message = "no description was found, so none was judged: silence, not a pass",
+                    fix = "The rule reads the quoted Description field of a tool, or a skill entry's description; update it if the source changed shape." });
+                continue;
+            }
+            final rows = mut {<str: [any]>};
+            foreach (h in helps) {
+                if (rows[h.text] == null) {
+                    rows[h.text] = judged(bin, table: table, text: h.text);
+                }
+            }
+            foreach (f in judge(name, helps: helps, rows: rows)) {
+                found.append(f);
+            }
+        }
+    } catch (e) {
+        fs\remove(table) catch void;
+        return [Finding{ path = JUDGE, message = "proofread did not run, so no description was judged: {e}", fix = fix }];
+    }
+    fs\remove(table) catch void;
+    return found;
+}
+
+fun parsed(text: str) > [any] !> any {
+    final rows: [any] = json\parse(text);
+    return rows;
+}
+
+test "only a tool's own Description line is read, with its line number" {
+    final src = "var Registry = []ToolDescriptor\{\n"
+        + "\t\{\n"
+        + "\t\tName:        \"client\",\n"
+        + "\t\tDescription: \"Run a program.\",\n"
+        + "\t\tParams: []ParamDescriptor\{\n"
+        + "\t\t\t\{Name: \"script\", Type: \"string\", Description: \"A parameter.\"\},\n"
+        + "\t\t\},\n"
+        + "\t\},\n";
+    final got = clihelp\extract(toolLines(src));
+    assert\equal(got.len(), want: 1, message: "one description");
+    assert\equal(got[0].line, want: 4, message: "the line");
+    assert\equal(got[0].text, want: "Run a program.", message: "the text");
+}
+
+test "a skill entry's description is read, and a line that is not an entry is not" {
+    final src = "var skills = []skillSource\{\n"
+        + "\t\{name: \"magus-run\", description: \"Run targets.\", bodyPath: \"skills/magus-run/SKILL.md\"\},\n"
+        + "\t\{name: \"magus-other\", bodyPath: \"skills/x\"\},\n"
+        + "\tdescription: \"not an entry\",\n";
+    final got = clihelp\extract(skillLines(src));
+    assert\equal(got.len(), want: 1, message: "one description");
+    assert\equal(got[0].line, want: 2, message: "the line");
+    assert\equal(got[0].text, want: "Run targets.", message: "the text");
+}
+
+test "a deny is reported at its line and an advise is not" {
+    final helps = [clihelp\Help{ line = 4, text = "A powerful tool" }, clihelp\Help{ line = 9, text = "Run it" }];
+    final rows = mut {<str: [any]>};
+    rows["A powerful tool"] = parsed(`[{"rule": "tool-selling", "decision": "deny", "message": "Drop 'powerful'.", "match": "powerful", "url": "https://example.com/tool-selling/"}]`);
+    rows["Run it"] = parsed(`[{"rule": "tool-boundary", "decision": "advise", "message": "advice"}]`);
+    final got = judge(SKILLS, helps: helps, rows: rows);
+    assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
+    assert\equal(got[0].path, want: SKILLS, message: "the source");
+    assert\equal(got[0].line, want: 4, message: "the line");
+    assert\equal(got[0].message, want: "Drop 'powerful'.: powerful [tool-selling]", message: "message and rule");
+    assert\equal(got[0].url, want: "https://example.com/tool-selling/", message: "the rule's page");
+}
+
+test "the built proofread judges a description and a source with none is an error" {
+    final got = check(support\fixture({
+        "internal/handler/mcp/gen/registry.go": "var x = 1\n\t\tDescription: \"A powerful tool.\",\n",
+        "internal/agent/catalog.go": "package agent\n",
+    }));
+    assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
+    assert\equal(got[0].line, want: 2, message: "the line of the description");
+    assert\equal(got[0].message.indexOf("[tool-selling]") != null, want: true, message: got[0].message);
+    assert\equal(got[1].message.indexOf("silence, not a pass") != null, want: true, message: got[1].message);
+}

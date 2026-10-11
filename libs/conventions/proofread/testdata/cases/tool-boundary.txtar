@@ -1,0 +1,7 @@
+A tool description that names no case where the tool is the wrong choice and no tool to use instead.
+-- hit/tool-description --
+Report the workspace's configured telemetry, cache settings and live pool state.
+Run builds, tests and lints through magus targets. Use when asked to run, build or test.
+-- pass/tool-description --
+Transform a supplied JSON object with Buzz. For workspace queries or actions, use the client tool.
+Last resort: read the source at the commit of the binary in use.

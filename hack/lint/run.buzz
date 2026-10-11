@@ -49,6 +49,7 @@ import "hack/lint/setup-magus-mints-the-queue-app-token-only-as-an-output" as qu
 import "hack/lint/skills-generate-declares-every-shipped-skill" as skills;
 import "hack/lint/symbol-docs-follow-proofread-rules" as symbolproofread;
 import "hack/lint/testlayout-pairing-has-no-exemptions" as testpairing;
+import "hack/lint/tool-descriptions-follow-proofread-rules" as tooldesc;
 import "hack/lint/trusted-jobs-restore-no-actions-cache" as trustedcache;
 import "hack/lint/whole-tree-targets-key-on-the-go-tree" as wholetree;
 
@@ -88,6 +89,7 @@ export fun rules() > [Rule] {
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
         Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
+        Rule{ name = "tool-descriptions-follow-proofread-rules", reads = tooldesc\reads(), check = tooldesc\check },
     ];
 }
 
@@ -100,8 +102,9 @@ final PRUNED = {".git": true, ".magus": true, "node_modules": true, "gen": true}
 final PRUNED_PATHS = {".claude/worktrees": true};
 
 // KEPT_PATHS are generated trees walked despite PRUNED, because a rule reads them: the
-// figures import their observed halves.
-final KEPT_PATHS = {"docs/site/diagrams/gen": true};
+// figures import their observed halves, and the tool descriptions are judged from the MCP
+// registry magus generates.
+final KEPT_PATHS = {"docs/site/diagrams/gen": true, "internal/handler/mcp/gen": true};
 
 // walk returns every file under root outside the pruned trees, as root-relative paths.
 export fun walk(root: str) > [str] !> any {

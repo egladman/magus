@@ -17,8 +17,8 @@ import (
 // one. KindMessage judges text as [JudgeMessage] does at its default cap.
 // KindChangeDescription, KindCommitMessage and KindIssue read the first line
 // as a title, a paragraph of its own. KindCommitMessage reads no headings.
-// KindCLIHelp reads plain text: no Markdown is stripped, only backticks mark
-// a literal. KindReleaseNotes and KindChangelog read Markdown pages.
+// KindCLIHelp and KindToolDescription read plain text: no Markdown is
+// stripped, only backticks mark a literal. KindReleaseNotes and KindChangelog read Markdown pages.
 // KindAgentInstructionsTemplate renders text in both of its forms first, and
 // each finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
@@ -39,8 +39,11 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		return judgeMessage(text, 0, o)
 	}
 
-	if kind == KindCLIHelp {
+	switch kind {
+	case KindCLIHelp:
 		return judgeHelp(raw, o)
+	case KindToolDescription:
+		return judgeTool(raw, o)
 	}
 
 	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))

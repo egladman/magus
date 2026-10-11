@@ -1,0 +1,7 @@
+A tool description whose first sentence opens on the tool itself, holds under 4 words or runs past 40.
+-- hit/tool-description --
+This tool runs a Buzz program and returns its value.
+Run things. Use it whenever you want to run things.
+-- pass/tool-description --
+Run a Buzz program against the magus client and return its value.
+Query the magus knowledge graph to find and relate entities.
