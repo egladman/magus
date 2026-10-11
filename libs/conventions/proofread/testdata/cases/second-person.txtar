@@ -1,6 +1,9 @@
 Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 The project's voice in a guide, where the reader is the one acting.
 
+Moved 2026-10-11, was: hit. Eli decided a guide may say "Let's" (a tutorial):
+  Let's add a target.
+
 Retired 2026-10-11, was: fp. Each text came from a page that is not a guide,
 judged as one, and the rule judges guides alone. Source page, then the text:
   libs/gopherbuzz/docs/ffi.md: separates a C ABI we can keep memory-safe from one that can crash the host.
@@ -19,10 +22,10 @@ judged as one, and the rule judges guides alone. Source page, then the text:
 -- hit/guide --
 A codec per host would cost us upkeep.
 We keep our cache; the cost is ours.
-Let's add a target.
 We added a flag.
 -- pass/guide --
 Set the locale to en-US.
+Let's add a target.
 Pass `--ours`, or the side git calls "ours".
 Add a target, then run it.
 -- hit/guide --

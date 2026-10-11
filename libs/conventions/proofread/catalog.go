@@ -139,7 +139,11 @@ var coreTexts = map[Rule]ruleText{
 			"28) after. A heading, a link's text, and a sentence that names the reader beside the project " +
 			"(\"you keep the wiring, and we do not force it\") or speaks as \"I\" are left alone. The rest " +
 			"came from READMEs, essays and design pages judged as guides, where \"we\" names the authors; " +
-			"no guide in this repository fired. It stays off until a fresh labeling round measures it.",
+			"no guide in this repository fired, and 13 such cases were retired from its labeled set. A guide " +
+			"may say \"Let's\", taking the reader along as a tutorial does, and \"we\" may state what the " +
+			"project offers or advises (\"we support\", \"we do not recommend\"); a \"we\" doing a step " +
+			"(\"Now we run the build\") is still reported. It stays off until a fresh labeling round " +
+			"measures it.",
 	},
 	RuleStepVerb: {
 		code:      "PRF1004",

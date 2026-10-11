@@ -10,7 +10,13 @@ func TestSecondPersonReportsTheProjectVoiceInAGuide(t *testing.T) {
 		// docs/guides/integrations/agents/any-host.md, before the guide rules.
 		{"us", KindGuide, "A codec per host would cost us upkeep.", []string{"1:us"}},
 		{"we, our and ours", KindGuide, "We keep our cache; the cost is ours.", []string{"1:We", "1:our", "1:ours"}},
-		{"let's", KindGuide, "Let's add a target.", []string{"1:Let's"}},
+		// A tutorial takes the reader along, and the project may say what it
+		// offers or advises; a step is still the reader's.
+		{"let's", KindGuide, "Let's add a target.", nil},
+		{"the project speaking", KindGuide, "We support Linux and macOS. For CI, we recommend a remote cache. " +
+			"We do not recommend a shared one, and we ship no Windows build.", nil},
+		{"we in a step", KindGuide, "Now we run the build.", []string{"1:we"}},
+		{"the project's own design", KindGuide, "We keep the cache local.", []string{"1:We"}},
 		{"a concept page keeps the project voice", KindReference, "We believe a cache is a contract.", nil},
 		{"US is a locale", KindGuide, "Set the locale to en-US.", nil},
 		{"code and quotes are mentions", KindGuide, "Pass `--ours`, or the side git calls \"ours\".", nil},
