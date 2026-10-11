@@ -25,12 +25,13 @@ import {
   tabHostsApp,
   type TabState,
 } from "./tabs";
-import { createTabBar, tabViews } from "./tabBar";
+import { createTabBar, tabElementId, tabPanelId, tabViews } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
 import {
   syncLauncherChord,
+  syncLauncherDemo,
   syncLauncherConnectPrompt,
   syncLauncherPulse,
   buildLauncher,
@@ -70,9 +71,7 @@ import { signal } from "./view";
 import {
   parseHash,
   wantsDemo,
-  getLiveToken,
   resolveServerHost,
-  createServerTransport,
   fetchReadiness,
   isReadOnly,
   adoptServerOrigin,
@@ -80,14 +79,21 @@ import {
   type ReadinessReport,
   type ReadinessComponent,
 } from "../lib/server";
-import { createClient } from "@connectrpc/connect";
-import { StatusService } from "@wire/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
+import { DEMO_CONNECTION_HINT, notConnectedHint, writeConnection } from "./connection";
+import {
+  SPLIT_WORD,
+  closeGlyph,
+  loadBuildInfo,
+  makeStatusBar,
+  panesIcon,
+  setPanesIcon,
+  svgIcon,
+} from "./statusbar";
 import {
   applyFocusRing,
   getFocusRing,
-  getDefaultHost,
   subscribeDefaultHost,
   applyNodeShapes,
   getNodeShapes,
@@ -254,171 +260,6 @@ interface Mounted {
   tile: TileView;
 }
 
-// The status bar shows the connected server's build: its version inline, the full fingerprint on
-// hover. Read via the StatusService GetStatus RPC (build) - the running binary reports its own
-// identity, so the bar reflects the server you are talking to. In the server-free demo it shows a demo
-// value; with no server and no demo the chip stays hidden. Cached once and applied to every tab's bar.
-let buildVersion: string | null = null;
-let buildFingerprint = "";
-
-function fillVersionChip(el: HTMLElement): void {
-  if (!buildVersion) return;
-  el.textContent = buildVersion;
-  el.title = buildFingerprint || "magus " + buildVersion;
-  el.hidden = false;
-}
-
-function setBuild(version: string, fingerprint: string): void {
-  if (!version) return;
-  buildVersion = version;
-  buildFingerprint = fingerprint;
-  document.querySelectorAll<HTMLElement>("[data-version-chip]").forEach(fillVersionChip);
-}
-
-function loadBuildInfo(): void {
-  const params = parseHash();
-  if (wantsDemo(params)) {
-    // v0.0.0 on purpose. There is no server in the demo, so there is no build to report, and a
-    // plausible-looking literal would invent a version, a commit and a date - then drift behind
-    // the real binary, so the showcase reads as an abandoned project. A zero version cannot go
-    // stale and claims no commit that never existed.
-    setBuild("v0.0.0", "synthesized demo data; no server is connected");
-    return;
-  }
-  const host = resolveServerHost(params);
-  if (!host) return;
-  const client = createClient(StatusService, createServerTransport(host, getLiveToken()));
-  client
-    .getStatus({})
-    .then((res) => {
-      const b = res.status?.build;
-      if (b?.version) setBuild(b.version, b.fingerprint || "");
-    })
-    // reported: by the server transport; the version chip keeps its placeholder
-    .catch(() => {});
-}
-
-// keyboardIcon returns the status-bar shortcuts glyph as an inline SVG (keys row over a space bar),
-// built via createElementNS to match the console's icon convention (no innerHTML, themes on currentColor).
-function keyboardIcon(): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "14");
-  svg.setAttribute("height", "14");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.6");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  const rect = document.createElementNS(NS, "rect");
-  rect.setAttribute("x", "2.5");
-  rect.setAttribute("y", "6");
-  rect.setAttribute("width", "19");
-  rect.setAttribute("height", "12");
-  rect.setAttribute("rx", "2");
-  const keys = document.createElementNS(NS, "path");
-  keys.setAttribute("d", "M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8");
-  svg.append(rect, keys);
-  return svg;
-}
-
-// svgIcon returns a blank inline SVG shell with the console's shared icon defaults (14x14, stroke on
-// currentColor so it themes for free, aria-hidden since every caller pairs it with a labeled button).
-// The panes-tray icons below each add their own shape to it - one place to keep that boilerplate in sync.
-function svgIcon(): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("width", "14");
-  svg.setAttribute("height", "14");
-  svg.setAttribute("fill", "none");
-  svg.setAttribute("stroke", "currentColor");
-  svg.setAttribute("stroke-width", "1.7");
-  svg.setAttribute("stroke-linecap", "round");
-  svg.setAttribute("stroke-linejoin", "round");
-  svg.setAttribute("aria-hidden", "true");
-  return svg;
-}
-
-// shareGlyph is the status-bar Share button's icon: the conventional three-nodes-and-two-edges
-// share mark.
-//
-// It replaced a PHONE. The phone was accurate when sharing meant "scan this QR with the handset in
-// your pocket", and it is wrong now: the same link is what puts Big Picture on a TV, a spare
-// monitor, an HDMI stick, or a teammate's laptop. An icon that names ONE of the destinations reads
-// as a restriction - people looked for a separate control to cast to a screen - so the glyph names
-// the action instead, which is the one thing every destination has in common.
-function shareGlyph(): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = svgIcon();
-  const node = (cx: string, cy: string): SVGElement => {
-    const c = document.createElementNS(NS, "circle");
-    c.setAttribute("cx", cx);
-    c.setAttribute("cy", cy);
-    c.setAttribute("r", "2.6");
-    return c;
-  };
-  const edge = (x1: string, y1: string, x2: string, y2: string): SVGElement => {
-    const l = document.createElementNS(NS, "line");
-    l.setAttribute("x1", x1);
-    l.setAttribute("y1", y1);
-    l.setAttribute("x2", x2);
-    l.setAttribute("y2", y2);
-    return l;
-  };
-  svg.append(
-    node("18", "5"),
-    node("6", "12"),
-    node("18", "19"),
-    edge("8.3", "10.7", "15.7", "6.3"),
-    edge("8.3", "13.3", "15.7", "17.7"),
-  );
-  return svg;
-}
-
-// activityGlyph is the status-bar Activity button's icon: the conventional pulse trace. It names
-// LIVENESS rather than a list or a clock, which is what the drawer answers - something is moving
-// right now - and it reads the same whether the panel lists one running target or twenty.
-function activityGlyph(): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = svgIcon();
-  const trace = document.createElementNS(NS, "path");
-  trace.setAttribute("d", "M2.5 12h4l2.5-6 4 12 2.5-6h4");
-  svg.append(trace);
-  return svg;
-}
-
-// panesIcon is the tray Panes button's glyph: a framed rect divided by a line whose ORIENTATION
-// mirrors the current split mode - a vertical divider for "row" (a plain split puts panes side by
-// side), a horizontal one for "col" (stacked) - so the icon doubles as an at-a-glance readout of the
-// default direction, not just a generic tiling glyph.
-function panesIcon(mode: "row" | "col"): SVGElement {
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = svgIcon();
-  const rect = document.createElementNS(NS, "rect");
-  rect.setAttribute("x", "3");
-  rect.setAttribute("y", "4");
-  rect.setAttribute("width", "18");
-  rect.setAttribute("height", "16");
-  rect.setAttribute("rx", "2");
-  const line = document.createElementNS(NS, "line");
-  if (mode === "row") {
-    line.setAttribute("x1", "12");
-    line.setAttribute("y1", "4");
-    line.setAttribute("x2", "12");
-    line.setAttribute("y2", "20");
-  } else {
-    line.setAttribute("x1", "3");
-    line.setAttribute("y1", "12");
-    line.setAttribute("x2", "21");
-    line.setAttribute("y2", "12");
-  }
-  svg.append(rect, line);
-  return svg;
-}
-
 // wireTabOverflowCue stamps the tab strip with WHICH SIDE still has tabs off screen, so the strip can
 // fade that edge (console.css). On a phone the row scrolls horizontally and its scrollbar is hidden -
 // deliberately, because the strip is swiped rather than dragged - and hiding it took away the only cue
@@ -444,14 +285,14 @@ function wireTabOverflowCue(host: HTMLElement): void {
   const button = (edge: "start" | "end"): HTMLButtonElement => {
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "console-tabs-more";
+    b.className = "console-shell-tabs__more";
     b.dataset.tabScroll = edge;
     const icon = svgIcon();
     const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
     path.setAttribute("points", edge === "start" ? "15 6 9 12 15 18" : "9 6 15 12 9 18");
     icon.append(path);
     const count = document.createElement("span");
-    count.className = "console-tabs-more__count";
+    count.className = "console-shell-tabs__more-count";
     // The glyph leads at the start edge and trails at the end edge, so the chevron is always on the
     // outside pointing off-screen and the number sits between it and the tabs it counts.
     b.append(...(edge === "start" ? [icon, count] : [count, icon]));
@@ -491,7 +332,7 @@ function wireTabOverflowCue(host: HTMLElement): void {
       ).length;
       const el = controls[side];
       el.hidden = !more[side];
-      const label = el.querySelector<HTMLElement>(".console-tabs-more__count");
+      const label = el.querySelector<HTMLElement>(".console-shell-tabs__more-count");
       // Written only when it CHANGES, and that guard is load-bearing rather than an optimisation.
       // Assigning textContent replaces the text node, which is a childList mutation inside the very
       // subtree the observer below watches - so an unconditional write re-entered update() on its own
@@ -514,222 +355,30 @@ function wireTabOverflowCue(host: HTMLElement): void {
   update();
 }
 
-// setPanesIcon repaints an already-built tray button's glyph in place - called once per tray button at
-// creation, and again on every button whenever the split mode changes (refreshPanesTray).
-//
-// Idempotent by design: it only swaps the SVG when the rendered mode actually changed (tracked in
-// data-panes-mode). refreshPanesTray also runs on every popup OPEN, and replaceChildren would otherwise
-// detach the button's current <line> children - including the very node a touch tap landed on. With the
-// tap target gone from the DOM mid-click, the document-level outside-click handler (which tests
-// panesAnchor.contains(target)) then saw an orphaned target and immediately closed the just-opened popup:
-// the "Panes button does nothing on a phone" bug. Skipping the no-op rebuild keeps the tapped node
-// attached, so the popup stays open; the glyph is still repainted whenever the mode genuinely changes.
-function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
-  if (btn.dataset.panesMode === mode) return;
-  btn.dataset.panesMode = mode;
-  const iconSpan = btn.querySelector<HTMLElement>(".pf-v6-c-button__icon");
-  if (iconSpan) iconSpan.replaceChildren(panesIcon(mode));
-  // The icon alone assumes the reader already knows what a split-pane glyph means - a fair bet for
-  // someone who has used a tiling window manager before, a bad one for someone who has not. Same
-  // words the Panes tray itself uses (Split horizontal / Split vertical), so a reader who opens the
-  // tray to check finds the term already familiar rather than a second vocabulary to learn.
-  const labelSpan = btn.querySelector<HTMLElement>(".console-shell-statusbar__panes-label");
-  if (labelSpan) labelSpan.textContent = mode === "row" ? "Horizontal" : "Vertical";
+// syncRefSplitter gives the reference panel's splitter the value it owes a screen reader: its width as a
+// percentage of the drawer. The markup cannot carry one, because the width is a stylesheet default
+// until the first drag; ui/ref-drawer.ts rewrites it on every resize it makes, and this is the first
+// reading and the one after the window changes size.
+function syncRefSplitter(): void {
+  const splitter = document.getElementById("console-refsplitter");
+  const drawer = document.getElementById("console-refdrawer");
+  const panel = document.getElementById("console-refpanel");
+  if (!splitter || !drawer || !panel) return;
+  const drawerWidth = drawer.getBoundingClientRect().width;
+  if (drawerWidth <= 0) return;
+  const basis = panel.style.getPropertyValue("--pf-v6-c-drawer__panel--md--FlexBasis");
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  // The stylesheet default is --console-refdrawer-w, 22rem.
+  const px = basis.endsWith("px") ? parseFloat(basis) : 22 * rem;
+  splitter.setAttribute(
+    "aria-valuenow",
+    String(Math.min(100, Math.round((px / drawerWidth) * 100))),
+  );
 }
 
-// notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
-// names the CONFIGURED server address so a disconnected user sees the target without opening Settings,
-// and always ends in the click hint (the item jumps to the server-address field). Empty host = unset.
 // The last /readyz answer, so a tab switch can paint the bar that just docked without waiting out
 // the poll interval. Module-level because the poller and the tab swap are separate closures.
 let lastReadiness: { report: ReadinessReport | null; host: string; at: number } | null = null;
-
-function notConnectedHint(host: string): string {
-  return host
-    ? "Not connected to " + host + ". Click to change the server address."
-    : "No server address configured. Click to set the server address.";
-}
-
-// makeStatusBar builds one tab's status bar: the SAME element ids the apps write to
-// (#console-conn, #console-observing, #console-count) and the .console-shell-statusbar__right slot the
-// log viewer injects its zoom control into. It is a real element (not an innerHTML snapshot) so the
-// app's live handles + listeners survive tab switches. Only the ACTIVE tab's status bar is attached
-// to the footer, so getElementById resolves to the active app's status - the bottom bar is per-tab.
-//
-// The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
-// spans the apps write via textContent + [data-state], styled ID-scoped in overrides.css.
-// #console-conn also gets a periodic /readyz enrichment from startConsole's readiness poller below.
-// Ownership split (see enrichConnHealth): an app with a link of its OWN claims textContent +
-// data-state by stamping data-owner through publishStatus; the poller owns title + data-health
-// always, and owns textContent/data-state on any bar nobody claimed. data-health is written only
-// while data-state is already "connected", so health refines the dot but never overrides it.
-// Only .console-shell-statusbar__right stays a class - the log viewer queries it to inject its zoom control.
-//
-// withPanesButton adds the Panes tray toggle (data-panes-toggle) to the right cluster - every TAB's bar
-// gets one (a tab always has at least one pane to act on), but the launcher's default bar does not:
-// zero tabs means zero panes, so startConsole calls makeStatusBar(false) for that one.
-function makeStatusBar(withPanesButton = true): HTMLElement {
-  const bar = document.createElement("div");
-  const left = document.createElement("div");
-  left.dataset.cluster = "";
-  const conn = document.createElement("span");
-  conn.id = "console-conn";
-  conn.setAttribute("aria-live", "polite");
-  // The FRAGMENT decides demo, the same authority the readiness pulse and the connect screen already
-  // use. Leaving it to each app to stamp meant only the Dashboard ever did, so a demo console read
-  // "demo" on one tab and "not connected" on the next - two answers to "what am I looking at", one of
-  // them wrong, in the one bar that exists to answer it.
-  //
-  // Safe to decide at construction now: demo mode is reachable ONLY through the Workspace menu, which
-  // sets #demo and remounts every tab. It was not always - each app used to carry a "See the demo"
-  // button that entered demo with no fragment, which is why this was deferred to the apps at all.
-  const demoing = wantsDemo(parseHash());
-  conn.textContent = demoing ? "demo" : "not connected";
-  // Otherwise start in the honest not-connected state so the liveness dot reads RED until something
-  // proves a link, rather than the muted default color. An app overwrites data-state the instant it
-  // mounts; the launcher's own bar (no app behind it) keeps "none" until the readiness poller
-  // resolves a host.
-  conn.dataset.state = demoing ? "demo" : "none";
-  // Clickable: a disconnected user's fastest fix is the server-address field, so the status pill
-  // itself is the shortcut there (openServerSettings, wired via the delegated listener below). role +
-  // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
-  // aria-label is the static accessible name (what the click DOES), while .title carries the dynamic
-  // last-probe sentence the readiness poller keeps current (what hovering SEES).
-  conn.setAttribute("role", "button");
-  conn.tabIndex = 0;
-  // Surface the CONFIGURED server address up front, so a disconnected user reads what address the console
-  // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
-  // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
-  // The demo sentence is the same one the readiness poller writes, set here too so it is right from
-  // the first paint rather than from the first poll tick.
-  const hint = demoing
-    ? "Demo data is synthetic. Click to change the server address."
-    : notConnectedHint(getDefaultHost());
-  conn.setAttribute("aria-label", hint);
-  conn.title = hint;
-  left.append(conn);
-  // Shared ("view only") reminder: a device viewing over the LAN share is read-only, so a quiet muted tag
-  // sits next to the connection dot as an ambient cue - not a banner. Loopback consoles never see it.
-  if (isReadOnly()) {
-    const viewOnly = document.createElement("span");
-    viewOnly.className = "console-shell-statusbar__viewonly";
-    viewOnly.dataset.viewonly = "";
-    viewOnly.textContent = "view only";
-    viewOnly.title = "This is a read-only view shared over the network.";
-    left.append(viewOnly);
-  }
-  // No separate "demo data" tag beside this. There was one, revealed per app, and next to a
-  // connection dot that now reads "demo" on every tab it was the same sentence twice in one bar.
-  // The disclosure a reader needs - that sample prose is asserting things nobody said - is what the
-  // dot says, for as long as demo mode is on, on every app rather than only the ones that
-  // remembered to raise it.
-  const right = document.createElement("div");
-  right.dataset.cluster = "";
-  right.className = "console-shell-statusbar__right";
-  for (const id of ["console-count", "console-observing"] as const) {
-    const s = document.createElement("span");
-    s.id = id;
-    s.dataset.item = "";
-    s.hidden = true;
-    s.setAttribute("aria-live", "polite");
-    right.append(s);
-  }
-  // Activity drawer toggle: opens the right-docked panel listing what magus is running right now and
-  // what ran recently. data-activity-toggle is the hook; startConsole's one delegated footer click
-  // drives the single shared panel regardless of which tab's copy fired - the same delegation the
-  // share and cheat-sheet buttons below use, since makeStatusBar rebuilds one button per tab.
-  //
-  // Ungated, unlike Share: a read-only viewer over the LAN reads status and the run feed the same way
-  // the dashboard does, so there is nothing here it is not already allowed to see.
-  const activity = document.createElement("button");
-  activity.type = "button";
-  activity.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__activity";
-  activity.dataset.activityToggle = "";
-  // aria-controls names the one shared panel (its id is stable whichever tab's button opened it).
-  // Deliberately NO aria-expanded: there are as many of these buttons as there are tabs, all driving
-  // a single panel, and a copy built while the panel is already open would announce "collapsed". A
-  // missing attribute is honest; a stale one is a lie. Same reasoning the share button applies.
-  activity.setAttribute("aria-controls", "console-activitypanel");
-  activity.setAttribute("aria-label", "Activity");
-  activity.title = "Activity. What magus is running now, and what ran recently.";
-  const activityIcon = document.createElement("span");
-  activityIcon.className = "pf-v6-c-button__icon";
-  activityIcon.append(activityGlyph());
-  activity.append(activityIcon);
-  right.append(activity);
-
-  // Panes tray toggle: opens the popup that drives split/focus/move/close without a keyboard - the
-  // touch-reachable route tiling used to lack entirely on a phone. Its glyph is a live readout of the
-  // persisted split mode (panesIcon); refreshPanesTray (startConsole) repaints every tab's copy in
-  // place whenever that mode changes. aria-controls points at the one shared popup element built once
-  // in startConsole (its id, #console-panespopup, is stable regardless of which tab's button opened it).
-  if (withPanesButton) {
-    const panes = document.createElement("button");
-    panes.type = "button";
-    panes.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__panes";
-    panes.dataset.panesToggle = "";
-    panes.setAttribute("aria-haspopup", "true");
-    panes.setAttribute("aria-expanded", "false");
-    panes.setAttribute("aria-controls", "console-panespopup");
-    panes.setAttribute("aria-label", "Panes");
-    panes.title = "Panes";
-    const panesIconSpan = document.createElement("span");
-    panesIconSpan.className = "pf-v6-c-button__icon";
-    panesIconSpan.append(panesIcon(splitMode.get()));
-    // Spells out the icon's orientation in words (setPanesIcon keeps it in sync) - tiling is not
-    // a metaphor everyone already carries, and the glyph alone assumes it is.
-    const panesLabelSpan = document.createElement("span");
-    panesLabelSpan.className = "console-shell-statusbar__panes-label";
-    panesLabelSpan.textContent = splitMode.get() === "row" ? "Horizontal" : "Vertical";
-    // Record the rendered mode so setPanesIcon (refreshPanesTray, incl. on every popup open) treats an
-    // unchanged mode as a no-op and never detaches this glyph's nodes out from under a tap in progress.
-    panes.dataset.panesMode = splitMode.get();
-    panes.append(panesIconSpan, panesLabelSpan);
-    right.append(panes);
-  }
-  // Share a read-only view: a quiet share-glyph button, loopback-console only (a read-only viewer can't
-  // trigger sharing, and the server rejects the loopback-guarded endpoint anyway). data-share-toggle is
-  // the hook; startConsole's one delegated click opens the share dialog for whichever tab's copy fired.
-  if (!isReadOnly()) {
-    const share = document.createElement("button");
-    share.type = "button";
-    share.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__share";
-    share.dataset.shareToggle = "";
-    share.setAttribute("aria-label", "Share a read-only view");
-    share.title = "Share a read-only view. A time-boxed link any device on this network can open.";
-    const shareIcon = document.createElement("span");
-    shareIcon.className = "pf-v6-c-button__icon";
-    shareIcon.append(shareGlyph());
-    share.append(shareIcon);
-    right.append(share);
-  }
-
-  // Keyboard-shortcuts toggle: a quiet icon button that flips the cheat sheet (the same overlay the
-  // hold-"?" gesture reveals). data-cheatsheet-toggle is the hook; startConsole wires ONE delegated
-  // click on the footer so every tab's button (built here) drives the single shared cheat sheet.
-  const shortcuts = document.createElement("button");
-  shortcuts.type = "button";
-  shortcuts.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__shortcuts";
-  shortcuts.dataset.cheatsheetToggle = "";
-  shortcuts.setAttribute("aria-label", "Keyboard shortcuts");
-  shortcuts.title = "Keyboard shortcuts";
-  const shortcutsIcon = document.createElement("span");
-  shortcutsIcon.className = "pf-v6-c-button__icon";
-  shortcutsIcon.append(keyboardIcon());
-  shortcuts.append(shortcutsIcon);
-  right.append(shortcuts);
-
-  // Build fingerprint, far-right and quiet: version + commit inline, full detail on hover. Hidden
-  // until version.json loads (fills from the cache if it already has).
-  const ver = document.createElement("span");
-  ver.className = "console-shell-statusbar__version";
-  ver.dataset.versionChip = "";
-  ver.hidden = true;
-  fillVersionChip(ver);
-  right.append(ver);
-  bar.append(left, right);
-  return bar;
-}
 
 // openServerSettings jumps a disconnected user straight to the fix: open the Settings app (as a
 // tab, focusing it if already open - open() is single-instance) then focus + scroll the server-address
@@ -976,6 +625,12 @@ export function startConsole(
     if (mounts.has(tab.id)) return;
     const host = document.createElement("div"); // a pane container: #console-outlet-content > div[data-tab-id]
     host.dataset.tabId = tab.id;
+    // The panel the tab controls (tabBar.ts names it back). Focusable so a reader who arrows off the
+    // tab list has somewhere to land when the app inside has no focusable content yet.
+    host.id = tabPanelId(tab.id);
+    host.setAttribute("role", "tabpanel");
+    host.setAttribute("aria-labelledby", tabElementId(tab.id));
+    host.tabIndex = 0;
     outlet.append(host);
     const seed: Pane = tab.layout ?? { kind: "leaf", id: tab.id, pageId: tab.pageId };
     const tile = createTileView({
@@ -1088,7 +743,10 @@ export function startConsole(
     launcher.hidden = active != null;
     // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
     // before this keymap was read.
-    if (!launcher.hidden) syncLauncherChord(launcher, commandChord("console.actionBar.open"));
+    if (!launcher.hidden) {
+      syncLauncherChord(launcher, commandChord("console.actionBar.open"));
+      syncLauncherDemo(launcher, wantsDemo(parseHash()));
+    }
     // Delegated once, on the launcher: syncLauncherChord rebuilds the keycap on every reveal, so a
     // listener bound to the button itself would be rebound each time.
     if (!launcherChordWired) {
@@ -1104,6 +762,7 @@ export function startConsole(
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
+    syncPanelToggles();
     applyReadiness(); // a fresh tab's bar has never been painted; an old one holds a stale reading
     // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
     // so nothing inside it changed. Read it here instead.
@@ -1323,6 +982,8 @@ export function startConsole(
   // markup. It reads the active app's [data-ref-section] help blocks (refreshed on tab change). The
   // panel's "break out to tab" button promotes the console-wide reference into a persistent tab.
   initRefDrawer({ onBreakOut: () => open("reference") });
+  syncRefSplitter();
+  window.addEventListener("resize", syncRefSplitter);
 
   // The notification center: the title-bar bell + its pop-out history panel. It builds its own bell into
   // #console-actions, installs the one document listener that records notifications raised from any
@@ -1334,13 +995,26 @@ export function startConsole(
   // The share pop-out: a right-docked panel (the notification-center idiom) that the
   // status-bar share button toggles through the one delegated footer click below. It
   // is a hidden singleton; a read-only viewer simply never gets a button to open it.
-  const sharePanel = mountSharePanel();
+  const sharePanel = mountSharePanel({ onChange: () => syncPanelToggles() });
 
   // The activity drawer: the share panel's sibling on the same right-docked idiom, listing what magus
   // is running now and what ran recently. Also a hidden singleton toggled from the status bar; unlike
   // Share it is available to a read-only viewer too, since it only reads what the dashboard already
   // shows. It polls only while open, so mounting it here costs nothing until someone opens it.
-  const activityDrawer = mountActivityDrawer();
+  const activityDrawer = mountActivityDrawer({ onChange: () => syncPanelToggles() });
+
+  // The status bar holds one toggle per tab for each shared panel, and only the docked bar is in the
+  // document, so aria-expanded is written on whichever is docked: when a panel opens or closes, and
+  // again when a tab swaps its bar in, so a bar built while a panel was open does not say it is shut.
+  function syncPanelToggles(): void {
+    const set = (selector: string, open: boolean): void => {
+      for (const b of statusHost.querySelectorAll<HTMLElement>(selector)) {
+        b.setAttribute("aria-expanded", open ? "true" : "false");
+      }
+    };
+    set("[data-share-toggle]", sharePanel.isOpen());
+    set("[data-activity-toggle]", activityDrawer.isOpen());
+  }
 
   // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
   // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
@@ -1425,7 +1099,7 @@ export function startConsole(
   });
   registerCommand({
     id: "console.pane.splitHorizontal",
-    label: "Split horizontal",
+    label: "Split " + SPLIT_WORD.row.toLowerCase(),
     group: "Panes",
     run: () => {
       splitMode.set("row");
@@ -1435,7 +1109,7 @@ export function startConsole(
   });
   registerCommand({
     id: "console.pane.splitVertical",
-    label: "Split vertical",
+    label: "Split " + SPLIT_WORD.col.toLowerCase(),
     group: "Panes",
     run: () => {
       splitMode.set("col");
@@ -1627,7 +1301,7 @@ export function startConsole(
   // PANE, not the menu) so the two are never confused. closePanesPopup is hoisted (declared further down).
   const panesHead = document.createElement("div");
   panesHead.className = "console-shell-panespopup__head";
-  const panesTitle = document.createElement("span");
+  const panesTitle = document.createElement("h2");
   panesTitle.className = "console-shell-panespopup__title";
   panesTitle.textContent = "Panes";
   const panesDone = document.createElement("button");
@@ -1637,11 +1311,7 @@ export function startConsole(
   panesDone.title = "Close";
   const doneIcon = document.createElement("span");
   doneIcon.className = "pf-v6-c-button__icon";
-  const doneGlyph = svgIcon();
-  const doneX = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  doneX.setAttribute("d", "M6 6l12 12M18 6L6 18");
-  doneGlyph.append(doneX);
-  doneIcon.append(doneGlyph);
+  doneIcon.append(closeGlyph());
   panesDone.append(doneIcon);
   panesDone.addEventListener("click", () => closePanesPopup(true));
   panesHead.append(panesTitle, panesDone);
@@ -1721,8 +1391,9 @@ export function startConsole(
     cell.addEventListener("pointercancel", clearDrop);
   }
 
-  // buildSplitControls is the focused cell's H/V buttons - split THIS pane, no direction to decode
-  // since the operator already pointed at it. Reuses the same commands (and the same
+  // buildSplitControls is the focused cell's two split buttons - split THIS pane, no direction to
+  // decode since the operator already pointed at it. Each wears the same glyph as the tray button for
+  // that direction. Reuses the same commands (and the same
   // splitMode-asserting behavior) the old d-pad's Split row drove, so the tray icon still tracks
   // "the last explicit choice". These buttons stop propagation on BOTH pointerdown and pointerup so
   // the tap never reaches the enclosing cell: the cell's pointerup handler (tap-to-focus) re-renders
@@ -1732,12 +1403,12 @@ export function startConsole(
   function buildSplitControls(): HTMLElement {
     const wrap = document.createElement("div");
     wrap.className = "console-shell-panesmap__splitctl";
-    const mk = (dir: Split["dir"], label: string, glyph: string): HTMLButtonElement => {
+    const mk = (dir: Split["dir"], label: string): HTMLButtonElement => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "console-shell-panesmap__splitbtn";
       b.dataset.split = dir;
-      b.textContent = glyph;
+      b.append(panesIcon(dir));
       b.setAttribute("aria-label", label);
       const commandId =
         dir === "row" ? "console.pane.splitHorizontal" : "console.pane.splitVertical";
@@ -1754,7 +1425,10 @@ export function startConsole(
       });
       return b;
     };
-    wrap.append(mk("row", "Split horizontal", "H"), mk("col", "Split vertical", "V"));
+    wrap.append(
+      mk("row", "Split " + SPLIT_WORD.row.toLowerCase()),
+      mk("col", "Split " + SPLIT_WORD.col.toLowerCase()),
+    );
     return wrap;
   }
 
@@ -1819,13 +1493,13 @@ export function startConsole(
   }
 
   // appendHintChord renders a formatted chord ("Cmd+\\") as its own kbd chips, reusing the cheat
-  // sheet's keycap styling (.console-cheatsheet-kbd) - the same "each token reads as a physical key"
+  // sheet's keycap styling (.console-shell-keycap) - the same "each token reads as a physical key"
   // treatment, so the map's hint line looks like it belongs to the same product as the cheat sheet.
   function appendHintChord(target: HTMLElement, chord: string): void {
     chord.split("+").forEach((tok, i) => {
       if (i > 0) target.append(document.createTextNode("+"));
       const kbd = document.createElement("kbd");
-      kbd.className = "console-cheatsheet-kbd";
+      kbd.className = "console-shell-keycap";
       kbd.textContent = tok;
       target.append(kbd);
     });
@@ -1985,7 +1659,7 @@ export function startConsole(
   document.body.append(keybindings.el);
   registerCommand({
     id: "console.settings.keybindings",
-    label: "Edit keybindings",
+    label: "Edit shortcuts",
     group: "General",
     run: () => keybindings.open(),
   });
@@ -2021,15 +1695,6 @@ export function startConsole(
     // present and future, the same way the cheat-sheet toggle above does.
     if (t.closest("#console-conn")) openServerSettings();
   });
-  // Keyboard activation for the same control (role="button" + tabindex="0" on #console-conn makes it
-  // focusable, but a <span> has no native Enter/Space activation the way a <button> would).
-  statusHost.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    const t = e.target as HTMLElement;
-    if (!t.closest("#console-conn")) return;
-    e.preventDefault(); // Space must not also scroll the page
-    openServerSettings();
-  });
   document.addEventListener(REQUEST_SERVER_SETTINGS_EVENT, openServerSettings);
 
   // Readiness polling: enriches whichever #console-conn is currently docked with the server's /readyz
@@ -2045,8 +1710,9 @@ export function startConsole(
   // just text - and it can never green-out an app (graph snapshot, disconnected log view) that has
   // declared itself not-connected, nor fight the dashboard which likewise drops data-health when down.
   function enrichConnHealth(conn: HTMLElement, report: ReadinessReport | null): void {
-    if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
-    else delete conn.dataset.health;
+    writeConnection(conn, {
+      health: conn.dataset.state === "connected" && report ? readinessHealth(report) : null,
+    });
   }
   // Bumped on every poll that reaches the server, so a slow answer can tell whether it is still the
   // current one. Cheaper than an AbortController here because the fetch helpers already collapse every
@@ -2061,12 +1727,7 @@ export function startConsole(
     if (wantsDemo(parseHash()) || current?.dataset.state === "demo") {
       // The dot may not exist yet at #demo - it is docked by whichever app is showing, and on the
       // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
-      if (current) {
-        const hint = "Demo data is synthetic. Click to change the server address.";
-        current.title = hint;
-        current.setAttribute("aria-label", hint);
-        delete current.dataset.health;
-      }
+      if (current) writeConnection(current, { hint: DEMO_CONNECTION_HINT, health: null });
       // A SYNTHETIC pulse, not null. Everything in the demo is fabricated and says so - the status bar
       // reads "demo", the workspace menu tags its roots - so a pool reading here is consistent with the
       // rest of it rather than a claim about a server. Nulling it meant the demo was the one mode where
@@ -2104,11 +1765,12 @@ export function startConsole(
       if (ws.get().activeId == null) {
         const conn = document.getElementById("console-conn");
         if (conn) {
-          conn.textContent = "not connected";
-          conn.dataset.state = "none";
-          delete conn.dataset.health;
-          conn.title = notConnectedHint("");
-          conn.setAttribute("aria-label", notConnectedHint(""));
+          writeConnection(conn, {
+            label: "not connected",
+            state: "none",
+            health: null,
+            hint: notConnectedHint(""),
+          });
         }
       }
       return;
@@ -2164,35 +1826,29 @@ export function startConsole(
     const conn = document.getElementById("console-conn");
     if (!conn) return; // momentarily absent between tab swaps
     if (conn.dataset.state === "demo") {
-      const hint = "Demo data is synthetic. Click to change the server address.";
-      conn.title = hint;
-      conn.setAttribute("aria-label", hint);
-      delete conn.dataset.health;
+      writeConnection(conn, { hint: DEMO_CONNECTION_HINT, health: null });
       return;
     }
     const ageSec = Math.max(0, Math.round((Date.now() - at) / 1000));
-    // The tooltip is always safe to enrich - no app writes conn.title, so this never contends.
-    conn.title = formatReadinessTitle(report, ageSec, host);
     // The poller owns any bar no app has claimed: the launcher's zero-tab bar, and every
     // app with no server link of its own - which used to sit on "not connected" all session.
     if (!conn.dataset.owner) {
-      conn.textContent = report
-        ? report.ready
-          ? "server ready"
-          : "server not ready"
-        : "not connected";
-      conn.dataset.state = report?.ready ? "connected" : "disconnected";
+      writeConnection(conn, {
+        label: report ? (report.ready ? "server ready" : "server not ready") : "not connected",
+        state: report?.ready ? "connected" : "disconnected",
+      });
     }
-    // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
-    // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
-    // state update above, and runs whoever owns the dot so an open-but-disconnected app still
-    // surfaces the address on the conn item.
-    conn.setAttribute(
-      "aria-label",
-      conn.dataset.state === "connected"
-        ? "Connected to " + host + ". Click to change the server address."
-        : notConnectedHint(host),
-    );
+    // The description names the address being probed: connected reads "Connected to <host>", anything
+    // else falls back to the not-connected hint (which also names <host>). Read AFTER the state update
+    // above, and runs whoever owns the dot so an open-but-disconnected app still surfaces the address.
+    // The tooltip carries the last probe's detail, which no app writes, so this never contends.
+    writeConnection(conn, {
+      hint:
+        conn.dataset.state === "connected"
+          ? "Connected to " + host + ". Click to change the server address."
+          : notConnectedHint(host),
+      title: formatReadinessTitle(report, ageSec, host),
+    });
     // Health enrichment runs whoever owns the dot, gated on the (app- or poller-set) data-state.
     enrichConnHealth(conn, report);
   }

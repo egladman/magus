@@ -15,7 +15,7 @@
   "",
   "    magus buzz hack/dev/bootstrap-worktree.buzz -- --job guard-shell-quoting",
   "",
-  "It builds `./magus`, builds the graph, takes the lease and refuses unless the row names this worktree and its base. If it refuses, stop and report what it printed; do not take the lease by hand somewhere else.",
+  "It places the orchestrator's `./magus` (it never builds one), builds the graph, takes the lease and refuses unless the row names this worktree and its base. If it refuses, stop and report what it printed; do not take the lease by hand somewhere else.",
   "",
   "The guard grades your writes under the lease only once it has bound your session: at a spawn titled for this job, or when it sees you run `./magus job exec guard-shell-quoting` yourself. Not spawned under it? Run that once after the script.",
   "",

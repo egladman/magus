@@ -59,7 +59,7 @@ type Service struct {
 	describeGraphFn  func() types.TargetGraphOutput
 	insightFn        func(ctx context.Context) (types.InsightView, error)
 	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
-	diffFn           func(ctx context.Context, paths []string) (types.Diff, error)
+	diffFn           func(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -300,13 +300,20 @@ func (s *Service) ProjectTargets(ctx context.Context, project string) []string {
 // the whole diff behind the slowest overlay, so the console paints the patch from the first
 // call and decorates it when this one lands. A reader is scrolling code either way.
 func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	return s.DiffWith(ctx, paths, types.DiffOptions{})
+}
+
+// DiffWith is [Service.Diff] with the options [types.DiffOptions] describes. A caller that reads
+// no ranking of the changeset, such as a thread brief, sets SkipOrder so the order is never
+// computed.
+func (s *Service) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
 	if s.diffFn != nil {
-		return s.diffFn(ctx, paths)
+		return s.diffFn(ctx, paths, opts)
 	}
 	if s.magus == nil {
 		return types.Diff{}, ErrNoWorkspace
 	}
-	rev, err := s.magus.Diff(ctx, paths)
+	rev, err := s.magus.DiffWith(ctx, paths, opts)
 	if err != nil {
 		return types.Diff{}, err
 	}

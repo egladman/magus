@@ -102,7 +102,7 @@ describe("the workspace scope control", () => {
   test("the value carries a caret", () => {
     const { host, picker } = mount();
     picker.setWorkspaces(BOTH);
-    assert.ok(host.querySelector(".console-shell-scope__caret svg"));
+    assert.ok(host.querySelector(".pf-v6-c-menu-toggle__toggle-icon svg"));
   });
 
   test("the menu offers the server-wide view first, then each workspace", () => {
@@ -155,6 +155,24 @@ describe("the workspace scope control", () => {
     assert.ok(magus);
     magus.focus();
     magus.click();
+    assert.equal(document.activeElement, btn);
+  });
+
+  test("opens onto the checked workspace and the arrow keys walk the rows", () => {
+    const { host, picker, btn } = mount();
+    picker.setWorkspaces(BOTH);
+    setWorkspaceScope(MAGUS);
+    btn.click();
+    const items = menuItems(host);
+    assert.equal(document.activeElement, items[2], "the current workspace has focus");
+
+    const down = new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true });
+    document.activeElement?.dispatchEvent(down);
+    assert.equal(document.activeElement, items[3]);
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    assert.equal(btn.getAttribute("aria-expanded"), "false");
     assert.equal(document.activeElement, btn);
   });
 

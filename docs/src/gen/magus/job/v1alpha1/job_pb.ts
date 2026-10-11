@@ -2,12 +2,12 @@
 // @generated from file magus/job/v1alpha1/job.proto (package magus.job.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.job.v1alpha1 is the versioned wire contract for the server's CONTROL service: the
+// Package magus.job.v1alpha1 is the versioned wire contract for the daemon's CONTROL service: the
 // mutating sibling of the read-only console services (magus.activity.v1alpha1, magus.status.v1alpha1,
 // magus.viewer.v1alpha1, magus.metrics.v1alpha1). Its RPCs submit background maintenance jobs - reconcile
 // the knowledge graph, rotate the activity trail, clear the build cache - through the same
-// fire-and-forget, coalescing mechanism the server uses for any adopted work, so an identical
-// in-flight job is never started twice. Every RPC requires the server bearer token; the service
+// fire-and-forget, coalescing mechanism the daemon uses for any adopted work, so an identical
+// in-flight job is never started twice. Every RPC requires the daemon bearer token; the service
 // is mounted behind the same guard as /mcp and never served unauthenticated. buf-breaking gates
 // this file: fields and RPCs may be ADDED (old clients ignore unknown fields), never renumbered
 // or removed. The response carries a full metadata snapshot (last run, current size) so a client
@@ -51,7 +51,7 @@ export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   /**
    * Where to watch this job: the console's runs app scoped to invocation_id. A PATH,
    * not an absolute URL, because the reader is the console itself and resolves it against
-   * its own origin. Empty only when the server coalesced a submit it could not name, since
+   * its own origin. Empty only when the daemon coalesced a submit it could not name, since
    * a run with no invocation has nothing to link to.
    *
    * @generated from field: string console_url = 3;
@@ -1088,7 +1088,7 @@ export type ListJobsResponse = Message<"magus.job.v1alpha1.ListJobsResponse"> & 
   blocked: JobBlock[];
 
   /**
-   * rows this server's binary can read but not write
+   * rows this daemon's binary can read but not write
    *
    * @generated from field: repeated magus.job.v1alpha1.JobReadOnly read_only = 8;
    */
@@ -1138,7 +1138,7 @@ export const SubmitStateSchema: GenEnum<SubmitState> = /*@__PURE__*/
 
 /**
  * JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
- * server's own housekeeping from work a session was handed without asking a second door.
+ * daemon's own housekeeping from work a session was handed without asking a second door.
  *
  * @generated from enum magus.job.v1alpha1.JobHolder
  */
@@ -1156,7 +1156,7 @@ export enum JobHolder {
   SESSION = 2,
 
   /**
-   * the server's own maintenance catalog
+   * the daemon's own maintenance catalog
    *
    * @generated from enum value: JOB_HOLDER_SERVER = 3;
    */
@@ -1170,7 +1170,7 @@ export const JobHolderSchema: GenEnum<JobHolder> = /*@__PURE__*/
   enumDesc(file_magus_job_v1alpha1_job, 1);
 
 /**
- * JobService is the server's control service for background maintenance jobs. Trigger RPCs
+ * JobService is the daemon's control service for background maintenance jobs. Trigger RPCs
  * submit a job and return immediately; ListJobs reports every job's state. Reads stay on
  * the per-domain services - this one only mutates.
  *

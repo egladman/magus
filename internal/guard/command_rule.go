@@ -42,6 +42,11 @@ type commandRuleInput struct {
 	// preauth is the served `next` that already cleared this command, "" for any other.
 	preauth string
 	lease   string
+	// mcpTool is the magus MCP tool the command is the rendering of, "" for a shell line.
+	mcpTool string
+	// readOnly is an mcpTool call that only reads, which the command it renders as does
+	// not always show.
+	readOnly bool
 }
 
 // gradeWorkspaceCommand asks the workspace's magus\guard.command rule about a command the
@@ -83,7 +88,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	asked := askWorkspaceRules(ctx, seamCommand, deps.LoadFailure, resolve, bind(deps.CommandRule))
 	// Parsed again only when nothing loaded, so the pass path pays nothing. The unloaded
 	// deny names the failures itself.
-	denied := asked.unloaded && denyUnloaded(&asked, seamCommand, gatedVerb(in.command, in.dialect), at)
+	denied := asked.unloaded && denyUnloaded(&asked, commandCall(ctx, in, at), at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}

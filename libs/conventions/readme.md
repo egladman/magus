@@ -19,8 +19,8 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
-| `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
-| `errmsg`        | an error text joining clauses, spanning lines or sentences, misplacing `%w`, or naming the wrong origin     |
+| `diagmsg`       | a message that runs long, stacks reasons, names two commands or opens with a one- to three-word tag         |
+| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record    |
 | `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 
 Every path, word list, host name, ceiling and exemption lives in the root
@@ -28,6 +28,13 @@ Every path, word list, host name, ceiling and exemption lives in the root
 policy. No diagnostic names this repository's identifiers or paths on its own: an
 analyzer whose remedy is repository-specific takes a `hint` setting, appended to
 each of its diagnostics.
+
+`diagmsg` holds a `log/slog` message to the tag rule alone, and never lets an
+allowlist exempt one: a record names what logged it with `attr.Component`, not a
+tag in its text. `errmsg` judges a `log/slog` call too. `error-log` reports an
+error built into a message, and `error-attr` an error's text passed as an `error`
+or `err` attribute; both belong in `attr.Error`, so the display names the error's
+origin once.
 
 ## Scope
 
@@ -113,6 +120,7 @@ what the text is for, its kind:
 | `agent-instructions-template` | a `text/template` body that renders a short and a full form, as `internal/agent` does |
 | `change-description`          | a pull request: its title on the first line, its description after it                 |
 | `review-reply`                | a review comment, a review's body or a reply in a thread                              |
+| `stylesheet`                  | the comments of a CSS file, each read with the rule or declaration it sits on         |
 
 The magus module never imports `libs/conventions`, and `proofread` imports only the
 standard library and `libs/diagnostics`. `cmd/proofread` runs it, and its first
@@ -121,7 +129,8 @@ argument names a kind: `proofread doc-comment` reads the symbols of
 `hack/lint/symbol-docs-follow-proofread-rules.buzz`, and a finding points at the
 declaration because an index records no position inside a doc. The page and
 agent-instruction kinds judge the files the arguments name;
-`change-description` and `review-reply` read the text on stdin. A finding from
+`change-description` and `review-reply` read the text on stdin, and `stylesheet`
+judges the files it names or, naming none, one on stdin. A finding from
 text names its file, or the kind it read from stdin, and its line. A Go symbol
 and a TypeScript one meet the same rules. For an `agent-instructions-template`,
 what the short form shows meets the agent-instruction rules, and what only the
@@ -297,14 +306,18 @@ where a decisions table would deny it. The [proofread guide](https://eli.gladman
 
 | Rule                 | Code    | Kinds                                | Default                              | Reports                                                                          |
 | -------------------- | ------- | ------------------------------------ | ------------------------------------ | -------------------------------------------------------------------------------- |
-| `comment-block`      | PRF6001 | doc comment                          | off (house)                          | a doc over 250 words                                                             |
-| `comment-sentence`   | PRF6002 | doc comment                          | off (house)                          | a doc sentence over 60 words                                                     |
+| `comment-block`      | PRF6001 | doc comment, stylesheet              | off (house)                          | a doc over 250 words                                                             |
+| `comment-sentence`   | PRF6002 | doc comment, stylesheet              | off (house)                          | a doc sentence over 60 words                                                     |
 | `filler`             | PRF4001 | all                                  | deny                                 | throat-clearing ("Note that") and filler adverbs ("simply")                      |
 | `terms`              | PRF5001 | all                                  | off (house)                          | a spelling the glossary replaces ("sub-agent")                                   |
 | `name-suffix`        | PRF6003 | doc comment                          | off (house)                          | a function or method name whose last word is Of or For                           |
-| `aside`              | PRF6004 | doc comment                          | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
-| `history`            | PRF6005 | doc comment                          | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
+| `aside`              | PRF6004 | doc comment, stylesheet, help        | off (house)                          | a spaced hyphen spelling an em-dash, inline or ending a line                     |
+| `history`            | PRF6005 | doc comment, stylesheet              | off (house)                          | a phrase narrating the change rather than the code ("used to")                   |
 | `docstub`            | PRF6006 | doc comment                          | off (house)                          | a one-line doc that only repeats the symbol's name                               |
+| `restates`           | PRF6007 | stylesheet                           | off (house)                          | a one-line comment that only names the code it sits on                           |
+| `comment-budget`     | PRF6008 | stylesheet                           | off (house)                          | a comment over the lines its place earns                                         |
+| `block-budget`       | PRF6009 | stylesheet                           | off (house)                          | a rule block whose comments, summed, outrun its size                             |
+| `banned-word`        | PRF5006 | stylesheet                           | off (house)                          | a word this repository bans                                                      |
 | `lead-context`       | PRF1001 | change description                   | deny; advise for a defect            | a lead that is not a paragraph saying what a reader can now do                   |
 | `reply-voice`        | PRF1002 | pages, change description, reply     | deny                                 | a reply opener, a conversation, a bold-label item, a stock label or heading      |
 | `tense`              | PRF5004 | pages, change description            | off (house)                          | the future tense, and the author as the actor of a change                        |
@@ -368,3 +381,33 @@ Code in a doc, fenced or indented, is never judged. A backtick span still counts
 toward the budgets, but no wording rule reads inside one.
 A doc with a line opening in TODO, FIXME, BUG, `compat(until:`, `compat:` or
 `Deprecated:` is exempt from `history` and `docstub`.
+
+### CSS comments
+
+The `stylesheet` kind reads the `/* */` comments out of a stylesheet and
+attributes each to the code it speaks of: the rule header or declaration below
+it, or the declaration it follows on the same line. It then runs the doc rules,
+some of the written ones and the rules above marked stylesheet on each, so a
+comment meets the rules a Go comment and a Markdown page meet. A finding names
+its line and no column, since the comment is judged with its delimiters gone. `history` also reads "no longer",
+"the old", "W2" and the like, which a stylesheet's comments use to narrate what
+a rule replaced. A comment a tool reads (`stylelint-`, `biome-`, `prettier-ignore`,
+`!`, `# sourceMappingURL`) and a banner of rule lines are not judged.
+
+A comment's budget is set by where it sits, carrying over the Go comment
+budget in `hack/policy/comments.buzz`:
+
+| Place               | Lines |
+| ------------------- | ----- |
+| heading a file      | 8     |
+| above a rule        | 4     |
+| above a declaration | 3     |
+| between rules       | 3     |
+| inside a block      | 3     |
+| after a declaration | 2     |
+
+A block earns 6 comment lines and one more for every 5 statements directly
+inside it; the comment above its header and each comment inside it sum against
+that. `restates` judges a one-line comment against the header, and against the
+declarations of a block of four or fewer. The console's lint runs the judge over
+`console/src/**/*.css` and fails on any finding.

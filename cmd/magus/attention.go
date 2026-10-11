@@ -380,8 +380,8 @@ func attentionWhere(where *types.EventLocation) string {
 // silently never reached the queue is a block nobody will ever be shown, so it says
 // so rather than swallowing it.
 func noteAttentionOpenFailure(err error) {
-	slog.Warn("magus session notify: the attention request was not recorded, so `"+hint.SessionAttention.String()+"` will not list it",
-		slog.String("error", err.Error()))
+	slog.With(attr.Component("session notify")).Warn("the attention request was not recorded, so `"+hint.SessionAttention.String()+"` will not list it",
+		attr.Error(err))
 }
 
 // noteMissingAttentionSource reports the one event shape that cannot become a durable
@@ -389,6 +389,6 @@ func noteAttentionOpenFailure(err error) {
 // (the desktop alert still fires) and says what the producer has to change, because
 // an agent whose blocks never reach the queue has no other symptom.
 func noteMissingAttentionSource() {
-	slog.Warn("magus session notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
+	slog.With(attr.Component("session notify")).Warn("the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
 		attr.Why("have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }

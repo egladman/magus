@@ -30,6 +30,7 @@ type diffConfig struct {
 	patchGiven    bool
 	minCohort     int
 	minShare      float64
+	skipOrder     bool
 }
 
 // DiffAgainst is [Magus.Diff] compared against base, a `magus graph export --symbols` of the
@@ -53,6 +54,7 @@ func (m *Magus) DiffWith(ctx context.Context, paths []string, opts types.DiffOpt
 		baseline: opts.Baseline, baselineLabel: opts.BaselineLabel,
 		patch: opts.Patch, patchGiven: opts.Patch != "",
 		minCohort: opts.MinCohort, minShare: opts.MinShare,
+		skipOrder: opts.SkipOrder,
 	})
 }
 
@@ -379,25 +381,32 @@ func readPatchFacts(patch string) patchFacts {
 // defines nothing in. Build constraints are not evaluated, test files count, and each ID is
 // the one scip-go gives the declaration, under the module of the nearest go.mod at or above
 // the file, so a nested module's file is named under its own module. Change follows the
-// patch rule touchedSymbols uses. It returns nil for a file it cannot read, one with no
-// go.mod above it inside root, and no changed lines.
-func parsedGoSymbols(root, path string, changed []int, pf patchFacts) []types.DiffSymbol {
+// patch rule touchedSymbols uses.
+//
+// The file is parsed once for all its hunks. all lists every symbol any hunk touched, in
+// declaration order, and perHunk[i] lists the ones hunks[i] touched. Both are nil for a file it
+// cannot read, one with no go.mod above it inside root, and no changed lines.
+func parsedGoSymbols(root, path string, hunks []impact.HunkLines, pf patchFacts) (all []types.DiffSymbol, perHunk [][]types.DiffSymbol) {
+	var changed []int
+	for _, h := range hunks {
+		changed = append(changed, h.Lines...)
+	}
 	if len(changed) == 0 {
-		return nil
+		return nil, nil
 	}
 	src, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	module, importPath, ok := goImportPath(root, path)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	fset := token.NewFileSet()
 	// A file with syntax errors still yields the declarations parsed before them.
 	file, _ := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
 	if file == nil || file.Name == nil {
-		return nil
+		return nil, nil
 	}
 	if strings.HasSuffix(path, "_test.go") && strings.HasSuffix(file.Name.Name, "_test") {
 		importPath += "_test"
@@ -443,13 +452,8 @@ func parsedGoSymbols(root, path string, changed []int, pf patchFacts) []types.Di
 	for i, d := range decls {
 		spans[i] = impact.Span{ID: d.id, Start: d.start, End: d.end}
 	}
-	touched := impact.Touched(spans, changed)
 	removed := strings.Join(pf.removed[path], "\n")
-	var out []types.DiffSymbol
-	for _, d := range decls {
-		if !touched[d.id] {
-			continue
-		}
+	symbolOf := func(d decl) types.DiffSymbol {
 		change := types.DiffChangeBody
 		if _, added := pf.added[path][d.start]; added {
 			change = types.DiffChangeAdded
@@ -457,12 +461,27 @@ func parsedGoSymbols(root, path string, changed []int, pf patchFacts) []types.Di
 				change = types.DiffChangeSignature
 			}
 		}
-		out = append(out, types.DiffSymbol{
+		return types.DiffSymbol{
 			ID: d.id, Label: d.label, Change: change, Qualified: qualifiedName(d.id, d.label),
 			PublicBeyondWorkspace: exportedFromModule(path, d.label, d.id),
-		})
+		}
 	}
-	return out
+	touched := impact.Touched(spans, changed)
+	for _, d := range decls {
+		if touched[d.id] {
+			all = append(all, symbolOf(d))
+		}
+	}
+	perHunk = make([][]types.DiffSymbol, len(hunks))
+	for i, h := range hunks {
+		hunkTouched := impact.Touched(spans, h.Lines)
+		for _, d := range decls {
+			if hunkTouched[d.id] {
+				perHunk[i] = append(perHunk[i], symbolOf(d))
+			}
+		}
+	}
+	return all, perHunk
 }
 
 // receiverType is the type name a method receiver names, "" for a form Go does not allow.

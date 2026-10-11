@@ -6,6 +6,78 @@
 
 import { h } from "../../desktop/view";
 import { canDetach, detachPanel, type DetachHandle } from "../../lib/detach";
+import { reportFailure } from "../../lib/notifications";
+import { inlineAlert } from "../../ui/alert";
+
+const SOURCE = "Graph";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// icon is a PF button icon slot holding one stroked glyph, so a control never falls back on a text
+// character ("×") that a font may draw at any size or weight.
+function icon(...paths: string[]): HTMLElement {
+  const slot = h("span", "pf-v6-c-button__icon");
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "1em");
+  svg.setAttribute("height", "1em");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of paths) {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  slot.append(svg);
+  return slot;
+}
+
+const CLOSE_GLYPH = "M6 6l12 12M18 6L6 18";
+const DETACH_GLYPH = ["M15 3h6v6", "M10 14 21 3", "M21 14v7H3V3h7"];
+
+// menuItem is one row of a PF Menu used as a static list of actions: a label, then a description line
+// per entry in `lines`. A row that cannot be used stays focusable (aria-disabled, not disabled) so the
+// reason it carries is reachable from the keyboard.
+function menuItem(
+  label: string,
+  lines: Array<string | HTMLElement>,
+  disabledReason?: string,
+): {
+  li: HTMLElement;
+  button: HTMLButtonElement;
+} {
+  const li = h("li", "pf-v6-c-menu__list-item");
+  const button = h("button", "pf-v6-c-menu__item");
+  button.type = "button";
+  const main = h("span", "pf-v6-c-menu__item-main");
+  main.append(h("span", "pf-v6-c-menu__item-text", label));
+  button.append(main);
+  for (const line of lines) {
+    const row = h("span", "pf-v6-c-menu__item-description");
+    row.append(line);
+    button.append(row);
+  }
+  if (disabledReason) {
+    li.classList.add("pf-m-aria-disabled");
+    button.setAttribute("aria-disabled", "true");
+  }
+  li.append(button);
+  return { li, button };
+}
+
+// menuList wraps rows in the PF Menu chrome.
+function menuList(rows: HTMLElement[]): HTMLElement {
+  const menu = h("div", "pf-v6-c-menu pf-m-plain");
+  const content = h("div", "pf-v6-c-menu__content");
+  const list = h("ul", "pf-v6-c-menu__list");
+  list.append(...rows);
+  content.append(list);
+  menu.append(content);
+  return menu;
+}
 
 export interface QueryBuilderDeps {
   // From the LOADED graph, so a picker never offers a value that matches nothing here.
@@ -271,11 +343,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   detachBtn.type = "button";
   detachBtn.title = "Open in its own window";
   detachBtn.setAttribute("aria-label", "Open the builder in its own window");
-  detachBtn.innerHTML =
-    '<span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
-    'aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
-    '<path d="M21 14v7H3V3h7"/></svg></span>';
+  detachBtn.append(icon(...DETACH_GLYPH));
   detachBtn.hidden = !canDetach();
   detachBtn.addEventListener("click", () => {
     if (detached?.isOpen()) {
@@ -301,35 +369,59 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
         detached = res.handle;
         detachBtn.removeAttribute("data-detach-failed");
         detachBtn.title = "Put it back";
+        clearNotice();
         return;
       }
-      // A browser can refuse a second window. Saying WHY beats a button that looks broken - which is
-      // what this did until the refusal was observed.
-      detachBtn.title = "Could not open a second window: " + res.reason;
+      // A browser can refuse a second window. The reason is said where the reader is looking, in the
+      // panel, and as a toast; a tooltip alone reaches nobody on touch and nobody who is not hovering.
+      const message = "Could not open the builder in its own window: " + res.reason;
+      detachBtn.title = message;
       detachBtn.setAttribute("data-detach-failed", "");
+      showFailure(message, "graph:detach");
     });
   });
 
   const closeBtn = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__close");
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Close the builder");
-  closeBtn.append(h("span", "pf-v6-c-button__icon", "×"));
+  closeBtn.append(icon(CLOSE_GLYPH));
   closeBtn.addEventListener("click", () => close());
   head.append(detachBtn, closeBtn);
 
-  // Tabs
+  // A failure here is a toast and this notice: the panel is where the reader is looking.
+  const notice = h("div", "console-graph-qb__notice");
+  notice.hidden = true;
+  function clearNotice(): void {
+    notice.replaceChildren();
+    notice.hidden = true;
+  }
+  function showFailure(message: string, key: string): void {
+    notice.replaceChildren(inlineAlert({ variant: "danger", title: message }));
+    notice.hidden = false;
+    reportFailure(SOURCE, message, key);
+  }
+
+  // Tabs: the WAI-ARIA tablist pattern on PF's tabs markup. The list is the tablist and each item
+  // is presentational, so a screen reader counts two tabs and not two list items holding two tabs.
+  // Roving tabindex plus arrow keys, Home and End; each tab owns the panel it controls.
   const tabs = h("div", "pf-v6-c-tabs console-graph-qb__tabs");
-  tabs.setAttribute("role", "tablist");
   const tabList = h("ul", "pf-v6-c-tabs__list");
+  tabList.setAttribute("role", "tablist");
+  tabList.setAttribute("aria-label", "Ask the graph");
+  const TAB_IDS = ["filter", "view"] as const;
   const tabButtons = new Map<"filter" | "view", HTMLButtonElement>();
+  const tabItems = new Map<"filter" | "view", HTMLElement>();
   for (const [id, label] of [
     ["filter", "Build a filter"],
     ["view", "Run a view"],
   ] as ["filter" | "view", string][]) {
     const li = h("li", "pf-v6-c-tabs__item");
+    li.setAttribute("role", "presentation");
     const btn = h("button", "pf-v6-c-tabs__link");
     btn.type = "button";
+    btn.id = "console-graph-qb-tab-" + id;
     btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-controls", "console-graph-qb-panel-" + id);
     btn.append(h("span", "pf-v6-c-tabs__item-text", label));
     btn.addEventListener("click", () => {
       tab = id;
@@ -338,12 +430,35 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     li.append(btn);
     tabList.append(li);
     tabButtons.set(id, btn);
+    tabItems.set(id, li);
   }
+  tabList.addEventListener("keydown", (e) => {
+    const at = TAB_IDS.indexOf(tab);
+    let next = -1;
+    if (e.key === "ArrowRight") next = (at + 1) % TAB_IDS.length;
+    else if (e.key === "ArrowLeft") next = (at - 1 + TAB_IDS.length) % TAB_IDS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = TAB_IDS.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    tab = TAB_IDS[next];
+    paint();
+    tabButtons.get(tab)?.focus();
+  });
   tabs.append(tabList);
 
   const body = h("div", "console-graph-qb__body");
   const filterPane = h("div", "console-graph-qb__pane");
   const viewPane = h("div", "console-graph-qb__pane");
+  for (const [id, pane] of [
+    ["filter", filterPane],
+    ["view", viewPane],
+  ] as const) {
+    pane.id = "console-graph-qb-panel-" + id;
+    pane.setAttribute("role", "tabpanel");
+    pane.setAttribute("aria-labelledby", "console-graph-qb-tab-" + id);
+    pane.tabIndex = 0;
+  }
   body.append(filterPane, viewPane);
 
   // --- filter pane -----------------------------------------------------------------------------
@@ -377,13 +492,25 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       const span = b.querySelector(".pf-v6-c-button__text");
       // writeText rejects when the document is not focused or the permission is denied, and an
       // unhandled rejection left the button reading "Copied" with an empty clipboard.
+      if (!navigator.clipboard) {
+        showFailure("Could not copy: the clipboard is not available here.", "graph:qb-copy");
+        return;
+      }
       void navigator.clipboard
-        ?.writeText(text)
+        .writeText(text)
         .then(() => {
+          clearNotice();
           if (span) span.textContent = "Copied";
         })
-        .catch(() => {
-          if (span) span.textContent = "Press Ctrl+C";
+        .catch((err: unknown) => {
+          showFailure(
+            "Could not copy the " +
+              label.replace("Copy ", "") +
+              ": " +
+              (err instanceof Error ? err.message : String(err)) +
+              ". Select it in the panel and copy it by hand.",
+            "graph:qb-copy",
+          );
         })
         .finally(() => {
           setTimeout(() => {
@@ -400,20 +527,21 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   );
 
   const exLabel = h("p", "console-graph-qb__previewlabel", "Start from an example");
-  const exWrap = h("div", "console-graph-qb__examples");
+  const exRows: HTMLElement[] = [];
   for (const ex of EXAMPLES) {
-    const b = h("button", "console-graph-qb__example");
-    b.type = "button";
-    b.append(h("span", "console-graph-qb__exlabel", ex.label));
-    b.append(h("code", "console-graph-qb__exquery", ex.query));
-    b.append(h("span", "console-graph-qb__exnote", ex.note));
-    b.addEventListener("click", () => {
+    const { li, button } = menuItem(ex.label, [
+      h("code", "console-graph-qb__exquery", ex.query),
+      ex.note,
+    ]);
+    button.addEventListener("click", () => {
       terms = parseTerms(ex.query);
       paintRows();
       commit(); // a discrete pick, same as any other - it applies and the canvas answers
     });
-    exWrap.append(b);
+    exRows.push(li);
   }
+  const exWrap = menuList(exRows);
+  exWrap.classList.add("console-graph-qb__examples");
 
   filterPane.append(
     rows,
@@ -451,11 +579,15 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
 
       const neg = h("button", "pf-v6-c-button pf-m-control console-graph-qb__neg");
       neg.type = "button";
+      // The word stays "not" and the pressed state carries the rest: a label that flipped between
+      // "is" and "not" while aria-pressed flipped too would say the state twice and the name never
+      // the same twice.
       neg.setAttribute("aria-pressed", t.negated ? "true" : "false");
+      neg.setAttribute("aria-label", "not (term " + (idx + 1) + ")");
       neg.title = t.negated
         ? "Excluding these. Click to include"
         : "Including these. Click to exclude";
-      neg.append(h("span", "pf-v6-c-button__text", t.negated ? "not" : "is"));
+      neg.append(h("span", "pf-v6-c-button__text", "not"));
       neg.addEventListener("click", () => {
         t.negated = !t.negated;
         paintRows();
@@ -464,7 +596,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
 
       const sel = h("span", "pf-v6-c-form-control console-graph-qb__field");
       const select = h("select");
-      select.setAttribute("aria-label", "Field");
+      select.setAttribute("aria-label", "Field of term " + (idx + 1));
       for (const f of FIELDS) {
         const o = h("option");
         o.value = f;
@@ -484,7 +616,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       const input = h("input");
       input.type = "text";
       input.value = t.value;
-      input.setAttribute("aria-label", "Value");
+      input.setAttribute("aria-label", "Value of term " + (idx + 1));
       input.spellcheck = false;
       input.autocomplete = "off";
       const list = fieldValues(t.field);
@@ -520,8 +652,8 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
 
       const del = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__del");
       del.type = "button";
-      del.setAttribute("aria-label", "Remove this term");
-      del.append(h("span", "pf-v6-c-button__icon", "×"));
+      del.setAttribute("aria-label", "Remove term " + (idx + 1));
+      del.append(icon(CLOSE_GLYPH));
       del.addEventListener("click", () => {
         terms.splice(idx, 1);
         paintRows();
@@ -559,24 +691,23 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
         (blocked ? " - " + blocked + " of " + VIEWS.length + " views need something else." : "."),
     );
     viewPane.append(summary);
+    const rows: HTMLElement[] = [];
     for (const v of VIEWS) {
       const why = v.requires?.(caps) ?? null;
-      const card = h("button", "console-graph-qb__view");
-      card.type = "button";
-      card.disabled = !!why;
-      card.append(h("span", "console-graph-qb__viewlabel", v.label));
-      card.append(h("span", "console-graph-qb__viewblurb", why ?? v.blurb));
-      if (v.cli && !why) card.append(h("code", "console-graph-qb__viewcli", v.cli));
-      if (v.picks && !why) {
-        card.append(h("span", "console-graph-qb__viewpick", "then click a node"));
-      }
-      card.addEventListener("click", () => {
+      const lines: Array<string | HTMLElement> = [why ?? v.blurb];
+      if (v.cli && !why) lines.push(h("code", "console-graph-qb__viewcli", v.cli));
+      if (v.picks && !why) lines.push(h("span", "console-graph-qb__viewpick", "then click a node"));
+      const { li, button } = menuItem(v.label, lines, why ?? undefined);
+      button.addEventListener("click", () => {
+        // A view the graph cannot answer stays reachable, for the reason on its row, but runs nothing.
+        if (why) return;
         close();
         if (v.id === "radial") deps.radialPick();
         else deps.runView(v.id);
       });
-      viewPane.append(card);
+      rows.push(li);
     }
+    viewPane.append(menuList(rows));
   }
 
   // --- footer ----------------------------------------------------------------------------------
@@ -601,7 +732,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   });
   foot.append(resetBtn, clearBtn);
 
-  box.append(head, tabs, body, foot);
+  box.append(head, notice, tabs, body, foot);
   overlay.append(box);
 
   // commit runs the query NOW. Called by every discrete control and by Enter/blur in a value, never
@@ -620,8 +751,9 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   function paint(): void {
     for (const [id, btn] of tabButtons) {
       const on = id === tab;
-      btn.classList.toggle("pf-m-current", on);
+      tabItems.get(id)?.classList.toggle("pf-m-current", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.tabIndex = on ? 0 : -1;
     }
     filterPane.hidden = tab !== "filter";
     viewPane.hidden = tab !== "view";

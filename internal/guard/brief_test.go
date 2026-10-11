@@ -130,7 +130,7 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
-		line, target, found := briefOffCheck(tt.brief, row, false, produces, defines)
+		line, target, found := briefOffCheck(tt.brief, row, produces, defines)
 		if tt.target == "" {
 			assert.False(t, found, "%s: refused over %q", tt.name, line)
 			continue

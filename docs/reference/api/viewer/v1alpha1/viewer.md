@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, viewerservice]
 
 ViewerService serves an invocation's captured output to a log viewer, resource-oriented per AIP: Get the Invocation (the run header), List its Events (paginated), Stream them (live). The offline URL-fragment path instead carries a whole Journal directly (no server).
 
-Package `magus.viewer.v1alpha1`, defined in `proto/magus/viewer/v1alpha1/viewer.proto`. Source: [viewer.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L148). Part of the [server API](../../index.md).
+Package `magus.viewer.v1alpha1`, defined in `proto/magus/viewer/v1alpha1/viewer.proto`. Source: [viewer.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/viewer/v1alpha1/viewer.proto#L148). Part of the [daemon API](../../index.md).
 
 ## Methods
 

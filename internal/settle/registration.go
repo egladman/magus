@@ -43,7 +43,7 @@ func EnsureDriver(ctx context.Context, m *magus.Magus) {
 	globs, err := DriverGlobs(ctx, m)
 	if err != nil {
 		// Installing without the carve-outs would route a hand-maintained file to magus.
-		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
+		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", attr.Error(err))
 		return
 	}
 	changed, err := installer.EnsureMergeDriver(ctx, m.Root(), globs)
@@ -53,10 +53,10 @@ func EnsureDriver(ctx context.Context, m *magus.Magus) {
 		// Every other one (a torn managed section, a stuck lock) leaves the merge driver
 		// unregistered, and nothing else would say so. The command itself still runs.
 		if errors.Is(err, fs.ErrPermission) {
-			slog.With(attr.Component("merge-driver")).DebugContext(ctx, "registration not refreshed in a read-only git dir", slog.String("error", err.Error()))
+			slog.With(attr.Component("merge-driver")).DebugContext(ctx, "registration not refreshed in a read-only git dir", attr.Error(err))
 			return
 		}
-		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", slog.String("error", err.Error()))
+		slog.With(attr.Component("merge-driver")).ErrorContext(ctx, "could not refresh registration", attr.Error(err))
 		return
 	}
 	if changed {

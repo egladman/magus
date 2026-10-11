@@ -34,8 +34,6 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
-	"github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/internal/prompt"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
@@ -66,6 +64,10 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	gates.MinCohort = rf.ConformanceMinCohort
 	if gates.MinCohort < 0 || gates.MinShare < 0 || gates.MinShare > 1 {
 		return usagef("magus diff: --conformance-min-cohort must be at least 1 and --conformance-min-share above 0 and at most 1")
+	}
+	rf.Thread = strings.TrimSpace(rf.Thread)
+	if rf.Thread != "" && (rf.Ack || rf.Unread || rf.Impact) {
+		return usagef("magus diff: --thread narrows the review to one thread, so it cannot be combined with --ack, --unread or --impact, which answer for the whole changeset")
 	}
 	// EVERY positional is a path that narrows the changeset, whichever source it came from.
 	// The source itself is always a flag (--rev, --patch, or the working tree by default),
@@ -318,10 +320,9 @@ func wantsTUI(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm,
 	switch {
 	case rf.NoTui, !enabled:
 		return false
-	// All four END in output the viewer has nowhere to put: a receipt count, a report, a
-	// prompt to copy, and a bump. They are requests for an answer rather than for somewhere
-	// to read.
-	case rf.Ack, rf.Impact, rf.Prompt, rf.Baseline != "":
+	// All three END in output the viewer has nowhere to put: a receipt count, a report, and a
+	// bump. They are requests for an answer rather than for somewhere to read.
+	case rf.Ack, rf.Impact, rf.Baseline != "":
 		return false
 	// A patch somebody handed us is bytes about files that may not be here, and a watch loop
 	// drives the terminal itself. A revision range is neither: it is a tree state magus can
@@ -375,6 +376,22 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if err != nil {
 		return err
 	}
+	if rf.Thread != "" && !tui {
+		return printThread(ctx, m, threadPrint{
+			opts:  opts,
+			id:    rf.Thread,
+			patch: patch,
+			annotate: func(ctx context.Context, paths []string) (types.Diff, error) {
+				// The record never reads the reading order, and ranking the whole changeset is not cheap.
+				g := gates
+				g.Patch, g.SkipOrder = patch, true
+				return annotateDiff(ctx, m, readReviewedContent(ctx, m, src), paths, base, rf.Baseline, g)
+			},
+			anchors: func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error) {
+				return impactAnchors(ctx, rootOverride, rev)
+			},
+		})
+	}
 	if strings.TrimSpace(patch) == "" {
 		// An empty input is a STATE, and saying so beats printing an empty table that reads as
 		// a failure to find anything. The sentence differs by source: a clean tree is good
@@ -415,12 +432,33 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// tree it is talking about, and a second resolve is a second chance to disagree.
 	content := readReviewedContent(ctx, m, src)
 	if tui {
-		return runDiffTUI(ctx, m, content, patch, base, paths, rf.Generated)
+		return runDiffTUI(ctx, m, content, diffTUIRequest{
+			patch: patch, base: base, paths: paths, label: src.label,
+			showGenerated: rf.Generated, unread: rf.Unread, thread: rf.Thread,
+		})
 	}
 	gates.Patch = patch
 	rev, err := annotateDiff(ctx, m, content, paths, base, rf.Baseline, gates)
 	if err != nil {
 		return err
+	}
+	if rf.Unread {
+		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
+		rev = review.FilterUnread(rev, viewed, verr)
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			warnUnreadUnknown(ctx, *rev.Unread, src.label, verr)
+		}
+	}
+	// The threads are named on the report so a person can find the id --thread takes. A patch
+	// somebody handed over belongs to no review this branch has open. Only a running server's
+	// session names them: a plain report never reaches the network.
+	if src.addressable() && opts.Format != outputName {
+		if comments, _, served := serverReviewComments(ctx); served {
+			review.AttachThreads(&rev, changeset.ParseHunks(patch), comments)
+		} else {
+			slog.InfoContext(ctx, "review threads are listed only while the server runs",
+				attr.Notice(""), attr.Component("magus"), attr.Next(fmt.Sprint(hint.ServerStart)))
+		}
 	}
 	if rf.Ack {
 		reason := strings.TrimSpace(rf.Reason)
@@ -440,31 +478,12 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		return nil
 	}
 
-	// Before the format switch, because a prompt is TEXT for a person to paste whatever -o says.
-	// The other formats project a record; this one is prose, and there is nothing to project.
-	if rf.Prompt {
-		// --impact already means "give me the fuller answer", so it selects the full form
-		// here rather than a second flag that would ask the same question again.
-		variant := prompt.Short
-		if impact {
-			variant = prompt.Full
-		}
-		// Best-effort: a backend that cannot report branches is an ordinary state, and the
-		// prompt omits that section rather than refusing to render.
-		overlap, _ := m.BranchChanges(ctx, branchOverlapLimit)
-		out := review.Prompt(review.PromptInput{
-			Changeset: rev,
-			Origin:    m.ReviewOrigin(ctx),
-			Overlap:   overlap,
-			Variant:   variant,
-		})
-		_, err := io.WriteString(os.Stdout, out)
-		return err
-	}
-
 	var pre *diffImpact
 	if impact {
-		p := collectImpact(ctx, m, rootOverride, rev)
+		p, err := collectImpact(ctx, m, rootOverride, rev)
+		if err != nil {
+			return fmt.Errorf("magus diff: %w", err)
+		}
 		pre = &p
 	}
 
@@ -477,17 +496,35 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	case outputName:
 		// Left alone under --impact: -o name is the shape a shell loop reads, and one
 		// non-path line in it would break every one of them.
-		paths := make([]string, 0, len(rev.Files))
+		shown := make([]types.DiffFile, 0, len(rev.Files))
 		for _, f := range rev.Files {
 			if f.Generated() && !rf.Generated {
 				continue
 			}
+			shown = append(shown, f)
+		}
+		// Narrowed to hunks, a name is a hunk: one path:start-end each, so a loop reaches
+		// every unread hunk rather than every file that holds one.
+		if rev.Unread != nil {
+			return emitNames(review.HunkNames(types.Diff{Files: shown}))
+		}
+		paths := make([]string, 0, len(shown))
+		for _, f := range shown {
 			paths = append(paths, f.Path)
 		}
 		return emitNames(paths)
 	}
+	if rev.Unread != nil {
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			return nil
+		}
+		fmt.Println(review.UnreadLine(*rev.Unread, src.label))
+		if rev.Unread.Unread == 0 {
+			return nil
+		}
+		fmt.Println()
+	}
 	hintSinceLastReview(ctx, rev, src)
-	hintReviewPrompt(ctx, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
 
@@ -519,6 +556,13 @@ func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
 }
 
+// warnUnreadUnknown tells the person the read marks could not be loaded, with the load error as
+// the record's error.
+func warnUnreadUnknown(ctx context.Context, u types.DiffUnread, source string, loadErr error) {
+	slog.WarnContext(ctx, review.UnreadLine(u, source),
+		attr.Notice(""), attr.Component("magus"), attr.Why("the read marks could not be read"), attr.Error(loadErr))
+}
+
 // short abbreviates a revision for a message a person reads, keeping the full one for the command.
 func short(rev string) string {
 	if len(rev) <= 12 {
@@ -527,33 +571,72 @@ func short(rev string) string {
 	return rev[:12]
 }
 
-// promptHintFiles is the changeset size above which reading alone stops being the whole job. Set
-// where a reader plausibly wants a second pass rather than at a number that fires on every commit:
-// a hint printed every time is one nobody sees by the third time, which is exactly when it starts
-// to matter.
-const promptHintFiles = 10
-
-// hintReviewPrompt mentions `--prompt` on a changeset big enough to want a second reader.
-//
-// It exists because a flag nobody knows about is a feature nobody has. `agent install` settled the
-// same question the same way (it prints the managed AGENTS.md block only when the reader's file
-// is missing it or carrying a stale one), and this is that discipline applied to the other place
-// magus hands a person text to carry somewhere itself refuses to go.
-//
-// stderr, so a piped or redirected report is unchanged, and only where hints are enabled at all.
-func hintReviewPrompt(ctx context.Context, rev types.Diff, rf *gen.DiffFlags) {
-	if rf.Prompt || !interactive.HintsEnabled() || len(rev.Files) < promptHintFiles {
-		return
-	}
-	interactive.Hint(ctx, fmt.Sprintf(
-		"%d changed files: `"+hint.Diff.With("--prompt")+"` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
-		len(rev.Files)))
+// threadPrint is what printThread reads one thread from. The patch, the changeset annotation
+// and the notes join are the CLI's own; assembling a record from them is review.NewThreadInput's.
+type threadPrint struct {
+	opts OutputOptions
+	// id names the thread: its first comment, or any reply in it.
+	id       string
+	patch    string
+	annotate func(ctx context.Context, paths []string) (types.Diff, error)
+	anchors  func(ctx context.Context, rev types.Diff) ([]review.AnchorHit, error)
 }
 
-// branchOverlapLimit caps how many branches the prompt's overlap lookup examines, and so how many
-// forks it costs. It matches the console route's bound for the same reason: unbounded, it would be
-// the most expensive thing in the command on a repository with a hundred stale branches.
-const branchOverlapLimit = 20
+// printThread prints one review thread and returns: the conversation, the hunk, and what the
+// change there reaches.
+//
+// An empty patch is not a refusal: a review outlives the tree it was written on, and the record
+// then carries the thread and the host's own copy of the hunk.
+func printThread(ctx context.Context, m *magus.Magus, t threadPrint) error {
+	comments, reason := reviewComments(ctx, m)
+	in, err := review.NewThreadInput(ctx, review.ThreadParts{
+		Patch:    t.patch,
+		Comments: comments,
+		Annotate: t.annotate,
+		Anchors:  t.anchors,
+	})
+	if err != nil {
+		return fmt.Errorf("magus diff: %w", err)
+	}
+	rec, err := review.ReadThread(in, t.id)
+	if err != nil {
+		return fmt.Errorf("magus diff: %w", threadLookupError(err, reason, len(comments)))
+	}
+	if reason != "" {
+		slog.WarnContext(ctx, "part of the review could not be read", attr.Notice(""), attr.Component("magus"), attr.Why(reason))
+	}
+	switch t.opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(t.opts, rec)
+	case outputName:
+		if rec.Hunk.Source == "patch" && rec.InChangeset {
+			for _, f := range in.Changeset.Files {
+				for _, h := range f.Hunks {
+					if f.Path == rec.Path && h.Index == rec.Hunk.Index {
+						return emitNames([]string{changeset.NewRange(f.Path, h.NewStart, h.NewCount)})
+					}
+				}
+			}
+		}
+		return emitNames([]string{rec.Path})
+	}
+	for _, line := range review.ThreadLines(rec) {
+		fmt.Println(line)
+	}
+	return nil
+}
+
+// threadLookupError says why an id named no thread when the review itself explains it: it was
+// only partly read, or nothing was read at all.
+func threadLookupError(err error, reason string, comments int) error {
+	switch {
+	case reason != "":
+		return fmt.Errorf("the review was only partly read: %s: %w", reason, err)
+	case comments == 0:
+		return fmt.Errorf("no comments were found: %w", err)
+	}
+	return err
+}
 
 // annotateDiff computes the annotated changeset for a set of changed paths.
 //
@@ -771,18 +854,73 @@ func pathLinker(root string) func(string) string {
 	}
 }
 
+// diffTUIRequest is what one viewer session opens on.
+type diffTUIRequest struct {
+	patch, base string
+	paths       []string
+	// label names the changeset in a sentence, as diffInput.label does.
+	label         string
+	showGenerated bool
+	// unread narrows the viewer to the hunks no read mark covers.
+	unread bool
+	// thread, when set, is a review thread id the viewer opens positioned on.
+	thread string
+}
+
+// keepFilteredHunks drops the parsed hunks rev no longer holds, so a viewer drawn from a filtered
+// changeset shows only what the filter kept.
+func keepFilteredHunks(rev types.Diff, parsed []changeset.FileHunks) []changeset.FileHunks {
+	kept := map[string]bool{}
+	for _, f := range rev.Files {
+		for _, h := range f.Hunks {
+			kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] = true
+		}
+	}
+	out := make([]changeset.FileHunks, 0, len(parsed))
+	for _, f := range parsed {
+		var hunks []changeset.Hunk
+		for _, h := range f.Hunks {
+			if kept[types.DiffHunkRef{Path: f.Path, Index: h.Index}.Key()] {
+				hunks = append(hunks, h)
+			}
+		}
+		if len(hunks) > 0 {
+			f.Hunks = hunks
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // runDiffTUI opens the interactive reader over the working tree's changeset.
 //
 // This is what makes "three clients, one session" true for a terminal. `magus diff` already
 // shared the COMPUTATION with the console and the MCP tools; what it did not share was the
 // coordination: where the reader is, what they have read, what an agent has asked them to
 // look at. Reading a diff is not a report you print once, it is a place you are IN.
-func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, patch, base string, paths []string, showGenerated bool) error {
-	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, base, paths)
+func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, req diffTUIRequest) error {
+	patch := req.patch
+	rev, sess, sync, err := attachDiffReview(ctx, m, content, patch, req.base, req.paths)
 	if err != nil {
 		return err
 	}
-	files := diffTUIFiles(rev, changeset.ParseHunks(patch))
+	parsed := changeset.ParseHunks(patch)
+	if req.unread {
+		viewed, verr := changeset.NewStore(m.CacheDir()).LoadViewed()
+		rev = review.FilterUnread(rev, viewed, verr)
+		if rev.Unread.ReadState == types.DiffReadStateUnknown {
+			warnUnreadUnknown(ctx, *rev.Unread, req.label, verr)
+			sync.close()
+			return nil
+		}
+		if rev.Unread.Unread == 0 {
+			fmt.Println(review.UnreadLine(*rev.Unread, req.label))
+			sync.close()
+			return nil
+		}
+		parsed = keepFilteredHunks(rev, parsed)
+	}
+	files := diffOrderTUIFiles(rev, parsed)
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
 	earned := newEarnedSync(sync, content, m.CacheDir(), files, sess.Viewed)
@@ -797,8 +935,20 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 	// placed at all, and neither is what the viewer is showing when the patch came from a file;
 	// and a remark drawn against hunk 3 of the wrong patch is worse than one drawn against its
 	// file, because the viewer presents it with no hedge.
-	threads, _ := reviewThreads(ctx, m)
-	threads = changeset.PlaceThreads(changeset.ParseHunks(patch), threads)
+	comments, reason := reviewComments(ctx, m)
+	comments = changeset.PlaceThreads(changeset.ParseHunks(patch), comments)
+	start := types.DiffCursor{Hunk: -1}
+	if req.thread != "" {
+		thread, terr := changeset.FindThread(comments, req.thread)
+		if terr != nil {
+			return fmt.Errorf("magus diff: %w", threadLookupError(terr, reason, len(comments)))
+		}
+		if !slices.ContainsFunc(files, func(f difftui.File) bool { return f.Path == thread.Head.Path }) {
+			return fmt.Errorf("magus diff: thread %s sits on %s, which %s does not change: `%s` prints it",
+				thread.ID(), thread.Head.Path, req.label, hint.Diff.With("--thread", thread.ID(), "--no-tui"))
+		}
+		start = types.DiffCursor{Path: thread.Head.Path, Hunk: thread.Head.Hunk}
+	}
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -812,9 +962,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, content reviewedContent, pa
 			// What colleagues said, so a terminal reader is not sent to a browser to find out.
 			// The incompleteness reason is dropped because the viewer takes the terminal over
 			// immediately; `magus notes capture` keeps it, where a reader can still see it.
-			Threads:  threads,
-			Unfolded: showGenerated,
-			Link:     pathLinker(m.Root()),
+			ReviewComments: comments,
+			Unfolded:       req.showGenerated,
+			Link:           pathLinker(m.Root()),
+			Start:          start,
 		},
 		Sync: sync,
 		// Called at quit rather than computed here, so the line reports the fold the reader
@@ -929,7 +1080,7 @@ func (s diffStoreSync) SetViewed(digest string, on bool) {
 // SetThreadsSeen advances the watermark through the same store call the console's session route
 // makes, so a terminal-only reader leaves the same record a browser one does.
 func (s diffStoreSync) SetThreadsSeen(ids []string) {
-	s.store.MarkThreadsSeen(s.root, ids)
+	s.store.MarkCommentsSeen(s.root, ids)
 }
 
 func (diffStoreSync) close() {}
@@ -1235,8 +1386,9 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 }
 
 func diffUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
+	fmt.Fprintln(w, "Usage: magus diff [--generated] [--impact] [--unread] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]")
 	fmt.Fprintln(w, "       magus diff --ack [<changed-path>...]")
+	fmt.Fprintln(w, "       magus diff --thread <id> [--rev <base>...<head>]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
 	tty.Prose(w, tty.SystemProbe,
@@ -1255,6 +1407,11 @@ func diffUsage(w io.Writer) {
 		"The order is: declared outputs last, then the widest reach first - how many files reference the most-referenced symbol the file changed.",
 		"Reach needs a symbol index; without one there is no ranking key at all, and diff says so at the top and falls back to path order rather than implying a ranking.",
 		"Build the index with `"+hint.GraphBuild.String()+"`.")
+	fmt.Fprintln(w, "")
+	tty.Prose(w, tty.SystemProbe,
+		"Below the files the report prints the reading order of the hunks: a definition before its uses, an interface before its implementations, code before its tests,",
+		"each with the sentence that placed it and a count proving every hunk is placed once.",
+		"With no current symbol index there is no order, and a note names the rebuild.")
 	fmt.Fprintln(w, "")
 	tty.Prose(w, tty.SystemProbe,
 		"Exported API, coverage, churn, and the agent trail are CONTEXT printed beside each file.",
@@ -1289,12 +1446,18 @@ func diffUsage(w io.Writer) {
 		"Needs a terminal.")
 	tty.ProseItem(w, tty.SystemProbe, "  --reason      ", "an optional note kept with an --ack")
 	tty.ProseItem(w, tty.SystemProbe, "  --watch       ", "re-read and re-render whenever the working tree changes")
+	tty.ProseItem(w, tty.SystemProbe, "  --unread      ",
+		"narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk.",
+		"It always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread.")
 	tty.ProseItem(w, tty.SystemProbe, "  --rev         ",
 		"review a committed range instead of the working tree, as base...head:",
 		"a colleague's branch, or an agent's finished work")
 	tty.ProseItem(w, tty.SystemProbe, "  --patch       ", "review a patch file instead of the working tree; - reads stdin")
-	tty.ProseItem(w, tty.SystemProbe, "  --prompt      ",
-		"print a review prompt to paste into your own LLM: the context magus has, never a drafted review")
+	tty.ProseItem(w, tty.SystemProbe, "  --thread      ",
+		"narrow the review to one pull request thread, named by its thread id or any of its comments' ids;",
+		"the report lists each thread's id beside its hunk, and -o json under each file's threads.",
+		"The viewer opens on its hunk. Printed, it is the conversation oldest first, the hunk,",
+		"and what the change there reaches: callers, who it is public to, coverage, conformance and notes.")
 	tty.ProseItem(w, tty.SystemProbe, "  --baseline    ",
 		"a `"+hint.GraphExport.With("--symbols", "-o", "json")+"` of the base, which adds what each changed symbol did to the API",
 		"and the smallest semver bump that proves. Signatures are compared as the indexer rendered them,",
@@ -1408,6 +1571,8 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
+	printDiffOrder(os.Stdout, rev, showGenerated)
+
 	if e := rev.ConformanceError; e != nil {
 		fmt.Printf("\nerror: conformance could not check this change: %s\n", diagnosticLine(*e))
 	}
@@ -1468,8 +1633,17 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	for _, fact := range diffFileFacts(f) {
 		fmt.Printf("      %s\n", fact)
 	}
-	// The story, last: it is the deepest context and the least urgent. A reader scanning for
-	// risk should hit reach and coverage first and find the narrative when they stop to read.
+	for _, t := range f.Threads {
+		at := "not on a hunk of this changeset"
+		for _, h := range f.Hunks {
+			if h.Index == t.Hunk {
+				at = "on " + changeset.NewRange(f.Path, h.NewStart, h.NewCount)
+			}
+		}
+		fmt.Printf("      %s, %s\n", review.ThreadRefLine(t), at)
+	}
+	// Agent touches come last: they are the deepest context and the least urgent, and a reader
+	// scanning for risk should meet reach and coverage first.
 	for _, t := range f.Touches {
 		who := t.Host
 		if who == "" {
@@ -1640,7 +1814,7 @@ type diffImpact struct {
 	// AdvisorBase qualifies everything the advisors said. nil when the backend cannot date a
 	// revision, which is a different fact from a base that is merely old.
 	AdvisorBase *impactAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
-	Anchors     []anchorHit        `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
+	Anchors     []review.AnchorHit `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
 	Rationale   []rationaleHit     `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
 	// Evidence is what this changeset's authors asked magus before writing it. It is the
 	// reasoning half of the record types.DiffTouch carries: that one names the files an agent
@@ -1724,7 +1898,7 @@ const impactListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A impact
 // that refuses to print because the symbol index is cold or no server is running is a
 // impact nobody runs, and this command reports context rather than passing judgement.
-func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffImpact {
+func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) (diffImpact, error) {
 	p := diffImpact{Reach: computeImpactReach(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -1759,17 +1933,23 @@ func collectImpact(ctx context.Context, m *magus.Magus, rootOverride string, rev
 	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
 	// the override they were first handed, so the anchors' graph load must spell the root
 	// exactly as diffCmd's own load did.
-	p.Anchors = impactAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
+	anchors, aerr := impactAnchors(ctx, rootOverride, rev)
+	if aerr != nil {
+		// Not a lens that degrades: a misdeclared notes store is a fault in the workspace's own
+		// config, and an anchors section that went missing would read as a clean tree.
+		return diffImpact{}, aerr
+	}
+	p.Anchors = anchors
 	p.Rationale = collectRationale(m.Root(), rev)
-	// The trail and window trail.AttachTouches walks for the per-file story, read here for the
+	// The trail and window trail.AttachTouches walks for the per-file touches, read here for the
 	// questions the authors asked rather than the files they opened.
-	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), diffPaths(rev), trail.DefaultReplayEvents)
+	p.Evidence, p.EvidenceGap = trail.Consulted(m.Root(), m.CacheDir(), review.ChangedPaths(rev), trail.DefaultReplayEvents)
 	var requiredIn func(string) bool
 	if ws, werr := inspectWorkspace(ctx, rootOverride); werr == nil {
 		requiredIn = reviewRequiredMatcher(ws)
 	}
 	p.Review = collectReview(rev, requiredIn, bulkReasons(m.CacheDir(), rev))
-	return p
+	return p, nil
 }
 
 // computeImpactReach renders what types.Diff has carried since the impact join landed and
@@ -1862,35 +2042,6 @@ func impactCostTarget(h *forecast.History, p types.ImpactProject) (string, forec
 		}
 	}
 	return "", forecast.Stats{}, false
-}
-
-// diffNotes reads every declared notes store, best-effort.
-//
-// A workspace that declares none is the DEFAULT rather than a fault, and an unreadable store
-// is already reported by `magus notes verify`; either way the anchors section says it found
-// nothing rather than failing the report around it.
-// diffPaths is the changed file set, generated files included: a note may anchor one.
-func diffPaths(rev types.Diff) []string {
-	out := make([]string, 0, len(rev.Files))
-	for _, f := range rev.Files {
-		out = append(out, f.Path)
-	}
-	return out
-}
-
-// diffSymbolIDs is every changed symbol's index id, which is what a symbol anchor names.
-func diffSymbolIDs(rev types.Diff) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, f := range rev.Files {
-		for _, s := range f.Symbols {
-			if s.ID != "" && !seen[s.ID] {
-				seen[s.ID] = true
-				out = append(out, s.ID)
-			}
-		}
-	}
-	return out
 }
 
 // impactLines renders the report, one claim per line, in the same count-then-list shape
@@ -2093,26 +2244,14 @@ func impactAdvisorLines(sections []adviceSection, failed []string, base *impactA
 	return out
 }
 
-func impactAnchorLines(hits []anchorHit) []string {
+func impactAnchorLines(hits []review.AnchorHit) []string {
 	if len(hits) == 0 {
 		return []string{"ANCHORS: no note anchors a changed file or symbol"}
 	}
 	out := []string{fmt.Sprintf("ANCHORS: %d note%s anchored to what you changed",
 		len(hits), plural(len(hits), "", "s"))}
 	for _, h := range impactCap(hits) {
-		line := fmt.Sprintf("      note %s anchors %s:%s", h.Note, h.Kind, h.Target)
-		if h.Drift != "" {
-			// An unmeasured anchor is marked too, and deliberately not with its wire code:
-			// rendered as "ungraded-anchor" it scans as a fourth kind of drift verdict, when
-			// what it says is that no verdict was reached. Bare would be worse: that reads
-			// as clean, which is the one thing nobody checked it for.
-			marker := h.Drift
-			if h.Drift == string(notes.StatusUngraded) {
-				marker = "ungraded"
-			}
-			line += " [" + marker + "]"
-		}
-		out = append(out, line)
+		out = append(out, "      "+h.Line())
 	}
 	return append(out, impactMoreLine(len(hits))...)
 }
@@ -2162,76 +2301,14 @@ func changedPathsFromPatch(patch string) []string {
 	return out
 }
 
-// anchorHit is one note anchor that names something in the changeset, shaped for the
-// impact report rather than for the store.
-type anchorHit struct {
-	Note  string `json:"note"            yaml:"note"`
-	Title string `json:"title,omitempty" yaml:"title,omitempty"`
-	// Pos is the anchor's index in its note, and Matched the changed thing that pulled the
-	// note in: a symbol node id or a file path. Both are carried rather than dropped because
-	// a note with several anchors is otherwise reported without saying WHICH of them fired.
-	Pos     int              `json:"pos"             yaml:"pos"`
-	Kind    notes.AnchorKind `json:"kind"            yaml:"kind"`
-	Target  string           `json:"target"          yaml:"target"`
-	Matched string           `json:"matched"         yaml:"matched"`
-	// Match is notes.MatchStrength: how the hit was found. It restates Kind for every hit this
-	// caller can currently produce, and stops doing so once one supplies a symbol anchor's file
-	// - the weak neighbor match must never render with the exact match's authority.
-	Match string `json:"match" yaml:"match"`
-	// Drift is the notes.IssueCode this anchor resolved to. Empty is graded CLEAN;
-	// notes.StatusUngraded is unmeasured, which grading needs the knowledge graph for and
-	// cannot report when the graph will not load. The two are distinct so a renderer cannot
-	// show an anchor nobody checked as fresh.
-	Drift string `json:"drift,omitempty" yaml:"drift,omitempty"`
-}
-
-// impactAnchors joins every note anchor against the changeset. A knowledge graph that will
-// not load costs the drift column and nothing else: notes.ResolveAnchors takes a nil resolver
-// and grades every anchor ungraded, so the section still answers WHAT is anchored.
-func impactAnchors(ctx context.Context, root string, files, symbols []string) []anchorHit {
-	stores, err := notesStores(root, "")
-	if err != nil {
-		return nil
-	}
-	res, resErr := notesResolver(ctx, root)
-
-	var resolved []notes.ResolvedAnchor
-	for _, st := range stores {
-		var scoped notes.Resolver
-		if resErr == nil {
-			scoped = res.ForScope(string(st.scope))
-		}
-		ra, raErr := notes.ResolveAnchors(ctx, st.dir, scoped)
-		if raErr != nil {
-			continue
-		}
-		resolved = append(resolved, stampAnchorNodeIDs(ra, string(st.scope))...)
-	}
-
-	hits := notes.AnchorHits(resolved, files, symbols)
-	out := make([]anchorHit, 0, len(hits))
-	for _, h := range hits {
-		out = append(out, anchorHit{
-			Note: h.Note, Title: h.Title, Pos: h.Pos, Kind: h.Kind, Target: h.Target,
-			Matched: h.Matched, Match: string(h.Match), Drift: string(h.Status),
-		})
-	}
-	return out
-}
-
-// stampAnchorNodeIDs mints each anchor's graph node id in place and returns the same slice.
-//
-// This is the only layer allowed to know both vocabularies: internal/notes must not learn the
-// graph (see its Resolver doc), and the graph mints ids from one place so two hand-kept copies
-// cannot diverge (knowledge.AnchorNodeID). Without it a symbol anchor is compared bare against
-// a node id and never matches, which is the join's headline case.
-//
-// scope is the ANCHORING store's, because a note-to-note anchor names a note in the same store.
-func stampAnchorNodeIDs(res []notes.ResolvedAnchor, scope string) []notes.ResolvedAnchor {
-	for i := range res {
-		res[i].NodeID = knowledge.AnchorNodeID(string(res[i].Anchor.Kind), res[i].Anchor.Target, scope)
-	}
-	return res
+// impactAnchors joins the declared notes stores against the changeset. root is the override
+// diffCmd's own load was handed, because the graph loader is once-per-process and keyed on it.
+func impactAnchors(ctx context.Context, root string, rev types.Diff) ([]review.AnchorHit, error) {
+	declared := globalCfg.Knowledge.Notes
+	dirs := review.NoteDirs{Shared: declared.Shared, Private: declared.Private}
+	return review.ChangesetAnchors(ctx, root, dirs, func(ctx context.Context) (*knowledge.Graph, error) {
+		return loadKnowledgeGraph(ctx, root, false, false, true)
+	}, rev)
 }
 
 // earnedSync watches a viewer session and turns finished files into read receipts.

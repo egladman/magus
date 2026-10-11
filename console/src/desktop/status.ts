@@ -1,12 +1,9 @@
 // Renders the shell-owned status bar from one contribution shape.
 
 import { parseHash, wantsDemo } from "../lib/server";
+import { DEMO_CONNECTION_HINT, writeConnection } from "./connection";
 
 export type ConnectionState = "none" | "connecting" | "connected" | "disconnected" | "demo";
-
-// DEMO_HINT is the sentence the readiness poller and makeStatusBar also write, kept identical so
-// the tooltip does not change wording depending on which of the three last touched it.
-const DEMO_HINT = "Demo data is synthetic. Click to change the server address.";
 
 export interface StatusContribution {
   // For an app with its OWN link to the server (the graph's SSE stream, the log tail). Omit both
@@ -40,15 +37,12 @@ export function publishStatus(contribution: StatusContribution): void {
   const conn = document.getElementById("console-conn");
   if (conn && contribution.connection) {
     conn.dataset.owner = "app";
-    conn.textContent = demoing ? "demo" : (contribution.label ?? "");
-    conn.dataset.state = demoing ? "demo" : contribution.connection;
-    if (contribution.health && !demoing) conn.dataset.health = contribution.health;
-    else delete conn.dataset.health;
-    const hint = demoing ? DEMO_HINT : contribution.hint;
-    if (hint !== undefined) {
-      conn.title = hint;
-      conn.setAttribute("aria-label", hint);
-    }
+    writeConnection(conn, {
+      label: demoing ? "demo" : (contribution.label ?? ""),
+      state: demoing ? "demo" : contribution.connection,
+      health: contribution.health && !demoing ? contribution.health : null,
+      hint: demoing ? DEMO_CONNECTION_HINT : contribution.hint,
+    });
   }
   const count = document.getElementById("console-count");
   if (count) {

@@ -99,7 +99,7 @@ func TestInstallRegenHookCoexists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"pre-merge-commit", "pre-commit", "post-commit", "post-rewrite", "post-applypatch", "post-merge"}, installed)
 
-	drift := driftMarkers.section("magus job run check-drift >/dev/null 2>&1 || true\n")
+	drift := driftMarkers.section("magus job run check-drift post-commit >/dev/null 2>&1 || true\n")
 	notice := "  echo \"magus: the settle hook did not run: magus is missing or predates 'vcs resolve --hook', so this operation is not regenerated; run 'magus vcs resolve' once it is\" >&2\n"
 	tolerate := "magus_rc=$?\nif [ $magus_rc -eq 2 ] || [ $magus_rc -eq 127 ]; then\n" + notice
 	stop := "elif [ $magus_rc -ne 0 ]; then\n  exit $magus_rc\n"

@@ -162,6 +162,11 @@ var denyRuleDocs = []types.RuleDoc{
 		Catches: "a process table inspected to wait on magus work the lock already reports",
 		Why: "A magus run holds a project lock and announces itself, and `magus status --watch=15s` reads that same lock state continuously: holder PID, command, age. " +
 			"`pgrep`, `pidof` and `ps` invent a poll with no bound of its own that answers a question the lock message already answered."},
+	{Name: string(denyRulePolicyUnloaded),
+		Catches: "a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load",
+		Why: "Misconfiguration is an error: when neither the working tree nor its approved copy loads, the workspace rules that judge these calls are not running, and letting the call through would read as judged. " +
+			"It fires only when the last policy that did load in this cache registered the seam's rule; with no record there was never a rule to lose, and the call passes. " +
+			"Every other call still runs on the built-in rules, so the fix stays runnable. The verdict names the likeliest fix for the caller: a rebuild in a checkout of magus, a placed binary for a leased worker, an update elsewhere."},
 	{Name: string(denyRuleRawTool),
 		Catches: "a toolchain command a spell already wraps, run outside the cache",
 		Why: "magus covers these exactly and adds cache, sandbox and affected tracking, so the refusal costs nothing: `magus run <target> <project>`, and `magus describe targets -o name` lists what this workspace calls them. " +
@@ -172,6 +177,7 @@ var denyRuleDocs = []types.RuleDoc{
 			"One command is exempt, in a checkout of magus itself: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`, alone on its line with no wrapper and no other prefix, in a checkout root that has no `magus` binary yet, is advised rather than refused, because a fresh checkout has no other way to get its first binary. " +
 			"It runs the real go-build target (its generate steps and stamped link) instead of a bare link, so the first binary is the one every later build would make. `--no-cache` because that target's key cannot express the embedded-spell ordering and once replayed a binary missing tools; Go's content-addressed build cache stays on, `-trimpath` matches the target's own build so packages compile once, and `GOEXPERIMENT=jsonv2` because magus refuses to compile without it and a fresh checkout cannot count on mise to set it. " +
 			"Every other raw go command in that root, a bare `go build -o magus ./cmd/magus` included, is refused and served the bootstrap. Once the binary exists the deny applies again and names `./magus run go-build .`. " +
+			"None of this is a leased worker's: there is one binary per base, the main session builds it and places a copy in each worker checkout, so a worker is refused every build of it and served the one command that copies the main checkout's binary into its own, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. " +
 			"A checkout that cannot load its own sources (MGS1021) has a second exemption, because no target can run there and the bootstrap fails to compile against generated files that lag their sources: " +
 			"alone on its line, with no environment prefix but `GOEXPERIMENT`, the relink MGS1021 prints (`go build [-trimpath] -o magus ./cmd/magus`) and the generators the `*_generate` targets run (`go generate <package>` inside the checkout, `go run [-trimpath] ./cmd/magus-utils <generator>`, never its release subcommands) are advised rather than refused, with a binary or without. " +
 			"The guard learns this by loading the workspace, and only for one of those lines; the binary judging is the checkout's own `./magus` when there is one. Once the workspace loads, they are refused again. " +
@@ -205,6 +211,11 @@ var denyRuleDocs = []types.RuleDoc{
 		Catches: "a magus command relocated into another checkout, judging a tree nobody ships",
 		Why: "A binary links the spell sources of the tree it was built from, so a verdict it reaches about a DIFFERENT checkout describes a tree that exists nowhere, and anything it regenerates lands there unmarked. " +
 			"Run magus from the workspace it belongs to and name the project as an argument; a different workspace is `--root <path>`."},
+	{Name: string(denyRuleStaleBinary),
+		Catches: "a call that changes state while the magus judging it cannot load this tree's guard policy",
+		Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
+			"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, `mv magus magus.old`, the bootstrap, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
+			"A leased worker is never told to build: there is one binary per base and the main session places it, so the worker's one fix is the placement it is served, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead."},
 	{Name: string(denyRuleStageAll),
 		Catches: "a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output",
 		Why: "A magus target writes its declared outputs as it runs, so the tree here is routinely dirty with files you did not edit. " +
@@ -279,8 +290,8 @@ var denyRuleDocs = []types.RuleDoc{
 		Catches: "a bound worker running a target other than its row's check or one writing its write paths",
 		Why: "A worker's row names one check, and the orchestrator runs every other target serially, in its own tree, after the units land. " +
 			"Two workers running the same target at once from two worktrees double the load and prove nothing the orchestrator's one run does not: the cache replays a run that has landed and never two in flight, and two trees share no key. " +
-			"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); magus's own `go-build .` in its own checkout; and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
-			"`magus affected` is never the check, since it takes its projects from the diff. An unbound caller, a row that owns the gate and a row declaring no check are untouched. " +
+			"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
+			"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`) is not on the list either: there is one binary per base, the main session builds it and places a copy in the worker's checkout. An unbound caller, a row that owns the gate and a row declaring no check are untouched. " +
 			"The same rule grades a spawn or continuation brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists."},
 	{Name: string(denyRuleWorktreeRemove),
 		Catches: "removing a worktree magus cannot prove holds nothing that would be lost",
@@ -380,6 +391,24 @@ var advisoryDocs = []types.RuleDoc{
 			"Prove the write paths disjoint with `magus describe file`, or give the new worker its own worktree, which is the answer whenever the write paths touch workspace configuration."},
 	{Name: string(advisoryStageClassify), Catches: "staging without classifying, when generated and source differ"},
 	{Name: string(advisoryUnleasedWrite), Catches: "a write magus cannot attribute while a fleet is running"},
+	{Name: string(advisoryCommandRuleFailed),
+		Catches: "a command the workspace's rule could not judge, so only the built-in rules graded it",
+		Why: "A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. " +
+			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+			"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
+	{Name: string(advisoryWriteRuleFailed),
+		Catches: "a file write the workspace's rule could not judge, so only the built-in rules graded it",
+		Why: "A workspace write rule that fails to load or errors judges nothing, and a write reaching a verdict without it must say so rather than read as fully judged. " +
+			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+			"It stands alone only when the built-in rules passed the write; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
+	{Name: string(advisorySpawnRuleFailed),
+		Catches: "a spawn the workspace's rule could not judge, so only the built-in rules graded it",
+		Why: "A workspace spawn rule that fails to load or errors judges nothing, and a spawn or continuation reaching a verdict without it must say so rather than read as fully judged. " +
+			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
+			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
 }
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
@@ -392,6 +421,7 @@ func Rules() []types.RuleDoc {
 	out = append(out, advisoryDocs...)
 	for i := range out {
 		out[i].Decision = string(defaults[out[i].Name])
+		out[i].Fixed = builtin.Fixed(out[i].Name)
 	}
 	slices.SortFunc(out, func(a, b types.RuleDoc) int {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a

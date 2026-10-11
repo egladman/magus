@@ -40,7 +40,7 @@ runs targets concurrently where the graph allows. `magus\needs` edges order the 
 ([dependencies](dependencies.md)); a target's `slots` and `exclusive` policy tune how
 much of it runs at once ([targets](targets.md)). Nested `magus` invocations a magusfile
 spawns adopt into this same pool rather than standing up their own
-([the broker and the server](../guides/integrations/server.md)).
+([the broker and the daemon](../guides/integrations/server.md)).
 
 All of this lives inside one process. It orders nothing in a _second_ `magus` you
 start in another terminal: the two invocations have separate graphs and separate
@@ -145,7 +145,7 @@ ran, and the same invocation succeeds once the holder finishes.
 Two exceptions queue instead, because the holder shares something with the run that
 wants the lock:
 
-- **The same process.** The server runs adopted nested runs, background jobs and its
+- **The same process.** The daemon runs adopted nested runs, background jobs and its
   own symbol indexer in one process. Those queue for a project rather than refusing
   each other.
 - **The same run.** A `ci` target whose parallel steps each run `magus run build
@@ -329,12 +329,12 @@ Key properties:
 `magus status` shows the whole budget: what is held, and by whom, across every
 worktree on the machine.
 
-## Relationship to the broker and the server
+## Relationship to the broker and the daemon
 
 The [broker](../guides/integrations/server.md) is the per-user process that holds the host's
 capacity and the shared services runs keep warm. It is the natural single point that
 knows what is running everywhere, which is why the budget lives there and why a run
-starts one. The server, which a person starts for MCP and the console, asks the broker
+starts one. The daemon, which a person starts for MCP and the console, asks the broker
 like any run.
 
 Neither runs your work. A top-level `magus run` executes in your own process and
@@ -350,6 +350,6 @@ three compose: ordering inside a run, exclusion per project, capacity per machin
 
 - [Dependencies](dependencies.md): `magus\needs` and `depends_on`, how a single run is ordered.
 - [Targets](targets.md): per-target `slots` and `exclusive` policy.
-- [The broker and the server](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
+- [The broker and the daemon](../guides/integrations/server.md): the process that owns the machine budget, and the one a person starts.
 - [Cache](cache.md): what a run writes, and why concurrent writers are serialized.
 - [MGS3009](../reference/codes/sandbox/MGS3009.md): the machine budget, and the two ways it refuses.

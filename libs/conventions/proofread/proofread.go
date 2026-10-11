@@ -1,8 +1,9 @@
 // Package proofread judges written text: the doc comment and name of one symbol a SCIP
 // index describes, a hand-written Markdown file, a skill, a pull request's
-// title and description, or a message a program prints. It parses no
-// programming language, so every
-// indexer's symbols meet the same rules.
+// title and description, the comments of a stylesheet, or a message a program
+// prints. It parses no programming language, so every indexer's symbols meet
+// the same rules; the one reader it carries, for CSS, only finds comments and
+// the code beside them.
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
@@ -146,6 +147,10 @@ const (
 	// choosing among many: an MCP tool's description or a skill's frontmatter
 	// description, plain text read to decide whether to call it.
 	KindToolDescription Kind = "tool-description"
+	// KindStylesheet is a stylesheet whose comments are judged: each is held to
+	// the doc comment rules and to some of the written ones, since a comment is
+	// both a doc on the code beside it and prose a maintainer reads cold.
+	KindStylesheet Kind = "stylesheet"
 )
 
 // Decision is what a finding costs the caller that reads it, in the words a
@@ -228,7 +233,7 @@ func (c check) declaredDecision(kind Kind) Decision {
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
+var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
 	issueChecks, densityChecks, reviewChecks, suppressChecks, agentReplyChecks, toolChecks, voiceChecks, []check{templateCheck})
 
 var messageChecks = []check{
@@ -246,25 +251,37 @@ var templateCheck = check{rule: RuleTemplate, on: []Kind{KindAgentInstructionsTe
 // Another rule leaves a span to each of these where it reports the span
 // itself, so one span gives one finding; see [input.reports].
 var (
-	fillerCheck      = check{rule: RuleFiller, on: everywhere, advise: agentReply, judge: filler}
+	fillerCheck = check{
+		rule: RuleFiller, on: slices.Concat(everywhere, stylesheet), advise: slices.Concat(agentReply, stylesheet),
+		judge: filler,
+	}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
-	tenseCheck       = check{rule: RuleTense, on: proseKinds, house: true, judge: tense}
+	tenseCheck       = check{rule: RuleTense, on: slices.Concat(proseKinds, stylesheet), house: true, judge: tense}
 )
 
+// comment is a doc comment and a stylesheet's comments, which the comment
+// rules judge alike.
+var comment = slices.Concat(docOnly, stylesheet)
+
+// A stylesheet has no labeled cases yet for the judgment rules it shares with
+// written text, so on it they advise until cases support a deny.
 var coreChecks = []check{
-	{rule: RuleCommentBlock, on: docOnly, house: true, judge: commentBlock},
-	{rule: RuleCommentSentence, on: docOnly, house: true, judge: commentSentence},
+	{rule: RuleCommentBlock, on: comment, house: true, judge: commentBlock},
+	{rule: RuleCommentSentence, on: comment, house: true, judge: commentSentence},
 	fillerCheck,
-	{rule: RuleTerms, on: everywhere, house: true, judge: terms},
+	{rule: RuleTerms, on: slices.Concat(everywhere, stylesheet), house: true, judge: terms},
 	{rule: RuleNameSuffix, on: docOnly, house: true, judge: nameSuffix},
-	{rule: RuleAside, on: slices.Concat(docOnly, help), house: true, judge: aside},
-	{rule: RuleHistory, on: docOnly, house: true, judge: history},
+	{rule: RuleAside, on: slices.Concat(comment, help), house: true, judge: aside},
+	{rule: RuleHistory, on: comment, house: true, judge: history},
 	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
 	leadContextCheck,
-	{rule: RuleReplyVoice, on: withReply, judge: replyVoice},
+	{rule: RuleReplyVoice, on: slices.Concat(withReply, stylesheet), advise: stylesheet, judge: replyVoice},
 	tenseCheck,
-	{rule: RuleHedge, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: hedge},
-	{rule: RuleAttribution, on: withReply, house: true, judge: attribution},
+	{
+		rule: RuleHedge, on: slices.Concat(proseKinds, agentReply, stylesheet),
+		advise: slices.Concat(agentReply, stylesheet), judge: hedge,
+	},
+	{rule: RuleAttribution, on: slices.Concat(withReply, stylesheet), house: true, judge: attribution},
 	{rule: RuleTerseSentence, on: skill, house: true, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: skill, house: true, judge: terseParagraph},
 	{rule: RuleWordy, on: slices.Concat(proseKinds, agentReply), advise: agentReply, judge: wordy},
@@ -392,6 +409,9 @@ type input struct {
 	// text is a [KindMessage]'s whole text and maxRunes its length cap.
 	text     string
 	maxRunes int
+	// css is the comment [judgeStylesheet] is judging, set for
+	// [KindStylesheet] alone.
+	css *cssComment
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty, and

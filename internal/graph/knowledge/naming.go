@@ -192,7 +192,7 @@ func newNamingIndex(g *Graph, c ConformanceChange) *namingIndex {
 		}
 		// Test and generated code is never a subject and never a norm, so it is not read at all.
 		file, _, _ := strings.Cut(n.Source, ":")
-		if file == "" || isTestSource(file) || x.generated(file) {
+		if file == "" || IsTestPath(file) || x.generated(file) {
 			continue
 		}
 		full, ok := parseDescriptors(id)

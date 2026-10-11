@@ -129,6 +129,30 @@ func TestAgentFamiliesCollect(t *testing.T) {
 	assert.Equal(t, 1, attrs[0].Len(), "severity is the only attribute; a session id must never join it")
 }
 
+// TestReviewMergedWhileReadingCollects reads back the count and the duration of reviews that
+// merged under a reader, and that neither carries an attribute: a review id or repository name
+// is unbounded, and how long the reader had been at it is the whole fact.
+func TestReviewMergedWhileReadingCollects(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	p.RecordReviewMergedWhileReading(ctx, 90)
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	merged, ok := sumInt64(t, rm, "magus.review.merged_while_reading")
+	require.True(t, ok, "magus.review.merged_while_reading missing")
+	assert.Equal(t, int64(1), merged)
+
+	count, sum, attrs, ok := histFloat64(t, rm, "magus.review.merged_while_reading.duration")
+	require.True(t, ok, "magus.review.merged_while_reading.duration missing")
+	assert.Equal(t, uint64(1), count)
+	assert.InDelta(t, 90.0, sum, 1e-9)
+	require.Len(t, attrs, 1)
+	assert.Equal(t, 0, attrs[0].Len())
+}
+
 // TestPoolInstrumentsCollect exercises the magus.pool.slots.running gauge and the
 // magus.pool.slots.queued gauge end to end through a real local provider.
 func TestPoolInstrumentsCollect(t *testing.T) {

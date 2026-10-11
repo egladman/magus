@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -112,10 +113,10 @@ func installHarnessSkillPath(ctx context.Context, root, path string, form agent.
 	}
 	for _, file := range written {
 		if !altered[file] {
-			slog.DebugContext(ctx, "agent harness install: already current", slog.String("path", file))
+			slog.With(attr.Component("agent harness install")).DebugContext(ctx, "already current", slog.String("path", file))
 			continue
 		}
-		slog.InfoContext(ctx, "agent harness install: wrote", slog.String("path", file))
+		slog.With(attr.Component("agent harness install")).InfoContext(ctx, "wrote", slog.String("path", file))
 	}
 	removed, err := agentSkills.PruneSkillTree(root, path, form)
 	if err != nil {

@@ -230,7 +230,7 @@ func (s *Store) read(st *dirState) error {
 		t, err := parseTokenRecord(f.name, path, f.info, now)
 		if err != nil {
 			st.skipped = append(st.skipped, err)
-			slog.With(attr.Component("auth")).WarnContext(context.Background(), "skipped a token record", slog.String("path", path), slog.String("error", err.Error()))
+			slog.With(attr.Component("auth")).WarnContext(context.Background(), "skipped a token record", slog.String("path", path), attr.Error(err))
 			continue
 		}
 		st.tokens = append(st.tokens, t)
@@ -350,7 +350,7 @@ func (s *Store) prune(st *dirState, now time.Time) {
 			changed = true
 			slog.With(attr.Component("auth")).DebugContext(context.Background(), "removed an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.Time("expired", t.Expires))
 		default:
-			slog.With(attr.Component("auth")).WarnContext(context.Background(), "could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), slog.String("error", err.Error()))
+			slog.With(attr.Component("auth")).WarnContext(context.Background(), "could not remove an expired token", slog.String("name", t.Name), slog.String("id", t.ID), attr.Error(err))
 			kept = append(kept, t)
 		}
 	}

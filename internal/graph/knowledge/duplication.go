@@ -49,7 +49,7 @@ func (g *Graph) Duplicates(opts types.DuplicationOptions) []types.DuplicationGro
 		// Tests are left out unless asked for. Sibling tests in one file call the same setup
 		// helpers by design, so they pair at a perfect score and bury every finding a person
 		// would act on: on this repository they were 3,944 of 4,182 pairs.
-		if !opts.IncludeTests && isTestSource(n.Source) {
+		if !opts.IncludeTests && IsTestPath(n.Source) {
 			continue
 		}
 		start, end := definitionSpan(n)
@@ -228,7 +228,7 @@ func (g *Graph) describeMember(site types.DuplicationSite, callees, shared map[s
 			callers[e.Source] = true
 		case types.RelationReferences:
 			file, ok := strings.CutPrefix(e.Source, types.KindFile+":")
-			if !ok || isTestSource(file) {
+			if !ok || IsTestPath(file) {
 				continue
 			}
 			if !slices.Contains(fileNS[e.Source], n.Attrs[attrNamespace]) {

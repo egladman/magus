@@ -2,7 +2,7 @@
 // with a deep-link into the full log viewer. It renders one row per running target
 // (command + current step + elapsed), each deep-linking to that run's live log when the
 // dashboard is connected. When a raw-output buffer is present (the demo feed synthesizes
-// one, see demo.ts), a rolling <pre> preview streams captured lines beneath the list so the
+// one, see demo.ts), a rolling preview streams captured lines beneath the list so the
 // board looks alive.
 //
 // Live-stream limitation: the server feed the dashboard holds (/api/v1/events) carries
@@ -24,7 +24,9 @@ import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
 import { logsLink } from "../../../lib/server";
 import { renderLine } from "../../../render/sections";
-import { Card, h, type Tile } from "./card";
+import { Card, countBadge, h, scrollRegion, type Tile } from "./card";
+import { menuToggle } from "../../../ui/menu-toggle";
+import { menuButton, type MenuAction } from "./menu";
 
 const PREVIEW_LINES = 120; // most recent captured lines kept in the streaming preview
 
@@ -54,6 +56,26 @@ function externalIcon(): SVGElement {
   return svg;
 }
 
+// The visible label is short so the tile header fits a phone; the name says where it goes.
+const OPEN_LABEL = "Open logs";
+const OPEN_NAME = "Open logs in the log viewer";
+
+// openButton builds the "Open logs" secondary button. A real <button> with the same
+// component classes and icon-then-text children as the Big Picture button, so the two are the same
+// element rather than an anchor dressed as one.
+function openButton(): HTMLButtonElement {
+  const button = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary console-dashboard-activity__open",
+  ) as HTMLButtonElement;
+  button.type = "button";
+  button.setAttribute("aria-label", OPEN_NAME);
+  const icon = h("span", "pf-v6-c-button__icon pf-m-start");
+  icon.append(externalIcon());
+  button.append(icon, h("span", "pf-v6-c-button__text", OPEN_LABEL));
+  return button;
+}
+
 export function activityTile(): Tile {
   const card = new Card("activity", "Live activity", {
     why:
@@ -61,35 +83,28 @@ export function activityTile(): Tile {
       " here with its step unchanged is hung rather than slow, and the tail usually says why.",
   });
 
-  // Header note: a running-count chip plus an "Open in log viewer" deep-link (repointed at
-  // the live host on each render). Replaces the plain note span.
+  // Header note: a running-count badge plus the way into the log viewer. With one target running
+  // that is a button straight to it; with several it is a menu of them, because the viewer has no
+  // single answer to "which one" (see renderOpenMenu).
   const noteWrap = h("span", "console-dashboard-activity__note");
-  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
-  const count = h("span", "pf-v6-c-label__content", "0");
-  countLabel.append(count);
-  // A real <button>, structurally identical to the Big Picture button in bigPicture.ts: the same
-  // component classes, the same __icon pf-m-start + __text children, in the same order.
-  //
-  // A <button> rather than the <a> this was through two revisions, so it is the same ELEMENT as the
-  // control it has to match, not an anchor dressed as one. The glyph's vertical centering is not a
-  // PatternFly behavior at all - it comes from the shared icon-button rule in dashboard.css, which
-  // this button is listed in alongside the Big Picture button.
-  //
-  // The cost is that a middle-click no longer opens a new tab, so the click handler below opens the
-  // destination in one explicitly - the same window.open the multi-target menu items already use.
-  const open = h(
-    "button",
-    "pf-v6-c-button pf-m-secondary console-dashboard-activity__open",
-  ) as HTMLButtonElement;
-  open.type = "button";
-  open.dataset.controlSize = "compact";
-  const openIcon = h("span", "pf-v6-c-button__icon pf-m-start");
-  openIcon.append(externalIcon());
-  open.append(openIcon, h("span", "pf-v6-c-button__text", "Open in log viewer"));
-  // Where a plain click goes when there is nothing to choose between. Held here rather than on an
-  // href because this is no longer an anchor.
+  noteWrap.dataset.controlSize = "compact";
+  const count = countBadge("running targets");
+  // Where a plain click goes when there is nothing to choose between.
   let openHref = "../logs/";
-  noteWrap.append(countLabel, open);
+  const openOne = openButton();
+  openOne.addEventListener("click", () => window.open(openHref, "_blank", "noopener"));
+  const picker = menuButton(
+    menuToggle({
+      variant: "secondary",
+      icon: externalIcon(),
+      text: OPEN_LABEL,
+      ariaLabel: OPEN_NAME,
+      classes: "console-dashboard-activity__open",
+    }),
+    [],
+  );
+  picker.el.hidden = true;
+  noteWrap.append(count.el, openOne, picker.el);
   card.noteNode().replaceWith(noteWrap);
 
   // A one-line guide: each running target is a trace an operator can open.
@@ -99,22 +114,24 @@ export function activityTile(): Tile {
   caption.append(document.createTextNode(". Open it to read the full output."));
 
   const list = h("ul", "console-dashboard-rowlist");
-  const empty = h("p", "console-dashboard-row__empty", "Pool is idle. Nothing running right now.");
   // A <div>, not a <pre>: every line is rendered through the SHARED renderLine() the log viewer and
   // the activity trail use, so the preview carries the same ANSI colors, [pass]/[fail] status
-  // badges, and line markup rather than being a flat monospace dump of the same bytes. It reads as
-  // the same product as the log viewer because it literally is the same renderer - the styles come
-  // from render/render.css, which dashboard.css imports for exactly this. renderLine handles its
-  // own pre-wrap, so the <pre> that used to be here is no longer doing anything.
+  // badges, and line markup rather than being a flat monospace dump of the same bytes. The styles
+  // come from styles/components/Render/render.css, which dashboard.css imports for exactly this.
+  //
+  // It scrolls, so it is a named, focusable log. aria-live is off: the tail is rebuilt on every
+  // frame, and a live region around that would read the whole buffer out again each time.
   const preview = h("div", "console-dashboard-activity__log");
   preview.hidden = true;
-  preview.setAttribute("aria-label", "Streaming output preview");
+  preview.dataset.keepEmpty = "";
+  scrollRegion(preview, "Streaming output preview");
+  preview.setAttribute("role", "log");
+  preview.setAttribute("aria-live", "off");
   // Zebra striping (render.css). This tail has no line-number gutter to track along - a rolling
   // window has no stable numbering to anchor one to - so the stripes are the only thing giving the
-  // eye a rail across a wrapped line. It matters most in Big Picture, where the preview is read at
-  // a distance and the content is moving underneath.
+  // eye a rail across a wrapped line.
   preview.dataset.zebra = "";
-  card.body.append(caption, list, empty, preview);
+  card.body.append(caption, list, preview);
 
   // Auto-follow the tail UNTIL the operator scrolls up to read - then freeze in place and let them
   // take control (like the log viewer's livePaused). Scrolling back to the bottom re-arms the follow.
@@ -124,111 +141,58 @@ export function activityTile(): Tile {
     pinned = preview.scrollHeight - preview.scrollTop - preview.clientHeight < 8;
   });
 
-  // The picker behind "Open in log viewer" when several targets are running. Anchored to the link
-  // and built with the shared PF menu vocabulary, matching the failing-target chips in the hero so
-  // "a choice of where to go" looks the same wherever the board offers one.
-  const openMenu = h("div", "pf-v6-c-menu console-dashboard-activity__openmenu");
-  openMenu.hidden = true;
-  openMenu.setAttribute("role", "menu");
-  const openMenuList = h("ul", "pf-v6-c-menu__list");
-  const openMenuContent = h("div", "pf-v6-c-menu__content");
-  openMenuContent.append(openMenuList);
-  openMenu.append(openMenuContent);
-  noteWrap.append(openMenu);
-
-  const closeOpenMenu = (): void => {
-    openMenu.hidden = true;
-    open.setAttribute("aria-expanded", "false");
-  };
-  if (typeof document !== "undefined") {
-    document.addEventListener("click", closeOpenMenu);
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") closeOpenMenu();
-    });
-  }
-  openMenu.addEventListener("click", (ev) => ev.stopPropagation());
+  // The picker's rows are rewritten only when the set of running targets changes: it is rendered on
+  // every frame, and rebuilding the items of an open menu takes the reader's focus with them.
+  let pickerSignature = "";
 
   function renderOpenMenu(
     targets: RunningTargetView[],
     liveHost: string | null,
     base: string,
   ): void {
-    // One target (or none): a plain link straight to it. Nothing to choose between.
+    // One target (or none): a plain button straight to it. Nothing to choose between.
     if (targets.length < 2) {
-      open.removeAttribute("aria-haspopup");
-      open.removeAttribute("aria-expanded");
-      openMenu.hidden = true;
+      openOne.hidden = false;
+      picker.el.hidden = true;
       if (targets.length === 1 && liveHost && targets[0].invocation) {
         openHref = logsLink(liveHost, { inv: targets[0].invocation });
       }
       return;
     }
-    open.setAttribute("aria-haspopup", "menu");
-    open.setAttribute("aria-expanded", "false");
-    openMenuList.replaceChildren(
-      ...targets.map((c) => {
-        const li = h("li", "pf-v6-c-menu__list-item");
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "pf-v6-c-menu__item";
-        b.setAttribute("role", "menuitem");
-        b.append(h("span", "pf-v6-c-menu__item-main", fmtArgs(c.args)));
+    openOne.hidden = true;
+    picker.el.hidden = false;
+    const signature = targets.map(rowKey).join("\n") + "|" + base;
+    if (signature === pickerSignature) return;
+    pickerSignature = signature;
+    const actions: MenuAction[] = targets.map((c) => ({
+      label: fmtArgs(c.args),
+      run: () => {
         const href = liveHost && c.invocation ? logsLink(liveHost, { inv: c.invocation }) : base;
-        b.addEventListener("click", () => {
-          closeOpenMenu();
-          window.open(href, "_blank", "noopener");
-        });
-        li.append(b);
-        return li;
-      }),
-      // The aggregate view stays REACHABLE, just not the default. It is the right answer sometimes -
-      // when the question is about how concurrent runs interleave - and removing it outright would
-      // trade one wrong default for another.
-      (() => {
-        const li = h("li", "pf-v6-c-menu__list-item");
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "pf-v6-c-menu__item";
-        b.setAttribute("role", "menuitem");
-        b.append(h("span", "pf-v6-c-menu__item-main", "All runs together"));
-        b.addEventListener("click", () => {
-          closeOpenMenu();
-          window.open(base, "_blank", "noopener");
-        });
-        li.append(b);
-        return li;
-      })(),
-    );
+        window.open(href, "_blank", "noopener");
+      },
+    }));
+    // The aggregate view stays REACHABLE, just not the default. It is the right answer sometimes -
+    // when the question is about how concurrent runs interleave - and removing it outright would
+    // trade one wrong default for another.
+    actions.push({
+      label: "All runs together",
+      run: () => window.open(base, "_blank", "noopener"),
+    });
+    picker.setActions(actions);
   }
-
-  open.addEventListener("click", (ev) => {
-    if (!open.hasAttribute("aria-haspopup")) {
-      // Single target: go straight there, in a new tab so the live board stays put.
-      window.open(openHref, "_blank", "noopener");
-      return;
-    }
-    ev.preventDefault();
-    ev.stopPropagation();
-    const willOpen = openMenu.hidden;
-    openMenu.hidden = !willOpen;
-    open.setAttribute("aria-expanded", String(willOpen));
-  });
 
   // Rows are RECONCILED BY KEY rather than rebuilt, so a target that finishes can leave rather than
   // simply not being in the next frame.
   //
   // The list used to be replaceChildren() per status frame, which meant every row was a new element
   // roughly once a second. Nothing could animate, because nothing persisted: a finished target
-  // vanished between frames and the rows below jumped up to fill the gap. On a board being watched
-  // rather than used, that jump is the most visually noticeable thing on the screen, and it carries
-  // no information - it is the one moment where something ENDING deserves to be legible.
+  // vanished between frames and the rows below jumped up to fill the gap.
   //
   // WHEN A ROW IS DISMISSED: the instant the server stops reporting the target as running. That is
   // the only honest trigger available - the status frame carries what is running now, with no
-  // "finished" event to hang a longer-lived "just completed" state on. So the row leaves as the work
-  // leaves, and the exit animation is what gives the eye time to register it. It is deliberately not
-  // a timed "keep finished rows for 10s" shelf: that would mean the panel titled Live activity was
-  // showing work that is not live, and the run timeline beside it already keeps the history.
+  // "finished" event to hang a longer-lived "just completed" state on. It is deliberately not a
+  // timed shelf: that would mean the panel titled Live activity was showing work that is not live,
+  // and the run timeline beside it already keeps the history.
   const rows = new Map<string, HTMLElement>();
   const LEAVE_MS = 260;
 
@@ -250,11 +214,9 @@ export function activityTile(): Tile {
       seen.add(key);
       let row = rows.get(key);
       if (!row) {
-        // Every row is a link. It used to be one only when a live host AND an invocation id were
-        // both present, which is false in the demo and on a freshly opened board - so the rows a
-        // reader is most likely to try first were exactly the inert ones. Without a specific
-        // invocation to deep-link, the row still opens the log viewer at `base`, which is a worse
-        // destination than the run itself but an infinitely better one than nothing happening.
+        // Every row is a link. Without a specific invocation to deep-link, the row still opens the
+        // log viewer at `base`, which is a worse destination than the run itself but an infinitely
+        // better one than nothing happening.
         const href = liveHost && c.invocation ? logsLink(liveHost, { inv: c.invocation }) : base;
         row = h("a", "console-dashboard-row");
         (row as HTMLAnchorElement).href = href;
@@ -268,9 +230,7 @@ export function activityTile(): Tile {
         list.append(row);
         // Force a style flush between setting the entering state and clearing it. Without this the
         // browser is free to coalesce both into one recalculation, never compute the entering style,
-        // and therefore never run the transition - the row would simply appear. requestAnimationFrame
-        // alone is not enough: it fires BEFORE the next paint, so the entering style can go
-        // unpainted. Reading offsetHeight forces the layout that makes it real.
+        // and therefore never run the transition - the row would simply appear.
         void row.offsetHeight;
         requestAnimationFrame(() => row?.removeAttribute("data-entering"));
       }
@@ -281,7 +241,7 @@ export function activityTile(): Tile {
       const t = relTime(c.startTime);
       if (t) bits.push(t);
       const meta = row.querySelector(".console-dashboard-row__meta");
-      if (meta) meta.textContent = bits.join(" - ");
+      if (meta) meta.textContent = bits.join(", ");
     }
 
     for (const [key, row] of rows) {
@@ -304,23 +264,19 @@ export function activityTile(): Tile {
     liveHost: string | null,
     logLines: string[],
     demo: boolean,
+    idleText: string,
   ): void {
-    count.textContent = String(targets.length);
+    count.set(targets.length);
     // Live: deep-link to the host's stream. Demo: stay inside the unified demo (../logs/#demo)
     // instead of dropping into the empty log viewer (demo has no live host). Otherwise plain.
     const base = liveHost ? logsLink(liveHost, {}) : demo ? "../logs/#demo" : "../logs/";
     openHref = base;
-    // With more than one thing running, "open in log viewer" has no single answer, so it stops
-    // being a link and becomes a CHOICE.
-    //
-    // Following it used to drop the reader into the viewer unfiltered, showing every concurrent
-    // invocation interleaved. The viewer can aggregate, but that is not what someone clicking from
-    // a specific panel wants - they have one run in mind, and the unfiltered view is the one place
-    // that run is hardest to read. One running target keeps the plain link: there is nothing to
-    // disambiguate, and a menu with a single item is a worse link.
+    // With more than one thing running, "open in log viewer" has no single answer, so it becomes a
+    // CHOICE. Following it used to drop the reader into the viewer unfiltered, showing every
+    // concurrent invocation interleaved, which is the one place a specific run is hardest to read.
     renderOpenMenu(targets, liveHost, base);
 
-    empty.hidden = targets.length > 0;
+    card.setEmpty(targets.length === 0 ? idleText : null);
     reconcileRows(targets, liveHost, base);
 
     // Streaming preview: only when a raw-output buffer is present (the demo feed). Keep the last
@@ -331,19 +287,13 @@ export function activityTile(): Tile {
       preview.hidden = false;
       if (pinned) {
         // No line-number gutter (null): the numbers are the log viewer's deep-link anchors, and a
-        // rolling tail of the last PREVIEW_LINES has no stable numbering to anchor to - a gutter
-        // here would show numbers that mean nothing and shift under the reader every tick.
+        // rolling tail of the last PREVIEW_LINES has no stable numbering to anchor to.
         preview.replaceChildren(
           ...logLines.slice(-PREVIEW_LINES).map((raw) => renderLine(raw, null)),
         );
-        // Ease down to the tail rather than snapping to it. `scrollTop = scrollHeight` teleports,
-        // so a new line arriving reads as the whole buffer flinching upward - which is unpleasant
-        // to read at a desk and genuinely hard to follow on a wall display, where the eye is
-        // already working at the edge of legibility. The distance traveled is a line or two, so
-        // smooth here is a nudge, not a ride.
-        //
-        // Guarded on prefers-reduced-motion: this is content that moves on its own, which is the
-        // exact case that setting exists for, and the instant jump is the honest fallback.
+        // Ease down to the tail rather than snapping to it: a new line arriving otherwise reads as
+        // the whole buffer flinching upward. Guarded on prefers-reduced-motion, since this is
+        // content that moves on its own - the exact case that setting exists for.
         const reduce =
           typeof matchMedia === "function" &&
           matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -368,21 +318,18 @@ export function activityTile(): Tile {
     const mine = all.filter((t) => inScope(t.workspace, scope));
     // "Where is my stuff" is the failure a scope invites, and this is the moment someone asks it: a
     // scoped tile that is empty while the server is busy looks identical to an idle server. Saying
-    // how much is running ELSEWHERE turns a dead end into a signpost - it is the sentence AWS's
-    // region picker never says, and the reason people think they have lost data rather than moved.
+    // how much is running ELSEWHERE turns a dead end into a signpost.
     const elsewhere = all.length - mine.length;
-    const scoped = workspaceScope() !== ALL_WORKSPACES;
-    if (mine.length === 0 && scoped && elsewhere > 0) {
-      empty.textContent =
-        "Nothing running in " +
-        shortName(workspaceScope()) +
-        ". " +
-        (elsewhere === 1 ? "1 target is" : elsewhere + " targets are") +
-        " running in other workspaces.";
-    } else {
-      empty.textContent = "Pool is idle. Nothing running right now.";
-    }
-    render(mine, latest.liveHost, latest.logLines, latest.conn.state === "demo");
+    const scoped = scope !== ALL_WORKSPACES;
+    const idleText =
+      mine.length === 0 && scoped && elsewhere > 0
+        ? "Nothing running in " +
+          shortName(scope) +
+          ". " +
+          (elsewhere === 1 ? "1 target is" : elsewhere + " targets are") +
+          " running in other workspaces."
+        : "The pool is idle. Nothing is running right now.";
+    render(mine, latest.liveHost, latest.logLines, latest.conn.state === "demo", idleText);
   };
   const offScope = onWorkspaceScope(repaint);
 
@@ -394,6 +341,7 @@ export function activityTile(): Tile {
     },
     destroy() {
       offScope();
+      picker.dispose();
     },
   };
 }

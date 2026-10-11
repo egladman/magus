@@ -4,25 +4,27 @@
 // waiting on a person, read from GET /api/v1/attention, the same queue `magus session attention`
 // lists and `magus session dispose` closes from any worktree of this repo.
 //
-// It used to derive that headline from the live run counts instead: failing targets shouted
-// "Attention needed", otherwise "All clear". That verdict predates the queue and can now
-// DISAGREE with it in both directions - a board reading "All clear" while three agents sit
-// blocked, or "Attention needed" over a queue nobody has to touch. Two things called attention
-// on one screen, and the reader has to work out which is lying. So the verdict comes from the
-// queue now, and only from the queue.
+// The verdict comes from the queue and only from the queue. It used to derive from the live run
+// counts instead, and the two disagreed in both directions: "All clear" while three agents sat
+// blocked, or "Attention needed" over a queue nobody had to touch.
 //
 // The failing/running/queued counts stay, as FACTS about live runs rather than as a verdict:
 // they carry the deep links into the failing run's log and the rerun commands, and a failure is
-// still worth seeing next to the queue. They just no longer decide what the headline says.
+// still worth seeing next to the queue. They just no longer decide what the headline says. The
+// headline therefore never takes the success colour while a failing count shows beside it.
 //
 // This is deliberately NOT a collapsible Card: the summary is always visible - it is the
 // board's headline, not a foldable panel.
 
 import type { DashboardState, StatusView } from "../state";
 import { ALL_WORKSPACES, onWorkspaceScope, workspaceScope } from "../../../lib/scope";
-import { h, helpGlyph, type Tile } from "./card";
+import { h, helpGlyph, prose, type Tile } from "./card";
 import { logsLink } from "../../../lib/server";
 import { showToast } from "../../../lib/refresh-toast";
+import { reportFailure } from "../../../lib/notifications";
+import { menuToggle } from "../../../ui/menu-toggle";
+import { statusIcon, statusText, type Status } from "../../../ui/status";
+import { menuButton, type MenuAction, type MenuButton } from "./menu";
 import {
   ageLabel,
   disposeAttention,
@@ -46,29 +48,9 @@ const REQUEST_TIMEOUT_MS = 10_000;
 // the residual line says how many more, and `magus session attention` lists them all.
 const QUEUE_LIST_MAX = 5;
 
-// One document-level listener closes any open chip menu on an outside click, rather than one per
-// chip: the list is rebuilt on every status frame, so per-chip listeners would accumulate against
-// detached nodes about once a second.
-if (typeof document !== "undefined") {
-  document.addEventListener("click", () => {
-    for (const m of document.querySelectorAll<HTMLElement>(".console-dashboard-hero__failmenu"))
-      m.hidden = true;
-    for (const b of document.querySelectorAll(".console-dashboard-hero__failbtn"))
-      b.setAttribute("aria-expanded", "false");
-  });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key !== "Escape") return;
-    for (const m of document.querySelectorAll<HTMLElement>(".console-dashboard-hero__failmenu"))
-      m.hidden = true;
-    for (const b of document.querySelectorAll(".console-dashboard-hero__failbtn"))
-      b.setAttribute("aria-expanded", "false");
-  });
-}
-
 // firstFailedInv returns the invocation id of the earliest run carrying a failed target,
 // so the failing count can deep-link into the run whose log an operator needs. Exported for the
-// tests beside this file; the Big Picture tile this comment used to name as the other consumer
-// derives its own headline and imports nothing from here.
+// tests beside this file.
 export function firstFailedInv(status: StatusView): string {
   for (const run of status.runs) {
     if (run.targets.some((t) => t.state === "failed")) return run.inv;
@@ -93,12 +75,9 @@ export interface FailedTarget {
   outputRef: string;
 }
 
-// failingTargets lists what is actually broken, rather than only how many things are.
-//
-// The hero said "2 targets are failing" and stopped there, which tells an operator that they have a
-// problem and nothing whatsoever about it - they then went to the timeline to find out WHICH, and
-// to the log viewer to find out why. Every one of those hops is already answerable from the status
-// frame the hero is rendering: the run carries each target's label and its output ref.
+// failingTargets lists what is actually broken, rather than only how many things are: every one of
+// the hops from "2 targets are failing" to the log is answerable from the status frame the hero is
+// already rendering, since the run carries each target's label and its output ref.
 export function failingTargets(status: StatusView): FailedTarget[] {
   const out: FailedTarget[] = [];
   for (const run of status.runs) {
@@ -118,16 +97,14 @@ export interface Verdict {
 
 // attentionVerdict derives the headline from the ATTENTION QUEUE, and from nothing else.
 //
-// The queue is the only source here on purpose. Every other signal on this board - failing
-// targets, server health, pool depth - is something magus observed; a request is something a
-// person was asked for and has not yet given. Folding an observation in would let the headline
-// say "Attention needed" over an empty queue, and a reader who clears that twice stops reading
-// the one line on the board that means somebody is waiting on them.
+// Every other signal on this board - failing targets, server health, pool depth - is something
+// magus observed; a request is something a person was asked for and has not yet given. Folding an
+// observation in would let the headline say "Attention needed" over an empty queue, and a reader
+// who clears that twice stops reading the one line on the board that means somebody is waiting.
 //
-// The three reads that are not "ok" get their own verdicts rather than being flattened into a
-// calm one: a server with no attention route, and a server that could not be read, both mean
-// the queue is UNKNOWN. Rendering unknown as "no open requests" is the single worst thing this
-// tile could do, because it is indistinguishable from the good state.
+// A server with no attention route, and a server that could not be read, both mean the queue is
+// UNKNOWN, and each gets its own verdict: rendering unknown as "no open requests" is
+// indistinguishable from the good state.
 export function attentionVerdict(read: AttentionRead, nowMs: number = Date.now()): Verdict {
   if (read.kind === "absent") {
     return {
@@ -168,12 +145,20 @@ export function attentionVerdict(read: AttentionRead, nowMs: number = Date.now()
   };
 }
 
+// verdictStatus is the shape half of the headline. A calm queue beside a failing count takes the
+// neutral mark, not the success one: "nobody is waiting" is true and is not good news while
+// something is failing, and green there contradicts the red count next to it.
+export function verdictStatus(state: Verdict["state"], failing: number): Status {
+  if (state === "attention") return "danger";
+  if (state === "warn") return "warning";
+  return failing > 0 ? "neutral" : "success";
+}
+
 // reproduceCommand is what you would type to run this failing target again yourself.
 //
-// It matters because opening the log is only half of what someone does with a failure. The other
-// half is reproducing it locally, and magus's own failure output already ends with a `reproduce:`
-// line for exactly that reason - the dashboard offering the log but not the command would make the
-// board strictly less useful than the terminal it is meant to save you a trip to.
+// Opening the log is only half of what someone does with a failure; the other half is reproducing
+// it locally, and magus's own failure output already ends with a `reproduce:` line for exactly that
+// reason.
 //
 // A root-project target has no project argument: `magus run lint` is correct and `magus run lint .`
 // is noise, so the label is only appended when there is one.
@@ -206,103 +191,51 @@ function copy(text: string): Promise<boolean> {
   );
 }
 
+function copyAction(label: string, command: string): MenuAction {
+  return {
+    label,
+    run() {
+      void copy(command).then((ok) => {
+        showToast(
+          "Dashboard",
+          ok ? "Copied: " + command : "Could not access the clipboard.",
+          ok ? "ok" : "error",
+        );
+      });
+    },
+  };
+}
+
 // failChip builds one failing-target chip and the menu behind it.
 //
 // A MENU rather than a plain link, because there are two genuinely different things to do with a
 // failure and picking one for the reader would be guessing: read the output here, or reproduce it
-// in a terminal. Both are one action away from a name that was previously not even shown.
-//
-// The chip is a <button> with aria-haspopup, not an <a>: its primary action is "offer the choices",
-// and dressing that as a link would promise navigation it does not perform.
-function failChip(f: FailedTarget, href: string): HTMLElement {
-  const wrap = h("div", "console-dashboard-hero__failchip");
-
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "console-dashboard-hero__failbtn";
-  btn.textContent = f.label;
-  btn.setAttribute("aria-haspopup", "menu");
-  btn.setAttribute("aria-expanded", "false");
-  btn.title = f.label + " failed. Open its output or copy the command to rerun it";
-
-  const menu = h("div", "pf-v6-c-menu console-dashboard-hero__failmenu");
-  menu.hidden = true;
-  menu.setAttribute("role", "menu");
-  const list = h("ul", "pf-v6-c-menu__list");
-  menu.append(h("div", "pf-v6-c-menu__content", "") as HTMLElement);
-  menu.querySelector(".pf-v6-c-menu__content")?.append(list);
-
-  const close = (): void => {
-    menu.hidden = true;
-    btn.setAttribute("aria-expanded", "false");
-  };
-
-  function item(label: string, run: () => void): HTMLElement {
-    const li = h("li", "pf-v6-c-menu__list-item");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "pf-v6-c-menu__item";
-    b.setAttribute("role", "menuitem");
-    b.append(h("span", "pf-v6-c-menu__item-main", label));
-    b.addEventListener("click", () => {
-      run();
-      close();
-    });
-    li.append(b);
-    return li;
-  }
-
-  if (href) {
-    list.append(
-      item("Open in log viewer", () => {
-        // A new tab: on a shared or fullscreened board, navigating away is not something the next
-        // person can undo.
-        window.open(href, "_blank", "noopener");
-      }),
-    );
-  }
-  const rerun = reproduceCommand(f.label);
-  list.append(
-    item("Copy rerun command", () => {
-      void copy(rerun).then((ok) => {
-        showToast(
-          "Dashboard",
-          ok ? "Copied: " + rerun : "Could not access the clipboard.",
-          ok ? "ok" : "error",
-        );
-      });
-    }),
-  );
-  const inspect = inspectCommand(f.outputRef);
-  if (inspect) {
-    list.append(
-      item("Copy output-ref command", () => {
-        void copy(inspect).then((ok) => {
-          showToast(
-            "Dashboard",
-            ok ? "Copied: " + inspect : "Could not access the clipboard.",
-            ok ? "ok" : "error",
-          );
-        });
-      }),
-    );
-  }
-
-  btn.addEventListener("click", (ev) => {
-    ev.stopPropagation(); // or the document handler below closes it in the same tick
-    const open = menu.hidden;
-    // Only one chip's menu at a time: two open menus overlapping is unreadable, and the second
-    // would be positioned over the first.
-    for (const other of document.querySelectorAll<HTMLElement>(".console-dashboard-hero__failmenu"))
-      other.hidden = true;
-    for (const other of document.querySelectorAll(".console-dashboard-hero__failbtn"))
-      other.setAttribute("aria-expanded", "false");
-    menu.hidden = !open;
-    btn.setAttribute("aria-expanded", String(open));
+// in a terminal. The chip is a <button> with a popup, not an <a>: its primary action is "offer the
+// choices", and dressing that as a link would promise navigation it does not perform.
+function failChip(f: FailedTarget, href: string): MenuButton {
+  const btn = menuToggle({
+    variant: "secondary",
+    small: true,
+    danger: true,
+    icon: statusIcon("danger"),
+    text: f.label,
+    classes: "console-dashboard-hero__failbtn",
   });
-  menu.addEventListener("click", (ev) => ev.stopPropagation());
-  wrap.append(btn, menu);
-  return wrap;
+  btn.querySelector(".pf-v6-c-menu-toggle__text")?.prepend(statusText("danger", "Failed: "));
+
+  const actions: MenuAction[] = [];
+  if (href) {
+    actions.push({
+      label: "Open in log viewer",
+      // A new tab: on a shared or fullscreened board, navigating away is not something the next
+      // person can undo.
+      run: () => window.open(href, "_blank", "noopener"),
+    });
+  }
+  actions.push(copyAction("Copy rerun command", reproduceCommand(f.label)));
+  const inspect = inspectCommand(f.outputRef);
+  if (inspect) actions.push(copyAction("Copy output-ref command", inspect));
+  return menuButton(btn, actions);
 }
 
 export function attentionTile(): Tile {
@@ -310,13 +243,13 @@ export function attentionTile(): Tile {
   root.setAttribute("aria-label", "Needs attention");
 
   const headline = h("div", "console-dashboard-hero__headline");
-  const verdict = h("p", "console-dashboard-hero__verdict");
-  // The glyph is a SIBLING of the verdict, never a child of it.
-  //
-  // renderQueue() sets verdict.textContent on every poll, and textContent replaces the element's
-  // entire child list - so a button appended inside it is destroyed by the first read that lands,
-  // seconds after mount. It is the kind of bug that looks like the feature was never wired: the
-  // markup is right at construction and gone before anyone looks.
+  const verdict = h("h3", "console-dashboard-hero__verdict");
+  const verdictMark = h("span", "console-dashboard-hero__mark");
+  // The text is its own node: renderQueue rewrites it on every read, and writing textContent on the
+  // heading would take the mark with it.
+  const verdictText = h("span", "console-dashboard-hero__verdicttext");
+  verdict.append(verdictMark, verdictText);
+  // The glyph is a SIBLING of the verdict, never a child of it, for the same reason.
   const verdictRow = h("div", "console-dashboard-hero__verdictrow");
   verdictRow.append(
     verdict,
@@ -333,10 +266,12 @@ export function attentionTile(): Tile {
   // The first paint, before any read has landed. No data-state is set with it, so the hero keeps
   // its neutral accent rule: the queue is UNKNOWN at this moment, and both the calm colour and
   // the loud one would be claims the tile has no basis for yet.
-  verdict.textContent = "Reading the queue";
+  verdictText.textContent = "Reading the queue";
+  verdictMark.append(statusIcon("neutral"));
   detail.textContent = "Blocks agents raised that are waiting on a person.";
   headline.append(verdictRow, detail);
 
+  const counts = h("div", "console-dashboard-hero__counts");
   const metrics = h("div", "console-dashboard-hero__metrics");
   // The failing metric is an <a> so it can deep-link to the failing run's log in live mode;
   // it degrades to a plain block (via a swapped node) when there is nothing to link to.
@@ -349,63 +284,66 @@ export function attentionTile(): Tile {
 
   // Running is a link to the live log, the same destination the live-activity tile offers. One link
   // to the stream, NOT a chip per running target: the activity tile already lists those with their
-  // own deep links, and a second renderer of the same list is exactly the duplication the failing
-  // list avoids by being the only place failures are named.
+  // own deep links.
   const runWrap = h("div", "console-dashboard-hero__metric console-dashboard-hero__run");
   const runLink = h("a", "console-dashboard-hero__metriclink");
   const runN = h("span", "console-dashboard-hero__n", "0");
-  runLink.append(runN, h("span", "console-dashboard-hero__l", "running"));
+  const runHint = h("span", "pf-v6-screen-reader", " (opens the live log viewer)");
+  runHint.hidden = true;
+  runLink.append(runN, h("span", "console-dashboard-hero__l", "running"), runHint);
   runWrap.append(runLink);
 
-  // Queued gets NO link, deliberately. There is nowhere to go: a queued target has not started, so
-  // it has no output to open and no run to join. A link that resolved to the log viewer's empty
-  // state would be worse than none - it teaches that the counts are not reliably clickable.
-  //
-  // What it gets instead is the answer to the question the number actually raises, which is not
-  // "where" but "why is anything waiting". That is derivable from the frame already in hand: the
-  // pool being full, or a lock being held, are the two reasons, and the tile can say which.
+  // Queued gets NO link: a queued target has not started, so it has no output to open and no run to
+  // join. What it gets instead is the answer to the question the number raises, which is not
+  // "where" but "why is anything waiting", read as text under the counts.
   const queueWrap = h("div", "console-dashboard-hero__metric console-dashboard-hero__queue");
   const queueN = h("span", "console-dashboard-hero__n", "0");
   queueWrap.append(queueN, h("span", "console-dashboard-hero__l", "queued"));
 
   metrics.append(failWrap, runWrap, queueWrap);
+  const reason = h("p", "console-dashboard-hero__reason");
+  reason.hidden = true;
+  counts.append(metrics, reason);
 
-  // The failing-target list: WHAT is broken, one clickable row each, straight under the verdict.
-  //
-  // This is the difference between a display that reports and one that can be acted on. The hero
-  // already had every fact it needed - the run frame carries each failing target's label and its
-  // output ref - and was spending them on a single count. Naming them costs a few lines of DOM and
-  // removes two navigation hops (timeline to find which, log viewer to find why).
-  //
-  // Capped, with a residual count, for the same reason every other list on this board is: a broken
-  // dependency can fail thirty targets at once, and thirty rows would push the verdict itself off a
-  // Big Picture panel. The cap is generous enough that the common case (a handful) shows in full.
   // The attention queue itself: one row per open request, straight under the verdict it is the
   // subject of. Above the failing-target list because it outranks it - a failing target is work
   // magus can tell you about, a request is work waiting on YOU.
   const queueList = h("ul", "console-dashboard-attention__list");
   queueList.hidden = true;
-  // A polite live region: a request appearing is the one thing on this board a reader needs to
-  // learn about without watching it. Polite rather than assertive because a queue row is a
-  // request, not an alarm - agents request, people dispose, and nothing here interrupts.
-  queueList.setAttribute("aria-live", "polite");
+  // Announced by its own region, which changes only when the COUNT changes: the list is rebuilt from
+  // every read, and a live region wrapped around it would re-read every row on every poll.
+  const announce = h("p", "pf-v6-screen-reader");
+  announce.setAttribute("role", "status");
   const queueNote = h("p", "console-dashboard-attention__note");
   queueNote.hidden = true;
-  headline.append(queueList, queueNote);
+  headline.append(announce, queueList, queueNote);
 
   const FAIL_LIST_MAX = 6;
   const failList = h("ul", "console-dashboard-hero__faillist");
+  failList.setAttribute("aria-label", "Failing targets");
+  failList.dataset.controlSize = "compact";
   failList.hidden = true;
-  // Inside the HEADLINE, not a third sibling of it. The hero is a wrapping flex row, so as a
-  // sibling the list became a flex item competing with the counts for the row - it sat to their
-  // right, stretched to the hero's full height, as a tall mostly-empty box. Nested in the headline
-  // block it simply flows under the verdict and its detail line, which is also where it belongs:
-  // it is the detail line's answer ("1 target is failing" -> "apps/admin:e2e"), not a fourth metric.
+  // Inside the HEADLINE, not a third sibling of it: it is the detail line's answer ("1 target is
+  // failing" -> "apps/admin:e2e"), not a fourth metric.
   headline.append(failList);
-  root.append(headline, metrics);
+  root.append(headline, counts);
+
+  let failing = 0;
+  let verdictState: Verdict["state"] | null = null;
+  let paintedMark = "";
+
+  // paintMark redraws the headline's mark when its status changes. It depends on both the queue
+  // (renderQueue) and the failing count (render), which arrive on different clocks.
+  function paintMark(): void {
+    if (!verdictState) return;
+    const status = verdictStatus(verdictState, failing);
+    if (status === paintedMark) return;
+    paintedMark = status;
+    verdictMark.replaceChildren(statusIcon(status));
+  }
 
   function render(status: StatusView, liveHost: string | null, demo: boolean): void {
-    const failing = countFailing(status);
+    failing = countFailing(status);
     const running = status.pool.running;
     const queued = status.pool.queued;
 
@@ -416,20 +354,17 @@ export function attentionTile(): Tile {
     failWrap.dataset.n = failing > 0 ? "some" : "none";
     runWrap.dataset.n = running > 0 ? "some" : "none";
     queueWrap.dataset.n = queued > 0 ? "some" : "none";
+    root.dataset.failing = failing > 0 ? "some" : "none";
+    paintMark();
 
+    // Whose the counts are, and why work is waiting, said as text under them. The verdict's sub-line
+    // already says whose these counts are; people read the three numbers first and the sentence
+    // under them second, and it is the numbers that look like they contradict a scoped tile.
     const scoped = workspaceScope() !== ALL_WORKSPACES;
-    // The verdict's sub-line already says whose these counts are; say it on the figures too. People
-    // read the three numbers first and the sentence under them second, and it is the numbers that
-    // look like they contradict a scoped tile reporting nothing running.
-    if (scoped) {
-      metrics.title =
-        "Pool counts are server-wide: one pool serves every workspace on this server.";
-    } else {
-      metrics.removeAttribute("title");
-    }
-    // No verdict is set here. The headline belongs to the queue (renderQueue), and a status
-    // frame arriving about once a second must not overwrite it - that is precisely how the two
-    // came to disagree, with whichever repainted last winning the line.
+    const lines = [queuedReason(status, queued)];
+    if (scoped) lines.push("Pool counts are server-wide: one pool serves every workspace.");
+    reason.textContent = lines.filter(Boolean).join(" ");
+    reason.hidden = reason.textContent === "";
 
     // Wire the failing count into the failing run's log when we are live and have an inv.
     const inv = failing > 0 ? firstFailedInv(status) : "";
@@ -447,24 +382,20 @@ export function attentionTile(): Tile {
     if (running > 0 && runHref) {
       runLink.setAttribute("href", runHref);
       runWrap.dataset.linked = "true";
-      runLink.title = "Open the live log viewer";
+      runHint.hidden = false;
     } else {
       runLink.removeAttribute("href");
       delete runWrap.dataset.linked;
-      runLink.removeAttribute("title");
+      runHint.hidden = true;
     }
-
-    // Queued explains ITSELF rather than linking: naming a saturated pool turns a number that reads
-    // as unexplained backlog into a fact with a cause.
-    queueWrap.title = queuedReason(status, queued);
 
     renderFailList(status, liveHost, demo);
   }
 
   // queuedReason says WHY work is waiting, from the same status frame. Capacity 0 means an
-  // unlimited pool, where saturation is not a possible explanation.
+  // unlimited pool, where saturation is not a possible explanation. Empty when nothing waits.
   function queuedReason(status: StatusView, queued: number): string {
-    if (queued === 0) return "Nothing is waiting to start.";
+    if (queued === 0) return "";
     const saturated = status.pool.capacity > 0 && status.pool.running >= status.pool.capacity;
     if (saturated) {
       return (
@@ -477,29 +408,20 @@ export function attentionTile(): Tile {
     return queued + " waiting to start.";
   }
 
+  // The chips are rebuilt only when the set of failures changes. A frame arrives about once a second,
+  // and rebuilding on each would close a menu the reader had just opened.
+  let chips: MenuButton[] = [];
+  let failSignature = "";
+
   // renderFailList names each failing target and links it to its own captured output.
   //
   // A target that failed WITHOUT an output ref still gets a row - it falls back to opening its run.
-  // Dropping it would be the worst option available: the count would say three and the list would
-  // show two, and the reader would have no way to tell which one they were not being shown.
+  // Dropping it would make the count say three and the list show two, with no way to tell which one
+  // the reader was not being shown.
   function renderFailList(status: StatusView, liveHost: string | null, demo: boolean): void {
     const failures = failingTargets(status);
-    failList.hidden = failures.length === 0;
-    if (failures.length === 0) {
-      failList.replaceChildren();
-      return;
-    }
-    const shown = failures.slice(0, FAIL_LIST_MAX);
-    const rows: HTMLElement[] = shown.map((f) => {
-      const li = h("li", "console-dashboard-hero__failrow");
-      // An anchor only when there is somewhere to go: offline there is no host to resolve a ref
-      // against, and a link that goes nowhere is worse than plain text.
-      //
-      // The demo gets the SHARED demo log viewer instead of nothing, the same fallback the
-      // live-activity tile uses. Without it the one mode anybody browses the feature in is the one
-      // mode where it renders as inert text - the showcase would demonstrate the count and hide the
-      // thing the count is for.
-      const href = liveHost
+    const hrefFor = (f: FailedTarget): string =>
+      liveHost
         ? f.outputRef
           ? logsLink(liveHost, { ref: f.outputRef })
           : f.inv
@@ -508,16 +430,32 @@ export function attentionTile(): Tile {
         : demo
           ? "../logs/#demo"
           : "";
-      li.append(failChip(f, href));
+    const signature = failures.map((f) => f.label + "|" + hrefFor(f)).join("\n");
+    if (signature === failSignature) return;
+    failSignature = signature;
+    for (const chip of chips) chip.dispose();
+    chips = [];
+    failList.hidden = failures.length === 0;
+    if (failures.length === 0) {
+      failList.replaceChildren();
+      return;
+    }
+    const shown = failures.slice(0, FAIL_LIST_MAX);
+    const rows: HTMLElement[] = shown.map((f) => {
+      const li = h("li", "console-dashboard-hero__failrow");
+      const chip = failChip(f, hrefFor(f));
+      chips.push(chip);
+      li.append(chip.el);
       return li;
     });
     if (failures.length > shown.length) {
-      const more = h(
-        "li",
-        "console-dashboard-hero__failmore",
-        "+" + (failures.length - shown.length) + " more",
+      rows.push(
+        h(
+          "li",
+          "console-dashboard-hero__failmore",
+          "+" + (failures.length - shown.length) + " more",
+        ),
       );
-      rows.push(more);
     }
     failList.replaceChildren(...rows);
   }
@@ -533,6 +471,7 @@ export function attentionTile(): Tile {
   // and a teardown flag wearing it would read as one at every call site.
   let torndown = false;
   let visible = true;
+  let announced = -1;
 
   // requestRow draws one open request: what to close, how long it has waited, what kind of block
   // it is, the paths the event named, and the first line of what the agent said.
@@ -543,7 +482,7 @@ export function attentionTile(): Tile {
   //
   // A permission's close control stays off the row until it is opened. The paths are the
   // subject and the agent's message is the caption; opening shows the full text before
-  // offering Dispose. Waiting is a bookmark the person just answered in the host,
+  // offering to close it. Waiting is a bookmark the person just answered in the host,
   // so its control is there from the start.
   function requestRow(req: AttentionRequest, nowMs: number, opened = false): HTMLElement {
     const li = h("li", "console-dashboard-attention__row");
@@ -552,12 +491,9 @@ export function attentionTile(): Tile {
     if (opened) li.dataset.open = "true";
 
     const head = h("div", "console-dashboard-attention__head");
-    const id = h("code", "console-dashboard-attention__id", req.id);
-    id.title = "magus session dispose " + req.id;
-    head.append(id);
+    head.append(h("code", "console-dashboard-attention__id", req.id));
 
-    const age = ageLabel(req.opened_ms, nowMs);
-    if (age) head.append(h("span", "console-dashboard-attention__age", age));
+    head.append(h("span", "console-dashboard-attention__age", ageLabel(req.opened_ms, nowMs)));
     if (req.outcome) {
       const outcome = h("span", "pf-v6-c-label pf-m-compact console-dashboard-attention__outcome");
       outcome.append(h("span", "pf-v6-c-label__content", req.outcome));
@@ -566,44 +502,66 @@ export function attentionTile(): Tile {
     // Which slice of a fleet's work is blocked. Absent for anything a person started by hand,
     // which is the ordinary case and not worth a placeholder.
     if (req.lease) {
-      head.append(h("span", "console-dashboard-attention__lease", req.lease));
+      head.append(h("code", "console-dashboard-attention__lease", req.lease));
     }
     if (disposeStartsHidden(req.outcome) && !opened) {
       head.append(openControl(li, req));
     } else {
       head.append(disposeControl(req));
     }
-
     li.append(head);
 
     const subject = subjectLine(req.files);
-    if (subject) {
-      const line = h("p", "console-dashboard-attention__subject", subject);
-      line.title = subject;
-      li.append(line);
-    }
+    if (subject) li.append(h("p", "console-dashboard-attention__subject", subject));
 
-    const message = h(
-      "p",
-      "console-dashboard-attention__message",
-      opened ? req.message : firstLine(req.message),
-    );
-    // The full text, unflattened, for the reader who needs more than the summary line. The row
-    // stays one line tall either way; `magus session attention -o json` is the unabridged copy.
-    if (req.message) message.title = req.message;
+    const summary = firstLine(req.message);
+    const message = h("p", "console-dashboard-attention__message", opened ? req.message : summary);
     li.append(message);
+    // The full text for a message the row had to shorten, as a control the reader can reach rather
+    // than a tooltip: the summary line says what it is and this opens the rest.
+    if (req.message && req.message !== summary && !disposeStartsHidden(req.outcome)) {
+      li.append(moreControl(li, message, req.message, summary));
+    }
+    li.append(h("code", "console-dashboard-attention__command", "magus session dispose " + req.id));
     return li;
   }
 
+  function moreControl(
+    li: HTMLElement,
+    message: HTMLElement,
+    full: string,
+    summary: string,
+  ): HTMLElement {
+    const btn = h(
+      "button",
+      "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__more",
+    );
+    btn.type = "button";
+    const label = h("span", "pf-v6-c-button__text", "Show full message");
+    btn.append(label);
+    btn.setAttribute("aria-expanded", "false");
+    btn.addEventListener("click", () => {
+      const open = li.dataset.open !== "true";
+      if (open) li.dataset.open = "true";
+      else delete li.dataset.open;
+      message.textContent = open ? full : summary;
+      label.textContent = open ? "Show less" : "Show full message";
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    return btn;
+  }
+
   // openControl is the look a permission asks for before it can be closed. Opening
-  // expands the subject and message and replaces this button with the dispose composer.
+  // expands the subject and message and replaces this button with the close composer.
   function openControl(li: HTMLElement, req: AttentionRequest): HTMLElement {
     const wrap = h("span", "console-dashboard-attention__dispose");
-    const btn = document.createElement("button");
+    const btn = h(
+      "button",
+      "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__openbtn",
+    );
     btn.type = "button";
-    btn.className = "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__openbtn";
-    btn.append(h("span", "pf-v6-c-button__text", "Open"));
-    btn.title = "Show what this permission names. Closing it waits until then.";
+    btn.append(h("span", "pf-v6-c-button__text", "Review request"));
+    btn.setAttribute("aria-label", "Review request " + req.id + " before closing it");
     btn.addEventListener("click", () => {
       li.dataset.open = "true";
       const message = li.querySelector(".console-dashboard-attention__message");
@@ -623,22 +581,27 @@ export function attentionTile(): Tile {
   // the message the reason is about while it is being typed. The composer sits in the row.
   //
   // Closing a request is the one write this tile makes, and it happens only here - one click,
-  // one reason, one id. There is deliberately no "dispose all": a queue cleared without being
+  // one reason, one id. There is deliberately no "close all": a queue cleared without being
   // read is the failure mode the queue exists to prevent.
   function disposeControl(req: AttentionRequest): HTMLElement {
     const wrap = h("span", "console-dashboard-attention__dispose");
-    const btn = document.createElement("button");
+    const btn = h(
+      "button",
+      "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__disposebtn",
+    );
     btn.type = "button";
-    btn.className = "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__disposebtn";
-    btn.append(h("span", "pf-v6-c-button__text", "Dispose"));
-    btn.title = "Close this request. Say why, so the store records who answered it and what for.";
+    btn.append(h("span", "pf-v6-c-button__text", "Close request"));
+    btn.setAttribute("aria-label", "Close request " + req.id);
     btn.setAttribute("aria-expanded", "false");
     wrap.append(btn);
 
+    // Cancelling hands focus back to the control that opened the composer; the composer removing
+    // itself would otherwise drop it on the page.
     const close = (): void => {
       wrap.querySelector(".console-dashboard-attention__composer")?.remove();
       btn.hidden = false;
       btn.setAttribute("aria-expanded", "false");
+      btn.focus();
     };
 
     btn.addEventListener("click", () => {
@@ -646,10 +609,21 @@ export function attentionTile(): Tile {
       const inputWrap = h("span", "pf-v6-c-form-control");
       const input = h("input", "pf-v6-c-form-control__text");
       input.type = "text";
+      input.id = "console-attention-reason-" + req.id;
       input.setAttribute("aria-label", "Why request " + req.id + " is being closed");
-      // A reason is offered, never demanded. Somebody closing a block they just answered in
-      // person has nothing to narrate, and a required field would be filled with "done".
-      input.placeholder = "Why (optional). Enter to dispose, Esc to cancel.";
+      const helper = h("span", "pf-v6-c-helper-text");
+      const helperItem = h("span", "pf-v6-c-helper-text__item");
+      helperItem.append(
+        h(
+          "span",
+          "pf-v6-c-helper-text__item-text",
+          "Reason is optional. Enter closes the request, Escape cancels.",
+        ),
+      );
+      helper.append(helperItem);
+      helper.id = input.id + "-help";
+      input.setAttribute("aria-describedby", helper.id);
+      input.placeholder = "Reason";
       input.addEventListener("keydown", (e) => {
         e.stopPropagation(); // the board's single-letter keys must not fire mid-sentence
         if (e.key === "Escape") {
@@ -664,7 +638,7 @@ export function attentionTile(): Tile {
         void send(req, reason);
       });
       inputWrap.append(input);
-      box.append(inputWrap);
+      box.append(inputWrap, helper);
       btn.hidden = true;
       btn.setAttribute("aria-expanded", "true");
       wrap.append(box);
@@ -673,18 +647,18 @@ export function attentionTile(): Tile {
     return wrap;
   }
 
-  // send posts the disposal and says what came back. A REFUSAL (unknown id, ambiguous prefix,
+  // send posts the closure and says what came back. A REFUSAL (unknown id, ambiguous prefix,
   // already closed by somebody else) is reported in the server's own words rather than as a
   // failure: each one is the server working, and each names what the person does next.
   async function send(req: AttentionRequest, reason: string): Promise<void> {
     if (!host) {
-      showToast("Attention", "Not connected to a server, so nothing can be disposed.", "error");
+      showToast("Attention", "Not connected to a server, so nothing can be closed.", "error");
       return;
     }
     const res = await disposeAttention(host, req.id, reason);
     if (torndown) return;
     if (res.kind === "ok") {
-      showToast("Attention", "Disposed " + req.id + ".", "ok");
+      showToast("Attention", "Closed request " + req.id + ".", "ok");
       // Re-read rather than dropping the row locally: another worktree may have closed
       // something else in the meantime, and the store is what every app agrees on.
       lastRead = 0;
@@ -696,22 +670,29 @@ export function attentionTile(): Tile {
     refresh();
   }
 
+  // The rows' own content, minus the age that moves on its own: the list is rebuilt when this
+  // changes and the age is written in place, so a poll that returns the same queue leaves the
+  // reader's focus and an open composer alone.
+  let rowsSignature = "";
+
   // renderQueue paints the headline and the rows from one read. Every non-ok read gets its own
   // words - see attentionVerdict - so an unknown queue never renders as a calm one.
   function renderQueue(read: AttentionRead): void {
-    const openedIDs = new Set(
-      Array.from(
-        queueList.querySelectorAll<HTMLElement>(".console-dashboard-attention__row[data-open]"),
-      )
-        .map((row) => row.dataset.requestId)
-        .filter((id): id is string => id !== undefined),
-    );
     const v = attentionVerdict(read);
     root.dataset.state = v.state;
-    verdict.textContent = v.line;
-    setProse(detail, v.sub);
+    verdictState = v.state;
+    verdictText.textContent = v.line;
+    prose(detail, v.sub);
+    paintMark();
+
+    const count = read.kind === "ok" ? read.requests.length : -1;
+    if (count !== announced) {
+      announced = count;
+      announce.textContent = count >= 0 ? v.line : "";
+    }
 
     if (read.kind !== "ok" || read.requests.length === 0) {
+      rowsSignature = "";
       queueList.hidden = true;
       queueList.replaceChildren();
       // The store path on the empty state, so a reader who expected a request knows which queue
@@ -725,22 +706,44 @@ export function attentionTile(): Tile {
 
     const now = Date.now();
     const shown = read.requests.slice(0, QUEUE_LIST_MAX);
-    const rows = shown.map((req) => requestRow(req, now, openedIDs.has(req.id)));
-    if (read.requests.length > shown.length) {
-      rows.push(
-        h(
-          "li",
-          "console-dashboard-attention__more",
-          "+" +
-            (read.requests.length - shown.length) +
-            " more; `magus session attention` lists the whole queue",
-        ),
-      );
-    }
-    queueList.replaceChildren(...rows);
-    queueList.hidden = false;
+    const signature =
+      shown.map((r) => [r.id, r.outcome, r.lease, r.message, r.files.length].join("|")).join("\n") +
+      "#" +
+      read.requests.length;
     queueNote.hidden = true;
     queueNote.textContent = "";
+    queueList.hidden = false;
+    if (signature === rowsSignature) {
+      const byId = new Map(shown.map((r) => [r.id, r]));
+      for (const row of queueList.querySelectorAll<HTMLElement>(
+        ".console-dashboard-attention__row",
+      )) {
+        const req = byId.get(row.dataset.requestId ?? "");
+        const age = row.querySelector(".console-dashboard-attention__age");
+        if (req && age) age.textContent = ageLabel(req.opened_ms, now);
+      }
+      return;
+    }
+    rowsSignature = signature;
+    const openedIDs = new Set(
+      Array.from(
+        queueList.querySelectorAll<HTMLElement>(".console-dashboard-attention__row[data-open]"),
+      )
+        .map((row) => row.dataset.requestId)
+        .filter((id): id is string => id !== undefined),
+    );
+    const rows = shown.map((req) => requestRow(req, now, openedIDs.has(req.id)));
+    if (read.requests.length > shown.length) {
+      const rest = h("li", "console-dashboard-attention__rest");
+      prose(
+        rest,
+        "+" +
+          (read.requests.length - shown.length) +
+          " more; `magus session attention` lists the whole queue",
+      );
+      rows.push(rest);
+    }
+    queueList.replaceChildren(...rows);
   }
 
   const refresh = (): void => {
@@ -749,14 +752,25 @@ export function attentionTile(): Tile {
     lastRead = Date.now();
     const current = ++request;
     controller = new AbortController();
+    let timedOut = false;
     const timeout = window.setTimeout(() => {
-      if (current === request) controller?.abort();
+      if (current !== request) return;
+      timedOut = true;
+      controller?.abort();
     }, REQUEST_TIMEOUT_MS);
     void loadAttention(host, controller.signal)
       .then((read) => {
-        // A composer the reader is typing into must survive a poll. Open permissions
-        // are carried into the new rows by id, so a disposed row can still disappear.
+        // A composer the reader is typing into must survive a poll.
         if (torndown || current !== request) return;
+        // An abort is silent in the transport, since a superseded read is not a failure; this one
+        // is the deadline, so it is reported here.
+        if (timedOut) {
+          reportFailure(
+            "Attention",
+            "The attention queue did not answer within " + REQUEST_TIMEOUT_MS / 1000 + "s.",
+            "attention:timeout",
+          );
+        }
         if (queueList.querySelector(".console-dashboard-attention__composer")) return;
         renderQueue(read);
       })
@@ -783,7 +797,7 @@ export function attentionTile(): Tile {
 
       if (s.conn.state === "demo") {
         // The demo shows the queue's SHAPE without inventing a block. A fabricated request
-        // would put a Dispose button on the showcase that closes nothing, and a reader who
+        // would put a close control on the showcase that closes nothing, and a reader who
         // presses it learns the wrong thing about the one control on this board that writes.
         host = "";
         request++;
@@ -826,29 +840,8 @@ export function attentionTile(): Tile {
       controller?.abort();
       window.clearInterval(interval);
       offScope();
+      for (const chip of chips) chip.dispose();
+      chips = [];
     },
   };
-}
-
-// setProse writes a sentence that may name a command in `backticks` as real nodes: the spans
-// between the ticks are text, the spans inside them are <code>. textContent printed the ticks
-// themselves, so a mark meant to say "this is a command you type" read as stray punctuation.
-//
-// Deliberately not markdown - this handles ONE inline construct, because that is the only one the
-// dashboard's own copy uses. A parser here would be a second markdown implementation living beside
-// the real one in notes/markdown.ts.
-function setProse(el: HTMLElement, text: string): void {
-  el.replaceChildren();
-  // Odd indices are the spans that sat between a pair of ticks.
-  text.split("`").forEach((part, i) => {
-    if (part === "") return;
-    if (i % 2 === 0) {
-      el.append(document.createTextNode(part));
-      return;
-    }
-    const code = document.createElement("code");
-    code.className = "console-dashboard-code";
-    code.textContent = part;
-    el.append(code);
-  });
 }

@@ -182,7 +182,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
   // pool: several targets start together, the short ones finish underneath the long poles, and the
   // queue drains behind them. The old scheduler ran exactly one target at a time, which meant the
   // pool grid showed one lit cube out of eight, the timeline showed one bar, and the whole
-  // concurrency story the dashboard exists to tell was invisible in the showcase.
+  // concurrency the dashboard exists to show was invisible in the showcase.
   const RUN_WIDTH = 4; // targets fanned out per invocation
   function startRun(now: number): RunView {
     const run: RunView = {
@@ -314,7 +314,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
     // The recent calls are the SAME session the activity trail records (demo-scenario.ts): the primary
     // harness ran services/identity:test and is still working, so the tools it calls here are the tools
     // that appear there - client, running and querying through its magus\ members - and the guard
-    // verdicts around them are the ones that story implies. The deny is a raw `go test` the guard turned back because the run belongs
+    // verdicts around them are the ones that scenario implies. The deny is a raw `go test` the guard turned back because the run belongs
     // to magus; the advise is the edit to libs/authkit that started all of this. Those two rows are what
     // the tile exists to make findable, so the showcase must contain both.
     const recent: AgentCallView[] = [

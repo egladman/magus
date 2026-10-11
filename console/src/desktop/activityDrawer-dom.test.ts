@@ -38,10 +38,50 @@ test("mounts hidden, and toggles open and shut", () => {
   assert.equal(panel().hidden, true, "a drawer nobody asked for must not be on screen");
   drawer.toggle();
   assert.equal(panel().hidden, false);
-  assert.equal(panel().getAttribute("aria-hidden"), "false");
   drawer.toggle();
   assert.equal(panel().hidden, true);
-  assert.equal(panel().getAttribute("aria-hidden"), "true");
+  // `hidden` is the whole of it: a second attribute saying the same thing is one more place to go stale.
+  assert.equal(panel().getAttribute("aria-hidden"), null);
+  drawer.destroy();
+});
+
+test("reports every open and close, so the toggles can say which they are", () => {
+  const seen: boolean[] = [];
+  const drawer = mountActivityDrawer({ onChange: (open) => seen.push(open) });
+  drawer.open();
+  assert.equal(drawer.isOpen(), true);
+  drawer.close();
+  drawer.toggle();
+  assert.deepEqual(seen, [true, false, true]);
+  drawer.destroy();
+});
+
+// A readout watched while working somewhere else: a click into the app behind it is the work, not a
+// request to dismiss. Only Escape, the close button and the drawer's own toggle close it.
+test("a click outside does not close it, but Escape and the close button do", () => {
+  const elsewhere = document.createElement("button");
+  document.body.append(elsewhere);
+  const drawer = mountActivityDrawer();
+  drawer.open();
+  elsewhere.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  elsewhere.click();
+  assert.equal(panel().hidden, false, "working in the page behind it must not dismiss the panel");
+  panel().querySelector<HTMLButtonElement>(".console-shell-panel__close")?.click();
+  assert.equal(panel().hidden, true);
+  drawer.open();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  assert.equal(panel().hidden, true);
+  drawer.destroy();
+});
+
+test("its title is an h2 the panel is labelled by, and its close is an svg", () => {
+  const drawer = mountActivityDrawer();
+  const title = panel().querySelector("h2");
+  assert.equal(title?.textContent, "Activity");
+  assert.equal(panel().getAttribute("aria-labelledby"), title?.id);
+  const close = panel().querySelector(".console-shell-panel__close");
+  assert.ok(close?.querySelector("svg"), "a drawn glyph, not a multiplication sign in text");
+  assert.equal(close?.textContent, "");
   drawer.destroy();
 });
 
@@ -68,16 +108,15 @@ test("opening does not move focus", () => {
 test("is a region, not a dialog - it promises no focus management", () => {
   const drawer = mountActivityDrawer();
   assert.equal(panel().getAttribute("role"), "region");
-  assert.equal(panel().getAttribute("aria-label"), "Activity");
   drawer.destroy();
 });
 
-test("the summary is the polite live region; the lists are not", () => {
+test("the summary is the polite status region; the lists are not", () => {
   const drawer = mountActivityDrawer();
   drawer.open();
   const summary = panel().querySelector(".console-shell-activity__summary");
   assert.ok(summary, "there is a summary line");
-  assert.equal(summary?.getAttribute("aria-live"), "polite");
+  assert.equal(summary?.getAttribute("role"), "status");
   const lists = [...panel().querySelectorAll(".console-shell-activity__list")];
   assert.equal(lists.length, 2, "two sections: running, and recent");
   for (const l of lists) {
@@ -110,6 +149,43 @@ test("with no server configured, both sections say so instead of reading as empt
   // "Not connected" and "nothing is running" are different facts, and the second one is a lie here.
   assert.deepEqual(empties, ["Not connected to a server.", "Not connected to a server."]);
   drawer.destroy();
+});
+
+// Demo has no server, and "not connected" in the console's one demo mode is wrong twice: the status
+// bar says demo, and the drawer was the only place that said otherwise.
+test("in the demo it lists the demo's own runs and says they are demo data", () => {
+  location.hash = "#demo";
+  const drawer = mountActivityDrawer();
+  drawer.open();
+  const summary = panel().querySelector(".console-shell-activity__summary")?.textContent ?? "";
+  assert.match(summary, /demo data/);
+  const links = [
+    ...panel().querySelectorAll<HTMLAnchorElement>("a.console-shell-activity__row-link"),
+  ];
+  assert.ok(links.length > 0, "the demo scenario has finished runs to list");
+  assert.match(links[0].getAttribute("href") ?? "", /^logs\/#demo&ref=/);
+  assert.equal(panel().textContent?.includes("Not connected"), false);
+  drawer.destroy();
+  location.hash = "";
+});
+
+test("a finished run links to the log viewer and carries one dated <time>", () => {
+  location.hash = "#demo";
+  const drawer = mountActivityDrawer();
+  drawer.open();
+  const row = panel().querySelector(".console-shell-activity__list > li");
+  assert.ok(row?.querySelector("a[href]"), "the title opens the run");
+  const time = row?.querySelector("time");
+  assert.ok(time?.getAttribute("datetime"), "a machine-readable instant");
+  assert.ok(time?.title, "the full timestamp rides in the title");
+  assert.ok(
+    row?.querySelector("[data-status]"),
+    "the outcome has a shape and a word, not a colour",
+  );
+  const count = panel().querySelector(".pf-v6-c-badge.pf-m-read");
+  assert.ok(count, "counts are PF read badges");
+  drawer.destroy();
+  location.hash = "";
 });
 
 // ---- teardown --------------------------------------------------------------

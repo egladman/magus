@@ -31,6 +31,7 @@ import {
 import { reportFailure } from "../lib/notifications";
 import { showToast } from "../lib/refresh-toast";
 import { encodeToCanvas } from "../lib/qr";
+import { buildPanel, panelBehavior } from "./panel";
 
 // The lifetimes the operator picks before minting, in seconds (sent as ttl_seconds). The server
 // refuses anything outside [1 minute, 24 hours] (auth.MinShareTTL, auth.MaxShareTTL) rather than
@@ -55,65 +56,39 @@ export interface SharePanel {
   open(): void;
   close(): void;
   toggle(): void;
+  isOpen(): boolean;
+}
+
+export interface ShareOptions {
+  // Runs after every open or close, so the status bar's toggles can say which they are.
+  onChange?: (open: boolean) => void;
 }
 
 // mountSharePanel builds the singleton share panel (hidden) once and returns its
 // controller. The shell wires the status-bar share button (rebuilt per app) to
 // toggle() through one delegated click, mirroring how the Panes tray drives its popup.
-export function mountSharePanel(): SharePanel {
-  const panel = document.createElement("section");
-  panel.className = "console-shell-share";
-  panel.id = "console-sharepanel";
-  panel.setAttribute("role", "dialog");
-  panel.setAttribute("aria-label", "Share a read-only view");
-  panel.hidden = true;
+export function mountSharePanel(options: ShareOptions = {}): SharePanel {
+  const shell = buildPanel({
+    id: "console-sharepanel",
+    title: "Share a read-only view",
+    role: "dialog",
+  });
+  const body = shell.body;
+  document.body.append(shell.el);
 
-  const head = document.createElement("div");
-  head.className = "console-shell-share__head";
-  const title = document.createElement("span");
-  title.className = "console-shell-share__title";
-  title.textContent = "Share a read-only view";
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "pf-v6-c-button pf-m-plain console-shell-share__close";
-  closeBtn.setAttribute("aria-label", "Close share panel");
-  closeBtn.textContent = "×"; // multiplication sign, the console's close glyph
-  head.append(title, closeBtn);
-
-  const body = document.createElement("div");
-  body.className = "console-shell-share__body";
-  panel.append(head, body);
-  document.body.append(panel);
-
-  let open = false;
   let selectedSeconds = DURATIONS[0].seconds;
 
-  const setOpen = (v: boolean): void => {
-    if (v === open) return;
-    open = v;
-    panel.hidden = !v;
-    panel.setAttribute("aria-hidden", v ? "false" : "true");
-    if (v) {
-      renderPicker(); // always start on the picker, even after a prior mint
-      requestAnimationFrame(() => body.querySelector("button")?.focus());
-    }
-  };
-
-  closeBtn.addEventListener("click", () => setOpen(false));
-
-  // Dismiss on an outside pointerdown or Escape. A click on any status-bar share
-  // button ([data-share-toggle]) is that button's own toggle, so ignore it here to
-  // avoid closing then immediately reopening (or vice versa).
-  document.addEventListener("pointerdown", (e) => {
-    if (!open) return;
-    const t = e.target;
-    if (!(t instanceof Node)) return;
-    if (panel.contains(t)) return;
-    if (t instanceof Element && t.closest("[data-share-toggle]")) return;
-    setOpen(false);
-  });
-  document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && open) setOpen(false);
+  // Dismissed by Escape, the close button, or an outside click. Sharing is a task with a half-made
+  // choice in it, so focus moves in on open and back to the share button on close. The picker is
+  // redrawn first on every open, even after a prior mint.
+  const behavior = panelBehavior(shell, {
+    toggles: "[data-share-toggle]",
+    closeOnOutside: true,
+    focusOnOpen: () => {
+      renderPicker();
+      return body.querySelector<HTMLElement>("button");
+    },
+    onChange: options.onChange,
   });
 
   // renderPicker draws phase 1: the duration toggle-group + Generate + a disclosure.
@@ -170,7 +145,7 @@ export function mountSharePanel(): SharePanel {
 
   // renderResult draws phase 2: the QR, the click-to-copy URL, the expiry, and a way
   // back to the picker.
-  function renderResult(url: string, expiresAt: string, superseded: boolean): void {
+  function renderResult(url: string, expiresAt: string, superseded: boolean): HTMLButtonElement {
     body.replaceChildren();
 
     if (superseded) {
@@ -184,6 +159,7 @@ export function mountSharePanel(): SharePanel {
     const qrFrame = document.createElement("div");
     qrFrame.className = "console-shell-share__qr";
     const canvas = document.createElement("canvas");
+    canvas.setAttribute("role", "img");
     canvas.setAttribute("aria-label", "QR code for the share link");
     try {
       encodeToCanvas(canvas, url, 240);
@@ -191,7 +167,8 @@ export function mountSharePanel(): SharePanel {
       // reported: the QR frame shows its failed state, and the link below still works.
       // A payload too large for the encoder should never happen for a LAN URL, but
       // never let a QR failure hide the URL itself - the copy line below still works.
-      qrFrame.classList.add("console-shell-share__qr--failed");
+      qrFrame.dataset.failed = "";
+      showToast("Share", "Could not draw the QR code. The link below still works.", "warn");
     }
     qrFrame.append(canvas);
     body.append(qrFrame);
@@ -239,12 +216,25 @@ export function mountSharePanel(): SharePanel {
     again.addEventListener("click", renderPicker);
     actions.append(copyBtn, again);
     body.append(actions);
+    return copyBtn;
   }
 
-  // generate mints the share for the selected lifetime and swaps the body to the
-  // result, or toasts why it could not. The Generate button is disabled while the
-  // request is in flight so a double click cannot mint twice.
+  // generate marks the panel busy for the length of the mint, so a screen reader hears that something
+  // is happening and that it ended; mint does the work.
   async function generate(trigger: HTMLButtonElement): Promise<void> {
+    body.setAttribute("aria-busy", "true");
+    try {
+      await mint(trigger);
+    } finally {
+      body.removeAttribute("aria-busy");
+    }
+  }
+
+  // mint mints the share for the selected lifetime and swaps the body to the
+  // result, or toasts why it could not. The Generate button is disabled while the
+  // request is in flight so a double click cannot mint twice. The button that was pressed leaves
+  // the page with the picker, so focus moves to the result's Copy link button, the next thing to do.
+  async function mint(trigger: HTMLButtonElement): Promise<void> {
     const host = resolveServerHost();
     if (!host) {
       showToast(
@@ -313,14 +303,15 @@ export function mountSharePanel(): SharePanel {
       showToast("Share", "The server returned an empty share URL.", "error");
       return;
     }
-    renderResult(data.url, data.expires_at ?? "", data.superseded === true);
+    renderResult(data.url, data.expires_at ?? "", data.superseded === true).focus();
   }
 
   renderPicker();
   return {
-    open: () => setOpen(true),
-    close: () => setOpen(false),
-    toggle: () => setOpen(!open),
+    open: behavior.open,
+    close: behavior.close,
+    toggle: behavior.toggle,
+    isOpen: behavior.isOpen,
   };
 }
 

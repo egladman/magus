@@ -1,0 +1,9 @@
+/* Offset that draws the ring inside the box, for an element whose ancestor clips an outside one. */
+:root { --console-focus-inset: calc(-1 * var(--pf-t--global--focus-ring--width--offset)); }
+
+/* :where() keeps specificity at zero, so a PatternFly component's own focus treatment and a local
+   outline-offset win without restating the colour or width. */
+:where(button, a, [role="button"], [tabindex]):focus-visible {
+  outline: var(--pf-t--global--focus-ring--width--offset) solid var(--pf-t--global--focus-ring--color--default);
+  outline-offset: var(--pf-t--global--focus-ring--position--offset);
+}

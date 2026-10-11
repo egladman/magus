@@ -29,7 +29,7 @@ import type {
 } from "../state";
 import { fmtCount } from "../state";
 import { SortableTable, type Column } from "../../../ui/table";
-import { Card, h, helpGlyph, type Tile } from "./card";
+import { Card, h, helpGlyph, tableScroller, type Tile } from "./card";
 import { REFRESH, svgGlyph } from "../../../ui/glyph";
 
 const flag = (on: boolean, label: string): string => (on ? label : "-");
@@ -120,9 +120,11 @@ function hotspotFilesTile(): Tile {
       " defect is most likely to land, and the best candidate for splitting before it gets worse.",
   });
   const table = new SortableTable<FileHotspotView>(hotspotFileCols, {
+    label: "Hotspot files ranked by churn and complexity",
     sortKey: "score",
     emptyText: "No file hotspots in the window.",
   });
+  tableScroller(table.el, "Hotspot files, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -154,9 +156,11 @@ function hotspotsTile(): Tile {
       " Use it to find which PROJECT is carrying the risk before drilling into which file.",
   });
   const table = new SortableTable<HotspotNodeView>(hotspotCols, {
+    label: "Hotspot projects ranked by churn",
     sortKey: "churn",
     emptyText: "No hotspots in the window.",
   });
+  tableScroller(table.el, "Hotspot projects, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -200,13 +204,15 @@ function affinityTile(): Tile {
     label: "affinity",
     note: "co-change coupling",
     why:
-      "Files that keep getting committed together. A high pair with no import between them is" +
+      "Projects that keep getting committed together. A high pair with no import between them is" +
       " coupling the code does not declare, so an edit to one silently needs an edit to the other.",
   });
   const table = new SortableTable<AffinityPairView>(affinityCols, {
+    label: "Project pairs that change together",
     sortKey: "count",
     emptyText: "No co-change pairs in the window.",
   });
+  tableScroller(table.el, "Co-changing project pairs, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -268,9 +274,11 @@ function ownershipTile(): Tile {
       " one person holds it: that is who to ask, and the first place to spread knowledge.",
   });
   const table = new SortableTable<OwnershipRowView>(ownershipCols, {
+    label: "Author concentration per project",
     sortKey: "share",
     emptyText: "No ownership data in the window.",
   });
+  tableScroller(table.el, "Ownership per project, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -326,9 +334,11 @@ function trendTile(): Tile {
       " Rising says attention is arriving; cooling says a project is being left alone, not that it is done.",
   });
   const table = new SortableTable<TrendRowView>(trendCols, {
+    label: "Commit trend per project, rising and cooling",
     sortKey: "delta",
     emptyText: "No trend data in the window.",
   });
+  tableScroller(table.el, "Commit trend per project, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -393,9 +403,11 @@ function volatilityTile(): Tile {
       " green you cannot spend, so it costs more than a target that simply fails.",
   });
   const table = new SortableTable<VolatilityRowView>(volatilityCols, {
+    label: "Targets ranked by run-outcome volatility",
     sortKey: "score",
     emptyText: "No run-outcome history recorded yet.",
   });
+  tableScroller(table.el, "Volatile targets, scrolls sideways");
   card.body.append(table.el);
   return {
     el: card.el,
@@ -435,8 +447,13 @@ export function insightSection(
   onRefresh: () => Promise<void>,
 ): { el: HTMLElement; tiles: Tile[] } & Tile {
   const band = h("div", "console-dashboard-insight");
+  band.setAttribute("role", "group");
+  band.setAttribute("aria-labelledby", "console-dashboard-insight-title");
   const head = h("div", "console-dashboard-insight__head");
-  head.append(h("h2", "console-dashboard-insight__title", "Insight"));
+  head.dataset.controlSize = "compact";
+  const title = h("h2", "console-dashboard-insight__title", "Insight");
+  title.id = "console-dashboard-insight-title";
+  head.append(title);
   head.append(
     helpGlyph(
       "Where a codebase's attention and risk concentrate: five lenses read git history, volatility reads run outcomes.",
@@ -445,15 +462,14 @@ export function insightSection(
   );
   const lastRan = h("span", "console-dashboard-insight__lastran");
   head.append(lastRan);
-  const refresh = h("button", "console-dashboard-insight__refresh");
-  refresh.dataset.controlSize = "default";
+  // A PF secondary button. The label is its own node because the click handler swaps it: writing
+  // textContent on the button would take the mark with it, and it would not come back.
+  const refresh = h("button", "pf-v6-c-button pf-m-secondary console-dashboard-insight__refresh");
   refresh.type = "button";
-  refresh.title = "Refetch the insight lenses now";
-  refresh.append(svgGlyph(REFRESH, 14));
-  // The label is its own node because the click handler swaps it: writing textContent on the button
-  // would take the mark with it, and it would not come back.
-  const refreshLabel = h("span", "", "Refresh");
-  refresh.append(refreshLabel);
+  const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
+  refreshIcon.append(svgGlyph(REFRESH, 14));
+  const refreshLabel = h("span", "pf-v6-c-button__text", "Refresh");
+  refresh.append(refreshIcon, refreshLabel);
   refresh.addEventListener("click", () => {
     refresh.disabled = true;
     refreshLabel.textContent = "Refreshing...";
@@ -485,8 +501,8 @@ export function insightSection(
         hour: "2-digit",
         minute: "2-digit",
       });
-      lastRan.textContent = "ran " + t;
-      lastRan.title = "The insight lenses last answered at " + t + ".";
+      const text = "Updated " + t;
+      if (lastRan.textContent !== text) lastRan.textContent = text;
     },
     destroy(): void {},
   };

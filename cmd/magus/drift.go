@@ -1,15 +1,19 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
 
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
@@ -41,15 +45,14 @@ import (
 //     (types.UnformattedCommit): a sibling of MGS4006, not a duplicate of lint's own
 //     formatting check: lint answers "is this file formatted, right now, anywhere in
 //     the tree"; this answers "did this commit leave a file it touched unformatted".
+//
+// Run for pre-push, it also counts the hunks of the pushed ranges that no read mark covers
+// (pushedUnread), the same count `magus diff --unread` filters to, and raises the desktop
+// notice for them even when nothing drifted. After a commit it never counts them: a notice
+// per commit would be noise.
 func serverCheckDrift(ctx context.Context, root string, args []string) error {
-	if _, err := cmdParse("server "+job.NameCheckDrift, args, func(fs *flag.FlagSet) {
-		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "usage: magus server check-drift")
-			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale. This is the")
-			fmt.Fprintln(os.Stderr, "worker for `"+hint.JobRun.With(job.NameCheckDrift)+"`; prefer that form.")
-		}
-	}); err != nil {
+	hook, err := parseCheckDriftArgs(args)
+	if err != nil {
 		return err
 	}
 	m, err := loadMagus(ctx, root)
@@ -74,16 +77,171 @@ func serverCheckDrift(ctx context.Context, root string, args []string) error {
 	}
 	notice, ok, err := checkDriftForCommit(ctx, m.Root(), res.VCS, m.ClassifyFiles, formatGlobs, realGofmtList)
 	if err != nil {
-		slog.WarnContext(ctx, "server check-drift: could not check HEAD for stale output", slog.String("error", err.Error()))
+		slog.With(attr.Component("check-drift")).WarnContext(ctx, "could not check HEAD for stale output", attr.Error(err))
 		// Best-effort: a broken check must not be mistaken for a failed commit or push.
-		return nil
+		ok = false
 	}
-	if !ok {
-		return nil
+	var lines []string
+	if ok {
+		lines = append(lines, notice)
+		slog.WarnContext(ctx, notice, attr.Notice(""))
 	}
-	slog.WarnContext(ctx, notice, attr.Notice(""))
-	noteJobDesktop(ctx, job.NameCheckDrift, notice)
+	if hook.Hook == job.DriftHookPrePush {
+		remote := hook.Remote
+		if remote == "" {
+			remote = m.ReviewOrigin(ctx).Remote
+		}
+		log := slog.With(attr.Component("check-drift"))
+		for _, u := range pushedUnread(ctx, res, m.Root(), m.CacheDir(), remote, hook.Pushes) {
+			attrs := []any{attr.Notice(""), attr.Next(u.next)}
+			if u.err != nil {
+				attrs = append(attrs, attr.Why(u.why), attr.Error(u.err))
+			}
+			log.WarnContext(ctx, u.msg, attrs...)
+			lines = append(lines, u.msg)
+		}
+	}
+	if len(lines) > 0 {
+		noteJobDesktop(ctx, job.NameCheckDrift, strings.Join(lines, "\n"))
+	}
 	return nil
+}
+
+// parseCheckDriftArgs reads the worker's flags, the ones [job.DriftHook.Argv] writes. With
+// none it is a commit's run, which is what a drift section an older magus installed calls.
+func parseCheckDriftArgs(args []string) (job.DriftHook, error) {
+	var h job.DriftHook
+	_, err := cmdParse("server "+job.NameCheckDrift, args, func(fs *flag.FlagSet) {
+		fs.StringVar(&h.Hook, "hook", job.DriftHookPostCommit, "The hook this run is for: post-commit or pre-push")
+		fs.StringVar(&h.Remote, "remote", "", "The remote a push goes to")
+		fs.Func("push", "One ref a push sends, as <remote object>:<local object>; repeatable", func(v string) error {
+			remote, local, found := strings.Cut(v, ":")
+			if !found {
+				return fmt.Errorf("want <remote object>:<local object>, got %q", v)
+			}
+			h.Pushes = append(h.Pushes, job.DriftPush{Remote: remote, Local: local})
+			return nil
+		})
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus server check-drift [--hook <name>] [--remote <name>] [--push <remote>:<local>]...")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Notice when HEAD left generated output or formatting stale, and for a push, count")
+			fmt.Fprintln(os.Stderr, "the unread hunks of each pushed range. This is the worker for")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobRun.With(job.NameCheckDrift)+"`; prefer that form.")
+		}
+	})
+	return h, err
+}
+
+// pushedUnread is the unread notice of each range a push sends: what the remote held against what
+// is sent, or the remote's default branch against it for a ref the remote does not have yet. Git
+// only, since only git's hook names the objects. A range that cannot be read, or has nothing
+// unread, adds no notice.
+func pushedUnread(ctx context.Context, res types.VCSResolution, root, cacheDir, remote string, pushes []job.DriftPush) []unreadNotice {
+	rr, ok := res.VCS.(types.RangeReporter)
+	if !ok || res.Name != "git" || len(pushes) == 0 {
+		return nil
+	}
+	if remote == "" {
+		remote = "origin"
+	}
+	viewed, verr := changeset.NewStore(cacheDir).LoadViewed()
+	var notices []unreadNotice
+	for _, p := range pushes {
+		base, label := p.Remote, short(p.Remote)
+		if strings.Trim(p.Remote, "0") == "" {
+			base = remote + "/HEAD"
+			label = base
+		}
+		patch, err := rr.RangeDiff(ctx, root, base, p.Local, nil)
+		if err != nil {
+			slog.With(attr.Component("check-drift")).DebugContext(ctx, "pushed range unreadable", slog.String("base", base), attr.Error(err))
+			continue
+		}
+		if n, ok := unreadRangeNotice(label+"..."+short(p.Local), patch, viewed, verr); ok {
+			notices = append(notices, n)
+		}
+	}
+	return notices
+}
+
+// hookStdin is what git wrote the hook running this command, and nothing when a person typed
+// the command at a terminal, where reading would wait for input that never comes.
+func hookStdin() io.Reader {
+	if tty.StdinIsTerminal() {
+		return strings.NewReader("")
+	}
+	return os.Stdin
+}
+
+// checkDriftJobArgv is the check-drift worker command for the hook that ran `job run
+// check-drift`: hookArgs are the hook's name and git's own arguments to it, and stdin is what
+// git wrote the hook. pre-push reads its pushed refs from stdin, one `<local ref> <local
+// object> <remote ref> <remote object>` line each; a deletion sends nothing and adds no range.
+// With no hook named, it is the plain worker command.
+func checkDriftJobArgv(hookArgs []string, stdin io.Reader) []string {
+	entry, _ := job.Lookup(job.NameCheckDrift)
+	if len(hookArgs) == 0 {
+		return entry.Argv
+	}
+	h := job.DriftHook{Hook: hookArgs[0]}
+	if h.Hook != job.DriftHookPrePush {
+		return h.Argv()
+	}
+	if len(hookArgs) > 1 {
+		h.Remote = hookArgs[1]
+	}
+	sc := bufio.NewScanner(stdin)
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) != 4 || strings.Trim(f[1], "0") == "" {
+			continue
+		}
+		h.Pushes = append(h.Pushes, job.DriftPush{Remote: f[3], Local: f[1]})
+	}
+	// A push to a bare URL names the URL where the remote goes, and the server admits no URL. A
+	// new ref's range then reads against the review's own remote.
+	if _, ok := job.ParseDriftHook(h.Argv()[len(entry.Argv):]); !ok {
+		h.Remote = ""
+	}
+	return h.Argv()
+}
+
+// unreadNotice is what the drift job says about one pushed range: the message, the one command
+// that reads it, and for a range whose read marks failed to load, the reason and the error.
+type unreadNotice struct {
+	msg, next string
+	why       string
+	err       error
+}
+
+// unreadRangeNotice says how many hunks of patch no read mark covers. viewed holds the digests
+// marked read and loadErr is the error from reading them: an unreadable store makes the notice
+// say the read state is unknown, never that every hunk is unread. It reports false for a range
+// with no hunks, or one read in full.
+func unreadRangeNotice(rangeLabel, patch string, viewed []string, loadErr error) (unreadNotice, bool) {
+	parsed := changeset.ParseHunks(patch)
+	total := 0
+	for _, f := range parsed {
+		total += len(f.Hunks)
+	}
+	if total == 0 {
+		return unreadNotice{}, false
+	}
+	next := hint.Diff.With("--unread", "--rev", rangeLabel)
+	if loadErr != nil {
+		return unreadNotice{
+			msg:  fmt.Sprintf("read state unknown for the %d hunks of this range (%s)", total, rangeLabel),
+			next: next,
+			why:  "the read marks could not be read",
+			err:  loadErr,
+		}, true
+	}
+	n := len(changeset.UnreadHunks(parsed, viewed))
+	if n == 0 {
+		return unreadNotice{}, false
+	}
+	return unreadNotice{msg: fmt.Sprintf("%d of %d hunks of this range (%s) unread", n, total, rangeLabel), next: next}, true
 }
 
 // checkDriftForCommit is the VCS-facing half of serverCheckDrift, kept separate so it can
@@ -133,7 +291,7 @@ func checkDriftForCommit(
 			// probe must not hide a real generated-output finding and must not fail
 			// the job. It is logged by the caller if this bubbles up, but here it just
 			// means the formatting class stays silent for this run.
-			slog.With(attr.Component("check-drift")).WarnContext(ctx, "gofmt probe failed", slog.String("error", gerr.Error()))
+			slog.With(attr.Component("check-drift")).WarnContext(ctx, "gofmt probe failed", attr.Error(gerr))
 		} else {
 			finding.unformatted = unformatted
 		}

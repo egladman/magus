@@ -1,0 +1,64 @@
+/* The workspace scope control in the title bar (ui/scope-picker.ts). It names the workspace this
+   browser tab is scoped to and hides itself until the server reports more than one. The border belongs
+   to the wrapper so it encloses the caption and the value as one control. */
+.console-shell-scope {
+  display: inline-flex;
+  align-items: stretch;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+  block-size: var(--console-control-block-size);
+}
+.console-shell-scope[hidden] { display: none; }
+/* The caption is its own segment behind a hairline, so the pair reads as field then value. */
+.console-shell-scope__caption {
+  display: flex;
+  align-items: center;
+  padding-inline: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  letter-spacing: 0.01em;
+  color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  white-space: nowrap;
+}
+#console-scope-btn {
+  --pf-v6-c-menu-toggle--BorderRadius: 0;
+  --pf-v6-c-menu-toggle--FontSize: var(--console-control-font-size);
+  inline-size: auto;
+  block-size: 100%;
+  padding-block: 0;
+  white-space: nowrap;
+}
+.console-shell-scope__menu {
+  position: absolute;
+  top: var(--console-titlebar-h);
+  inset-inline-end: var(--pf-t--global--spacer--sm);
+  z-index: var(--pf-t--global--z-index--lg);
+  min-inline-size: 14rem;
+}
+/* Marks a menu row as not real: the demo's roots are spelled like checkouts (~/Repos/acme). Menu rows
+   only; the closed control never carries it, and the status bar already says "demo". */
+.console-shell-scope__tag {
+  margin-inline-start: var(--pf-t--global--spacer--sm);
+  padding: 0 var(--pf-t--global--spacer--xs);
+  border-radius: var(--pf-t--global--border--radius--pill);
+  font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  letter-spacing: var(--console-chip-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+/* The demo row is an action, not a scope: entering the demo changes whether anything on screen is real. */
+.console-shell-scope__demorow {
+  border-block-start: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  margin-block-start: var(--pf-t--global--spacer--xs);
+  padding-block-start: var(--pf-t--global--spacer--xs);
+}
+/* Below the rail's breakpoint the caption is the part that can go. */
+@media (width < 48rem) {
+  .console-shell-scope__caption { display: none; }
+}

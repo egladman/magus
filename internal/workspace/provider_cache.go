@@ -125,9 +125,9 @@ func providedProjects(ctx context.Context, cache ProviderCache, root, spellName 
 // dropped: the provider is the source of truth, so a lost entry costs a re-run.
 func writeProviderCache(ctx context.Context, path string, entry any) {
 	if data, err := json.Marshal(entry); err != nil {
-		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not encodable", slog.String("path", path), slog.String("err", err.Error()))
+		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not encodable", slog.String("path", path), attr.Error(err))
 	} else if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
-		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not writable", slog.String("path", path), slog.String("err", err.Error()))
+		slog.With(attr.Component("magus")).DebugContext(ctx, "provider cache not writable", slog.String("path", path), attr.Error(err))
 	}
 }
 
@@ -192,7 +192,7 @@ func providerFingerprint(ctx context.Context, root, spellName string) string {
 	for _, g := range globs {
 		if _, err := doublestar.Match(g, "probe"); err != nil {
 			slog.With(attr.Component("magus")).WarnContext(ctx, "workspace provider declares a malformed glob, so its project set cannot be cached",
-				slog.String("provider", spellName), slog.String("glob", g), slog.String("err", err.Error()))
+				slog.String("provider", spellName), slog.String("glob", g), attr.Error(err))
 			return ""
 		}
 	}

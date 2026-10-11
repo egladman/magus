@@ -1,0 +1,11 @@
+/* The story of this sheet is the review story. */
+.story { color: red; }
+
+/* Each chapter has a lane for its corpus. */
+.chapter { color: blue; }
+
+/* The agent surface is a new surface for the handoff. */
+.surface { color: green; }
+
+/* Two surfaces share a surface-level grid, with the surface area of a card. */
+.shared { color: pink; }

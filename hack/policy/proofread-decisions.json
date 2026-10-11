@@ -13,6 +13,10 @@
     "terse-sentence": "deny",
     "terse-paragraph": "deny",
     "bare-rule": "deny",
-    "template": "deny"
+    "template": "deny",
+    "restates": "deny",
+    "comment-budget": "deny",
+    "block-budget": "deny",
+    "banned-word": "deny"
   }
 }

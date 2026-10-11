@@ -1,0 +1,9 @@
+/* PF components and ID-scoped rules set display, which outranks the UA's [hidden] rule, so
+   el.hidden = true silently did nothing on the graph's node cloud, the dashboard tiles, the activity
+   toolbar and the empty states, each of which grew its own X[hidden] patch. */
+[hidden] { display: none !important; }
+
+/* The graph and log scaffolds carry <details data-ref-section> help copy. ref-drawer.ts clones it into
+   the Reference panel on open, and the clones drop the attribute. Without this the sources would
+   spill the copy inline. */
+[data-ref-section] { display: none; }

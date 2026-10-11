@@ -8,8 +8,10 @@
 //	    or nobody acts), and for a green or red-inherited one the merge command a person
 //	    runs
 //	magus buzz hack/ci/pull-requests.buzz -- apply [--author <login>] [--pr <n>]... [--method <m>]
-//	    take the actions that change no code: queue what is green on a current base, and
-//	    rerun a red run once per head when the failure is outside the change's files
+//	    take the actions that change no code: queue a green stack by the label on its top,
+//	    and rerun a red run once per head when the failure is outside the change's files.
+//	    It never enables auto-merge, which a person does: for a green pull request that
+//	    is not in a stack it prints the command (for_person) and runs nothing
 //	magus buzz hack/ci/pull-requests.buzz -- dashboard [--all] [--base <b>] --out <file> (--issue <n> | --preview) [--console-base <url>]
 //	    the queue as one markdown page: an alert with the queue's state, a table per
 //	    section with what needs a person first, a box per action that starts a pull
@@ -21,7 +23,8 @@
 //	    a person with write access checked, matched to the boxes the board offers now,
 //	    as a plan for act, a run summary, and the step's outputs
 //	magus buzz hack/ci/pull-requests.buzz -- act --plan <file>
-//	    run the plan's commands: enable auto-merge, or rerun failed jobs
+//	    run the plan's commands, as the queue app for the person who checked each box:
+//	    enable auto-merge, or rerun failed jobs
 //
 // red-inherited means every failing check, and every Go test its log reports failing, also
 // fails on main's latest completed CI run, and nothing else does: the change broke nothing
@@ -1216,20 +1219,28 @@ export fun render(r: Record) > str {
     return encode(doc);
 }
 
-// applyCommands is what apply runs for r: queueing and reruns only, never a merge past
-// the queue and never a write to a branch.
+// applyCommands is what apply runs for r: queueing a stack by its label and reruns only,
+// never a merge past the queue, never enabling auto-merge and never a write to a branch.
 export fun applyCommands(r: Record, method: str) > [[str]] {
     final cmds = mut [<[str]>];
     if (r.action == "queue") {
         if (r.evidence.top != null) {
             cmds.append(["gh", "pr", "edit", "{r.evidence.top!}", "--add-label", QUEUE_LABEL + method]);
-        } else {
-            cmds.append(["gh", "pr", "merge", "{r.pr}", "--auto", "--" + method]);
         }
     } else if (r.action == "rerun") {
         foreach (run in r.evidence.rerun) {
             cmds.append(["gh", "run", "rerun", run, "--failed"]);
         }
+    }
+    return cmds;
+}
+
+// personCommands is what queueing r needs and apply leaves to a person: enabling auto-merge
+// on a pull request in no stack. apply prints it; nothing the agent runs enables it.
+export fun personCommands(r: Record, method: str) > [[str]] {
+    final cmds = mut [<[str]>];
+    if (r.action == "queue" and r.evidence.top == null) {
+        cmds.append(["gh", "pr", "merge", "{r.pr}", "--auto", "--" + method]);
     }
     return cmds;
 }
@@ -1582,6 +1593,9 @@ fun apply(sel: Selector) > void !> any {
         foreach (cmd in applyCommands(r, method: sel.method)) {
             capture(cmd[0], args: cmd.sub(1));
             std\print(encode({"pr": r.pr, "action": r.action, "command": cmd}));
+        }
+        foreach (cmd in personCommands(r, method: sel.method)) {
+            std\print(encode({"pr": r.pr, "action": r.action, "for_person": cmd}));
         }
     }
 }
@@ -2003,11 +2017,11 @@ fun failedRuns(p: Pull) > [str] {
     return acc;
 }
 
-// joinCommand is how a pull request that could join enters the queue: what apply would
-// run, or for one GitHub says conflicts, the label.
+// joinCommand is how a pull request that could join enters the queue: the command apply
+// would run or leaves to a person, or for one GitHub says conflicts, the label.
 fun joinCommand(p: Pull, r: Record) > str {
     if (r.action == "queue") {
-        final cmds = applyCommands(r, method: "squash");
+        final cmds = applyCommands(r, method: "squash") + personCommands(r, method: "squash");
         if (cmds.len() > 0) {
             final words = mut [<str>];
             foreach (w in cmds[0]) {
@@ -2199,9 +2213,10 @@ export fun respond(e: Edit, issue: int, role: str, offered: [Box]) > Response {
     return Response{ refusal = refusal, marks = marks, choice = choose(marks, offered: offered) };
 }
 
-// boxCommands is what act runs for a box, as the queue app. A requeue and a queue enable
-// auto-merge, which is merge intent the queue reads with no labeler to check; start is
-// merge-queue.buzz's step, which the workflow runs itself.
+// boxCommands is what act runs for a box, as the queue app. A box is checked by a person
+// with write access, so the auto-merge it enables is that person's act. A requeue and a
+// queue enable auto-merge, which is merge intent the queue reads with no labeler to check;
+// start is merge-queue.buzz's step, which the workflow runs itself.
 export fun boxCommands(x: Box) > [[str]] {
     final cmds = mut [<[str]>];
     if (x.action == "requeue" or x.action == "queue") {
@@ -3130,13 +3145,15 @@ test "a green pull request is queued, a stack by the label on its top" {
     final lone = Pull{ number = 1, head = "a", checks = [green("t")] };
     final r = classify(lone, open: [lone], facts: Facts{});
     assert\equal([r.state, r.stage, r.action, r.model], want: ["green", "needs-queue", "queue", "none"], message: "lone");
-    assert\equal(applyCommands(r, method: "squash"), want: [["gh", "pr", "merge", "1", "--auto", "--squash"]], message: "auto-merge");
+    assert\equal(applyCommands(r, method: "squash").len(), want: 0, message: "apply does not enable auto-merge");
+    assert\equal(personCommands(r, method: "squash"), want: [["gh", "pr", "merge", "1", "--auto", "--squash"]], message: "auto-merge, for the person");
 
     final mid = Pull{ number = 2, head = "b", base = "a" };
     final top = Pull{ number = 3, head = "c", base = "b" };
     final stacked = classify(lone, open: [lone, mid, top], facts: Facts{});
     assert\equal(stacked.evidence.top, want: 3, message: "the top of the stack");
     assert\equal(applyCommands(stacked, method: "rebase"), want: [["gh", "pr", "edit", "3", "--add-label", "merge-queue: rebase"]], message: "the label on the top");
+    assert\equal(personCommands(stacked, method: "rebase").len(), want: 0, message: "a stack has nothing left for the person");
     assert\equal(classify(mid, open: [lone, mid, top], facts: Facts{}).evidence.parent, want: 1, message: "the middle waits on the bottom");
 
     final fork = Pull{ number = 4, head = "d", base = "a" };
@@ -3156,6 +3173,23 @@ test "apply only queues and reruns" {
     foreach (action in ["none", "fix", "merge-base"]) {
         final r = Record{ pr = 1, head = "h", base = "main", state = "red", reason = "", action = action, model = "opus", evidence = Evidence{} };
         assert\equal(applyCommands(r, method: "squash").len(), want: 0, message: action);
+    }
+}
+
+test "no step apply runs enables auto-merge" {
+    final lone = Pull{ number = 1, head = "a", checks = [green("t")] };
+    final mid = Pull{ number = 2, head = "b", base = "a" };
+    final top = Pull{ number = 3, head = "c", base = "b" };
+    final rerun = Record{ pr = 1, head = "h", base = "main", state = "red", reason = "", action = "rerun", model = "none",
+        evidence = Evidence{ rerun = ["11"] } };
+    final records = mut [classify(lone, open: [lone], facts: Facts{}), classify(lone, open: [lone, mid, top], facts: Facts{}), rerun];
+    foreach (action in ["none", "fix", "merge-base", "queue"]) {
+        records.append(Record{ pr = 1, head = "h", base = "main", state = "green", reason = "", action = action, model = "none", evidence = Evidence{} });
+    }
+    foreach (r in records) {
+        foreach (cmd in applyCommands(r, method: "squash")) {
+            std\assert(cmd.indexOf("--auto") == null and cmd.indexOf("enablePullRequestAutoMerge") == null, message: "{r.action}: {cmd.join(" ")}");
+        }
     }
 }
 

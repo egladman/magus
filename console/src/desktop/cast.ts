@@ -53,10 +53,10 @@ export function castSigil(svg: string, ms = CAST_MS): Promise<boolean> {
   if (typeof document === "undefined") return Promise.resolve(false);
   return new Promise((resolve) => {
     const veil = document.createElement("div");
-    veil.className = "console-cast";
+    veil.className = "console-shell-cast";
     veil.setAttribute("aria-hidden", "true"); // decorative; the sigil is announced nowhere
     const holder = document.createElement("div");
-    holder.className = "console-cast__mark";
+    holder.className = "console-shell-cast__mark";
     holder.innerHTML = svg;
     veil.append(holder);
     document.body.append(veil);

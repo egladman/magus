@@ -137,6 +137,8 @@ func (r *recorder) RecordReviewRemark(_ context.Context, _ string) {}
 
 func (r *recorder) RecordReviewPublish(_ context.Context, _ string, _ bool) {}
 
+func (r *recorder) RecordReviewMergedWhileReading(_ context.Context, _ float64) {}
+
 func (r *recorder) Snapshot(_ context.Context) ([]byte, error) { return nil, nil }
 
 func (r *recorder) Shutdown(_ context.Context) error { r.stops++; return nil }

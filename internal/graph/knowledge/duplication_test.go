@@ -138,17 +138,6 @@ func TestDuplicatesIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestIsTestSourceCoversTheIndexedLanguages(t *testing.T) {
-	t.Parallel()
-
-	for _, path := range []string{"pkg/x_test.go:12", "web/a.test.ts", "web/a.spec.tsx", "py/test_thing.py", "py/thing_test.py"} {
-		assert.True(t, isTestSource(path), path)
-	}
-	for _, path := range []string{"pkg/x.go:12", "web/testing.ts", "py/tester.py", "contest.go"} {
-		assert.False(t, isTestSource(path), path)
-	}
-}
-
 // placementFixture is two copies, one in package a and one in package b, both calling
 // helpers declared in package h. imports is importer -> imported, written the way the
 // index records them: a file defining the importer's namespace references the imported one.

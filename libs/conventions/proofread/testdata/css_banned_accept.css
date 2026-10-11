@@ -1,0 +1,8 @@
+/* A verb is fine: the panel surfaces the error beside the field. */
+.panel { color: red; }
+
+/* The words `lane` and "corpus" are mentioned here, not used. */
+.mention { color: blue; }
+
+/* The word "story" is quoted and not used. */
+.quoted { color: green; }

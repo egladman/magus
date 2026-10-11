@@ -177,7 +177,7 @@ test("fetchSessionActivity asks the viewer service for one session and path", as
   assert.ok("activity" in result && result.activity.wrote);
 });
 
-test("the showcase story row renders Ran and its Session panel states reasoning is unavailable", async () => {
+test("the showcase touch row renders Ran and its Session panel states reasoning is unavailable", async () => {
   globalThis.fetch = (() => {
     throw new Error("demo mode must not reach the network");
   }) as typeof fetch;
@@ -185,13 +185,13 @@ test("the showcase story row renders Ran and its Session panel states reasoning 
   const dispose = activate(document.body);
   for (let i = 0; i < 12; i++) await new Promise((r) => setTimeout(r, 0));
 
-  const story = [...document.querySelectorAll<HTMLElement>(".console-diff-row--story")].find((el) =>
+  const touch = [...document.querySelectorAll<HTMLElement>(".console-diff-row--touch")].find((el) =>
     el.querySelector(".console-diff-row__ran"),
   );
-  assert.ok(story, "a story row carrying Ran");
-  assert.match(story.querySelector(".console-diff-row__ran")?.textContent ?? "", /^ran /);
+  assert.ok(touch, "a touch row carrying Ran");
+  assert.match(touch.querySelector(".console-diff-row__ran")?.textContent ?? "", /^ran /);
 
-  const open = [...story.querySelectorAll<HTMLButtonElement>("button")].find(
+  const open = [...touch.querySelectorAll<HTMLButtonElement>("button")].find(
     (b) => b.textContent === "Session",
   );
   assert.ok(open);

@@ -11,6 +11,6 @@ export const activity: AppManifest = {
   path: "activity",
   accent: "--console-rust",
   server: { purpose: "Activity records what the server did: MCP calls, jobs, config changes." },
-  // The trail renders through the log viewer's sheet.
-  load: { kind: "module", css: "logs/logs.css" },
+  // Its sheet imports the frame it shares with the log viewer (styles/layouts/Frame/frame.css).
+  load: { kind: "module", css: "activity/activity.css" },
 };

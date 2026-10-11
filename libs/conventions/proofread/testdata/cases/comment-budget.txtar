@@ -1,0 +1,33 @@
+A stylesheet comment over the lines its place earns.
+-- hit/stylesheet whole --
+/* The grid.
+   Three columns on a wide pane.
+   Two on a narrow one.
+   One below the floor.
+   The floor is a token. */
+.grid { display: grid; }
+-- hit/stylesheet whole --
+.card {
+  /* A note above a declaration.
+     It runs on.
+     And on.
+     And on. */
+  padding: 1rem;
+}
+-- hit/stylesheet whole --
+.card {
+  margin: 0; /* a trailing note
+                that wraps
+                twice */
+}
+-- pass/stylesheet whole --
+/* Squared corners: the console's house style. */
+:root {
+  --console-radius: 0;
+}
+-- pass/stylesheet whole --
+.row {
+  /* Clip, so a long label never pushes the badge off the row. */
+  overflow: hidden;
+  cursor: pointer; /* the whole row is the hit target */
+}

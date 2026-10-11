@@ -167,6 +167,61 @@ func TestAppendAgentCommand_RequiresCommandOrPath(t *testing.T) {
 	require.Empty(t, events)
 }
 
+// A hook row names the magus that judged the call and the directory the host reported, and
+// leaves both off when the producer did not know them.
+func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{
+		Tool: "Bash", Command: "ls", Decision: "pass",
+		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2", Cwd: "/work/tree/console",
+	})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: "pass"})
+	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+		Child: "Explore", Context: "look",
+		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0", Cwd: "/work/tree",
+	})
+
+	events, err := ReadRecent(dir, 10)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	var commands, spawns []Event
+	for _, e := range events {
+		switch e.Kind {
+		case KindAgentCommand:
+			commands = append(commands, e)
+		case KindAgentSpawn:
+			spawns = append(spawns, e)
+		}
+	}
+	require.Len(t, commands, 2)
+	require.Len(t, spawns, 1)
+	judged, unknown := commands[0], commands[1]
+	if judged.Binary == "" {
+		judged, unknown = unknown, judged
+	}
+	require.Equal(t, stamped(t, judged, Event{
+		Kind:          KindAgentCommand,
+		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Action:        "Bash",
+		Outcome:       OutcomeOK,
+		Preview:       "guard: pass",
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
+		Cwd:           "/work/tree/console",
+	}), judged)
+	require.Empty(t, unknown.Binary)
+	require.Empty(t, unknown.Cwd)
+	require.Equal(t, stamped(t, spawns[0], Event{
+		Kind:          KindAgentSpawn,
+		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
+		Action:        "Explore",
+		Outcome:       OutcomeOK,
+		Binary:        "/work/tree/magus",
+		BinaryVersion: "v0.5.0",
+		Cwd:           "/work/tree",
+	}), spawns[0])
+}
+
 func TestAppendAgentCommand_PathUsesFallbackEntryPointAndAction(t *testing.T) {
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Path: "AGENTS.md", Decision: "advise", Context: "record the decision"})

@@ -1,13 +1,13 @@
 ---
 title: "reply-voice"
-description: "A deny rule by default: it refuses text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label."
 tags: [proofread, rules, reply-voice, deny]
 aliases: [reference/prose/reply-voice]
 ---
 
 # reply-voice
 
-A deny rule by default: it refuses text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
+A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `review-reply` and advises on `stylesheet` by default: it reports text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label.
 
 ## What it catches
 
@@ -37,6 +37,7 @@ The code is `PRF1002`. The decision depends on the kind of text judged:
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
 | `review-reply`       | deny    |
+| `stylesheet`         | advise  |
 
 ## Changing it
 

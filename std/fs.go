@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
@@ -811,7 +812,7 @@ func FsWatch(ctx context.Context, paths []string, cb Callback) error {
 			cache.ProgressFromContext(ctx).Beat()
 		case err := <-w.Errors():
 			if err != nil {
-				slog.WarnContext(ctx, "fs.watch", slog.String("error", err.Error()))
+				slog.WarnContext(ctx, "fs.watch", attr.Error(err))
 			}
 		case batch, ok := <-w.Events():
 			if !ok {

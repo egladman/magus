@@ -225,6 +225,31 @@ func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 	assertArgs(t, []string{"change-description"}, "fix: pin the key\n## Summary\n", want)
 }
 
+func TestRunJudgesAStylesheetCommentAtItsSourceLine(t *testing.T) {
+	path := writeFile(t, t.TempDir(), "a.css", ".a { color: red; }\n\n/* Simply put.\n   Still fine. */\n.b { color: blue; }\n")
+	decisions := writeFile(t, t.TempDir(), "d.json", `{"rules":{"filler":"advise"}}`)
+
+	// A stylesheet finding has a line and no column: its comment is judged with
+	// the delimiters gone.
+	f := row(path, path+":3", "stylesheet", proofread.RuleFiller, proofread.DecisionAdvise,
+		"Drop 'Simply': state the fact.", "Simply").replacing("")
+	f.Line = 3
+
+	assertArgs(t, []string{"stylesheet", "-decisions", decisions, path}, "", rows(t, f))
+}
+
+func TestRunJudgesAStylesheetFromStdinWhenNoPathIsNamed(t *testing.T) {
+	decisions := writeFile(t, t.TempDir(), "d.json", `{"rules":{"history":"deny"}}`)
+
+	f := row("stylesheet", "stylesheet:4", "stylesheet", proofread.RuleHistory, proofread.DecisionDeny,
+		"Comment narrates a change (\"Used to\"); describe the code as it stands and leave its history to the "+
+			"commit message.", "Used to")
+	f.Line = 4
+
+	assertArgs(t, []string{"stylesheet", "-decisions", decisions}, "/* Fine. */\n.a { color: red; }\n\n/* Used to be a grid. */\n"+
+		".b { color: blue; }\n", rows(t, f))
+}
+
 func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
 	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleBuzzword, proofread.DecisionDeny,
 		"Replace 'delve' with what is actually so.", "delve").at(1, 8, 13))

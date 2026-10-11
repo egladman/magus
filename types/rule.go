@@ -14,6 +14,9 @@ type RuleDoc struct {
 	// Workspace is what the root magusfile's magus\guard.builtins sets for the rule, "" when
 	// it sets nothing and Decision applies: the decision, with ", lines N" when it sets lines.
 	Workspace string `json:"workspace,omitempty"`
+	// Fixed reports that magus\guard.builtins refuses to set the rule: it is how a workspace
+	// learns something about its own policy, so it can be neither silenced nor promoted.
+	Fixed bool `json:"fixed,omitempty"`
 	// Catches says what the rule fires on, in one line, in the reader's terms.
 	Catches string `json:"catches"`
 	// Why is the reasoning behind the rule, for a reader who wants to disagree with it

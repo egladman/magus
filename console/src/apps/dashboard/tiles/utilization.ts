@@ -4,52 +4,28 @@
 // relative to the observed peak). Seeded from the metrics Backfill, then kept live by
 // one synthesized sample per status frame (both arrive in state.samples).
 //
-// PatternFly (W0 spike): this is the reference tile. Its shell is a PatternFly Card
-// (.pf-v6-c-card + __header/__title-text/__body/__footer) built inline here rather than the
-// shared collapsible Card class - only pf-v6-* classes plus the app hook (data-card) and the
-// tile's own grid/legend markup (styled by dashboard.css, unchanged). Its colors come from the
-// console's NEW semantic tokens (--console-status-*, defined in tokens.css onto PF status
-// tokens), not the old --c-* palette; those tokens are theme-aware so the grid colors correctly
-// in light and dark. The dashboard's default-collapse affordance is not wired for the spike
-// (that is a W3 detail); everything else - live updates, tooltips, theme re-render - is intact.
+// Its colors come from the console's semantic tokens (--console-status-*, defined in tokens.css
+// onto PF status tokens), which are theme-aware, so the grid colors correctly in light and dark.
 
 import type { DashboardState, SampleView } from "../state";
 import { clock } from "../state";
 import { cssVar, onThemeChange } from "../charts/uplot";
-import { h, helpGlyph, type Tile } from "./card";
+import { Card, h, type Tile } from "./card";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const GRID_ROWS = 7;
 
 export function utilizationTile(): Tile {
-  // PatternFly Card shell. data-card is the app hook; every class is a pf-v6-* one.
-  const card = h("div", "pf-v6-c-card");
-  card.dataset.card = "util";
-
-  const header = h("div", "pf-v6-c-card__header");
-  const headerMain = h("div", "pf-v6-c-card__header-main");
-  const titleWrap = h("div", "pf-v6-c-card__title");
-  const title = h("h2", "pf-v6-c-card__title-text", "Pool utilization");
-  titleWrap.append(
-    title,
-    helpGlyph(
+  const card = new Card("util", "Pool utilization", {
+    note: "no samples yet",
+    why:
       "Pool occupancy over time, one square per sample, so saturation reads as a pattern rather" +
-        " than as one instant. A band of saturated squares with work queued means the machine was" +
-        " the constraint for that whole stretch.",
-      "pool utilization",
-    ),
-  );
-  headerMain.append(titleWrap);
-  header.append(headerMain);
-
-  const body = h("div", "pf-v6-c-card__body");
-  const footer = h("div", "pf-v6-c-card__footer");
-  const note = document.createElement("span");
-  note.textContent = "no samples yet";
-  footer.append(note);
+      " than as one instant. A band of saturated squares with work queued means the machine was" +
+      " the constraint for that whole stretch.",
+  });
 
   const grid = h("div", "console-dashboard-util__grid");
-  grid.setAttribute("aria-label", "Pool utilization history");
+  const readout = h("p", "console-dashboard-chart__readout", "No samples yet.");
   const legend = h("div", "console-dashboard-util__legend");
   const scale = h("span", "console-dashboard-util__scale");
   scale.append(document.createTextNode("idle "));
@@ -72,9 +48,7 @@ export function utilizationTile(): Tile {
     "One square per sample in reading order, oldest first and newest at the end. A dark run of" +
       " squares is a stretch where the pool stayed busy.",
   );
-  body.append(howto, grid, legend);
-
-  card.append(header, body, footer);
+  card.body.append(howto, grid, readout, legend);
 
   let samples: SampleView[] = [];
   let peakRunning = 1;
@@ -98,6 +72,16 @@ export function utilizationTile(): Tile {
     return { fill: base, opacity };
   }
 
+  // describe is one sample in words, for the square's title and the readout under the grid.
+  function describe(s: SampleView): string {
+    if (s.running === null) return `${clock(s.at)}, not measured`;
+    const cap =
+      s.capacity !== null && s.capacity > 0
+        ? `${s.running}/${s.capacity}`
+        : `${s.running} (unlimited)`;
+    return `${clock(s.at)}, ${cap} running${s.queued !== null && s.queued > 0 ? ", " + s.queued + " queued" : ""}`;
+  }
+
   function render(): void {
     peakRunning = 1;
     for (const s of samples)
@@ -113,7 +97,10 @@ export function utilizationTile(): Tile {
     svg.setAttribute("class", "console-dashboard-util__svg");
     svg.setAttribute("preserveAspectRatio", "xMinYMin meet");
     svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", "Pool utilization history");
+    svg.setAttribute(
+      "aria-label",
+      "Pool utilization history, one square per sample. The readout below has the newest sample.",
+    );
     const frag = document.createDocumentFragment();
     for (let i = 0; i < n; i++) {
       const s = samples[i];
@@ -130,27 +117,22 @@ export function utilizationTile(): Tile {
       r.setAttribute("fill-opacity", opacity.toFixed(3));
       r.setAttribute("class", "console-dashboard-util__square");
       const title = document.createElementNS(SVGNS, "title");
-      if (s.running === null) {
-        title.textContent = `${clock(s.at)} - not measured`;
-      } else {
-        const cap =
-          s.capacity !== null && s.capacity > 0
-            ? `${s.running}/${s.capacity}`
-            : `${s.running} (unlimited)`;
-        title.textContent = `${clock(s.at)} - ${cap} running${s.queued !== null && s.queued > 0 ? ", " + s.queued + " queued" : ""}`;
-      }
+      title.textContent = describe(s);
       r.appendChild(title);
       frag.appendChild(r);
     }
     svg.appendChild(frag);
     grid.replaceChildren(svg);
-    note.textContent = n ? `${n} samples, newest ${clock(samples[n - 1].at)}` : "no samples yet";
+    card.setNote(n ? `${n} samples, newest ${clock(samples[n - 1].at)}` : "no samples yet");
+    readout.textContent = n
+      ? "Newest sample: " + describe(samples[n - 1]) + "."
+      : "No samples yet.";
   }
 
   const offTheme = onThemeChange(render);
 
   return {
-    el: card,
+    el: card.el,
     update(s: DashboardState) {
       samples = s.samples;
       render();

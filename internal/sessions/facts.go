@@ -109,7 +109,7 @@ func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 	h.broken = true
 	slog.With(attr.Component("magus")).WarnContext(ctx, "this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
 		slog.String("store", h.dir),
-		slog.String("error", err.Error()))
+		attr.Error(err))
 }
 
 // WithAttrs returns a handler writing to h's store with attrs ahead of each

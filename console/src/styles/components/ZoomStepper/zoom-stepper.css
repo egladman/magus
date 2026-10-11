@@ -1,0 +1,56 @@
+/* The zoom stepper (desktop/zoomControl.ts). Shared chrome: the log viewer and the Plan app both dock
+   it in the status bar, and a copy per app is how two controls that should match drift apart. */
+.console-shell-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  margin: 0;
+  /* A hairline and trailing space set it apart from the status bar's icon buttons, which are easy to
+     misclick when flush. */
+  padding-right: var(--pf-t--global--spacer--sm);
+  border-right: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-zoom .console-shell-zoom__button, .console-shell-zoom .console-shell-zoom__readout {
+  appearance: none;
+  border: 0;
+  background: none;
+  margin: 0;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--pf-t--global--text--color--subtle);
+  user-select: none;
+  border-radius: var(--pf-t--global--border--radius--small);
+  transition: color var(--console-motion-fast), background var(--console-motion-fast);
+}
+.console-shell-zoom .console-shell-zoom__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  font-size: var(--pf-t--global--font--size--body--lg);
+  line-height: 1;
+}
+.console-shell-zoom .console-shell-zoom__readout {
+  min-width: 2.7rem;
+  min-block-size: var(--pf-t--global--spacer--lg);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  padding: 0 var(--pf-t--global--spacer--xs);
+}
+.console-shell-zoom .console-shell-zoom__button:hover, .console-shell-zoom .console-shell-zoom__readout:hover {
+  color: var(--pf-t--global--text--color--regular);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+/* Height only, as for the status-bar tray: a 44px width put more in a 375px bar than it holds. */
+@media (pointer: coarse) {
+  .console-shell-zoom .console-shell-zoom__button {
+    min-block-size: 44px;
+    height: auto;
+  }
+  .console-shell-zoom .console-shell-zoom__readout {
+    min-block-size: 44px;
+  }
+}

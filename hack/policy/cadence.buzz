@@ -4,6 +4,7 @@ namespace agentpolicy\cadence;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 
 final gateDenial = "a worker mid-change does not run the gate; finish with the narrow validation your brief names and report.\n"
     + "The gate runs once per branch, by the orchestrator or by a worker spawned as "
@@ -83,9 +84,9 @@ fun unqualifiedPush(programs: [helpers\Program], checkout: Checkout) > str {
                     if (ref.startsWith("HEAD:")) {
                         final name = ref.sub(5);
                         if (!name.startsWith("refs/") and checkout.remoteBranches.indexOf("{remote}/{name}") == null) {
-                            return "HEAD is detached and {remote} has no branch `{name}` this checkout knows of; "
-                                + "name the branch in full: `git push {remote} HEAD:refs/heads/{name}`.\n"
-                                + "Without it git cannot tell a branch from a tag and refuses the push; a `;` or a "
+                            return "a detached HEAD cannot tell {remote}/{name} from a tag; name the branch in full: "
+                                + "`git push {remote} HEAD:refs/heads/{name}`\n"
+                                + "{remote} has no branch {name} this checkout knows of. Without the full ref git cannot tell a branch from a tag and refuses the push; a `;` or a "
                                 + "background run hides that.";
                         }
                     }
@@ -94,6 +95,12 @@ fun unqualifiedPush(programs: [helpers\Program], checkout: Checkout) > str {
         }
     }
     return "";
+}
+
+// judged is decideCadence with every denial held to the verdict shape.
+fun judged(programs: [helpers\Program], caller: Caller, checkout: Checkout?) > GuardVerdict {
+    final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
+    return verdict\checked(decideCadence(programs, caller: caller, checkout: checkout), label: label);
 }
 
 // person is an unattributed caller: no lease binds it and no spawn titled it.
@@ -108,7 +115,7 @@ test "a worker whose role is not integrate may not run the gate" {
         Caller{ role = "root", title = "v050-prep/fix naming-advisory" },
         Caller{ role = "worker", title = "" },
     ]) {
-        final v = decideCadence(gate, caller: caller, checkout: null);
+        final v = judged(gate, caller: caller, checkout: null);
         std\assert(v.decision == "deny", message: "{caller.role} {caller.title}");
         std\assert(v.reason.indexOf("integrate") != null, message: "names who may gate");
     }
@@ -118,28 +125,28 @@ test "a worker whose role is not integrate may not run the gate" {
         ["magus", "affected", "ci:rw"],
         ["magus", "-j", "4", "affected", "ci"],
     ]) {
-        std\assert(decideCadence(helpers\request([argv]), caller: worker, checkout: null).decision == "deny", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv]), caller: worker, checkout: null).decision == "deny", message: argv.join(" "));
     }
 }
 
 test "the orchestrator, a person, an integrate worker and the plan form may gate" {
     final gate = helpers\request([["magus", "affected", "ci", "--no-default-charms"]]);
-    std\assert(decideCadence(gate, caller: person(), checkout: null).decision == "allow", message: "an unattributed caller");
+    std\assert(judged(gate, caller: person(), checkout: null).decision == "allow", message: "an unattributed caller");
     final integrator = Caller{ role = "worker", title = "orchestrator/integrate local-command-policy" };
-    std\assert(decideCadence(gate, caller: integrator, checkout: null).decision == "allow", message: "an integrate worker");
+    std\assert(judged(gate, caller: integrator, checkout: null).decision == "allow", message: "an integrate worker");
     final worker = Caller{ role = "worker", title = "orchestrator/feat guard-command" };
     final plan = helpers\request([["magus", "affected", "ci", "--plan", "--no-default-charms"]]);
-    std\assert(decideCadence(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");
+    std\assert(judged(plan, caller: worker, checkout: null).decision == "allow", message: "the plan runs nothing");
     final narrow = helpers\request([["magus", "run", "go::go-test", ".", "--", "-run", "Guard"]]);
-    std\assert(decideCadence(narrow, caller: worker, checkout: null).decision == "allow", message: "narrow validation");
+    std\assert(judged(narrow, caller: worker, checkout: null).decision == "allow", message: "narrow validation");
 }
 
 test "a detached push to a branch the remote lacks is denied, naming the full ref" {
     final detached = Checkout{ detached = true, remoteBranches = ["origin/main", "origin/naming-advisory"] };
-    final v = decideCadence(helpers\request([["git", "push", "origin", "HEAD:local-command-policy"]]), caller: person(), checkout: detached);
+    final v = judged(helpers\request([["git", "push", "origin", "HEAD:local-command-policy"]]), caller: person(), checkout: detached);
     std\assert(v.decision == "deny", message: "an unknown branch");
     std\assert(v.reason.indexOf("git push origin HEAD:refs/heads/local-command-policy") != null, message: "names the fix");
-    final forced = decideCadence(helpers\request([["git", "-C", "../wt", "push", "-u", "origin", "+HEAD:topic"]]), caller: person(), checkout: detached);
+    final forced = judged(helpers\request([["git", "-C", "../wt", "push", "-u", "origin", "+HEAD:topic"]]), caller: person(), checkout: detached);
     std\assert(forced.decision == "deny", message: "a forced push, a -C and a flag");
 }
 
@@ -150,8 +157,8 @@ test "a push the remote can place stays silent" {
         ["git", "push", "origin", "HEAD:refs/heads/x"],
         ["git", "push", "origin", "main"],
     ]) {
-        std\assert(decideCadence(helpers\request([argv]), caller: person(), checkout: detached).decision == "allow", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv]), caller: person(), checkout: detached).decision == "allow", message: argv.join(" "));
     }
     final onBranch = Checkout{ detached = false, remoteBranches = [<str>] };
-    std\assert(decideCadence(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == "allow", message: "HEAD names a branch");
+    std\assert(judged(helpers\request([["git", "push", "origin", "HEAD:new-branch"]]), caller: person(), checkout: onBranch).decision == "allow", message: "HEAD names a branch");
 }

@@ -9,7 +9,7 @@
 // and the work a session was handed are ONE list, told apart by their holder rather than by living
 // on two different screens.
 //
-// It is the SAME story every other showcase tells (demo-scenario.ts), seen from the work side: the
+// It is the SAME scenario every other showcase tells (demo-scenario.ts), seen from the work side: the
 // acme monorepo's shared token library grew an audience on its claims type, and the blast radius
 // took out a Go verifier and a TypeScript web client. The diff app shows the resulting patch;
 // the activity trail shows the failing services/identity:test run at 92m and the apps/dashboard

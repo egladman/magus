@@ -229,3 +229,19 @@ func TestClientJobWritesReachTheRebindRule(t *testing.T) {
 		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, line).Say, what, "%q renders %q", script, line)
 	}
 }
+
+// TestDiffToolReadsOnlyForStateAndThread pins which diff tool ops a binary that cannot load the
+// tree still lets through: the two that only read, and none that writes into the session.
+func TestDiffToolReadsOnlyForStateAndThread(t *testing.T) {
+	name := hint.ToolDiff.String()
+	for op, want := range map[string]bool{
+		"": true, "state": true, "thread": true, " thread ": true,
+		"comment": false, "suggest": false, "resolve": false, "outline": false,
+	} {
+		in := map[string]any{}
+		if op != "" {
+			in["op"] = op
+		}
+		assert.Equal(t, want, mcpReadsOnly(name, in), "op %q", op)
+	}
+}

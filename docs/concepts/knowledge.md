@@ -346,9 +346,11 @@ version.
 Edges are directed and carry provenance and a confidence tag: `extracted` (1.0,
 from a parseable source) or `inferred` (a rubric score, from a fuzzy match).
 
-Relations: `depends_on`, `contains`, `uses`, `calls`, `imports`, `references`,
-`documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
-function, and code symbol to code symbol from a SCIP index. `rationale_for` points at a
+Relations: `depends_on`, `contains`, `uses`, `calls`, `implements`, `imports`,
+`references`, `documents`, `rationale_for`, `owns`. `calls` spans two layers: buzz function to buzz
+function, and code symbol to code symbol from a SCIP index. `implements` runs from an
+implementing type or method to the interface or interface method it satisfies, both
+symbols, from the relationships the indexer records. `rationale_for` points at a
 buzz function, or at its symbol once a Buzz index covers the file.
 
 Ownership is extracted from a committed `CODEOWNERS` file (checked at the repo
@@ -374,7 +376,7 @@ derived data buys nothing (`export` exists for teams that want a snapshot).
   guard.idx            what the agent guard asks the graph (see below)
 ```
 
-`guard.idx` is written by `magus graph build` and after each run of the server's
+`guard.idx` is written by `magus graph build` and after each run of the daemon's
 background symbol indexer. It lists the ids the guard's search rules check a pattern
 against (symbol names, doc sections, targets, diagnostics) and a stamp of every source
 they came from. The guard hook reads this one file instead of loading the graph, and
@@ -512,13 +514,13 @@ source tree: magus hands the indexer the destination through a `MAGUS_SYMBOL_IND
 environment variable it injects for the op, and reads that same path back at query
 time. The next graph query folds the symbols in, every index of a project unioned.
 
-**The server keeps it fresh for you.** While the server runs, background auto-indexing
+**The daemon keeps it fresh for you.** While the daemon runs, background auto-indexing
 re-runs each symbol-capable project's indexer ops when its sources change, so symbols stay
-current with no manual step. It is deliberately unobtrusive: a burst of edits coalesces
-into one run (a quiet window), a project re-indexes at most once per interval, a run
-starts only when nothing else is running, and it cancels itself the moment your own work
-needs a slot. Each run goes through the normal path, so it shows up as an ordinary
-journaled job, not hidden work. It is on by default in the server; a one-shot CLI never
+current with no manual step. A burst of edits coalesces into one run (a quiet window), a
+project re-indexes at most once per interval, and a run queues on the pool like any other
+work. At start it re-indexes every index that went stale while no daemon ran, and a run an
+edit raced is retried. Each run goes through the normal path, so it shows up as an ordinary
+journaled job, not hidden work. It is on by default in the daemon; a one-shot CLI never
 auto-indexes. Tune or disable it under `knowledge.symbol_indexing` (`disabled`,
 `quiet_seconds`, `min_interval_seconds`). If an indexer is not installed the background
 run of that index just fails and backs off, while the project's other indexes keep
@@ -556,7 +558,9 @@ machine's cache holds, and a function id resolves to its symbol in `magus refs`.
 Each ingested index becomes a per-project `<project>@symbols` shard: `symbol` nodes
 (keyed by their version-stripped SCIP moniker), `defines` edges from the defining
 file, `references` edges from each using file (one per file, carrying an
-occurrence count and capped lines), and `calls` edges between symbols.
+occurrence count and capped lines), `calls` edges between symbols, and `implements`
+edges from an implementation to the interface it satisfies, when the indexer records
+implementation relationships and the interface is defined in this workspace.
 
 A call edge is attributed, not inferred: SCIP records an enclosing range for each
 definition, so a reference occurrence that falls inside one was written in that

@@ -88,6 +88,32 @@ func TestAssembleSymbolsEmitsCallEdges(t *testing.T) {
 	assert.Empty(t, lines, "call sites live on the file's references edge, not repeated per pair")
 }
 
+// An implementation points at its interface, in the direction a dependency-first ordering
+// reads, and the edge needs no provenance: the indexer's relationship is the whole claim.
+func TestAssembleSymbolsEmitsImplementsEdges(t *testing.T) {
+	syms := []types.KnowledgeSymbol{
+		{
+			Key:        "example.com/foo Impl#",
+			Label:      "Impl",
+			Source:     "pkg/foo/impl.go:5",
+			Defs:       []string{"pkg/foo/impl.go"},
+			Implements: []string{"example.com/foo Iface#"},
+		},
+		{
+			Key:    "example.com/foo Iface#",
+			Label:  "Iface",
+			Source: "pkg/foo/iface.go:3",
+			Defs:   []string{"pkg/foo/iface.go"},
+		},
+	}
+	out := mergeAll([]Shard{assembleSymbols("pkg/foo", syms, []types.TargetGraphProject{{Path: "pkg/foo"}})}).Output()
+
+	_, ok := findEdge(out, "symbol:example.com/foo Impl#", "symbol:example.com/foo Iface#", types.RelationImplements)
+	assert.True(t, ok, "the implementer reaches the interface")
+	_, ok = findEdge(out, "symbol:example.com/foo Iface#", "symbol:example.com/foo Impl#", types.RelationImplements)
+	assert.False(t, ok, "the edge is not mirrored")
+}
+
 // TestAssembleShardsIngestsSymbols: a project with declared symbols yields a
 // per-project @symbols shard in the assembled set, merged into the graph.
 func TestAssembleShardsIngestsSymbols(t *testing.T) {
@@ -497,5 +523,29 @@ func TestSplitSymbolShardPartitionsByDefiningDirectory(t *testing.T) {
 		merged.canonical = false
 		assert.Equalf(t, fingerprintShardContent(merged), fingerprintShardContent(p),
 			"%s is already canonical, so skipping the merge fingerprints it alike", p.Name)
+	}
+}
+
+func TestIsTestPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"pkg/x_test.go", true},
+		{"pkg/x_test.go:12", true},
+		{"web/a.test.ts", true},
+		{"web/a.spec.tsx", true},
+		{"py/test_thing.py", true},
+		{"py/thing_test.py", true},
+		{"pkg/x.go", false},
+		{"web/testing.ts", false},
+		{"py/tester.py", false},
+		{"contest.go", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		assert.Equal(t, tc.want, IsTestPath(tc.path), tc.path)
 	}
 }

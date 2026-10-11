@@ -84,7 +84,7 @@ export function buzzTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       const b = s.metrics?.buzz;
-      card.el.hidden = !b;
+      card.setEmpty(b ? null : "No Buzz interpreter metrics have been reported yet.");
       if (b) render(b);
     },
     destroy() {},

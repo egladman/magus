@@ -58,7 +58,7 @@ export function sandboxTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       const sb = s.metrics?.sandbox;
-      card.el.hidden = !sb;
+      card.setEmpty(sb ? null : "No sandbox metrics have been reported yet.");
       if (sb) render(sb);
     },
     destroy() {},

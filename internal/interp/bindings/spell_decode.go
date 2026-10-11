@@ -43,6 +43,19 @@ func strField(m map[string]any, key, where string) (string, error) {
 	return s, nil
 }
 
+// boolField reads an optional bool field.
+func boolField(m map[string]any, key, where string) (bool, error) {
+	v, present := m[key]
+	if !present || v == nil {
+		return false, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, fmt.Errorf("%s: field %q is %T, want bool", where, key, v)
+	}
+	return b, nil
+}
+
 // intField reads an optional integer field.
 //
 // float64 is accepted alongside int and is not a leniency: a Buzz integer that has crossed a

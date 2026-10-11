@@ -354,8 +354,12 @@ import (
 // script over magus\importGraph, and the lenses that only look like answers.
 // magus-multi-agent forks a scout --read-only, passes one only through a script check,
 // and reads the outputs a fork says are regenerated outside its write paths.
-// 118: skill text drops the selling and filler words proofread now refuses.
-const SkillVersion = 118
+//
+// 118: magus-change-summary drops its `--prompt` section, because magus diff no longer has
+// that flag.
+//
+// 119: skill text drops the selling and filler words proofread now refuses.
+const SkillVersion = 119
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -451,10 +455,9 @@ type Variant int
 // spellings across those places (simple, concise, short), which is one word per
 // place a reader looks, and nothing to tell them the three name one thing.
 //
-// Why these two words rather than any other pair: internal/prompt.Variant is the same
-// concept for prose and already says Short, and the full end cannot move at all: `full`
-// is the installed twin's directory name and the branch every skill body's {{if .Full}}
-// already takes.
+// Why these two words rather than any other pair: the full end cannot move at all.
+// `full` is the installed twin's directory name and the branch every skill body's
+// {{if .Full}} already takes, and short is its natural opposite.
 //
 // The `skill-variant:` stamp KEY keeps its own name on purpose: it records which body a
 // file holds, which is a Variant, not the Form an install was asked for.

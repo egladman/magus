@@ -42,7 +42,7 @@ func (g *Graph) SymbolDecls(o SymbolDeclOptions) []types.SymbolDecl {
 		}
 		for _, def := range defs {
 			file, _, _ := strings.Cut(def.Source, ":")
-			if file == "" || isTestSource(file) || x.generated(file) {
+			if file == "" || IsTestPath(file) || x.generated(file) {
 				continue
 			}
 			d.Source, d.Doc = def.Source, def.Doc

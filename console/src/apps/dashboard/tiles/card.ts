@@ -8,9 +8,10 @@
 
 import type { DashboardState } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
-import { attachHelpPopover } from "../../../ui/help-popover";
+import { attachHelpPopover, createHelpButton } from "../../../ui/help-popover";
 import { persisted } from "../../../lib/persist";
 import { collapsedCardsCell } from "../../../desktop/layoutPrefs";
+import { scrollRegion } from "../scroll";
 
 export interface Tile {
   readonly el: HTMLElement;
@@ -51,10 +52,6 @@ export interface CardOptions {
   // mean. Rendered as the shared "?" affordance beside the heading (ui/help-popover.ts).
   //
   // Deliberately distinct from `term`, which links the glossary's definition of WHAT something is.
-  // A dashboard can show an operator a great deal and still leave them unable to act, because
-  // knowing that "cache hit rate is 62%" is not the same as knowing whether 62% is a problem. The
-  // glossary answers the first question and nothing answered the second.
-  //
   // Write it as a consequence, not a restatement: "a low rate here means most work is rebuilding
   // from scratch" tells the reader something; "the ratio of hits to total lookups" does not.
   why?: string;
@@ -65,59 +62,154 @@ export interface CardOptions {
   onReveal?: () => void;
 }
 
+// One disposer per live help popover, found again by the trigger. The boards rebuild their cards on
+// every reopen, so a popover that nobody disposes keeps its open state, and its shared document
+// listeners, alive after its trigger has left the page.
+const helpDisposers = new WeakMap<HTMLElement, () => void>();
+
 // helpGlyph builds the shared "?" affordance and wires its popover.
 //
 // Exported because not every panel is a Card: the utilization tile hand-builds its own PatternFly
-// shell, and the attention hero is deliberately not a card at all. Without this they would each
-// grow their own copy of the button, and the affordance that is supposed to mean one thing
-// everywhere would start looking and behaving differently per panel - which is exactly what the
-// shared popover was introduced to end.
+// shell, and the attention hero is deliberately not a card at all. The disposer is kept, so
+// disposeHelpGlyphs can close and unwire every one under a container before it is discarded.
 export function helpGlyph(why: string, label: string): HTMLElement {
-  const help = document.createElement("button");
-  help.type = "button";
-  help.className = "console-render-help-glyph";
-  help.textContent = "?";
-  help.setAttribute("aria-label", "Why " + label + " matters");
-  help.title = why; // attachHelpPopover reads this, then strips it so hover does not double up
-  attachHelpPopover(help);
+  const help = createHelpButton("Why " + label + " matters");
+  helpDisposers.set(
+    help,
+    attachHelpPopover(help, { text: why, label: "Why " + label + " matters" }),
+  );
   return help;
 }
 
-// Card builds the standard collapsible tile shell as a PatternFly Card and exposes its
-// body for the tile to populate. It restores its collapsed state from localStorage and
-// persists toggles. The header title is a glossary deep-link when a term is given.
+// disposeHelpGlyphs closes and unwires every help popover under root. Call it before the container
+// is emptied or removed.
+export function disposeHelpGlyphs(root: ParentNode): void {
+  for (const trigger of root.querySelectorAll<HTMLElement>("[data-help-trigger]")) {
+    const dispose = helpDisposers.get(trigger);
+    if (!dispose) continue;
+    helpDisposers.delete(trigger);
+    dispose();
+  }
+}
+
+// prose fills el with text in which a command in `backticks` becomes <code>: the spans between the
+// ticks are text, the spans inside them are code. textContent printed the ticks themselves, so a
+// mark meant to say "this is something you type" read as stray punctuation. One inline construct
+// only; a markdown parser here would be a second one beside notes/markdown.ts.
+export function prose(el: HTMLElement, text: string): void {
+  el.replaceChildren();
+  // Odd indices are the spans that sat between a pair of ticks.
+  text.split("`").forEach((part, i) => {
+    if (part === "") return;
+    if (i % 2 === 0) {
+      el.append(document.createTextNode(part));
+      return;
+    }
+    const code = document.createElement("code");
+    code.className = "console-dashboard-code";
+    code.textContent = part;
+    el.append(code);
+  });
+}
+
+// emptyState is the one "nothing to show here" the board uses: a PF extra-small empty state with a
+// single sentence. A tile that has nothing yet keeps its card and says so, instead of vanishing and
+// leaving the grid a different shape each poll. Identifiers go in `backticks`.
+export function emptyState(text: string): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "pf-v6-c-empty-state pf-m-xs";
+  root.dataset.emptyState = "";
+  const content = document.createElement("div");
+  content.className = "pf-v6-c-empty-state__content";
+  const body = document.createElement("div");
+  body.className = "pf-v6-c-empty-state__body";
+  prose(body, text);
+  content.append(body);
+  root.append(content);
+  return root;
+}
+
+export { scrollRegion };
+
+// tableScroller names the scroll container SortableTable wraps its table in.
+export function tableScroller(table: HTMLElement, label: string): void {
+  const wrap = table.querySelector<HTMLElement>(".console-table__wrap");
+  if (wrap) scrollRegion(wrap, label);
+}
+
+// countBadge is the header's count: a PF read Badge carrying the number, with the unit it counts
+// as hidden text so "3" is not announced alone. Replace the card's note slot with it.
+export function countBadge(unit: string): { el: HTMLElement; set(n: number): void } {
+  const el = document.createElement("span");
+  el.className = "pf-v6-c-badge pf-m-read";
+  const value = document.createTextNode("0");
+  const hidden = document.createElement("span");
+  hidden.className = "pf-v6-screen-reader";
+  hidden.textContent = " " + unit;
+  el.append(value, hidden);
+  return {
+    el,
+    set(n) {
+      value.data = String(n);
+    },
+  };
+}
+
+// SVG_NS and the toggle's chevron. PF's own toggle icon is a webfont glyph the console does not
+// ship, so the same angle-right is drawn inline; PF's pf-m-expanded rule turns it.
+const SVG_NS = "http://www.w3.org/2000/svg";
+function chevron(): SVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("class", "pf-v6-svg");
+  svg.setAttribute("viewBox", "0 0 256 512");
+  svg.setAttribute("fill", "currentColor");
+  svg.setAttribute("width", "1em");
+  svg.setAttribute("height", "1em");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute(
+    "d",
+    "M224.3 273l-136 136c-9.4 9.4-24.6 9.4-33.9 0l-22.6-22.6c-9.4-9.4-9.4-24.6 0-33.9l96.4-96.4-96.4-96.4c-9.4-9.4-9.4-24.6 0-33.9L54.3 103c9.4-9.4 24.6-9.4 33.9 0l136 136c9.5 9.4 9.5 24.6.1 34z",
+  );
+  svg.append(path);
+  return svg;
+}
+
+let titleSeq = 0;
+
+// Card builds the standard collapsible tile shell as a PatternFly compact Card and exposes its
+// body for the tile to populate. It restores its collapsed state from storage and persists toggles.
+// The header title is a glossary deep-link when a term is given, and the card's accessible name.
 //
-// PatternFly (W3): the shell is a pf-v6-c-card with the standard __header / __header-main /
-// __title / __title-text / __body parts. The collapse affordance is NOT PatternFly's own
-// expandable-card toggle (that renders a pficon glyph via a webfont the console does not
-// ship); instead the fold rides a data-collapsed attribute on the card and a bare caret
-// button, both styled ID/data-scoped in dashboard.css - the same "component-less bit"
-// escape the shell's status bar uses. The note sits in __actions (PF floats it right).
+// The fold rides a data-collapsed attribute on the card (dashboard.css hides the body); the toggle is
+// PF's own plain button with the Card's toggle icon, named by the title it folds. The note sits in
+// __actions (PF floats it right).
 export class Card {
   readonly el: HTMLElement;
   readonly body: HTMLElement;
   private noteEl: HTMLElement;
+  private empty: HTMLElement | null = null;
 
   constructor(id: string, title: string, opts: CardOptions = {}) {
     const section = document.createElement("section");
-    section.className = "pf-v6-c-card";
+    section.className = "pf-v6-c-card pf-m-compact pf-m-expanded";
     section.dataset.card = id;
+    const titleId = "console-dashboard-card-title-" + ++titleSeq;
+    section.setAttribute("aria-labelledby", titleId);
 
     const head = document.createElement("div");
     head.className = "pf-v6-c-card__header";
 
-    // Collapse toggle: a bare caret button (data-collapse). Bare so Pico (still loaded until
-    // W4) does not skin it as a filled button; dashboard.css resets it and draws the caret.
     const toggle = document.createElement("div");
     toggle.className = "pf-v6-c-card__header-toggle";
     const collapse = document.createElement("button");
     collapse.type = "button";
+    collapse.className = "pf-v6-c-button pf-m-plain";
     collapse.dataset.collapse = "";
-    collapse.setAttribute("aria-label", "Collapse card");
+    collapse.setAttribute("aria-labelledby", titleId);
     const caret = document.createElement("span");
     caret.className = "pf-v6-c-card__header-toggle-icon";
-    caret.dataset.caret = "";
-    caret.setAttribute("aria-hidden", "true");
+    caret.append(chevron());
     collapse.append(caret);
     toggle.append(collapse);
 
@@ -125,21 +217,19 @@ export class Card {
     headerMain.className = "pf-v6-c-card__header-main";
     const titleWrap = document.createElement("div");
     titleWrap.className = "pf-v6-c-card__title";
-    const h = document.createElement("h2");
+    const h = document.createElement("h3");
     h.className = "pf-v6-c-card__title-text";
+    h.id = titleId;
     if (opts.term) {
       // The TITLE itself is the reference link: clicking it opens the term's glossary entry.
-      // (It navigates - nothing intercepts it; see glossary.ts.) No separate labeled link
-      // beside it - that just repeated the title ("Workspaces Workspace", "Sandbox File
-      // system sandbox").
+      // No separate labeled link beside it - that just repeated the title ("Workspaces Workspace").
       h.append(glossaryLink(opts.term, { label: title, slug: opts.slug }));
     } else {
       h.textContent = title;
     }
     titleWrap.append(h);
-    // The "?" affordance, when the tile says why it matters. Reuses the shared glyph and popover
-    // rather than a title= tooltip: a hover tooltip is invisible on touch and unreachable on a
-    // shared screen, and this is the text most likely to be wanted by whoever knows the least.
+    // The "?" affordance, when the tile says why it matters: a popover rather than a title=
+    // tooltip, which is invisible on touch and unreachable on a shared screen.
     if (opts.why) titleWrap.append(helpGlyph(opts.why, opts.label || title));
     headerMain.append(titleWrap);
 
@@ -171,22 +261,20 @@ export class Card {
       }
     }
 
-    const collapsedNow = loadCollapsed().has(id);
-    if (collapsedNow) section.dataset.collapsed = "";
-    collapse.setAttribute("aria-expanded", collapsedNow ? "false" : "true");
+    const fold = (folded: boolean): void => {
+      section.toggleAttribute("data-collapsed", folded);
+      section.classList.toggle("pf-m-expanded", !folded);
+      collapse.setAttribute("aria-expanded", folded ? "false" : "true");
+    };
+    fold(loadCollapsed().has(id));
     collapse.addEventListener("click", () => {
-      const collapsed = section.hasAttribute("data-collapsed");
+      const folded = !section.hasAttribute("data-collapsed");
       const set = loadCollapsed();
-      if (collapsed) {
-        section.removeAttribute("data-collapsed");
-        set.delete(id);
-      } else {
-        section.dataset.collapsed = "";
-        set.add(id);
-      }
-      collapse.setAttribute("aria-expanded", collapsed ? "true" : "false");
+      if (folded) set.add(id);
+      else set.delete(id);
+      fold(folded);
       saveCollapsed(set);
-      if (collapsed) opts.onReveal?.();
+      if (!folded) opts.onReveal?.();
     });
   }
 
@@ -200,6 +288,24 @@ export class Card {
   // more than text. Returned so callers do not have to querySelector past the card shell.
   noteNode(): HTMLElement {
     return this.noteEl;
+  }
+
+  // setEmpty swaps the body for the shared empty state while the tile has nothing to show, and
+  // marks the card [data-empty] so the Big Picture rotator skips it. null puts the content back.
+  // The text is only rebuilt when it changes, so a status frame per second leaves it alone.
+  setEmpty(text: string | null): void {
+    if (text === null) {
+      this.el.removeAttribute("data-empty");
+      this.empty?.remove();
+      this.empty = null;
+      return;
+    }
+    this.el.dataset.empty = "";
+    if (this.empty && this.empty.textContent === text.replaceAll("`", "")) return;
+    const next = emptyState(text);
+    if (this.empty) this.empty.replaceWith(next);
+    else this.body.prepend(next);
+    this.empty = next;
   }
 }
 

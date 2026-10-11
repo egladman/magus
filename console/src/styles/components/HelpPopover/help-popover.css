@@ -1,0 +1,36 @@
+/* The shared "?" affordance (ui/help-popover.ts): one circle shape on every app, sized with
+   box-sizing so width equals height once the border counts. */
+.console-render-help-glyph {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  cursor: help;
+  user-select: none;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+}
+.console-render-help-glyph:hover, .console-render-help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
+/* The display above is an author rule and beats the attribute; a glyph explaining why a control is
+   unavailable has to disappear when it is not. */
+.console-render-help-glyph[hidden] { display: none; }
+[data-help-trigger] {
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+}
+/* A PF Popover placed by ui/help-popover.ts at coordinates it clamps into the viewport, so it never
+   spills off a phone. The gap to the trigger is a margin, so one coordinate serves either side. */
+.console-help-popover {
+  position: fixed;
+  z-index: var(--pf-t--global--z-index--lg);
+  max-inline-size: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
+}
+.console-help-popover.pf-m-bottom { margin-block-start: var(--pf-t--global--spacer--sm); }
+.console-help-popover.pf-m-top { margin-block-start: calc(-1 * var(--pf-t--global--spacer--sm)); }

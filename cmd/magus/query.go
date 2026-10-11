@@ -1153,7 +1153,7 @@ func askServer(ctx context.Context, root, verb string, read *graphRead, reply an
 		return false
 	}
 	if err := proc.Read(ctx, sock, version, wsRoot, verb, read, reply); err != nil {
-		slog.With(attr.Component("magus")).DebugContext(ctx, "the server did not answer this read; reading locally", slog.String("error", err.Error()))
+		slog.With(attr.Component("magus")).DebugContext(ctx, "the server did not answer this read; reading locally", attr.Error(err))
 		return false
 	}
 	return true

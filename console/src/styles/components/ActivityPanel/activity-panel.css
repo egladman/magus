@@ -1,0 +1,60 @@
+/* "What magus is running, and what just ran" (activityDrawer.ts): the SidePanel frame holding a dense
+   two-section list. */
+#console-activitypanel .console-shell-panel__body { gap: var(--pf-t--global--spacer--md); }
+.console-shell-activity__summary {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__section { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--xs); }
+.console-shell-activity__section-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  text-transform: uppercase;
+  letter-spacing: var(--console-label-tracking);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+/* The outcome rule is a data attribute; the status mark beside the title carries the shape and the
+   word, so the rule is never the only cue. */
+.console-shell-activity__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  border-left: var(--pf-t--global--border--width--strong) solid transparent;
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-activity__row[data-outcome="pass"] { border-left-color: var(--console-status-ok); }
+.console-shell-activity__row[data-outcome="fail"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
+.console-shell-activity__row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  min-width: 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-shell-activity__row-title code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; }
+.console-shell-activity__row-link { min-width: 0; color: inherit; text-decoration: none; }
+.console-shell-activity__row-link:hover { color: var(--pf-t--global--text--color--link--default); text-decoration: underline; }
+.console-shell-activity__row-meta { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
+.console-shell-activity__row-unit {
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  letter-spacing: 0.03em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__empty {
+  margin: 0;
+  padding: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: var(--pf-t--global--font--line-height--body);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__empty[hidden] { display: none; }

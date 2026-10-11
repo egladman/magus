@@ -15,6 +15,7 @@ import {
 } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows } from "./density";
+import { factList, type Fact } from "./widgets";
 
 // ABSENT says what a step does with no broker, per policy: the fact an operator needs when the
 // card reads "not running".
@@ -23,15 +24,6 @@ const ABSENT: Record<BrokerPolicy, string> = {
   "best-effort": "not running: the next run starts one, and runs unarbitrated until it answers",
   required: "not running: steps refuse to start until one answers (MGS3022)",
 };
-
-function fact(label: string, value: string): HTMLElement {
-  const li = h("li", "console-dashboard-row");
-  li.append(
-    h("code", "console-dashboard-row__cmd", label),
-    h("span", "console-dashboard-row__meta", value),
-  );
-  return li;
-}
 
 // share renders "held/budget unit", or the held figure alone when the broker has not measured the
 // budget: a zero there means unmeasured, not a host with no room.
@@ -52,34 +44,51 @@ export function brokerTile(): Tile {
   const state = h("span", "pf-v6-c-label__content", "-");
   stateLabel.append(state);
   card.noteNode().replaceWith(stateLabel);
-  const facts = h("ul", "console-dashboard-rowlist");
+  const facts = h("div", "console-dashboard-facts");
   const holders = h("ul", "console-dashboard-rowlist");
   card.body.append(facts, holders);
 
+  // The facts list is rebuilt only when what it says changes: the broker is read once a frame and
+  // almost never differs, and rebuilding a description list per second helps nobody.
+  let painted = "";
+  function setFacts(rows: Fact[]): void {
+    const signature = JSON.stringify(rows.map((r) => [r.term, r.value]));
+    if (signature === painted) return;
+    painted = signature;
+    facts.replaceChildren(factList(rows));
+  }
+
   function render(b: BrokerView | null, policy: BrokerPolicy): void {
-    card.el.hidden = false;
+    card.setEmpty(null);
     holders.replaceChildren();
     if (!b) {
       state.textContent = policy === "off" ? "off" : "not running";
-      facts.replaceChildren(fact("policy", ABSENT[policy]));
+      setFacts([{ term: "Policy", value: ABSENT[policy] }]);
       return;
     }
     state.textContent = "running";
-    const rows = [
-      fact("slots", share(String(b.heldSlots), b.budgetSlots, String(b.budgetSlots))),
-      fact(
-        "memory",
-        share(fmtBytes(b.heldMb * 1024 * 1024), b.budgetMb, fmtBytes(b.budgetMb * 1024 * 1024)),
-      ),
-      fact("process", "pid " + b.pid + (b.version ? " - " + b.version : "")),
-      fact("policy", policy),
+    const rows: Fact[] = [
+      {
+        term: "Slots",
+        value: share(String(b.heldSlots), b.budgetSlots, String(b.budgetSlots)),
+      },
+      {
+        term: "Memory",
+        value: share(
+          fmtBytes(b.heldMb * 1024 * 1024),
+          b.budgetMb,
+          fmtBytes(b.budgetMb * 1024 * 1024),
+        ),
+      },
+      { term: "Process", value: "pid " + b.pid + (b.version ? ", " + b.version : "") },
+      { term: "Policy", value: policy },
     ];
     const up = relTime(b.startTime);
-    if (up) rows.push(fact("up", up));
+    if (up) rows.push({ term: "Up", value: up });
     if (b.idleExitSeconds > 0)
-      rows.push(fact("exits", "after " + b.idleExitSeconds + "s holding nothing"));
-    if (b.socket) rows.push(fact("socket", b.socket));
-    facts.replaceChildren(...rows);
+      rows.push({ term: "Exits", value: "after " + b.idleExitSeconds + "s holding nothing" });
+    if (b.socket) rows.push({ term: "Socket", value: b.socket });
+    setFacts(rows);
     for (const c of b.holders) {
       const li = h("li", "console-dashboard-row");
       const detail = [c.slots + (c.slots === 1 ? " slot" : " slots")];
@@ -89,10 +98,12 @@ export function brokerTile(): Tile {
       if (age) detail.push("held " + age);
       li.append(
         h("code", "console-dashboard-row__cmd", (c.project || ".") + ":" + c.target),
-        h("span", "console-dashboard-row__meta", detail.join(" - ")),
+        h("span", "console-dashboard-row__meta", detail.join(", ")),
       );
-      // The holder's command and checkout are what name a holder from another worktree.
-      li.title = [c.command, c.dir].filter(Boolean).join("\n");
+      // The holder's command and checkout are what name a holder from another worktree, so they are
+      // text on the row rather than a tooltip.
+      const where = [c.command, c.dir].filter(Boolean).join("  ");
+      if (where) li.append(h("code", "console-dashboard-row__detail", where));
       holders.append(li);
     }
   }
@@ -103,7 +114,6 @@ export function brokerTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (s.status) render(s.status.broker, s.status.brokerPolicy);
-      else card.el.hidden = true;
     },
     destroy() {
       unfit();

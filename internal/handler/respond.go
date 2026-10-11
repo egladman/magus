@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/types"
 )
@@ -69,7 +70,7 @@ func Refuse(w http.ResponseWriter, r *http.Request, e rpcerr.Error) {
 func WriteJSON(w http.ResponseWriter, r *http.Request, v any) {
 	body, err := json.Marshal(v)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "response marshal failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
+		slog.ErrorContext(r.Context(), "response marshal failed", slog.String("path", r.URL.Path), attr.Error(err))
 		Refuse(w, r, rpcerr.Internal("response"))
 		return
 	}

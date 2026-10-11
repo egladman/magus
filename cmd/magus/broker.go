@@ -138,7 +138,7 @@ func brokerServe(ctx context.Context, args []string) error {
 	// anything new is hosted.
 	journal, jerr := service.NewJournal(filepath.Join(proc.SockDir(), "services"))
 	if jerr != nil {
-		slog.With(attr.Component("broker")).Warn("service journal unavailable; crash reaping disabled", slog.String("error", jerr.Error()))
+		slog.With(attr.Component("broker")).Warn("service journal unavailable; crash reaping disabled", attr.Error(jerr))
 	} else if res := journal.Sweep(ctx); res.Reaped > 0 || res.Unreapable > 0 {
 		slog.With(attr.Component("broker")).Info("reaped orphaned services a previous broker left",
 			slog.Int("reaped", res.Reaped), slog.Int("left_running", res.Unreapable))
@@ -195,7 +195,7 @@ func reopenBrokerLog(ctx context.Context, path string) {
 		return
 	}
 	if err := redirectStdio(path); err != nil {
-		slog.With(attr.Component("broker")).ErrorContext(ctx, "could not reopen its log; still writing to the old one", slog.String("error", err.Error()))
+		slog.With(attr.Component("broker")).ErrorContext(ctx, "could not reopen its log; still writing to the old one", attr.Error(err))
 		return
 	}
 	slog.With(attr.Component("broker")).InfoContext(ctx, "reopened its log", slog.String("log", path))
@@ -342,7 +342,7 @@ func ensureBroker(ctx context.Context) int {
 	}
 	pid, logPath, err := spawnBroker()
 	if err != nil {
-		slog.With(attr.Component("magus")).Debug("could not start a broker", slog.String("error", err.Error()))
+		slog.With(attr.Component("magus")).Debug("could not start a broker", attr.Error(err))
 		return 0
 	}
 	deadline := time.Now().Add(brokerReadyTimeout)

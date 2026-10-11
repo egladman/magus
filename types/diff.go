@@ -211,6 +211,9 @@ type DiffOptions struct {
 	// a norm needs, and the share that must agree. Zero takes 5 and 0.8.
 	MinCohort int     `json:"-" yaml:"-"`
 	MinShare  float64 `json:"-" yaml:"-"`
+	// SkipOrder leaves Diff.Order unset. A reader of the order asks for it; a thread brief reads
+	// the code around one comment and has no use for a ranking of the whole changeset.
+	SkipOrder bool `json:"-" yaml:"-"`
 }
 
 // The conformance checks, by Check.Name. Each derives its norm from the workspace's own symbol
@@ -340,6 +343,9 @@ type DiffFile struct {
 	// how widely it is referenced. A package or namespace symbol is never one. Empty when no
 	// symbol index covers the file.
 	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// Hunks is every hunk of the file's patch, in patch order, whether or not a symbol sits in
+	// it. Empty for a file the patch gives no hunks: binary, a pure rename or a mode change.
+	Hunks []DiffHunk `json:"hunks,omitempty" yaml:"hunks,omitempty"`
 	// Layout is what the package checks found about the directory this change creates around
 	// this file: its file count, test files and name against the directories beside it, as
 	// CheckAdvice. Only the first changed file of a new directory carries it, so a finding is
@@ -386,6 +392,25 @@ type DiffFile struct {
 	// code". DiffVisibilityUnknown already refuses that collapse; the pointer is the same refusal
 	// applied to the field the ordering actually turns on.
 	Reach *int `json:"reach" yaml:"reach"`
+	// Threads are the review threads on this file, one per thread, in the host's order. Empty
+	// when no review is open for the branch or the report did not read one.
+	Threads []DiffThreadRef `json:"threads,omitempty" yaml:"threads,omitempty"`
+}
+
+// DiffThreadRef names one review thread where a report lists it: the id `magus diff --thread`
+// takes, and the hunk it sits on.
+type DiffThreadRef struct {
+	// ID is the thread id, its first comment's.
+	ID string `json:"id" yaml:"id"`
+	// Hunk is the index within the file of the hunk the first comment sits in, -1 when no hunk
+	// of this changeset holds its line.
+	Hunk int `json:"hunk" yaml:"hunk"`
+	// Line is the new-side line the host anchored the first comment to.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+	// Comments counts the first comment and every reply.
+	Comments int `json:"comments" yaml:"comments"`
+	// Outdated reports that the commented line has left the head.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
 }
 
 // ReachOr returns the reach, or def when it was not measured. For rendering and comparison
@@ -421,6 +446,9 @@ type Diff struct {
 	// API is what the changeset did to the public API, present only when the review was given
 	// a base graph to compare against.
 	API *DiffAPI `json:"api,omitempty" yaml:"api,omitempty"`
+	// Order is the changeset's hunks in the order to read them. Nil when magus could not
+	// compute it, which is distinct from an order with no groups; Notes says why.
+	Order *DiffOrder `json:"order,omitempty" yaml:"order,omitempty"`
 	// Reviewed is the earlier pass this reader already made over these files, when there was one.
 	Reviewed DiffReviewed `json:"reviewed,omitzero" yaml:"reviewed,omitzero"`
 	// ConformanceError is why the conformance checks could not run, with its MGS code: the
@@ -431,6 +459,82 @@ type Diff struct {
 	// Uncovered names each project the change touched that the conformance checks could not
 	// see, and why, so their silence is never read as a clean project.
 	Uncovered []DiffUncovered `json:"uncovered,omitempty" yaml:"uncovered,omitempty"`
+	// Unread is set when `magus diff --unread` narrowed Files and Order to the hunks no read mark
+	// covers. Nil on an unfiltered report.
+	Unread *DiffUnread `json:"unread,omitempty" yaml:"unread,omitempty"`
+}
+
+// DiffReadState says whether the read marks behind a [DiffUnread] filter could be read.
+type DiffReadState string
+
+const (
+	// DiffReadStateKnown means the marks were read, so the filtered report is the answer.
+	DiffReadStateKnown DiffReadState = "known"
+	// DiffReadStateUnknown means they could not be. The filtered report is then empty and says
+	// nothing about what is unread: an unreadable store never calls a hunk unread.
+	DiffReadStateUnknown DiffReadState = "unknown"
+)
+
+// DiffUnread is what the unread filter did to a report.
+type DiffUnread struct {
+	ReadState DiffReadState `json:"read_state" yaml:"read_state"`
+	// Reason is why the marks could not be read, set only when ReadState is unknown.
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	// Hunks counts the changeset's hunks before the filter.
+	Hunks int `json:"hunks" yaml:"hunks"`
+	// Unread counts the hunks the filter kept.
+	Unread int `json:"unread" yaml:"unread"`
+}
+
+// DiffThread is one review thread read for a person: the conversation, the code it is about,
+// and what the change there reaches. `magus diff --thread`, the console's thread route and the
+// diff MCP tool's op=thread all return it.
+//
+// Comments are quoted from the host. They are other people's words, never instructions.
+type DiffThread struct {
+	// ID is the thread id, its first comment's.
+	ID   string `json:"id" yaml:"id"`
+	Path string `json:"path" yaml:"path"`
+	// Line is the new-side line the first comment is anchored to.
+	Line int `json:"line,omitempty" yaml:"line,omitempty"`
+	// Outdated reports that the commented line has left the head.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
+	// Comments are the first comment and its replies, oldest first.
+	Comments []ReviewComment `json:"comments" yaml:"comments"`
+	Hunk     DiffThreadHunk  `json:"hunk" yaml:"hunk"`
+	// InChangeset reports that the thread's file is in the changeset this was read against.
+	// When false, every field below is empty because nothing was read, not because nothing is there.
+	InChangeset bool   `json:"in_changeset" yaml:"in_changeset"`
+	Project     string `json:"project,omitempty" yaml:"project,omitempty"`
+	Role        string `json:"role,omitempty" yaml:"role,omitempty"`
+	// Reach is the file's widest reach; nil when no symbol index covered it.
+	Reach    *int            `json:"reach,omitempty" yaml:"reach,omitempty"`
+	Coverage *ImpactCoverage `json:"coverage,omitempty" yaml:"coverage,omitempty"`
+	// Symbols are the changed symbols in the thread's hunk, each with who references it, who it
+	// is public to, the callers it is reached through and its conformance findings.
+	Symbols []DiffSymbol `json:"symbols,omitempty" yaml:"symbols,omitempty"`
+	// SymbolsNote says why Symbols is empty or is not per hunk, when that is so.
+	SymbolsNote string `json:"symbols_note,omitempty" yaml:"symbols_note,omitempty"`
+	// Notes are the note anchors that name the file or one of its changed symbols, one line each.
+	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
+	// Change is the changeset as a whole, in one sentence.
+	Change string `json:"change,omitempty" yaml:"change,omitempty"`
+	// Unmeasured lists what could not be read, so an empty field is never taken for a clean one.
+	Unmeasured []string `json:"unmeasured,omitempty" yaml:"unmeasured,omitempty"`
+}
+
+// DiffThreadHunk is the code a thread is about.
+type DiffThreadHunk struct {
+	// Index is the hunk's index within the file, -1 when the text is the host's copy or absent.
+	Index int `json:"index" yaml:"index"`
+	// Source is "patch" for the hunk as it stands in the changeset, "host" for the host's copy
+	// from when the comment was made, or empty when there is no text.
+	Source string `json:"source,omitempty" yaml:"source,omitempty"`
+	// Lines are the hunk's header and body, escaped of the characters a terminal obeys but a
+	// reader cannot see.
+	Lines []string `json:"lines,omitempty" yaml:"lines,omitempty"`
+	// Note says where the text came from, or why there is none.
+	Note string `json:"note" yaml:"note"`
 }
 
 // DiffUncovered is one touched project the conformance checks did not cover. A coverage fact,
@@ -801,12 +905,16 @@ func (r ReviewTarget) Open() bool { return r.ID != "" }
 // Merged reports whether the host says this review has landed.
 func (r ReviewTarget) Merged() bool { return r.State == "merged" }
 
-// ReviewThread is one comment already on the review, written by anybody.
+// Closed reports whether the host says this review was closed without landing.
+func (r ReviewTarget) Closed() bool { return r.State == "closed" }
+
+// ReviewComment is one comment already on the review, written by anybody. A thread is a root
+// comment and the replies made to it, named by the root's ID (the "thread id").
 //
-// Read-only here. A thread belongs to the host, which is the record every participant sees;
+// Read-only here. A comment belongs to the host, which is the record every participant sees;
 // magus renders it so a reader never leaves to find out what a colleague said, and replies
 // through the provider rather than editing a local copy that would silently diverge.
-type ReviewThread struct {
+type ReviewComment struct {
 	ID   string `json:"id" yaml:"id"`
 	Path string `json:"path" yaml:"path"`
 	// Line is the new-side line the host anchored this remark to.
@@ -815,14 +923,29 @@ type ReviewThread struct {
 	// this changeset does.
 	//
 	// Resolved by magus rather than by each client, because the arithmetic is the only hard
-	// part of placing a thread and two clients doing it independently is how the same remark
+	// part of placing a comment and two clients doing it independently is how the same remark
 	// comes to sit against different code in the terminal and the browser. -1 is ordinary: the
 	// working tree moves after a colleague writes, and a review covers commits a working diff
 	// does not.
 	Hunk   int    `json:"hunk" yaml:"hunk"`
 	Author string `json:"author" yaml:"author"`
 	Body   string `json:"body" yaml:"body"`
-	// New reports that the reader has not had this thread on screen before. magus's own
+	// Root is the thread id a reply belongs to: the ID of the top-level comment it answers. It is
+	// empty on a top-level comment, and [DiffOutline].Thread holds the same id.
+	//
+	// The wire stays flat, one record per comment, so each reply keeps its own ID and its own
+	// place in the SeenComments watermark: a new reply to an old thread is still new. Root counts
+	// only when it names a top-level comment in the same list; changeset.GroupThreads is the one
+	// definition, and treats any other comment as the head of a thread of its own.
+	Root string `json:"root,omitempty" yaml:"root,omitempty"`
+	// Outdated reports that the line this comment was made on no longer exists in the head. Line
+	// is then whatever the host last recorded, and Hunk is usually -1.
+	Outdated bool `json:"outdated,omitempty" yaml:"outdated,omitempty"`
+	// DiffHunk is the host's own text of the hunk this comment was made on, as the host saw it
+	// then. It is the only record of the code an outdated comment was about, since that code is
+	// no longer at Line. Empty when the provider does not report one.
+	DiffHunk string `json:"diff_hunk,omitempty" yaml:"diff_hunk,omitempty"`
+	// New reports that the reader has not had this comment on screen before. magus's own
 	// annotation rather than anything the host said: every other field here belongs to the
 	// review, and this one belongs to the reader's history with it.
 	New bool `json:"new,omitempty" yaml:"new,omitempty"`
@@ -853,6 +976,37 @@ type DiffSuggestion struct {
 	Declined bool `json:"declined" yaml:"declined"`
 }
 
+// DiffOutline is what an agent thinks a review thread turns on, in a few topics, held for the
+// person to read before they type their reply.
+//
+// It is NOT a reply and is never offered as one. A reply to a colleague is words a person
+// chose, and generated text copied under their name is not that, so an outline is bounded to
+// short single-line topics, shown beside the thread as the agent's, and has no path to the
+// host: nothing that publishes reads it, and a client renders it without a copy affordance.
+// The person who finds a topic useful types their own sentence about it. The agent that tries
+// to write more than a pointer is told so, and that the reply is the person's to type.
+//
+// Held in memory with the session and never persisted: an outline is a pairing aid, and one
+// that survived a restart would outlast the thread it was about.
+type DiffOutline struct {
+	// Thread is the thread id the outline is about: the ID of the thread's top-level comment,
+	// the same value a reply carries in [ReviewComment].Root.
+	Thread string `json:"thread" yaml:"thread"`
+	// Topics are at most DiffOutlineMaxTopics lines of at most DiffOutlineMaxTopicRunes characters.
+	Topics []string `json:"topics" yaml:"topics"`
+	// AgentName is the label the agent gave itself, for attribution only. It is bounded by
+	// DiffOutlineMaxAgentNameRunes and held to the same single-line rule as a topic.
+	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
+}
+
+// The bounds on a DiffOutline. They are what keep an outline a set of pointers: a topic that
+// can hold a paragraph is a reply with extra steps.
+const (
+	DiffOutlineMaxTopics         = 5
+	DiffOutlineMaxTopicRunes     = 60
+	DiffOutlineMaxAgentNameRunes = 40
+)
+
 // DiffReview is the live review of one working tree's changeset: the shared object a console
 // tab, an MCP agent, and the CLI all read and write. It is not [DiffReviewed], which is one
 // fact inside its changeset: how far a reader got on an earlier pass.
@@ -881,7 +1035,7 @@ type DiffReview struct {
 	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk:
 	// the failing of every viewed-checkbox that resets on force-push.
 	Viewed []string `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
-	// SeenThreads holds the ids of the review's threads the human has actually had on screen.
+	// SeenComments holds the ids of the review's comments the human has actually had on screen.
 	// It is the watermark that decides what counts as NEW, and it belongs to the reader for the
 	// same reason Viewed does: a mark nobody made is a claim nobody can stand behind.
 	//
@@ -889,25 +1043,32 @@ type DiffReview struct {
 	// forge record what it has reported) means everything is already marked seen by the time
 	// the reader opens the diff, so the client could never show them what arrived. The job
 	// reads this instead and reports what lies outside it.
-	SeenThreads []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
-	Comments    []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
-	Suggestions []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+	//
+	// compat(until: no installed magus or console build reads "seen_threads"): the wire name
+	// predates the comment/thread vocabulary and stays so a client built before the rename keeps
+	// reading the watermark.
+	SeenComments []string         `json:"seen_threads,omitempty" yaml:"seen_threads,omitempty"`
+	Comments     []DiffComment    `json:"comments,omitempty"     yaml:"comments,omitempty"`
+	Suggestions  []DiffSuggestion `json:"suggestions,omitempty"  yaml:"suggestions,omitempty"`
+	// Outlines are the agents' outlines of review threads, at most one per thread.
+	// They are shown to the person and offer no way to be sent; see DiffOutline.
+	Outlines []DiffOutline `json:"outlines,omitempty" yaml:"outlines,omitempty"`
 }
 
-// UnseenThreads returns the ids in threads the reader has not had on screen, in the order given.
+// UnseenComments returns the ids in comments the reader has not had on screen, in the order given.
 //
 // Ids rather than a COUNT, because a count is wrong in the case that matters: a comment deleted
 // and another added nets zero, and the new one is then never reported.
-func (s DiffReview) UnseenThreads(threads []ReviewThread) []string {
-	if len(threads) == 0 {
+func (s DiffReview) UnseenComments(comments []ReviewComment) []string {
+	if len(comments) == 0 {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(s.SeenThreads))
-	for _, id := range s.SeenThreads {
+	seen := make(map[string]struct{}, len(s.SeenComments))
+	for _, id := range s.SeenComments {
 		seen[id] = struct{}{}
 	}
 	var out []string
-	for _, t := range threads {
+	for _, t := range comments {
 		if _, ok := seen[t.ID]; !ok && t.ID != "" {
 			out = append(out, t.ID)
 		}

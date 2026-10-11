@@ -6,6 +6,7 @@ import { must } from "../../lib/guards";
 // re-run whenever the body is rebuilt (a view toggle, a filter change).
 
 import { bodyEl, el } from "./dom";
+import { setSectionOpen } from "../../render/sections";
 
 let searchMarks: HTMLElement[] = [];
 let activeMark = -1;
@@ -80,11 +81,7 @@ export function setActiveMark(i: number): void {
   mark.setAttribute("data-active", "");
   // Expand a collapsed section so the active match is visible.
   const sec = mark.closest(".console-render-section");
-  if (sec && sec.hasAttribute("data-collapsed")) {
-    sec.removeAttribute("data-collapsed");
-    const head = sec.querySelector(".console-render-section__head");
-    if (head) head.setAttribute("aria-expanded", "true");
-  }
+  if (sec?.hasAttribute("data-collapsed")) setSectionOpen(sec, true);
   mark.scrollIntoView({ block: "center", behavior: "smooth" });
   const countEl = el("search-count");
   if (countEl) countEl.textContent = activeMark + 1 + "/" + searchMarks.length;

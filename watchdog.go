@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -126,7 +127,7 @@ func (m *Magus) watchForStall(ctx context.Context, prog *cache.Progress, release
 				// Logged as well as returned: the abort unwinds through cancellation, and
 				// a reader watching the terminal should see WHY the run stopped at the
 				// moment it stops, not only in the final error.
-				slog.ErrorContext(logCtx, err.Error())
+				slog.ErrorContext(logCtx, "run stalled; aborting it", attr.Error(err))
 				cancel(err)
 				// After the cancel, so the run is already unwinding when its
 				// exclusivity goes: a peer that takes a lock here finds a run on its
@@ -209,7 +210,7 @@ func (m *Magus) watchForSupersede(ctx context.Context, hold *projectHold) (conte
 				w.tripped.Store(err)
 				// Logged as well as returned, so a reader watching the terminal learns why
 				// the run stopped at the moment it stops rather than only at the end.
-				slog.WarnContext(logCtx, err.Error())
+				slog.WarnContext(logCtx, "gate superseded; yielding its project locks", attr.Error(err))
 				cancel(err)
 				return
 			}

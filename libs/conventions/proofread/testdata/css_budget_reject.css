@@ -1,0 +1,32 @@
+/* The header of this sheet.
+   It names the tokens the sheet reads.
+   It names the apps that load it.
+   It names the build step that bundles it.
+   It names the cache that serves it.
+   It names the test that guards it.
+   It names the owner of each section.
+   It names the order the sections run in.
+   It names the file it is compared against. */
+
+/* The grid.
+   Three columns on a wide pane.
+   Two on a narrow one.
+   One below the floor.
+   The floor is a token. */
+.grid { display: grid; }
+
+/* A banner between rules.
+   It runs on.
+   And on.
+   And on. */
+
+.card {
+  /* A note above a declaration.
+     It runs on.
+     And on.
+     And on. */
+  padding: 1rem;
+  margin: 0; /* a trailing note
+                that wraps
+                twice */
+}

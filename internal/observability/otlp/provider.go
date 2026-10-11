@@ -351,6 +351,7 @@ func (disabledProvider) RecordLeaseRegistration(_ context.Context, _ string)    
 func (disabledProvider) RecordAttentionDisposition(_ context.Context, _ float64, _ string)     {}
 func (disabledProvider) RecordReviewRemark(_ context.Context, _ string)                        {}
 func (disabledProvider) RecordReviewPublish(_ context.Context, _ string, _ bool)               {}
+func (disabledProvider) RecordReviewMergedWhileReading(_ context.Context, _ float64)           {}
 func (disabledProvider) Snapshot(_ context.Context) ([]byte, error)                            { return nil, nil }
 func (disabledProvider) Shutdown(_ context.Context) error                                      { return nil }
 

@@ -48,7 +48,8 @@ import {
   anchorLine,
   maxLineChars,
   placeThreads,
-  storyText,
+  commentThreadId,
+  touchText,
   LINE_PREFIX_CHARS,
   type PlacedThreads,
   type Row,
@@ -64,6 +65,15 @@ import {
   riskChips,
   type OrderedChangeset,
 } from "./order";
+import {
+  firstUnreadStep,
+  readingSteps,
+  stepFiles,
+  findStepIndex,
+  stepRows,
+  type ReadingStep,
+  type StepRows,
+} from "./readingorder";
 import { reportFailure } from "../../lib/notifications";
 import { detectLanguage, tokenize, type Language } from "./syntax";
 import {
@@ -77,19 +87,23 @@ import {
   mutate,
   publish,
   reply,
+  setReading,
   HttpError,
+  type Reading,
   type DiffComment,
   type DiffReview,
   type DiffAnnotation,
   type DiffTouch,
   type ReviewInfo,
-  type ReviewThread,
+  type ReviewComment,
   type ReviewVerdict,
   type ReviewRole,
   type BranchChange,
   reportSessionFailure,
 } from "./session";
 import { setMarkdown } from "./markdown";
+import { guardOutline, guardReply, outlineKey, outlinesByThread } from "./outline";
+import { copyThreadText } from "./thread-copy";
 import { fetchSessionActivity, renderAgentSession } from "./agent";
 import { mergedNotice } from "../../lib/review-notice";
 import {
@@ -99,6 +113,7 @@ import {
   applyDemoPublish,
   applyDemoReply,
   applyDemoOp,
+  demoReading,
 } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../../desktop/commands";
@@ -118,35 +133,56 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import { svgGlyph } from "../../ui/glyph";
+import { must } from "../../lib/guards";
+import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
+import { expandableSection } from "../../ui/expandable";
+import { statusGlyph, statusIcon, statusText, type Status } from "../../ui/status";
+import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
+import {
+  ANGLE_LEFT,
+  ANGLE_RIGHT,
+  CLOSE,
+  COPIED_MS,
+  buttonIcon,
+  clipboardCopy,
+  disclosure,
+  helperLine,
+  linkButton,
+  plainIconButton,
+  popover,
+  progress,
+  radio,
+  tabs,
+  toggleGroup,
+  toolbarRow,
+  uid,
+} from "./pf";
 
-// Marks for this app's two toolbar controls. Kept here rather than in ui/glyph.ts, which holds
-// only the ones a second app also draws.
+// Marks for this app's toolbar controls. Kept here rather than in ui/glyph.ts, which holds only the
+// ones a second app also draws.
 //
 // PLAY is the run control's: the conventional right-pointing triangle for "start this".
 const PLAY: readonly string[] = ["M8 5l11 7-11 7z"];
 
 // CROSSHAIR is focus mode's: aim at one thing. Not corner brackets, which every other UI spends on
 // fullscreen - they promise a bigger pane rather than a narrower one.
-// buttonIcon wraps a mark in the structure PF's Icon component renders, which carries the -0.125em
-// nudge that sits an svg on the optical centre of the text beside it. Spelled out because this
-// console consumes PF as plain CSS.
-function buttonIcon(paths: readonly string[]): HTMLElement {
-  const slot = h("span", "pf-v6-c-button__icon");
-  const icon = h("span", "pf-v6-c-icon pf-m-inline");
-  const content = h("span", "pf-v6-c-icon__content");
-  content.append(svgGlyph(paths));
-  icon.append(content);
-  slot.append(icon);
-  return slot;
-}
-
 const CROSSHAIR: readonly string[] = [
   "M19 12a7 7 0 1 1-14 0 7 7 0 1 1 14 0",
   "M12 2v3",
   "M12 19v3",
   "M2 12h3",
   "M19 12h3",
+];
+
+// LIST is the overview's: a changeset as a column of lines.
+const LIST: readonly string[] = [
+  "M8 6h13",
+  "M8 12h13",
+  "M8 18h13",
+  "M3 6h.01",
+  "M3 12h.01",
+  "M3 18h.01",
 ];
 import type { AppInstance } from "../../desktop/standalone";
 
@@ -216,18 +252,26 @@ interface State {
   // default, which is what makes a second pass cost only the second pass: a reviewer who asked
   // for changes comes back to a changeset that is mostly what they already read.
   showSettled: boolean;
-  // focus narrows the stream to ONE hunk. The counts, the reading order and the threads are all
+  // focus narrows the stream to ONE step: the hunks the reading order shows together, or a single
+  // hunk when the server computed no order. The counts, the reading order and the threads are all
   // still computed over the whole changeset - what changes is how much of it is asked of the
   // reader at once.
   focus: boolean;
-  // focusAt is the hunk focus mode is showing, held as a path and the hunk's own index rather
-  // than a row number: rows are rebuilt on every fold, mode switch and annotation, and a row
-  // number would point at different code afterwards.
+  // focusAt is a hunk of the step focus mode is showing, held as a path and the hunk's own index
+  // rather than a row number: rows are rebuilt on every fold, mode switch and annotation, and a
+  // row number would point at different code afterwards. The step is whichever one holds it.
   focusAt: { path: string; index: number } | null;
   // pairs is every (file, hunk) in the visible changeset, in reading order, and it is built
-  // BEFORE the focus slice - which is what lets "hunk 4 of 14" and the progress bar keep
-  // describing the whole pass while the stream shows one hunk.
+  // BEFORE the focus slice - which is what lets "step 4 of 9" and the progress bar keep
+  // describing the whole pass while the stream shows one step.
   pairs: { path: string; index: number; digest: string }[];
+  // steps is pairs grouped into the units focus mode moves between. ordered says the server's
+  // order produced them; false means each is one hunk in file order and there is no reason to show.
+  steps: ReadingStep[];
+  ordered: boolean;
+  // reading is the review's "I am reading this" mark as the server last answered it. Null is
+  // off, or never asked.
+  reading: Reading | null;
   // branches maps a path to the other branches changing it, as of the reader's last fetch. Null
   // until the lookup lands, and null is not an empty map: one means "not asked yet or the backend
   // cannot say", the other would mean "asked, and nothing competes".
@@ -278,7 +322,7 @@ const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
 // What each verdict is called in front of a person. The wire words are magus's vocabulary; these
 // are what a reviewer would say they are doing.
 const VERDICT_COPY: Record<ReviewVerdict, string> = {
-  comment: "Remarks only",
+  comment: "Comment only",
   approve: "Approve",
   request_changes: "Request changes",
 };
@@ -294,11 +338,52 @@ const TONE_CLASS: Record<string, string> = {
 // label builds a PF Label. Text goes through textContent by construction (h sets text, never
 // innerHTML), which is what keeps a path, a diff line, or an agent's comment from being
 // trusted markup - all three are attacker-influenceable on a branch someone else wrote.
-function label(text: string, modifier?: string, title?: string): HTMLElement {
-  const el = h("span", `pf-v6-c-label${modifier ? ` ${modifier}` : ""}`);
-  el.append(h("span", "pf-v6-c-label__content", text));
+//
+// compact is PF's small label, for a chip that sits in a row of text; icon is the shape half of a
+// status, so a chip that carries a colour also carries a mark.
+interface LabelOptions {
+  readonly compact?: boolean;
+  readonly icon?: Status;
+}
+
+function label(
+  text: string,
+  modifier?: string,
+  title?: string,
+  opts: LabelOptions = {},
+): HTMLElement {
+  const classes = ["pf-v6-c-label"];
+  if (modifier) classes.push(modifier);
+  if (opts.compact) classes.push("pf-m-compact");
+  const el = h("span", classes.join(" "));
+  const content = h("span", "pf-v6-c-label__content");
+  if (opts.icon) {
+    const slot = h("span", "pf-v6-c-label__icon");
+    slot.append(statusIcon(opts.icon));
+    content.append(slot);
+  }
+  content.append(h("span", "pf-v6-c-label__text", text));
+  el.append(content);
   if (title) el.title = title;
   return el;
+}
+
+// badge is PF's Badge: a count, which a Label (a category or a state) is not.
+function badge(count: string): HTMLElement {
+  return h("span", "pf-v6-c-badge pf-m-read", count);
+}
+
+// stat is one readout item: a Badge carrying the count, then what it counts.
+function stat(count: string, text: string): HTMLElement {
+  const el = h("span", "console-diff-stat");
+  el.dataset.stat = "";
+  el.append(badge(count), ` ${text}`);
+  return el;
+}
+
+// plural is "1 file" and "2 files".
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
 }
 
 // scopeLabel names the two sides of the comparison, from the only thing the session carries
@@ -388,6 +473,22 @@ function lineText(line: DiffLine, lang: Language): HTMLElement {
   return el;
 }
 
+// pathText is a path that truncates from its start (diff.css sets direction: rtl on these). The
+// text goes in a bdi: the right-to-left base is what moves the ellipsis to the front, and the
+// isolate keeps a leading slash or dot in the order it was typed instead of sending it to the
+// far end of the line.
+function pathText(className: string, text: string): HTMLElement {
+  const el = h("span", className);
+  el.append(h("bdi", undefined, text));
+  return el;
+}
+
+// rowActions is the trailing cell of a row that carries controls. diff.css pins it to the inline end
+// of the visible pane, so a row that scrolls sideways under a long line still shows its buttons.
+function rowActions(): HTMLElement {
+  return h("span", "console-diff-row__actions");
+}
+
 function gutter(n: number | null): HTMLElement {
   // A non-breaking space, not "": an empty text node collapses and the gutters would shift
   // width row to row.
@@ -451,6 +552,9 @@ export function activate(host: HTMLElement): AppInstance {
     focus: focusCell.get(),
     focusAt: null,
     pairs: [],
+    steps: [],
+    ordered: false,
+    reading: null,
     branches: null,
     branchesUnsupported: "",
     roleFilter: hashRole(),
@@ -474,13 +578,12 @@ export function activate(host: HTMLElement): AppInstance {
   // affordance is the same one: a chevron in the header hides it, a chevron on the rail brings it
   // back, and the choice persists - a reader who works in a narrow tile should not re-close it
   // every visit.
+  sidebar.id = uid("sidebar");
   const sidebarHead = h("div", "console-diff-sidebar__head");
-  const sidebarTitle = h("span", "console-diff-sidebar__heading", "Files");
-  const hideBtn = h("button", "console-diff-sidebar__toggle");
-  hideBtn.type = "button";
-  hideBtn.title = "Hide the file index";
-  hideBtn.setAttribute("aria-label", "Hide the file index");
-  hideBtn.textContent = "‹";
+  const sidebarTitle = h("h2", "console-diff-sidebar__heading", "Files");
+  const hideBtn = plainIconButton("Hide the file index", ANGLE_LEFT);
+  hideBtn.classList.add("console-diff-sidebar__toggle");
+  hideBtn.setAttribute("aria-controls", sidebar.id);
   sidebarHead.append(sidebarTitle, hideBtn);
 
   // Keep filtering in the index at every diff size.
@@ -495,7 +598,9 @@ export function activate(host: HTMLElement): AppInstance {
   sidebarIndex.setAttribute("role", "list");
   sidebarIndex.setAttribute("aria-label", "Changed files index");
   const sidebarSpacer = h("div", "console-diff-sidebar__spacer");
+  sidebarSpacer.setAttribute("role", "presentation");
   const sidebarWindow = h("div", "console-diff-sidebar__window");
+  sidebarWindow.setAttribute("role", "presentation");
   sidebarSpacer.append(sidebarWindow);
   sidebarIndex.append(sidebarSpacer);
   const sidebarGenerated = h("div", "console-diff-sidebar__generated");
@@ -504,29 +609,19 @@ export function activate(host: HTMLElement): AppInstance {
   // not perform, with no control showing it, is a file index that silently lies about the changeset.
   const roleStrip = h("div", "console-diff-rolefilter");
   roleStrip.hidden = true;
-  const roleStripText = h("span", "console-diff-rolefilter__text");
-  const roleStripClear = h("button", "console-diff-rolefilter__clear");
-  roleStripClear.type = "button";
-  roleStripClear.textContent = "Show all";
-  roleStripClear.addEventListener("click", () => {
-    state.roleFilter = "";
-    renderSidebar();
-  });
-  roleStrip.append(roleStripText, roleStripClear);
 
   sidebar.append(sidebarHead, sidebarFilterWrap, roleStrip, sidebarIndex, sidebarGenerated);
 
-  const reopenBtn = h("button", "console-diff-reopen");
-  reopenBtn.type = "button";
-  reopenBtn.title = "Show the file index";
-  reopenBtn.setAttribute("aria-label", "Show the file index");
-  reopenBtn.textContent = "›";
+  const reopenBtn = plainIconButton("Show the file index", ANGLE_RIGHT);
+  reopenBtn.classList.add("console-diff-reopen");
+  reopenBtn.setAttribute("aria-controls", sidebar.id);
 
   const applySidebar = (collapsed: boolean): void => {
     root.dataset.sidebar = collapsed ? "collapsed" : "open";
     sidebar.hidden = collapsed;
     reopenBtn.hidden = !collapsed;
     hideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    reopenBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
   };
   // Below the breakpoint the toggle applies for the session but is NOT written down. The collapse
   // there is forced by width rather than chosen, so persisting it would let one phone visit rewrite
@@ -555,71 +650,87 @@ export function activate(host: HTMLElement): AppInstance {
   // two hairlines meet as a straight line across the seam rather than as a T - the job
   // --console-diff-head-block-size was introduced for and could not do while the toolbar's own
   // content set its height.
-  const head = h("div", "console-diff-toolbar__head");
+  const headRow = toolbarRow("console-diff-toolbar__head");
+  const head = headRow.el;
   head.dataset.controlSize = "compact";
-  const eyebrow = h("span", "console-diff-toolbar__eyebrow", "Review");
+  const eyebrow = h("span", "pf-v6-c-toolbar__item console-diff-toolbar__eyebrow", "Review");
   // What is being compared, in the head where a reader looks for orientation rather than as a
   // twelfth chip. A chip is a count; this is the sentence the counts are about.
-  const scopeEl = h("span", "console-diff-toolbar__scope");
+  const scopeEl = h("span", "pf-v6-c-toolbar__item console-diff-toolbar__scope");
   const readout = h("div", "console-diff-toolbar__readout");
+  readout.dataset.controlSize = "compact";
   const statsEl = h("div", "console-diff-toolbar__stats");
-  const collaborationNotice = h("span", "console-diff-collaboration");
+  // The one place a refused key or a degraded session is explained in words. Both the toolbar's
+  // sentences and a key's refusal land here, so a keyboard-only action has somewhere to point.
+  const collaborationNotice = h("div", "console-diff-collaboration");
   collaborationNotice.setAttribute("role", "status");
   collaborationNotice.setAttribute("aria-live", "polite");
-  collaborationNotice.addEventListener("animationend", () =>
-    collaborationNotice.classList.remove("is-flash"),
+  collaborationNotice.addEventListener(
+    "animationend",
+    () => delete collaborationNotice.dataset.flash,
   );
-  // The keys, stated on screen, the way the terminal viewer states them in its footer - and
-  // for the reason recorded there: a viewer whose bindings are only in the documentation is
-  // a viewer nobody drives with anything but the arrow keys.
-  //
-  // The console's hold-"?" cheat sheet cannot carry these: it renders only commands that
-  // resolve to a chord in the console-wide keymap, and these are app-local single keys
-  // that never enter it. Until then the only summary lived inside the Esc overview - behind
-  // the one key a first-time reader is least likely to try.
-  // Each key is its own element rather than a run of text. Written as a sentence, the pair that
-  // steps by file reads as `}/{` beside `]/[`, and a reader who has met a template engine sees
-  // mustache syntax and a rendering bug - the author of this app did, off a screenshot.
-  // Punctuation is only legible AS a key when it is drawn as one.
-  const keysEl = h("div", "console-diff-toolbar__keys");
-  for (const [keys, what] of [
-    [["]", "["], "hunk"],
-    [["}", "{"], "file"],
-    [["v"], "read"],
-    [["u"], "next unread"],
-    [["."], "generated"],
-    [["Esc"], "overview"],
-  ] as [string[], string][]) {
-    const group = h("span", "console-diff-toolbar__key");
-    // Wrapping the alternatives lets them bind tighter to each other than to the label. Flat, every
-    // gap is the same width and `] [ hunk` reads as three peers instead of two keys and their job.
-    const combo = h("span", "console-diff-toolbar__keycombo");
-    keys.forEach((key, i) => {
-      // "]/[", the spelling the terminal viewer's legend uses. Two bare boxes read as a sequence to
-      // press; the slash says either one will do.
-      if (i > 0) combo.append(h("span", "console-diff-toolbar__keyor", "/"));
-      combo.append(h("kbd", undefined, key));
-    });
-    group.append(combo, h("span", "console-diff-toolbar__keyname", what));
-    keysEl.append(group);
-  }
-  // Behind a disclosure, not always on: the legend is teach-once reference, and leaving it
-  // inline was what wrapped the readout to a second line and grew the toolbar. A native
-  // details element keeps it keyboard-reachable with no JS.
-  const keysWrap = h("details", "console-diff-toolbar__keyswrap");
-  keysWrap.append(h("summary", "console-diff-toolbar__keystoggle", "keys"), keysEl);
-  // The progress of the pass, shown only while reading one hunk at a time. A bar for the glance
-  // and the numbers beside it, because a bar over hunks of unequal size advances unevenly and
-  // would be read as lying about how much is left; the counts are the honest version it is
-  // approximating.
-  const progressEl = h("div", "console-diff-progress");
+  // Announced politely from one region that is always in the page: a live region inserted together
+  // with its message is read by fewer screen readers than one that was already there.
+  const announcer = h("div", "pf-v6-screen-reader");
+  announcer.setAttribute("role", "status");
+  announcer.setAttribute("aria-live", "polite");
+  let announceTimer: number | undefined;
+  const announce = (message: string): void => {
+    announcer.textContent = "";
+    window.clearTimeout(announceTimer);
+    announceTimer = window.setTimeout(() => {
+      announcer.textContent = message;
+    }, 50);
+  };
+  // The keys, stated on screen, the way the terminal viewer states them in its footer: a viewer
+  // whose bindings are only in the documentation is one nobody drives with anything but the arrow
+  // keys. The list is built from COMMANDS (see keyLegend), so it cannot teach a key that is not
+  // bound. Behind a popover, not always on: it is teach-once reference, and leaving it inline
+  // wrapped the readout to a second line.
+  const keysWrap = h("span", "console-diff-toolbar__keyswrap");
+  const keysToggle = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__keystoggle",
+    "Keys",
+  );
+  keysToggle.type = "button";
+  const keysPop = popover(keysToggle, "Keyboard shortcuts");
+  const keysEl = h("dl", "console-diff-toolbar__keys");
+  keysPop.body.append(keysEl);
+  keysWrap.append(keysToggle, keysPop.el);
+  // The progress of the pass, shown only in focus mode. A bar for the glance and the numbers beside
+  // it, because a bar over hunks of unequal size advances unevenly and would be read as lying about
+  // how much is left; the counts are the honest version it is approximating.
+  const progressRow = toolbarRow("console-diff-progress");
+  const progressEl = progressRow.el;
   progressEl.hidden = true;
-  const progressBar = h("div", "console-diff-progress__bar");
-  const progressFill = h("div", "console-diff-progress__fill");
-  progressBar.setAttribute("role", "presentation");
-  progressBar.append(progressFill);
-  const progressText = h("span", "console-diff-progress__text");
-  progressEl.append(progressBar, progressText);
+  progressEl.dataset.controlSize = "compact";
+  const stepNav = h("div", "pf-v6-c-toolbar__group console-diff-progress__nav");
+  stepNav.setAttribute("role", "group");
+  stepNav.setAttribute("aria-label", "Move through the reading order");
+  const prevStepBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Previous");
+  prevStepBtn.type = "button";
+  const nextStepBtn = h("button", "pf-v6-c-button pf-m-secondary pf-m-small", "Next");
+  nextStepBtn.type = "button";
+  const readNextBtn = h(
+    "button",
+    "pf-v6-c-button pf-m-primary pf-m-small console-diff-progress__read",
+    "Mark read and next",
+  );
+  readNextBtn.type = "button";
+  stepNav.append(prevStepBtn, nextStepBtn, readNextBtn);
+  prevStepBtn.addEventListener("click", () => focusStep(-1));
+  nextStepBtn.addEventListener("click", () => focusStep(1));
+  readNextBtn.addEventListener("click", () => focusRead());
+  const progressBar = progress("Hunks read", "hunks read");
+  progressBar.el.classList.add("pf-v6-c-toolbar__item");
+  const progressText = h("span", "pf-v6-c-toolbar__item console-diff-progress__text");
+  const progressPath = h("span", "pf-v6-c-toolbar__item console-diff-progress__path");
+  const progressDrafts = h("span", "pf-v6-c-toolbar__item console-diff-progress__drafts");
+  progressDrafts.hidden = true;
+  // The path goes last: it is the item that can give up room, so a narrow row shortens it before
+  // it wraps the drafts onto a line of their own.
+  progressRow.section.append(stepNav, progressBar.el, progressText, progressDrafts, progressPath);
 
   const focusButton = h(
     "button",
@@ -628,7 +739,7 @@ export function activate(host: HTMLElement): AppInstance {
   focusButton.type = "button";
   // The label alternates between Focus and Leave focus, so it lives in its own span - assigning
   // textContent to the button would take the icon with it.
-  const focusText = h("span");
+  const focusText = h("span", "console-diff-toolbar__label");
   focusButton.append(buttonIcon(CROSSHAIR), focusText);
   focusButton.addEventListener("click", () => setFocus(!state.focus));
 
@@ -648,42 +759,115 @@ export function activate(host: HTMLElement): AppInstance {
   verdictButton.append(buttonIcon(PLAY), verdictText);
   verdictButton.addEventListener("click", () => void startRun());
 
-  // The toolbar STACKS, so an item appended straight to it stretches to the full width and PF
-  // centres its label in all that space, which reads as a caption rather than a control. Every
-  // control belongs to one of the two rows below.
-  //
+  // The overview is the whole changeset on one screen, and Esc is not the only way in or out of it.
+  const overviewButton = h(
+    "button",
+    "pf-v6-c-button pf-m-secondary pf-m-small console-diff-toolbar__overview",
+  );
+  overviewButton.type = "button";
+  overviewButton.setAttribute("aria-expanded", "false");
+  const overviewText = h("span", "console-diff-toolbar__label", "Overview");
+  overviewButton.title = "The whole changeset on one screen (Esc)";
+  overviewButton.append(buttonIcon(LIST), overviewText);
+  overviewButton.addEventListener("click", () => toggleOverview());
+
+  // Unified or split: two views of one diff, so a toggle group and not two commands to remember.
+  const modeGroup = toggleGroup(
+    "Diff layout",
+    [
+      { id: "unified", text: "Unified" },
+      { id: "split", text: "Split" },
+    ] as const,
+    (id) => void setMode(id),
+  );
+  modeGroup.el.classList.add("console-diff-toolbar__mode");
+
   // ACTIONS at the trailing edge of the head, the same edge the dashboard's Big Picture button
   // holds. The legend is a reading rather than an action, so it goes to the readout row it
   // annotates - beside the counts, and the first thing to go when that row runs out of room.
-  const actions = h("div", "console-diff-toolbar__actions");
-  actions.append(verdictButton, focusButton);
-  head.append(eyebrow, scopeEl, actions);
+  const actions = h("div", "pf-v6-c-toolbar__group console-diff-toolbar__actions");
+
+  // The reading mark. A toggle rather than a one-shot because the mark has an end: leaving the
+  // review clears it, and a mark that cannot be cleared reads as a claim nobody can retract.
+  const readingGroup = toggleGroup(
+    "Reading mark",
+    [{ id: "reading", text: "Reading" }] as const,
+    () => void toggleReading(),
+  );
+  const readingButton = readingGroup.buttons.get("reading") as HTMLButtonElement;
+  readingButton.classList.add("console-diff-toolbar__reading");
+  readingButton.title = "Mark this review as being read. Nothing is sent to the review host.";
+
+  // While the mark is on: since when, and the command the PERSON may run to tell the review's
+  // participants. The command is shown and copyable and never run from here, because the one
+  // sentence that leaves this machine is typed by a person, like every other. It lives in a popover
+  // off the head so a mark that is on costs no row of its own.
+  const readingEl = h("span", "console-diff-reading");
+  readingEl.hidden = true;
+  const readingSince = h(
+    "button",
+    "pf-v6-c-button pf-m-link pf-m-inline console-diff-reading__since",
+  );
+  readingSince.type = "button";
+  const readingPop = popover(readingSince, "Reading command");
+  const readingCopy = clipboardCopy("Copy command", (command, done) => {
+    (navigator.clipboard?.writeText(command) ?? Promise.reject(new Error("no clipboard"))).then(
+      () => {
+        done();
+        announce("Command copied");
+      },
+      (e: unknown) =>
+        reportFailure(
+          "Review",
+          "Could not copy the command (" + String(e) + "). Select it and copy it by hand.",
+          "reading:copy",
+        ),
+    );
+  });
+  readingCopy.el.setAttribute("aria-label", "Command that tells the review you are reading");
+  readingPop.body.append(
+    h(
+      "p",
+      "console-diff-reading__note",
+      "Run this to tell the review's participants you are reading. magus never sends it; you run it.",
+    ),
+    readingCopy.el,
+  );
+  readingEl.append(readingSince, readingPop.el);
+
+  actions.append(
+    verdictButton,
+    overviewButton,
+    readingGroup.el,
+    readingEl,
+    modeGroup.el,
+    focusButton,
+  );
+  headRow.section.append(eyebrow, scopeEl, actions);
   readout.append(statsEl, keysWrap);
 
   toolbar.append(head, readout, collaborationNotice, progressEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
+  context.id = uid("context");
   context.hidden = true;
   context.tabIndex = -1;
   context.setAttribute("role", "region");
   context.setAttribute("aria-label", "Surrounding code");
   const contextHead = h("div", "console-diff-context__head");
-  const contextTitle = h("span", "console-diff-context__title");
-  const contextClose = h(
-    "button",
-    "pf-v6-c-button pf-m-plain console-diff-context__close",
-  ) as HTMLButtonElement;
-  contextClose.type = "button";
-  contextClose.setAttribute("aria-label", "Close surrounding code");
-  contextClose.textContent = "×";
+  const contextTitle = h("h2", "console-diff-context__title");
+  const contextClose = plainIconButton("Close surrounding code", CLOSE);
+  contextClose.classList.add("console-diff-context__close");
   const contextBody = h("pre", "console-diff-context__body");
   contextBody.setAttribute("aria-live", "polite");
   // The agent session shares this panel: one bounded region outside the stream, one close key.
   const sessionBody = h("div", "console-diff-context__body console-diff-agent");
   sessionBody.hidden = true;
   sessionBody.setAttribute("aria-live", "polite");
+  // A failed read lands here as a danger alert, announced, as well as in a toast.
+  const contextAlert = h("div", "console-diff-context__alert");
   contextHead.append(contextTitle, contextClose);
-  context.append(contextHead, contextBody, sessionBody);
+  context.append(contextHead, contextAlert, contextBody, sessionBody);
 
   const rail = h("div", "console-diff-rail");
   rail.setAttribute("aria-label", "Agent suggestions");
@@ -699,8 +883,12 @@ export function activate(host: HTMLElement): AppInstance {
   // two-dimensionally navigable. aria-rowcount is set on every paint from the true row total.
   scroll.setAttribute("role", "grid");
   scroll.setAttribute("aria-label", "Changed lines");
+  // The spacer and the window are layout, not grid parts: the rows reach the grid through them, so
+  // they say they own nothing.
   const spacer = h("div", "console-diff-spacer");
+  spacer.setAttribute("role", "presentation");
   const windowEl = h("div", "console-diff-window");
+  windowEl.setAttribute("role", "rowgroup");
   spacer.append(windowEl);
   scroll.append(spacer);
 
@@ -718,21 +906,31 @@ export function activate(host: HTMLElement): AppInstance {
   pinned.setAttribute("aria-hidden", "true");
   viewport.append(scroll, pinned);
 
+  // Focus lands here when it opens: the stream it replaces is hidden, and focus left on a hidden
+  // element is focus on nothing, which is how Esc stopped reaching the handler that closes it.
   const overview = h("div", "console-diff-overview");
-  const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Loading");
-  const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
+  overview.id = uid("overview");
+  overview.tabIndex = -1;
+  overview.setAttribute("role", "region");
+  overview.setAttribute("aria-label", "Changeset overview");
+  overviewButton.setAttribute("aria-controls", overview.id);
+  // A spinner only while the first read is in flight; every other empty state is an answer.
+  const emptyState = emptyStateShell({
+    heading: "h1",
+    title: "Loading",
+    classes: "console-diff-empty",
+    icon: statusGlyph("running"),
+    ways: true,
+  });
+  const empty = emptyState.root;
+  const emptyIcon = must(emptyState.icon);
+  emptyIcon.classList.add("console-diff-empty__spinner");
   const emptyMessage = h("p", undefined, "Reading the working tree.");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyBodyWrap.append(emptyMessage, emptyActions);
-  emptyContent.append(emptyTitle, emptyBodyWrap);
-  empty.append(emptyContent);
+  emptyState.body.append(emptyMessage);
   const emptySlots: EmptyStateSlots = {
-    title: emptyTitle,
+    title: emptyState.title,
     message: emptyMessage,
-    actions: emptyActions,
+    actions: emptyState.actions,
   };
 
   // The end of a review, offered once. A merged pull request is where a conversation stops being
@@ -742,16 +940,13 @@ export function activate(host: HTMLElement): AppInstance {
   const merged = h("div", "console-diff-merged");
   merged.hidden = true;
   merged.setAttribute("role", "status");
-  const mergedText = h("span", "console-diff-merged__text");
-  const mergedDismiss = h("button", "console-diff-merged__dismiss", "dismiss");
-  mergedDismiss.type = "button";
+  const mergedDismiss = linkButton("Dismiss");
   mergedDismiss.addEventListener("click", () => {
     mergedSeen = true;
     merged.hidden = true;
   });
-  merged.append(mergedText, mergedDismiss);
 
-  main.append(toolbar, merged, context, rail, viewport, overview, empty);
+  main.append(toolbar, merged, context, rail, viewport, overview, empty, announcer);
   root.append(sidebar, reopenBtn, main);
   // Below the shell's 48rem inversion the index starts COLLAPSED, whatever is stored. Its column
   // floor is 180px, so on a 375px phone it took 48% of the screen and left the hunk stream 194px to
@@ -774,32 +969,32 @@ export function activate(host: HTMLElement): AppInstance {
 
   const renderFileRow = (file: DiffFile): HTMLElement => {
     const el = h("div", "console-diff-row console-diff-row--file");
+    const chip = (text: string, modifier?: string, title?: string): HTMLElement =>
+      label(text, modifier, title, { compact: true });
     const st = STATUS_COPY[file.status];
-    el.append(label(st.short, st.modifier, file.status));
+    el.append(chip(st.short, st.modifier, file.status));
 
-    const name = h("span", "console-diff-row__path");
-    name.textContent =
-      file.status === "renamed" || file.status === "copied"
-        ? `${file.oldPath} -> ${file.path}`
-        : file.path;
-    el.append(name);
+    el.append(
+      pathText(
+        "console-diff-row__path",
+        file.status === "renamed" || file.status === "copied"
+          ? `${file.oldPath} → ${file.path}`
+          : file.path,
+      ),
+    );
 
-    if (file.binary) el.append(label("binary", "pf-m-grey", "No text diff to show"));
+    if (file.binary) el.append(chip("binary", "pf-m-grey", "No text diff to show"));
     // A mode change produces no hunks either, and without this the row is a filename and a
     // churn count with nothing to say why it is in the changeset - the reader is left to
     // assume the app dropped something. A script gaining +x is a real reviewable event.
     const mode = modeChange(file);
     if (mode !== null) {
       el.append(
-        label(
-          mode,
-          "pf-m-grey",
-          file.newMode === "100755" ? "Now executable" : "File mode changed",
-        ),
+        chip(mode, "pf-m-grey", file.newMode === "100755" ? "Now executable" : "File mode changed"),
       );
     }
-    if (file.additions > 0) el.append(label(`+${file.additions}`, "pf-m-green"));
-    if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
+    if (file.additions > 0) el.append(chip(`+${file.additions}`, "pf-m-green"));
+    if (file.deletions > 0) el.append(chip(`−${file.deletions}`, "pf-m-red"));
 
     // branchTooltip names the branches and says WHEN each answer was true.
     //
@@ -822,7 +1017,7 @@ export function activate(host: HTMLElement): AppInstance {
     const alsoOn = state.branches?.get(file.path) ?? [];
     if (alsoOn.length > 0) {
       el.append(
-        label(
+        chip(
           `also on ${alsoOn.length} ${alsoOn.length === 1 ? "branch" : "branches"}`,
           "pf-m-orange",
           branchTooltip(alsoOn),
@@ -839,7 +1034,7 @@ export function activate(host: HTMLElement): AppInstance {
     // gives up the least, and "public API" is the last thing to go.
     const risks = h("span", "console-diff-row__risks");
     for (const c of riskChips(findAnnotation(file.path))) {
-      risks.append(label(c.text, TONE_CLASS[c.tone], c.title));
+      risks.append(chip(c.text, TONE_CLASS[c.tone], c.title));
     }
     el.append(risks);
     return el;
@@ -850,37 +1045,103 @@ export function activate(host: HTMLElement): AppInstance {
     if (row.kind === "hunk") {
       const el = h("div", "console-diff-row console-diff-row--hunk");
       const digest = state.digestByRow.get(index);
-      if (digest && state.viewed.has(digest)) el.dataset.viewed = "";
+      const read = digest !== undefined && state.viewed.has(digest);
+      if (read) el.dataset.viewed = "";
       // The @@ coordinates are wire syntax, and this app already prints line numbers in its
       // gutters, so what the heading says is what a reader wanted from it: the declaration they
       // are inside of. A hunk git could name none for keeps its position alone.
       el.append(
         h("span", "console-diff-row__text", row.hunk.declaration || `line ${row.hunk.newStart}`),
       );
+      if (read)
+        el.append(label("read", "pf-m-green", undefined, { compact: true, icon: "success" }));
+      const actions = rowActions();
+      const comment = linkButton("Comment");
+      comment.classList.add("console-diff-row__comment-action");
+      comment.title = "Write a comment on this hunk (c)";
+      comment.addEventListener("click", (event) => {
+        event.stopPropagation();
+        composeComment(index);
+      });
+      actions.append(comment);
+      if (digest !== undefined) {
+        const mark = linkButton(read ? "Mark unread" : "Mark read");
+        mark.classList.add("console-diff-row__mark");
+        mark.title = read
+          ? "Take this hunk back out of the read set (v)"
+          : "Mark this hunk read (v)";
+        mark.addEventListener("click", (event) => {
+          event.stopPropagation();
+          toggleViewed(index);
+        });
+        actions.append(mark);
+      }
       if (!demo && !row.file.binary && row.file.status !== "deleted") {
-        const peek = h(
-          "button",
-          "console-diff-row__peek",
-          "Peek surrounding code",
-        ) as HTMLButtonElement;
-        peek.type = "button";
-        peek.title = "Show the current file around this hunk without leaving the diff";
+        const peek = linkButton("Peek surrounding code");
+        peek.classList.add("console-diff-row__peek");
+        peek.title = "Show the current file around this hunk without leaving the diff (p)";
         peek.addEventListener("click", (event) => {
           event.stopPropagation();
           void showContext(row.file, row.hunk);
         });
-        el.append(peek);
+        actions.append(peek);
       }
-      if (digest && state.viewed.has(digest))
-        el.append(label("read", "pf-m-green", "Marked read. Press v to unmark."));
+      el.append(actions);
       return el;
     }
-    if (row.kind === "story") {
-      const el = h("div", "console-diff-row console-diff-row--story");
+    if (row.kind === "step") {
+      const { head } = row;
+      const el = h("div", "console-diff-row console-diff-row--step");
+      el.dataset.group = head.group ?? "";
+      el.append(h("span", "console-diff-row__step", `Step ${head.position} of ${head.total}`));
+      // The group is named by the symbol its first hunk defines. The generated and unranked
+      // groups have no such name, so they say what they are.
+      const group =
+        head.group === "generated"
+          ? "generated output"
+          : head.group === "unranked"
+            ? "not placed by the order"
+            : head.label;
+      if (group) el.append(h("span", "console-diff-row__group", group));
+      el.append(label(plural(head.hunks, "hunk"), undefined, "In this step", { compact: true }));
+      return el;
+    }
+    if (row.kind === "why") {
+      const el = h("div", "console-diff-row console-diff-row--why");
+      el.dataset.relation = row.place.why.relation;
+      if (row.place.label) el.append(h("span", "console-diff-row__symbol", row.place.label));
+      el.append(h("span", "console-diff-row__why", row.place.why.text));
+      return el;
+    }
+    if (row.kind === "quote") {
+      // The outdated conversation's code, as the host saw it. Plain text: it is a quotation
+      // of lines that may no longer exist, not a line of this diff to highlight.
+      const el = h("div", "console-diff-row console-diff-row--quote");
+      el.append(h("span", "console-diff-row__text", row.text || " "));
+      return el;
+    }
+    if (row.kind === "outline") {
+      // An agent's pointer at what a reply could cover, shown to the person who types it. Marked
+      // as the agent's by the same left border an agent's remark takes, and guarded so there is
+      // nothing to copy: the reply on a review is the person's own words.
+      const el = h("div", "console-diff-row console-diff-row--comment console-diff-row--outline");
+      el.dataset.author = "agent";
+      if (row.head) el.dataset.head = "";
+      else {
+        const bullet = h("span", "console-diff-row__bullet", "•");
+        bullet.setAttribute("aria-hidden", "true");
+        el.append(bullet);
+      }
+      el.append(h("span", "console-diff-row__outline", row.text));
+      guardOutline(el);
+      return el;
+    }
+    if (row.kind === "touch") {
+      const el = h("div", "console-diff-row console-diff-row--touch");
       const who = h("span", "console-diff-row__who");
       who.textContent = row.touch.host || "agent";
-      const what = h("span", "console-diff-row__story");
-      what.textContent = storyText(row.touch);
+      const what = h("span", "console-diff-row__touch");
+      what.textContent = touchText(row.touch);
       el.append(who, what);
       const ran = row.touch.ran ?? [];
       if (ran.length) {
@@ -888,40 +1149,81 @@ export function activate(host: HTMLElement): AppInstance {
         r.title = `Ran before this write, newest first: ${ran.join(", ")}`;
         el.append(r);
       }
-      const open = h("button", "console-diff-row__session", "Session") as HTMLButtonElement;
-      open.type = "button";
+      if (row.touch.transcript) {
+        // A POINTER: magus never opens it, and neither does this - the path is shown so the
+        // reader can open their host's own log themselves.
+        el.append(h("span", "console-diff-row__transcript", `transcript: ${row.touch.transcript}`));
+      }
+      const open = linkButton("Session");
+      open.classList.add("console-diff-row__session");
       open.title = "Show what this agent session ran and said before this write";
       const touch = row.touch;
       open.addEventListener("click", (event) => {
         event.stopPropagation();
         void showSession(row.file, touch);
       });
-      el.append(open);
-      if (row.touch.transcript) {
-        const t = h("span", "console-diff-row__transcript", "transcript");
-        // A POINTER: magus never opens it, and neither does this - the path is shown so the
-        // reader can open their host's own log themselves.
-        t.title = row.touch.transcript;
-        el.append(t);
-      }
+      const actions = rowActions();
+      actions.append(open);
+      el.append(actions);
       return el;
     }
     if (row.kind === "thread") {
       // A colleague's remark, already on the host's review. It renders in the comment row's
       // shape and NOT in its colors: the reader has to be able to tell at a glance what is
       // still theirs to send from what the world has already seen.
+      const thread = row.thread;
       const el = h("div", "console-diff-row console-diff-row--comment");
       el.dataset.author = "review";
+      // Each comment keeps its own id: the seen watermark advances per comment, and a reply is
+      // new on its own even when its root is not.
+      el.dataset.commentId = thread.id;
+      // A reply sits under its root, indented; the root is the conversation's head.
+      if (thread.root) el.dataset.reply = "";
       const who = h("span", "console-diff-row__who");
-      who.textContent = row.thread.author || "review";
+      who.textContent = thread.author || "review";
       const said = h("span", "console-diff-row__comment console-diff-md");
-      setMarkdown(said, row.thread.body);
+      setMarkdown(said, thread.body);
       el.append(who, said);
       // "new" first: it is the reason to read this row rather than skim past it, and the server
       // marks it only on the response that first carried the thread - so it answers "since last
       // time" rather than "recently", which decays into a badge that is always on.
-      if (row.thread.new) el.append(label("new", "pf-m-orange"));
-      el.append(label("on the review", "pf-m-blue"));
+      const chip = (text: string, modifier: string, title?: string): HTMLElement =>
+        label(text, modifier, title, { compact: true });
+      if (thread.new) el.append(chip("new", "pf-m-orange"));
+      if (thread.root) return el;
+      if (thread.outdated) {
+        el.append(
+          chip("outdated", "pf-m-grey", "The line this was said about is no longer in the code"),
+        );
+      }
+      el.append(chip("on the review", "pf-m-blue"));
+      // One Reply per thread, on its root, keyed by the root's id so a test or a script can find
+      // the thread without counting rows.
+      const actions = rowActions();
+      const replyBtn = linkButton("Reply");
+      replyBtn.classList.add("console-diff-row__reply");
+      replyBtn.dataset.threadId = commentThreadId(thread);
+      replyBtn.title = "Reply to this thread on the review (a)";
+      replyBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        composeReply(thread);
+      });
+      actions.append(replyBtn);
+      // Beside Reply: this thread as `magus diff --thread` prints it, copied when the person
+      // clicks. It only puts the text on their clipboard. The showcase has no server to build
+      // it, so it withholds the button the way it withholds Peek.
+      if (!demo) {
+        const copyBtn = linkButton("Copy thread");
+        copyBtn.classList.add("console-diff-row__brief");
+        copyBtn.dataset.threadId = commentThreadId(thread);
+        copyBtn.title = "Copy this thread with its hunk and what the change there reaches";
+        copyBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void copyThread(commentThreadId(thread), copyBtn);
+        });
+        actions.append(copyBtn);
+      }
+      el.append(actions);
       return el;
     }
     if (row.kind === "comment") {
@@ -929,18 +1231,22 @@ export function activate(host: HTMLElement): AppInstance {
       el.dataset.author = row.comment.author;
       if (row.comment.resolved) el.dataset.resolved = "";
       const who = h("span", "console-diff-row__who");
-      // The agent's own label when it gave one; otherwise the OS account the server recorded,
-      // which says whose account wrote the remark and never claims it was a person.
+      // The agent's own label when it gave one. Everything else arrived through the review route,
+      // which is the reader's own: a draft until it is published, and "You" after.
       who.textContent =
         row.comment.author === "agent"
           ? row.comment.agent_name || "agent"
-          : row.comment.origin?.user || "unattributed";
-      // Rendered the same way a colleague's remark is: a draft that reads differently here than
+          : row.comment.published
+            ? "You"
+            : "You (draft)";
+      // Rendered the same way a colleague's comment is: a draft that reads differently here than
       // it will on the review is a draft you cannot proofread.
       const body = h("span", "console-diff-row__comment console-diff-md");
       setMarkdown(body, row.comment.body);
       el.append(who, body);
-      if (row.comment.resolved) el.append(label("resolved", "pf-m-green"));
+      if (row.comment.resolved) {
+        el.append(label("resolved", "pf-m-green", undefined, { compact: true, icon: "success" }));
+      }
       return el;
     }
     if (row.kind === "line") {
@@ -1051,6 +1357,8 @@ export function activate(host: HTMLElement): AppInstance {
     pinned.hidden = false;
   };
 
+  // The row each visible file's header sits at, by path. Rebuilt with the rows.
+  let fileRowByPath = new Map<string, number>();
   // Keep direct button references for active-file updates.
   const sidebarItems = new Map<number, HTMLButtonElement>();
   let activeSidebarFile: HTMLButtonElement | undefined;
@@ -1070,14 +1378,16 @@ export function activate(host: HTMLElement): AppInstance {
 
   const renderSidebarItem = (
     o: (typeof state.changeset.primary)[number],
-    index: number,
     project: string,
-  ): HTMLButtonElement => {
-    const item = h("button", "console-diff-sidebar__item") as HTMLButtonElement;
+  ): HTMLElement => {
+    // The list item is a div and the button is inside it: a button that takes a listitem role is
+    // no longer a button to a screen reader.
+    const entry = h("div", "console-diff-sidebar__entry");
+    entry.setAttribute("role", "listitem");
+    const item = h("button", "console-diff-sidebar__item");
     item.type = "button";
-    item.setAttribute("role", "listitem");
     const st = STATUS_COPY[o.file.status];
-    item.append(label(st.short, st.modifier, o.file.status));
+    item.append(label(st.short, st.modifier, o.file.status, { compact: true }));
     // Give the filename priority over its directory.
     const slash = o.file.path.lastIndexOf("/");
     const wrap = h("span", "console-diff-sidebar__file");
@@ -1090,28 +1400,30 @@ export function activate(host: HTMLElement): AppInstance {
       : slash > 0
         ? o.file.path.slice(0, slash)
         : "";
-    if (rel) wrap.append(h("span", "console-diff-sidebar__dir", rel));
-    item.append(wrap);
-    // Keep the full path in the native tooltip.
-    item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-    if (o.annotation?.visibility === "public") item.dataset.visibility = "public";
+    // The count says what it counts. A bare "38" beside a filename is a number with no unit, and
+    // the unit used to live only in a tooltip that touch never shows. It sits on the filename's
+    // line, so the directory below keeps the whole width.
     if (o.annotation?.reach) {
-      const r = h("span", "console-diff-sidebar__counts");
-      r.textContent = String(o.annotation.reach);
-      r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
-      item.append(r);
+      wrap.append(h("span", "console-diff-sidebar__counts", `${o.annotation.reach} referents`));
     }
-    // Grouping changes order, so retain the source row index.
-    const row = state.fileRows[index];
+    if (rel) wrap.append(pathText("console-diff-sidebar__dir", rel));
+    item.append(wrap);
+    // The full path stays in the native tooltip as a supplement; the row says all it needs to.
+    item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
+    if (o.annotation?.visibility === "public") {
+      item.dataset.visibility = "public";
+      name.append(statusText("info", " (public API)"));
+    }
+    // The stream's row for this path, by path. The index into the visible files cannot be used:
+    // folding generated or settled files and focus mode all change which files have a row.
+    const row = fileRowByPath.get(o.file.path);
     if (row !== undefined) {
       item.dataset.fileRow = String(row);
       sidebarItems.set(row, item);
     }
-    item.addEventListener("click", () => {
-      if (row !== undefined) scrollToRow(row);
-      scroll.focus();
-    });
-    return item;
+    item.addEventListener("click", () => void goToFile(o.file.path));
+    entry.append(item);
+    return entry;
   };
 
   const paintSidebar = (force = false): void => {
@@ -1141,7 +1453,7 @@ export function activate(host: HTMLElement): AppInstance {
         if (entry.kind === "project") {
           const head = h("div", "console-diff-sidebar__project");
           head.setAttribute("role", "presentation");
-          const pName = h("span", "console-diff-sidebar__project-name", entry.project);
+          const pName = pathText("console-diff-sidebar__project-name", entry.project);
           pName.title = entry.project;
           const pCount = h("span", "console-diff-sidebar__project-count", String(entry.count));
           head.append(pName, pCount);
@@ -1149,7 +1461,7 @@ export function activate(host: HTMLElement): AppInstance {
           continue;
         }
         const change = state.changeset.primary[entry.changeIndex];
-        if (change) frag.append(renderSidebarItem(change, entry.changeIndex, entry.project));
+        if (change) frag.append(renderSidebarItem(change, entry.project));
       }
       sidebarWindow.style.transform = `translateY(${sidebarOffsets[first]}px)`;
       sidebarWindow.replaceChildren(frag);
@@ -1246,14 +1558,16 @@ export function activate(host: HTMLElement): AppInstance {
   // shortcut has no button to disable, so this restarts the toolbar notice's flash animation to
   // point at the sentence that already gives the same reason, instead of a second copy of it.
   const flashCollaborationNotice = (): void => {
-    collaborationNotice.classList.remove("is-flash");
+    delete collaborationNotice.dataset.flash;
     void collaborationNotice.offsetWidth;
-    collaborationNotice.classList.add("is-flash");
+    collaborationNotice.dataset.flash = "";
   };
   // transientNotice is an answer to something the reader just pressed - why the send did
   // nothing, most of the time. It outranks the collaboration sentence while it stands and is
   // cleared by the next command, so it lasts exactly as long as the question it answers.
   let transientNotice = "";
+  // Why the run control is disabled, when it is: the project declares no test target.
+  let verdictReason = "";
   const flashPublishNotice = (text: string): void => {
     transientNotice = text;
     renderToolbar();
@@ -1284,6 +1598,7 @@ export function activate(host: HTMLElement): AppInstance {
   ): Promise<void> => {
     contextBody.hidden = false;
     sessionBody.hidden = true;
+    contextAlert.replaceChildren();
     context.setAttribute("aria-label", "Surrounding code");
     // Demo fixtures cannot provide workspace context. The row button is withheld in demo for the
     // same reason (see renderRow), but the p key and command-bar entry have no button to withhold,
@@ -1310,7 +1625,7 @@ export function activate(host: HTMLElement): AppInstance {
     const requestID = ++contextRequestID;
     context.hidden = false;
     contextTitle.textContent = file.path;
-    contextBody.textContent = "Loading surrounding code...";
+    contextBody.textContent = "Loading surrounding code…";
     if (focus) context.focus();
     const hp = host_();
     if (!hp) {
@@ -1327,10 +1642,13 @@ export function activate(host: HTMLElement): AppInstance {
         .join("\n");
     } catch (error) {
       if (disposed || requestID !== contextRequestID || request.signal.aborted) return;
-      contextBody.textContent =
+      const why =
         error instanceof HttpError && error.status === 409
           ? "The review snapshot changed. Refresh the diff before peeking at surrounding code."
           : "Could not load surrounding code: " + String(error);
+      contextBody.textContent = "";
+      contextAlert.replaceChildren(inlineAlert({ variant: "danger", title: why }));
+      reportFailure("Review", why, "context:failed");
     }
   };
 
@@ -1341,6 +1659,7 @@ export function activate(host: HTMLElement): AppInstance {
     const requestID = ++contextRequestID;
     contextBody.hidden = true;
     sessionBody.hidden = false;
+    contextAlert.replaceChildren();
     context.setAttribute("aria-label", "Agent session");
     context.hidden = false;
     contextTitle.textContent = `${touch.host || "agent"} session ${touch.session || "(no id)"}`;
@@ -1397,12 +1716,24 @@ export function activate(host: HTMLElement): AppInstance {
       return false;
     }
     const before = (state.session?.comments ?? []).length;
+    const outlinesBefore = outlineKey(state.session?.outlines);
+    const viewedBefore = state.viewed;
     state.session = s;
     state.viewed = new Set(s.viewed ?? []);
     setCollaboration("live");
     renderRail();
-    if (relayout && (s.comments ?? []).length !== before) void rebuild();
-    else renderToolbar();
+    // An outline is a row of the stream like a comment, so a new one moves the geometry too.
+    const moved = (s.comments ?? []).length !== before || outlineKey(s.outlines) !== outlinesBefore;
+    if (relayout && moved) void rebuild();
+    else {
+      renderToolbar();
+      // A read mark changes no geometry, but it changes what the rows already on screen say:
+      // their label and their Mark read button.
+      const viewedMoved =
+        viewedBefore.size !== state.viewed.size ||
+        [...state.viewed].some((d) => !viewedBefore.has(d));
+      if (viewedMoved) paint(true);
+    }
     return true;
   };
 
@@ -1464,7 +1795,7 @@ export function activate(host: HTMLElement): AppInstance {
 
   // monoCharWidth measures the mono font's actual character advance, in pixels, so the row-width
   // floor below can be set in px instead of ch. ch is relative to EACH element's own font, and a
-  // comment or story row renders in the body font (see .console-diff-row--comment), not mono - the
+  // comment or touch row renders in the body font (see .console-diff-row--comment), not mono - the
   // same ch count on those rows resolved to a smaller pixel width than on a code line, so their
   // background fell short of the scroll width all over again. The probe is measured off-DOM
   // (position: absolute, visibility: hidden) and over many characters, not one, because a single
@@ -1482,48 +1813,60 @@ export function activate(host: HTMLElement): AppInstance {
     return width;
   };
 
-  // focusSlice narrows the file list to the one hunk focus mode is showing.
-  //
-  // A slice, not a filter of the rows: buildRows takes files, so everything downstream - the
-  // offsets, the hunk marks, the thread placement - recomputes for what is actually on screen
-  // rather than being patched afterwards. It is safe to renumber nothing because a hunk carries
-  // its own index (see Hunk.index); keying by array position here would move every remark.
-  const focusSlice = (files: DiffFile[]): DiffFile[] => {
-    const want = state.focusAt;
-    for (const file of files) {
-      if (want && file.path !== want.path) continue;
-      for (const hunk of file.hunks) {
-        if (want && hunk.index !== want.index) continue;
-        state.focusAt = { path: file.path, index: hunk.index };
-        return [{ ...file, hunks: [hunk] }];
-      }
-    }
-    // The hunk went away - a fold, a re-read, a tree that moved. Fall back to the first one
-    // rather than showing nothing: an empty stream would read as "the change is gone".
-    const first = files[0];
-    const firstHunk = first?.hunks[0];
-    if (!first || !firstHunk) return files;
-    state.focusAt = { path: first.path, index: firstHunk.index };
-    return [{ ...first, hunks: [firstHunk] }];
+  // The narrowest a row may be: the longest line's width, or the visible pane when that is wider.
+  // The pane half is what lets a tinted row, and the actions pinned to its end, reach the right
+  // edge of a pane whose longest line is short. clientWidth rather than a container unit because
+  // it leaves out a classic scrollbar, which a unit would count and so scroll sideways for.
+  let contentFloorPx = 0;
+  const applyRowFloor = (): void => {
+    const pane = scroll.clientWidth;
+    scroll.style.setProperty("--console-diff-min-row-width", `${Math.max(contentFloorPx, pane)}px`);
   };
+  const scrollResize =
+    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => applyRowFloor());
+  scrollResize?.observe(scroll);
+  controller.signal.addEventListener("abort", () => scrollResize?.disconnect(), { once: true });
 
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated, state.showSettled);
     // Built from the WHOLE visible changeset, before any narrowing, because the counts describe
-    // the pass and not the screen.
-    state.pairs = state.files.flatMap((f) =>
-      f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
+    // the pass and not the screen. The steps are the server's reading order laid over exactly
+    // these hunks, or one step per hunk in file order when it sent none.
+    state.steps = readingSteps(
+      state.session?.diff?.order,
+      state.files.flatMap((f) =>
+        f.hunks.map((hunk) => ({ path: f.path, index: hunk.index, digest: hunk.digest })),
+      ),
+    );
+    state.ordered = state.steps.some((s) => s.group !== undefined);
+    state.pairs = state.steps.flatMap((s) =>
+      s.hunks.map((h) => ({ path: h.path, index: h.index, digest: h.digest })),
     );
     // Resume on the FIRST rebuild of a remembered pass, not just when the mode is toggled on.
-    // setFocus seeds focusAt, but a reader who left in focus mode arrives with it null, and
-    // focusSlice's fallback is the first hunk - so the remembered preference, which is the common
-    // path, restarted the pass at the top every time and the docs promised otherwise.
-    if (state.focus && state.pairs.length > 0) {
+    // setFocus seeds focusAt, but a reader who left in focus mode arrives with it null, so the
+    // remembered preference, which is the common path, would restart the pass at the top every
+    // time and the docs promise otherwise.
+    //
+    // The slice is a narrowing of the file list, not a filter of the rows: buildRows takes files,
+    // so everything downstream - the offsets, the hunk marks, the thread placement - recomputes
+    // for what is on screen. Nothing is renumbered because a hunk carries its own index (see
+    // Hunk.index); keying by array position here would move every remark.
+    let placement: StepRows | null = null;
+    if (state.focus && state.steps.length > 0) {
       state.focusAt ??= firstUnread();
-      state.files = focusSlice(state.files);
+      // The step went away - a fold, a re-read, a tree that moved. Fall back to the first one
+      // rather than showing nothing: an empty stream would read as "the change is gone".
+      const at = Math.max(0, findStepIndex(state.steps, state.focusAt));
+      const step = state.steps[at];
+      const first = step?.hunks[0];
+      if (step && first) {
+        state.focusAt = { path: first.path, index: first.index };
+        state.files = stepFiles(step, state.files);
+        if (state.ordered) placement = stepRows(state.steps, at);
+      }
     }
     // Touches come from the annotations, so the first paint has none and the stream gains the
-    // story rows when the review lands - the same two-phase shape everything else here uses.
+    // touch rows when the review lands - the same two-phase shape everything else here uses.
     const touches = new Map<string, readonly DiffTouch[]>();
     for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
@@ -1532,14 +1875,16 @@ export function activate(host: HTMLElement): AppInstance {
     // group or switching to split changes which hunk a line sits in, and a placement computed
     // once would leave a colleague's remark pinned to whatever used to be there.
     state.threads = state.review ? placeThreads(state.files, state.review.threads) : null;
-    // Focus mode renders ONE hunk, so a remark on any other hunk of the same file is bucketed
-    // under a key nothing emits - rendered nowhere, counted nowhere, and absent from the
-    // elsewhere listing that exists to guarantee no remark is ever silently dropped. Moving them
-    // to elsewhere is what keeps that guarantee true when the stream narrows.
+    // Focus mode renders one step, so a remark on any hunk outside it is bucketed under a key
+    // nothing emits - rendered nowhere, counted nowhere, and absent from the elsewhere listing
+    // that exists to guarantee no remark is ever silently dropped. Moving them to elsewhere is
+    // what keeps that guarantee true when the stream narrows.
     if (state.focus && state.threads) {
       state.threads = narrowToHunk(
         state.threads,
-        state.focusAt ? commentKey(state.focusAt.path, state.focusAt.index) : "",
+        state.focusAt
+          ? state.files.flatMap((f) => f.hunks.map((x) => commentKey(f.path, x.index)))
+          : "",
       );
     }
     state.rows = buildRows(
@@ -1548,15 +1893,22 @@ export function activate(host: HTMLElement): AppInstance {
       byHunk(state.session?.comments ?? []),
       touches,
       state.threads ?? undefined,
+      placement ?? undefined,
+      outlinesByThread(state.session?.outlines),
     );
     state.hunks = hunkRowIndexes(state.rows);
     state.hunkOrdinalByRow = hunkOrdinal(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
+    fileRowByPath = new Map();
+    for (const i of state.fileRows) {
+      const r = state.rows[i];
+      if (r?.kind === "file") fileRowByPath.set(r.file.path, i);
+    }
     state.offsets = rowOffsets(state.rows);
     state.fileOf = fileOfRow(state.rows);
     spacer.style.height = `${state.offsets[state.rows.length]}px`;
-    const rowFloorPx = (maxLineChars(state.rows) + LINE_PREFIX_CHARS) * monoCharWidth();
-    scroll.style.setProperty("--console-diff-min-row-width", `${rowFloorPx}px`);
+    contentFloorPx = (maxLineChars(state.rows) + LINE_PREFIX_CHARS) * monoCharWidth();
+    applyRowFloor();
     // Row indices move on every rebuild, so the map is rebuilt with them - but it is filled
     // completely here, from digests that arrived with the changeset.
     state.digestByRow = new Map();
@@ -1607,35 +1959,128 @@ export function activate(host: HTMLElement): AppInstance {
     ];
     const pending = drafts().length;
     if (pending > 0) {
-      chips.push(
-        label(
-          `${pending} ${pending === 1 ? "draft" : "drafts"}`,
-          "pf-m-orange",
-          "Written, not sent. Press s to read the batch and send it.",
-        ),
-      );
+      chips.push(label(plural(pending, "draft"), "pf-m-orange", undefined, { icon: "warning" }));
+      // The chip says there is something to send; this is the way to send it that is not a key.
+      const send = linkButton("Review and send");
+      send.classList.add("console-diff-toolbar__send");
+      send.title = "Read the batch before it leaves, then send it (s)";
+      send.addEventListener("click", () => composePublish());
+      chips.push(send);
     }
     // A reason alongside an OPEN review is not "there is no review" - it is a review that was
     // read incompletely, most often a thread the provider returned in a shape magus could not
-    // decode. Shown, because the alternative is a conversation quietly missing a remark.
+    // decode. Shown, because the alternative is a thread quietly missing a comment.
     if (info.reason) {
-      chips.push(label("partly read", "pf-m-red", info.reason));
+      chips.push(label("partly read", "pf-m-red", info.reason, { icon: "danger" }));
     }
-    // Threads on files this changeset does not touch have nowhere in the stream to sit. Counted
+    // Comments on files this changeset does not touch have nowhere in the stream to sit. Counted
     // rather than dropped: "your colleague said nothing" is the one thing a review app must
-    // never say by accident.
+    // never say by accident. Said in words because the chip is all some readers get.
     const elsewhere = state.threads?.elsewhere.length ?? 0;
     if (elsewhere > 0) {
       chips.push(
         label(
-          `${elsewhere} elsewhere`,
+          `${plural(elsewhere, "comment")} elsewhere`,
           undefined,
-          "Comments on the review, on files this view is not showing",
+          "On the review, on files this view is not showing. The overview lists them.",
         ),
       );
     }
     return chips;
   };
+
+  // renderReading draws the reading mark: the toggle's pressed state, and while it is on, since
+  // when and the command for the person to run.
+  const renderReading = (): void => {
+    const on = state.reading !== null;
+    readingGroup.select(on ? "reading" : null);
+    readingEl.hidden = !on;
+    if (!state.reading) {
+      readingPop.close();
+      return;
+    }
+    const since = state.reading.since;
+    readingSince.textContent = since
+      ? `reading since ${new Date(since).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+      : "reading";
+    const command = state.reading.command ?? "";
+    readingCopy.setText(command);
+    readingCopy.el.hidden = command === "";
+  };
+
+  // toggleReading asks the server to mark, or unmark, the review as being read. The button holds
+  // its old state until the server answers: a refusal (no review is open, or it already merged)
+  // leaves the mark as it was and surfaces as a toast, so the pressed state never claims more
+  // than the server recorded.
+  const toggleReading = async (): Promise<void> => {
+    const on = state.reading === null;
+    if (demo) {
+      state.reading = demoReading(on);
+      renderReading();
+      if (on) readingPop.open();
+      return;
+    }
+    const hp = host_();
+    if (!hp) {
+      reportFailure(
+        "Review",
+        "Connect a server to mark this review as being read.",
+        "reading:no-server",
+      );
+      return;
+    }
+    readingButton.disabled = true;
+    const res = await setReading(hp, on, controller.signal);
+    if (disposed) return;
+    readingButton.disabled = false;
+    if (res) {
+      state.reading = res.reading ? res : null;
+      renderReading();
+      // Shown as it turns on: the command is what the mark is for, and it is the one thing the
+      // person has to do next if they want anyone else to see it.
+      if (state.reading) readingPop.open();
+    }
+  };
+
+  // What the collaboration state says, as a chip and as the sentence that explains it. A live
+  // session needs neither.
+  const collaborationCopy = (): { text: string; notice: string } =>
+    ({
+      live: { text: "", notice: "" },
+      unavailable: {
+        text: "agent session unavailable",
+        notice:
+          "Agent comments and review marks are unavailable until the review session connects.",
+      },
+      degraded: {
+        text: "agent sync unavailable",
+        notice:
+          "Agent collaboration is temporarily unavailable. Review actions are disabled until it reconnects.",
+      },
+      stale: {
+        text: "review snapshot changed",
+        notice:
+          "The shared review now describes a different patch. Refresh the diff before collaborating.",
+      },
+    })[state.collaboration];
+
+  // renderNotice shows the one sentence that answers the reader. It is rewritten only when the
+  // sentence changes: the toolbar re-renders on every cursor move, and a live region whose
+  // children are replaced is announced again each time.
+  let noticeKey = "";
+  const renderNotice = (): void => {
+    const text = transientNotice || collaborationCopy().notice || verdictReason;
+    const key = (transientNotice ? "info:" : "warning:") + text;
+    if (key === noticeKey) return;
+    noticeKey = key;
+    collaborationNotice.replaceChildren();
+    if (text) {
+      collaborationNotice.append(
+        inlineAlert({ variant: transientNotice ? "info" : "warning", title: text }),
+      );
+    }
+  };
+  let statsHelpDispose: (() => void) | undefined;
 
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
@@ -1647,27 +2092,9 @@ export function activate(host: HTMLElement): AppInstance {
     const size: HTMLElement[] = [];
     const attention: HTMLElement[] = [];
     const pass: HTMLElement[] = [];
-    const collaboration = {
-      live: { text: "agent session live", tone: "pf-m-blue", notice: "" },
-      unavailable: {
-        text: "agent session unavailable",
-        tone: "pf-m-orange",
-        notice:
-          "Agent comments and review marks are unavailable until the review session connects.",
-      },
-      degraded: {
-        text: "agent sync unavailable",
-        tone: "pf-m-orange",
-        notice:
-          "Agent collaboration is temporarily unavailable. Review actions are disabled until it reconnects.",
-      },
-      stale: {
-        text: "review snapshot changed",
-        tone: "pf-m-orange",
-        notice:
-          "The shared review now describes a different patch. Refresh the diff before collaborating.",
-      },
-    }[state.collaboration];
+    // What each count means, for the "?" at the end of the row. A tooltip is not where a
+    // definition lives: touch has no hover, and the definition is what the count is worth.
+    const meanings: string[] = [];
     // Demo state is NOT chipped here. Every other app says it in one place - the shell's
     // connection pill - and a second badge in this toolbar made the diff the one app that
     // announced it twice, in a style nothing else uses.
@@ -1677,24 +2104,18 @@ export function activate(host: HTMLElement): AppInstance {
     // a per-app badge: fixing it here only would leave every other tileable app with
     // the same gap and a different answer.
     size.push(
-      label(
-        `${s.files} ${s.files === 1 ? "file" : "files"}`,
-        undefined,
-        "Files worth reading; generated output is excluded",
-      ),
+      stat(String(s.files), s.files === 1 ? "file" : "files"),
       label(`+${s.additions}`, "pf-m-green"),
-      label(`-${s.deletions}`, "pf-m-red"),
+      label(`−${s.deletions}`, "pf-m-red"),
     );
-    // A LABEL, not a button. This row is a readout - counts and warnings - and the one control
-    // hiding among them read as a different kind of thing because it was one. The fold lives on
-    // the sidebar's "N generated" group, where the files it folds are, and on the . key.
+    meanings.push("Files counts the files worth reading; generated output is excluded.");
+    // A readout item, not a button. This row is counts and warnings, and the one control hiding
+    // among them read as a different kind of thing because it was one. The fold lives on the
+    // sidebar's "N generated" group, where the files it folds are, and on the . key.
     if (s.generated > 0) {
-      size.push(
-        label(
-          state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
-          undefined,
-          "Declared target outputs. Review the source change instead. Fold these files in the sidebar or press period.",
-        ),
+      size.push(stat(String(s.generated), state.showGenerated ? "generated" : "generated, folded"));
+      meanings.push(
+        "Generated files are declared target outputs. Review the source change instead. Fold them in the sidebar or press period.",
       );
     }
     // Said out loud for the reason the generated count is: a folded file the reader was never
@@ -1702,32 +2123,28 @@ export function activate(host: HTMLElement): AppInstance {
     // value, so it reads as progress rather than as a warning.
     if (s.settled > 0) {
       pass.push(
-        label(
-          state.showSettled ? `${s.settled} already read` : `${s.settled} already read, folded`,
-          undefined,
-          "You read these at exactly this content and they have not changed since. Press n to show them.",
-        ),
+        stat(String(s.settled), state.showSettled ? "already read" : "already read, folded"),
+      );
+      meanings.push(
+        "Already read files are ones you read at exactly this content, unchanged since. Press n to show them.",
       );
     }
     if (!ranked()) {
-      attention.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
+      attention.push(label("unranked", "pf-m-orange", undefined, { icon: "warning" }));
+      meanings.push(`Unranked: ${UNRANKED_TITLE}`);
     }
     if (s.publicFiles > 0) {
       attention.push(
-        label(
-          `${s.publicFiles} public API`,
-          "pf-m-orange",
-          "Files whose changed symbols are reachable outside their project or module",
-        ),
+        label(`${s.publicFiles} public API`, "pf-m-orange", undefined, { icon: "warning" }),
+      );
+      meanings.push(
+        "Public API files have changed symbols reachable outside their project or module.",
       );
     }
     if (s.untested > 0) {
-      attention.push(
-        label(
-          `${s.untested} untested`,
-          "pf-m-red",
-          "Files with measured zero coverage (files nobody measured are not counted)",
-        ),
+      attention.push(label(`${s.untested} untested`, "pf-m-red", undefined, { icon: "danger" }));
+      meanings.push(
+        "Untested files have measured zero coverage. Files nobody measured are not counted.",
       );
     }
     // state.viewed.size used to be the numerator here, and it is the WHOLE SESSION's marked set -
@@ -1747,36 +2164,40 @@ export function activate(host: HTMLElement): AppInstance {
     ).length;
     if (stale > 0) {
       attention.push(
-        label(
-          `${stale} changed since read`,
-          "pf-m-red",
-          "You read these and they changed afterwards. Press u to go to the first one.",
-        ),
+        label(`${stale} changed since read`, "pf-m-red", undefined, { icon: "danger" }),
+      );
+      meanings.push(
+        "Changed since read files were read by you and changed afterwards. Press u to go to the first one.",
       );
     }
     const read = hunksRead(state.hunks, state.digestByRow, state.viewed);
-    pass.push(
-      label(
-        `${read}/${state.hunks.length} hunks read`,
-        read === state.hunks.length && read > 0 ? "pf-m-green" : undefined,
-        "Marks are keyed to hunk CONTENT, so they survive a rebase that did not touch the hunk",
-      ),
-    );
-    pass.push(
-      label(
-        state.mode === "split" ? "split" : "unified",
-        "pf-m-blue",
-        "1 unified, 2 split, 0 toggle",
-      ),
-    );
-    if (state.collaboration !== "live") pass.push(label(collaboration.text, collaboration.tone));
-    collaborationNotice.textContent = transientNotice || collaboration.notice;
+    const complete = read === state.hunks.length && read > 0;
+    // The marks are keyed to hunk CONTENT, so they survive a rebase that did not touch the hunk.
+    const progressStat = stat(`${read}/${state.hunks.length}`, "hunks read");
+    if (complete) {
+      progressStat.dataset.complete = "";
+      progressStat.prepend(statusIcon("success"));
+    }
+    pass.push(progressStat);
+    meanings.push("Hunks read counts the hunks you marked read. Marks follow the hunk's content.");
+    const collaboration = collaborationCopy();
+    if (collaboration.text) {
+      pass.push(label(collaboration.text, "pf-m-orange", undefined, { icon: "warning" }));
+    }
+    modeGroup.select(state.mode);
+    renderNotice();
     // The review cluster comes last: it describes what happens to this pass when it is over,
     // which is the least urgent thing on a row about what is in front of the reader now. An
     // empty cluster is dropped rather than rendered, or the wide inter-cluster gap opens a hole
     // where nothing is.
+    statsHelpDispose?.();
+    const help = createHelpButton("What these counts mean");
+    statsHelpDispose = attachHelpPopover(help, {
+      text: meanings.join(" "),
+      label: "What these counts mean",
+    });
     statsEl.replaceChildren(
-      ...[size, attention, pass, reviewChips()]
+      ...[size, attention, pass, reviewChips(), [help]]
         .filter((c) => c.length > 0)
         .map((c) => {
           const el = h("div", "console-diff-toolbar__cluster");
@@ -1793,7 +2214,9 @@ export function activate(host: HTMLElement): AppInstance {
     const said = (state.review?.threads.length ?? 0) + (state.session?.comments?.length ?? 0);
     const text = mergedSeen ? "" : mergedNotice(state.review, said);
     merged.hidden = text === "";
-    mergedText.textContent = text;
+    merged.replaceChildren();
+    if (text)
+      merged.append(inlineAlert({ variant: "info", title: text, actions: [mergedDismiss] }));
   };
 
   // The target an inline run asks for. Hard-coded to the canonical test target rather than
@@ -1827,6 +2250,8 @@ export function activate(host: HTMLElement): AppInstance {
     const project = currentProject();
     if (!project) {
       verdictButton.hidden = true;
+      verdictReason = "";
+      renderNotice();
       return;
     }
     verdictButton.hidden = false;
@@ -1834,36 +2259,43 @@ export function activate(host: HTMLElement): AppInstance {
     const stale = v !== undefined && v.asOf !== treeState();
     verdictButton.disabled = v?.state === "running";
     verdictButton.dataset.state = stale ? "stale" : (v?.state ?? "unknown");
+    // The reasons a verdict has more to say than its button can hold are shown under the head, in
+    // the one line that explains things, and not only in a tooltip.
+    verdictReason = "";
     if (v?.undeclared) {
       // A gap in what the workspace declares, not a failure. Said plainly, because "no tests ran"
       // rendered as silence reads as "nothing to worry about".
       verdictText.textContent = `${project}: no ${RUN_TARGET} target`;
       verdictButton.title = v.undeclared;
       verdictButton.disabled = true;
+      verdictReason = `${project} has no ${RUN_TARGET} target to run: ${v.undeclared}`;
+      renderNotice();
       return;
     }
     const secs = v?.durationMs ? ` ${(v.durationMs / 1000).toFixed(1)}s` : "";
     switch (v?.state) {
       case "running":
-        verdictText.textContent = `Testing ${project}...`;
+        verdictText.textContent = `Testing ${project}…`;
         verdictButton.title = `magus run ${RUN_TARGET} ${project} is in flight`;
         break;
       case "passed":
         verdictText.textContent = stale
-          ? `${project} passed - since edited`
+          ? `${project} passed, since edited`
           : `${project} passed${secs}`;
         verdictButton.title = stale
           ? "This verdict is about the changeset as it was, not as it is now. Run again."
           : "Run again";
         break;
       case "failed":
-        verdictText.textContent = stale ? `${project} failed - since edited` : `${project} failed`;
+        verdictText.textContent = stale ? `${project} failed, since edited` : `${project} failed`;
         verdictButton.title = v.error || "Run again";
+        if (v.error && !stale) verdictReason = `${project} failed: ${v.error}`;
         break;
       default:
         verdictText.textContent = `Test ${project}`;
         verdictButton.title = `Run ${RUN_TARGET} for ${project} on this machine`;
     }
+    renderNotice();
   };
 
   // startRun submits the project in view, then polls until it settles.
@@ -1920,6 +2352,11 @@ export function activate(host: HTMLElement): AppInstance {
     }
     state.verdicts.delete(project);
     renderVerdict();
+    reportFailure(
+      "Review",
+      `The ${RUN_TARGET} run for ${project} did not report back in ten minutes. Run it again from here or from a terminal.`,
+      "run:timeout",
+    );
   };
 
   // renderProgress draws where the pass is. Only in focus mode: the dense view already answers
@@ -1929,8 +2366,12 @@ export function activate(host: HTMLElement): AppInstance {
     focusText.textContent = state.focus ? "Leave focus" : "Focus";
     focusButton.title = state.focus
       ? "Show the whole changeset again (f)"
-      : "Read one hunk at a time (f)";
+      : state.ordered
+        ? "Read one step at a time, in the order the changes depend on each other (f)"
+        : "Read one step at a time, one hunk each (f)";
+    focusButton.setAttribute("aria-pressed", String(state.focus));
     progressEl.hidden = !state.focus;
+    renderKeys();
     // The whole READOUT goes, not just the counts inside it. Hiding statsEl alone left the row
     // standing at its --console-diff-head-block-size floor with the key disclosure floating alone
     // in an otherwise empty band - a mode whose claim is less chrome, spending a toolbar row on
@@ -1941,22 +2382,52 @@ export function activate(host: HTMLElement): AppInstance {
     // keyboard mode: the reader advances with ] and marks with v, and taking the only on-screen
     // statement of those keys away from the mode that depends on them is the wrong half to cut.
     readout.hidden = state.focus;
-    (state.focus ? progressEl : readout).append(keysWrap);
+    (state.focus ? progressRow.section : readout).append(keysWrap);
     renderVerdict();
     if (!state.focus) return;
     const total = state.pairs.length;
     const read = readCount();
-    const at = pairAt();
-    progressFill.style.width = total > 0 ? `${(read / total) * 100}%` : "0%";
-    const left = state.files[0]?.path ?? "";
+    const at = stepAt();
+    progressBar.set(read, total);
+    // Position, then the file the step is in, then what the pass has produced so far. The draft
+    // count is why this row carries the send control: it is the evidence that reading is turning
+    // into something, and the way to act on it.
+    //
+    // The step is the unit of the pass; with no order from the server each step is one hunk. The
+    // read count stays in hunks, in the bar: a step holds several, and "3 of 9 read" would be a
+    // different count from the bar beside it.
+    progressText.textContent = `Step ${at + 1} of ${state.steps.length}`;
+    progressPath.replaceChildren(h("bdi", undefined, state.files[0]?.path ?? ""));
+    prevStepBtn.disabled = at <= 0;
     const drafted = drafts().length;
-    // Position, then what is left, then what the pass has produced so far. The last one is why a
-    // draft count belongs here: it is the evidence that reading is turning into something.
-    progressText.textContent =
-      `hunk ${at + 1} of ${total}, ${read} read` +
-      (drafted > 0 ? `, ${drafted} drafted` : "") +
-      (left ? ` - ${left}` : "");
+    progressDrafts.hidden = drafted === 0 || !state.review?.id;
+    progressDrafts.replaceChildren();
+    if (!progressDrafts.hidden) {
+      const send = linkButton("Review and send");
+      send.title = "Read the batch before it leaves, then send it (s)";
+      send.addEventListener("click", () => composePublish());
+      progressDrafts.append(
+        label(plural(drafted, "draft"), "pf-m-orange", undefined, { icon: "warning" }),
+        send,
+      );
+    }
   };
+
+  // renderKeys fills the legend: one row per bound key, taken from COMMANDS, so a key that is not
+  // bound cannot be taught and a rebinding cannot leave this stale. Focus mode rewords the keys
+  // that mean something else there.
+  const legendRows = (): HTMLElement[] => {
+    const rows: HTMLElement[] = [];
+    for (const c of COMMANDS) {
+      if (!c.key) continue;
+      const term = h("dt");
+      term.append(h("kbd", "console-shell-keycap", c.key === "Escape" ? "Esc" : c.key));
+      const desc = h("dd", undefined, (state.focus && c.focusShort) || c.short);
+      rows.push(term, desc);
+    }
+    return rows;
+  };
+  const renderKeys = (): void => keysEl.replaceChildren(...legendRows());
 
   const renderSidebar = (): void => {
     // Grouped by PROJECT, not by directory depth. In a monorepo a path answers two questions -
@@ -1978,7 +2449,17 @@ export function activate(host: HTMLElement): AppInstance {
     const needle = sidebarFilter.value.trim().toLocaleLowerCase();
     const role = state.roleFilter;
     roleStrip.hidden = !role;
-    if (role) roleStripText.textContent = "Showing " + role + " files only.";
+    roleStrip.replaceChildren();
+    if (role) {
+      const clear = linkButton("Show all");
+      clear.addEventListener("click", () => {
+        state.roleFilter = "";
+        renderSidebar();
+      });
+      roleStrip.append(
+        inlineAlert({ variant: "info", title: `Showing ${role} files only.`, actions: [clear] }),
+      );
+    }
     sidebarEntries = [];
     let shownTotal = 0;
     for (const [project, entries] of groups) {
@@ -2009,26 +2490,23 @@ export function activate(host: HTMLElement): AppInstance {
     paintSidebar(true);
     const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
-      // Its own twist caret rather than the log viewer's console-render-section one: that class is
-      // styled only in logs.css, which this app never loads (verified cold - the button rendered
-      // display:inline-block with a 0x0 caret when Diff was the first app opened in a session,
-      // and only looked right because an earlier visit to Logs/Activity/Notes had pulled the sheet
-      // in already). The rotation is also driven off this button's OWN aria-expanded rather than a
-      // [data-collapsed] ancestor, because this button has no such ancestor - logs.css's selector
-      // could never have matched it even with the sheet loaded.
-      const g = h("button", "console-diff-sidebar__group");
-      g.type = "button";
-      g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
-      const twist = h("span", "console-diff-sidebar__grouptwist");
-      twist.setAttribute("aria-hidden", "true");
-      const gLabel = h("span", "console-diff-sidebar__grouplabel");
-      gLabel.textContent = `${state.changeset.generated.length} generated`;
-      g.append(twist, gLabel);
-      g.title = state.showGenerated
-        ? "Declared target outputs. Press . to fold."
-        : "Declared target outputs, folded. Press . to expand.";
-      g.addEventListener("click", () => void toggleGenerated());
-      generated.append(g);
+      // PF's Expandable section, opened to match the fold. Its toggle asks for the change and the
+      // sidebar repaints from the answer, so the section is rebuilt rather than flipped in place.
+      const group = expandableSection(`${state.changeset.generated.length} generated`, {
+        open: state.showGenerated,
+        toggleClass: "console-diff-sidebar__group",
+      });
+      group.toggle.addEventListener("click", () => void toggleGenerated());
+      group.body.append(
+        h("p", "console-diff-sidebar__note", "Declared target outputs. Press . to fold them."),
+      );
+      generated.append(group.el);
+    }
+    // What the underline in the list means, said once under it rather than left to be guessed.
+    if (state.changeset.primary.some((o) => o.annotation?.visibility === "public")) {
+      generated.append(
+        h("p", "console-diff-sidebar__note", "An underlined file name changes public API."),
+      );
     }
     sidebarGenerated.replaceChildren(generated);
   };
@@ -2052,22 +2530,22 @@ export function activate(host: HTMLElement): AppInstance {
       const where = h("span", "console-diff-rail__where");
       where.textContent = `${s.path}${s.hunk >= 0 ? `:${s.hunk}` : ""}`;
       const reason = h("span", "console-diff-rail__reason", s.reason);
-      const go = h("button", "console-diff-rail__go");
+      const go = h("button", "pf-v6-c-button pf-m-secondary pf-m-small console-diff-rail__go");
       go.type = "button";
       // The key rides as its own <kbd>, the same chip the Shortcuts overlay and the Actions
       // app use for a physical key - not "[g]" folded into the label, which reads as part
       // of the word rather than a key you can press.
-      go.append("go ", h("kbd", "console-cheatsheet-kbd", "g"));
+      go.append("go ", h("kbd", "console-shell-keycap", "g"));
       go.disabled = !canCollaborate();
-      if (go.disabled) go.title = "Agent collaboration is unavailable";
       go.addEventListener("click", () => acceptSuggestion(s.id));
-      const skip = h("button", "console-diff-rail__skip");
+      const skip = h("button", "pf-v6-c-button pf-m-secondary pf-m-small console-diff-rail__skip");
       skip.type = "button";
-      skip.append("skip ", h("kbd", "console-cheatsheet-kbd", "x"));
+      skip.append("skip ", h("kbd", "console-shell-keycap", "x"));
       skip.disabled = !canCollaborate();
-      if (skip.disabled) skip.title = "Agent collaboration is unavailable";
       skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));
-      item.append(who, where, reason, go, skip);
+      const buttons = h("span", "console-diff-rail__buttons");
+      buttons.append(go, skip);
+      item.append(who, where, reason, buttons);
       frag.append(item);
     }
     rail.replaceChildren(frag);
@@ -2076,45 +2554,57 @@ export function activate(host: HTMLElement): AppInstance {
   const renderOverview = (): void => {
     const s = stats(state.changeset);
     const box = h("div", "console-diff-overview__box");
-    box.append(h("h2", "console-diff-overview__title", "This changeset"));
+    const back = h("button", "pf-v6-c-button pf-m-secondary console-diff-overview__back");
+    back.type = "button";
+    back.append(buttonIcon(ANGLE_LEFT), h("span", "pf-v6-c-button__text", "Back to diff"));
+    back.addEventListener("click", () => toggleOverview());
+    box.append(back, h("h2", "console-diff-overview__title", "This changeset"));
 
-    const line = (k: string, v: string, title?: string): HTMLElement => {
-      const r = h("div", "console-diff-overview__row");
-      const kk = h("span", "console-diff-overview__k", k);
-      const vv = h("span", "console-diff-overview__v", v);
-      if (title) r.title = title;
-      r.append(kk, vv);
-      return r;
+    // A description list, because each row is a term and what is true of it. The explanation a
+    // row needs sits under its value as text, not in a tooltip that touch never shows.
+    const facts = h("dl", "pf-v6-c-description-list pf-m-horizontal pf-m-compact");
+    const line = (k: string, v: string, note?: string): void => {
+      const group = h("div", "pf-v6-c-description-list__group");
+      const term = h("dt", "pf-v6-c-description-list__term");
+      term.append(h("span", "pf-v6-c-description-list__text", k));
+      const desc = h("dd", "pf-v6-c-description-list__description");
+      const text = h("div", "pf-v6-c-description-list__text", v);
+      desc.append(text);
+      if (note) desc.append(h("div", "console-diff-overview__note", note));
+      group.append(term, desc);
+      facts.append(group);
     };
-    box.append(line("to read", `${s.files} files, +${s.additions} -${s.deletions}`));
-    if (s.generated > 0)
-      box.append(line("folded away", `${s.generated} generated`, "Declared target outputs"));
-    if (s.publicFiles > 0)
-      box.append(
-        line(
-          "public API",
-          `${s.publicFiles} files`,
-          "Changed symbols reachable outside their project or module",
-        ),
+    line("To read", `${plural(s.files, "file")}, +${s.additions} −${s.deletions}`);
+    if (s.generated > 0) {
+      line("Folded away", `${plural(s.generated, "generated file")}`, "Declared target outputs.");
+    }
+    if (s.publicFiles > 0) {
+      line(
+        "Public API",
+        plural(s.publicFiles, "file"),
+        "Changed symbols reachable outside their project or module.",
       );
-    if (s.untested > 0) box.append(line("measured untested", `${s.untested} files`));
+    }
+    if (s.untested > 0) {
+      line(
+        "No coverage",
+        plural(s.untested, "file"),
+        "Measured at zero. Files nobody measured are not counted.",
+      );
+    }
     const seeds = state.session?.diff?.seed_projects ?? [];
     const affected = state.session?.diff?.affected_projects ?? [];
     if (affected.length > 0) {
-      box.append(
-        line(
-          "projects",
-          `${seeds.length} edited, ${affected.length} rebuild`,
-          "Edited counts projects a person changed a source file in; generated-only changes do not count as an edit. Rebuild is the full downstream closure over every changed path, generated included, because a regenerated output still invalidates a cache key.",
-        ),
+      line(
+        "Projects",
+        `${seeds.length} edited, ${affected.length} to rebuild`,
+        "Edited counts projects where a person changed a source file; generated-only changes do not count. To rebuild is every project downstream of any changed path, generated included, because a regenerated output still invalidates a cache key.",
       );
     }
+    box.append(facts);
     const unchecked = conformanceUnchecked(state.session?.diff);
     if (unchecked) {
-      const err = h("p", "console-diff-overview__note");
-      err.dataset.tone = "error";
-      err.textContent = unchecked;
-      box.append(err);
+      box.append(inlineAlert({ variant: "danger", title: unchecked }));
       reportFailure("diff", unchecked, "conformance-unchecked");
     }
     for (const line of conformanceUncovered(state.session?.diff)) {
@@ -2139,24 +2629,23 @@ export function activate(host: HTMLElement): AppInstance {
         why.textContent = UNRANKED_TITLE;
         box.append(why);
       }
+      const files = h("ul", "console-diff-overview__files");
       for (const o of top) {
-        const r = h("button", "console-diff-overview__file");
-        r.type = "button";
-        r.textContent = o.file.path;
+        const r = linkButton(o.file.path);
+        r.classList.add("console-diff-overview__file");
         r.addEventListener("click", () => {
-          state.overview = false;
-          root.dataset.overview = "off";
-          const i = state.changeset.primary.indexOf(o);
-          const row = state.fileRows[i];
-          if (row !== undefined) scrollToRow(row);
-          scroll.focus();
+          setOverview(false);
+          void goToFile(o.file.path);
         });
-        box.append(r);
+        const item = h("li");
+        item.append(r);
+        files.append(item);
       }
+      box.append(files);
     }
-    // Threads with nowhere in the stream to sit. They are READ here rather than merely
-    // counted: a chip saying "3 elsewhere" tells the reader something was said and withholds
-    // what, which is worse than not mentioning it - they now have to leave to find out.
+    // Comments with nowhere in the stream to sit. They are READ here rather than merely
+    // counted: a chip saying "3 comments elsewhere" tells the reader something was said and
+    // withholds what, which is worse than not mentioning it - they now have to leave to find out.
     // A capability gap, said out loud. Without it the overview looks identical to a repository
     // where genuinely nothing else is in flight, and the reader would take magus's silence for
     // an all-clear it never checked.
@@ -2171,14 +2660,14 @@ export function activate(host: HTMLElement): AppInstance {
     }
     const elsewhere = state.threads?.elsewhere ?? [];
     if (elsewhere.length > 0) {
-      box.append(h("h3", "console-diff-overview__subtitle", "Said on the review, elsewhere"));
+      box.append(h("h3", "console-diff-overview__subtitle", "Comments on the review, elsewhere"));
       const why = h("p", "console-diff-overview__note");
       why.textContent =
         "These are on files this view is not showing, whether folded away or outside the changeset. A review covers commits a working diff does not.";
       box.append(why);
       for (const t of elsewhere) {
         const r = h("p", "console-diff-overview__note");
-        r.append(h("span", undefined, `${t.author} on ${t.path}:${t.line} - `));
+        r.append(h("span", undefined, `${t.author} on ${t.path}:${t.line}: `));
         const said = h("span", "console-diff-md");
         setMarkdown(said, t.body);
         r.append(said);
@@ -2186,13 +2675,12 @@ export function activate(host: HTMLElement): AppInstance {
       }
     }
     box.append(
-      h(
-        "p",
-        "console-diff-overview__hint",
-        "Esc returns to the diff. ] and [ step hunks, } and { step files, v marks read, " +
-          "u jumps to the next file needing attention, . folds generated.",
-      ),
+      h("h3", "console-diff-overview__subtitle", "Keyboard shortcuts"),
+      h("p", "console-diff-overview__note", "Esc or Back to diff returns to the diff."),
     );
+    const keys = h("dl", "console-diff-toolbar__keys console-diff-overview__keys");
+    keys.append(...legendRows());
+    box.append(keys);
     overview.replaceChildren(box);
   };
 
@@ -2228,12 +2716,49 @@ export function activate(host: HTMLElement): AppInstance {
     if (i !== null) scrollToRow(i);
   };
 
+  // goToFile brings one file into view, found by its path.
+  //
+  // By path, never by position: the files with a row are not the changeset's files in order. A
+  // fold, the settled files and focus mode each drop some, so an index into one list landed on a
+  // neighbour's header, or on nothing. In focus mode the stream holds one step, so the move is to
+  // the step holding the file's first hunk. A file the view has folded is unfolded first, because
+  // the reader asked for it by name.
+  const goToFile = async (path: string): Promise<void> => {
+    if (state.focus) {
+      const first = state.pairs.filter((p) => p.path === path).sort((a, b) => a.index - b.index)[0];
+      if (first) {
+        state.focusAt = { path: first.path, index: first.index };
+        await rebuild();
+        scroll.focus();
+        return;
+      }
+      // A file with no hunk (a mode change, a binary) has no step to focus on, so the whole
+      // changeset comes back for it.
+      state.focus = false;
+      focusCell.set(false);
+      root.dataset.focus = "off";
+      await rebuild();
+    }
+    let row = fileRowByPath.get(path);
+    if (row === undefined && !state.showSettled) {
+      state.showSettled = true;
+      await rebuild();
+      row = fileRowByPath.get(path);
+    }
+    if (row === undefined && !state.showGenerated) {
+      state.showGenerated = true;
+      await rebuild();
+      row = fileRowByPath.get(path);
+    }
+    if (row !== undefined) scrollToRow(row);
+    scroll.focus();
+  };
+
   // --- focus mode -----------------------------------------------------------
 
-  const pairAt = (): number =>
-    state.pairs.findIndex(
-      (p) => p.path === state.focusAt?.path && p.index === state.focusAt?.index,
-    );
+  // stepAt is the position of the step on screen among all of them, or -1 when the focused hunk
+  // is no longer in the changeset.
+  const stepAt = (): number => findStepIndex(state.steps, state.focusAt);
 
   const readCount = (): number => state.pairs.filter((p) => state.viewed.has(p.digest)).length;
 
@@ -2241,16 +2766,16 @@ export function activate(host: HTMLElement): AppInstance {
   // picks up where it stopped instead of starting at the top - which is the whole reason to
   // read this way: the pass has to survive being interrupted.
   const firstUnread = (): { path: string; index: number } | null => {
-    const p = state.pairs.find((x) => !state.viewed.has(x.digest)) ?? null;
-    return p ? { path: p.path, index: p.index } : null;
+    const first = firstUnreadStep(state.steps, state.viewed)?.hunks[0];
+    return first ? { path: first.path, index: first.index } : null;
   };
 
-  // focusStep moves the pass. Forward past the last hunk is not a dead end: the reading is
-  // finished, so it opens the batch that reading produced. The pass gets a conclusion rather
-  // than running out.
+  // focusStep moves the pass by one step. Forward past the last one is not a dead end: the
+  // reading is finished, so it opens the batch that reading produced. The pass gets a conclusion
+  // rather than running out.
   const focusStep = (dir: 1 | -1): void => {
-    const at = pairAt();
-    // The focused hunk is no longer in the changeset - a fold, a rebase, a tree that moved under
+    const at = stepAt();
+    // The focused step is no longer in the changeset - a fold, a rebase, a tree that moved under
     // the reader. Resume rather than arithmetic on -1, which stepped FORWARD to index 0 and
     // silently restarted the pass at the top while stepping BACK did nothing at all.
     if (at < 0) {
@@ -2258,12 +2783,12 @@ export function activate(host: HTMLElement): AppInstance {
       void rebuild();
       return;
     }
-    const p = state.pairs[at + dir];
-    if (!p) {
+    const next = state.steps[at + dir]?.hunks[0];
+    if (!next) {
       if (dir === 1) endOfPass();
       return;
     }
-    state.focusAt = { path: p.path, index: p.index };
+    state.focusAt = { path: next.path, index: next.index };
     void rebuild();
   };
 
@@ -2285,13 +2810,17 @@ export function activate(host: HTMLElement): AppInstance {
   // the move are independent, so the move happens now and the count catches up when the write
   // lands.
   const focusRead = (): void => {
-    const p = state.pairs[pairAt()];
-    if (!p) return;
+    const step = state.steps[stepAt()];
+    if (!step) return;
     if (!canCollaborate()) {
       flashCollaborationNotice();
       return;
     }
-    if (!state.viewed.has(p.digest)) void sync({ op: "viewed", digest: p.digest, on: true });
+    // Every hunk of the step: the step is the unit the reader just finished, and leaving one
+    // unmarked would bring the pass back to it as "unread".
+    for (const h of step.hunks) {
+      if (!state.viewed.has(h.digest)) void sync({ op: "viewed", digest: h.digest, on: true });
+    }
     focusStep(1);
   };
 
@@ -2331,8 +2860,8 @@ export function activate(host: HTMLElement): AppInstance {
 
   // toggleViewed marks the hunk the cursor is in. It is the READER's claim, which is why no
   // agent tool can make it.
-  const toggleViewed = async (): Promise<void> => {
-    const i = currentHunkRow();
+  const toggleViewed = (rowIndex?: number): void => {
+    const i = rowIndex ?? currentHunkRow();
     if (i === null) return;
     const digest = digestForHunk(i);
     if (!digest) return;
@@ -2351,63 +2880,77 @@ export function activate(host: HTMLElement): AppInstance {
 
   // composerField builds the input every composer here shares.
   //
-  // Enter is a NEWLINE. A remark worth writing is often a paragraph and a code fence, and a
+  // Enter is a NEWLINE. A comment worth writing is often a paragraph and a code fence, and a
   // field where Enter commits cannot hold either - the reader loses the thought at the first
   // line break. Committing takes a deliberate act instead: the chord, or the button beside it.
   //
   // Both, not one. A chord alone is invisible to whoever has not read the docs, and a button
-  // alone makes a keyboard pass reach for the mouse once per remark.
+  // alone makes a keyboard pass reach for the mouse once per comment. Cancel is a button for the
+  // same reason Esc is not enough: a way out only a key can reach is no way out on a phone.
   const composerField = (opts: {
+    label: string;
     placeholder: string;
     action: string;
     onCommit: (value: string) => void;
     onCancel: () => void;
-  }): { wrap: HTMLElement; field: HTMLTextAreaElement; commit: HTMLButtonElement } => {
-    const wrap = h("span", "console-diff-composer__input");
-    // The commit button took PF's own geometry - baseline-aligned, its own vertical padding -
-    // while every other control in the console takes the shared tier. The tier reaches the button
-    // and skips the textarea by construction (a multi-line box is sized by its rows, which is why
-    // tokens.css excludes a form-control that holds one).
-    wrap.dataset.controlSize = "default";
+  }): {
+    wrap: HTMLElement;
+    field: HTMLTextAreaElement;
+    commit: HTMLButtonElement;
+    cancel: HTMLButtonElement;
+  } => {
+    const wrap = h("div", "console-diff-composer__input");
+    // The tier reaches the buttons and skips the textarea by construction (a multi-line box is
+    // sized by its rows, which is why tokens.css excludes a form-control that holds one).
+    wrap.dataset.controlSize = "compact";
     const control = h("span", "pf-v6-c-form-control");
     const field = h("textarea", "pf-v6-c-form-control__text");
-    field.rows = 3;
+    field.rows = 2;
+    field.setAttribute("aria-label", opts.label);
+    // The words in this box are the person's. An agent's outline is only ever read, so a paste
+    // of one is refused here rather than trusted to be a coincidence.
+    guardReply(field, () => state.session?.outlines ?? []);
     field.placeholder = opts.placeholder;
-    // Write and Preview, because the remark is markdown wherever it lands and the reader is
+    // Write and Preview, because the comment is markdown wherever it lands and the reader is
     // typing it blind otherwise: a fence or a list reads as its own syntax here and as rendered
     // text on the review. The tab pair is GitHub's, deliberately - it is the shape whoever
     // writes these already has in their hands.
-    const tabs = h("span", "console-diff-composer__tabs");
-    const writeTab = h("button", "console-diff-composer__tab");
-    writeTab.type = "button";
-    writeTab.textContent = "Write";
-    const previewTab = h("button", "console-diff-composer__tab");
-    previewTab.type = "button";
-    previewTab.textContent = "Preview";
+    const writePanel = h("div", "console-diff-composer__panel");
+    writePanel.append(control);
     const rendered = h("div", "console-diff-composer__preview console-diff-md");
     rendered.hidden = true;
     const show = (previewing: boolean): void => {
-      control.hidden = previewing;
+      writePanel.hidden = previewing;
       rendered.hidden = !previewing;
-      writeTab.setAttribute("aria-pressed", String(!previewing));
-      previewTab.setAttribute("aria-pressed", String(previewing));
-      if (!previewing) {
-        field.focus();
-        return;
-      }
+      if (!previewing) return;
       const body = field.value.trim();
       if (body) setMarkdown(rendered, body);
       else rendered.textContent = "Nothing written yet.";
     };
-    writeTab.addEventListener("click", () => show(false));
-    previewTab.addEventListener("click", () => show(true));
-    tabs.append(writeTab, previewTab);
-    const commit = h("button", "pf-v6-c-button pf-m-primary console-diff-composer__send");
+    const tabBar = tabs(
+      "Comment editor",
+      [
+        { id: "write", text: "Write", panel: writePanel },
+        { id: "preview", text: "Preview", panel: rendered },
+      ] as const,
+      (id) => show(id === "preview"),
+    );
+    tabBar.el.classList.add("console-diff-composer__tabs");
+    const cancel = linkButton("Cancel");
+    cancel.classList.add("console-diff-composer__cancel");
+    cancel.title = "Esc";
+    cancel.addEventListener("click", () => opts.onCancel());
+    const commit = h(
+      "button",
+      "pf-v6-c-button pf-m-primary pf-m-small console-diff-composer__send",
+    );
     commit.type = "button";
     commit.textContent = opts.action;
     // macOS reaches for Cmd where everything else reaches for Ctrl, and a label naming the wrong
     // one is worse than none: it teaches a chord that does nothing.
-    commit.title = `${navigator.userAgent.includes("Mac") ? "Cmd" : "Ctrl"}+Enter`;
+    const mac = navigator.userAgent.includes("Mac");
+    commit.title = `${mac ? "Cmd" : "Ctrl"}+Enter`;
+    commit.setAttribute("aria-keyshortcuts", `${mac ? "Meta" : "Control"}+Enter`);
     field.addEventListener("keydown", (e) => {
       // Stopped here so the app's own single-letter keys do not fire while typing - a bare
       // "v" in a remark must be the letter v.
@@ -2431,35 +2974,59 @@ export function activate(host: HTMLElement): AppInstance {
     // It still holds where the eye last left it as the remark grows, which is what put it beside
     // the field in the first place: a textarea grows DOWNWARD, so a control anchored above it does
     // not move at all.
-    const head = h("span", "console-diff-composer__head");
-    head.append(tabs, commit);
-    const row = h("span", "console-diff-composer__row");
-    row.append(control, rendered);
+    const head = h("div", "console-diff-composer__head");
+    const buttons = h("span", "console-diff-composer__buttons");
+    buttons.append(cancel, commit);
+    head.append(tabBar.el, buttons);
+    const row = h("div", "console-diff-composer__row");
+    row.append(writePanel, rendered);
     wrap.append(head, row);
     show(false);
-    return { wrap, field, commit };
+    return { wrap, field, commit, cancel };
   };
 
-  const composeComment = (): void => {
+  // The composer's host. Outside the scroll container, which is a grid whose children are rows,
+  // and outside the virtualized window, which is replaced wholesale on every scroll frame: a
+  // composer living in either would be destroyed mid-sentence or announced as a grid row.
+  const composerOpen = (): HTMLTextAreaElement | null =>
+    root.querySelector<HTMLTextAreaElement>(".console-diff-composer__input textarea");
+
+  // composerFailure shows why a send did not leave, as a danger alert inside the box and as a
+  // toast. The box stays open with the words still in it.
+  const composerFailure = (
+    box: HTMLElement,
+    slot: HTMLElement,
+    title: string,
+    why: string,
+  ): void => {
+    box.dataset.failed = "";
+    slot.replaceChildren(inlineAlert({ variant: "danger", title, body: why }));
+    reportFailure("Review", `${title}: ${why}`, `composer:${title}`);
+  };
+
+  // composeComment opens the box for a comment on one hunk: the one at rowIndex when a row's own
+  // button asked, and otherwise the one under the cursor.
+  const composeComment = (rowIndex?: number): void => {
     if (!canCollaborate()) {
       flashCollaborationNotice();
       return;
     }
-    const i = currentHunkRow();
+    const i = rowIndex ?? currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
     if (!row || row.kind !== "hunk") return;
 
     // One composer at a time; a second press re-focuses rather than stacking boxes.
-    const existing = scroll.querySelector<HTMLTextAreaElement>(
-      ".console-diff-composer__input textarea",
-    );
+    const existing = composerOpen();
     if (existing) {
       existing.focus();
       return;
     }
 
-    const box = h("div", "console-diff-composer");
+    const box = h("form", "console-diff-composer");
+    box.setAttribute("aria-label", "Comment on this hunk");
+    box.noValidate = true;
+    box.addEventListener("submit", (e) => e.preventDefault());
     const where = h("span", "console-diff-composer__where");
     where.textContent = `${row.file.path} hunk ${row.index + 1}`;
     const close = (): void => {
@@ -2467,6 +3034,7 @@ export function activate(host: HTMLElement): AppInstance {
       scroll.focus();
     };
     const { wrap: inputWrap, field } = composerField({
+      label: `Comment on ${row.file.path}, hunk ${row.index + 1}`,
       placeholder: "Say what is wrong, or what you had to work out. Esc cancels.",
       action: "Stage draft",
       onCancel: close,
@@ -2483,9 +3051,7 @@ export function activate(host: HTMLElement): AppInstance {
       },
     });
     box.append(where, inputWrap);
-    // Pinned rather than inserted into the virtualized window: the window is replaced wholesale
-    // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
-    scroll.append(box);
+    viewport.append(box);
     field.focus();
   };
 
@@ -2563,38 +3129,48 @@ export function activate(host: HTMLElement): AppInstance {
       );
       return;
     }
-    const existing = scroll.querySelector<HTMLTextAreaElement>(
-      ".console-diff-composer__input textarea",
-    );
+    const existing = composerOpen();
     if (existing) {
       existing.focus();
       return;
     }
 
-    const box = h("div", "console-diff-composer console-diff-composer--batch");
+    const box = h("form", "console-diff-composer console-diff-composer--batch");
+    box.setAttribute("aria-label", "Send your drafts");
+    box.noValidate = true;
+    box.addEventListener("submit", (e) => e.preventDefault());
     const where = h("span", "console-diff-composer__where");
-    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to ${destination(state.review)}`;
+    where.textContent = `Send ${plural(pending.length, "comment")} to ${destination(state.review)}`;
     // The network, said out loud. Everything else on this app is local, so the one act that
     // leaves the machine must not look like the others - and it names the HOST, because an
-    // appliance and github.com are the same feature and different destinations.
-    const warn = h(
-      "span",
-      "console-diff-composer__network",
+    // appliance and github.com are the same feature and different destinations. One line, so
+    // it costs the code under it as little as it can.
+    const warn = helperLine(
+      "warning",
+      statusIcon("warning"),
       `Posts over the network to ${state.review.host ?? "the review host"}. Nothing has left this machine yet.`,
     );
+    const failure = h("div", "console-diff-composer__failure");
+    // The drafts are a section the reader opens to read, because the box sits over the diff and
+    // the set is what the send field is about, not what it is for.
+    const batch = disclosure(`${plural(pending.length, "comment")} to send`);
     const listing = h("ul", "console-diff-composer__batch");
     for (const d of pending) {
       const item = h("li");
       const at = h("span", "console-diff-composer__at", `${d.path}:${d.line ?? "?"}`);
       // A draft with no line is one no host can place, so it is held back rather than guessed
-      // at. Said here, before the send, rather than discovered afterwards as a remark that
+      // at. Said here, before the send, rather than discovered afterwards as a comment that
       // quietly never arrived.
-      if (!d.line) item.dataset.unplaceable = "";
+      if (!d.line) {
+        item.dataset.unplaceable = "";
+        item.prepend(statusIcon("warning"));
+        at.append(statusText("warning", " (no line to anchor to)"));
+      }
       item.append(at, h("span", "console-diff-composer__body", d.body));
-      // Backing out is part of the transaction: a staged remark you have changed your mind
+      // Backing out is part of the transaction: a staged comment you have changed your mind
       // about should not have to be sent to get rid of it.
-      const drop = h("button", "console-diff-composer__drop", "discard") as HTMLButtonElement;
-      drop.type = "button";
+      const drop = linkButton("Discard", { danger: true });
+      drop.classList.add("console-diff-composer__drop");
       drop.title = "Remove this draft. It has not been sent.";
       drop.addEventListener("click", () => {
         void sync({ op: "discard", id: d.id }).then(() => {
@@ -2606,6 +3182,7 @@ export function activate(host: HTMLElement): AppInstance {
       item.append(drop);
       listing.append(item);
     }
+    batch.body.append(listing);
     const close = (): void => {
       box.remove();
       scroll.focus();
@@ -2616,23 +3193,18 @@ export function activate(host: HTMLElement): AppInstance {
     // one the publish path enforces. An older server sends none, which reads as remarks only.
     const allowed = state.review.verdicts ?? ["comment"];
     let verdict: ReviewVerdict = "comment";
-    const verdicts = h("div", "console-diff-composer__verdicts");
+    const verdicts = h("fieldset", "console-diff-composer__verdicts");
+    verdicts.append(h("legend", "pf-v6-screen-reader", "What this review says"));
     if (allowed.length > 1) {
       for (const v of allowed) {
-        const label = h("label", "console-diff-composer__verdict");
-        const radio = h("input") as HTMLInputElement;
-        radio.type = "radio";
-        radio.name = "console-diff-verdict";
-        radio.value = v;
-        radio.checked = v === "comment";
-        radio.addEventListener("change", () => {
-          if (radio.checked) verdict = v;
+        const option = radio("console-diff-verdict", v, VERDICT_COPY[v], v === "comment", () => {
+          verdict = v;
         });
-        label.append(radio, h("span", undefined, VERDICT_COPY[v]));
-        verdicts.append(label);
+        option.classList.add("console-diff-composer__verdict");
+        verdicts.append(option);
       }
     } else if (state.review.verdict_limit) {
-      // Only remarks, and the REASON said out loud. "This is your own change" is how review is
+      // Only comments, and the REASON said out loud. "This is your own change" is how review is
       // meant to work; "magus could not tell who opened it" is a gap in what the provider
       // answered. Rendering them alike would hide the second behind the first.
       verdicts.append(h("span", "console-diff-composer__verdictnote", state.review.verdict_limit));
@@ -2642,25 +3214,31 @@ export function activate(host: HTMLElement): AppInstance {
       wrap: inputWrap,
       field,
       commit,
+      cancel,
     } = composerField({
+      label: "Review summary",
       placeholder: "One line about the pass as a whole. Optional. Esc cancels.",
       action: `Send to ${state.review.host ?? "the review host"}`,
       onCancel: close,
       onCommit: (summary) => {
+        const sendLabel = commit.textContent;
         field.disabled = true;
         commit.disabled = true;
-        where.textContent = "Sending...";
+        cancel.disabled = true;
+        commit.textContent = "Sending…";
+        failure.replaceChildren();
+        delete box.dataset.failed;
         const heldBack = pending.filter((d) => !d.line).length;
-        void sendDrafts(summary, verdict).then((failure) => {
+        void sendDrafts(summary, verdict).then((problem) => {
           if (disposed) return;
-          if (!failure) {
+          if (!problem) {
             close();
-            // A send that could not carry everything must SAY so. The remarks with no line stay
+            // A send that could not carry everything must SAY so. The comments with no line stay
             // drafts and go nowhere, and a reader told only "sent" would believe the whole pass
             // reached their colleague.
             if (heldBack > 0) {
               flashPublishNotice(
-                `Sent, but ${heldBack} ${heldBack === 1 ? "remark has" : "remarks have"} no line to anchor to and stayed a draft.`,
+                `Sent, but ${heldBack} ${heldBack === 1 ? "comment has" : "comments have"} no line to anchor to and stayed a draft.`,
               );
             }
             return;
@@ -2670,14 +3248,15 @@ export function activate(host: HTMLElement): AppInstance {
           // summary would be a punishment for the forge being down.
           field.disabled = false;
           commit.disabled = false;
-          where.textContent = failure;
-          box.dataset.failed = "";
+          cancel.disabled = false;
+          commit.textContent = sendLabel;
+          composerFailure(box, failure, "Could not send your drafts", problem);
           field.focus();
         });
       },
     });
-    box.append(where, warn, listing, verdicts, inputWrap);
-    scroll.append(box);
+    box.append(where, warn, failure, batch.el, verdicts, inputWrap);
+    viewport.append(box);
     field.focus();
   };
 
@@ -2710,12 +3289,13 @@ export function activate(host: HTMLElement): AppInstance {
     }
   };
 
-  // replyHere answers the thread nearest the cursor, so a conversation can be finished without
-  // leaving for the browser.
+  // replyHere answers the conversation nearest the cursor, so it can be finished without leaving
+  // for the browser.
   //
-  // "Nearest" is the first thread rendered under the cursor's hunk, falling back to the file's.
-  // That is the same rule resolveHere uses, and it is the rule a reader already has in their
-  // head: the remark they can see.
+  // "Nearest" is the first conversation rendered under the cursor's hunk, falling back to the
+  // file's. That is the same rule resolveHere uses, and it is the rule a reader already has in
+  // their head: the remark they can see. The list holds a root before its replies, so the first
+  // comment is the head of that conversation.
   const replyHere = (): void => {
     const i = currentHunkRow();
     const row = i === null ? undefined : state.rows[i];
@@ -2724,18 +3304,25 @@ export function activate(host: HTMLElement): AppInstance {
     const thread =
       state.threads?.atHunk.get(key)?.[0] ?? state.threads?.atFile.get(row.file.path)?.[0];
     if (!thread) {
-      flashPublishNotice("No thread here to answer. Press c to write a remark of your own.");
+      flashPublishNotice("No thread here to answer. Press c to write a comment of your own.");
       return;
     }
-    const existing = scroll.querySelector<HTMLTextAreaElement>(
-      ".console-diff-composer__input textarea",
-    );
+    composeReply(thread);
+  };
+
+  // composeReply opens the reply box for the thread `thread` belongs to. The reply goes to the
+  // thread id whichever of its comments was clicked.
+  const composeReply = (thread: ReviewComment): void => {
+    const existing = composerOpen();
     if (existing) {
       existing.focus();
       return;
     }
 
-    const box = h("div", "console-diff-composer console-diff-composer--batch");
+    const box = h("form", "console-diff-composer console-diff-composer--batch");
+    box.setAttribute("aria-label", `Reply to ${thread.author}`);
+    box.noValidate = true;
+    box.addEventListener("submit", (e) => e.preventDefault());
     const where = h("span", "console-diff-composer__where");
     // Who is being answered, and where it lands. A reply goes to a PERSON, but it is also the
     // second act on this app that leaves the machine, so it names the destination for the
@@ -2743,11 +3330,12 @@ export function activate(host: HTMLElement): AppInstance {
     where.textContent = state.review
       ? `Reply to ${thread.author} on ${destination(state.review)}`
       : `Reply to ${thread.author}`;
-    const warn = h(
-      "span",
-      "console-diff-composer__network",
+    const warn = helperLine(
+      "warning",
+      statusIcon("warning"),
       `Posts over the network to ${state.review?.host ?? "the review host"} when you send it.`,
     );
+    const failure = h("div", "console-diff-composer__failure");
     const close = (): void => {
       box.remove();
       scroll.focus();
@@ -2757,18 +3345,24 @@ export function activate(host: HTMLElement): AppInstance {
       wrap: inputWrap,
       field,
       commit,
+      cancel,
     } = composerField({
+      label: `Reply to ${thread.author}`,
       placeholder: "Esc cancels.",
       action: "Send reply",
       onCancel: close,
       onCommit: (body) => {
         if (!body) return;
+        const sendLabel = commit.textContent;
         field.disabled = true;
         commit.disabled = true;
-        where.textContent = "Sending...";
-        void sendReply(thread.id, body).then((failure) => {
+        cancel.disabled = true;
+        commit.textContent = "Sending…";
+        failure.replaceChildren();
+        delete box.dataset.failed;
+        void sendReply(commentThreadId(thread), body).then((problem) => {
           if (disposed) return;
-          if (!failure) {
+          if (!problem) {
             close();
             return;
           }
@@ -2776,30 +3370,53 @@ export function activate(host: HTMLElement): AppInstance {
           // not leave has changed nothing, and retyping it would be a punishment for the forge.
           field.disabled = false;
           commit.disabled = false;
-          where.textContent = failure;
-          box.dataset.failed = "";
+          cancel.disabled = false;
+          commit.textContent = sendLabel;
+          composerFailure(box, failure, "Could not send your reply", problem);
           field.focus();
         });
       },
     });
-    box.append(where, warn, inputWrap);
-    scroll.append(box);
+    box.append(where, warn, failure, inputWrap);
+    viewport.append(box);
     field.focus();
   };
 
-  // sendReply posts one reply and returns the failure to show, or "" when it left.
-  const sendReply = async (thread: string, body: string): Promise<string> => {
+  // copyThread puts the thread `threadId` names on the clipboard, as `magus diff --thread`
+  // prints it. Every way it can fail is a toast. The showcase never reaches it: it has no server
+  // to build the text, so it does not render the button.
+  const copyThread = async (threadId: string, btn: HTMLButtonElement): Promise<void> => {
+    const hp = host_();
+    if (!hp) {
+      reportFailure("Review", "Connect a server to copy a thread.", "thread:no-server");
+      return;
+    }
+    btn.disabled = true;
+    const copied = await copyThreadText(hp, threadId, controller.signal);
+    btn.disabled = false;
+    if (disposed || !copied) return;
+    // Said to the ear as well as the eye, and put back so the button can be used again.
+    btn.textContent = "Copied";
+    announce("Thread copied");
+    window.setTimeout(() => {
+      btn.textContent = "Copy thread";
+    }, COPIED_MS);
+  };
+
+  // sendReply posts one reply into the thread `threadId` names and returns the failure to show,
+  // or "" when it left.
+  const sendReply = async (threadId: string, body: string): Promise<string> => {
     if (demo) {
       // The showcase answers for real, into memory, so a reader trying it finds out what it
       // does rather than meeting a dead key.
-      state.review = applyDemoReply(state.review, thread, body);
+      state.review = applyDemoReply(state.review, threadId, body);
       await rebuild();
       return "";
     }
     const hp = host_();
     if (!hp) return "Connect a server to reply.";
     try {
-      await reply(hp, thread, body, controller.signal);
+      await reply(hp, threadId, body, controller.signal);
       if (disposed) return "";
       // Re-read rather than appending locally: the thread belongs to the host, and this is
       // also how the reader finds out what else was said while they were typing.
@@ -2873,25 +3490,48 @@ export function activate(host: HTMLElement): AppInstance {
     await rebuild();
   };
 
-  const toggleOverview = (): void => {
-    state.overview = !state.overview;
-    root.dataset.overview = state.overview ? "on" : "off";
-    if (state.overview) renderOverview();
-    else scroll.focus();
+  // setOverview opens or closes the overview and moves focus with it. The stream it covers is
+  // hidden, so focus left there would be on nothing and Esc would reach no handler: focus goes to
+  // the overview on the way in and back to the stream on the way out.
+  const setOverview = (on: boolean): void => {
+    state.overview = on;
+    root.dataset.overview = on ? "on" : "off";
+    overviewButton.setAttribute("aria-expanded", String(on));
+    overviewText.textContent = on ? "Back to diff" : "Overview";
+    if (on) {
+      renderOverview();
+      overview.focus();
+    } else {
+      scroll.focus();
+    }
   };
+  const toggleOverview = (): void => setOverview(!state.overview);
 
   // --- commands -------------------------------------------------------------
-  const COMMANDS: { id: string; label: string; run: () => void; key?: string }[] = [
+  // short is what the key legend calls the command, and focusShort what it calls it in focus mode,
+  // for the keys that mean something else there.
+  const COMMANDS: {
+    id: string;
+    label: string;
+    short: string;
+    focusShort?: string;
+    run: () => void;
+    key?: string;
+  }[] = [
     {
       id: "diff.focus.toggle",
-      label: "Diff: read one hunk at a time",
+      label: "Diff: focus on one step at a time",
+      short: "focus on one step",
+      focusShort: "leave focus",
       run: () => setFocus(!state.focus),
       key: "f",
     },
     {
       id: "diff.hunk.next",
       label: "Diff: next hunk",
-      // In focus mode the stream holds one hunk, so there is no next row to scroll to - the
+      short: "next hunk",
+      focusShort: "next step",
+      // In focus mode the stream holds one step, so there is no next row to scroll to - the
       // step is a rebuild around the next one.
       run: () => (state.focus ? focusStep(1) : step(1, state.hunks)),
       key: "]",
@@ -2899,72 +3539,86 @@ export function activate(host: HTMLElement): AppInstance {
     {
       id: "diff.hunk.prev",
       label: "Diff: previous hunk",
+      short: "previous hunk",
+      focusShort: "previous step",
       run: () => (state.focus ? focusStep(-1) : step(-1, state.hunks)),
       key: "[",
     },
     {
       id: "diff.file.next",
       label: "Diff: next file",
+      short: "next file",
       run: () => step(1, state.fileRows),
       key: "}",
     },
     {
       id: "diff.file.prev",
       label: "Diff: previous file",
+      short: "previous file",
       run: () => step(-1, state.fileRows),
       key: "{",
     },
     {
       id: "diff.viewed.toggle",
       label: "Diff: mark hunk read",
+      short: "mark hunk read",
+      focusShort: "mark the step read, then next",
       run: () => void (state.focus ? focusRead() : toggleViewed()),
       key: "v",
     },
     {
       id: "diff.resume",
       label: "Diff: go to the first file that needs reading",
+      short: "first file to read",
       run: () => resume(),
       key: "u",
     },
     {
       id: "diff.settled.toggle",
       label: "Diff: fold or unfold files you have already read",
+      short: "fold files already read",
       run: () => void toggleSettled(),
       key: "n",
     },
     {
       id: "diff.generated.toggle",
       label: "Diff: fold or unfold generated files",
+      short: "fold generated files",
       run: () => void toggleGenerated(),
       key: ".",
     },
     {
       id: "diff.view.unified",
       label: "Diff: unified view",
+      short: "unified layout",
       run: () => void setMode("unified"),
       key: "1",
     },
     {
       id: "diff.view.split",
       label: "Diff: split view",
+      short: "split layout",
       run: () => void setMode("split"),
       key: "2",
     },
     {
       id: "diff.view.toggle",
       label: "Diff: toggle split and unified",
+      short: "switch layout",
       run: () => void setMode(state.mode === "split" ? "unified" : "split"),
       key: "0",
     },
     {
       id: "diff.suggestion.accept",
       label: "Diff: go to the agent's suggestion",
+      short: "go to the agent's suggestion",
       run: () => acceptSuggestion(),
       key: "g",
     },
     {
       id: "diff.suggestion.skip",
       label: "Diff: skip the agent's suggestion",
+      short: "skip the agent's suggestion",
       run: () => {
         const p = (state.session?.suggestions ?? []).find((s) => !s.accepted && !s.declined);
         if (p) sync({ op: "answer", id: p.id, on: false });
@@ -2974,30 +3628,35 @@ export function activate(host: HTMLElement): AppInstance {
     {
       id: "diff.comment",
       label: "Diff: comment on this hunk",
-      run: composeComment,
+      short: "comment on this hunk",
+      run: () => composeComment(),
       key: "c",
     },
     {
       id: "diff.comment.resolve",
       label: "Diff: resolve the comment here",
+      short: "resolve the comment here",
       run: resolveHere,
       key: "r",
     },
     {
       id: "diff.publish",
       label: "Diff: send your drafts to the review",
+      short: "send your drafts",
       run: composePublish,
       key: "s",
     },
     {
       id: "diff.thread.reply",
       label: "Diff: reply to the thread here",
+      short: "reply to the thread here",
       run: replyHere,
       key: "a",
     },
     {
       id: "diff.context.peek",
       label: "Diff: peek surrounding code for this hunk",
+      short: "peek surrounding code",
       run: () => {
         const i = currentHunkRow();
         const row = i === null ? undefined : state.rows[i];
@@ -3008,6 +3667,7 @@ export function activate(host: HTMLElement): AppInstance {
     {
       id: "diff.overview",
       label: "Diff: changeset overview",
+      short: "overview, or close the peek",
       run: () => {
         if (!context.hidden) closeContext();
         else toggleOverview();
@@ -3078,6 +3738,7 @@ export function activate(host: HTMLElement): AppInstance {
   const showEmpty = (title: string, message: string): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
+    emptyIcon.hidden = true;
     renderEmptyMessage(emptySlots, title, message);
   };
 
@@ -3085,6 +3746,7 @@ export function activate(host: HTMLElement): AppInstance {
   const showConnectPrompt = (promptState: ConnectPromptState): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
+    emptyIcon.hidden = true;
     renderConnectPrompt(emptySlots, promptState, {
       purpose: "Diff reads the working tree through a local server.",
       onRetry: () => void load(),
@@ -3145,6 +3807,8 @@ export function activate(host: HTMLElement): AppInstance {
         status === 503 ? "No workspace" : "Could not read the diff",
         status === 503 ? "The server is running but has not opened a workspace yet." : String(e),
       );
+      if (status !== 503)
+        reportFailure("Review", `Could not read the diff: ${String(e)}`, "diff:read");
       return;
     }
 
@@ -3156,6 +3820,11 @@ export function activate(host: HTMLElement): AppInstance {
       showEmpty(
         "Could not read the diff",
         "The server returned a patch this reader could not parse.",
+      );
+      reportFailure(
+        "Review",
+        "The server returned a patch this reader could not parse.",
+        "diff:parse",
       );
       return;
     }

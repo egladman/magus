@@ -36,11 +36,18 @@ final RULES: {str: str} = {
     "bare-rule": "deny",
     // A skill body that does not render cannot be judged, and silence would read as a pass.
     "template": "deny",
+    // The Go comment budget and the banned words, carried over to the comments of a
+    // stylesheet, which hack/policy/comments.buzz judges on a write.
+    "restates": "deny",
+    "comment-budget": "deny",
+    "block-budget": "deny",
+    "banned-word": "deny",
 };
 
 // DECISIONS_FILE is RULES as the JSON file .claude/settings.json hands the proofread-reply
-// hook, which runs where this module cannot be imported. A test holds the two equal.
-final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
+// hook, which runs where this module cannot be imported, and the comment guard hands proofread
+// for a stylesheet read from stdin. A test holds the two equal.
+export final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
 
 // PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that
 // stops matching any file in the tree fails this file's test, so the list only shrinks.

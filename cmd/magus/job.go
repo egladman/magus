@@ -650,7 +650,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "declared goal stands graded against the evidence magus holds now.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It renders context and never a status: magus assembles what it holds and you")
-			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job, the way `magus diff --prompt` does. Grading a goal is")
+			fmt.Fprintln(os.Stderr, "hand it to whoever takes the job. Grading a goal is")
 			fmt.Fprintln(os.Stderr, "still a READ: it records nothing, so asking never advances a job and never blocks the")
 			fmt.Fprintln(os.Stderr, "holder still working on it. It is the same grading `"+hint.JobWait.String()+"` does, so the")
 			fmt.Fprintln(os.Stderr, "two cannot disagree.")

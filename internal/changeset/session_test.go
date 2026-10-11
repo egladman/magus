@@ -103,27 +103,27 @@ func TestProgressSavesDoNotDependOnAFixedTempName(t *testing.T) {
 	s := NewStore(dir)
 	s.Attach("/w", "working", types.Diff{}, "")
 	s.MarkViewed("/w", "d1", true)
-	s.MarkThreadsSeen("/w", []string{"t1"})
+	s.MarkCommentsSeen("/w", []string{"t1"})
 
 	assert.ElementsMatch(t, []string{"d1"}, NewStore(dir).Attach("/w", "working", types.Diff{}, "").Viewed,
 		"progress was lost because the save wanted one fixed temp path")
-	assert.ElementsMatch(t, []string{"t1"}, NewStore(dir).LoadSeenThreads(),
+	assert.ElementsMatch(t, []string{"t1"}, NewStore(dir).LoadSeenComments(),
 		"the watermark was lost because the save wanted one fixed temp path")
 }
 
 // Two Stores over one state dir (the server and a check-review job) each attach before
 // the other saves. The one saving second holds a set that never saw the first one's
-// thread, and saving it must not mark that thread new again: the watermark only grows.
+// comment, and saving it must not mark that comment new again: the watermark only grows.
 func TestSessionSeenWatermarkNeverRegresses(t *testing.T) {
 	dir := t.TempDir()
 	a, b := NewStore(dir), NewStore(dir)
 	a.Attach("/w", "working", types.Diff{}, "")
 	b.Attach("/w", "working", types.Diff{}, "")
 
-	a.MarkThreadsSeen("/w", []string{"t1"})
-	b.MarkThreadsSeen("/w", []string{"t2"})
+	a.MarkCommentsSeen("/w", []string{"t1"})
+	b.MarkCommentsSeen("/w", []string{"t2"})
 
-	assert.Equal(t, []string{"t1", "t2"}, NewStore(dir).LoadSeenThreads())
+	assert.Equal(t, []string{"t1", "t2"}, NewStore(dir).LoadSeenComments())
 }
 
 func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
@@ -391,32 +391,49 @@ func TestACommentIDIsNeverReusedAfterAGap(t *testing.T) {
 
 // The watermark is what decides whether a remark is NEW, so it has to be the reader's and it has
 // to survive being asked twice. Ids, never a count: a deleted remark plus a new one nets zero.
-func TestMarkThreadsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
+func TestMarkCommentsSeenIsAdditiveAndDecidesWhatIsUnseen(t *testing.T) {
 	store := NewStore(t.TempDir())
 	root := t.TempDir()
 	require.NotNil(t, store.Attach(root, "", types.Diff{}, ""))
 
-	threads := []types.ReviewThread{{ID: "t1"}, {ID: "t2"}}
-	require.Equal(t, []string{"t1", "t2"}, store.Get(root).UnseenThreads(threads))
+	comments := []types.ReviewComment{{ID: "t1"}, {ID: "t2"}}
+	require.Equal(t, []string{"t1", "t2"}, store.Get(root).UnseenComments(comments))
 
-	store.MarkThreadsSeen(root, []string{"t1"})
-	assert.Equal(t, []string{"t2"}, store.Get(root).UnseenThreads(threads))
+	store.MarkCommentsSeen(root, []string{"t1"})
+	assert.Equal(t, []string{"t2"}, store.Get(root).UnseenComments(comments))
 
 	// Idempotent: seeing the same conversation again neither re-marks nor grows the set.
-	store.MarkThreadsSeen(root, []string{"t1"})
-	assert.Equal(t, []string{"t1"}, store.Get(root).SeenThreads)
+	store.MarkCommentsSeen(root, []string{"t1"})
+	assert.Equal(t, []string{"t1"}, store.Get(root).SeenComments)
 
-	// A thread deleted on the host and another added nets zero on a count and must not hide the
+	// A comment deleted on the host and another added nets zero on a count and must not hide the
 	// new one.
-	store.MarkThreadsSeen(root, []string{"t2"})
-	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenThreads([]types.ReviewThread{{ID: "t1"}, {ID: "t3"}}))
+	store.MarkCommentsSeen(root, []string{"t2"})
+	assert.Equal(t, []string{"t3"}, store.Get(root).UnseenComments([]types.ReviewComment{{ID: "t1"}, {ID: "t3"}}))
 }
 
-// A thread with no id cannot be tracked, and calling it new forever would mark the conversation
+// A released binary wrote the watermark to seen-threads.json and reads only that name, so the
+// file must keep it for the two builds to share a state directory.
+func TestSeenWatermarkKeepsTheFileNameReleasedBinariesRead(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "review"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "review", "seen-threads.json"), []byte(`["t1"]`), 0o644))
+
+	s := NewStore(dir)
+	assert.Equal(t, []string{"t1"}, s.LoadSeenComments(), "a watermark an older build wrote is read")
+
+	s.Attach("/w", "working", types.Diff{}, "")
+	s.MarkCommentsSeen("/w", []string{"t2"})
+	b, err := os.ReadFile(filepath.Join(dir, "review", "seen-threads.json"))
+	require.NoError(t, err)
+	assert.JSONEq(t, `["t1","t2"]`, string(b), "the newer build writes where the older one reads")
+}
+
+// A comment with no id cannot be tracked, and calling it new forever would mark the conversation
 // unread on every render.
-func TestUnseenThreadsIgnoresAnUnidentifiedThread(t *testing.T) {
+func TestUnseenCommentsIgnoresAnUnidentifiedComment(t *testing.T) {
 	var sess types.DiffReview
-	assert.Empty(t, sess.UnseenThreads([]types.ReviewThread{{ID: ""}}))
+	assert.Empty(t, sess.UnseenComments([]types.ReviewComment{{ID: ""}}))
 }
 
 // TestTrackHunksRelocatesADraftWhoseCodeMoved is the end-to-end shape of the anchor: a remark

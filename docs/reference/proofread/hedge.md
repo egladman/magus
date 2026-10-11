@@ -37,6 +37,7 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 | `release-notes`      | off     |
 | `changelog`          | off     |
 | `agent-reply`        | off     |
+| `stylesheet`         | off     |
 
 ## Changing it
 

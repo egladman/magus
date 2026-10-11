@@ -12,7 +12,7 @@ import { notify, matchAuthorMarker, undeclaredSeedNotice } from "../../lib/notif
 import type { ViewerParams } from "./fragment";
 import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
-import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
+import { el, scrollEl, setBtnLabel, setRefIdentity, showLog } from "./dom";
 import { buildModelMulti } from "./model";
 import { graphAvailable } from "./share";
 import { render, updateTimelineControl } from "./render";
@@ -49,7 +49,7 @@ export function connectLive(host: string, params: ViewerParams): void {
   state.currentJournals = null;
   state.currentRef = "";
   state.livePaused = false;
-  if (emptyEl) emptyEl.hidden = true;
+  showLog();
   setRefIdentity("live", false);
   const pauseBtn = el("pause-btn");
   if (pauseBtn) {

@@ -372,7 +372,7 @@ func (s *Store) sync(ctx context.Context, shards []Shard, fps map[string]string,
 		if key != newMan.Routing || (key != "" && (!fileExists(s.routingPath()) || !fileExists(s.namesPath()))) {
 			newMan.Routing = ""
 			if err := s.writeXref(shards, newMan); err != nil {
-				s.log.DebugContext(ctx, "symbol xref routing write failed", slog.String("error", err.Error()))
+				s.log.DebugContext(ctx, "symbol xref routing write failed", attr.Error(err))
 			} else {
 				newMan.Routing = key
 			}
@@ -518,7 +518,7 @@ func (s *Store) readClassShards(ctx context.Context, man *manifest, classes []Sh
 			sf, err := s.readVerifiedShard(egctx, man, name)
 			if err != nil {
 				s.log.DebugContext(egctx, "stored shard unusable, reassembling its class",
-					slog.String("shard", name), slog.String("error", err.Error()))
+					slog.String("shard", name), attr.Error(err))
 				failed[i] = true
 				return nil
 			}
@@ -762,7 +762,7 @@ func (s *Store) mergeOverlayShard(ctx context.Context, g *Graph, man *manifest, 
 	sf, err := s.readVerifiedShard(ctx, man, name)
 	if err != nil {
 		s.log.DebugContext(ctx, "overlay merge failed",
-			slog.String("shard", name), slog.String("error", err.Error()))
+			slog.String("shard", name), attr.Error(err))
 		return false
 	}
 	mergeOverlay(g, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})
@@ -995,7 +995,7 @@ func (s *Store) pushShard(ctx context.Context, name, fp string, b []byte) {
 	ctx, cancel := context.WithTimeout(ctx, remotePushTimeout)
 	defer cancel()
 	if err := s.remote.PutShard(ctx, fp, bytes.NewReader(b)); err != nil {
-		s.log.DebugContext(ctx, "remote shard push failed", slog.String("shard", name), slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "remote shard push failed", slog.String("shard", name), attr.Error(err))
 	}
 }
 
@@ -1293,7 +1293,7 @@ func (s *Store) recordPathIDs(ctx context.Context, shards []Shard, fps map[strin
 		err = file.WriteFileAtomic(s.pathIDsPath(), b, 0o644)
 	}
 	if err != nil {
-		s.log.DebugContext(ctx, "path ID index write failed", slog.String("error", err.Error()))
+		s.log.DebugContext(ctx, "path ID index write failed", attr.Error(err))
 	}
 }
 

@@ -43,11 +43,16 @@ test("summarizes the jobs on the dashboard, saying who holds each one", async ()
     tile.update({ ...initialState(), liveHost: "127.0.0.1:7391" });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(summary(tile), "3 jobs. 1 declared, 1 running, 1 pass. 0 no-return.");
+    // Not a live region: the tile repaints on every four-second read, and a region around that
+    // would announce an unchanged summary again each time.
     assert.equal(
       tile.el.querySelector(".console-dashboard-jobs__summary")?.getAttribute("aria-live"),
-      "polite",
+      null,
     );
     assert.deepEqual(ids(tile), ["clear-cache", "diff"]);
+    // The row's state is a shape and a word, not a letter: an icon beside "server, running".
+    assert.ok(tile.el.querySelector(".console-dashboard-jobs__mark .pf-v6-c-icon"));
+    assert.equal(tile.el.hasAttribute("data-empty"), false);
     // The holder rides beside the state: a server job and a session's job read the same at a
     // glance otherwise, and on the board that is where they are most easily confused.
     assert.equal(
@@ -119,8 +124,14 @@ test("a refused job service says so rather than reading as an idle workspace", a
   try {
     tile.update({ ...initialState(), liveHost: "127.0.0.1:7391" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(summary(tile), "This server does not serve jobs.");
+    assert.equal(
+      tile.el.querySelector("[data-empty-state]")?.textContent,
+      "This server does not serve jobs.",
+    );
+    assert.equal(tile.el.hasAttribute("data-empty"), true);
     assert.deepEqual(ids(tile), []);
+    // The way into the Jobs view survives the empty state.
+    assert.ok(tile.el.querySelector("[data-keep-empty]"));
   } finally {
     tile.destroy();
     globalThis.fetch = originalFetch;

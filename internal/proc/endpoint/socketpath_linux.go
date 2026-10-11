@@ -73,7 +73,7 @@ func diagBoundAt(ln *net.UnixListener, path string) (bool, error) {
 	}
 	dev, ino, bound, err := diagVFS(uint32(sock.Ino))
 	if err != nil {
-		return false, fmt.Errorf("endpoint: ask sock_diag which file the socket offered for %s is bound to: %w", path, err)
+		return false, fmt.Errorf("ask sock_diag which file the socket offered for %s is bound to: %w", path, err)
 	}
 	return bound && dev == uint64(want.Dev) && uint64(ino) == want.Ino, nil //nolint:unconvert // Dev is uint32 on linux/mips
 }

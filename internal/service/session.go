@@ -63,7 +63,7 @@ func (s *Session) Acquire(ctx context.Context, key string, svc spells.Service) (
 			return owned, true, nil
 		}
 		slog.With(attr.Component("magus")).WarnContext(ctx, "the broker could not host a service; hosting it in-process for this run",
-			slog.String("key", key), slog.String("err", err.Error()))
+			slog.String("key", key), attr.Error(err))
 	}
 	h, err := s.reg.Acquire(ctx, key, svc)
 	if err != nil {

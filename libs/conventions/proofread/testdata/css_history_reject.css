@@ -1,0 +1,17 @@
+/* This used to be a grid. */
+.a { display: block; }
+
+/* The grid no longer wraps; it previously did. */
+.b { display: grid; }
+
+/* W2 shell rebuild: the menu now uses a popover. */
+.c { position: fixed; }
+
+/* Replaces the old custom toggle with a segmented control. */
+.d { display: flex; }
+
+/* The Pico-era palette is gone. */
+.e { color: red; }
+
+/* Fixes the overflow in Safari. */
+.f { overflow: hidden; }

@@ -7,7 +7,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CARD_H, CARD_MAX_W, CARD_MIN_W, cardDetail, ellipsize, measureCards } from "./cards.js";
+import {
+  CARD_H,
+  CARD_MAX_W,
+  CARD_MIN_W,
+  cardDetail,
+  drawCard,
+  ellipsize,
+  measureCards,
+} from "./cards.js";
 import type { GNode } from "./types.js";
 
 function fakeCtx(): CanvasRenderingContext2D {
@@ -132,4 +140,77 @@ test("detail only ever coarsens as the view zooms out", () => {
     assert.ok(r <= prev, "detail increased while zooming out at k=" + k.toFixed(2));
     prev = r;
   }
+});
+
+// The lower line of a card (project, duration) is read at 12px, the console's type floor. The fake
+// context records every font a fillText was painted in and what it painted.
+function recordingCtx() {
+  const painted: Array<{ text: string; font: string; x: number; y: number }> = [];
+  const ctx = {
+    font: "",
+    textAlign: "left",
+    measureText: (s: string) => ({ width: s.length * 6 }),
+    fillText(text: string, x: number, y: number) {
+      painted.push({ text, font: this.font, x, y });
+    },
+    fillRect() {},
+    strokeRect() {},
+    beginPath() {},
+    arc() {},
+    fill() {},
+    stroke() {},
+  };
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, painted };
+}
+
+const THEME = { bg: "", text: "", muted: "", border: "", accent: "", font: "sans" };
+
+test("drawCard: the project and duration lines are painted at 12px, never smaller", () => {
+  const { ctx, painted } = recordingCtx();
+  const n = fakeNode("t", "build");
+  n.w = 200;
+  n.h = CARD_H;
+  n.attrs = { project: "console" };
+  drawCard(ctx, n, {
+    theme: THEME,
+    kindColor: "",
+    alpha: 1,
+    selected: false,
+    anchor: false,
+    zoomK: 1,
+    durationText: "1.2s",
+  });
+  assert.deepEqual(
+    painted.map((p) => p.text),
+    ["build", "console", "1.2s"],
+  );
+  for (const p of painted) {
+    const px = Number(/(\d+)px/.exec(p.font)?.[1]);
+    assert.ok(px >= 12, p.text + " was painted at " + px + "px");
+  }
+});
+
+test("drawCard: a long project name leaves the duration its width", () => {
+  const { ctx, painted } = recordingCtx();
+  const n = fakeNode("t", "build");
+  n.w = 120;
+  n.h = CARD_H;
+  n.attrs = { project: "a-very-long-project-name" };
+  drawCard(ctx, n, {
+    theme: THEME,
+    kindColor: "",
+    alpha: 1,
+    selected: false,
+    anchor: false,
+    zoomK: 1,
+    durationText: "12.5s",
+  });
+  const project = painted.find((p) => p.text !== "build" && p.text !== "12.5s");
+  assert.ok(project, "the project line was painted");
+  // 6px per character, and the duration needs its own width plus the gap.
+  const budget = 120 - 3 - 2 * 10 - ("12.5s".length * 6 + 6);
+  assert.ok(
+    project.text.length * 6 <= budget,
+    "project text " + project.text + " overruns " + budget,
+  );
 });

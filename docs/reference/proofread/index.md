@@ -30,7 +30,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | Rule                                        | Code    | Dimension   | Default        | Catches                                                                                               |
 | ------------------------------------------- | ------- | ----------- | -------------- | ----------------------------------------------------------------------------------------------------- |
 | [lead-context](lead-context.md)             | PRF1001 | structure   | deny           | a change description that does not open with a paragraph naming what a reader can now do              |
-| [reply-voice](reply-voice.md)               | PRF1002 | structure   | deny           | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
+| [reply-voice](reply-voice.md)               | PRF1002 | structure   | varies by kind | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
 | [second-person](second-person.md)           | PRF1003 | conventions | off            | we, us, our or ours in a guide, which speaks to the reader as you                                     |
 | [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                |
 | [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
@@ -91,17 +91,21 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [ascii](ascii.md)             | PRF5003 | conventions | off (house) | a curly quote, an ellipsis character or an emoji in prose                |
 | [tense](tense.md)             | PRF5004 | conventions | off (house) | a claim in the future tense, or a first-person account of a change       |
 | [attribution](attribution.md) | PRF5005 | conventions | off (house) | credit to a tool or an agent, or an account of how the work was produced |
+| [banned-word](banned-word.md) | PRF5006 | conventions | off (house) | a word this repository bans, in a stylesheet comment                     |
 
 ## Doc comments
 
-| Rule                                    | Code    | Dimension   | Default     | Catches                                                                    |
-| --------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------- |
-| [comment-block](comment-block.md)       | PRF6001 | economy     | off (house) | a doc comment over 250 words                                               |
-| [comment-sentence](comment-sentence.md) | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                       |
-| [name-suffix](name-suffix.md)           | PRF6003 | conventions | off (house) | a function or method name whose last word is Of or For                     |
-| [aside](aside.md)                       | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                       |
-| [history](history.md)                   | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to") |
-| [docstub](docstub.md)                   | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                 |
+| Rule                                    | Code    | Dimension   | Default     | Catches                                                                          |
+| --------------------------------------- | ------- | ----------- | ----------- | -------------------------------------------------------------------------------- |
+| [comment-block](comment-block.md)       | PRF6001 | economy     | off (house) | a doc comment over 250 words                                                     |
+| [comment-sentence](comment-sentence.md) | PRF6002 | economy     | off (house) | a doc comment sentence over 60 words                                             |
+| [name-suffix](name-suffix.md)           | PRF6003 | conventions | off (house) | a function or method name whose last word is Of or For                           |
+| [aside](aside.md)                       | PRF6004 | conventions | off (house) | a spaced hyphen spelling an em dash in a doc comment                             |
+| [history](history.md)                   | PRF6005 | conventions | off (house) | a doc comment phrase narrating the change rather than the code ("used to")       |
+| [docstub](docstub.md)                   | PRF6006 | economy     | off (house) | a one-line doc comment that only repeats the symbol's name                       |
+| [restates](restates.md)                 | PRF6007 | economy     | off (house) | a one-line stylesheet comment that only names the rule or declaration it sits on |
+| [comment-budget](comment-budget.md)     | PRF6008 | economy     | off (house) | a stylesheet comment over the lines its place earns                              |
+| [block-budget](block-budget.md)         | PRF6009 | economy     | off (house) | a rule block whose comments, summed, outrun its size                             |
 
 ## Agent instructions
 

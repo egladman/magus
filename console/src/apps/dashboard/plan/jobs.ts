@@ -28,8 +28,9 @@ import {
   isUnreachable,
 } from "../../../lib/server";
 import { errMessage } from "../../../lib/guards";
+import type { Status } from "../../../ui/status";
 import { humanBytes } from "../../activity/adapter";
-import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../../graph/layout";
+import { layoutLayered } from "../../graph/layout";
 import type { GLink, GNode } from "../../graph/types";
 // The row shape stays in lockstep with the drawer that defines it without this module pulling the
 // drawer's protobuf in behind it. The VALUE side (runningRows/recentRows) is imported by main.ts,
@@ -64,6 +65,18 @@ export const STATE_MARK: Record<JobState, string> = {
   pass: "OK",
   fail: "FAIL",
   no_return: "NR",
+};
+
+// STATE_STATUS is the shape (ui/status.ts) that goes beside the word on a row: the same icons an
+// Alert uses, so a job that failed looks like a failure everywhere on the console. no_return takes
+// the warning triangle, not the failure cross: it never came back, which is a different thing to
+// have gone wrong.
+export const STATE_STATUS: Record<JobState, Status> = {
+  declared: "neutral",
+  running: "running",
+  pass: "success",
+  fail: "danger",
+  no_return: "warning",
 };
 
 // Who runs it, in the one word the list and the detail both use.
@@ -433,12 +446,16 @@ export function joinRuns(model: JobTree, rows: readonly ActivityRow[]): RunJoin 
 
 // ---- placement -------------------------------------------------------------
 
-// Node geometry, in the same world units the layered layout spaces columns and rows by
-// (LAYERED_COL_W 180 / LAYERED_ROW_H 48), so a node sits inside its cell with a real gap. NODE_H
-// carries a third text row (the holder and the truncated criteria, main.ts's goal line) below the
-// mark/id row a plain job carries; a target or a catalog job just leaves it blank.
-export const NODE_W = 152;
-export const NODE_H = 40;
+// Node geometry. The drawing is laid out in CSS pixels, 1:1, so the 12px type the console takes as
+// its floor fits the box at every pane width instead of shrinking with a scaled viewBox. NODE_W
+// holds a mark and a 17-character id at that size; NODE_H carries a second text row (the holder and
+// the truncated criteria, main.ts's goal line) below the mark/id row a plain job carries - a target
+// or a catalog job just leaves it blank. The layered layout spaces columns and rows from them, so a
+// node sits inside its cell with a real gap.
+export const NODE_W = 188;
+export const NODE_H = 52;
+const COL_W = NODE_W + 48;
+const ROW_H = NODE_H + 16;
 const PAD = 24;
 
 export interface NodeLayout {
@@ -487,7 +504,7 @@ export function layoutNodes(model: Placeable): NodeLayout {
     target: e.from,
     relation: "depends_on",
   }));
-  layoutLayered(nodes, links, { colW: LAYERED_COL_W, rowH: LAYERED_ROW_H });
+  layoutLayered(nodes, links, { colW: COL_W, rowH: ROW_H });
 
   const at = new Map<string, { x: number; y: number }>();
   let minX = Infinity;

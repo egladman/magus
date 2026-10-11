@@ -4,7 +4,7 @@
 
 Up: [workspace index](../MAGUS.md)
 
-Depends on: [(workspace root)](../MAGUS.md), [docs](../docs/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
+Depends on: [(workspace root)](../MAGUS.md), [docs](../docs/MAGUS.md), [libs/conventions](../libs/conventions/MAGUS.md), [libs/textsearch](../libs/textsearch/MAGUS.md), [proto](../proto/MAGUS.md)
 
 Query: `magus query project=console`
 

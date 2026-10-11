@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	store "github.com/egladman/magus/internal/notes"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -96,26 +97,16 @@ type notesStore struct {
 // empty list would say "you have no notes" when the truth is "this workspace has nowhere
 // to put one", and those call for completely different next actions.
 func notesStores(root, only string) ([]notesStore, error) {
+	declared := globalCfg.Knowledge.Notes
+	found, err := review.NoteStores(root, review.NoteDirs{Shared: declared.Shared, Private: declared.Private})
+	if err != nil {
+		return nil, fmt.Errorf("magus notes: %w", err)
+	}
 	var out []notesStore
-	add := func(declared string, scope store.Scope) error {
-		if only != "" && only != string(scope) {
-			return nil
+	for _, s := range found {
+		if only == "" || only == string(s.Scope) {
+			out = append(out, notesStore{dir: s.Dir, scope: s.Scope})
 		}
-		dir, err := store.Dir(root, scope, declared)
-		if errors.Is(err, store.ErrDisabled) {
-			return nil
-		}
-		if err != nil {
-			return fmt.Errorf("magus notes: %w", err)
-		}
-		out = append(out, notesStore{dir: dir, scope: scope})
-		return nil
-	}
-	if err := add(globalCfg.Knowledge.Notes.Shared, store.ScopeShared); err != nil {
-		return nil, err
-	}
-	if err := add(globalCfg.Knowledge.Notes.Private, store.ScopePrivate); err != nil {
-		return nil, err
 	}
 	if len(out) == 0 {
 		if only != "" {
@@ -853,8 +844,8 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	sess, fromServer := captureSession(ctx, m)
 	// The colleagues' half. Read separately and never required: a review with no forge behind
 	// it is the ordinary case, and the local conversation is worth keeping on its own.
-	threads, partial := reviewThreads(ctx, m)
-	if len(sess.Comments) == 0 && len(threads) == 0 {
+	comments, partial := reviewComments(ctx, m)
+	if len(sess.Comments) == 0 && len(comments) == 0 {
 		return errors.New("magus notes capture: this review has no comments yet, and a transcript of an empty conversation is not worth a note")
 	}
 
@@ -883,7 +874,7 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	target := stores[0]
 
-	capture := captureFromSession(sess, threads, title, tags)
+	capture := captureFromSession(sess, comments, title, tags)
 	noteName := name
 	if noteName == "" {
 		noteName = captureName(sess)
@@ -908,11 +899,11 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 	}
 	// Every remark, both halves. Counting only the local ones would understate a transcript
 	// whose most useful line came from somebody else.
-	said := len(sess.Comments) + len(threads)
+	said := len(sess.Comments) + len(comments)
 	fmt.Printf("Captured %d comment%s into %s [%s] (%s).\n",
 		said, plural(said, "", "s"),
 		notePath(root, target, saved), target.scope, notesAnchorSummary(saved))
-	if line := newRemarkLine(threads); line != "" {
+	if line := newRemarkLine(comments); line != "" {
 		fmt.Println(line)
 	}
 	// Said out loud, because a transcript is exactly the artifact nobody re-checks. A capture
@@ -951,11 +942,11 @@ func notesCapture(ctx context.Context, root string, args []string) error {
 // The mapping lives here rather than in internal/notes so the store never has to know what a
 // diff is, and so a second source can be added without it learning.
 //
-// threads are the remarks already on the host's review, and they are captured ALONGSIDE the
+// comments are the remarks already on the host's review, and they are captured ALONGSIDE the
 // session's own. A transcript holding only your half of a conversation is not a transcript of
 // the conversation: the question a reader has months later is what was decided, and the answer
 // is nearly always in what somebody else said back.
-func captureFromSession(sess *types.DiffReview, threads []types.ReviewThread, title string, tags []string) store.Capture {
+func captureFromSession(sess *types.DiffReview, comments []types.ReviewComment, title string, tags []string) store.Capture {
 	// Grouped by file, because that is how a reviewer looks for a thread later ("what did we
 	// say about key.go"). Comment order within a file is left alone: it is the order the
 	// conversation happened in, and sorting it would break the replies.
@@ -967,9 +958,9 @@ func captureFromSession(sess *types.DiffReview, threads []types.ReviewThread, ti
 		}
 		byPath[path] = append(byPath[path], e)
 	}
-	// The host's threads first, per file. What a colleague said usually came before the
+	// The host's comments first, per file. What a colleague said usually came before the
 	// remark it provoked, and a transcript that opened with the reply reads backwards.
-	for _, t := range threads {
+	for _, t := range comments {
 		add(t.Path, store.CaptureEntry{
 			Subject: t.Path,
 			Locator: store.LineLocator(t.Line),
@@ -1104,28 +1095,28 @@ func serverDiffReview(ctx context.Context) *types.DiffReview {
 	return &sess
 }
 
-// reviewThreads reads what colleagues said on the review this branch has open, and the reason
+// reviewComments reads what colleagues said on the review this branch has open, and the reason
 // the read was incomplete when there is one.
 //
 // The server answers when one is running, because its session also knows which threads the
 // reader has already had on screen. Without one the forge is asked directly: a colleague's
 // remark is a fact about the review, not about whether a background process happens to be up,
 // and the same patch on the same branch must not show a different conversation either way.
-func reviewThreads(ctx context.Context, m *magus.Magus) ([]types.ReviewThread, string) {
-	if threads, reason, served := serverReviewThreads(ctx); served {
-		return threads, reason
+func reviewComments(ctx context.Context, m *magus.Magus) ([]types.ReviewComment, string) {
+	if comments, reason, served := serverReviewComments(ctx); served {
+		return comments, reason
 	}
-	return localReviewThreads(ctx, m.ReviewOrigin(ctx), m.CacheDir())
+	return localReviewComments(ctx, m.ReviewOrigin(ctx), m.CacheDir())
 }
 
-// serverReviewThreads reads the threads from a running server. served says whether the server
+// serverReviewComments reads the comments from a running server. served says whether the server
 // answered at all, which is what separates "no server, ask the forge yourself" from "the server
 // looked and there is no review open".
 //
 // The reason is separate from the emptiness, and only non-empty when magus READ the review and
 // could not understand part of it. That is the one case a caller must not pass over quietly: a
 // transcript silently missing a colleague's remark is worse than no transcript.
-func serverReviewThreads(ctx context.Context) (threads []types.ReviewThread, reason string, served bool) {
+func serverReviewComments(ctx context.Context) (comments []types.ReviewComment, reason string, served bool) {
 	token, err := auth.LoadOperator()
 	if err != nil {
 		return nil, "", false
@@ -1146,9 +1137,9 @@ func serverReviewThreads(ctx context.Context) (threads []types.ReviewThread, rea
 		return nil, "", false
 	}
 	var body struct {
-		ID      string               `json:"id"`
-		Threads []types.ReviewThread `json:"threads"`
-		Reason  string               `json:"reason"`
+		ID       string                `json:"id"`
+		Comments []types.ReviewComment `json:"threads"`
+		Reason   string                `json:"reason"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return nil, "", false
@@ -1158,39 +1149,39 @@ func serverReviewThreads(ctx context.Context) (threads []types.ReviewThread, rea
 		// is worth a line during a capture: there is simply no second half.
 		return nil, "", true
 	}
-	return body.Threads, body.Reason, true
+	return body.Comments, body.Reason, true
 }
 
-// localReviewThreads asks the forge itself, the way the check-review job and the server's own
-// review handler do. Placement is left to the caller: the server resolves threads against the
+// localReviewComments asks the forge itself, the way the check-review job and the server's own
+// review handler do. Placement is left to the caller: the server resolves comments against the
 // working tree, and a caller showing some other patch has to place them against that one.
 //
 // The origin and the cache dir are passed rather than a workspace, so a test can answer them
 // without a repository, the narrowing the server's own review source uses.
-func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewThread, string) {
+func localReviewComments(ctx context.Context, from types.ReviewOrigin, cacheDir string) ([]types.ReviewComment, string) {
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil, ""
 	}
-	threads, err := bindings.ReviewThreads(ctx, at)
-	// The watermark is PERSISTED, so the new-thread mark survives without the server that
+	comments, err := bindings.ReviewComments(ctx, at)
+	// The watermark is PERSISTED, so the new-comment mark survives without the server that
 	// normally applies it. Reading it here never moves it, for the reason the handler gives.
-	watermark := types.DiffReview{SeenThreads: changeset.NewStore(cacheDir).LoadSeenThreads()}
+	watermark := types.DiffReview{SeenComments: changeset.NewStore(cacheDir).LoadSeenComments()}
 	fresh := make(map[string]struct{})
-	for _, id := range watermark.UnseenThreads(threads) {
+	for _, id := range watermark.UnseenComments(comments) {
 		fresh[id] = struct{}{}
 	}
-	for i := range threads {
-		if _, ok := fresh[threads[i].ID]; ok {
-			threads[i].New = true
+	for i := range comments {
+		if _, ok := fresh[comments[i].ID]; ok {
+			comments[i].New = true
 		}
 	}
 	if err != nil {
-		// The threads that DID decode still travel, and the reason rides beside them: the
+		// The comments that DID decode still travel, and the reason rides beside them: the
 		// handler's posture, for the handler's reason.
-		return threads, err.Error()
+		return comments, err.Error()
 	}
-	return threads, ""
+	return comments, ""
 }
 
 // newRemarkLine says how much of the captured conversation this reader had never had in front
@@ -1198,12 +1189,12 @@ func localReviewThreads(ctx context.Context, from types.ReviewOrigin, cacheDir s
 //
 // Printed rather than written into the note, which is the whole reason it is a line and not a
 // field. New belongs to the READER's history with the review and not to the conversation (see
-// types.ReviewThread.New), so in a transcript a colleague reads next year it would describe
+// types.ReviewComment.New), so in a transcript a colleague reads next year it would describe
 // somebody else's morning. Said to the person taking the capture, it is the one moment it is
 // worth knowing.
-func newRemarkLine(threads []types.ReviewThread) string {
+func newRemarkLine(comments []types.ReviewComment) string {
 	fresh := 0
-	for _, t := range threads {
+	for _, t := range comments {
 		if t.New {
 			fresh++
 		}

@@ -138,8 +138,10 @@ export interface CommandBarDeps {
 }
 
 export function createCommandBar(deps: CommandBarDeps): CommandBar {
-  // The bar: prompt | input | items. role=combobox semantics are overkill for a dmenu; a labeled
-  // dialog holding a labeled input and a listbox of options keeps the ARIA honest and simple.
+  // The bar: prompt | input | items. A labeled dialog holding an editable combobox and the listbox it
+  // controls (the WAI-ARIA list autocomplete pattern): focus stays in the input, and
+  // aria-activedescendant names the option the arrow keys are on, so a screen reader follows the
+  // selection without the options ever taking focus.
   const bar = h("div", "console-shell-commandbar");
   bar.id = "command-bar";
   bar.hidden = true;
@@ -151,21 +153,32 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
 
   const input = h("input", "console-shell-commandbar__input");
   input.type = "text";
-  input.setAttribute("aria-label", "Search actions");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-label", "Search commands");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", "command-bar-options");
+  input.setAttribute("aria-expanded", "false");
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
   input.placeholder = "Run a command"; // a terse prompt; the "run" cap already names the verb
 
   const items = h("div", "console-shell-commandbar__items");
+  items.id = "command-bar-options";
   items.setAttribute("role", "listbox");
-  items.setAttribute("aria-label", "Matching actions");
+  items.setAttribute("aria-label", "Matching commands");
+
+  // The empty answer, in a live region of its own: a listbox may hold only options, and an empty one
+  // says nothing to a reader who cannot see that the row went blank. It stays rendered (zero width
+  // while empty) so the text it receives is announced.
+  const none = h("div", "console-shell-commandbar__empty");
+  none.setAttribute("role", "status");
 
   // A quiet preview of the SELECTED command's prose label, pinned to the bar's right end. The row
   // shows terse command tokens (open.logs); this says what the focused one does in plain words.
   const preview = h("span", "console-shell-commandbar__preview");
   preview.setAttribute("aria-hidden", "true");
 
-  bar.append(prompt, input, items, preview);
+  bar.append(prompt, input, items, none, preview);
 
   let filtered: CommandMatch[] = [];
   let selected = 0;
@@ -201,6 +214,7 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
     btn.title = name;
     btn.tabIndex = -1; // the input keeps focus; the row is keyboard-driven from there
     btn.setAttribute("role", "option");
+    btn.id = "command-bar-option-" + i;
     btn.setAttribute("aria-selected", i === selected ? "true" : "false");
     btn.setAttribute("aria-label", name);
     if (i === selected) btn.dataset.selected = "";
@@ -217,6 +231,7 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
       stage.matches.forEach((m, i) => {
         items.append(row(m.target.label, m.hits, i, m.target.label, () => run(m.target.value)));
       });
+      syncCombobox(stage.matches.length, "No matching tabs");
       updatePreview();
       return;
     }
@@ -228,7 +243,22 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
       btn.dataset.cmd = m.command.id;
       items.append(btn);
     });
+    syncCombobox(filtered.length, "No matching commands");
     updatePreview();
+  }
+
+  // syncCombobox keeps the input's combobox state true to the list it controls: expanded only while
+  // there are options, pointing at the selected one, and the empty answer in words when there are none.
+  function syncCombobox(count: number, emptyText: string): void {
+    input.setAttribute("aria-expanded", count > 0 ? "true" : "false");
+    none.textContent = count > 0 ? "" : emptyText;
+    syncActive();
+  }
+
+  function syncActive(): void {
+    const active = items.children[selected];
+    if (active && active.id) input.setAttribute("aria-activedescendant", active.id);
+    else input.removeAttribute("aria-activedescendant");
   }
 
   // updatePreview shows the selected command's plain-language label at the bar's right end, so the
@@ -256,6 +286,7 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
       b.setAttribute("aria-selected", on ? "true" : "false");
       if (on) b.scrollIntoView({ inline: "nearest", block: "nearest" });
     });
+    syncActive();
     updatePreview();
   }
 

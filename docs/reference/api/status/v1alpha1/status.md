@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, statusservice]
 
 StatusService serves the snapshot, and streams it for a live dashboard.
 
-Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:245](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L245). Part of the [server API](../../index.md).
+Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:245](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L245). Part of the [daemon API](../../index.md).
 
 ## Methods
 

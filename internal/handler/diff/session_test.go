@@ -379,7 +379,7 @@ func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
 	}
 	// Never null: a client iterating threads must not have to guard a state that means the
 	// same thing an empty list does.
-	if got.Threads == nil {
+	if got.Comments == nil {
 		t.Fatal("threads must be an empty array, not null")
 	}
 }
@@ -458,7 +458,7 @@ func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Threads == nil {
+	if got.Comments == nil {
 		t.Fatal("threads must be an empty array even when a reason is set")
 	}
 }
@@ -482,7 +482,7 @@ func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 	h := NewReviewLookupHandler(fakeReviewPatch{patch: "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n@@ -10,3 +10,3 @@\n ten\n-old\n+new\n"}, nil)
 
-	got := h.place(t.Context(), []types.ReviewThread{
+	got := h.place(t.Context(), []types.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 11, Hunk: -1},
 		{ID: "t2", Path: "a.go", Line: 900, Hunk: -1},
 		{ID: "t3", Path: "other.go", Line: 1, Hunk: -1},
@@ -498,7 +498,7 @@ func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 // against its file is worth far more than one withheld because its line could not be resolved.
 func TestReviewRouteKeepsThreadsWhenThePatchCannotBeRead(t *testing.T) {
 	h := NewReviewLookupHandler(fakeReviewPatch{patch: ""}, nil)
-	in := []types.ReviewThread{{ID: "t1", Path: "a.go", Line: 11, Hunk: -1}}
+	in := []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Hunk: -1}}
 	assert.Equal(t, in, h.place(t.Context(), in))
 }
 
@@ -618,6 +618,91 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 	assert.Empty(t, store.Get(root).Comments, "a reply belongs to the host's record, not this session")
 }
 
+// A reply is addressed to a conversation by its first comment. Root names it, so a client holding
+// a reply need not find the root first, and it wins over ID when both arrive.
+func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
+	var threads []string
+	name := "fake-reply-recorder-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReplyReviewContract:
+				threads = append(threads, req.Params["thread"].(string))
+				return true, nil
+			default:
+				return nil, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+
+	root := t.TempDir()
+	h := NewReviewHandler(ReviewOptions{
+		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: root,
+	}, nil)
+
+	for _, body := range []string{
+		`{"op":"reply","id":"th1","body":"agreed"}`,
+		`{"op":"reply","id":"th2","root":"th1","body":"agreed"}`,
+		`{"op":"reply","root":"th1","body":"agreed"}`,
+	} {
+		require.Equal(t, http.StatusOK, post(t, h, body).Code, body)
+	}
+	assert.Equal(t, []string{"th1", "th1", "th1"}, threads,
+		"no root answers the thread addressed; a root answers its thread, with or without an id")
+
+	empty := post(t, h, `{"op":"reply","body":"agreed"}`)
+	assert.Equal(t, http.StatusBadRequest, empty.Code, "neither an id nor a root names no thread")
+	assert.Len(t, threads, 3, "and the host was not asked")
+}
+
+// A client holding only the id of a reply it was shown can answer it: the review is read and the
+// id resolved to its thread's, because a host attaches a reply to a thread by its top-level
+// comment and answering a reply's own id would open nothing.
+func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
+	var asked []string
+	name := "fake-reply-resolver-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReviewThreadsContract:
+				return []any{
+					map[string]any{"id": "th1", "path": "a.go", "body": "why"},
+					map[string]any{"id": "th2", "root": "th1", "body": "because"},
+					map[string]any{"id": "x", "root": "x", "body": "self-rooted"},
+				}, nil
+			case spells.ReplyReviewContract:
+				asked = append(asked, req.Params["thread"].(string))
+				return true, nil
+			default:
+				return nil, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+	h := NewReviewHandler(ReviewOptions{
+		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: t.TempDir(),
+	}, nil)
+
+	for _, body := range []string{
+		`{"op":"reply","id":"th2","body":"agreed"}`,
+		`{"op":"reply","root":"th2","body":"agreed"}`,
+		`{"op":"reply","id":"x","body":"agreed"}`,
+		`{"op":"reply","id":"unknown","body":"agreed"}`,
+	} {
+		require.Equal(t, http.StatusOK, post(t, h, body).Code, body)
+	}
+
+	assert.Equal(t, []string{"th1", "th1", "x", "unknown"}, asked,
+		"a reply resolves to its thread, a self-rooted comment is its own, and what the review does not hold goes through for the host to refuse")
+}
+
 // The whole route, end to end: the provider's threads come back placed against the working
 // patch, so the client renders them beside the code rather than working the anchors out itself.
 func TestReviewRouteServesPlacedThreads(t *testing.T) {
@@ -642,11 +727,11 @@ func TestReviewRouteServesPlacedThreads(t *testing.T) {
 		State:        got.State,
 		Verdicts:     got.Verdicts,
 		VerdictLimit: got.VerdictLimit,
-		Threads:      got.Threads,
+		Comments:     got.Comments,
 	}, got)
-	require.Len(t, got.Threads, 2)
-	assert.Equal(t, 0, got.Threads[0].Hunk, "a line inside a hunk arrives placed")
-	assert.Equal(t, -1, got.Threads[1].Hunk, "one outside every hunk arrives unplaced, not dropped")
+	require.Len(t, got.Comments, 2)
+	assert.Equal(t, 0, got.Comments[0].Hunk, "a line inside a hunk arrives placed")
+	assert.Equal(t, -1, got.Comments[1].Hunk, "one outside every hunk arrives unplaced, not dropped")
 	assert.Empty(t, got.Reason, "a clean read carries no reason")
 }
 
@@ -665,7 +750,7 @@ func TestReviewRouteCarriesAReasonBesideTheThreadsItCouldRead(t *testing.T) {
 
 	var got diffReviewResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-	require.Len(t, got.Threads, 1, "what could be read still reaches the reader")
+	require.Len(t, got.Comments, 1, "what could be read still reaches the reader")
 	assert.Contains(t, got.Reason, "want int", "and what could not is stated")
 }
 
@@ -778,18 +863,18 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
 		var got diffReviewResponse
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
-		require.Len(t, got.Threads, 1)
-		assert.True(t, got.Threads[0].New, "attempt %d: serving must not consume the mark", attempt)
+		require.Len(t, got.Comments, 1)
+		assert.True(t, got.Comments[0].New, "attempt %d: serving must not consume the mark", attempt)
 	}
 
 	// Only the reader's claim moves it, and then the thread stops being new.
-	store.MarkThreadsSeen(root, []string{"t1"})
+	store.MarkCommentsSeen(root, []string{"t1"})
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
 	var after diffReviewResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &after))
-	require.Len(t, after.Threads, 1)
-	assert.False(t, after.Threads[0].New, "once the reader has seen it, it is not new again")
+	require.Len(t, after.Comments, 1)
+	assert.False(t, after.Comments[0].New, "once the reader has seen it, it is not new again")
 }
 
 // A backend without the capability must SAY so. "Nobody else is touching this file" is

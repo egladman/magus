@@ -21,10 +21,8 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/ci/forecast"
-	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive/difftui"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -269,7 +267,7 @@ func impactFixture() diffImpact {
 			Ref: "origin/main",
 			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
 		},
-		Anchors: []anchorHit{
+		Anchors: []review.AnchorHit{
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
 		},
@@ -582,18 +580,6 @@ func TestImpactReachRendersWhatTheDiffAlreadyKnew(t *testing.T) {
 		Rebuilds: 2,
 		Projects: []impactProject{{Path: "root", Seed: true, Files: 2}, {Path: "docs"}},
 	}, r)
-}
-
-// TestDiffSymbolIDsAreWhatASymbolAnchorNames pins the second half of the anchors query. A note
-// anchors a symbol by its index id, so passing labels or paths would match nothing and the
-// section would report a clean tree it never checked.
-func TestDiffSymbolIDsAreWhatASymbolAnchorNames(t *testing.T) {
-	rev := types.Diff{Files: []types.DiffFile{
-		{Path: "a.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}, {ID: "", Label: "unindexed"}}},
-		{Path: "b.go", Symbols: []types.DiffSymbol{{ID: "m types/Diff#", Label: "Diff"}}},
-	}}
-	assert.Equal(t, []string{"a.go", "b.go"}, diffPaths(rev))
-	assert.Equal(t, []string{"m types/Diff#"}, diffSymbolIDs(rev), "deduplicated, and an unindexed symbol is not an id")
 }
 
 // stubDiffSession is the server's /api/v1/diff/session route, holding every request until the
@@ -1002,7 +988,7 @@ func TestTerminalSeenMarkingReachesTheStoreTheConsoleWrites(t *testing.T) {
 
 	// Read back through a SECOND store, because the watermark has to survive the process: one
 	// that lived in memory marks the whole conversation new again the next morning.
-	assert.Equal(t, []string{"t1", "t2"}, changeset.NewStore(cache).LoadSeenThreads())
+	assert.Equal(t, []string{"t1", "t2"}, changeset.NewStore(cache).LoadSeenComments())
 }
 
 func TestCompatUntil(t *testing.T) {
@@ -1595,7 +1581,7 @@ func reviewFixture(t *testing.T, files map[string]string, roles map[string]strin
 // tests exercise the join the CLI and the console both go through rather than a second one.
 func attach(t *testing.T, root, cache string, rev types.Diff) types.Diff {
 	t.Helper()
-	states, err := review.ReadStates(cache, diffPaths(rev), reviewedContent{root: root}.digest)
+	states, err := review.ReadStates(cache, review.ChangedPaths(rev), reviewedContent{root: root}.digest)
 	require.NoError(t, err)
 	rev.AttachReadState(states)
 	return rev
@@ -2078,6 +2064,46 @@ func TestDiffSourceFromFlags(t *testing.T) {
 	})
 }
 
+// TestDiffThreadRefusesWhatAnswersForTheWholeChangeset. --thread narrows the review to one
+// thread, so a flag that answers for every file is a misunderstanding to name, not one to resolve
+// by picking a winner.
+func TestDiffThreadRefusesWhatAnswersForTheWholeChangeset(t *testing.T) {
+	for _, other := range []string{"--unread", "--ack", "--impact"} {
+		t.Run(other, func(t *testing.T) {
+			err := diffCmd(t.Context(), t.TempDir(), []string{"--thread", "c1", other})
+
+			require.Error(t, err)
+			assert.IsType(t, errUsage{}, err)
+			assert.Contains(t, err.Error(), "--thread narrows the review to one thread")
+		})
+	}
+}
+
+// TestDiffNoLongerTakesThePromptOrPrintHookFlags. Both were removed outright; an old script that
+// still passes one is told it is not a flag rather than having it ignored.
+func TestDiffNoLongerTakesThePromptOrPrintHookFlags(t *testing.T) {
+	for _, gone := range []string{"--prompt", "--print-hook"} {
+		t.Run(gone, func(t *testing.T) {
+			err := diffCmd(t.Context(), t.TempDir(), []string{gone})
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), strings.TrimPrefix(gone, "--"))
+		})
+	}
+}
+
+// TestWantsTUIKeepsTheViewerForUnreadAndThread. Both narrow what the viewer shows rather than
+// asking for an answer it has nowhere to put, so at a terminal the viewer still opens.
+func TestWantsTUIKeepsTheViewerForUnreadAndThread(t *testing.T) {
+	term := diffTUITerm{Reads: true, Paints: true}
+	src := diffInput{kind: inputWorkingTree}
+
+	assert.True(t, wantsTUI(&gen.DiffFlags{Unread: true}, src, outputText, term, true))
+	assert.True(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputText, term, true))
+	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1"}, src, outputJSON, term, true), "-o json prints the record")
+	assert.False(t, wantsTUI(&gen.DiffFlags{Thread: "c1", NoTui: true}, src, outputText, term, true))
+}
+
 // TestPrintDiffTextOrdersTheEvidence covers the whole text rendering: the counts headline,
 // the unranked caveat's placement BEFORE the list, the generated fold in both states, and
 // the agent trail.
@@ -2166,38 +2192,6 @@ func TestPathLinkerLeavesPipedOutputBare(t *testing.T) {
 	link := pathLinker(t.TempDir())
 	assert.Equal(t, "cmd/magus/diff.go", link("cmd/magus/diff.go"))
 	assert.Equal(t, "/abs/path.go", link("/abs/path.go"))
-}
-
-// diffFiles returns a diff of n files, for exercising the hint's threshold.
-func diffFiles(n int) types.Diff {
-	rev := types.Diff{Base: "main"}
-	for i := range n {
-		rev.Files = append(rev.Files, types.DiffFile{Path: strings.Repeat("a", i+1) + ".go"})
-	}
-	return rev
-}
-
-// TestReviewPromptHintFiresOnlyOnALargeChangeset. A flag nobody knows about is a feature
-// nobody has, which is why the hint exists, but one printed on every diff is one the reader
-// stops seeing by the third time, which is exactly when it starts to matter. Both halves are
-// the feature, so both are pinned.
-func TestReviewPromptHintFiresOnlyOnALargeChangeset(t *testing.T) {
-	small := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles-1), &gen.DiffFlags{}) })
-	large := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles), &gen.DiffFlags{}) })
-
-	assert.Empty(t, small, "an ordinary changeset gets no hint")
-	assert.Contains(t, large, "--prompt")
-	// The refusal travels with the offer: a reader must not have to wonder whether pressing
-	// this sends their code somewhere.
-	assert.Contains(t, large, "calls no model and sends nothing")
-}
-
-// TestReviewPromptHintIsSilentWhenAlreadyAsked: suggesting a flag the reader just passed is
-// how a command teaches people to ignore its hints.
-func TestReviewPromptHintIsSilentWhenAlreadyAsked(t *testing.T) {
-	out := noticesFrom(t, func() { hintReviewPrompt(t.Context(), diffFiles(promptHintFiles+50), &gen.DiffFlags{Prompt: true}) })
-
-	assert.Empty(t, out)
 }
 
 func TestRevRangeFromFlag(t *testing.T) {
@@ -2376,34 +2370,4 @@ func TestDiffTUIFilesLeavesAnHonestPatchAlone(t *testing.T) {
 	require.Len(t, files, 1)
 	require.Len(t, files[0].Hunks, 1)
 	assert.Equal(t, []string{"-old", "+new"}, files[0].Hunks[0].Lines)
-}
-
-// TestSymbolAnchorJoinsAgainstTheGraphsNodeID holds the two ends of the anchor join together.
-//
-// A note anchors a bare SCIP key, the diff reports its changed symbols as knowledge-graph node
-// ids, and this is the only layer where both spellings are in scope. It shipped comparing them
-// directly, so symbol anchors (the form the store's own template tells authors to prefer)
-// never matched, and the impact report said no note anchored what you had changed.
-func TestSymbolAnchorJoinsAgainstTheGraphsNodeID(t *testing.T) {
-	const key = "m internal/cache/Store#Put()."
-	changed := knowledge.AnchorNodeID("symbol", key, string(notes.ScopeShared))
-	require.NotEqual(t, key, changed,
-		"if the two spellings agreed, the join could not have been broken")
-
-	res := stampAnchorNodeIDs([]notes.ResolvedAnchor{{
-		Note: "put-is-not-idempotent", Pos: 0,
-		Anchor: notes.Anchor{Kind: notes.AnchorSymbol, Target: key},
-	}}, string(notes.ScopeShared))
-
-	hits := notes.AnchorHits(res, nil, []string{changed})
-
-	// Target stays the one the author wrote, not the graph's spelling.
-	assert.Equal(t, []notes.AnchorHit{{
-		Note:    "put-is-not-idempotent",
-		Pos:     0,
-		Kind:    notes.AnchorSymbol,
-		Target:  key,
-		Matched: changed,
-		Match:   notes.MatchSymbol,
-	}}, hits)
 }

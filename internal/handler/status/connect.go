@@ -46,7 +46,7 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 func liveStatus(ctx context.Context, log *slog.Logger, r types.StatusSnapshot, build types.BuildInfo) *statusv1.Status {
 	s, dropped := statusSnapshotToProto(r, build)
 	if dropped != nil {
-		log.With(attr.Component("status")).WarnContext(ctx, "sending a snapshot without an error detail", slog.String("error", dropped.Error()))
+		log.With(attr.Component("status")).WarnContext(ctx, "sending a snapshot without an error detail", attr.Error(dropped))
 	}
 	return s
 }

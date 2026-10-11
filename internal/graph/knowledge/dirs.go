@@ -88,7 +88,7 @@ var packageLanguages = map[string]string{
 
 // packageLanguage is the indexed language of a non-test source file, or "".
 func packageLanguage(p string) string {
-	if isTestSource(p) {
+	if IsTestPath(p) {
 		return ""
 	}
 	return packageLanguages[strings.ToLower(path.Ext(p))]

@@ -1,0 +1,91 @@
+// The shape every denial a policy file returns has, asserted by the tests of each file that
+// returns one. The guard prints the first line inline and keeps the rest behind the ref, so a
+// reason that opens with prose or crowds its first line costs the reader what the shape saves.
+namespace agentpolicy\verdict;
+
+import "std";
+import "magus";
+
+// verdictRunes is the longest verdict line, in runes.
+final verdictRunes = 160;
+
+// problem names how a denial breaks the shape, "" when it holds: a lowercase verdict on the
+// first line of at most 160 runes, at most one backticked command on it, the rationale after
+// the first newline.
+export fun problem(denial: str) > str {
+    final verdict = denial.split("\n")[0];
+    if (verdict.trim() == "") {
+        return "the denial opens with a blank line instead of its verdict";
+    }
+    final first = verdict.sub(0, len: 1);
+    if (first.lower() != first) {
+        return "the verdict opens with a capital: {verdict}";
+    }
+    if (verdict.utf8Len() > verdictRunes) {
+        return "the verdict runs {verdict.utf8Len()} runes against {verdictRunes}: {verdict}";
+    }
+    final commands = verdict.split("`").len() - 1;
+    if (commands > 2) {
+        return "the verdict line carries more than one backticked command: {verdict}";
+    }
+    if (commands == 1) {
+        return "the verdict line leaves a backtick open: {verdict}";
+    }
+    return "";
+}
+
+// assertVerdict fails the test when denial breaks the shape, naming label.
+export fun assertVerdict(denial: str, label: str) > void {
+    final broken = problem(denial);
+    std\assert(broken == "", message: "{label}: {broken}");
+}
+
+// opening is the verdict line for a denial that lists problems: lead and the first problem
+// when they fit one line, with the problem's backticks turned to quotes since it can quote text
+// the reader wrote; lead alone, pointing at the list, when they do not.
+export fun opening(lead: str, problem: str) > str {
+    final line = lead + ": " + problem.replace("`", with: "'");
+    if (line.utf8Len() > verdictRunes or problem.indexOf("\n") != null) {
+        return lead + "; the list below names each";
+    }
+    return line;
+}
+
+// checked returns v after asserting that a deny carries the shape; an allow or an advisory
+// passes as it is, since only a denial prints as a verdict and a ref.
+export fun checked(v: GuardVerdict, label: str) > GuardVerdict {
+    if (v.decision == "deny") {
+        assertVerdict(v.reason, label: label);
+    }
+    return v;
+}
+
+test "a lowercase one-line verdict with one command and a rationale below passes" {
+    std\assert(problem("a worker does not build magus; ask the main session to place ./magus\nrun `x`.\nwhy") == "", message: "verdict, command line, why");
+    std\assert(problem("read it whole: `magus query output <ref>`.\n") == "", message: "one command on the verdict line");
+    std\assert(problem("`--admin` merges past the queue; the person queues it") == "", message: "opens with a command");
+    std\assert(problem("no command here") == "", message: "no command");
+}
+
+test "a capital, a blank first line, a long verdict, two commands and an open backtick fail" {
+    std\assert(problem("A worker does not build magus") != "", message: "capital");
+    std\assert(problem("\nverdict on the second line") != "", message: "blank first line");
+    std\assert(problem("") != "", message: "empty");
+    std\assert(problem("x".repeat(161)) != "", message: "161 runes");
+    std\assert(problem("x".repeat(160)) == "", message: "160 runes");
+    std\assert(problem("run `a` then `b`") != "", message: "two commands");
+    std\assert(problem("run `a") != "", message: "open backtick");
+    std\assert(problem("fine verdict\nrun `a` then `b` below the first line") == "", message: "commands below the first line are rationale");
+}
+
+test "an opening quotes the first problem when it fits and points at the list when it does not" {
+    std\assert(opening("this text breaks a rule", problem: "a trailing period") == "this text breaks a rule: a trailing period", message: "fits");
+    std\assert(opening("this text breaks a rule", problem: "write `x`") == "this text breaks a rule: write 'x'", message: "backticks");
+    std\assert(opening("this text breaks a rule", problem: "y".repeat(200)) == "this text breaks a rule; the list below names each", message: "points at the list");
+}
+
+test "a deny is held to the shape, an allow and an advisory are not" {
+    checked(magus\guard.deny("read it whole: `magus query output <ref>`.\nwhy"), label: "deny");
+    checked(magus\guard.allow(), label: "allow");
+    checked(magus\guard.advise("You are reading one pull request's CI."), label: "advise");
+}

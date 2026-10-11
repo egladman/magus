@@ -249,8 +249,8 @@ X; otherwise Y". It says X, and the daemon makes X faster.
 
 `/mcp` and the console are network endpoints BY DEFINITION: something connects to
 them over a socket. The shared concurrency pool, machine-wide
-admission, and background jobs are cross-process by definition. Nobody is surprised that asking for a server needs a
-server, so these are not a capability split; they are the daemon's own work.
+admission, and background jobs are cross-process by definition. Nobody is surprised that asking for a daemon needs a
+daemon, so these are not a capability split; they are the daemon's own work.
 
 For those, a command SHOULD auto-start the daemon, because asking for the console
 IS asking for the daemon and starting it is doing what was asked rather than a

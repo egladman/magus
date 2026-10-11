@@ -102,14 +102,18 @@ function ask(roots: readonly string[]): void {
   box.setAttribute("role", "dialog");
   box.setAttribute("aria-modal", "true");
   box.setAttribute("aria-labelledby", "console-signin-title");
+  box.setAttribute("aria-describedby", "console-signin-lede");
 
   const header = document.createElement("header");
   header.className = "pf-v6-c-modal-box__header";
+  const headerMain = document.createElement("div");
+  headerMain.className = "pf-v6-c-modal-box__header-main";
   const title = document.createElement("h1");
   title.className = "pf-v6-c-modal-box__title";
   title.id = "console-signin-title";
   title.textContent = "Connect";
-  header.append(title);
+  headerMain.append(title);
+  header.append(headerMain);
 
   const body = document.createElement("div");
   body.className = "pf-v6-c-modal-box__body";
@@ -156,6 +160,7 @@ function ask(roots: readonly string[]): void {
   wsLabel.textContent = "Workspace";
   const lede = document.createElement("p");
   lede.className = "console-shell-signin__lede";
+  lede.id = "console-signin-lede";
   lede.textContent =
     "This server is serving " +
     roots.length +

@@ -15,7 +15,7 @@ The definition and schema\_version fields every domain output carries are delibe
 
 GET /api/v1/graph is NOT superseded. It is the bulk subgraph fetch - a whole document - which is a different job from ranked retrieval, and the page already speaks it.
 
-Package `magus.graph.v1alpha1`, defined in `proto/magus/graph/v1alpha1/graph.proto`. Source: [graph.proto:63](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L63). Part of the [server API](../../index.md).
+Package `magus.graph.v1alpha1`, defined in `proto/magus/graph/v1alpha1/graph.proto`. Source: [graph.proto:63](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L63). Part of the [daemon API](../../index.md).
 
 ## Methods
 

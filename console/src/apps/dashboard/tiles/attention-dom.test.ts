@@ -10,14 +10,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  attentionTile,
   countFailing,
   failingTargets,
   inspectCommand,
   reproduceCommand,
   attentionVerdict,
+  verdictStatus,
 } from "./attention";
 import type { AttentionRequest } from "./attentionQueue";
-import type { StatusView } from "../state";
+import { initialState, type StatusView } from "../state";
 
 // request builds one open queue row. Only opened_ms varies across these tests; the rest satisfy
 // the wire shape.
@@ -151,4 +153,167 @@ test("the verdict names how long the oldest request has waited", () => {
     now,
   );
   assert.match(v.sub, /waiting 5m/);
+});
+
+// The headline's mark. A calm queue beside a failing count must not take the success colour: green
+// on "Nobody waiting" with a red 1 next to it is the board contradicting itself.
+test("a calm queue is only marked successful while nothing is failing", () => {
+  assert.equal(verdictStatus("clear", 0), "success");
+  assert.equal(verdictStatus("clear", 2), "neutral");
+  assert.equal(verdictStatus("warn", 0), "warning");
+  assert.equal(verdictStatus("attention", 0), "danger");
+});
+
+// frame builds the state the hero repaints from. The demo connection keeps the queue read local, so
+// the tile never touches the network.
+function frame(targets: { label: string; state: string; ref?: string }[]) {
+  return { ...initialState(), status: statusWith(targets), conn: { state: "demo" as const } };
+}
+
+test("the hero's verdict is a heading with an icon, and goes neutral beside a failure", () => {
+  const tile = attentionTile();
+  document.body.append(tile.el);
+  tile.update(frame([{ label: "svc/api:test", state: "passed" }]));
+  const verdict = tile.el.querySelector(".console-dashboard-hero__verdict");
+  assert.equal(verdict?.tagName, "H3");
+  const icon = (): string | null =>
+    tile.el.querySelector(".console-dashboard-hero__mark .pf-v6-c-icon__content")?.className ??
+    null;
+  assert.match(icon() ?? "", /pf-m-success/);
+  assert.equal(tile.el.dataset.failing, "none");
+
+  tile.update(frame([{ label: "svc/api:test", state: "failed", ref: "out1" }]));
+  assert.equal(tile.el.dataset.failing, "some");
+  assert.doesNotMatch(icon() ?? "", /pf-m-success/, "no success mark beside a failing count");
+  assert.equal(tile.el.dataset.state, "clear", "the verdict itself is still the queue's");
+  tile.destroy();
+  tile.el.remove();
+});
+
+test("why work is queued is text under the counts, not a tooltip", () => {
+  const tile = attentionTile();
+  const status = statusWith([{ label: "svc/api:test", state: "passed" }]);
+  status.pool = { capacity: 2, running: 2, queued: 3 };
+  tile.update({ ...initialState(), status, conn: { state: "demo" as const } });
+  const reason = tile.el.querySelector<HTMLElement>(".console-dashboard-hero__reason");
+  assert.equal(reason?.hidden, false);
+  assert.match(reason?.textContent ?? "", /3 waiting: every one of the pool's 2 slots is busy/);
+  assert.equal(tile.el.querySelector("[title]"), null, "nothing here lives only in a tooltip");
+  tile.destroy();
+});
+
+test("a failing chip's menu is not rebuilt by the next identical frame", () => {
+  const tile = attentionTile();
+  document.body.append(tile.el);
+  const failing = [{ label: "svc/api:test", state: "failed", ref: "out1" }];
+  tile.update(frame(failing));
+  const button = tile.el.querySelector<HTMLButtonElement>(".console-dashboard-hero__failbtn");
+  assert.ok(button, "a failing target gets a chip");
+  button.click();
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  // Frames arrive about once a second. Rebuilding the list on each one closed the menu a reader
+  // had just opened.
+  tile.update(frame(failing));
+  assert.equal(tile.el.querySelector(".console-dashboard-hero__failbtn"), button);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+
+  const first = tile.el.querySelector<HTMLElement>('[role="menuitem"]');
+  first?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+  tile.destroy();
+  tile.el.remove();
+});
+
+// A queue with one waiting request, served the way the route serves it.
+async function withQueue(body: () => Promise<void>): Promise<void> {
+  const real = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        store: "/s",
+        requests: [
+          {
+            id: "att-0123456789ab",
+            opened_ms: Date.now() - 5000,
+            outcome: "waiting",
+            message: "needs the deploy key\nthen a long second line the row has to shorten",
+          },
+        ],
+      }),
+      { status: 200 },
+    )) as typeof fetch;
+  try {
+    await body();
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test("closing a request: the reason's instructions are helper text, and Escape gives focus back", async () => {
+  await withQueue(async () => {
+    const tile = attentionTile();
+    document.body.append(tile.el);
+    tile.update({
+      ...initialState(),
+      status: statusWith([]),
+      liveHost: "127.0.0.1:7391",
+      conn: { state: "connected" as const },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const close = tile.el.querySelector<HTMLButtonElement>(
+      ".console-dashboard-attention__disposebtn",
+    );
+    assert.ok(close, "a waiting request carries its close control from the start");
+    assert.equal(close.textContent, "Close request", "named for what it does, not 'Dispose'");
+    assert.match(close.getAttribute("aria-label") ?? "", /att-0123456789ab/);
+
+    close.click();
+    const input = tile.el.querySelector<HTMLInputElement>(".pf-v6-c-form-control__text");
+    assert.ok(input);
+    assert.doesNotMatch(input.placeholder, /Enter|Esc/, "instructions are not in the placeholder");
+    const help = document.getElementById(input.getAttribute("aria-describedby") ?? "");
+    assert.match(help?.textContent ?? "", /Enter closes the request, Escape cancels/);
+
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    assert.equal(tile.el.querySelector(".console-dashboard-attention__composer"), null);
+    assert.equal(document.activeElement, close, "focus returns to the control that opened it");
+    tile.destroy();
+    tile.el.remove();
+  });
+});
+
+test("a shortened message can be opened in full, as a control and not a tooltip", async () => {
+  await withQueue(async () => {
+    const tile = attentionTile();
+    document.body.append(tile.el);
+    tile.update({
+      ...initialState(),
+      status: statusWith([]),
+      liveHost: "127.0.0.1:7391",
+      conn: { state: "connected" as const },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    const message = tile.el.querySelector<HTMLElement>(".console-dashboard-attention__message");
+    assert.equal(message?.textContent, "needs the deploy key");
+    assert.equal(message?.getAttribute("title"), null);
+    const more = tile.el.querySelector<HTMLButtonElement>(".console-dashboard-attention__more");
+    assert.equal(more?.getAttribute("aria-expanded"), "false");
+    more?.click();
+    assert.match(message?.textContent ?? "", /long second line/);
+    assert.equal(more?.getAttribute("aria-expanded"), "true");
+    tile.destroy();
+    tile.el.remove();
+  });
+});
+
+test("the chip is a button with a popup that names the failure in words", () => {
+  const tile = attentionTile();
+  tile.update(frame([{ label: "svc/api:test", state: "failed" }]));
+  const button = tile.el.querySelector<HTMLButtonElement>(".console-dashboard-hero__failbtn");
+  assert.equal(button?.getAttribute("aria-haspopup"), "menu");
+  assert.match(button?.textContent ?? "", /Failed: svc\/api:test/);
+  assert.ok(button?.classList.contains("pf-m-danger"));
+  assert.equal(button?.getAttribute("title"), null);
+  tile.destroy();
 });

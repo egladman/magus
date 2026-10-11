@@ -3,6 +3,8 @@ package ward
 import (
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -267,16 +269,41 @@ func ExplainStaleBinary(err error, running, constraint string) error {
 // staleNameNote follows each failure that names something this build may not provide.
 const staleNameNote = "This build does not provide that name; unless it is misspelled, this magus is out of date."
 
-// staleShaped reports whether err carries one of the codes an out-of-date binary produces.
-// BZZ1009, a namespace the file never imported, is not one: no newer binary supplies a
-// missing import line.
+// staleShaped reports whether err carries one of the codes an out-of-date binary produces,
+// or the one uncoded complaint it produces when a host object lacks a member the tree
+// calls. BZZ1009, a namespace the file never imported, is not one: no newer binary
+// supplies a missing import line.
 func staleShaped(err error) bool {
 	var d *diagnostics.Error
-	if !errors.As(err, &d) {
+	if errors.As(err, &d) {
+		code := string(d.Code)
+		return code == buzzUndefinedType || code == buzzUnresolvedImport
+	}
+	return missingObjectMember.MatchString(err.Error())
+}
+
+// missingObjectMember matches the checker's complaint that an object lacks a member. It
+// has no BZZ code, so the sentence is the only handle: a magusfile calling a host member
+// this build predates, such as `magus\guard.builtins` on a binary built before it,
+// fails with exactly this. A misspelled field fails the same way, which is why the note
+// stays hedged ("unless it is misspelled").
+var missingObjectMember = regexp.MustCompile(`object [A-Za-z_][A-Za-z0-9_]* has no field or method "`)
+
+// IsStaleBinary reports whether a workspace-load failure looks like an out-of-date
+// binary: any branch of err is stale-shaped, or ExplainStaleBinary already annotated it
+// as MGS1021.
+func IsStaleBinary(err error) bool {
+	if err == nil {
 		return false
 	}
-	code := string(d.Code)
-	return code == buzzUndefinedType || code == buzzUnresolvedImport
+	if errors.Is(err, types.WorkspaceNeedsNewerMagus) {
+		return true
+	}
+	branches, isJoin := joined(err)
+	if !isJoin {
+		return staleShaped(err)
+	}
+	return slices.ContainsFunc(branches, staleShaped)
 }
 
 // joined returns err's branches when rejoining them reproduces its message, as it

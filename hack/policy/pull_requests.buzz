@@ -39,6 +39,7 @@ import "fs";
 import "path";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/policy/commits" as subjects;
 import "./hack/policy/proofread" as decisions;
 import "./hack/magusfile/commits" as conventional;
@@ -1308,8 +1309,8 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
         }
     }
     if (problems.len() > 0) {
-        return magus\guard.deny(opening(denied, advice: false) + "\n  - " + problems.join("\n  - ") + "\n"
-            + teaching(denied, advice: false), {"rule": ruleName(denied)});
+        return magus\guard.deny(verdict\opening(opening(denied, advice: false), problem: problems[0]) + "\n  - "
+            + problems.join("\n  - ") + "\n" + teaching(denied, advice: false), {"rule": ruleName(denied)});
     }
     if (advice.len() > 0 and once(key)) {
         return magus\guard.advise(opening(advised, advice: true) + "\n  - " + advice.join("\n  - ") + "\n"
@@ -1349,22 +1350,23 @@ fun ruleName(kinds: [str]) > str {
     return "forge-text";
 }
 
-// opening is the first line of a verdict on text of kinds, the first of them in the order a
-// description, a reply, a commit message, an issue and release notes.
+// opening is the first line of advice on text of kinds, or the lead of a denial's verdict, for
+// the first of them in the order a description, a reply, a commit message, an issue and
+// release notes.
 fun opening(kinds: [str], advice: bool) > str {
     if (kinds.indexOf(descriptionKind) != null) {
-        return if (advice) "This pull request description could read better:" else "This pull request text breaks the description rules:";
+        return if (advice) "This pull request description could read better:" else "this pull request text breaks a description rule";
     }
     if (kinds.indexOf(replyKind) != null) {
-        return if (advice) "This review reply could read better:" else "This review reply breaks the reply rules:";
+        return if (advice) "This review reply could read better:" else "this review reply breaks a reply rule";
     }
     if (kinds.indexOf(commitKind) != null) {
-        return if (advice) "This commit message could read better:" else "This commit message breaks the writing rules:";
+        return if (advice) "This commit message could read better:" else "this commit message breaks a writing rule";
     }
     if (kinds.indexOf(issueKind) != null) {
-        return if (advice) "This issue could read better:" else "This issue breaks the writing rules:";
+        return if (advice) "This issue could read better:" else "this issue breaks a writing rule";
     }
-    return if (advice) "These release notes could read better:" else "These release notes break the writing rules:";
+    return if (advice) "These release notes could read better:" else "these release notes break a writing rule";
 }
 
 // teaching is the shape a verdict on text of kinds teaches, one line per kind: a description's
@@ -1387,6 +1389,17 @@ fun teaching(kinds: [str], advice: bool) > str {
         lines.append(releaseLine);
     }
     return lines.join("\n");
+}
+
+// decided is decidePullRequest with every denial held to the verdict shape.
+fun decided(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool) > GuardVerdict {
+    return decidedCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: citedRun);
+}
+
+// decidedCiting is decideCiting with every denial held to the verdict shape.
+fun decidedCiting(programs: [helpers\Program], line: str, files: {str: str}, diff: fun (base: str) > Facts, judge: fun (text: str, kind: str) > [Judged], once: fun (key: str) > bool, cited: fun (ref: str) > Citation) > GuardVerdict {
+    final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
+    return verdict\checked(decideCiting(programs, line: line, files: files, diff: diff, judge: judge, once: once, cited: cited), label: label);
 }
 
 final goodTitle = "fix(guard): keep the key stable";
@@ -1418,7 +1431,7 @@ fun reporting(f: Judged) > fun (text: str, kind: str) > [Judged] {
 }
 
 fun judged(programs: [helpers\Program], line: str, files: {str: str}) > GuardVerdict {
-    return decideCiting(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(), cited: skipCited);
+    return decidedCiting(programs, line: line, files: files, diff: facts(unknownFacts()), judge: passing(), once: helpers\counter(), cited: skipCited);
 }
 
 fun judgedReason(title: str, body: str) > str {
@@ -1426,7 +1439,7 @@ fun judgedReason(title: str, body: str) > str {
 }
 
 fun verdictWith(title: str, body: str, f: Facts) > GuardVerdict {
-    return decideCiting(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), judge: passing(), once: helpers\counter(), cited: skipCited);
+    return decidedCiting(create(title, body: body), line: "", files: {<str: str>}, diff: facts(f), judge: passing(), once: helpers\counter(), cited: skipCited);
 }
 
 // sized is a well-shaped description: a 20-word lead, then n words of bullets of at most
@@ -1476,13 +1489,13 @@ test "a spaced hyphen is denied with the shape and its example" {
 
 test "every deny finding is listed with where it sits and its rule, under the rule's name" {
     final lead = Judged{ rule = "lead-context", line = 2, message = "It opens with a heading: open with a paragraph." };
-    final v = decidePullRequest(create(goodTitle, body: "## Summary"), line: "", files: {<str: str>},
+    final v = decided(create(goodTitle, body: "## Summary"), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(lead), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.rule == "pull-request-text", message: "named: {v.rule}");
     std\assert(v.reason.indexOf("description line 1: It opens with a heading: open with a paragraph. [lead-context]") != null, message: v.reason);
     final title = Judged{ rule = "filler", line = 1, message = "Drop 'robust': state the fact.", matched = "robust" };
-    final t = decidePullRequest(create("fix(cache): add a robust key", body: "Pins the key."), line: "", files: {<str: str>},
+    final t = decided(create("fix(cache): add a robust key", body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(title), once: helpers\counter());
     std\assert(t.reason.indexOf("the title: Drop 'robust': state the fact. [filler]") != null, message: t.reason);
     std\assert(t.reason.indexOf("\"robust\": drop it") == null, message: "a word proofread reported is not reported twice: {t.reason}");
@@ -1587,12 +1600,12 @@ test "proofread reads the title and the description as one pull request" {
         seen.append(Call{ text = text, kind = kind });
         return [<Judged>];
     };
-    decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
+    decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0].text == goodTitle + "\nPins the key." and seen[0].kind == "change-description",
         message: "{seen.len()}");
     final unread = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
-    decidePullRequest(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
+    decided(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
         diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
 }
@@ -1631,7 +1644,7 @@ test "a reply denial teaches a reply, not a description" {
     final v = decidePullRequest(helpers\request([["gh", "pr", "comment", "412", "--body", "No, as I said."]]), line: "",
         files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(opener), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
-    std\assert(v.reason.startsWith("This review reply breaks the reply rules:"), message: v.reason);
+    std\assert(v.reason.startsWith("this review reply breaks a reply rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
     std\assert(v.reason.indexOf("acknowledge the point it answers") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
 }
@@ -1664,7 +1677,7 @@ test "a commit message denial names the subject, its rule and the shape, under i
         diff: facts(unknownFacts()), judge: reporting(mood), once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
     std\assert(v.rule == "commit-message-text", message: "named: {v.rule}");
-    std\assert(v.reason.startsWith("This commit message breaks the writing rules:"), message: v.reason);
+    std\assert(v.reason.startsWith("this commit message breaks a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("the subject: Open the subject with the imperative: 'Add', not 'Added'. [subject-mood]") != null, message: v.reason);
     std\assert(v.reason.indexOf("one line in the imperative") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
     final body = Judged{ rule = "filler", line = 3, message = "Drop 'actually': state the fact.", matched = "actually" };
@@ -1710,7 +1723,7 @@ test "an issue is judged with its title on line 1 and denied under the forge-tex
     final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
         diff: facts(unknownFacts()), judge: reporting(bad), once: helpers\counter());
     std\assert(denied.decision == "deny" and denied.rule == "forge-text", message: denied.reason);
-    std\assert(denied.reason.startsWith("This issue breaks the writing rules:"), message: denied.reason);
+    std\assert(denied.reason.startsWith("this issue breaks a writing rule"), message: denied.reason);
     std\assert(denied.reason.indexOf("body line 2: Describe what happened. [blame]") != null, message: denied.reason);
     std\assert(denied.reason.indexOf("what happened against what you expected") != null, message: "teaches the issue shape");
 }
@@ -1720,7 +1733,7 @@ test "release notes are judged as written, with no title, budget or shape" {
     final v = decidePullRequest(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\nMight fix the key."]]),
         line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(hedge), once: helpers\counter());
     std\assert(v.decision == "deny" and v.rule == "forge-text", message: v.reason);
-    std\assert(v.reason.startsWith("These release notes break the writing rules:"), message: v.reason);
+    std\assert(v.reason.startsWith("these release notes break a writing rule"), message: v.reason);
     std\assert(v.reason.indexOf("line 2: Drop 'might fix'. [hedge]") != null, message: v.reason);
     std\assert(v.reason.indexOf("Added, Changed, Deprecated, Removed, Fixed or Security") != null, message: "teaches the groups");
     final clean = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\n- **The key is stable.**"]]),
@@ -1860,8 +1873,8 @@ test "a budget the diff could not settle is advice, told once" {
     final once = helpers\counter();
     final edit = helpers\request([["gh", "pr", "edit", "412", "--body", body]]);
     final big = facts(shipping(100, lines: 5000));
-    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "advise", message: "another pull request's diff is never read");
-    std\assert(decidePullRequest(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "allow", message: "said once per pull request");
+    std\assert(decided(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "advise", message: "another pull request's diff is never read");
+    std\assert(decided(edit, line: "", files: {<str: str>}, diff: big, judge: passing(), once: once).decision == "allow", message: "said once per pull request");
 }
 
 test "the diff is read once, and only for the checkout's own pull request" {
@@ -1870,10 +1883,10 @@ test "the diff is read once, and only for the checkout's own pull request" {
         reads.append(base);
         return shipping(1, lines: 40);
     };
-    decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    decided(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 1 and reads[0] == "main", message: "one read, against the pull request's base");
     final headed = helpers\request([["gh", "pr", "create", "--head", "other", "--title", goodTitle, "--body", sized(100)]]);
-    decidePullRequest(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
+    decided(headed, line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 1, message: "another branch's diff is not this checkout's");
     decidePullRequest(helpers\request([["gh", "pr", "comment", "--body", "Done."]]), line: "", files: {<str: str>}, diff: counting, judge: passing(), once: helpers\counter());
     std\assert(reads.len() == 1, message: "a reply reads no diff");
@@ -2003,12 +2016,12 @@ test "a description read from a heredoc or a body file is judged" {
         seen.append(text);
         return [<Judged>];
     };
-    decidePullRequest(filled, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decided(filled, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 1 and seen[0] == "fix: pin the key\nClaude pinned the key.", message: "{seen}");
 
     final fromFile = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body-file", "pr.md"]]);
     std\assert(bodyFiles(fromFile)[0] == "pr.md", message: "the file to read");
-    decidePullRequest(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decided(fromFile, line: "", files: {"pr.md": "Claude wanted this."}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
     std\assert(seen.len() == 2 and seen[1] == goodTitle + "\nClaude wanted this.", message: "{seen}");
 }
 

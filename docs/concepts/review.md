@@ -87,6 +87,54 @@ which suits a cache that exists only on a runner. A review happens on your lapto
 token never exists, so folding these ops in there would leave them inert. Import both when
 you want both.
 
+## The reading order
+
+`magus diff` ends its report with the order to read the hunks in. File order puts a test
+ahead of the code it exercises and an implementation ahead of the interface it satisfies,
+so you meet each hunk before you know what it is for. The reading order puts a definition
+before its uses.
+
+magus builds it from the symbol index, not from paths:
+
+- A hunk that defines a changed symbol comes before the hunks that use it.
+- An interface comes before its implementations, using the `implements` relation the
+  indexer records (see [Knowledge](knowledge.md#schema)).
+- Tests come after the code they exercise.
+- Hunks linked this way form a group. Larger groups come first, and between groups of one
+  size the one whose symbols reach more files comes first.
+
+Each hunk carries one sentence naming the relationship that placed it, such as `uses Parse,
+defined in step 2` or `tests Parse, defined above`. Consecutive hunks from one file share a
+step, and so do hunks that use each other, because neither can go first. Generated output
+sits in a folded group of its own (`--generated` shows it), and a hunk magus cannot place
+goes in a final group named `unranked` that says why: no symbol index covers the file, the
+hunk defines and uses no changed symbol, or the working tree no longer matches the range
+you are reading.
+
+The last line is a completeness line, such as `14 hunks, 14 placed`. It names any hunk
+placed twice or not placed, and any changed file with no hunk to show (a binary file, a
+rename), so a short list is never mistaken for a whole one.
+
+The same diff and the same index always give the same order. No model chooses it. A change
+made of many small unconnected hunks gains little, because each lands in a group of one.
+
+When a project the change touches can be indexed and has no index built, magus leaves the
+order out and adds a note naming that project and the `magus graph build` that fixes it.
+Another project's index does not stand in: the uses of a changed symbol that live in the
+unindexed one are unknown, and an order drawn without them would read as "nothing is related".
+
+The order reaches every place you read a change:
+
+- the text report prints it under the file summary;
+- the terminal viewer walks the hunks in it;
+- `-o json` carries it under `order`, with the completeness line as `order.count`;
+- the console's focus mode (`f`) walks it one step at a time.
+
+When the symbol index cannot be brought current, magus prints no order and a note says to run
+`magus graph build`. With the daemon running, a stale index is rebuilt in the background, so a
+retry in a minute may find it current. An order drawn without the uses would read as "nothing
+is related", which is a claim it cannot back.
+
 ## Reading
 
 On the console's Diff page:
@@ -121,6 +169,9 @@ still afford.
 - `]` and `[` move without marking, for reading something twice.
 - Reading the last hunk opens the batch you drafted. A pass ends in the decision it was for,
   rather than running out.
+
+When the change has a [reading order](#the-reading-order), focus mode follows it, one step at
+a time, rather than file by file.
 
 Stop halfway and the marks persist, so opening the diff again puts you back at the first hunk
 you have not read. The mode is remembered too: it is how you read, not a thing to re-enter every
@@ -159,8 +210,7 @@ you send with the batch in front of you or you do not send.
 
 Two things the console has that the terminal viewer does not yet: reading one hunk at a time
 (`f`), and the run control below. Both are read-side and nothing about a terminal prevents them;
-they are missing, not withheld, unlike publishing. `--prompt` needs neither: it is a flag on
-`magus diff` itself, and the viewer stands aside for it the way it does for `--impact`.
+they are missing, not withheld, unlike publishing.
 
 ### Where a remark lands
 
@@ -183,6 +233,18 @@ so neither the viewer nor the console drops one.
 The overview reads those remarks out rather than counting them. A chip saying "1 elsewhere"
 tells you something was said and withholds what, which leaves you to open a browser to find
 out, the one errand this whole page exists to save you.
+
+### Threads
+
+A comment and the replies to it are one thread, and the id of its first comment is the
+thread id. The host's comments say which thread they belong to: `root` is the thread id (empty
+on the first comment), `outdated` says the commented line has left the head, and `diff_hunk`
+is the host's copy of the hunk the comment was made on. magus places the whole thread under
+the hunk of its first comment, in the console and in `magus diff`'s viewer, and answering a
+thread sends your reply into it.
+
+magus does not fetch whether the host marks a thread resolved. `outdated` is the only
+state of that kind a thread carries.
 
 ## When somebody says something
 
@@ -217,6 +279,29 @@ once, under the local side.
 
 A backend that cannot answer says nothing at all, which is deliberately different from saying
 nothing competes; those are different facts, and only one of them is reassuring.
+
+## Saying you are reading
+
+With one approval required, a pull request can merge while a second reviewer is halfway
+through it. That reader's time is gone and nobody counts it.
+
+The console's reading toggle marks the open review as being read. The mark is local, and it
+changes nothing about the merge queue: it is a notice, not a hold. For a GitHub pull request
+the console also shows a line to run if you want the others to know:
+
+```sh
+gh pr comment 482 --repo acme/acme --body 'octocat is reading this now'
+```
+
+magus prints that line and never runs it, so the one sentence that leaves your machine is
+one you sent. For any other host the line is empty. A review that has already merged refuses
+the mark.
+
+If the review merges while the mark is set, the `check-review` job reports `review.merged`,
+even when nobody commented, and clears the mark. Two opt-in telemetry metrics count what it
+cost: `magus.review.merged_while_reading` and `magus.review.merged_while_reading.duration`.
+They carry no attribute and reach a backend only when telemetry export is on; see
+[Telemetry](telemetry.md#agents-and-review).
 
 ## After it merges
 
@@ -262,7 +347,7 @@ not know your build.
 Three things keep it honest:
 
 - **It runs what the magusfile declares, and nothing else.** The console names a target and a
-  project, never a command. The server admits the run only if that project declares that target,
+  project, never a command. The daemon admits the run only if that project declares that target,
   so a browser-reachable button is strictly less capable than a terminal.
 - **A verdict is about a TREE STATE.** Edit anything and the answer greys out and says
   `passed - since edited`, because a green tick over code you have since changed is a wrong
@@ -275,76 +360,88 @@ Three things keep it honest:
 There is one button, not one per file. The question is asked about one place at a time, and a
 control on every file heading would answer it n times in a column.
 
-## Handing the change to your own model
+## Before you push
 
 ```sh
-magus diff --prompt
+magus diff --unread --rev main...HEAD
 ```
 
-prints a review prompt to paste into whichever model you use. `--prompt --impact` adds the
-rationale behind each instruction, for a reader deciding whether to trust it.
+narrows the review of that range to the hunks no read mark covers. A mark belongs to a hunk's
+content, context lines included, so a hunk you read and then edited is unread again. At a
+terminal the viewer opens on just those hunks; printed, it is the usual report, filtered, under
+every `-o`: `-o name` prints one `path:start-end` per unread hunk, and `-o json` is the same
+document with an `unread` record saying how many of how many were kept. It exits 0 whatever it
+finds: a push held up by a read count would make the count the goal. Where the marks cannot be
+read it says the read state is unknown, on stderr and as `"read_state": "unknown"`, and calls
+no hunk unread.
 
-magus assembles it and stops. Nothing calls a model, holds a key, or sends anything anywhere:
-the clipboard is the airgap, and it is what keeps the review something you wrote. The prompt asks
-for findings, and says so out loud: file, line, what is wrong. It does not ask for review prose,
-because generated text is the wrong thing to put in front of the colleague who asked.
+The push itself asks the same question without doing the work. The `pre-push` hook magus
+installs hands off to the `check-drift` job, and that job adds one line counting the unread
+hunks of the range being pushed; see [the drift notice](../guides/integrations/git.md#the-drift-notice). Nothing blocks the push.
+
+## The report
 
 It reads the working tree by default, and a patch file when you hand it one. Against a patch
 with a single changed file:
 
-<!-- example:diff-prompt -->
+<!-- example:diff-report -->
 
 ```console
-$ magus diff --prompt --patch change.patch
-# Review this change
+$ magus diff --no-tui --patch change.patch
+1 files to read; 1 projects edited, 1 projects rebuild
 
-Find what is worth commenting on. I will write the actual review comments myself, so
-give me findings - file, line, what is wrong - and flag the ones you are unsure of.
-Do not draft review prose or a summary I could paste.
+  main.go
+      in .
 
-## What this is
+reading order
 
-- compared against: change.patch
-- 1 changed file(s)
-- projects edited directly: .
+group 1 of 1: unranked (1 hunk)
+  step 1
+    main.go:1-3
+        the working tree no longer matches the range head for this file
 
-## Read in this order
+1 hunks, 1 placed
 
-magus ranked these by what they can break, consequence first.
+conformance did not check .: no symbol indexer
 
-- `main.go` - source; in .
-
-## Conformance
-
-Where these symbols differ from how the rest of the workspace declares the same kind of thing; weigh, do not enforce.
-
-- not checked: `.` (no symbol indexer)
-
-## What magus could not measure
-
-Do not read any of these as evidence that there is nothing there.
-
-- no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)
-
-## Use what is already installed
-
-Load these rather than inferring from the diff alone:
-
-- `magus-query` - what references what, without guessing from a text search
-- `magus-architecture-review` - where code belongs, grounded in the graph
-
-Follow the conventions this workspace documents over generic ones.
-Before reporting a finding, look for the test that PINS the behavior you are about
-to call a bug. If you cannot find where a claim is verified, say it is unverified.
+note: no symbol index loaded: changed-symbol callers and coverage overlays are unavailable (build it with `magus graph build`)
 ```
 
 <!-- /example -->
 
-What it carries is the part no model can work out from a diff: the reading order magus ranked,
-which projects rebuild as a result, what could NOT be measured, and which other branches are
-changing the same files. What it does NOT carry is the durable half of a review briefing: it
-names the magus skills you already have rather than pasting copies of them, because a copy drifts
-from the installed one and spends your context on text your tools already loaded.
+While the daemon runs, each thread on the pull request is named beside the hunk it sits on, as
+`thread <id>`, and `-o json` carries the same ids under each file's `threads`. The report takes
+them from the daemon's session and never asks the host itself, so with no daemon it lists no
+threads and logs a notice with `magus server start` as the next command. Under `-q` the notice
+shrinks to that command.
+
+### One thread
+
+```sh
+magus diff --thread 2193847561
+```
+
+narrows the review to one thread, the way a path narrows it to one file. The id is the thread
+id, the id of its first comment, or any reply's; the report above is where you find it. At a
+terminal the viewer opens on the thread's hunk. Printed, with `--no-tui` or into a pipe, it is
+the conversation oldest first, the hunk it is about (the host's copy when the comment is
+outdated), and what the change there reaches: the symbols changed in that hunk with how many
+files reference them, which projects they are public to and the callers that cross a boundary,
+the coverage, the conformance findings, the notes anchored to the file, and one line on the
+change as a whole. Whatever could not be measured is listed, so an empty answer is never read
+as a clean one. The comments are quoted as other people's words.
+
+`-o json` carries the same record. The console's `GET /api/v1/diff/thread?id=` route and the
+diff MCP tool's read-only `thread` op return it too.
+
+### An outline from an agent
+
+An agent pairing over MCP can leave an outline beside a thread, with the diff tool's
+`outline` op: at most five topics of 60 characters, one line each. The console shows it
+beside the thread. It cannot be copied or pasted into the reply box, and it is held in
+memory for the session, never saved, and a second outline of the same thread replaces the
+first. A longer topic is refused with a message that you type the reply. The outline is
+something to think with while you write.
 
 ## What magus does not do
 
@@ -355,7 +452,9 @@ from the installed one and spends your context on text your tools already loaded
   reply is addressed to the colleague who asked, by name. There is no agent-reachable op that
   produces one; replying lives on the human route alone, so an answer to your colleague is
   something you wrote. Receiving generated text where you asked a question is how the human half
-  of a review dies, and this is the one place magus spends a refusal to prevent it.
+  of a review dies, and this is the one place magus spends a refusal to prevent it. The nearest
+  thing an agent can leave is an [outline](#an-outline-from-an-agent) of topics, which cannot be
+  copied into a reply.
 - **A review never approves a change its own credential opened.** Reviewing a colleague's
   branch, you may approve or request changes; on your own, the verdict is silently downgraded
   to remarks and the page says so. The API would happily let your change approve itself,
@@ -372,3 +471,9 @@ from the installed one and spends your context on text your tools already loaded
   contract magus detects by name.
 - [Secrets](secrets.md): how the token reaches the spell without being written down.
 - [Knowledge](knowledge.md): where a captured review conversation lives afterwards.
+- [Reviewing your changes](../guides/reviewing-changes.md): the commands for the reading
+  order, the unread filter and one thread.
+- [ADR 0006: the person drives review](../decisions/0006-the-person-drives-review.md): why a
+  person types every reply, merges, and decides when a review is done.
+- [Telemetry](telemetry.md#agents-and-review): the metrics that count review time lost to a
+  merge.

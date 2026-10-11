@@ -7,6 +7,7 @@ import { adoptServerOrigin, parseHash, resolveServerHost } from "../../../lib/se
 import { subscribeDefaultHost } from "../../../lib/settings";
 import type { AppInstance } from "../../../desktop/standalone";
 import { h } from "../../../desktop/view";
+import { emptyStateShell } from "../../../ui/empty-state";
 import {
   listDiagrams,
   renderDiagram,
@@ -40,7 +41,7 @@ import {
   type FigureMeta,
 } from "./wasm";
 
-const SOURCE = "Diagrams";
+const SOURCE = "Figures";
 // The id a shared link's figure goes by; no server figure has it.
 const LINK_ID = "link";
 
@@ -79,7 +80,9 @@ export interface DiagramsRefs {
   readonly scope: HTMLInputElement;
   readonly focus: HTMLInputElement;
   readonly depth: HTMLInputElement;
+  readonly apply: HTMLButtonElement;
   readonly notices: HTMLElement;
+  readonly state: HTMLElement;
   readonly controls: HTMLElement;
   readonly fit: HTMLButtonElement;
   readonly zoomIn: HTMLButtonElement;
@@ -129,7 +132,7 @@ function textInput(name: string, placeholder: string): HTMLInputElement {
 // (never over it), then the figure beside its node list.
 export function build(host: HTMLElement): DiagramsRefs {
   const page = h("section", "console-diagrams");
-  page.setAttribute("aria-label", "Diagrams");
+  page.setAttribute("aria-label", "Figures");
 
   const bar = h("header", "console-diagrams__bar");
   bar.dataset.controlSize = "default";
@@ -144,17 +147,23 @@ export function build(host: HTMLElement): DiagramsRefs {
   depth.size = 3;
   const apply = button("Apply", "pf-m-secondary");
   apply.type = "submit";
-  lensForm.append(field("Scope", scope), field("Focus", focus), field("Depth", depth), apply);
+  // "Center on", not "Focus": the Focus button below dims everything but a node, a different act from
+  // choosing which node the server centers the drawing on. The field is still `focus` in the lens
+  // and in the fragment.
+  lensForm.append(field("Scope", scope), field("Center on", focus), field("Depth", depth), apply);
   bar.append(field("Figure", picker), lensForm);
 
+  // Each notice carries its own live role (ui/alert.ts), so this host announces nothing itself: a
+  // live container around role=alert children read every notice twice.
   const notices = h("div", "console-diagrams__notices");
-  notices.setAttribute("aria-live", "polite");
 
   const body = h("div", "console-diagrams__body");
   const main = h("div", "console-diagrams__main");
   const controls = h("div", "console-diagrams__controls");
   controls.dataset.controlSize = "compact";
-  controls.setAttribute("role", "toolbar");
+  // A group, not a toolbar: role=toolbar promises arrow-key movement between its buttons, and these
+  // are ordinary Tab stops.
+  controls.setAttribute("role", "group");
   controls.setAttribute("aria-label", "Figure controls");
   const fit = button("Fit", "pf-m-secondary");
   fit.title = "Fit the figure (f)";
@@ -175,14 +184,26 @@ export function build(host: HTMLElement): DiagramsRefs {
   controls.append(fit, zoomOut, zoomIn, focusNode, clearFocus, runtime, runtimeStatus);
 
   const figure = h("figure", "console-diagrams__figure");
+  // What is on screen when there is no figure to show: a spinner while it draws, a PF empty state
+  // when there is nothing to draw, no server, or a refusal. A sibling of the frame and not inside
+  // it, because the frame's only SVG is the figure.
+  const state = h("div", "console-diagrams__state");
+  state.hidden = true;
   const frame = h("div", "console-diagrams__frame");
   frame.tabIndex = 0;
-  frame.setAttribute(
-    "aria-label",
-    "Figure: f fits, + and - zoom, 0 is actual size, Esc clears focus",
+  // The name is the thing; the keys are a shortcut list and a description, so a screen reader says
+  // "Figure" and then, on request, how to drive it.
+  frame.setAttribute("aria-label", "Figure");
+  frame.setAttribute("aria-keyshortcuts", "f + - 0 Escape");
+  frame.setAttribute("aria-describedby", KEYS_ID);
+  const keys = h(
+    "p",
+    "pf-v6-screen-reader",
+    "f fits the figure, plus and minus zoom, 0 is actual size, Escape clears focus.",
   );
+  keys.id = KEYS_ID;
   const caption = h("figcaption", "console-diagrams__caption");
-  figure.append(frame, caption);
+  figure.append(state, frame, keys, caption);
   main.append(controls, figure);
 
   const aside = h("aside", "console-diagrams__aside");
@@ -201,7 +222,9 @@ export function build(host: HTMLElement): DiagramsRefs {
     scope,
     focus,
     depth,
+    apply,
     notices,
+    state,
     controls,
     fit,
     zoomIn,
@@ -219,6 +242,48 @@ export function build(host: HTMLElement): DiagramsRefs {
 // parseClaim reads the kind from the figure id, as the handler's parseLens does.
 function parseClaim(id: string): string {
   return id.split(":")[0] === IMPORTS ? IMPORTS : "flow";
+}
+
+const KEYS_ID = "console-diagrams-keys";
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// stateView is the frame's stand-in: a spinner or a PF empty state. Built from nodes, not markup,
+// so a body that wants a <code> element can hand one over.
+export function stateView(
+  kind: "loading" | "empty",
+  title: string,
+  body?: string | Node,
+): HTMLElement {
+  if (kind === "loading") {
+    const wrap = h("div", "console-diagrams__loading");
+    const spinner = document.createElementNS(SVG_NS, "svg");
+    spinner.setAttribute("class", "pf-v6-c-spinner pf-m-xl");
+    spinner.setAttribute("role", "status");
+    spinner.setAttribute("viewBox", "0 0 100 100");
+    spinner.setAttribute("aria-label", title);
+    const circle = document.createElementNS(SVG_NS, "circle");
+    circle.setAttribute("class", "pf-v6-c-spinner__path");
+    circle.setAttribute("cx", "50");
+    circle.setAttribute("cy", "50");
+    circle.setAttribute("r", "45");
+    circle.setAttribute("fill", "none");
+    spinner.append(circle);
+    wrap.append(spinner, h("p", undefined, title));
+    return wrap;
+  }
+  const state = emptyStateShell({ heading: "h2", title, classes: "pf-m-sm" });
+  if (body === undefined) state.body.remove();
+  else state.body.append(typeof body === "string" ? h("p", undefined, body) : body);
+  state.footer.remove();
+  return state.root;
+}
+
+// command is a sentence holding a shell command as a <code> element, never as backticks a screen
+// reader would read out.
+function command(before: string, cmd: string, after = "."): HTMLElement {
+  const p = h("p");
+  p.append(before, h("code", undefined, cmd), after);
+  return p;
 }
 
 const READ_NOTICE: Record<string, { tone: NoticeTone; title: string }> = {
@@ -244,10 +309,36 @@ export function activate(host: HTMLElement): AppInstance {
   let stale = false;
   let linkPayload: string | null = null;
 
-  const showNotice = (tone: NoticeTone, title: string, body: string): void => {
+  const showNotice = (tone: NoticeTone, title: string, body: string | Node): void => {
     refs.notices.replaceChildren(notice(tone, title, body));
   };
   const clearNotices = (): void => refs.notices.replaceChildren();
+
+  // showState puts the frame's stand-in on screen, or takes it away for a figure. The frame is
+  // hidden while a stand-in shows, so its stale contents and focus stop cannot be reached.
+  const showState = (view: HTMLElement | null): void => {
+    if (view) refs.state.replaceChildren(view);
+    else refs.state.replaceChildren();
+    refs.state.hidden = view === null;
+    refs.frame.hidden = view !== null;
+  };
+
+  // syncControls enables a control only when it has something to act on: the figure's own controls
+  // need a figure, the picker, lens and runtime need a server's list to act on, and Clear focus needs
+  // a focus. A dead button that answers a click with nothing reads as broken.
+  const syncControls = (): void => {
+    const has = controller !== null;
+    for (const b of [refs.fit, refs.zoomIn, refs.zoomOut, refs.focusNode]) b.disabled = !has;
+    refs.clearFocus.disabled = !has || controller?.focused() == null;
+    const served = linkPayload === null && entries.length > 0;
+    refs.picker.disabled = !served;
+    refs.scope.disabled = !served;
+    refs.focus.disabled = !served;
+    refs.depth.disabled = !served;
+    refs.apply.disabled = !served;
+    refs.runtime.disabled =
+      !served || runtimeState.kind === "loading" || runtimeState.kind === "ready";
+  };
 
   const showRead = (read: DiagramFailure): void => {
     const n = READ_NOTICE[read.kind];
@@ -262,7 +353,7 @@ export function activate(host: HTMLElement): AppInstance {
 
   const syncRuntime = (): void => {
     const s = runtimeState;
-    refs.runtime.disabled = s.kind === "loading" || s.kind === "ready";
+    syncControls();
     refs.runtimeStatus.textContent =
       s.kind === "loading"
         ? "Loading the runtime..."
@@ -277,7 +368,7 @@ export function activate(host: HTMLElement): AppInstance {
   };
 
   const onFocusChange = (id: string | null): void => {
-    refs.clearFocus.disabled = id === null;
+    refs.clearFocus.disabled = controller === null || id === null;
     const svg = refs.frame.querySelector("svg");
     const lit = id !== null && svg ? neighbours(readEdges(svg), id) : new Set<string>();
     markListFocus(refs.nodes, id, lit);
@@ -286,6 +377,7 @@ export function activate(host: HTMLElement): AppInstance {
   // A first figure fits; a re-layout of the same figure swaps in place keeping the reader's zoom.
   const mount = (rendered: RenderedDiagram, keepView: boolean): void => {
     const svg = prepareSvg(rendered.svg, { nodes: rendered.nodes, sourceUrl: rendered.sourceUrl });
+    showState(null);
     const old = refs.frame.querySelector("svg");
     if (keepView && controller && old) {
       if (!reducedMotion()) svg.dataset.entering = "";
@@ -307,6 +399,7 @@ export function activate(host: HTMLElement): AppInstance {
       onFocus: (id) => controller?.focusNode(id),
     });
     onFocusChange(controller?.focused() ?? null);
+    syncControls();
   };
 
   const clearFigure = (): void => {
@@ -315,8 +408,13 @@ export function activate(host: HTMLElement): AppInstance {
     refs.frame.replaceChildren();
     refs.caption.textContent = "";
     refs.nodes.replaceChildren();
-    refs.clearFocus.disabled = true;
+    syncControls();
   };
+
+  // refusedState is the frame's stand-in once a figure could not be shown: the notice above says why,
+  // so this only says that the frame is empty on purpose.
+  const refusedState = (): void =>
+    showState(stateView("empty", "No figure shown", "The notice above says why."));
 
   const renderFromServer = async (id: string, lens: Lens): Promise<void> => {
     current?.abort();
@@ -324,6 +422,9 @@ export function activate(host: HTMLElement): AppInstance {
     current = ac;
     figure = { kind: "loading", id, lens };
     refs.frame.setAttribute("aria-busy", "true");
+    // A figure already on screen stays (dimmed, busy) while the next one draws; only a frame with
+    // nothing in it gets the spinner.
+    if (controller === null) showState(stateView("loading", "Drawing the figure"));
     const read = await renderDiagram({ host: serverHost, signal: ac.signal }, id, lens);
     if (stale || current !== ac) return;
     refs.frame.removeAttribute("aria-busy");
@@ -332,6 +433,7 @@ export function activate(host: HTMLElement): AppInstance {
       clearFigure();
       figure = { kind: "refused", id, lens };
       showRead(read);
+      refusedState();
       return;
     }
     clearNotices();
@@ -345,8 +447,9 @@ export function activate(host: HTMLElement): AppInstance {
       mount(rendered, sameFigure);
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
-      reportFailure(SOURCE, "Could not show diagram " + id + ": " + detail, "diagrams:mount:" + id);
+      reportFailure(SOURCE, "Could not show figure " + id + ": " + detail, "diagrams:mount:" + id);
       showNotice("danger", "Could not show the figure", detail);
+      if (controller === null) refusedState();
       return;
     }
     figure = { kind: "shown", id, lens, rendered, laidOut: "server" };
@@ -391,6 +494,7 @@ export function activate(host: HTMLElement): AppInstance {
       clearFigure();
       figure = { kind: "refused", id, lens };
       showRead(out);
+      refusedState();
       return true;
     }
     const rendered: RenderedDiagram = {
@@ -425,18 +529,23 @@ export function activate(host: HTMLElement): AppInstance {
 
   const loadList = async (): Promise<void> => {
     if (!serverHost) {
-      showNotice(
-        "info",
-        "No server",
-        "Diagrams are drawn by a running server. Start one with `magus server start`.",
+      showState(
+        stateView(
+          "empty",
+          "No server",
+          command("Figures are drawn by a running server. Start one with ", "magus server start"),
+        ),
       );
+      syncControls();
       return;
     }
+    showState(stateView("loading", "Loading the figures"));
     const read = await listDiagrams({ host: serverHost });
     if (stale) return;
     if (read.kind === "aborted") return;
     if (read.kind !== "ok") {
       showRead(read);
+      refusedState();
       return;
     }
     entries = read.value;
@@ -454,9 +563,13 @@ export function activate(host: HTMLElement): AppInstance {
     const wanted = viewFromHash(parseHash());
     const start = entries.find((e) => e.id === wanted.id) ?? entries[0];
     if (!start) {
-      showNotice("info", "Nothing to draw", "This workspace has no figures the server can draw.");
+      showState(
+        stateView("empty", "Nothing to draw", "This workspace has no figures the server can draw."),
+      );
+      syncControls();
       return;
     }
+    syncControls();
     show(start.id, start.id === wanted.id ? wanted.lens : EMPTY_LENS);
   };
 
@@ -529,6 +642,7 @@ export function activate(host: HTMLElement): AppInstance {
       figure = { kind: "refused", id: LINK_ID, lens: EMPTY_LENS };
       reportFailure(SOURCE, title + ": " + detail, "diagrams:link");
       showNotice("danger", title, detail);
+      refusedState();
     };
     const read = decodeFigureLink(payload);
     if (!read.ok) {
@@ -537,6 +651,7 @@ export function activate(host: HTMLElement): AppInstance {
     }
     figure = { kind: "loading", id: LINK_ID, lens: EMPTY_LENS };
     refs.frame.setAttribute("aria-busy", "true");
+    showState(stateView("loading", "Drawing the figure"));
     runtimeState = { kind: "loading" };
     syncRuntime();
     let runtime: BuzzRuntime | null = null;

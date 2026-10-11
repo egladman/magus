@@ -24,7 +24,7 @@
 //
 // The timeline is why two of these are stale. verify.go changed 92 minutes ago in the very
 // changeset the Diff app is showing, so the note anchored to it reads DRIFTED here. The
-// staleness tiers are demonstrated BY the story rather than beside it.
+// staleness tiers are demonstrated BY the timeline rather than beside it.
 
 import { create } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
@@ -36,6 +36,7 @@ import {
   NoteSchema,
   AnchorSchema,
   StoreStatusSchema,
+  SourceSchema,
   type Note,
   type Anchor,
   type StoreStatus,
@@ -63,6 +64,8 @@ interface NoteSpec {
   // It is not outrunDays: how far a note's subject ran ahead of its prose and when the file was
   // last touched are different measurements, and the app shows them in different places.
   editedDaysAgo: number;
+  // source marks the prose as a quoted capture, which the app renders as a thread.
+  source?: { kind: string; ref: string };
 }
 
 // KIND_SLUG spells a node id the way the graph does. AnchorKind is a protobuf enum, so it is a
@@ -112,7 +115,7 @@ const NOTES: NoteSpec[] = [
       "a single value cannot say that. The cost is real and worth writing down: every consumer\n" +
       "that read the field has to change with it, and two of them are not Go.",
   },
-  // DRIFTED + OUTRUN, and the story is what caused it: verify.go changed 92 minutes ago in this
+  // DRIFTED + OUTRUN, and the timeline is what caused it: verify.go changed 92 minutes ago in this
   // very changeset, so the fingerprint this note recorded no longer matches. The app's staleness
   // tiers are demonstrated by the timeline rather than by an unrelated coincidence.
   {
@@ -200,6 +203,44 @@ const NOTES: NoteSpec[] = [
       "If you are here because typecheck broke and the diff looks like it only touched Go, this\n" +
       "is why.",
   },
+  // A captured review thread, so the quoted label, the per-file dividers, the person and agent
+  // voices and a resolved entry can all be seen. The body is byte-for-byte the shape
+  // internal/notes writes, which transcript.test.ts pins.
+  {
+    name: "review-thread-claims-audience",
+    editedDaysAgo: 5,
+    title: "Review thread: Claims audience list",
+    scope: Scope.SHARED,
+    path: "notes/review-thread-claims-audience.md",
+    tags: ["auth", "review"],
+    anchors: [
+      { kind: AnchorKind.SYMBOL, target: "m authkit/Claims#", status: AnchorStatus.RESOLVES },
+    ],
+    source: { kind: "review-thread", ref: "rev1" },
+    body: [
+      "Captured from a review-thread on the Claims audience change.",
+      "",
+      "A transcript, not written prose: these are things people said, quoted, and nobody has revisited them since. Re-read the code before acting on any of it.",
+      "",
+      "libs/authkit/claims.go hunk 1",
+      "-----------------------------",
+      "",
+      "reviewer:",
+      "",
+      "Why a list? Every caller I can find passes exactly one audience.",
+      "",
+      "claude (agent) (resolved):",
+      "",
+      "The gateway now mints one token accepted by both identity and ledger. A single string cannot say that.",
+      "",
+      "services/identity/internal/token/verify.go hunk 2",
+      "-------------------------------------------------",
+      "",
+      "reviewer:",
+      "",
+      "Keep the audience assertion. Dropping it makes every service a valid audience for every other.",
+    ].join("\n"),
+  },
   // PRIVATE + UNVERIFIED. The store for reasoning nobody else needs, and the one anchor verdict
   // that means "not measured yet" rather than "measured and wrong".
   {
@@ -253,6 +294,7 @@ function build(spec: NoteSpec): Note {
     staleness: spec.staleness ?? Staleness.UNMEASURED,
     outrunDays: spec.outrunDays ?? 0,
     modifyTime: timestampFromMs(Date.now() - spec.editedDaysAgo * 86400000),
+    source: spec.source ? create(SourceSchema, spec.source) : undefined,
   });
 }
 

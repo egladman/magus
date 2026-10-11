@@ -1,0 +1,35 @@
+/* The title-bar bell (#console-notifybtn) and its history panel (lib/notifications.ts). The panel is a
+   PF Notification drawer; this holds the unseen dot and the header and description placements PF has
+   no slot for. State is data-*: data-unseen on the bell. */
+#console-notifybtn { position: relative; }
+.console-shell-notify__dot { display: none; }
+#console-notifybtn[data-unseen] .console-shell-notify__dot {
+  display: block;
+  position: absolute;
+  top: var(--pf-t--global--spacer--xs);
+  right: var(--pf-t--global--spacer--xs);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--pf-t--global--color--status--danger--default);
+  /* A ring in the bar's colour, so the dot reads against the glyph it overlaps. */
+  outline: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--background--color--primary--default);
+}
+/* The header wraps so three actions fit the 24rem panel. */
+.console-shell-notify .pf-v6-c-notification-drawer__header { flex-wrap: wrap; row-gap: var(--pf-t--global--spacer--sm); }
+.console-shell-notify__older { position: relative; }
+.console-shell-notify__older-menu {
+  position: absolute;
+  top: calc(100% + var(--pf-t--global--spacer--xs));
+  right: 0;
+  min-width: 11rem;
+  z-index: var(--pf-t--global--z-index--xs);
+}
+.console-shell-notify__older-menu[hidden] { display: none; }
+/* The description holds the source chip and the entry's action on one wrapping line. */
+.console-shell-notify .pf-v6-c-notification-drawer__list-item-description {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+}

@@ -11,6 +11,72 @@ import { el } from "./dom";
 import { clearMarks } from "./search";
 import { render } from "./render";
 import { parseQuery } from "./query";
+import { createFilterField, type FilterField } from "../../render/filterField";
+import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
+
+// FILTER_HELP is the grammar, written once for the "?" popover beside the box.
+const FILTER_HELP =
+  "Terms combine with AND, case-insensitive. Free text and step:<text> match command and output lines; " +
+  "target:<text> matches the target label; status:pass|fail|cached|running matches the result. " +
+  "The filter is shareable as #q= in the link.";
+
+let field: FilterField | null = null;
+let disposeHelp: (() => void) | null = null;
+
+// mountFilterField builds the filter box and its "?" into host and returns the disposer that tears
+// the help popover down. The box is the shared search input, so Clear and the result count behave
+// as they do on every other filter in the console.
+export function mountFilterField(host: HTMLElement): () => void {
+  field?.dispose();
+  disposeHelp?.();
+  const f = createFilterField({
+    id: "log-filter",
+    label: "Filter the log",
+    placeholder: "Filter: status:fail target:build text",
+    onChange: (value) => applyFilterFromInput(value),
+  });
+  const help = createHelpButton("Filter syntax");
+  disposeHelp = attachHelpPopover(help, { text: FILTER_HELP, label: "Filter syntax" });
+  host.replaceChildren(f.el, help);
+  field = f;
+  return () => {
+    f.dispose();
+    disposeHelp?.();
+    disposeHelp = null;
+    field = null;
+  };
+}
+
+// syncFilterBox writes the box without re-applying it, for a filter that arrived by link or by a
+// run being opened with one target pre-narrowed.
+export function syncFilterBox(q: string): void {
+  field?.setValue(q);
+}
+
+export function focusFilterBox(): void {
+  field?.focus();
+}
+
+export function clearFilterResults(): void {
+  field?.setResults("", "");
+}
+
+// setFilterResults shows how much the active filter left. Counts of 0 are said, not hidden: a filter
+// that matched nothing is the answer, not an absence of one.
+export function setFilterResults(shown: number, total: number, noun: [string, string]): void {
+  if (!field) return;
+  if (state.filterParsed.empty) {
+    field.setResults("", "");
+    return;
+  }
+  const word = total === 1 ? noun[0] : noun[1];
+  field.setResults(
+    shown + " of " + total,
+    shown === 0
+      ? "No " + noun[1] + " match the filter"
+      : shown + " of " + total + " " + word + " match the filter",
+  );
+}
 
 // parseQuery is the pure grammar; it lives in query.ts (DOM-free, unit-tested) and is
 // re-exported here so existing importers keep resolving it from filter.ts.

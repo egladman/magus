@@ -1,0 +1,50 @@
+/* Every app's cold state is a PF EmptyState over a row of "ways" out of it: bordered cards with a
+   label, a command to run (or a button) and a hint. It lives in the shell sheet every app loads. */
+[data-empty-ways] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pf-t--global--spacer--md);
+  /* Auto side margins centre the capped-width grid. */
+  margin: var(--pf-t--global--spacer--lg) auto 0;
+  text-align: left;
+  width: 100%;
+  max-width: 40rem;
+}
+/* The ways sit in PF's footer, which spaces itself; a footer with no actions yet takes no room. */
+.pf-v6-c-empty-state__footer > [data-empty-ways] { margin-block-start: 0; }
+.pf-v6-c-empty-state__footer:has(> .pf-v6-c-empty-state__actions:empty) { display: none; }
+[data-empty-way] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+[data-empty-way-label] {
+  color: var(--pf-t--global--text--color--regular);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  font-size: var(--pf-t--global--font--size--body--default);
+}
+[data-empty-cmd] { margin: 0; }
+[data-empty-cmd] code {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+}
+[data-empty-hint] {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+[data-empty-way-actions] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  margin-top: var(--pf-t--global--spacer--xs);
+}
+/* PF buttons are nowrap; a way's button wraps instead of overrunning its card. */
+[data-empty-way] .pf-v6-c-button { white-space: normal; }
+@media (max-width: 40rem) {
+  [data-empty-ways] { grid-template-columns: 1fr; }
+}

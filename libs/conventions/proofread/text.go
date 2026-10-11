@@ -14,7 +14,8 @@ import (
 // with its line in text.
 //
 // KindDocComment reads text as a doc comment, by the rules [Judge] applies to
-// one. KindMessage judges text as [JudgeMessage] does at its default cap.
+// one. KindStylesheet reads text as a stylesheet and judges its comments.
+// KindMessage judges text as [JudgeMessage] does at its default cap.
 // KindChangeDescription, KindCommitMessage and KindIssue read the first line
 // as a title, a paragraph of its own. KindCommitMessage reads no headings.
 // KindCLIHelp and KindToolDescription read plain text: no Markdown is
@@ -35,6 +36,8 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		})
 	case KindAgentInstructionsTemplate:
 		return judgeSkillSource(strings.Join(raw, "\n"), o)
+	case KindStylesheet:
+		return judgeStylesheet(strings.Join(raw, "\n"), o)
 	case KindMessage:
 		return judgeMessage(text, 0, o)
 	}

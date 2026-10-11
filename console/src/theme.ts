@@ -1,9 +1,8 @@
-// theme.ts — site-wide color theme control for the magus docs + console pages.
+// theme.ts — color theme control for the magus console.
 //
-// Pico v2 follows the OS preference when no data-theme attribute is present, so "auto" means: set
-// nothing and let the system decide. A persisted choice (light/dark) overrides it. The early set()
-// call runs from <head> before paint to avoid a flash. On the console, the Settings app drives
-// theme changes over the `magus:theme-set` CustomEvent (see the listener below).
+// "auto" means: set nothing and let the OS preference decide. A persisted choice (light/dark)
+// overrides it. The early set() call runs from <head> before paint to avoid a flash. The Settings
+// app drives theme changes over the `magus:theme-set` CustomEvent (see the listener below).
 //
 // This is a classic <script src> in <head> (NOT a module - it must run before paint and set nothing
 // global), so it stays an IIFE with no import/export; esbuild transpiles it to a minified script.
@@ -49,31 +48,27 @@
     }
   }
 
-  // Update the split theme-color metas (light + dark) so the browser chrome (tab
-  // bar, address bar on Android) matches the current theme on manual override.
-  // When "auto", clear both overrides and let the media-query pair decide again.
+  // The browser chrome (tab bar, address bar on Android, the installed window's title bar) takes
+  // --console-chrome, the tone of the rail and the status bar: PatternFly's secondary background in
+  // light and #242424 in dark (tokens.css). index.html's two metas and the manifest carry the same
+  // values; theme-color.test.ts holds the three together.
+  const CHROME_LIGHT = "#f2f2f2";
+  const CHROME_DARK = "#242424";
+
+  // Update the split theme-color metas (light + dark) so the browser chrome matches the current theme
+  // on manual override. When "auto", put the media-query pair back and let the OS decide again.
   function updateThemeColorMeta(t: Theme): void {
     const lightMeta = document.querySelector('meta[name="theme-color"][media*="light"]');
     const darkMeta = document.querySelector('meta[name="theme-color"][media*="dark"]');
     if (!lightMeta || !darkMeta) return;
-    if (t === "light") {
-      lightMeta.setAttribute("content", "#ffffff");
-      darkMeta.setAttribute("content", "#ffffff");
-    } else if (t === "dark") {
-      lightMeta.setAttribute("content", "#13171f");
-      darkMeta.setAttribute("content", "#13171f");
-    } else {
-      // "auto": restore originals so the media-query condition governs again
-      lightMeta.setAttribute("content", "#ffffff");
-      darkMeta.setAttribute("content", "#13171f");
-    }
+    lightMeta.setAttribute("content", t === "dark" ? CHROME_DARK : CHROME_LIGHT);
+    darkMeta.setAttribute("content", t === "light" ? CHROME_LIGHT : CHROME_DARK);
   }
 
-  // PatternFly v6 dark mode is a class on <html> (pf-v6-theme-dark), NOT Pico's data-theme, so we
-  // toggle it alongside (data-theme is kept for the apps still on Pico until the W4 cutover drops
-  // it). "auto" follows the OS via prefers-color-scheme (see the matchMedia listener below, which
-  // re-applies on OS change while in auto); the early set() runs from <head> before paint, so a fresh
-  // load in OS-dark applies the class with no flash. Verified light + dark + the auto/light/dark cycle.
+  // PatternFly v6 dark mode is a class on <html> (pf-v6-theme-dark); data-theme records the choice
+  // beside it. "auto" follows the OS via prefers-color-scheme (see the matchMedia listener below,
+  // which re-applies on OS change while in auto); the early set() runs from <head> before paint, so
+  // a fresh load in OS-dark applies the class with no flash.
   const darkMql =
     typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-color-scheme: dark)")

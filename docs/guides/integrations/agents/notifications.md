@@ -15,7 +15,7 @@ one. The open row is the block, and a second toast asks for a yes on it. A
 failure still notifies, and so does a block that could not be filed, because
 that one has no row.
 
-It does not publish an event to the server or Console. Use it to bring a
+It does not publish an event to the daemon or Console. Use it to bring a
 person back to the host where the agent needs an answer.
 
 ```sh
@@ -29,7 +29,7 @@ An MCP server only ever observes tool calls. A blocked agent makes no call at
 all: the blockage IS the silence, and silence is precisely what MCP has no way
 to report. The host's own hook system is the only hook that fires on it. So
 this is a hook sink rather than a tool, and it stays one whether or not the
-server is up.
+daemon is up.
 
 ## The envelope
 

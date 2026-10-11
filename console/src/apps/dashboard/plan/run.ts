@@ -17,7 +17,14 @@
 // FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the app can
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
-import { authHeaders, readRefusal } from "../../../lib/server";
+import {
+  authHeaders,
+  readRefusal,
+  reportFetchFailure,
+  reportHttpStatus,
+} from "../../../lib/server";
+import { reportFailure } from "../../../lib/notifications";
+import type { Status } from "../../../ui/status";
 import { str } from "./jobs";
 
 // ---- states ----------------------------------------------------------------
@@ -43,6 +50,14 @@ export const RUN_STATE_MARK: Record<RunState, string> = {
   running: "R",
   pass: "OK",
   fail: "FAIL",
+};
+
+// RUN_STATE_STATUS is the shape (ui/status.ts) beside the word on a row, matching the job side's.
+export const RUN_STATE_STATUS: Record<RunState, Status> = {
+  idle: "neutral",
+  running: "running",
+  pass: "success",
+  fail: "danger",
 };
 
 // normalizeRunState maps whatever the server said onto the four known states. An unrecognized value
@@ -253,14 +268,30 @@ export async function loadRunPlan(
       signal,
     });
   } catch (e) {
+    reportFetchFailure(host, "the target plan", e);
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
   }
   if (res.status === 404 || res.status === 501) return { kind: "absent" };
-  if (res.status === 400) return { kind: "unknown-target", detail: await unknownTargetDetail(res) };
-  if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
+  if (res.status === 400) {
+    // The server's own sentence about a target it cannot resolve, said on the empty state and in a
+    // toast: the reader typed it a moment ago and may not be looking at the pane that answers.
+    const detail = await unknownTargetDetail(res);
+    reportFailure(
+      "Jobs",
+      detail || "The server does not know the target " + target + ".",
+      "plan:unknown-target:" + target,
+    );
+    return { kind: "unknown-target", detail };
+  }
+  if (!res.ok) {
+    reportHttpStatus(host, "the target plan", res.status);
+    return { kind: "unreadable", detail: "HTTP " + res.status };
+  }
   try {
     return { kind: "ok", plan: parseRunPlan(await res.json()) };
   } catch (e) {
-    return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
+    const detail = e instanceof Error ? e.message : String(e);
+    reportFailure("Server", "Could not read the target plan: " + detail, "fetch:plan-body");
+    return { kind: "unreadable", detail };
   }
 }

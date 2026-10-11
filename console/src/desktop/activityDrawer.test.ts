@@ -19,6 +19,7 @@ import {
   relAge,
   runningRows,
   summaryLine,
+  whenLabel,
   type ActivityRow,
   type RunDescriptor,
 } from "./activityDrawer";
@@ -258,6 +259,42 @@ test("every row carries the phase-2 unit slot, unset until a producer fills it",
 test("summaryLine is what the live region announces", () => {
   assert.equal(summaryLine(0, 0), "0 running, 0 recent");
   assert.equal(summaryLine(3, 25), "3 running, 25 recent");
+  assert.equal(summaryLine(0, 4, true), "0 running, 4 recent (demo data)");
+});
+
+// One time format in the drawer: relative while recent, dated once an hour has passed, and nothing for
+// an instant nobody reported.
+test("whenLabel is relative under an hour, dated after, and empty for an unknown instant", () => {
+  assert.equal(whenLabel(NOW - 12_000, NOW), "12s ago");
+  assert.equal(whenLabel(NOW - 59 * 60_000, NOW), "59m ago");
+  const after = whenLabel(NOW - 2 * 3600_000, NOW);
+  assert.doesNotMatch(after, /ago$/, "past an hour the age gives way to a date");
+  assert.match(after, /\d/);
+  assert.equal(whenLabel(0, NOW), "");
+});
+
+test("rows link to the run in the log viewer: a stored run by ref, a live one by invocation", () => {
+  const recent = recentRows([run({ ref: "out a/b" })], NOW);
+  assert.equal(recent[0].href, "logs/#ref=out%20a%2Fb");
+  assert.equal(recentRows([run({ ref: "x" })], NOW, true)[0].href, "logs/#demo&ref=x");
+  const live = runningRows(
+    status({
+      runningTargets: [
+        { args: ["run", "build"], workspace: "", step: "", startTime: ts(NOW), invocation: "inv9" },
+      ],
+      locks: [{ project: ".", pid: 7, command: "magus run ci", dir: "/w", acquireTime: ts(NOW) }],
+    }),
+    NOW,
+  );
+  const byId = Object.fromEntries(live.map((r) => [r.id, r.href]));
+  assert.equal(byId.inv9, "logs/#inv=inv9");
+  assert.equal(byId["lock:7:."], undefined, "a lock held by another process has no stored run");
+});
+
+test("facts is the detail without its age, so the drawer can write the time once, its own way", () => {
+  const rows = recentRows([run({ duration_ms: 820, timestamp_ms: NOW - 3000 })], NOW);
+  assert.equal(rows[0].detail, "820ms - 3s");
+  assert.equal(rows[0].facts, "820ms");
 });
 
 // ---- reading the feed ------------------------------------------------------

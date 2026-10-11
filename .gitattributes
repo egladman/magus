@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-52-g23893c105-dirty (commit 23893c105e43931d88ac2b7ed10aadf3a3275d16, 2026-10-10T12:15:15-04:00)
+# BEGIN magus-generated - do not edit this section manually
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -81,11 +81,9 @@ console/gen/graph/knowledge-graph.json merge=magus linguist-generated
 console/gen/graph/target-graph.json merge=magus linguist-generated
 console/gen/index.html merge=magus linguist-generated
 console/gen/manifest.webmanifest merge=magus linguist-generated
-console/gen/overrides.css merge=magus linguist-generated
 console/gen/patternfly.css merge=magus linguist-generated
 console/gen/sw.js merge=magus linguist-generated
 console/gen/theme.js merge=magus linguist-generated
-console/gen/tokens.css merge=magus linguist-generated
 console/gen/wasm/buzz.wasm merge=magus linguist-generated
 console/gen/wasm/wasm_exec.js merge=magus linguist-generated
 console/src/apps/diff/gen/*.ts merge=magus linguist-generated

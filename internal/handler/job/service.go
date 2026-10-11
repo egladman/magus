@@ -132,7 +132,7 @@ func (s *Service) report(ctx context.Context) types.JobList {
 	staleAfter, err := s.store.StaleAfter()
 	if err != nil {
 		slog.WarnContext(ctx, "reading jobs.stale_after failed; no row is flagged stale",
-			slog.String("error", err.Error()))
+			attr.Error(err))
 	}
 	list, err := s.store.Report(ctx, time.Now().Unix(), staleAfter)
 	if err != nil {
@@ -247,7 +247,7 @@ func (s *Service) recordSubmit(ctx context.Context, j jobstore.CatalogEntry, inv
 		row.LastRun.Invocation = inv
 	}); err != nil {
 		slog.With(attr.Component("job")).DebugContext(ctx, "recording the submitted job's row failed",
-			slog.String("job", j.Name), slog.String("error", err.Error()))
+			slog.String("job", j.Name), attr.Error(err))
 	}
 }
 

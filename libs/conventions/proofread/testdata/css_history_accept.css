@@ -1,0 +1,12 @@
+/* A transition brings a card into view; a keyframe stranded on its first frame
+   leaves it invisible in a tab the browser considers hidden. */
+.card { transition: opacity 0.2s; }
+
+/* TODO: the old two-column layout needs this until the migration lands. */
+.legacy { float: left; }
+
+/* Fixed 2px for marks under 20px tall. */
+.dot { width: 2px; }
+
+/* Use `now uses` and `was previously` as mentions. */
+.mention { color: red; }

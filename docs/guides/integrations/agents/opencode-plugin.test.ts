@@ -24,6 +24,9 @@
 // a built magus to run it locally; it skips loudly without one.
 
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import { MagusGuard } from "./opencode-plugin.ts";
@@ -426,4 +429,78 @@ test("permission.ask with no runnable magus keeps the prompt", async () => {
     );
   });
   assert.equal(output.status, "ask");
+});
+
+/**
+ * Runs `body` with the process in `cwd` and no __MAGUS_BIN, so the plugin resolves its own
+ * binary the way an installed copy does.
+ */
+async function inDirectory(cwd: string, body: () => Promise<void>): Promise<void> {
+  const before = process.cwd();
+  const pinned = process.env.__MAGUS_BIN;
+  delete process.env.__MAGUS_BIN;
+  process.chdir(cwd);
+  try {
+    await body();
+  } finally {
+    process.chdir(before);
+    if (pinned !== undefined) process.env.__MAGUS_BIN = pinned;
+  }
+}
+
+/** The binary the plugin spawns for a shell command judged from `cwd`. */
+async function resolvedBinary(cwd: string): Promise<string> {
+  const calls = stubBun(() => pass);
+  await inDirectory(cwd, async () => {
+    const h = await hooks();
+    await h["tool.execute.before"]({ tool: "bash", callID: "r1" }, { args: { command: "ls" } });
+  });
+  return calls[0].bin;
+}
+
+test("a call from a nested project resolves the workspace root's binary", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "plugin-root-")));
+  try {
+    writeFileSync(join(root, "magus.yaml"), "");
+    writeFileSync(join(root, "magus"), "");
+    mkdirSync(join(root, "console", "src"), { recursive: true });
+    writeFileSync(join(root, "console", "magusfile.buzz"), "");
+    assert.equal(await resolvedBinary(join(root, "console", "src")), join(root, "magus"));
+    assert.equal(await resolvedBinary(join(root, "console")), join(root, "magus"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a worktree under another checkout never climbs into it", async () => {
+  const parent = realpathSync(mkdtempSync(join(tmpdir(), "plugin-parent-")));
+  try {
+    writeFileSync(join(parent, "magus.yaml"), "");
+    writeFileSync(join(parent, "magus"), "");
+    const worktree = join(parent, ".claude", "worktrees", "job");
+    mkdirSync(join(worktree, "console"), { recursive: true });
+    writeFileSync(join(worktree, "magus.yaml"), "");
+    writeFileSync(join(worktree, "console", "magusfile.buzz"), "");
+    assert.equal(
+      await resolvedBinary(join(worktree, "console")),
+      "magus",
+      "the parent's binary is never the answer",
+    );
+    writeFileSync(join(worktree, "magus"), "");
+    assert.equal(await resolvedBinary(join(worktree, "console")), join(worktree, "magus"));
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("a tree with no magus.yaml falls back to the nearest magusfile", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "plugin-bare-")));
+  try {
+    mkdirSync(join(root, "sub", "deep"), { recursive: true });
+    writeFileSync(join(root, "sub", "magusfile.buzz"), "");
+    writeFileSync(join(root, "sub", "magus"), "");
+    assert.equal(await resolvedBinary(join(root, "sub", "deep")), join(root, "sub", "magus"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

@@ -355,11 +355,11 @@ graph.
 ### The CLI works without it
 
 The CLI still reads the workspace, runs targets, uses the cache, and answers
-graph queries with no server running. What it lacks is MCP tool discovery, the
+graph queries with no daemon running. What it lacks is MCP tool discovery, the
 warm graph and background indexes, and structured output retrieval.
 
 An agent must not turn that into a blocker. If an MCP tool is missing or its
-call fails, use the CLI fallback. For server-socket diagnosis,
+call fails, use the CLI fallback. For daemon-socket diagnosis,
 `magus status --probe=readiness` checks whether this workspace is loaded on the
 socket; it does not prove the host registered MCP. Restoring or changing host
 MCP wiring is a user-owned integration action, not ordinary agent work.
@@ -375,7 +375,7 @@ An agent working through a shell falls back on the habits it learned everywhere
 else: grep and cat over the files. Those return text matches. They do not return
 the project DAG, the declared outputs, the affected set, or the blast radius of
 a symbol, because none of that is written in the files; it lives in the graph
-the server keeps warm. So the agent reasons one layer below the structure it is
+the daemon keeps warm. So the agent reasons one layer below the structure it is
 trying to understand, and fills the gap by guessing: this file looks generated,
 these two packages change together. Those guesses are frequently wrong,
 and the agent has no way to check them.

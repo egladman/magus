@@ -421,6 +421,79 @@ test("a refused run names the reason and leaves the control pressable", async ()
   }
 });
 
+// Every failure is a toast as well as the words on the row: the reader pressed Run and may be
+// looking at another pane by the time the answer comes back.
+test("a refused run is also raised as a failure notification", async () => {
+  serve({
+    jobs: okJobs([serverJob("rotate-activities")]),
+    run: { status: 503, code: "unavailable", message: "job: no server socket to submit to" },
+  });
+  const raised: { kind?: string; message: string; toast?: boolean }[] = [];
+  const listen = (e: Event): void => {
+    raised.push((e as CustomEvent).detail);
+  };
+  document.addEventListener("magus:notify", listen);
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    rowFor(host, "rotate-activities")
+      ?.querySelector<HTMLButtonElement>(".console-plan-list__run")
+      ?.click();
+    await settle();
+    const failure = raised.find((n) => /Could not run rotate-activities/.test(n.message));
+    assert.ok(failure, "a notification names the job and the reason");
+    assert.equal(failure.kind, "error");
+    assert.equal(failure.toast, true);
+  } finally {
+    document.removeEventListener("magus:notify", listen);
+    teardown();
+  }
+});
+
+// The id keeps its own line. The row had the mark, the id, the meta and the Run control in one wrap
+// row, and in a 17rem column the id lost: it truncated to nothing beside the metadata.
+test("a row carries the id first, the state as an icon, and Run in the same row", async () => {
+  serve({ jobs: okJobs([serverJob("rotate-activities")]) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const row = rowFor(host, "rotate-activities") as HTMLElement;
+    const item = row.querySelector<HTMLElement>(".console-plan-list__item") as HTMLElement;
+    assert.deepEqual(
+      [...item.children].slice(0, 2).map((c) => c.className),
+      ["console-plan-list__mark", "console-plan-list__id"],
+    );
+    assert.ok(
+      item.querySelector(".console-plan-list__mark .pf-v6-c-icon"),
+      "a shape, not a letter",
+    );
+    assert.equal(item.querySelector(".console-plan-list__id")?.textContent, "rotate-activities");
+    assert.equal(item.getAttribute("title"), null, "nothing on the row is only a tooltip");
+    assert.equal(
+      row.querySelector(".console-plan-list__run")?.parentElement,
+      row,
+      "Run is a sibling in the row, not a line under it",
+    );
+  } finally {
+    teardown();
+  }
+});
+
+// The drawing is sized in pixels from its viewBox, 1:1, so its type is 12px at any pane width.
+test("the stage is drawn at its own size rather than scaled to the pane", async () => {
+  serve({ jobs: okJobs([serverJob("a"), sessionJob("b", { parent: "a" })]) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const svg = host.querySelector<SVGSVGElement>(".console-plan-stage__svg");
+    const [, , w, h] = (svg?.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    assert.equal(svg?.style.width, `${Math.round(w)}px`);
+    assert.equal(svg?.style.height, `${Math.round(h)}px`);
+  } finally {
+    teardown();
+  }
+});
+
 test("the overview line is the polite live region; the list is not", async () => {
   serve({ jobs: okJobs([sessionJob("root", { state: "no_return" })]) });
   const { host, teardown } = mount();
@@ -972,7 +1045,7 @@ test("a server with no target plan route names the missing endpoint", async () =
     await settle();
     assert.equal(phase(host), "empty");
     assert.match(text(host), /No target plan endpoint/);
-    assert.match(text(host), /lights up when the server serves \/api\/v1\/plan/);
+    assert.match(text(host), /does not serve a target plan.*\/api\/v1\/plan/);
   } finally {
     teardown();
   }

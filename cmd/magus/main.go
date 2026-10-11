@@ -824,9 +824,9 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 			// error, dead server). proc.NotAdopted owns the classification: the errors
 			// carry it (a NotAdopted() method).
 			if proc.NotAdopted(fwdErr) {
-				slog.Debug("proc forward not adopted; running locally", slog.String("error", fwdErr.Error()))
+				slog.Debug("proc forward not adopted; running locally", attr.Error(fwdErr))
 			} else {
-				slog.Warn("proc forward failed; running locally", slog.String("error", fwdErr.Error()))
+				slog.Warn("proc forward failed; running locally", attr.Error(fwdErr))
 			}
 			// parentLive is a narrower question than "not adopted": keep MAGUS_PROC_SOCKET
 			// pointed at the parent only when it is a usable pool for deeper adoptable
@@ -861,7 +861,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	if err := fs.Parse(args); err != nil {
 		if !errors.Is(err, flag.ErrHelp) {
 			stopFlags()
-			slog.Error("flag parse failed", slog.String("error", err.Error()))
+			slog.Error("flag parse failed", attr.Error(err))
 			return startupResult{cleanup: cleanup}, 1
 		}
 		helpRequested = true
@@ -1532,7 +1532,7 @@ func mapExitCode(err error) int {
 	// A misuse of the command line exits 2, not 1: the work was never attempted.
 	var usage errUsage
 	if errors.As(err, &usage) {
-		slog.Error(err.Error(), rationaleArgs(err)...)
+		slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // the final error line has no verdict beyond the error itself; an attr.Error with an empty message would print a different line and log an empty message to non-display handlers
 		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
@@ -1547,7 +1547,7 @@ func mapExitCode(err error) int {
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
-	slog.Error(err.Error(), rationaleArgs(err)...)
+	slog.Error(err.Error(), rationaleArgs(err)...) //nolint:errmsg // same final error line as the usage branch above
 	// A failure that names its own status keeps it, the same question internal/proc's
 	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
 	// busy machine and not a broken build: a contended no-wait workspace lock, and a

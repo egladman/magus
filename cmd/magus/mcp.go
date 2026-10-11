@@ -158,12 +158,12 @@ func serveMCPStdio(ctx context.Context, m *magus.Magus, in io.Reader, wire io.Wr
 func publishServerTrailBase() {
 	root, err := magus.FindRoot("")
 	if err != nil {
-		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		slog.Warn("no workspace root; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
 	base, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	if err != nil {
-		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", slog.String("error", err.Error()))
+		slog.Warn("cache dir unresolvable; background jobs and scheduled maintenance will not be recorded", attr.Error(err))
 		return
 	}
 	serverTrailBase = base
@@ -188,7 +188,7 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	mcpOn := globalCfg.MCP.Enabled == nil || *globalCfg.MCP.Enabled
 	addr, err := mcpAddrPort()
 	if mcpOn && err != nil {
-		slog.Error("MCP skipped: invalid MCP address", slog.String("error", err.Error()))
+		slog.Error("MCP skipped: invalid MCP address", attr.Error(err))
 		mcpOn = false
 	}
 	// The bridge Magus MUST share the server's single provider (WithProvider) so the
@@ -207,14 +207,14 @@ func startBridge(ctx context.Context, cancel context.CancelFunc, tel observabili
 	if err != nil {
 		root, rerr := magus.FindRoot("")
 		if !mcpOn || rerr != nil || serverRegistry == nil {
-			slog.Warn("workspace unavailable; no MCP, console or watch for it", slog.String("error", err.Error()))
+			slog.Warn("workspace unavailable; no MCP, console or watch for it", attr.Error(err))
 			return
 		}
 		// Serve anyway: a console and an agent that can connect and read the diagnostic
 		// beat a server with nothing listening. The registry holds the failure and retries
 		// once a source changes; every route is served when that load succeeds.
 		slog.Warn("workspace failed to load; serving its failure until a source changes",
-			slog.String("root", root), slog.String("error", err.Error()))
+			slog.String("root", root), attr.Error(err))
 		serverRegistry.failBridge(root, err)
 		serverHTTPAddr.Store(addr.String())
 		go serveUnloadedBridge(ctx, cancel, root, addr)
@@ -251,10 +251,10 @@ func startWatch(ctx context.Context, m *magus.Magus) {
 // stale until a manual `magus run ::scip`. It reports whether the symbol indexer started.
 func watchWorkspace(ctx context.Context, m *magus.Magus) bool {
 	if _, werr := m.WatchKnowledgeGraph(ctx); werr != nil {
-		slog.Warn("knowledge-graph watcher unavailable; queries will rebuild per call", slog.String("error", werr.Error()))
+		slog.Warn("knowledge-graph watcher unavailable; queries will rebuild per call", attr.Error(werr))
 	}
 	if _, werr := m.WatchSymbolIndexing(ctx); werr != nil {
-		slog.Warn("symbol auto-indexer unavailable; symbol indexes will not refresh automatically", slog.String("error", werr.Error()))
+		slog.Warn("symbol auto-indexer unavailable; symbol indexes will not refresh automatically", attr.Error(werr))
 		return false
 	}
 	return true
@@ -288,7 +288,7 @@ func serveUnloadedBridge(ctx context.Context, cancel context.CancelFunc, root st
 	select {
 	case err := <-done:
 		if err != nil && ctx.Err() == nil {
-			slog.Error("MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
+			slog.Error("MCP HTTP server failed; initiating server shutdown", attr.Error(err))
 			cancel()
 		}
 	case m := <-active:
@@ -400,7 +400,7 @@ func serveBridge(ctx context.Context, cancel context.CancelFunc, m *magus.Magus,
 			// Any other error means MCP is gone while the server is still up —
 			// clients would receive no response indefinitely. Cancel the server
 			// context to trigger a clean restart by the process supervisor.
-			slog.Error("MCP HTTP server failed; initiating server shutdown", slog.String("error", err.Error()))
+			slog.Error("MCP HTTP server failed; initiating server shutdown", attr.Error(err))
 			cancel()
 		}
 	}()

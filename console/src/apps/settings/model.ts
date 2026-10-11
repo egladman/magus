@@ -257,7 +257,7 @@ export function importSettings(
 // it is saved or applied. One human-readable before -> after entry per changed field.
 export interface PendingChange {
   key: string; // stable id: "poll" | "host" | "theme" | "focusRing" | "keymap:<commandId>"
-  label: string; // "Refresh rate", "Theme", "Server host", "Focus ring", "Keybinding Close pane or tab"
+  label: string; // "Refresh rate", "Theme", "Server host", "Focus ring", "Shortcut Close pane or tab"
   before: string; // display value of the committed side, e.g. "20s"
   after: string; // display value of the draft side, e.g. "10s"
 }
@@ -341,7 +341,7 @@ export function computePendingChanges(
     if (before !== after) {
       changes.push({
         key: "keymap:" + id,
-        label: "Keybinding " + ctx.commandLabel(id),
+        label: "Shortcut " + ctx.commandLabel(id),
         before,
         after,
       });

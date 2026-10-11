@@ -1,0 +1,84 @@
+/* One frame for Share, Activity and the notification centre (.console-shell-notify, a PF Notification
+   drawer built by lib/notifications.ts): docked on the right between the top chrome and the status bar,
+   overlaying the content without reflow. panel.ts builds the shared markup. They appear and
+   disappear through the hidden attribute, so there is no transition for reduced-motion to switch off. */
+.console-shell-panel,
+.console-shell-notify {
+  position: fixed;
+  top: var(--console-topchrome-h);
+  bottom: var(--console-statusbar-h);
+  right: 0;
+  left: auto;
+  width: 24rem;
+  max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
+  display: flex;
+  flex-direction: column;
+  background: var(--pf-t--global--background--color--primary--default);
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  /* Above the drawer content (100) and panel (200). */
+  z-index: var(--pf-t--global--z-index--md);
+}
+/* PF's drawer fills its container's height, which would push this fixed frame past the status bar. */
+.console-shell-notify { height: auto; }
+/* The panels are the primary background but the status bar below is the secondary one, so a bottom
+   fade eases between them. It is non-interactive and sits over the content. */
+.console-shell-panel::after,
+.console-shell-notify::after,
+#console-refpanel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6rem;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 22%, transparent) 48%,
+    color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 62%, transparent) 74%,
+    var(--pf-t--global--background--color--secondary--default) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+/* A left-only strip instead of box-shadow: a symmetric blur would bleed down onto the status bar and
+   fight the bottom fade. */
+.console-shell-panel::before,
+.console-shell-notify::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--pf-t--global--spacer--lg) * -1);
+  width: var(--pf-t--global--spacer--lg);
+  background: linear-gradient(to right, transparent, var(--pf-t--global--box-shadow--color--lg--default));
+  pointer-events: none;
+}
+.console-shell-panel__head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm);
+  border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-panel__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+/* Scrolls on a short viewport; the bottom padding clears the status-bar fade. */
+.console-shell-panel__body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xl);
+}
+@media (max-width: 30rem) {
+  .console-shell-panel,
+  .console-shell-notify { left: 0; right: 0; width: auto; max-width: none; }
+}

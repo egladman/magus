@@ -581,14 +581,19 @@ fun helper() > void {
 	in.Graph.Projects[0].Nodes[0].WritesFiles = []types.OutputRef{{Glob: "../../docs/spells/go.md"}}
 	in.Graph.Projects[0].Nodes[0].ReadsFiles = []types.InputRef{{Project: "pkg/a", Glob: "magusfile.buzz"}}
 
-	// defines and calls, from a SCIP index rather than the Buzz walk: the two relations
-	// have producers on both sides, and this is the one a foreign indexer drives.
+	// defines, calls and implements, from a SCIP index rather than the Buzz walk: the
+	// relations have producers on both sides, and this is the one a foreign indexer drives.
 	in.Symbols = map[string][]types.KnowledgeSymbol{"pkg/a": {
 		{Key: "go/pkg-a/Build", Label: "Build", Language: "go", SymbolKind: "function",
 			Source: "pkg/a/build.go:10", Defs: []string{"pkg/a/build.go"},
 			Calls: []types.KnowledgeSymbolCall{{Key: "go/pkg-a/helper", Count: 1}}},
 		{Key: "go/pkg-a/helper", Label: "helper", Language: "go", SymbolKind: "function",
 			Source: "pkg/a/build.go:20", Defs: []string{"pkg/a/build.go"}},
+		{Key: "go/pkg-a/Builder", Label: "Builder", Language: "go", SymbolKind: "interface",
+			Source: "pkg/a/build.go:30", Defs: []string{"pkg/a/build.go"}},
+		{Key: "go/pkg-a/gadget", Label: "gadget", Language: "go", SymbolKind: "struct",
+			Source: "pkg/a/build.go:40", Defs: []string{"pkg/a/build.go"},
+			Implements: []string{"go/pkg-a/Builder"}},
 	}}
 	// depends_on, in its project -> package shape, which no other input produces.
 	in.Packages = map[string][]types.KnowledgePackage{"pkg/a": {

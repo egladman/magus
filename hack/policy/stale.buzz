@@ -8,6 +8,7 @@ import "path";
 import "crypto";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/policy/binaries" as binaries;
 
 // The sources a ./magus answers from: the guard rules and hook plumbing compiled into it,
@@ -274,12 +275,13 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
         if (hook.stamped) {
             why = "it was built before {movedList(hook)}";
         }
-        return magus\guard.deny("the magus answering this hook ({hook.path}) is stale against {hook.workspace}; "
-            + "rebuild it from its own sources: `{hook.path} --root {hook.workspace} run go-build .`.\n"
+        return magus\guard.deny("the magus answering this hook is stale; rebuild it from its own sources, then rerun\n"
+            + "{hook.path} is stale against {hook.workspace}; rebuild it with "
+            + "`{hook.path} --root {hook.workspace} run go-build .`. "
             + "`magus {verb}` writes state other checkouts and other magus versions read, and that binary is "
             + "stale: {why}. That is the hook's binary, judged against its own checkout, not the one this "
             + "command names. It would stamp that state with a build its checkout has moved past, and can "
-            + "undo what a newer magus wrote. Rerun once it is rebuilt.");
+            + "undo what a newer magus wrote.");
     }
     if (!w!.shared or !hook.ours) {
         return magus\guard.allow();
@@ -292,16 +294,14 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
     }
     final check = onBase(hook.commit);
     if (check.unreadable != "") {
-        return magus\guard.deny("nothing can say whether ./magus was built from the base branch: "
-            + "{check.unreadable}; fix the workspace's version control, then rerun.\n"
-            + "`magus {verb}` writes state every checkout of this repository shares.");
+        return magus\guard.deny("nothing can say whether ./magus was built from the base branch; fix the workspace's version control, then rerun\n"
+            + "The check failed: {check.unreadable}. `magus {verb}` writes state every checkout of this repository shares.");
     }
     if (!check.known or check.contained) {
         return magus\guard.allow();
     }
-    return magus\guard.deny("./magus was built from {hook.commit}, not on {check.base}; run this from a "
-        + "checkout at {check.base} with that checkout's own ./magus.\n"
-        + "`magus {verb}` writes state every checkout of this repository shares. A branch's build stamps "
+    return magus\guard.deny("./magus was not built from {check.base}; run this from a checkout at {check.base} with that checkout's own ./magus\n"
+        + "./magus was built from {hook.commit}, which is not on {check.base}. `magus {verb}` writes state every checkout of this repository shares. A branch's build stamps "
         + "that state newer than every build from {check.base}, which then refuse it, and one behind "
         + "{check.base} can undo what a newer magus wrote. Rebuild that checkout's ./magus with "
         + "`./magus run go-build .`.");
@@ -428,7 +428,7 @@ fun mainHolds(onMain: [str]) > fun (commit: str) > BaseCheck {
 }
 
 fun writeVerdict(argv: [str], bin: fun () > HookBinary, onBase: fun (commit: str) > BaseCheck) > GuardVerdict {
-    return decideStateWrite(helpers\request([argv]), bin: bin, onBase: onBase);
+    return verdict\checked(decideStateWrite(helpers\request([argv]), bin: bin, onBase: onBase), label: argv.join(" "));
 }
 
 final stateWriters = [
@@ -452,7 +452,7 @@ test "a stale ./magus is denied every state-writing verb, naming the rebuild" {
         final v = writeVerdict(argv, bin: staleBin, onBase: mainHolds(["c1"]));
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("internal/guard/shell.go") != null, message: "names what moved");
-        std\assert(v.reason.indexOf("(/repo/magus) is stale against /repo") != null, message: "names the hook's binary and its checkout");
+        std\assert(v.reason.indexOf("/repo/magus is stale against /repo") != null, message: "names the hook's binary and its checkout");
         std\assert(v.reason.indexOf("`/repo/magus --root /repo run go-build .`") != null, message: "names the rebuild of that binary");
     }
     final unstamped = fun () > HookBinary { return HookBinary{ ours = true, stamped = false, moved = [<str>] }; };
@@ -464,7 +464,7 @@ test "a build off the base branch is denied shared writes and allowed its own ch
     foreach (argv in stateWriters) {
         final v = writeVerdict(argv, bin: built("f00d"), onBase: mainHolds(["c1"]));
         std\assert(v.decision == "deny", message: argv.join(" "));
-        std\assert(v.reason.indexOf("./magus was built from f00d, not on origin/main") == 0, message: v.reason);
+        std\assert(v.reason.indexOf("./magus was not built from origin/main; run this from a checkout at origin/main") == 0, message: v.reason);
         std\assert(writeVerdict(argv, bin: built("c1"), onBase: mainHolds(["c1"])).decision == "allow", message: "on the base: " + argv.join(" "));
     }
     foreach (argv in [

@@ -308,7 +308,7 @@ func (w *warmGraph) reloadLoop(ctx context.Context) {
 			}
 		}
 		if _, err := w.Get(ctx, false); err != nil && ctx.Err() == nil {
-			w.log.DebugContext(ctx, "background knowledge-graph rebuild failed; the next query rebuilds", slog.String("error", err.Error()))
+			w.log.DebugContext(ctx, "background knowledge-graph rebuild failed; the next query rebuilds", attr.Error(err))
 		}
 	}
 }

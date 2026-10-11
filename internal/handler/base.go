@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 )
 
@@ -20,7 +21,7 @@ type Base struct {
 // Fail answers a route whose source failed: 500 with a body naming only what failed. err
 // can carry the server's absolute paths, so it goes to the log and never to the client.
 func (b Base) Fail(w http.ResponseWriter, r *http.Request, what string, err error) {
-	b.Log.ErrorContext(r.Context(), what+" failed", slog.String("path", r.URL.Path), slog.String("error", err.Error()))
+	b.Log.ErrorContext(r.Context(), what+" failed", slog.String("path", r.URL.Path), attr.Error(err))
 	Refuse(w, r, rpcerr.Internal(what))
 }
 

@@ -65,3 +65,20 @@ test("reply throws the envelope's message, and a plain body or none still shows"
     );
   }
 });
+
+// The host threads a reply by its conversation's first comment. Sending any other comment's id
+// would start a second conversation beside the one being answered.
+test("reply names the conversation by its root", async () => {
+  const real = globalThis.fetch;
+  let sent: unknown;
+  globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+    sent = JSON.parse(String(init?.body));
+    return new Response("{}");
+  }) as typeof fetch;
+  try {
+    await reply("127.0.0.1:7391", "t1", "one service", new AbortController().signal);
+  } finally {
+    globalThis.fetch = real;
+  }
+  assert.deepEqual(sent, { op: "reply", root: "t1", body: "one service" });
+});

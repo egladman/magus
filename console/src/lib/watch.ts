@@ -156,7 +156,7 @@ async function pollReviewMerged(host: string, store: NotificationStore): Promise
   const resp = await activity.listActivityEvents({
     // Sized for TWO actions, not one. The job appends a review.said on every run while remarks
     // stay unread, so a handful of ticks would push the rarer review.merged off a newest-first
-    // page and the offer to keep the conversation would never be surfaced at all.
+    // page and the offer to keep the thread would never be surfaced at all.
     pageSize: 40,
     filter: { kinds: [Kind.JOB], actions: ["review.merged", "review.said"], actors: [] },
   });

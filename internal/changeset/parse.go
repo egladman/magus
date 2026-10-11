@@ -562,29 +562,44 @@ func PatchDigest(patch string) string {
 // change, which is the side a reader is looking at; matching the old side would land a remark
 // about new code on whatever used to be there.
 //
-// Threads are returned in the order given, so a caller that renders them keeps the
-// conversation's order.
-func PlaceThreads(files []FileHunks, threads []types.ReviewThread) []types.ReviewThread {
-	if len(threads) == 0 {
+// A reply takes its head's Path and Hunk together, even when its own line no longer matches: the
+// host keeps a thread anchored where it began, and a reply stranded in "elsewhere" alone would be
+// read without the code it answers. What counts as a reply is [GroupThreads]'s rule, so a comment
+// whose head is not in comments is placed by its own line. An outdated head (Outdated, or no
+// line) is unplaced, so its replies follow it to the file heading or to "elsewhere".
+//
+// Comments are returned in the order given, so a caller that renders them keeps the thread's
+// order.
+func PlaceThreads(files []FileHunks, comments []types.ReviewComment) []types.ReviewComment {
+	if len(comments) == 0 {
 		return nil
 	}
 	byPath := make(map[string][]Hunk, len(files))
 	for _, f := range files {
 		byPath[f.Path] = f.Hunks
 	}
-	out := make([]types.ReviewThread, 0, len(threads))
-	for _, t := range threads {
+	out := make([]types.ReviewComment, 0, len(comments))
+	for _, t := range comments {
 		t.Hunk = -1
-		for _, h := range byPath[t.Path] {
-			if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
-				// Hunk.Index, not the slice position. They agree while a caller passes every
-				// hunk of a file, and Index exists precisely so one that filters cannot
-				// silently renumber what a thread is anchored to.
-				t.Hunk = h.Index
-				break
+		if !t.Outdated && t.Line > 0 {
+			for _, h := range byPath[t.Path] {
+				if t.Line >= h.NewStart && t.Line < h.NewStart+h.NewCount {
+					// Hunk.Index, not the slice position. They agree while a caller passes every
+					// hunk of a file, and Index exists precisely so one that filters cannot
+					// silently renumber what a thread is anchored to.
+					t.Hunk = h.Index
+					break
+				}
 			}
 		}
 		out = append(out, t)
+	}
+	// A second pass, because a reply can precede its head in the order the host sent.
+	for i, h := range headIndexes(out) {
+		if h != i {
+			out[i].Hunk = out[h].Hunk
+			out[i].Path = out[h].Path
+		}
 	}
 	return out
 }

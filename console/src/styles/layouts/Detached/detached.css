@@ -1,0 +1,15 @@
+/* A detached panel fills its new window. */
+[data-detached-host] {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+[data-detached-host] > * { flex: 1 1 auto; min-height: 0; }
+/* The gap the panel left behind, so a moved panel does not read as a closed one. */
+[data-detached-placeholder] {
+  padding: var(--pf-t--global--spacer--md);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--default);
+}

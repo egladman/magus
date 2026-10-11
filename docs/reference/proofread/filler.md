@@ -40,6 +40,7 @@ The code is `PRF4001`. The decision depends on the kind of text judged:
 | `cli-help`           | off     |
 | `review-reply`       | off     |
 | `agent-reply`        | off     |
+| `stylesheet`         | off     |
 
 ## Changing it
 

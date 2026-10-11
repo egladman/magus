@@ -81,6 +81,12 @@ func (v DiffUncoveredReason) Values() []string { return diffUncoveredReasons.Str
 func (v DiffUncoveredReason) Valid() bool      { return diffUncoveredReasons.Valid(v) }
 func (v DiffUncoveredReason) String() string   { return enum.String(v) }
 
+var diffReadStates = enum.Set[DiffReadState]{"known", "unknown"}
+
+func (v DiffReadState) Values() []string { return diffReadStates.Strings() }
+func (v DiffReadState) Valid() bool      { return diffReadStates.Valid(v) }
+func (v DiffReadState) String() string   { return enum.String(v) }
+
 var targetRunStates = enum.Set[TargetRunState]{"queued", "running", "passed", "failed", "cached"}
 
 func (v TargetRunState) Values() []string { return targetRunStates.Strings() }

@@ -97,7 +97,7 @@ const (
 // review replies and PRF9xxx messages a program prints. A code is never
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
-var ruleTexts = mergeTexts(coreTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts,
+var ruleTexts = mergeTexts(coreTexts, cssTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts,
 	agentReplyTexts, toolTexts, voiceTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {

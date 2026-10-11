@@ -145,9 +145,9 @@ test("demo mode builds rows from the demo payload", () => {
     rows.filter((r) => r.kind === "file").map((r) => r.file.path),
     cs.primary.map((o) => o.file.path),
   );
-  // A story row for each file the trail says an agent wrote, and a comment row under each
+  // A touch row for each file the trail says an agent wrote, and a comment row under each
   // annotated hunk - both are rows, which is what makes them scroll with the code.
-  assert.equal(rows.filter((r) => r.kind === "story").length, 4);
+  assert.equal(rows.filter((r) => r.kind === "touch").length, 4);
   assert.equal(rows.filter((r) => r.kind === "comment").length, 3);
   assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience Audience")));
 });
@@ -197,13 +197,13 @@ test("applyDemoOp resolves a comment and answers a suggestion", () => {
 test("the diff annotations agree with the figures every other app reports", () => {
   const insight = scenarioInsight(Date.now());
   const claims = insight.hotspots.find((h) => h.name === STORY_FILES.CLAIMS);
-  assert.ok(claims, "the scenario no longer ranks the file the story turns on");
+  assert.ok(claims, "the scenario no longer ranks the file it turns on");
 
   const annotated = files.find((f) => f.path === STORY_FILES.CLAIMS);
-  assert.ok(annotated, "the changeset no longer carries the file the story turns on");
+  assert.ok(annotated, "the changeset no longer carries the file the scenario turns on");
 
   const note = (session.diff.files ?? []).find((a) => a.path === STORY_FILES.CLAIMS);
-  assert.ok(note, "the annotations no longer cover the file the story turns on");
+  assert.ok(note, "the annotations no longer cover the file the scenario turns on");
   assert.equal(note.churn?.commits, claims.churn, "churn disagrees with the Insight app");
   assert.equal(note.churn?.authors, claims.authors, "author count disagrees with the Insight app");
   assert.equal(

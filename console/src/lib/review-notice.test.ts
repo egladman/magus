@@ -7,16 +7,16 @@ const review = (over: Partial<MergedReview> = {}): MergedReview => ({
   ...over,
 });
 
-// The offer exists to catch a conversation before it becomes somebody else's website's problem.
-test("a merged review with remarks offers to keep them", () => {
+// The offer exists to catch a thread before it becomes somebody else's website's problem.
+test("a merged review with comments offers to keep them", () => {
   const said = mergedNotice(review({ state: "merged" }), 3);
   assert.match(said, /merged on acme\/acme/);
-  assert.match(said, /3 remarks/);
+  assert.match(said, /3 comments/);
   assert.match(said, /magus notes capture/);
 });
 
-test("one remark is not pluralised", () => {
-  assert.match(mergedNotice(review({ state: "merged" }), 1), /1 remark live/);
+test("one comment is not pluralised", () => {
+  assert.match(mergedNotice(review({ state: "merged" }), 1), /1 comment live/);
 });
 
 // The silence cases are the design. A prompt that fires on every merge is one a reader learns to
@@ -45,7 +45,7 @@ test("a review with no repo is offered without one", () => {
 });
 
 // The counts are parsed out of a trail preview, so a malformed one yields NaN - and `NaN <= 0` is
-// FALSE, so the obvious guard let it through and rang the bell with "NaN new remarks are waiting
+// FALSE, so the obvious guard let it through and rang the bell with "NaN new comments are waiting
 // for you". A bell-tier notification that reads NaN spends the notification system's credibility.
 test("NaN is not a count", () => {
   assert.equal(saidNotice("acme/acme", Number.NaN), "");

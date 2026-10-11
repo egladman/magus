@@ -45,6 +45,7 @@ import {
   createServerTransport,
 } from "../../lib/server";
 import { persisted } from "../../lib/persist";
+import { reportFailure } from "../../lib/notifications";
 import { subscribeDefaultHost } from "../../lib/settings";
 import { h } from "../../desktop/view";
 import {
@@ -54,6 +55,10 @@ import {
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
 import type { AppInstance } from "../../desktop/standalone";
+import { inlineAlert } from "../../ui/alert";
+import { emptyStateShell } from "../../ui/empty-state";
+import { svgGlyph } from "../../ui/glyph";
+import { statusGlyph, statusIcon, statusText, type Status } from "../../ui/status";
 import { demoNotes } from "./demo";
 import { parseTranscript, type Transcript } from "./transcript";
 import { renderMarkdown } from "./markdown";
@@ -63,34 +68,36 @@ const PURPOSE =
 
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
 // "private" are the words in magus.yaml, but what a reader needs at a glance is who ends up
-// able to read the note, which is the only difference between the two.
-//
-// `consequence` is short because it renders INSIDE the store heading rather than in a banner
-// beneath it. A banner is a thing to scroll past; a sticky heading is on screen for as long as
-// the notes it introduces are. `where` and the path stay in the detail pane, where a reader who
-// wants the location is already looking.
-const SCOPE_COPY: Record<number, { title: string; key: string; consequence: string }> = {
+// able to read the note, which is the only difference between the two. The consequence is
+// visible text in the store heading and again beside the open note's scope label.
+const SCOPE_COPY: Record<
+  number,
+  { title: string; key: string; consequence: string; color: string }
+> = {
   [Scope.SHARED]: {
     title: "Shared",
     key: "shared",
-    consequence: "committed, review sees it",
+    consequence: "committed, and reviews can read it",
+    color: "pf-m-blue",
   },
   [Scope.PRIVATE]: {
     title: "Private",
     key: "private",
-    consequence: "this machine only",
+    consequence: "this machine only, never committed",
+    color: "pf-m-purple",
   },
 };
 
-// ANCHOR_COPY maps a status to its label. UNVERIFIED is deliberately not treated as healthy: it
-// means nothing was checked, which is a different answer from "fine", and presenting it as a
-// pass would tell a reader their notes were verified when no verification ran.
-const ANCHOR_COPY: Record<number, { label: string; slug: string }> = {
-  [AnchorStatus.RESOLVES]: { label: "resolves", slug: "resolves" },
-  [AnchorStatus.DANGLING]: { label: "dangling", slug: "dangling" },
-  [AnchorStatus.DRIFTED]: { label: "drifted", slug: "drifted" },
-  [AnchorStatus.UNVERIFIED]: { label: "unverified", slug: "unverified" },
-  [AnchorStatus.BODY_CHANGED]: { label: "body changed", slug: "body-changed" },
+// ANCHOR_COPY maps a status to its label and the status mark that carries its shape. UNVERIFIED
+// is deliberately not treated as healthy: it means nothing was checked, which is a different
+// answer from "fine", and presenting it as a pass would tell a reader their notes were verified
+// when no verification ran.
+const ANCHOR_COPY: Record<number, { label: string; status: Status }> = {
+  [AnchorStatus.RESOLVES]: { label: "resolves", status: "success" },
+  [AnchorStatus.DANGLING]: { label: "dangling", status: "danger" },
+  [AnchorStatus.DRIFTED]: { label: "drifted", status: "warning" },
+  [AnchorStatus.UNVERIFIED]: { label: "unverified", status: "neutral" },
+  [AnchorStatus.BODY_CHANGED]: { label: "body changed", status: "info" },
 };
 
 const ANCHOR_KIND_NAME: Record<number, string> = {
@@ -101,22 +108,41 @@ const ANCHOR_KIND_NAME: Record<number, string> = {
   5: "note",
 };
 
+const STALENESS_STATUS: Record<number, Status> = {
+  [Staleness.OUTRUN]: "warning",
+  [Staleness.PETRIFIED]: "danger",
+};
+
 // Collapsed store keys, remembered across mounts. A reader who folds "Private" away has made
 // a standing choice about what they want to see, not a gesture that should reset on every tab
-// switch - and it is the same cell the old scope toggle occupied, minus the control.
+// switch.
 const collapsedCell = persisted<string[]>("notes-collapsed", []);
+
+const COPY_ICON = [
+  "M11 9h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z",
+  "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+];
+const CHECK_ICON = ["M20 6 9 17l-5-5"];
+const BACK_ICON = ["M19 12H5", "m12 19-7-7 7-7"];
+const CLEAR_ICON = ["M18 6 6 18", "m6 6 12 12"];
+const CHEVRON_ICON = ["m9 6 6 6-6 6"];
 
 interface Refs {
   panel: HTMLElement;
   bar: HTMLElement;
   main: HTMLElement;
+  pane: HTMLElement;
   search: HTMLInputElement;
+  clear: HTMLButtonElement;
+  count: HTMLElement;
   list: HTMLElement;
   detail: HTMLElement;
-  detailScope: HTMLElement;
+  back: HTMLButtonElement;
   detailBody: HTMLElement;
+  live: HTMLElement;
   empty: HTMLElement;
   emptySlots: EmptyStateSlots;
+  emptyHeader: HTMLElement;
 }
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or null when absent. A note
@@ -129,7 +155,7 @@ function tsMillis(t: Timestamp | undefined): number | null {
 
 // age renders an elapsed span at one significant unit: a reader scanning the column wants the
 // order of magnitude, and "412 days" costs three characters to say what "1y" says.
-function age(ms: number): string {
+export function age(ms: number): string {
   const days = Math.floor((Date.now() - ms) / 86400000);
   if (days <= 0) return "today";
   if (days < 31) return days + "d";
@@ -140,17 +166,15 @@ function age(ms: number): string {
 // edited phrases the same span as a sentence. Separate from age because the column wants a
 // token and the sentence wants grammar: "today" is already a complete answer, and running it
 // through the "edited X ago" frame produces "edited today ago".
-function edited(ms: number): string {
+export function edited(ms: number): string {
   const span = age(ms);
-  return span === "today" ? "edited today" : "edited " + span + " ago";
+  return span === "today" ? "Edited today" : "Edited " + span + " ago";
 }
 
 // worstAnchor reports the anchor verdict a row should be marked by. Dangling outranks drifted
 // because the subject is gone rather than merely changed, and both outrank an unverified
-// anchor, which is an absence of evidence rather than a finding. Body-changed ranks last and
-// deliberately paints no rule down the row's edge: it fires on most edits, and a column that
-// is lit on every row is a column nobody scans.
-function worstAnchor(n: Note): { slug: string; count: number } | null {
+// anchor, which is an absence of evidence rather than a finding.
+function worstAnchor(n: Note): { label: string; status: Status; count: number } | null {
   for (const status of [
     AnchorStatus.DANGLING,
     AnchorStatus.DRIFTED,
@@ -158,77 +182,151 @@ function worstAnchor(n: Note): { slug: string; count: number } | null {
     AnchorStatus.BODY_CHANGED,
   ]) {
     const hits = n.anchors.filter((a) => a.status === status);
-    if (hits.length > 0) {
-      const copy = ANCHOR_COPY[status];
-      if (copy) return { slug: copy.slug, count: hits.length };
+    const copy = ANCHOR_COPY[status];
+    if (hits.length > 0 && copy) {
+      return { label: copy.label, status: copy.status, count: hits.length };
     }
   }
   return null;
 }
 
-// stalenessSlug names the divergence tier, or null when magus measured none. UNMEASURED renders
+// behind is the staleness phrase, or null when magus measured no divergence. UNMEASURED renders
 // nothing at all rather than a reassuring badge: absence of evidence is not evidence of
-// freshness.
-function stalenessSlug(n: Note): string | null {
-  if (n.staleness === Staleness.OUTRUN) return "outrun";
-  if (n.staleness === Staleness.PETRIFIED) return "petrified";
-  return null;
+// freshness. The list row and the open note read the same words.
+export function behind(n: Note): { text: string; status: Status } | null {
+  const status = STALENESS_STATUS[n.staleness];
+  if (!status) return null;
+  const unit = n.outrunDays === 1 ? " day" : " days";
+  return { text: n.outrunDays + unit + " behind its subject", status };
 }
 
-// button builds a PF Button. Text goes through textContent by construction (h sets text, never
-// innerHTML), which is what keeps note prose and note titles from being trusted markup.
-function button(label: string, modifiers: string): HTMLButtonElement {
-  const b = h("button", "pf-v6-c-button " + modifiers) as HTMLButtonElement;
+// statusPhrase is a status mark followed by its words, so a hue is never the only carrier.
+function statusPhrase(status: Status, words: string): HTMLElement {
+  const el = h("span", "console-notes-app__status");
+  el.dataset.status = status;
+  el.append(statusIcon(status), document.createTextNode(words));
+  return el;
+}
+
+interface LabelOptions {
+  color?: string;
+  icon?: Element;
+  // Words a screen reader hears after the visible text.
+  hidden?: string;
+}
+
+// pfLabel builds a compact outline PF Label.
+function pfLabel(text: string, opts: LabelOptions = {}): HTMLElement {
+  const el = h(
+    "span",
+    "pf-v6-c-label pf-m-outline pf-m-compact" + (opts.color ? " " + opts.color : ""),
+  );
+  const content = h("span", "pf-v6-c-label__content");
+  if (opts.icon) {
+    const icon = h("span", "pf-v6-c-label__icon");
+    icon.append(opts.icon);
+    content.append(icon);
+  }
+  content.append(h("span", "pf-v6-c-label__text", text));
+  if (opts.hidden) content.append(h("span", "pf-v6-screen-reader", opts.hidden));
+  el.append(content);
+  return el;
+}
+
+// tagList is the PF label group for a note's tags, as a real list a reader can count.
+function tagList(tags: string[]): HTMLElement {
+  const group = h("div", "pf-v6-c-label-group");
+  const main = h("div", "pf-v6-c-label-group__main");
+  const list = h("ul", "pf-v6-c-label-group__list");
+  list.setAttribute("role", "list");
+  list.setAttribute("aria-label", "Tags");
+  for (const tag of tags) {
+    const item = h("li", "pf-v6-c-label-group__list-item");
+    item.append(pfLabel(tag));
+    list.append(item);
+  }
+  main.append(list);
+  group.append(main);
+  return group;
+}
+
+// glyphButton is a PF Button with an icon and visible text.
+function glyphButton(
+  label: string,
+  modifiers: string,
+  icon?: readonly string[],
+): HTMLButtonElement {
+  const b = h("button", "pf-v6-c-button " + modifiers);
   b.type = "button";
+  if (icon) {
+    const slot = h("span", "pf-v6-c-button__icon pf-m-start");
+    slot.append(svgGlyph(icon, 16));
+    b.append(slot);
+  }
   b.append(h("span", "pf-v6-c-button__text", label));
   return b;
 }
 
-// alert builds a PF Alert, icon included. The icon is not decoration: PF lays the component out
-// as a grid with a slot for it, and an alert built without one collapses into something a reader
-// scrolls past like body text.
-function alert(variant: string, title: string, body?: string): HTMLElement {
-  const el = h("div", "pf-v6-c-alert " + variant);
-  const icon = h("div", "pf-v6-c-alert__icon");
-  icon.setAttribute("aria-hidden", "true");
-  icon.textContent = variant.includes("warning") ? "!" : "i";
-  el.append(icon);
-  el.append(h("p", "pf-v6-c-alert__title", title));
-  if (body) {
-    const desc = h("div", "pf-v6-c-alert__description");
-    desc.append(h("p", undefined, body));
-    el.append(desc);
-  }
-  return el;
-}
-
-// copyRow renders a value beside a button that copies it. The console cannot run a command for
-// the reader - and on a phone nothing can - so copying it is the whole of the affordance.
-function copyRow(value: string, what: string): HTMLElement {
-  const row = h("div", "console-notes-app__copy");
-  row.append(h("code", undefined, value));
-  const btn = button("copy", "pf-m-secondary");
+// copyRow is a PF inline Clipboard copy: the value beside a button that copies it. The console
+// cannot run a command for the reader - and on a phone nothing can - so copying it is the whole
+// of the affordance. A failure is a toast; success is announced and shown.
+function copyRow(value: string, what: string, announce: (msg: string) => void): HTMLElement {
+  const box = h("div", "pf-v6-c-clipboard-copy pf-m-inline");
+  box.append(h("code", "pf-v6-c-clipboard-copy__text pf-m-code", value));
+  const actions = h("span", "pf-v6-c-clipboard-copy__actions");
+  const item = h("span", "pf-v6-c-clipboard-copy__actions-item");
+  const btn = h("button", "pf-v6-c-button pf-m-plain pf-m-no-padding");
+  btn.type = "button";
   btn.setAttribute("aria-label", "Copy " + what);
+  const slot = h("span", "pf-v6-c-button__icon");
+  slot.append(svgGlyph(COPY_ICON, 16));
+  btn.append(slot);
+  const done = h("span", "console-notes-app__copied", "Copied");
+  done.hidden = true;
+  item.append(btn, done);
+  actions.append(item);
+  box.append(actions);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const fail = (why: string): void =>
+    reportFailure(
+      "Notes",
+      "Could not copy the " + what + " (" + why + "). Select it and copy it by hand.",
+      "notes:copy:" + what,
+    );
   btn.addEventListener("click", () => {
-    const text = btn.querySelector(".pf-v6-c-button__text");
-    if (!text) return;
-    const settle = (word: string): void => {
-      text.textContent = word;
-      setTimeout(() => {
-        text.textContent = "copy";
-      }, 1200);
-    };
     if (!navigator.clipboard?.writeText) {
-      settle("failed");
+      fail("this browser has no clipboard access here");
       return;
     }
     navigator.clipboard.writeText(value).then(
-      () => settle("copied"),
-      () => settle("failed"),
+      () => {
+        announce("Copied the " + what + ".");
+        slot.replaceChildren(svgGlyph(CHECK_ICON, 16));
+        done.hidden = false;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          slot.replaceChildren(svgGlyph(COPY_ICON, 16));
+          done.hidden = true;
+        }, 1500);
+      },
+      (e: unknown) => fail(e instanceof Error ? e.message : String(e)),
     );
   });
-  row.append(btn);
-  return row;
+  return box;
+}
+
+// emptyBlock is a PF small Empty state: a title, a sentence, and optional actions.
+function emptyBlock(title: string, message: string, actions: HTMLElement[] = []): HTMLElement {
+  const state = emptyStateShell({
+    heading: "h2",
+    title,
+    classes: "pf-m-sm console-notes-app__hint",
+  });
+  state.body.textContent = message;
+  if (actions.length > 0) state.actions.append(...actions);
+  else state.footer.remove();
+  return state.root;
 }
 
 // buildScaffold assembles the app: a filtered list beside a reading pane, over a PF
@@ -237,91 +335,107 @@ function copyRow(value: string, what: string): HTMLElement {
 // roots.
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-notes-app");
+  panel.setAttribute("aria-label", "Notes");
 
   const main = h("div", "console-notes-app__main");
   const pane = h("div", "console-notes-app__pane");
 
   const bar = h("div", "console-notes-app__bar");
   bar.dataset.controlSize = "default";
-  // PF FormControl is a WRAPPER plus an input, and `__text` alone styles nothing: the field
-  // was rendering as a bare native input, which is why it had square corners and a 2px inset
-  // border while every other control on the app was rounded.
-  const searchWrap = h("span", "pf-v6-c-form-control console-notes-app__search");
-  const search = h("input", "pf-v6-c-form-control__text") as HTMLInputElement;
+  bar.setAttribute("role", "search");
+  bar.setAttribute("aria-label", "Notes");
+  const group = h("div", "pf-v6-c-text-input-group console-notes-app__search");
+  const groupMain = h("div", "pf-v6-c-text-input-group__main");
+  const textWrap = h("span", "pf-v6-c-text-input-group__text");
+  const search = h("input", "pf-v6-c-text-input-group__text-input");
   search.type = "search";
-  // Says what the field does AND teaches the non-obvious half: you can find a note by the code
-  // it annotates, not only by its own words. "anchor" is the app's word for that and it is
-  // opaque on first contact, so the placeholder spends its characters on the capability and
-  // leaves the vocabulary to the detail pane, which has room to label it.
-  //
-  // It stops short of promising a text search, because there is not one: ListNotes leaves the
-  // prose empty by contract, so a filter claiming to read it would silently miss every note the
-  // reader has not opened.
+  // The placeholder teaches the non-obvious half: you can find a note by the code it annotates,
+  // not only by its own words. It stops short of promising a text search, because ListNotes
+  // leaves the prose empty by contract, so a filter claiming to read it would miss every note
+  // the reader has not opened.
   search.placeholder = "Filter notes, or the code they are about";
   search.setAttribute("aria-label", "Filter notes by title, tag or anchor");
-  // ONE bar across the whole app rather than one per pane. The filter sits at the left and
-  // the open note's scope badge at the right, and because it spans both columns there is no
-  // second header to keep level with it - two of them drifted 29px apart, which is the kind of
-  // alignment that is easier to delete than to maintain.
-  searchWrap.append(search);
-  const detailScope = h("span", "console-notes-app__detail-scope");
-  bar.append(h("span", "console-notes-app__label", "Notes"), searchWrap, detailScope);
+  search.spellcheck = false;
+  search.autocomplete = "off";
+  textWrap.append(search);
+  groupMain.append(textWrap);
+  const utilities = h("div", "pf-v6-c-text-input-group__utilities");
+  const clear = h("button", "pf-v6-c-button pf-m-plain");
+  clear.type = "button";
+  clear.setAttribute("aria-label", "Clear filter");
+  clear.hidden = true;
+  const clearIcon = h("span", "pf-v6-c-button__icon");
+  clearIcon.append(svgGlyph(CLEAR_ICON, 16));
+  clear.append(clearIcon);
+  utilities.append(clear);
+  group.append(groupMain, utilities);
+
+  const count = h("span", "console-notes-app__count");
+  count.setAttribute("role", "status");
+  count.setAttribute("aria-live", "polite");
+  bar.append(h("span", "console-notes-app__label", "Notes"), group, count);
 
   const list = h("div", "console-notes-app__list");
-  list.setAttribute("role", "list");
   pane.append(list);
 
-  const detail = h("div", "console-notes-app__detail");
-  // Only the way back, and only when the detail is an overlay. Once the panes sit side by side
-  // the list never went anywhere, so the bar has nothing to say and the sheet hides it.
+  const detail = h("section", "console-notes-app__detail");
+  detail.setAttribute("aria-label", "Open note");
   const detailBar = h("div", "console-notes-app__detail-bar");
-  const back = button("Back to notes", "pf-m-link pf-m-inline console-notes-app__detail-back");
+  detailBar.dataset.controlSize = "default";
+  const back = glyphButton("Back to notes", "pf-m-link", BACK_ICON);
   detailBar.append(back);
   const detailBody = h("div", "console-notes-app__detail-body");
   detail.append(detailBar, detailBody);
-  back.addEventListener("click", () => {
-    detail.removeAttribute("data-open");
-  });
 
   main.append(pane, detail);
 
-  const empty = h("div", "pf-v6-c-empty-state console-notes-app__empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text");
-  const emptyBody = h("div", "pf-v6-c-empty-state__body");
-  const emptyMessage = h("p");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.dataset.emptyWays = "";
-  emptyBody.append(emptyMessage, emptyActions);
-  emptyContent.append(emptyTitle, emptyBody);
-  empty.append(emptyContent);
+  const live = h("div", "pf-v6-screen-reader");
+  live.setAttribute("role", "status");
+  live.setAttribute("aria-live", "polite");
 
-  // The bar belongs to the panel, not to a pane, and it is hidden with `main` in the cold
-  // state - a filter over nothing is a control with nothing to do.
-  panel.append(bar, main, empty);
+  const emptyState = emptyStateShell({
+    heading: "h2",
+    classes: "console-notes-app__empty",
+    ways: true,
+  });
+  const empty = emptyState.root;
+
+  panel.append(h("h1", "pf-v6-screen-reader", "Notes"), bar, main, live, empty);
   host.append(panel);
   return {
     bar,
     panel,
     main,
+    pane,
     search,
+    clear,
+    count,
     list,
     detail,
-    detailScope,
+    back,
     detailBody,
+    live,
     empty,
-    emptySlots: { title: emptyTitle, message: emptyMessage, actions: emptyActions },
+    emptySlots: {
+      title: emptyState.title,
+      message: emptyState.body,
+      actions: emptyState.actions,
+    },
+    emptyHeader: emptyState.header,
   };
 }
+
+type Prose =
+  | { state: "loading" }
+  | { state: "ready"; body: string }
+  | { state: "error"; message: string };
 
 // activate builds the app into host, loads once, and returns a teardown. Every async load
 // checks `stale` before touching the DOM, so a load that resolves after the tab closed is
 // dropped.
 //
 // Returns the console's app shape (page.ts): a teardown plus setVisible, so the shell can tell
-// this pane when it stops being the visible one. Every app hands back this shape rather than a
-// bare teardown - an app with nowhere to put the hook is how the log viewer came to write a
-// backgrounded tab's status bar.
+// this pane when it stops being the visible one.
 export function activate(host: HTMLElement): AppInstance {
   const refs = buildScaffold(host);
   let stale = false;
@@ -330,27 +444,51 @@ export function activate(host: HTMLElement): AppInstance {
   let stores: StoreStatus[] = [];
   let selected: string | null = null;
   let loadBody: (n: Note) => Promise<string> = () => Promise.resolve("");
+  let proseHost: HTMLElement | null = null;
+  // Bumped by every body request, so a slow answer for a note the reader has left is dropped.
+  let bodyGeneration = 0;
+
+  const announce = (msg: string): void => {
+    refs.live.textContent = msg;
+  };
 
   function showEmptyNotes(): void {
     notes = [];
     stores = [];
     selected = null;
     refs.list.replaceChildren();
-    refs.detail.removeAttribute("data-open");
+    closeDetail(false);
     refs.detailBody.replaceChildren();
     refs.main.hidden = true;
     refs.bar.hidden = true;
     refs.empty.hidden = false;
   }
 
+  function resetEmptyIcon(): void {
+    refs.empty.classList.remove("pf-m-danger");
+    refs.emptyHeader.querySelector(".pf-v6-c-empty-state__icon")?.remove();
+  }
+
   function showConnectPrompt(state: ConnectPromptState): void {
     showEmptyNotes();
+    resetEmptyIcon();
     renderConnectPrompt(refs.emptySlots, state, { purpose: PURPOSE, onRetry: load });
   }
 
+  // The transport has already raised the toast for a failed call; this is the text where the
+  // reader is looking, with a Retry, since nothing retries behind it.
   function showNotesError(message: string): void {
     showEmptyNotes();
+    resetEmptyIcon();
     renderEmptyMessage(refs.emptySlots, "Could not read the notes", message);
+    refs.empty.classList.add("pf-m-danger");
+    const icon = h("div", "pf-v6-c-empty-state__icon");
+    icon.setAttribute("aria-hidden", "true");
+    icon.append(statusGlyph("danger"));
+    refs.emptyHeader.prepend(icon);
+    const retry = glyphButton("Retry", "pf-m-primary");
+    retry.addEventListener("click", () => load());
+    refs.emptySlots.actions.append(retry);
   }
 
   // The store is part of a note's resource name ("shared/x", "private/x") rather than a
@@ -377,10 +515,10 @@ export function activate(host: HTMLElement): AppInstance {
     return hay.includes(term);
   }
 
-  // Most recently edited first. The wire order is the store's scan order, which is an
-  // implementation detail of the filesystem walk and means nothing to a reader; modify time is
-  // the one ordering the note files themselves carry. Notes the store could not stat sort last
-  // rather than to the top, so a missing timestamp cannot masquerade as the freshest thing here.
+  // Most recently edited first. The wire order is the store's scan order, which means nothing to
+  // a reader; modify time is the one ordering the note files themselves carry. Notes the store
+  // could not stat sort last rather than to the top, so a missing timestamp cannot masquerade as
+  // the freshest thing here.
   function byRecency(a: Note, b: Note): number {
     const am = tsMillis(a.modifyTime);
     const bm = tsMillis(b.modifyTime);
@@ -390,61 +528,110 @@ export function activate(host: HTMLElement): AppInstance {
     return bm - am;
   }
 
-  function buildRow(n: Note): HTMLElement {
-    const row = h("button", "console-notes-app__note") as HTMLButtonElement;
-    row.type = "button";
-    row.dataset.name = n.name;
-    const broken = worstAnchor(n);
-    if (broken) row.dataset.health = broken.slug;
-    if (selected === n.name) row.setAttribute("aria-current", "true");
+  // --- the list: one roving tab stop over store headings and note rows -------------------
 
-    const top = h("div", "console-notes-app__note-top");
+  const stops = (): HTMLElement[] =>
+    Array.from(refs.list.querySelectorAll<HTMLElement>("[data-roving]")).filter(
+      (b) => !b.closest("[hidden]"),
+    );
+
+  function settleTabStop(preferKey: string | null): void {
+    const all = stops();
+    const pick =
+      all.find((b) => b.dataset.roving === preferKey) ??
+      all.find((b) => b.getAttribute("aria-current") === "true") ??
+      all[0];
+    for (const b of all) b.tabIndex = b === pick ? 0 : -1;
+  }
+
+  refs.list.addEventListener("focusin", (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || target.dataset.roving === undefined) return;
+    for (const b of stops()) b.tabIndex = b === target ? 0 : -1;
+  });
+  refs.list.addEventListener("keydown", (e) => {
+    const all = stops();
+    const here = all.indexOf(document.activeElement as HTMLElement);
+    if (here < 0) return;
+    // A note is a list item rather than a button, so its Enter and Space are pressed here; a store
+    // heading is a real button and answers them itself.
+    if ((e.key === "Enter" || e.key === " ") && all[here] instanceof HTMLLIElement) {
+      e.preventDefault();
+      all[here].click();
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const last = all.length - 1;
+    const next =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? last
+          : Math.max(0, Math.min(last, here + (e.key === "ArrowDown" ? 1 : -1)));
+    all[next]?.focus();
+  });
+
+  function buildRow(n: Note): HTMLElement {
+    // PF's clickable data list: the item is the control, so it carries the tab stop and is named by
+    // its title. Enter and Space press it (the list's keydown below), as they would a button.
+    const row = h("li", "pf-v6-c-data-list__item pf-m-clickable console-notes-app__note");
+    row.dataset.name = n.name;
+    row.dataset.roving = "note:" + n.name;
+    if (selected === n.name) {
+      row.setAttribute("aria-current", "true");
+      row.classList.add("pf-m-selected");
+    }
+    const itemRow = h("div", "pf-v6-c-data-list__item-row");
+    const content = h("div", "pf-v6-c-data-list__item-content");
+    const first = h("div", "pf-v6-c-data-list__cell");
+    const second = h("div", "pf-v6-c-data-list__cell");
+
+    const top = h("span", "console-notes-app__note-top");
     // Marked in the LIST, not only once a reader opens it. A capture is quoted material that
     // nobody stands behind, and a reader who learns that after reading it has already taken it
-    // for a colleague's reasoning - which is the single thing this mark exists to prevent.
+    // for a colleague's reasoning.
     if (n.source) {
-      const mark = h("span", "console-notes-app__quoted", "quoted");
-      mark.title = "A transcript captured from a " + n.source.kind + ", not prose someone wrote";
-      top.append(mark);
+      top.append(
+        pfLabel("Quoted", {
+          color: "pf-m-purple",
+          hidden: ": a transcript captured from a " + n.source.kind + ", not prose someone wrote",
+        }),
+      );
     }
-    top.append(h("span", "console-notes-app__note-title", n.title || n.name));
+    const titleEl = h("span", "console-notes-app__note-title", n.title || n.name);
+    titleEl.id = "console-notes-title-" + n.scope + "-" + n.name;
+    row.setAttribute("aria-labelledby", titleEl.id);
+    top.append(titleEl);
     const ms = tsMillis(n.modifyTime);
     if (ms !== null) {
-      const ageEl = h("span", "console-notes-app__note-age", age(ms));
       // The age column means ONE thing on every row: when the file was last edited. Staleness
-      // is a different quantity (how far the subject ran ahead of the prose) and shares the
-      // meta line below with the rest of the evidence rather than this column, so a reader
-      // never has to work out which of two spans a number is.
-      ageEl.title = "Last edited";
+      // is a different quantity (how far the subject ran ahead of the prose) and sits in the
+      // meta line below with the rest of the evidence.
+      const ageEl = h("span", "console-notes-app__note-age");
+      ageEl.append(
+        h("span", "pf-v6-screen-reader", "Last edited "),
+        document.createTextNode(age(ms)),
+      );
       top.append(ageEl);
     }
-    row.append(top);
+    first.append(top);
+    content.append(first);
 
-    const meta = h("div", "console-notes-app__note-meta");
-    const slug = stalenessSlug(n);
-    if (slug) {
-      const el = h("span", undefined, n.outrunDays + "d behind");
-      el.dataset.staleness = slug;
-      meta.append(el);
+    const meta = h("span", "console-notes-app__note-meta");
+    const lag = behind(n);
+    if (lag) meta.append(statusPhrase(lag.status, lag.text));
+    const broken = worstAnchor(n);
+    if (broken) meta.append(statusPhrase(broken.status, broken.count + " " + broken.label));
+    for (const tag of n.tags) meta.append(pfLabel(tag));
+    if (meta.childElementCount > 0) {
+      second.append(meta);
+      content.append(second);
     }
-    if (broken) {
-      const el = h("span", undefined, broken.count + " " + broken.slug);
-      el.dataset.health = broken.slug;
-      meta.append(el);
-    }
-    if (n.tags.length > 0) meta.append(h("span", undefined, n.tags.join(" ")));
-    if (meta.childElementCount > 0) row.append(meta);
 
     row.addEventListener("click", () => openNote(n));
-    row.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      e.preventDefault();
-      const rows = Array.from(
-        refs.list.querySelectorAll<HTMLButtonElement>(".console-notes-app__note"),
-      );
-      const next = rows[rows.indexOf(row) + (e.key === "ArrowDown" ? 1 : -1)];
-      next?.focus();
-    });
+    itemRow.append(content);
+    row.append(itemRow);
     return row;
   }
 
@@ -456,10 +643,36 @@ export function activate(host: HTMLElement): AppInstance {
     renderList();
   }
 
+  function clearFilter(): void {
+    refs.search.value = "";
+    renderList();
+    refs.search.focus();
+  }
+
   function renderList(): void {
     const term = refs.search.value.trim().toLowerCase();
+    const focusedKey = refs.list.contains(document.activeElement)
+      ? ((document.activeElement as HTMLElement).dataset.roving ?? null)
+      : null;
     refs.list.replaceChildren();
+    refs.clear.hidden = refs.search.value === "";
     let shown = 0;
+
+    for (const store of stores) {
+      const copy = SCOPE_COPY[store.scope];
+      if (!copy) continue;
+      if (store.declared) {
+        shown += notes.filter((n) => n.scope === store.scope && matches(n, term)).length;
+      }
+    }
+
+    if (term && shown === 0 && notes.length > 0) {
+      const clear = glyphButton("Clear filter", "pf-m-link");
+      clear.addEventListener("click", clearFilter);
+      refs.list.append(emptyBlock("No notes match", "Nothing matches that filter.", [clear]));
+      reconcile(term, shown, focusedKey);
+      return;
+    }
 
     for (const store of stores) {
       const copy = SCOPE_COPY[store.scope];
@@ -470,15 +683,23 @@ export function activate(host: HTMLElement): AppInstance {
       // search lying, so an active term expands everything for as long as it is set.
       const folded = term === "" && collapsed().includes(copy.key);
 
-      const head = h("button", "console-notes-app__store") as HTMLButtonElement;
+      const group = h("div", "console-notes-app__group");
+      const regionId = "console-notes-list-" + copy.key;
+      const heading = h("h2", "console-notes-app__store-heading");
+      const head = h("button", "console-notes-app__store");
       head.type = "button";
       head.dataset.scope = copy.key;
+      head.dataset.roving = "store:" + copy.key;
       head.setAttribute("aria-expanded", String(!folded));
-      if (folded) head.dataset.collapsed = "";
-      head.append(h("span", "console-notes-app__store-twist"));
+      head.setAttribute("aria-controls", regionId);
+      const twist = h("span", "console-notes-app__store-twist");
+      twist.append(svgGlyph(CHEVRON_ICON, 16));
+      head.append(twist);
       // Parenthesized, because the number is a count of what is under this heading and not
       // part of the store's name - "Shared 4" reads for a moment as a fourth Shared.
-      head.append(h("span", undefined, copy.title + " (" + mine.length + ")"));
+      head.append(
+        h("span", "console-notes-app__store-title", copy.title + " (" + mine.length + ")"),
+      );
       // A store that is declared and empty and a store that is not declared at all are
       // different facts, and a blank area would say the first when it means the second.
       head.append(
@@ -489,61 +710,117 @@ export function activate(host: HTMLElement): AppInstance {
         ),
       );
       head.addEventListener("click", () => toggleStore(copy.key));
-      refs.list.append(head);
+      heading.append(head);
 
-      if (folded) continue;
+      const region = h("div", "console-notes-app__region");
+      region.id = regionId;
+      region.hidden = folded;
+      group.append(heading, region);
+      refs.list.append(group);
 
       if (!store.declared) {
-        refs.list.append(
-          h(
-            "p",
-            "console-notes-app__note-none",
-            "Set knowledge.notes." + copy.key + " in magus.yaml to enable this store.",
-          ),
+        const hint = h("p", "console-notes-app__note-none");
+        hint.append(
+          document.createTextNode("Set "),
+          h("code", undefined, "knowledge.notes." + copy.key),
+          document.createTextNode(" in magus.yaml to enable this store."),
         );
+        region.append(hint);
         continue;
       }
 
-      // A real PF Alert rather than a hand-rolled strip. A store that cannot read one of its
-      // own files is a genuine warning, and the component carries the severity semantics and
-      // the icon slot for free - the sheet only flattens it so it spans the list edge to edge
-      // instead of floating in it as a card.
-      for (const issue of store.issues) {
-        refs.list.append(alert("pf-m-warning pf-m-inline console-notes-app__issue", issue));
+      if (store.issues.length > 0) {
+        const issues = h("div", "console-notes-app__issues");
+        for (const issue of store.issues) {
+          issues.append(inlineAlert({ variant: "warning", title: issue }));
+        }
+        region.append(issues);
       }
 
       if (mine.length === 0) {
-        refs.list.append(
-          h(
-            "p",
-            "console-notes-app__note-none",
-            term
-              ? "No note here matches that filter."
-              : "Nothing here yet. `magus notes edit <name>` opens your editor and writes the first one.",
-          ),
-        );
+        const hint = h("p", "console-notes-app__note-none");
+        if (term) {
+          hint.textContent = "No note here matches that filter.";
+        } else {
+          hint.append(
+            document.createTextNode("Nothing here yet. Run "),
+            h("code", undefined, "magus notes edit <name>"),
+            document.createTextNode(" to open your editor and write the first one."),
+          );
+        }
+        region.append(hint);
         continue;
       }
-      for (const n of mine) refs.list.append(buildRow(n));
-      shown += mine.length;
+      const ul = h("ul", "pf-v6-c-data-list pf-m-compact pf-m-grid");
+      ul.setAttribute("role", "list");
+      ul.setAttribute("aria-label", copy.title + " notes");
+      for (const n of mine) ul.append(buildRow(n));
+      region.append(ul);
     }
+    reconcile(term, shown, focusedKey);
+  }
+
+  // reconcile brings everything that depends on the rendered list back in step with it: the tab
+  // stop, the focus a re-render would otherwise drop, the count, and the open note.
+  function reconcile(term: string, shown: number, focusedKey: string | null): void {
+    settleTabStop(focusedKey);
+    if (focusedKey)
+      stops()
+        .find((b) => b.dataset.roving === focusedKey)
+        ?.focus();
+    const total = notes.length;
+    refs.count.textContent = term
+      ? shown + " of " + total + (total === 1 ? " note" : " notes")
+      : total + (total === 1 ? " note" : " notes");
 
     // The reading pane keeps whatever is open, but a filter that hides the open note leaves the
     // list and the pane disagreeing about what is selected.
     if (selected && !refs.list.querySelector('[data-name="' + CSS.escape(selected) + '"]')) {
       showBlank();
     }
-    if (shown === 0 && term) refs.detail.removeAttribute("data-open");
   }
+
+  // --- the reading pane --------------------------------------------------------------------
+
+  // The detail is an overlay in a narrow pane and a second column in a wide one; the stylesheet's
+  // container query decides which, and this asks it. Over a pane that is showing the detail as an
+  // overlay the list and filter beneath are inert, so neither Tab nor a screen reader can reach
+  // what the overlay hides.
+  const isOverlay = (): boolean => getComputedStyle(refs.detail).position === "absolute";
+
+  function syncOverlay(): void {
+    const covering = refs.detail.hasAttribute("data-open") && isOverlay();
+    for (const el of [refs.pane, refs.bar]) {
+      if (covering) el.setAttribute("inert", "");
+      else el.removeAttribute("inert");
+    }
+  }
+
+  function closeDetail(restoreFocus: boolean): void {
+    refs.detail.removeAttribute("data-open");
+    syncOverlay();
+    if (!restoreFocus || !selected) return;
+    refs.list.querySelector<HTMLElement>('[data-name="' + CSS.escape(selected) + '"]')?.focus();
+  }
+
+  refs.back.addEventListener("click", () => closeDetail(true));
+  refs.detail.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !refs.detail.hasAttribute("data-open") || !isOverlay()) return;
+    e.stopPropagation();
+    closeDetail(true);
+  });
+  const resizeObserver =
+    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => syncOverlay());
+  resizeObserver?.observe(refs.panel);
 
   function showBlank(): void {
     selected = null;
-    refs.detail.removeAttribute("data-open");
-    refs.detailScope.textContent = "";
-    refs.detailScope.removeAttribute("data-scope");
-    refs.detailScope.removeAttribute("title");
+    proseHost = null;
+    bodyGeneration++;
+    closeDetail(false);
+    refs.detailBody.removeAttribute("aria-busy");
     refs.detailBody.replaceChildren(
-      h("div", "console-notes-app__blank", "Select a note to read it."),
+      emptyBlock("No note selected", "Choose a note from the list to read it."),
     );
   }
 
@@ -567,7 +844,7 @@ export function activate(host: HTMLElement): AppInstance {
       if (where !== subject) {
         subject = where;
         author = ""; // a new file restates who is speaking, even for the same person
-        wrap.append(h("div", "console-notes-app__thread-file", where));
+        wrap.append(h("h3", "console-notes-app__thread-file", where));
       }
 
       const box = h("article", "console-notes-app__entry");
@@ -582,7 +859,9 @@ export function activate(host: HTMLElement): AppInstance {
       } else {
         box.dataset.continued = "";
       }
-      if (e.resolved) box.append(h("span", "console-notes-app__entry-resolved", "resolved"));
+      if (e.resolved) {
+        box.append(pfLabel("Resolved", { color: "pf-m-green", icon: statusIcon("success") }));
+      }
 
       // textContent, as everywhere else a note's prose is rendered: this is quoted material
       // out of a file on disk and must never become a way to run markup someone pasted in.
@@ -594,101 +873,162 @@ export function activate(host: HTMLElement): AppInstance {
 
   function buildAnchor(a: Anchor): HTMLElement {
     const copy = ANCHOR_COPY[a.status] ?? ANCHOR_COPY[AnchorStatus.UNVERIFIED];
-    const row = h("div", "console-notes-app__anchor");
-    const dot = h("span", "console-notes-app__anchor-status");
-    if (copy) dot.dataset.status = copy.slug;
-    dot.setAttribute("role", "img");
-    dot.setAttribute("aria-label", copy?.label ?? "unverified");
-    row.append(dot);
+    const row = h("li", "console-notes-app__anchor");
+    row.append(statusPhrase(copy?.status ?? "neutral", copy?.label ?? "unverified"));
 
     const target = h("span", "console-notes-app__anchor-target");
     target.append(document.createTextNode((ANCHOR_KIND_NAME[a.kind] ?? "anchor") + " " + a.target));
-    if (a.detail) target.append(h("small", "console-notes-app__anchor-detail", a.detail));
+    if (a.detail) target.append(h("span", "console-notes-app__anchor-detail", a.detail));
     // The node id is the handle a reader carries to the Graph Explorer by hand. It is text and
-    // not a link because cross-app navigation carries a pageId and nothing else today, so a
-    // link would have to invent a contract this change has no business inventing.
-    if (a.nodeId) target.append(h("small", "console-notes-app__anchor-detail", a.nodeId));
+    // not a link because cross-app navigation carries a pageId and nothing else today.
+    if (a.nodeId) target.append(h("span", "console-notes-app__anchor-detail", a.nodeId));
     row.append(target);
     return row;
   }
 
-  function renderNote(n: Note, body: string): void {
-    const copy = SCOPE_COPY[n.scope];
-    // A badge, not a sentence. This is the open note's scope - a property OF the thing being
-    // read, which is what a badge means - and spelling the consequence out beside it read as
-    // running commentary on the header. The consequence still matters, so it moves to the
-    // tooltip, and the list heading states it in full for the store as a whole.
-    refs.detailScope.textContent = copy ? copy.title : "";
-    if (copy) {
-      refs.detailScope.dataset.scope = copy.key;
-      refs.detailScope.title = copy.consequence;
+  // setProse swaps the note's body region between loading, ready and failed without touching the
+  // heading or the facts, so a body arriving neither moves focus nor shifts the layout around it.
+  function setProse(n: Note, prose: Prose): void {
+    const slot = proseHost;
+    if (!slot) return;
+    refs.detailBody.setAttribute("aria-busy", String(prose.state === "loading"));
+    if (prose.state === "loading") {
+      const skeleton = h("div", "console-notes-app__loading");
+      skeleton.setAttribute("role", "status");
+      skeleton.append(h("span", "pf-v6-screen-reader", "Loading the note"));
+      for (const width of ["pf-m-width-75", "", "", "pf-m-width-50", "", "pf-m-width-66"]) {
+        skeleton.append(h("div", "pf-v6-c-skeleton pf-m-text-md " + width));
+      }
+      slot.replaceChildren(skeleton);
+      return;
     }
-
-    const read = h("div", "console-notes-app__read");
-    read.append(h("h2", "console-notes-app__title", n.title || n.name));
-
-    const sub = h("div", "console-notes-app__subtitle");
-    const ms = tsMillis(n.modifyTime);
-    if (ms !== null) sub.append(h("span", undefined, edited(ms)));
-    const slug = stalenessSlug(n);
-    if (slug) {
-      const el = h(
-        "span",
-        undefined,
-        n.outrunDays + " days behind its subject" + (slug === "petrified" ? ", re-read it" : ""),
+    if (prose.state === "error") {
+      const retry = glyphButton("Retry", "pf-m-link pf-m-inline");
+      retry.addEventListener("click", () => requestBody(n));
+      slot.replaceChildren(
+        inlineAlert({
+          variant: "danger",
+          title: "Could not load this note",
+          body: prose.message,
+          actions: [retry],
+        }),
       );
-      el.dataset.staleness = slug;
-      sub.append(el);
+      return;
     }
-    if (n.tags.length > 0) sub.append(h("span", undefined, n.tags.join(" ")));
-    if (sub.childElementCount > 0) read.append(sub);
-
     // A capture renders as its entries where the body reads back as one, and verbatim where it
     // does not. Losing the boxes is cosmetic; losing the transcript would not be.
-    const transcript = n.source ? parseTranscript(n.source.kind, body) : null;
+    const transcript = n.source ? parseTranscript(n.source.kind, prose.body) : null;
     if (transcript) {
-      read.append(h("p", "console-notes-app__prose", transcript.preamble));
-      read.append(buildTranscript(transcript));
-    } else {
-      // A note IS a markdown file, so it is rendered as one. renderMarkdown builds nodes rather
-      // than markup - no innerHTML, no HTML string anywhere - which keeps the untrusted-body
-      // guarantee structural while letting a hard-wrapped paragraph reflow to the pane.
-      const prose = h("div", "console-notes-app__prose");
-      prose.append(renderMarkdown(body));
-      read.append(prose);
+      slot.replaceChildren(
+        h("p", "console-notes-app__prose", transcript.preamble),
+        buildTranscript(transcript),
+      );
+      return;
     }
+    // A note IS a markdown file, so it is rendered as one. renderMarkdown builds nodes rather
+    // than markup - no innerHTML, no HTML string anywhere - which keeps the untrusted-body
+    // guarantee structural while letting a hard-wrapped paragraph reflow to the pane.
+    const body = h("div", "console-notes-app__prose");
+    body.append(renderMarkdown(prose.body));
+    slot.replaceChildren(body);
+  }
+
+  function renderNote(n: Note): HTMLElement {
+    const copy = SCOPE_COPY[n.scope];
+    const read = h("div", "console-notes-app__read");
+    const title = h("h2", "console-notes-app__title", n.title || n.name);
+    title.tabIndex = -1;
+    read.append(title);
+
+    const sub = h("div", "console-notes-app__subtitle");
+    if (copy) {
+      sub.append(
+        pfLabel(copy.title, { color: copy.color }),
+        h("span", undefined, copy.consequence),
+      );
+    }
+    if (n.source) {
+      sub.append(
+        pfLabel("Quoted", { color: "pf-m-purple" }),
+        h(
+          "span",
+          undefined,
+          "a transcript captured from a " + n.source.kind + ", not prose someone wrote",
+        ),
+      );
+    }
+    const ms = tsMillis(n.modifyTime);
+    if (ms !== null) sub.append(h("span", undefined, edited(ms)));
+    const lag = behind(n);
+    if (lag) {
+      sub.append(
+        statusPhrase(
+          lag.status,
+          lag.text +
+            (n.staleness === Staleness.PETRIFIED ? ". Re-read it before relying on it" : ""),
+        ),
+      );
+    }
+    read.append(sub);
+    if (n.tags.length > 0) read.append(tagList(n.tags));
+
+    proseHost = h("div", "console-notes-app__prose-host");
+    read.append(proseHost);
 
     const facts = h("div", "console-notes-app__facts");
     if (n.anchors.length > 0) {
-      facts.append(h("div", "console-notes-app__facts-head", "Anchored to"));
-      for (const a of n.anchors) facts.append(buildAnchor(a));
+      facts.append(h("h3", "console-notes-app__facts-head", "Anchored to"));
+      const anchors = h("ul", "console-notes-app__anchors");
+      anchors.setAttribute("role", "list");
+      for (const a of n.anchors) anchors.append(buildAnchor(a));
+      facts.append(anchors);
     }
-    facts.append(h("div", "console-notes-app__facts-head", "File"));
-    facts.append(copyRow(n.path, "path"));
+    facts.append(h("h3", "console-notes-app__facts-head", "File"));
+    facts.append(copyRow(n.path, "path", announce));
     // The path and the command, rather than an edit box. This is where a reader goes to change
     // a note, and naming the command is the whole affordance: the write path is a person in an
     // editor, and the console showing a text box would be the thing this store exists to prevent.
-    facts.append(h("div", "console-notes-app__facts-head", "Edit it"));
-    facts.append(copyRow("magus notes edit " + n.name, "edit command"));
+    facts.append(h("h3", "console-notes-app__facts-head", "Edit from a terminal"));
+    facts.append(copyRow("magus notes edit " + n.name, "edit command", announce));
 
     refs.detailBody.replaceChildren(read, facts);
     refs.detailBody.scrollTop = 0;
+    return title;
+  }
+
+  function requestBody(n: Note): void {
+    const generation = ++bodyGeneration;
+    setProse(n, { state: "loading" });
+    const current = (): boolean => !stale && selected === n.name && generation === bodyGeneration;
+    loadBody(n).then(
+      (body) => {
+        // A second click before the first body lands must not overwrite the note now open.
+        if (current()) setProse(findNote(n.name) ?? n, { state: "ready", body });
+      },
+      (e: unknown) => {
+        // reported: by the server transport's failure interceptor
+        if (current()) {
+          setProse(n, { state: "error", message: e instanceof Error ? e.message : String(e) });
+        }
+      },
+    );
   }
 
   function openNote(n: Note): void {
     selected = n.name;
     for (const row of refs.list.querySelectorAll<HTMLElement>(".console-notes-app__note")) {
-      if (row.dataset.name === n.name) row.setAttribute("aria-current", "true");
+      const on = row.dataset.name === n.name;
+      if (on) row.setAttribute("aria-current", "true");
       else row.removeAttribute("aria-current");
+      row.classList.toggle("pf-m-selected", on);
     }
     refs.detail.dataset.open = "";
-    renderNote(n, "");
-    void loadBody(n).then((body) => {
-      // A second click before the first body lands must not overwrite the note now open.
-      if (stale || selected !== n.name) return;
-      const current = findNote(n.name) ?? n;
-      renderNote(current, body);
-    });
+    const title = renderNote(n);
+    syncOverlay();
+    // Focus follows the reader into the overlay. Beside the list it stays on the row, where the
+    // arrow keys still move through the notes.
+    if (isOverlay()) title.focus();
+    requestBody(n);
   }
 
   function show(
@@ -768,6 +1108,12 @@ export function activate(host: HTMLElement): AppInstance {
   }
 
   refs.search.addEventListener("input", () => renderList());
+  refs.search.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !refs.search.value) return;
+    e.stopPropagation();
+    clearFilter();
+  });
+  refs.clear.addEventListener("click", clearFilter);
   refs.main.hidden = true;
   refs.bar.hidden = true;
   load();
@@ -784,6 +1130,7 @@ export function activate(host: HTMLElement): AppInstance {
     setVisible(): void {},
     deactivate(): void {
       stale = true;
+      resizeObserver?.disconnect();
       unsubscribeHost();
     },
   };

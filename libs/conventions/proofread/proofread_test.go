@@ -89,6 +89,7 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
 		RuleSecondPerson, RuleStepVerb, RuleCondescension,
+		RuleRestates, RuleCommentBudget, RuleBlockBudget, RuleBannedWord,
 	}, ruleNames(toneChecks), ruleNames(slopChecks), ruleNames(messageChecks), ruleNames(commitChecks),
 		ruleNames(helpChecks), ruleNames(issueChecks), ruleNames(densityChecks), ruleNames(reviewChecks),
 		ruleNames(suppressChecks), ruleNames(agentReplyChecks), ruleNames(toolChecks), []Rule{RuleVoiceDrift},

@@ -36,6 +36,7 @@ The code is `PRF5004`. The decision depends on the kind of text judged:
 | `issue`              | off     |
 | `release-notes`      | off     |
 | `changelog`          | off     |
+| `stylesheet`         | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
 a rule of writing a teammate reads. A repository turns it on in its decisions table.

@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, activityservice]
 
 ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API, never under /mcp (the agent protocol endpoint).
 
-Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:175](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L175). Part of the [server API](../../index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:175](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L175). Part of the [daemon API](../../index.md).
 
 ## Methods
 

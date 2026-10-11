@@ -81,11 +81,8 @@ export interface AlertRail {
 // mountAlertRail builds the rail and wires it to NOTIFY_EVENT. The caller appends `el` to the
 // panels container and calls destroy() on teardown.
 export function mountAlertRail(): AlertRail {
-  const root = h("div", "console-dashboard-alertrail");
-  root.setAttribute("role", "status"); // polite: it announces, it never steals focus
-  root.setAttribute("aria-live", "polite");
   // Shown/hidden by a data attribute rather than the `hidden` property, so the rail can TRANSITION
-  // in and out. `hidden` resolves to display:none (overrides.css enforces it with !important), and
+  // in and out. `hidden` resolves to display:none (utilities/hidden.css enforces it with !important), and
   // display is not an animatable property - toggling it makes the rail snap in and out, which on a
   // board being watched from across a room reads as the whole screen flinching. The attribute keeps
   // it in the layout and lets opacity and transform carry the change.
@@ -94,15 +91,30 @@ export function mountAlertRail(): AlertRail {
   // never gets to run leaves the element at its final style (visible); an animation that never runs
   // leaves it on its `from` frame (invisible), which is how this rail once ended up parked below the
   // fold.
-  root.setAttribute("aria-hidden", "true");
+  const root = h("div", "console-dashboard-alertrail");
+  root.setAttribute("role", "region");
+  root.setAttribute("aria-label", "Alerts");
+
+  // The announcement is a region of its own that is in the page, and never hidden, from the moment
+  // the rail mounts. A live region is only spoken when its content changes while it is already
+  // exposed to assistive technology; the rail itself is hidden by visibility until it has something
+  // to say, so putting the live semantics on it announced nothing, or announced after the fact.
+  const announcer = h("p", "pf-v6-screen-reader");
+  announcer.setAttribute("role", "status");
+  announcer.setAttribute("aria-live", "polite");
 
   const lines = h("div", "console-dashboard-alertrail__lines");
   const more = h("div", "console-dashboard-alertrail__more");
   more.hidden = true;
-  root.append(lines, more);
+  root.append(announcer, lines, more);
 
   let queue: Alert[] = [];
   let timer: number | null = null;
+  // The dwell is held while the pointer rests on the rail or focus is inside it: a card the reader is
+  // reaching for must not leave under their hand. The time it had left is kept and resumed.
+  let held = false;
+  let dueAt = 0;
+  let remaining = 0;
   // The rail's own dedupe. The notification store drops a repeated key before it ever reaches the
   // bell, and this listener sits alongside that store rather than downstream of it, so without a
   // matching key set an app that re-detects the same failure on every status frame would
@@ -136,7 +148,6 @@ export function mountAlertRail(): AlertRail {
   function render(): void {
     if (queue.length === 0) {
       root.removeAttribute("data-shown");
-      root.setAttribute("aria-hidden", "true");
       // The canvas gives its padding back FIRST, then the rail fades out over the same window, so
       // the panels grow into the space as the rail leaves rather than after it has gone.
       syncHeight();
@@ -151,7 +162,6 @@ export function mountAlertRail(): AlertRail {
       return;
     }
     root.setAttribute("data-shown", "");
-    root.setAttribute("aria-hidden", "false");
 
     // Coalesce by source: a run that fails six targets should read as one line about that run, not
     // six near-identical ones. The newest message stands in for the group, because on a live board
@@ -187,9 +197,11 @@ export function mountAlertRail(): AlertRail {
         // shared or cast screen, navigating away is not recoverable by whoever is watching.
         if (newest.href) {
           const a = h("a", "console-dashboard-alertrail__action", newest.linkLabel);
-          (a as HTMLAnchorElement).href = newest.href;
-          (a as HTMLAnchorElement).target = "_blank";
-          (a as HTMLAnchorElement).rel = "noopener";
+          a.href = newest.href;
+          a.target = "_blank";
+          a.rel = "noopener";
+          // Named for what it opens, so a list of links reads as more than a column of "Open".
+          a.setAttribute("aria-label", newest.linkLabel + ": " + newest.message);
           card.append(a);
         }
         return card;
@@ -205,14 +217,33 @@ export function mountAlertRail(): AlertRail {
   // expire drops the whole queue at once rather than ageing entries out one by one. A rail that
   // shortens line by line drags the eye back to it repeatedly to watch nothing happen; clearing in
   // one step means the board is either saying something or it is not.
-  function schedule(): void {
+  function schedule(ms: number = dwell()): void {
     if (timer !== null) clearTimeout(timer);
+    dueAt = Date.now() + ms;
     timer = window.setTimeout(() => {
       timer = null;
       queue = [];
       render();
-    }, dwell());
+    }, ms);
   }
+
+  function hold(): void {
+    if (held || timer === null) return;
+    held = true;
+    remaining = Math.max(1_000, dueAt - Date.now());
+    clearTimeout(timer);
+    timer = null;
+  }
+
+  function release(): void {
+    if (!held) return;
+    held = false;
+    if (queue.length > 0) schedule(remaining);
+  }
+  root.addEventListener("pointerenter", hold);
+  root.addEventListener("pointerleave", release);
+  root.addEventListener("focusin", hold);
+  root.addEventListener("focusout", release);
 
   function onNotify(ev: Event): void {
     if (viewMode.get() !== "bigPicture") return;
@@ -221,17 +252,24 @@ export function mountAlertRail(): AlertRail {
     const key = input.key || input.source + ":" + input.message;
     if (seen.has(key)) return;
     seen.add(key);
-    const link = typeof input.link === "string" ? { label: "Open", href: input.link } : input.link;
+    const link =
+      typeof input.link === "string"
+        ? { label: "Open " + input.source, href: input.link }
+        : input.link;
     queue.push({
       source: input.source,
       kind: input.kind ?? "error",
       message: input.message,
       at: input.at ?? Date.now(),
       href: link?.href ?? "",
-      linkLabel: link?.label || "Open",
+      linkLabel: link?.label || "Open " + input.source,
     });
     render();
-    schedule();
+    // Read out by the always-present region: the rail's own visibility is what it is hidden by.
+    announcer.textContent = input.source + ": " + input.message;
+    // A rail the reader is holding stays; the new alert joins it and the dwell restarts on leaving.
+    if (held) remaining = Math.max(remaining, dwell());
+    else schedule();
   }
 
   document.addEventListener(NOTIFY_EVENT, onNotify);
@@ -248,7 +286,9 @@ export function mountAlertRail(): AlertRail {
     if (mode === "bigPicture") return;
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    held = false;
     queue = [];
+    announcer.textContent = "";
     render();
   });
 

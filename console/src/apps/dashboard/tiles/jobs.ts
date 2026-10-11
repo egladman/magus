@@ -7,12 +7,14 @@ import {
   treeOrder,
   HOLDER_LABEL,
   STATE_LABEL,
-  STATE_MARK,
+  STATE_STATUS,
   type JobClient,
   type JobsRead,
 } from "../plan/jobs";
 import { demoOverlaps, demoJobs } from "../plan/demo";
 import { openApp } from "../../../desktop/app-navigation";
+import { reportFailure } from "../../../lib/notifications";
+import { statusIcon } from "../../../ui/status";
 import { Card, h, type Tile } from "./card";
 
 const REFRESH_MS = 4_000;
@@ -23,17 +25,18 @@ export function jobsTile(): Tile {
     note: "waiting for the server",
     why:
       "Every job this server knows about, its own maintenance and the work sessions hold, with" +
-      " anything that needs intervention first. The letter mark on each row: D declared, R" +
-      " running, OK pass, FAIL fail, NR no-return (nothing was ever reported back, unlike fail," +
-      " the one state that needs a human, since no one is coming to tell you about it).",
+      " anything that needs intervention first. Each row says whether the job is declared," +
+      " running, passed, failed, or no-return: nothing was ever reported back, unlike a failure," +
+      " the one state that needs a human, since no one is coming to tell you about it.",
   });
   const summary = h("p", "console-dashboard-jobs__summary", "No jobs.");
-  summary.setAttribute("aria-live", "polite");
   const list = h("ul", "console-dashboard-jobs__list");
   const note = h("p", "console-dashboard-jobs__note");
   const detail = document.createElement("button");
   detail.type = "button";
   detail.className = "pf-v6-c-button pf-m-link pf-m-inline";
+  // The way into the Jobs view stays when the card is empty: that is where the reader goes next.
+  detail.dataset.keepEmpty = "";
   detail.append(h("span", "pf-v6-c-button__text", "All jobs"));
   detail.addEventListener("click", () => openApp({ pageId: "dashboard", mode: "jobs" }));
   card.body.append(summary, list, note, detail);
@@ -47,32 +50,39 @@ export function jobsTile(): Tile {
   let disposed = false;
   let visible = true;
 
+  // setText writes only when the text changed: the tile repaints on every read, and a rewritten
+  // node is a mutation to assistive tech even when the words are the same.
+  const setText = (el: HTMLElement, text: string): void => {
+    if (el.textContent !== text) el.textContent = text;
+  };
+
   const render = (read: JobsRead): void => {
     if (read.kind === "denied") {
       card.setNote("jobs not served");
-      summary.textContent = "This server does not serve jobs.";
+      card.setEmpty("This server does not serve jobs.");
       list.replaceChildren();
-      note.textContent = "";
+      setText(note, "");
       return;
     }
     if (read.kind === "unreadable" || read.kind === "unreachable") {
       card.setNote("jobs unreadable");
-      summary.textContent = "The jobs could not be read.";
+      card.setEmpty("The jobs could not be read: " + read.detail);
       list.replaceChildren();
-      note.textContent = read.detail;
+      setText(note, "");
       return;
     }
 
     const model = buildJobTree(read.jobs, read.overlaps);
     if (!model.nodes.length) {
       card.setNote("no jobs");
-      summary.textContent = "No jobs.";
+      card.setEmpty("No jobs yet. Nothing is running here and nothing has been handed out.");
       list.replaceChildren();
-      note.textContent = "";
+      setText(note, "");
       return;
     }
+    card.setEmpty(null);
     card.setNote(`${model.nodes.length} jobs`);
-    summary.textContent = overviewLine(model);
+    setText(summary, overviewLine(model));
     const priority = { no_return: 0, fail: 1, running: 2, declared: 3, pass: 4 } as const;
     const active = treeOrder(model)
       .map((id) => model.byId.get(id))
@@ -84,8 +94,10 @@ export function jobsTile(): Tile {
       ...active.map((node) => {
         const item = h("li", "console-dashboard-jobs__item");
         item.dataset.state = node.state;
+        const mark = h("span", "console-dashboard-jobs__mark");
+        mark.append(statusIcon(STATE_STATUS[node.state]));
         item.append(
-          h("span", "console-dashboard-jobs__mark", STATE_MARK[node.state]),
+          mark,
           h("code", "console-dashboard-jobs__id", node.id),
           // Which kind of job this is, beside its state: the board is where the two are most
           // easily confused, since a server job and a session's job read the same at a glance.
@@ -101,7 +113,7 @@ export function jobsTile(): Tile {
     const warnings: string[] = [];
     if (model.overlaps.length) warnings.push(`${model.overlaps.length} overlapping claims`);
     if (model.dangling.length) warnings.push(`${model.dangling.length} unresolved parents`);
-    note.textContent = warnings.join(". ") + (warnings.length ? "." : "");
+    setText(note, warnings.join(". ") + (warnings.length ? "." : ""));
   };
 
   const refresh = (): void => {
@@ -111,13 +123,26 @@ export function jobsTile(): Tile {
     const current = ++request;
     controller = new AbortController();
     const signal = controller.signal;
+    let timedOut = false;
     const timeout = window.setTimeout(() => {
-      if (current === request) controller?.abort();
+      if (current !== request) return;
+      timedOut = true;
+      controller?.abort();
     }, REQUEST_TIMEOUT_MS);
     client ??= jobClient(host);
     void listJobs(client, signal)
       .then((read) => {
-        if (!disposed && current === request) render(read);
+        if (disposed || current !== request) return;
+        // The transport stays silent about an abort, since a superseded read is not a failure; this
+        // one is the deadline, so it is reported here.
+        if (timedOut) {
+          reportFailure(
+            "Jobs",
+            "The job list did not answer within " + REQUEST_TIMEOUT_MS / 1000 + "s.",
+            "jobs:timeout",
+          );
+        }
+        render(read);
       })
       .finally(() => {
         window.clearTimeout(timeout);

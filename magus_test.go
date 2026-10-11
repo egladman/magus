@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -1066,6 +1067,7 @@ func (p *recordingProvider) RecordLeaseRegistration(context.Context, string)    
 func (p *recordingProvider) RecordAttentionDisposition(context.Context, float64, string)     {}
 func (p *recordingProvider) RecordReviewRemark(context.Context, string)                      {}
 func (p *recordingProvider) RecordReviewPublish(context.Context, string, bool)               {}
+func (p *recordingProvider) RecordReviewMergedWhileReading(context.Context, float64)         {}
 func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
 func (p *recordingProvider) Shutdown(context.Context) error {
 	p.shutdownCalled = true
@@ -1670,10 +1672,82 @@ func TestTouchedSymbolsAreTheOnesThePatchChanged(t *testing.T) {
 	)
 	got := touchedSymbols(head, patch, map[string]*types.DiffFile{"api.go": {Path: "api.go"}})
 	require.Equal(t, map[string]touchedSymbol{
-		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()", kind: "Function"},
-		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()", kind: "Function"},
-		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()", kind: "Function"},
+		goSymbol("api", "Open()."):  {change: types.DiffChangeBody, signature: "func Open()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 3, extent: 3}},
+		goSymbol("api", "Close()."): {change: types.DiffChangeSignature, signature: "func Close()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 7, extent: 3}},
+		goSymbol("api", "Fresh()."): {change: types.DiffChangeAdded, signature: "func Fresh()", kind: "Function", place: hunkPlace{hunks: []int{0}, start: 11, extent: 3}},
 	}, got)
+}
+
+const twoHunkPatch = `diff --git a/api.go b/api.go
+--- a/api.go
++++ b/api.go
+@@ -2,4 +2,4 @@ package api
+
+ func Open() {
+-	a()
++	b()
+ }
+@@ -20,3 +20,3 @@ func Close() {
+ func Close() {
+-	c()
++	d()
+ }
+`
+
+// A file's hunks each carry the digest the parser gave them and only the symbols whose lines
+// that hunk changed.
+func TestDiffHunksSplitSymbolsAcrossHunks(t *testing.T) {
+	open, closeID := goSymbol("api", "Open()."), goSymbol("api", "Close().")
+	head := graphOf(
+		rangedSymbol(open, "Open", "api.go:3", 5, "Function"),
+		rangedSymbol(closeID, "Close", "api.go:20", 22, "Function"),
+	)
+	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: closeID}, {ID: open}}}}
+	touched := touchedSymbols(head, twoHunkPatch, map[string]*types.DiffFile{"api.go": &files[0]})
+	places := map[string]map[string]hunkPlace{"api.go": {}}
+	for id, ts := range touched {
+		places["api.go"][id] = ts.place
+	}
+
+	attachHunks(files, twoHunkPatch, places)
+
+	parsed := changeset.Parse(twoHunkPatch)
+	require.Len(t, parsed, 1)
+	require.Len(t, parsed[0].Hunks, 2)
+	h0, h1 := parsed[0].Hunks[0], parsed[0].Hunks[1]
+	assert.Equal(t, []types.DiffHunk{
+		{Index: 0, Digest: h0.Digest, OldStart: 2, OldCount: 4, NewStart: 2, NewCount: 4, Declaration: "package api", Symbols: []string{open}},
+		{Index: 1, Digest: h1.Digest, OldStart: 20, OldCount: 3, NewStart: 20, NewCount: 3, Declaration: "func Close() {", Symbols: []string{closeID}},
+	}, files[0].Hunks)
+	assert.NotEmpty(t, h0.Digest)
+	assert.NotEqual(t, h0.Digest, h1.Digest)
+}
+
+// A hunk no listed symbol sits in is still a hunk, and a file the patch has no hunks for
+// gets none.
+func TestDiffHunksIncludeHunksWithoutSymbols(t *testing.T) {
+	files := []types.DiffFile{{Path: "api.go"}, {Path: "other.go"}}
+
+	attachHunks(files, twoHunkPatch, nil)
+
+	require.Len(t, files[0].Hunks, 2)
+	assert.Empty(t, files[0].Hunks[0].Symbols)
+	assert.Empty(t, files[0].Hunks[1].Symbols)
+	assert.Nil(t, files[1].Hunks)
+}
+
+// Symbols a hunk shares come innermost first: the smaller definition, then the later start.
+func TestDiffHunkSymbolsAreInnermostFirst(t *testing.T) {
+	files := []types.DiffFile{{Path: "api.go", Symbols: []types.DiffSymbol{{ID: "outer"}, {ID: "inner"}, {ID: "sibling"}}}}
+	places := map[string]map[string]hunkPlace{"api.go": {
+		"outer":   {hunks: []int{0}, start: 3, extent: 10},
+		"inner":   {hunks: []int{0}, start: 5, extent: 2},
+		"sibling": {hunks: []int{0}, start: 8, extent: 2},
+	}}
+
+	attachHunks(files, twoHunkPatch, places)
+
+	assert.Equal(t, []string{"sibling", "inner", "outer"}, files[0].Hunks[0].Symbols)
 }
 
 // A changed test function has no referents and leaves no module, and is still the

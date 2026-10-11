@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -135,7 +136,7 @@ func (v saplingVCS) Bisect(ctx context.Context, dir string, opts types.BisectOpt
 	defer func() { _ = v.reset(context.WithoutCancel(ctx), dir) }()
 
 	if err := v.run(ctx, dir, opts.TestCmd); err != nil {
-		slog.WarnContext(ctx, "sl bisect run exited with error", slog.String("err", err.Error()))
+		slog.WarnContext(ctx, "sl bisect run exited with error", attr.Error(err))
 	}
 
 	sha, err := v.culprit(ctx, dir)

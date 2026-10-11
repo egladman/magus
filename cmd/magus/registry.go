@@ -322,7 +322,7 @@ func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
 	if err != nil {
 		slog.With(attr.Component("server")).WarnContext(ctx, "cannot watch a failed workspace; it stays failed until `magus server reload`",
-			slog.String("root", e.root), slog.String("error", err.Error()))
+			slog.String("root", e.root), attr.Error(err))
 		return false
 	}
 	defer func() { _ = w.Close() }()
@@ -528,7 +528,7 @@ func completeJobRow(ctx context.Context, args []string, dur time.Duration, jobEr
 		}
 	}); err != nil {
 		slog.DebugContext(ctx, "completing the job's row failed",
-			slog.String("job", catalog.Name), slog.String("error", err.Error()))
+			slog.String("job", catalog.Name), attr.Error(err))
 	}
 }
 

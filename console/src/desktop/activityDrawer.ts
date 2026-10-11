@@ -1,16 +1,17 @@
 // activityDrawer.ts - the shell's activity drawer: what magus is running right now, and what ran
 // recently. It is the immediate sibling of share.ts, built on the same right-docked side-panel
-// idiom (the notification-center / reference-drawer family): one hidden singleton appended to
-// document.body, toggled by a status-bar button through the one delegated footer click in main.ts,
-// dismissed on Escape or an outside pointerdown.
+// idiom (panel.ts): one hidden singleton appended to document.body, toggled by a status-bar button
+// through the one delegated footer click in main.ts.
 //
-// It diverges from share.ts on exactly ONE point, deliberately. Share moves focus into the panel on
-// open, because sharing is a task you came to perform. This is a readout you glance at WHILE working
+// It diverges from share.ts on two points, deliberately. Share moves focus into the panel on open,
+// because sharing is a task you came to perform; this is a readout you glance at WHILE working
 // somewhere else, and it repaints on a timer, so pulling focus would interrupt the very thing being
-// watched. Nothing here ever calls focus(). The summary line is an aria-live="polite" region instead,
-// so a screen reader is told what changed without the caret leaving where the user put it. It is the
-// SUMMARY that is live and not the lists: a list rebuilt every few seconds inside a live region
-// re-announces every row on every tick, which is how a considerate feature becomes an unusable one.
+// watched. And Share closes on a click outside, while this closes only on Escape, its close button
+// or its toggle: a click into the app behind it is the reader getting on with the work it sits
+// beside. The summary line is a polite status region instead of focus, so a screen reader is told
+// what changed without the caret leaving where the user put it. It is the SUMMARY that is live and
+// not the lists: a list rebuilt every few seconds inside a live region re-announces every row on
+// every tick, which is how a considerate feature becomes an unusable one.
 //
 // Two sections, newest first within each:
 //
@@ -33,7 +34,16 @@ import { createClient } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { StatusService, type Status } from "@wire/status/v1alpha1/status_pb";
 import { ViewerService, type Output } from "@wire/viewer/v1alpha1/viewer_pb";
-import { authHeaders, createServerTransport, getLiveToken, resolveServerHost } from "../lib/server";
+import {
+  createServerTransport,
+  getLiveToken,
+  parseHash,
+  resolveServerHost,
+  wantsDemo,
+} from "../lib/server";
+import { statusMark, type Status as StatusKind } from "../ui/status";
+import { scenarioRuns } from "./demo-scenario";
+import { buildPanel, panelBehavior } from "./panel";
 
 // The refresh cadence, and the deadline each read inside one refresh gets. Deliberately NOT the
 // operator's configured refresh rate (lib/settings getPollMs, default 20s): that rate governs how
@@ -67,6 +77,13 @@ export interface ActivityRow {
   // (plan/jobs.ts joinRuns); what is still missing is a producer that stamps
   // the field - no run or trail event records its unit yet.
   unit?: string;
+  // The detail without its age: what the source knows about the row, apart from when. The drawer
+  // writes its own time beside it, in one format; `detail` keeps the age inline for the Plan app's
+  // compact list, which is the other reader of these rows.
+  facts?: string;
+  // Where the run opens in the Log Viewer. Absent for a row with nothing stored to open, such as a
+  // lock held by another process.
+  href?: string;
 }
 
 // RunDescriptor mirrors one row of the server's GET /api/v1/outputs JSON. It is the same wire DTO
@@ -144,24 +161,28 @@ export function runningRows(st: Status | undefined, nowMs: number): ActivityRow[
   for (const t of st?.pool?.runningTargets ?? []) {
     const atMs = tsMillis(t.startTime);
     const args = t.args ?? [];
+    const facts = [t.workspace, t.step].filter(Boolean).join(" - ");
     rows.push({
       id: t.invocation || "run:" + args.join(" "),
       title: args.length ? "magus " + args.join(" ") : "magus",
-      detail: [t.workspace, t.step, relAge(atMs, nowMs)].filter(Boolean).join(" - "),
+      detail: [facts, relAge(atMs, nowMs)].filter(Boolean).join(" - "),
+      facts,
       atMs,
       outcome: "",
+      // The log viewer opens an invocation by id; a slot with none has nothing to link to.
+      href: t.invocation ? viewerHref("inv", t.invocation, false) : undefined,
     });
   }
   for (const l of st?.locks ?? []) {
     const atMs = tsMillis(l.acquireTime);
+    const facts = [l.project || ".", l.pid ? "pid " + l.pid : ""].filter(Boolean).join(" - ");
     rows.push({
       id: "lock:" + l.pid + ":" + l.project,
       // The holder's argv is what identifies it. The project alone would not: two runs against the
       // same tree are the case a reader most needs to tell apart.
       title: l.command || "lock held",
-      detail: [l.project || ".", l.pid ? "pid " + l.pid : "", relAge(atMs, nowMs)]
-        .filter(Boolean)
-        .join(" - "),
+      detail: [facts, relAge(atMs, nowMs)].filter(Boolean).join(" - "),
+      facts,
       atMs,
       outcome: "",
     });
@@ -172,26 +193,65 @@ export function runningRows(st: Status | undefined, nowMs: number): ActivityRow[
 // recentRows projects the run-descriptor feed into the RECENT section, newest first and capped. The
 // feed is already newest-first, but it is sorted here anyway so the ordering is this module's
 // guarantee rather than an assumption about a route it does not own.
-export function recentRows(runs: RunDescriptor[], nowMs: number): ActivityRow[] {
+export function recentRows(runs: RunDescriptor[], nowMs: number, demo = false): ActivityRow[] {
   return runs
     .map(
       (r): ActivityRow => ({
         id: r.ref,
         title: r.project ? r.project + ":" + r.target : r.target || r.ref,
         detail: [fmtMs(r.duration_ms), relAge(r.timestamp_ms, nowMs)].filter(Boolean).join(" - "),
+        facts: fmtMs(r.duration_ms),
         atMs: r.timestamp_ms,
         // A descriptor exists only for a run that finished, so the outcome is always known here.
         outcome: r.failed ? "fail" : "pass",
+        href: r.ref ? viewerHref("ref", r.ref, demo) : undefined,
       }),
     )
     .sort((a, b) => b.atMs - a.atMs)
     .slice(0, RECENT_LIMIT);
 }
 
-// summaryLine is what the aria-live region announces: the two counts in one sentence, so a screen
+// summaryLine is what the live region announces: the two counts in one sentence, so a screen
 // reader hears "3 running, 25 recent" when a tick changes it and nothing at all when it does not.
-export function summaryLine(running: number, recent: number): string {
-  return running + " running, " + recent + " recent";
+// Demo data says so, since the same sentence over fabricated runs would read as a claim about a server.
+export function summaryLine(running: number, recent: number, demo = false): string {
+  return running + " running, " + recent + " recent" + (demo ? " (demo data)" : "");
+}
+
+// viewerHref is the Log Viewer deep link for one run, relative like the Runs app's: every console
+// page resolves "logs/" against /console/, so it works at a server origin, under the docs site's
+// base path, or on a dev port. The demo carries its fragment so a demo run opens as one.
+function viewerHref(key: "inv" | "ref", value: string, demo: boolean): string {
+  return "logs/#" + (demo ? "demo&" : "") + key + "=" + encodeURIComponent(value);
+}
+
+// whenLabel is the one time format the drawer uses: relative while it is recent ("12s ago",
+// "4m ago"), a dated clock time once an hour has passed ("Oct 9, 14:03"). "" for an instant the
+// source did not report, so a missing time never reads as "just now".
+export function whenLabel(atMs: number, nowMs: number): string {
+  if (atMs <= 0) return "";
+  if (nowMs - atMs < 3600_000) return relAge(atMs, nowMs) + " ago";
+  return new Date(atMs).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// demoDescriptors reads the demo scenario's run history as the same descriptors the server feed
+// yields, so the drawer shows the demo's own runs and says so, rather than "not connected".
+function demoDescriptors(nowMs: number): RunDescriptor[] {
+  return scenarioRuns(nowMs).map((r) => ({
+    ref: r.ref,
+    project: r.project,
+    target: r.target,
+    inv: r.inv,
+    failed: r.state === "failed",
+    error: r.error,
+    timestamp_ms: r.endMs,
+    duration_ms: r.durationMs,
+  }));
 }
 
 // ---- the panel -------------------------------------------------------------
@@ -200,54 +260,38 @@ export interface ActivityDrawer {
   open(): void;
   close(): void;
   toggle(): void;
-  // Remove the drawer for good: its timer, its two document listeners, and the panel itself. close()
+  isOpen(): boolean;
+  // Remove the drawer for good: its timer, its document listeners, and the panel itself. close()
   // is not that - it hides a panel that is meant to be reopened, so the listeners stay. A shell that
-  // is going away needs this one, or every re-mount leaves another pointerdown/keydown pair on
-  // document holding a detached panel alive and toggling it.
+  // is going away needs this one, or every re-mount leaves another keydown listener on document
+  // holding a detached panel alive and toggling it.
   destroy(): void;
+}
+
+export interface ActivityOptions {
+  // Runs after every open or close, so the status bar's toggles can say which they are.
+  onChange?: (open: boolean) => void;
 }
 
 // mountActivityDrawer builds the singleton drawer (hidden) once and returns its controller. The shell
 // wires the status-bar activity button (rebuilt per app) to toggle() through one delegated click,
 // exactly as it does for the share panel.
-export function mountActivityDrawer(): ActivityDrawer {
-  const panel = document.createElement("section");
-  panel.className = "console-shell-activity";
-  panel.id = "console-activitypanel";
+export function mountActivityDrawer(options: ActivityOptions = {}): ActivityDrawer {
   // A region, NOT share.ts's dialog: a dialog promises focus management, and this panel deliberately
-  // never takes focus. Stated explicitly rather than left to the implicit role of a named <section>,
-  // so the difference from its sibling is visible here rather than inferred from an omission.
-  panel.setAttribute("role", "region");
-  panel.setAttribute("aria-label", "Activity");
-  panel.hidden = true;
-
-  const head = document.createElement("div");
-  head.className = "console-shell-activity__head";
-  const title = document.createElement("span");
-  title.className = "console-shell-activity__title";
-  title.textContent = "Activity";
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "pf-v6-c-button pf-m-plain console-shell-activity__close";
-  closeBtn.setAttribute("aria-label", "Close activity panel");
-  closeBtn.textContent = "×"; // multiplication sign, the console's close glyph
-  head.append(title, closeBtn);
-
-  const body = document.createElement("div");
-  body.className = "console-shell-activity__body";
+  // never takes focus.
+  const shell = buildPanel({ id: "console-activitypanel", title: "Activity", role: "region" });
+  const body = shell.body;
 
   const summary = document.createElement("p");
   summary.className = "console-shell-activity__summary";
-  summary.setAttribute("aria-live", "polite");
+  summary.setAttribute("role", "status");
   summary.textContent = summaryLine(0, 0);
 
   const running = buildSection("Running", "Nothing is running.");
   const recent = buildSection("Recent", "No runs recorded yet.");
   body.append(summary, running.el, recent.el);
-  panel.append(head, body);
-  document.body.append(panel);
+  document.body.append(shell.el);
 
-  let open = false;
   let destroyed = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   // The generation a read is stamped with. A read that resolves after a newer one started - or after
@@ -257,9 +301,6 @@ export function mountActivityDrawer(): ActivityDrawer {
   // The reads in flight, so shutting the panel stops them. A closed drawer is not a reason to keep
   // the server answering, and it is the same rule the timer already follows.
   let reading: AbortController | null = null;
-  // Every listener this drawer installs, the two on document included, removed together by
-  // destroy(). Not by close(): a hidden drawer still has to hear the button that reopens it.
-  const listeners = new AbortController();
 
   // stopReading retires whatever is in flight - the abort ends the request, the bumped generation
   // makes sure a response already on its way in cannot paint.
@@ -269,48 +310,26 @@ export function mountActivityDrawer(): ActivityDrawer {
     reading = null;
   };
 
-  const setOpen = (v: boolean): void => {
-    if (destroyed || v === open) return;
-    open = v;
-    panel.hidden = !v;
-    panel.setAttribute("aria-hidden", v ? "false" : "true");
-    if (v) {
-      void refresh();
-      timer = setInterval(() => void refresh(), POLL_MS);
-    } else {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
+  // Closes on Escape, the close button, or its own status-bar toggle, and on nothing else. This is a
+  // readout the reader glances at while working somewhere else, so a click into the app behind it must
+  // not dismiss it. No focus moves in on open: see the header comment.
+  const behavior = panelBehavior(shell, {
+    toggles: "[data-activity-toggle]",
+    closeOnOutside: false,
+    onChange(v) {
+      if (v) {
+        void refresh();
+        timer = setInterval(() => void refresh(), POLL_MS);
+      } else {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        stopReading();
       }
-      stopReading();
-    }
-    // No focus() on open, and none on close: see the header comment. The panel is read, not entered.
-  };
-
-  closeBtn.addEventListener("click", () => setOpen(false), { signal: listeners.signal });
-
-  // Dismiss on an outside pointerdown or Escape. A click on any status-bar activity button
-  // ([data-activity-toggle]) is that button's own toggle, so ignore it here to avoid closing then
-  // immediately reopening (or vice versa). Same shape as share.ts's dismissal.
-  document.addEventListener(
-    "pointerdown",
-    (e) => {
-      if (!open) return;
-      const t = e.target;
-      if (!(t instanceof Node)) return;
-      if (panel.contains(t)) return;
-      if (t instanceof Element && t.closest("[data-activity-toggle]")) return;
-      setOpen(false);
+      options.onChange?.(v);
     },
-    { signal: listeners.signal },
-  );
-  document.addEventListener(
-    "keydown",
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) setOpen(false);
-    },
-    { signal: listeners.signal },
-  );
+  });
 
   // refresh reads both feeds for one tick and repaints. The two are fetched together but fail
   // independently: a status read that fails must not blank a run list that answered, and vice versa,
@@ -320,10 +339,20 @@ export function mountActivityDrawer(): ActivityDrawer {
     // nothing to read, or a read still out from the server that just went away would paint rows
     // over "not connected".
     stopReading();
+    // The fragment decides demo, as everywhere else in the shell: with no server to read, the drawer
+    // shows the demo's own runs and says they are demo data, not "not connected".
+    if (wantsDemo(parseHash())) {
+      const now = Date.now();
+      const demoList = recentRows(demoDescriptors(now), now, true);
+      running.render([], "Nothing is running in the demo.", now);
+      recent.render(demoList, "No demo runs.", now);
+      setSummary(0, demoList.length, true);
+      return;
+    }
     const host = resolveServerHost();
     if (!host) {
-      running.render([], "Not connected to a server.");
-      recent.render([], "Not connected to a server.");
+      running.render([], "Not connected to a server.", Date.now());
+      recent.render([], "Not connected to a server.", Date.now());
       setSummary(0, 0);
       return;
     }
@@ -346,34 +375,42 @@ export function mountActivityDrawer(): ActivityDrawer {
       status.kind === "ok"
         ? "Nothing is running."
         : "Could not read the server's status: " + status.detail,
+      now,
     );
     recent.render(
       recentList,
       runs.kind === "ok"
         ? "No runs recorded yet."
         : "Could not read the run history: " + runs.detail,
+      now,
     );
     setSummary(runningList.length, recentList.length);
   }
 
   // Written only when it actually changed: assigning the same string still counts as a mutation to
   // some assistive tech, which would re-announce an unchanged count on every four-second tick.
-  function setSummary(runningCount: number, recentCount: number): void {
-    const line = summaryLine(runningCount, recentCount);
+  function setSummary(runningCount: number, recentCount: number, demo = false): void {
+    const line = summaryLine(runningCount, recentCount, demo);
     if (summary.textContent !== line) summary.textContent = line;
   }
 
   return {
-    open: () => setOpen(true),
-    close: () => setOpen(false),
-    toggle: () => setOpen(!open),
+    // A destroyed drawer stays destroyed: a stale reference cannot put a detached panel back on screen.
+    open: () => {
+      if (!destroyed) behavior.open();
+    },
+    close: behavior.close,
+    toggle: () => {
+      if (!destroyed) behavior.toggle();
+    },
+    isOpen: behavior.isOpen,
     destroy() {
       if (destroyed) return;
-      // Shut it first, while setOpen still works: that is what clears the timer and aborts the reads.
-      setOpen(false);
+      // Shut it first, while the behavior still works: that is what clears the timer and aborts the reads.
+      behavior.close();
       destroyed = true;
-      listeners.abort();
-      panel.remove();
+      behavior.destroy();
+      shell.el.remove();
     },
   };
 }
@@ -382,7 +419,7 @@ export function mountActivityDrawer(): ActivityDrawer {
 // way, so the construction lives here once.
 interface Section {
   el: HTMLElement;
-  render(rows: ActivityRow[], emptyText: string): void;
+  render(rows: ActivityRow[], emptyText: string, nowMs: number): void;
 }
 
 function buildSection(heading: string, initialEmpty: string): Section {
@@ -390,16 +427,14 @@ function buildSection(heading: string, initialEmpty: string): Section {
   el.className = "console-shell-activity__section";
 
   const headEl = document.createElement("h3");
-  headEl.className = "console-shell-activity__sectionhead";
+  headEl.className = "console-shell-activity__section-head";
   const label = document.createElement("span");
   label.textContent = heading;
-  const countLabel = document.createElement("span");
-  countLabel.className = "pf-v6-c-label pf-m-compact";
+  // A PF Badge in its read state: a count, not a status.
   const count = document.createElement("span");
-  count.className = "pf-v6-c-label__content";
+  count.className = "pf-v6-c-badge pf-m-read";
   count.textContent = "0";
-  countLabel.append(count);
-  headEl.append(label, countLabel);
+  headEl.append(label, count);
 
   const list = document.createElement("ul");
   list.className = "console-shell-activity__list";
@@ -413,39 +448,68 @@ function buildSection(heading: string, initialEmpty: string): Section {
 
   return {
     el,
-    render(rows: ActivityRow[], emptyText: string): void {
+    render(rows: ActivityRow[], emptyText: string, nowMs: number): void {
       count.textContent = String(rows.length);
       empty.textContent = emptyText;
       empty.hidden = rows.length > 0;
-      list.replaceChildren(...rows.map(rowEl));
+      list.replaceChildren(...rows.map((r) => rowEl(r, nowMs)));
     },
   };
 }
 
-// rowEl renders one row: the command in mono, its meta after, and - once a
-// producer stamps it - the job it belongs to.
-function rowEl(row: ActivityRow): HTMLElement {
+// outcomeStatus is the shape an outcome wears: a row that has finished passed or failed, one that has
+// not is still running. The row's left rule is the colour; this is the icon and the word beside it.
+function outcomeStatus(outcome: ActivityRow["outcome"]): StatusKind {
+  if (outcome === "pass") return "success";
+  if (outcome === "fail") return "danger";
+  return "running";
+}
+
+// rowEl renders one row: an outcome mark, the command in mono (a link to the run when there is one
+// stored), its meta after, one time, and - once a producer stamps it - the job it belongs to.
+function rowEl(row: ActivityRow, nowMs: number): HTMLElement {
   const li = document.createElement("li");
   li.className = "console-shell-activity__row";
   // State is a data attribute, never a modifier class (README.md). Absent while the outcome is
   // still unknown, so an in-flight row is styled as neutral rather than provisionally green.
   if (row.outcome) li.dataset.outcome = row.outcome;
 
+  const lead = document.createElement("div");
+  lead.className = "console-shell-activity__row-title";
+  lead.append(statusMark(outcomeStatus(row.outcome)));
   const titleEl = document.createElement("code");
-  titleEl.className = "console-shell-activity__rowtitle";
   titleEl.textContent = row.title;
-  li.append(titleEl);
+  if (row.href) {
+    const link = document.createElement("a");
+    link.className = "console-shell-activity__row-link";
+    link.href = row.href;
+    link.append(titleEl);
+    lead.append(link);
+  } else {
+    lead.append(titleEl);
+  }
+  li.append(lead);
 
   if (row.unit) {
     const unitEl = document.createElement("span");
-    unitEl.className = "console-shell-activity__rowunit";
+    unitEl.className = "console-shell-activity__row-unit";
     unitEl.textContent = row.unit;
     li.append(unitEl);
   }
 
   const metaEl = document.createElement("span");
-  metaEl.className = "console-shell-activity__rowmeta";
-  metaEl.textContent = row.detail;
+  metaEl.className = "console-shell-activity__row-meta";
+  const facts = row.facts ?? row.detail;
+  if (facts) metaEl.append(document.createTextNode(facts));
+  const when = whenLabel(row.atMs, nowMs);
+  if (when) {
+    if (facts) metaEl.append(document.createTextNode(" - "));
+    const time = document.createElement("time");
+    time.dateTime = new Date(row.atMs).toISOString();
+    time.title = new Date(row.atMs).toLocaleString();
+    time.textContent = when;
+    metaEl.append(time);
+  }
   li.append(metaEl);
   return li;
 }

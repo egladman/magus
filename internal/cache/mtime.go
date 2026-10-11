@@ -15,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // mtimeEntry records the stat fingerprint and content hash of one file (single-char JSON keys for compactness).
@@ -217,14 +218,14 @@ func (s *mtimeStore) flush(ctx context.Context) {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		if s.log != nil {
 			s.log.WarnContext(ctx, "magus/cache: mtime store: cannot create shard dir; inputs will be re-hashed on every build",
-				slog.String("dir", s.dir), slog.String("err", err.Error()))
+				slog.String("dir", s.dir), attr.Error(err))
 		}
 		return
 	}
 	for _, p := range pending {
 		if err := s.writeShardFile(p.key, p.data); err != nil && s.log != nil {
 			s.log.WarnContext(ctx, "magus/cache: mtime store: shard write failed; inputs will be re-hashed on next build",
-				slog.String("err", err.Error()))
+				attr.Error(err))
 		}
 	}
 }

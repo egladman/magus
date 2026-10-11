@@ -139,10 +139,10 @@ test("an empty view keeps the tile's own note and offers the empty state", () =>
   tile.update(initialState());
   assert.match(note(tile.el), /version window each is held to/);
   assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-statstrip")?.hidden, true);
-  assert.match(
-    tile.el.querySelector(".console-dashboard-row__empty")?.textContent ?? "",
-    /supported/,
-  );
+  const empty = tile.el.querySelector("[data-empty-state]");
+  assert.match(empty?.textContent ?? "", /supported/);
+  assert.equal(empty?.querySelectorAll("code").length, 2, "the keys it names are code, not prose");
+  assert.equal(tile.el.hasAttribute("data-empty"), true, "the rotator skips an empty card");
 });
 
 test("rows arriving hide the empty state and show the counts", () => {
@@ -150,5 +150,6 @@ test("rows arriving hide the empty state and show the counts", () => {
   tile.update(initialState());
   tile.update(stateWith([row()]));
   assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-statstrip")?.hidden, false);
-  assert.equal(tile.el.querySelector<HTMLElement>(".console-dashboard-row__empty")?.hidden, true);
+  assert.equal(tile.el.querySelector("[data-empty-state]"), null);
+  assert.equal(tile.el.hasAttribute("data-empty"), false);
 });

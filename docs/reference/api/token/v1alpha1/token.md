@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, tokenservice]
 
 TokenService lists, mints and revokes stored tokens, and lists and revokes the active share link. No response ever carries a secret except CreateTokenResponse, once.
 
-Package `magus.token.v1alpha1`, defined in `proto/magus/token/v1alpha1/token.proto`. Source: [token.proto:25](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L25). Part of the [server API](../../index.md).
+Package `magus.token.v1alpha1`, defined in `proto/magus/token/v1alpha1/token.proto`. Source: [token.proto:25](https://github.com/egladman/magus/blob/main/proto/magus/token/v1alpha1/token.proto#L25). Part of the [daemon API](../../index.md).
 
 ## Methods
 

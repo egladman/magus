@@ -468,6 +468,149 @@ describe("the Diagrams app", () => {
   });
 });
 
+// What a reader without the pointer and without the colours gets from the Figures page: controls that
+// only enable when they have something to act on, a name and a description for the frame, a stand-in
+// for a frame with nothing in it, and notices that are announced once.
+describe("the Figures page, for a reader who cannot see it", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    document.body.replaceChildren();
+    document.documentElement.dataset.motion = "reduced";
+    location.hash = "";
+    requests = [];
+    importsIndexed = false;
+    serve();
+  });
+
+  afterEach(() => {
+    setDefaultHost("");
+    globalThis.fetch = realFetch;
+    delete document.documentElement.dataset.motion;
+  });
+
+  function mountApp() {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const instance = activate(host);
+    const q = <T extends Element>(sel: string): T => {
+      const el = host.querySelector<T>(sel);
+      assert.ok(el, sel);
+      return el;
+    };
+    return { host, instance, q };
+  }
+
+  const controlNames = [
+    "Fit",
+    "Zoom out",
+    "Zoom in",
+    "Focus",
+    "Clear focus",
+    "Load interactive runtime",
+  ];
+  function control(host: HTMLElement, name: string): HTMLButtonElement {
+    const b = [
+      ...host.querySelectorAll<HTMLButtonElement>(".console-diagrams__controls button"),
+    ].find((x) => x.textContent === name);
+    assert.ok(b, name);
+    return b;
+  }
+
+  test("with no server there is an empty state naming the command, and nothing to press", async () => {
+    setDefaultHost("");
+    const { host, q, instance } = mountApp();
+    await settle();
+    assert.deepEqual(requests, []);
+    const state = q<HTMLElement>(".console-diagrams__state");
+    assert.equal(state.hidden, false);
+    assert.ok(state.querySelector(".pf-v6-c-empty-state"), "a PF empty state");
+    assert.equal(state.querySelector("code")?.textContent, "magus server start");
+    assert.ok(!(state.textContent ?? "").includes("`"), "a command is a <code>, not backticks");
+    assert.equal(q<HTMLElement>(".console-diagrams__frame").hidden, true);
+    for (const name of controlNames) assert.equal(control(host, name).disabled, true, name);
+    assert.equal(q<HTMLSelectElement>("select").disabled, true);
+    assert.equal(q<HTMLInputElement>('input[name="focus"]').disabled, true);
+    instance.deactivate();
+  });
+
+  test("a figure enables its controls and takes the stand-in away", async () => {
+    setDefaultHost(HOST);
+    const { host, q, instance } = mountApp();
+    await settle();
+    assert.equal(q<HTMLElement>(".console-diagrams__state").hidden, true);
+    assert.equal(q<HTMLElement>(".console-diagrams__frame").hidden, false);
+    for (const name of ["Fit", "Zoom out", "Zoom in", "Focus", "Load interactive runtime"])
+      assert.equal(control(host, name).disabled, false, name);
+    assert.equal(control(host, "Clear focus").disabled, true, "nothing is focused yet");
+    assert.equal(q<HTMLInputElement>('input[name="focus"]').disabled, false);
+    instance.deactivate();
+  });
+
+  test("the figure controls are a group, and the frame is named Figure with its keys described", async () => {
+    setDefaultHost(HOST);
+    const { q, instance } = mountApp();
+    await settle();
+    assert.equal(q(".console-diagrams__controls").getAttribute("role"), "group");
+    const frame = q<HTMLElement>(".console-diagrams__frame");
+    assert.equal(frame.getAttribute("aria-label"), "Figure");
+    assert.match(frame.getAttribute("aria-keyshortcuts") ?? "", /\bf\b/);
+    const described = document.getElementById(frame.getAttribute("aria-describedby") ?? "");
+    assert.ok(described, "the keys live in a described-by element");
+    assert.match(described.textContent ?? "", /Escape clears focus/);
+    instance.deactivate();
+  });
+
+  test("the lens field that centers the drawing is not called Focus", async () => {
+    setDefaultHost(HOST);
+    const { host, instance } = mountApp();
+    await settle();
+    const labels = [...host.querySelectorAll(".console-diagrams__field-label")].map(
+      (l) => l.textContent,
+    );
+    assert.deepEqual(labels, ["Figure", "Scope", "Center on", "Depth"]);
+    instance.deactivate();
+  });
+
+  test("a refusal is announced once: the host is no live region and the alert carries the role", async () => {
+    setDefaultHost(HOST);
+    const { q, instance } = mountApp();
+    await settle();
+    const picker = q<HTMLSelectElement>("select");
+    picker.value = "big";
+    picker.dispatchEvent(new Event("change"));
+    await settle();
+    assert.equal(q(".console-diagrams__notices").hasAttribute("aria-live"), false);
+    const note = q(".console-diagrams__notice");
+    assert.equal(note.getAttribute("role"), "status");
+    assert.match(note.textContent ?? "", /Warning alert/, "the severity is a word, not a hue");
+    assert.match(q(".console-diagrams__state").textContent ?? "", /The notice above says why/);
+    instance.deactivate();
+  });
+
+  test("while the first figure draws the frame holds a spinner, not a blank", async () => {
+    setDefaultHost(HOST);
+    let release: (r: Response) => void = () => {};
+    const inner = globalThis.fetch;
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      if (String(input).endsWith("/api/v1/diagrams/projects"))
+        return new Promise<Response>((resolve) => {
+          release = resolve;
+        });
+      return inner(input);
+    }) as typeof fetch;
+    const { q, instance } = mountApp();
+    await settle();
+    const state = q<HTMLElement>(".console-diagrams__state");
+    assert.equal(state.hidden, false);
+    assert.ok(state.querySelector(".pf-v6-c-spinner"), "a PF spinner");
+    release(await inner("http://" + HOST + "/api/v1/diagrams/projects"));
+    await settle();
+    assert.equal(q<HTMLElement>(".console-diagrams__state").hidden, true);
+    instance.deactivate();
+  });
+});
+
 // ---- the runtime's record -------------------------------------------------------------------
 
 test("figure ids are the handler's sanitized ids", () => {

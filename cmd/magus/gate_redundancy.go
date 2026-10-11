@@ -214,7 +214,7 @@ func (g *gateRedundancy) size(ctx context.Context, base string, forced bool) *ty
 	}
 	rep, err := g.m.AssessChange(ctx, g.target, magus.AssessOptions{Base: base})
 	if err != nil {
-		slog.DebugContext(ctx, "gate sizing: change not assessed; running the full gate", slog.String("error", err.Error()))
+		slog.DebugContext(ctx, "change not assessed; running the full gate", attr.Error(err))
 		return nil
 	}
 	if rep.Tier == types.RiskFull {
@@ -345,8 +345,8 @@ func (g *gateRedundancy) append(ctx context.Context, rec sessions.GateResult) {
 	}
 	err = sessions.RecordGate(dir, rec, sessions.InvocationStart{Origin: trail.LocalOrigin(ctx), Workspace: g.root, Command: "gate", Version: version})
 	if err != nil {
-		slog.DebugContext(ctx, "gate redundancy: record not written",
-			slog.String("store", dir), slog.String("error", err.Error()))
+		slog.With(attr.Component("gate redundancy")).DebugContext(ctx, "record not written",
+			slog.String("store", dir), attr.Error(err))
 	}
 }
 

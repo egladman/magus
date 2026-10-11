@@ -11,13 +11,14 @@ const SLOT_CAP = 256; // soft cap on rendered cubes so a huge pool never bloats 
 export function poolTile(): Tile {
   const card = new Card("pool", "Pool", {
     term: "Pool",
-    note: "0 / 0 slots",
+    note: "0 of 0 slots",
     why:
       "How much concurrency is actually in use. Full with work queued means raising it will help." +
       " Mostly empty while runs drag means the graph is serialized and more slots change nothing.",
   });
   const grid = h("div", "console-dashboard-pool__grid");
-  grid.setAttribute("aria-label", "Concurrency slots");
+  // The cubes are one picture; its name carries the numbers they stand for.
+  grid.setAttribute("role", "img");
   const legend = h("div", "console-dashboard-pool__legend");
   const queuedLg = h("span", "console-dashboard-legend console-dashboard-legend--queued");
   queuedLg.hidden = true;
@@ -34,7 +35,13 @@ export function poolTile(): Tile {
     const cap = pool.capacity,
       used = pool.running,
       queued = pool.queued;
-    card.setNote(cap > 0 ? `${used} / ${cap} slots` : `${used} running, unlimited`);
+    card.setNote(cap > 0 ? `${used} of ${cap} slots` : `${used} running, unlimited`);
+    grid.setAttribute(
+      "aria-label",
+      (cap > 0
+        ? `${used} of ${cap} concurrency slots running`
+        : `${used} slots running, unlimited`) + (queued > 0 ? `, ${queued} queued` : ""),
+    );
     const slots = cap > 0 ? cap : used;
     const total = Math.min(slots + queued, SLOT_CAP);
 

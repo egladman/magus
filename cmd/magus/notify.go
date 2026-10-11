@@ -111,8 +111,8 @@ func eventFromStdin(body []byte) types.Event {
 // same working plain-text notification.
 func noteUnusableEnvelope(err error, ev types.Event) {
 	if err != nil {
-		slog.Warn("magus session notify: stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
-			slog.String("error", err.Error()))
+		slog.With(attr.Component("session notify")).Warn("stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
+			attr.Error(err))
 		return
 	}
 	var missing []string
@@ -125,7 +125,7 @@ func noteUnusableEnvelope(err error, ev types.Event) {
 	if ev.Source.Kind == "" {
 		missing = append(missing, "source.kind")
 	}
-	slog.Warn("magus session notify: stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
+	slog.With(attr.Component("session notify")).Warn("stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
 		slog.String("missing", strings.Join(missing, ", ")),
 		attr.Why("send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
 }

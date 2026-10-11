@@ -43,6 +43,7 @@ The code is `PRF1090`. The decision depends on the kind of text judged:
 | `changelog`                   | deny    |
 | `agent-reply`                 | deny    |
 | `tool-description`            | deny    |
+| `stylesheet`                  | deny    |
 
 ## Changing it
 

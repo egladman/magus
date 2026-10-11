@@ -12,7 +12,13 @@
 // outcome here rather than an error: loadAttention reports "absent" so the tile can say the
 // route is missing instead of showing an empty queue, which would read as "nobody is blocked".
 
-import { authHeaders, readRefusal } from "../../../lib/server";
+import {
+  authHeaders,
+  readRefusal,
+  reportFetchFailure,
+  reportHttpStatus,
+} from "../../../lib/server";
+import { reportFailure } from "../../../lib/notifications";
 
 // ---- the wire shape --------------------------------------------------------
 
@@ -192,15 +198,25 @@ export async function loadAttention(host: string, signal?: AbortSignal): Promise
       signal,
     });
   } catch (e) {
+    reportFetchFailure(host, "the attention queue", e);
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
   }
   if (res.status === 404 || res.status === 501) return { kind: "absent" };
-  if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
+  if (!res.ok) {
+    reportHttpStatus(host, "the attention queue", res.status);
+    return { kind: "unreadable", detail: "HTTP " + res.status };
+  }
   try {
     const body = await res.json();
     return { kind: "ok", requests: parseRequests(body), store: parseStore(body) };
   } catch (e) {
-    return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
+    const detail = e instanceof Error ? e.message : String(e);
+    reportFailure(
+      "Server",
+      "Could not read the attention queue: " + detail,
+      "fetch:attention-queue-body",
+    );
+    return { kind: "unreadable", detail };
   }
 }
 

@@ -85,7 +85,7 @@ func (m precedentMiner) packages() precedentPackages {
 	}
 	for id, nss := range m.fileNS {
 		n := m.g.nodes[id]
-		if n.Kind != types.KindFile || isTestSource(n.Source) {
+		if n.Kind != types.KindFile || IsTestPath(n.Source) {
 			continue
 		}
 		dir := path.Dir(n.Source)
@@ -321,7 +321,7 @@ func (m precedentMiner) testPackageName(pk precedentPackages) []types.Precedent 
 		if n.Kind != types.KindFile || m.x.generated(n.Source) {
 			continue
 		}
-		if isTestSource(n.Source) {
+		if IsTestPath(n.Source) {
 			tests = append(tests, id)
 			continue
 		}

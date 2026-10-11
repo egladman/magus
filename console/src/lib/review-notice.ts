@@ -1,4 +1,5 @@
-// review-notice.ts - one sentence, offered when a review has landed with a conversation on it.
+// review-notice.ts - one sentence, offered when a review has landed with a thread on it. A comment is
+// one record; the thread is the conversation they make.
 //
 // It lives in lib/ rather than beside the diff app because TWO things ask the question and they
 // are in different bundles: the Diff app when you open it on a merged review, and the shell's
@@ -6,8 +7,8 @@
 // whether to say anything is the design, not an implementation detail of either one, and two copies
 // of it would drift the moment somebody tuned the wording.
 
-// saidNotice is what to say when remarks have arrived on the review since the reader last had the
-// conversation on screen.
+// saidNotice is what to say when comments have arrived on the review since the reader last had the
+// thread on screen.
 //
 // A BELL notification, unlike the merge offer beside it: somebody is waiting on an answer. See the
 // admission doctrine in notifications.ts, which was widened in the same change to say so rather than
@@ -15,12 +16,12 @@
 export function saidNotice(repo: string, count: number): string {
   // `>= 1` rather than `<= 0`, because the count is parsed out of a trail preview and a malformed
   // one yields NaN - and `NaN <= 0` is FALSE, so the obvious guard lets it straight through and
-  // rings the bell with "NaN new remarks are waiting for you".
+  // rings the bell with "NaN new comments are waiting for you".
   if (!(count >= 1)) return "";
   const where = repo ? ` on ${repo}` : "";
   return count === 1
-    ? `A new remark${where} is waiting for you.`
-    : `${count} new remarks${where} are waiting for you.`;
+    ? `A new comment${where} is waiting for you.`
+    : `${count} new comments${where} are waiting for you.`;
 }
 
 // MergedReview is the little of a review this needs. Structural, so the Diff app's fuller
@@ -34,7 +35,7 @@ export interface MergedReview {
 
 // mergedNotice is what to say, or "" when there is nothing worth saying.
 //
-// The emptiness is the point. A merged review whose conversation was empty has nothing to preserve,
+// The emptiness is the point. A merged review with no thread has nothing to preserve,
 // and a prompt that fires on every merge regardless is one a reader learns to dismiss unread - which
 // spends the attention it was saving for the merge that mattered.
 //
@@ -46,7 +47,7 @@ export function mergedNotice(review: MergedReview | null, said: number): string 
   if (!review || review.state !== "merged" || !(said >= 1)) return "";
   const where = review.repo ? ` on ${review.repo}` : "";
   return (
-    `This review merged${where}, and its ${said} ${said === 1 ? "remark" : "remarks"} live only on the host. ` +
-    "Run magus notes capture to keep the conversation in your knowledge graph."
+    `This review merged${where}, and its ${said} ${said === 1 ? "comment" : "comments"} live only on the host. ` +
+    "Run magus notes capture to keep the thread in your knowledge graph."
   );
 }

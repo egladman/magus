@@ -34,7 +34,7 @@
 // Cursor has also raced additional_context away before; env is the half that sticks.
 // Compaction still has no model-facing rehydrate event.
 //
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human

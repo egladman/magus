@@ -1,0 +1,25 @@
+/* The console's colour slots.
+   Every colour reads a PatternFly token, so a token bump is one edit here. */
+
+/* Squared corners: the console's house style. */
+:root {
+  --console-radius: 0;
+}
+
+.row {
+  /* Clip, so a long label never pushes the badge off the row. */
+  overflow: hidden;
+  cursor: pointer; /* the whole row is the hit target */
+}
+
+/*
+ * A banner built from rule lines costs the reader nothing.
+ * ========================================================
+ */
+.badge { color: blue; }
+
+/* stylelint-disable-next-line declaration-no-important */
+.legacy { margin: 0 !important; }
+
+/* TODO: drop the prefixed form once the last supported browser ships the plain one. */
+.grid { display: grid; }

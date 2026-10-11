@@ -1,0 +1,367 @@
+/* The one file that adapts PatternFly's tokens to the console. */
+
+/* Brand ramp: spruce in place of PatternFly blue. The ramp is overridden rather than --console-accent
+   alone because PF components (a pf-m-primary button) read these tokens directly. PF's dark selector
+   aliases brand--default to dark--brand--100, so redefining that primitive moves dark. White on
+   brand--200 measures 6.03:1 and black on dark--brand--100 6.91:1. */
+:root {
+  --pf-t--global--color--brand--100: #579485;
+  --pf-t--global--color--brand--200: #3f6b60;
+  --pf-t--global--color--brand--300: #33574e;
+  --pf-t--global--color--brand--400: #28433d;
+  --pf-t--global--color--brand--500: #1e332e;
+  --pf-t--global--color--brand--subtle--100: #eff6f4;
+  --pf-t--global--color--brand--subtle--200: #dfece9;
+  --pf-t--global--color--brand--subtle--300: #b2d2ca;
+  --pf-t--global--color--brand--subtle--400: #8bbbaf;
+  --pf-t--global--dark--color--brand--100: #6f9d92;
+  --pf-t--global--dark--color--brand--200: #8fb3aa;
+  --pf-t--global--dark--color--brand--300: #adc7c1;
+  --pf-t--global--dark--color--brand--subtle--100: #2b403b;
+  --pf-t--global--dark--color--brand--subtle--200: #38524c;
+  --pf-t--global--dark--color--brand--subtle--300: #5d897e;
+  --pf-t--global--focus-ring--color--100: var(--pf-t--global--color--brand--200);
+  --pf-t--global--focus-ring--color--200: var(--pf-t--global--color--brand--200);
+  --pf-t--global--dark--focus-ring--color--100: var(--pf-t--global--dark--color--brand--100);
+}
+
+/* Corners come in two tiers: 6px controls, 2-4px containers. Only the semantic aliases are set. */
+:root {
+  /* Fixed 2px for marks under about 20px tall, where the platform-tuned tiny tier reads as a lozenge. */
+  --console-radius-micro: 2px;
+  --pf-t--global--border--radius--tiny: 2px;
+  --pf-t--global--border--radius--small: 3px;
+  --pf-t--global--border--radius--medium: 3px;
+  --pf-t--global--border--radius--large: 4px;
+  --pf-t--global--border--radius--pill: 4px;
+  --pf-t--global--border--radius--action--default: 6px;
+  --pf-t--global--border--radius--action--plain--default: 6px;
+  --pf-t--global--border--radius--control--default: 6px;
+  --pf-t--global--border--radius--control--form-element: 6px;
+}
+
+/* Apple platforms favour rounder corners; theme.ts tags the root. */
+:root[data-platform="apple"] {
+  --pf-t--global--border--radius--tiny: 4px;
+  --pf-t--global--border--radius--small: 6px;
+  --pf-t--global--border--radius--medium: 7px;
+  --pf-t--global--border--radius--large: 9px;
+  --pf-t--global--border--radius--pill: 9px;
+  --pf-t--global--border--radius--action--default: 9px;
+  --pf-t--global--border--radius--action--plain--default: 9px;
+  --pf-t--global--border--radius--control--default: 9px;
+  --pf-t--global--border--radius--control--form-element: 9px;
+}
+
+/* Motion: bring something into view with a transition, never a keyframe animation. A browser does not
+   advance animations in a hidden tab, so an unfinished fade-in stays invisible; an unfinished
+   transition just sits at its final style. No easing token lives here: --console-ease is defined
+   below, and a second definition earlier silently loses to it. */
+:root {
+  --console-motion-fast: 120ms;
+  --console-motion: 190ms;
+  --console-motion-slow: 900ms;
+  --console-motion-ceremony: 1400ms;
+  --console-motion-spin: 1000ms;
+  --console-motion-breathe: 2400ms;
+  --console-motion-orbit: 90s;
+}
+
+/* Control block size: PatternFly's own formula (one line box plus the vertical control spacer)
+   restated as a height. data-control-size on a group opts in; magus/control-size-token enforces it.
+   The default tier is a no-op for a plain PF control and the compact tier is pf-m-small's geometry. */
+:root {
+  --console-control-block-size: calc(
+    var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+      2 * var(--pf-t--global--spacer--control--vertical--default)
+  );
+  --console-control-font-size: var(--pf-t--global--font--size--body--default);
+}
+[data-control-size="compact"] {
+  --console-control-block-size: calc(
+    var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+      2 * var(--pf-t--global--spacer--control--vertical--compact)
+  );
+  --console-control-font-size: var(--pf-t--global--font--size--body--sm);
+}
+
+/* Apple's 44pt touch floor, keyed on the pointer: a touchscreen laptop at 1280px needs it and a
+   narrow desktop window does not. Both tiers land on the floor, so there is no compact there. */
+@media (pointer: coarse) {
+  :root,
+  [data-control-size="compact"] {
+    --console-control-block-size: max(44px, calc(
+      var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+        2 * var(--pf-t--global--spacer--control--vertical--default)
+    ));
+  }
+}
+
+/* PF centres a control's label with symmetric padding, and the tier zeroes padding-block, so the
+   label needs align-items to stay centred. */
+[data-control-size] .pf-v6-c-button,
+[data-control-size] .pf-v6-c-toggle-group__button,
+[data-control-size] .pf-v6-c-tabs__link,
+[data-control-size].pf-v6-c-button {
+  align-items: center;
+}
+
+/* The tier applies the height instead of publishing it for each adopter to consume, so a row's
+   controls cannot disagree. A textarea is excluded: its rows size it. */
+[data-control-size] .pf-v6-c-button:not(.pf-m-inline),
+[data-control-size] .pf-v6-c-toggle-group__button,
+[data-control-size] .pf-v6-c-tabs__link,
+[data-control-size] .pf-v6-c-form-control:not(:has(textarea)),
+[data-control-size] .pf-v6-c-text-input-group__text-input,
+[data-control-size].pf-v6-c-button:not(.pf-m-inline) {
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+}
+/* PF's FormControl is a grid wrapper; the inner input has to fill it. */
+[data-control-size] .pf-v6-c-form-control > input,
+[data-control-size] .pf-v6-c-form-control > select {
+  block-size: 100%;
+  padding-block: 0;
+  font-size: var(--console-control-font-size);
+}
+[data-control-size] .pf-v6-c-form-control__text {
+  font-size: var(--console-control-font-size);
+}
+
+/* App bar and head heights, read by every app. The head holds a label, but some carry a collapse
+   toggle that grows to 44px on a coarse pointer, hence the max(). */
+:root {
+  --console-app-bar-h: calc(
+    var(--console-control-block-size) + 2 * var(--pf-t--global--spacer--sm)
+  );
+  --console-app-head-h: max(2.5rem, var(--console-control-block-size));
+}
+
+/* The uppercase label and chip are the console's only two uppercase voices. A sheet writes
+   text-transform itself; magus/label-token requires the three tokens beside it. */
+:root {
+  --console-label-size: var(--pf-t--global--font--size--body--sm);
+  --console-label-tracking: 0.05em;
+  --console-label-weight: 600;
+  --console-chip-size: var(--pf-t--global--font--size--body--sm);
+  --console-chip-tracking: 0.05em;
+  --console-chip-weight: 700;
+}
+
+/* A system stack keeps PF's RedHat @font-face rules unreferenced, so no font is fetched. */
+:root {
+  --pf-t--global--font--family--body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pf-t--global--font--family--heading: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --pf-t--global--font--family--mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Semantic slots. Charts read these through getComputedStyle, so they must be defined even where no
+   CSS consumes them. */
+:root {
+  --console-accent: var(--pf-t--global--color--brand--default);
+  --console-accent-hover: var(--pf-t--global--color--brand--hover);
+  /* The nonstatus orange, apart from the brand and status hues: the "toggled on" mark. */
+  --console-pin-active: var(--pf-t--global--color--nonstatus--orange--300);
+  --console-status-running: var(--pf-t--global--icon--color--status--info--default);
+  --console-status-queued: var(--pf-t--global--icon--color--status--danger--default);
+  --console-status-ok: var(--pf-t--global--icon--color--status--success--default);
+  --console-status-warn: var(--pf-t--global--icon--color--status--warning--default);
+  --console-status-danger: var(--pf-t--global--icon--color--status--danger--default);
+  /* Title bar, rail and status bar are one continuous frame, so they share one slot. */
+  --console-chrome: var(--pf-t--global--background--color--secondary--default);
+  --console-graph-edge-alpha: 0.26;
+  --console-graph-edge-dim-alpha: 0.12;
+}
+
+/* The text tier of the status slots, for colour that lands on a glyph the reader must read. PF's text
+   ramp equals the icon slot for ok and warn, so warn is pinned to warning--500: 7.89:1 on white where
+   the default step is 2.21:1. */
+:root {
+  --console-status-ok-text: var(--pf-t--global--text--color--status--success--default);
+  --console-status-warn-text: var(--pf-t--global--color--status--warning--500);
+  --console-status-danger-text: var(--pf-t--global--text--color--status--danger--default);
+}
+
+/* Decorative card palette, one hue per launcher card. Plain properties rather than theme-aware PF
+   tokens, so the dark ramp is restated in the dark block. */
+:root {
+  --console-clay: #9a5f45;
+  --console-rust: #9c4f34;
+  --console-moss: #667139;
+  --console-sage: #5c6e4f;
+  --console-spruce: #3f6b60;
+  --console-gold: #857032;
+  --console-slate: #3f5f78;
+  --console-indigo: #59547f;
+  --console-plum: #7a4a5e;
+  --console-stone: #6b645d;
+  --console-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* uPlot reads these at runtime from charts/uplot.ts. */
+:root {
+  --console-chart-axis: var(--pf-t--global--text--color--subtle);
+  --console-chart-grid: var(--pf-t--global--border--color--default);
+}
+
+/* Terminal colours for ANSI output. Red and green reuse the status tokens so an error line matches
+   its [fail] badge. Each clears 4.5:1 on the light ground (white 5.6, 6.9 and 5.3); PF's nonstatus
+   chart steps measured 1.97:1 as text. */
+:root {
+  --console-ansi-red: var(--console-status-danger);
+  --console-ansi-green: var(--console-status-ok);
+  --console-ansi-yellow: var(--console-status-warn-text);
+  --console-ansi-blue: var(--pf-t--color--blue--50);
+  --console-ansi-magenta: var(--pf-t--color--purple--50);
+  --console-ansi-cyan: var(--pf-t--color--teal--60);
+}
+
+/* Graph node kinds: five hue families derived in OKLCH, with ratios against the canvas (light #ffffff,
+   dark #292929) that types/kindpalette_drift_test.go re-measures. A kind with no token falls back to
+   a flat #888 in graph/main.ts, silently; count against the Kind* constants, not the legend. */
+/* Problems, h 25 */
+:root {
+  --console-node-diagnostic: #86423e;  /* 7.34:1 */
+  --console-node-charm:      #9d5651;  /* 5.41:1 */
+}
+/* Code, h 130 */
+:root {
+  --console-node-function:   #304516;  /* 10.56:1 */
+  --console-node-method:     #3f5921;  /* 7.89:1 */
+  --console-node-import:     #506e2c;  /* 5.82:1 */
+  --console-node-package:    #668249;  /* 4.33:1 */
+  --console-node-symbol:     #7d9664;  /* 3.27:1 */
+}
+/* Declarations, h 190 */
+:root {
+  --console-node-marker:     #003f3c;  /* 11.82:1 */
+  --console-node-target:     #00524e;  /* 9.06:1 */
+  --console-node-spell:      #006763;  /* 6.73:1 */
+  --console-node-op:         #007e79;  /* 4.93:1 */
+  --console-node-tool:       #3c918c;  /* 3.74:1 */
+}
+/* Structure, h 250 */
+:root {
+  --console-node-project:    #1f4970;  /* 9.35:1 */
+  --console-node-module:     #2b5c8c;  /* 6.97:1 */
+  --console-node-dir:        #4071a2;  /* 5.12:1 */
+  --console-node-file:       #5b85b1;  /* 3.86:1 */
+}
+/* Prose, h 310 */
+:root {
+  --console-node-doc:        #5f4174;  /* 8.42:1 */
+  --console-node-docsection: #6d4a86;  /* 6.97:1 */
+  --console-node-rationale:  #75528e;  /* 6.26:1 */
+  --console-node-note:       #87689e;  /* 4.66:1 */
+  --console-node-link:       #9a7fae;  /* 3.49:1 */
+}
+/* People, neutral */
+:root {
+  --console-node-owner:      #615659;  /* 7.04:1 */
+  --console-node-author:     #756a6d;  /* 5.20:1 */
+}
+
+/* Dark theme. PF's plain nonstatus tokens hold light data-viz values in both themes, so the node
+   palette, the card palette and the pin need explicit dark values. theme.ts toggles the class. */
+:root.pf-v6-theme-dark {
+  /* Off-white: pure white on dark blooms for readers with astigmatism. Still 11.6:1 on the card
+     background and 13.7:1 on the deepest chrome. */
+  --pf-t--global--text--color--regular: #e3e3e3;
+  /* In dark, elevation reads as lightness, so the chrome is lighter than the content it wraps. */
+  --console-chrome: #242424;
+  /* PF does not remap warning--500 for dark: the light pin would measure 1.84:1. */
+  --console-status-warn-text: var(--pf-t--global--text--color--status--warning--default);
+  --console-ansi-blue: var(--pf-t--color--blue--30);
+  --console-ansi-magenta: var(--pf-t--color--purple--30);
+  --console-ansi-cyan: var(--pf-t--color--teal--30);
+  --console-clay: #c08768; --console-rust: #bd6f52; --console-moss: #9ba766; --console-sage: #93a985; --console-spruce: #6f9d92;
+  --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-plum: #b8869c;
+  --console-stone: #a49d95;
+  --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
+  --console-graph-edge-alpha: 0.42;
+  --console-graph-edge-dim-alpha: 0.16;
+}
+
+/* The node palette on the dark canvas: same families and order, anchor moved from L0 0.50 to 0.78,
+   chroma eased from 0.100 to 0.085. */
+/* Problems, h 25 */
+:root.pf-v6-theme-dark {
+  --console-node-diagnostic: #db9993;  /* 6.23:1 */
+  --console-node-charm:      #f2afa9;  /* 7.95:1 */
+}
+/* Code, h 130 */
+:root.pf-v6-theme-dark {
+  --console-node-function:   #7f946b;  /* 4.40:1 */
+  --console-node-method:     #92ab7a;  /* 5.77:1 */
+  --console-node-import:     #a5c389;  /* 7.46:1 */
+  --console-node-package:    #bed8a5;  /* 9.39:1 */
+  --console-node-symbol:     #d6eec1;  /* 11.68:1 */
+}
+/* Declarations, h 190 */
+:root.pf-v6-theme-dark {
+  --console-node-marker:     #4f8e89;  /* 3.85:1 */
+  --console-node-target:     #61a5a0;  /* 5.13:1 */
+  --console-node-spell:      #6cbdb7;  /* 6.65:1 */
+  --console-node-op:         #83d4ce;  /* 8.50:1 */
+  --console-node-tool:       #a3e8e3;  /* 10.54:1 */
+}
+/* Structure, h 250 */
+:root.pf-v6-theme-dark {
+  --console-node-project:    #769ac1;  /* 4.96:1 */
+  --console-node-module:     #86b1dd;  /* 6.48:1 */
+  --console-node-dir:        #9bc7f5;  /* 8.23:1 */
+  --console-node-file:       #bdddff;  /* 10.36:1 */
+}
+/* Prose, h 310 */
+:root.pf-v6-theme-dark {
+  --console-node-doc:        #b095c5;  /* 5.51:1 */
+  --console-node-docsection: #c0a3d7;  /* 6.69:1 */
+  --console-node-rationale:  #c8a9e1;  /* 7.08:1 */
+  --console-node-note:       #ddc1f3;  /* 9.00:1 */
+  --console-node-link:       #ecd7ff;  /* 10.90:1 */
+}
+/* People, neutral */
+:root.pf-v6-theme-dark {
+  --console-node-owner:      #b4a9ac;  /* 6.38:1 */
+  --console-node-author:     #cbbfc2;  /* 8.15:1 */
+}
+
+/* Copies of the docs site's One Light and One Dark --syn-* palette (docs/src/styles/theme.css), since
+   docs/ and console/ are separate bundles. syntax-palette.test.ts fails when the two disagree. */
+:root {
+  --console-syntax-comment: #606a72;
+  --console-syntax-keyword: #705aae;
+  --console-syntax-string: #3a744c;
+  --console-syntax-number: #8d5e26;
+  --console-syntax-function: #2f6aad;
+}
+:root.pf-v6-theme-dark {
+  --console-syntax-comment: #9da6ae;
+  --console-syntax-keyword: #b79ae6;
+  --console-syntax-string: #8fc79b;
+  --console-syntax-number: #dbab77;
+  --console-syntax-function: #7fb2e6;
+}
+
+:root {
+  --console-series-p50: var(--pf-t--global--color--nonstatus--blue--300);
+  --console-series-p95: var(--pf-t--global--color--nonstatus--teal--300);
+  /* A QR code needs a light ground in either theme to scan. */
+  --console-qr-frame: var(--pf-t--color--white);
+}
+
+/* magus/figure paints an inlined figure with var(--magus-diagram-*, light hex). Each role maps onto a
+   theme-aware slot, so there is no dark copy. soft stays unmixed because a mix toward the paper fell
+   under 4.5:1 at the figure's smallest type. The Diagrams app's tests pin all nine. */
+:root {
+  --magus-diagram-paper: var(--pf-t--global--background--color--primary--default);
+  --magus-diagram-fill: var(--console-chrome);
+  --magus-diagram-ink: var(--pf-t--global--text--color--regular);
+  --magus-diagram-muted: var(--pf-t--global--text--color--subtle);
+  --magus-diagram-soft: var(--pf-t--global--text--color--subtle);
+  --magus-diagram-rule: var(--pf-t--global--border--color--default);
+  --magus-diagram-accent: var(--console-accent);
+  --magus-diagram-accent-tint: color-mix(in srgb, var(--console-accent) 10%, transparent);
+  --magus-diagram-link: var(--pf-t--global--text--color--link--default);
+}

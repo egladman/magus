@@ -1,6 +1,6 @@
 // Shared glue for the Buzz hook templates in the directory above this one.
 //
-// One copy of the walk up to the magusfile, the event-field readers, and the
+// One copy of the walk up to the workspace root, the event-field readers, and the
 // once-per-session notice. Per-template copies drifted: a comment shortened in
 // one file, a warn dropped in another, and a reader could not tell which copy was
 // the one a measurement had justified.
@@ -167,23 +167,38 @@ export fun parentDir(dir: str) > str {
     return "";
 }
 
-// workspaceRoot is the directory holding the magusfile, or "" when the walk
-// never finds one. A hook's working directory is the host's session directory,
-// which is not always the workspace root.
+// workspaceRoot is the workspace root above the hook's own working directory, or ""
+// when the walk never finds one. A hook's working directory is the host's session
+// directory, which is not always the workspace root.
 export fun workspaceRoot() > str {
     return workspaceRootAt(path\abs(".") catch "");
 }
 
-// workspaceRootAt is workspaceRoot walked up from dir instead of the hook's own
-// working directory.
-export fun workspaceRootAt(dir: str) > str {
+// nearestWith is the nearest directory at or above dir holding the file name, "" when
+// none does.
+fun nearestWith(name: str, dir: str) > str {
     var at = dir;
     while (at != "") {
-        final found = fs\isFile("{at}/magusfile.buzz") catch false;
+        final found = fs\isFile("{at}/{name}") catch false;
         if (found) { return at; }
         at = parentDir(at);
     }
     return "";
+}
+
+// workspaceRootAt is workspaceRoot walked up from dir instead of the hook's own
+// working directory.
+//
+// The marker is magus.yaml, the file magus.FindRoot treats as "the workspace starts
+// here". The nearest magusfile.buzz is wrong: console/, docs/, libs/* and the agents
+// guide directory each have one and no binary, so a call from any of them resolved
+// no ./magus and fell to PATH. The nearest magus.yaml also never climbs into a parent
+// checkout, since a worktree nested under one holds its own. Only a tree with no
+// magus.yaml above dir falls back to the nearest magusfile.buzz.
+export fun workspaceRootAt(dir: str) > str {
+    final declared = nearestWith("magus.yaml", dir: dir);
+    if (declared != "") { return declared; }
+    return nearestWith("magusfile.buzz", dir: dir);
 }
 
 // resolveBin prefers the workspace's own ./magus over PATH. A repository that
@@ -194,8 +209,8 @@ export fun workspaceRootAt(dir: str) > str {
 // when a write into a declared notes store was allowed by a binary that predated
 // the knowledge.notes key while magus doctor reported the guard as fine.
 //
-// The walk is up to the magusfile, not a test of ./magus alone. Measured
-// 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
+// The walk is up to the workspace root (magus.yaml), not a test of ./magus alone.
+// Measured 2026-08-27, when a piped `magus affected ci` that the rules do deny ran
 // unjudged because the session directory was not the workspace root.
 //
 // cwd, the directory the host says the call runs in, is walked first: a host runs a
@@ -210,7 +225,7 @@ export fun resolveBin(cwd: str = "") > str {
     if (root != "") {
         final candidate = "{root}/magus";
         if (isExecutable(candidate)) { return candidate; }
-        // The magusfile was found and the binary beside it cannot be run. Falling
+        // The root was found and the binary beside it cannot be run. Falling
         // through to PATH here is the same answer the walk's `break` gave: do not
         // keep climbing into a parent checkout.
     }
@@ -271,4 +286,46 @@ export fun noticeOnce(session: str, family: str, file: str) > bool {
         return false;
     }
     return true;
+}
+
+// plantBinary leaves an executable ./magus in dir.
+fun plantBinary(dir: str) > void !> any {
+    fs\writeFile("{dir}/magus", content: "#!/bin/sh\n");
+    fs\chmod("{dir}/magus", mode: 493);
+}
+
+test "a call from a nested project resolves the workspace root's binary" {
+    final root = fs\tempDir("hook-root-");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    plantBinary(root);
+    fs\mkdirAll("{root}/console/src");
+    fs\writeFile("{root}/console/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{root}/console/src") == root, message: "the magus.yaml directory is the root, not the project");
+    std\assert(resolveBin(cwd: "{root}/console/src") == "{root}/magus", message: "the root's binary");
+    std\assert(resolveBin(cwd: "{root}/console") == "{root}/magus", message: "from the project directory itself");
+    fs\removeAll(root);
+}
+
+test "a worktree under another checkout never climbs into it" {
+    final parent = fs\tempDir("hook-parent-");
+    fs\writeFile("{parent}/magus.yaml", content: "");
+    plantBinary(parent);
+    final worktree = "{parent}/.claude/worktrees/job";
+    fs\mkdirAll("{worktree}/console");
+    fs\writeFile("{worktree}/magus.yaml", content: "");
+    fs\writeFile("{worktree}/console/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{worktree}/console") == worktree, message: "its own magus.yaml is the nearest");
+    std\assert(resolveBin(cwd: "{worktree}/console") != "{parent}/magus", message: "the parent's binary is never the answer");
+    plantBinary(worktree);
+    std\assert(resolveBin(cwd: "{worktree}/console") == "{worktree}/magus", message: "its own binary once it has one");
+    fs\removeAll(parent);
+}
+
+test "a tree with no magus.yaml falls back to the nearest magusfile" {
+    final root = fs\tempDir("hook-bare-");
+    fs\mkdirAll("{root}/sub/deep");
+    fs\writeFile("{root}/sub/magusfile.buzz", content: "");
+    std\assert(workspaceRootAt("{root}/sub/deep") == "{root}/sub", message: "the nearest magusfile");
+    std\assert(workspaceRootAt(root) == "", message: "none above");
+    fs\removeAll(root);
 }

@@ -1,36 +1,30 @@
-// refresh-toast.ts - a small bottom-left "reload" prompt shared by service-worker-register
-// (a newer version of the assets is available) and console-settings (a browser-side pref
-// changed and takes effect on reload). Idempotent: a second call while a toast is already up
-// is a no-op, so one Refresh button covers overlapping reasons to reload. Styled by .console-shell-toast
-// in overrides.css.
+// refresh-toast.ts - the toasts the console raises for itself: a "reload" prompt shared by
+// service-worker-register (a newer version of the assets is available) and console-settings (a
+// browser-side pref changed and takes effect on reload), a countdown to a reload, and showToast for
+// everything else. All of them are PatternFly Alerts in the toast group (lib/toast.ts).
 //
 // Every toast carries a SOURCE (the app or feature that raised it) - required, not optional, so a new
-// caller cannot forget it. A toast fires globally in the bottom-left corner, so it can appear while a
-// different tab is active; the source chip tells you where it came from in the moment, and it rides into
-// the notification history for the same reason. See lib/notifications.ts.
+// caller cannot forget it. A toast fires globally, so it can appear while a different tab is active;
+// the source is the alert's title and rides into the notification history for the same reason. See
+// lib/notifications.ts.
 import { notify, type NotifyLink } from "./notifications";
-import { renderTransientToast, sourceChip } from "./toast";
+import { pushToast, renderTransientToast } from "./toast";
 
+const REFRESH_KEY = "console-refresh-prompt";
+const COUNTDOWN_KEY = "console-refresh-countdown";
+
+// showRefreshToast asks the reader to reload and waits. Idempotent: a second call while the prompt is
+// up is a no-op, so one Refresh button covers overlapping reasons to reload. It stays until closed.
 export function showRefreshToast(source: string, message: string): void {
-  if (document.querySelector(".console-shell-toast")) return;
-  const toast = document.createElement("div");
-  toast.className = "console-shell-toast";
-  toast.setAttribute("role", "status");
-  toast.append(sourceChip(source));
-
-  const msg = document.createElement("span");
-  msg.textContent = message;
-  toast.appendChild(msg);
-
-  const refresh = document.createElement("button");
-  refresh.type = "button";
-  refresh.textContent = "Refresh";
-  refresh.addEventListener("click", () => {
-    location.reload();
+  if (document.querySelector(`[data-toast-key="${REFRESH_KEY}"]`)) return;
+  pushToast({
+    source,
+    message,
+    kind: "info",
+    ms: 0,
+    key: REFRESH_KEY,
+    actions: [{ label: "Refresh", run: () => location.reload() }],
   });
-  toast.appendChild(refresh);
-
-  document.body.appendChild(toast);
   // Record it too, so a reload prompt dismissed (or reloaded past) is still in the history.
   notify({ source, message, kind: "ok" });
 }
@@ -46,7 +40,8 @@ export function showRefreshToast(source: string, message: string): void {
 //
 // It still ANNOUNCES rather than acting silently: anyone who happens to be looking gets told what
 // is about to happen and roughly when, and Cancel is there for the case where someone is in fact
-// standing at the screen. Cancelling is remembered by the caller, not here.
+// standing at the screen. Closing the toast cancels too. Cancelling is remembered by the caller,
+// not here.
 //
 // Returns a canceler so the caller can call the whole thing off (leaving the mode, say).
 export function showCountdownToast(
@@ -55,30 +50,25 @@ export function showCountdownToast(
   seconds: number,
   onElapsed: () => void,
 ): () => void {
-  document.querySelector(".console-shell-toast--transient")?.remove();
-  const toast = document.createElement("div");
-  toast.className = "console-shell-toast console-shell-toast--transient";
-  toast.dataset.kind = "ok";
-  toast.setAttribute("role", "status");
-  toast.append(sourceChip(source));
-
-  const msg = document.createElement("span");
+  // A countdown already up is closed first, which stops its timer through onDismiss.
+  document
+    .querySelector<HTMLElement>(`[data-toast-key="${COUNTDOWN_KEY}"] .pf-v6-c-alert__action button`)
+    ?.click();
   let left = Math.max(1, Math.round(seconds));
-  msg.textContent = message(left);
-  toast.appendChild(msg);
-
   let timer = 0;
-  const stop = (): void => {
+  const halt = (): void => {
     if (timer) window.clearInterval(timer);
     timer = 0;
-    toast.remove();
   };
-
-  const cancel = document.createElement("button");
-  cancel.type = "button";
-  cancel.textContent = "Cancel";
-  cancel.addEventListener("click", stop);
-  toast.appendChild(cancel);
+  const toast = pushToast({
+    source,
+    message: message(left),
+    kind: "info",
+    ms: 0,
+    key: COUNTDOWN_KEY,
+    actions: [{ label: "Cancel", run: () => toast.dismiss() }],
+    onDismiss: halt,
+  });
 
   // Tick the text in place rather than re-calling showToast each second: that would replace the
   // element (losing the Cancel button mid-press) and record a fresh notification-history entry for
@@ -86,21 +76,20 @@ export function showCountdownToast(
   timer = window.setInterval(() => {
     left -= 1;
     if (left <= 0) {
-      stop();
+      toast.dismiss();
       onElapsed();
       return;
     }
-    msg.textContent = message(left);
+    toast.setMessage(message(left));
   }, 1000);
 
-  document.body.appendChild(toast);
   // Recorded ONCE, at announcement time, so the history says a refresh was scheduled even though
   // the reload that follows wipes the page.
   notify({ source, message: message(left), kind: "ok" });
-  return stop;
+  return () => toast.dismiss();
 }
 
-// Options for a transient toast: how long it lingers, an optional deep link rendered as an action, and
+// Options for a toast: how long it lingers, an optional deep link rendered as an action, and
 // an optional dedupe key forwarded to the notification history.
 export interface ToastOptions {
   ms?: number;
@@ -108,14 +97,13 @@ export interface ToastOptions {
   key?: string;
 }
 
-// showToast pops a transient, auto-dismissing toast in the same bottom-left slot as the reload prompt:
-// a Settings save/apply confirmation ("ok"), a "warn" (a partial success worth reading, e.g. an import
-// that dropped some keys), or an "error" explaining why something failed. A fresh call replaces any
-// transient toast already up, so rapid calls do not stack. Errors and warnings linger longer than
-// confirmations - they have to be read. Styled by .console-shell-toast in overrides.css.
+// showToast pops a toast on top of the stack: a Settings save/apply confirmation ("ok"), a "warn" (a
+// partial success worth reading, e.g. an import that dropped some keys), or an "error" explaining why
+// something failed. It dismisses itself after 8s, unless the pointer rests on it or focus is inside,
+// and always has a close button.
 //
-// `source` (required) names where the toast came from and is rendered as a quiet chip; write the message
-// to stand alone (what happened + what to do next), and let the chip carry the "where" rather than
+// `source` (required) names where the toast came from and is the alert's title; write the message to
+// stand alone (what happened + what to do next), and let the title carry the "where" rather than
 // repeating it in prose. Every toast is ALSO recorded into the notification history (the title-bar bell's
 // panel) so a toast you missed while it auto-dismissed is still there to read later. The toast's own
 // timing is unchanged; recording is a side effect. An optional deep link is rendered as an action on

@@ -54,9 +54,9 @@ export function buildInstallSection(store: InstallStore): { el: HTMLElement; des
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
 
-  const installBtn = h("button", "pf-v6-c-button pf-m-primary", "Install") as HTMLButtonElement;
+  // Secondary: the action bar's Save & Apply is this page's one primary action.
+  const installBtn = h("button", "pf-v6-c-button pf-m-secondary", "Install");
   installBtn.type = "button";
-  installBtn.title = "Install the console as an app on this device";
   installBtn.addEventListener("click", () => {
     installBtn.disabled = true;
     void store.prompt().then(

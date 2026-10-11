@@ -177,13 +177,8 @@ func insidePackage(a string) bool {
 // soleGoCall is the line's call when it is one go command and nothing else: no pipe,
 // chain, redirect, wrapper or subshell. Its environment prefix is left to the caller.
 func soleGoCall(command string, d Dialect) (*syntax.CallExpr, bool) {
-	f, err := parseFile(command, d)
-	if err != nil || len(f.Stmts) != 1 {
-		return nil, false
-	}
-	st := f.Stmts[0]
-	call, ok := st.Cmd.(*syntax.CallExpr)
-	if !ok || st.Negated || st.Background || st.Coprocess || len(st.Redirs) > 0 || len(call.Args) == 0 {
+	call, ok := soleCall(command, d)
+	if !ok {
 		return nil, false
 	}
 	return call, literalWord(call.Args[0].Parts) == "go"
@@ -267,11 +262,20 @@ type ownBuildOutcome struct {
 	// to load with MGS1021, advised through as recoveryAdvisory.
 	recovery         bool
 	recoveryAdvisory ShellVerdict
+	// lease is the lease the call acts under, "" for the orchestrator or a person. A
+	// worker never builds the binary: there is one per base, and the main session places it.
+	lease string
 }
 
 // apply layers this outcome onto v, the raw-tool deny it refines.
 func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
+	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
+		// Replaces every pass-through and every "get one with" below: each names a build.
+		v.Why = onePerBase + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = workerBuildVerdict
+		v.Next, v.Lead = nil, ""
+		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
 	case o.recovery:
 		return o.recoveryAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):
@@ -370,6 +374,7 @@ func newOwnBuildOutcome(ctx context.Context, deps Dependencies, command string, 
 	// The load is a full workspace open, so only a line that could be let through pays it.
 	recovery := call.recoversMagus() && soleGoCommand(command, d) && cannotLoad(ctx, deps, root)
 	return &ownBuildOutcome{
+		lease:         deps.lease,
 		root:          root,
 		bootstrapArgv: argv,
 		bootstrap:     call.bootstrapsMagus(),

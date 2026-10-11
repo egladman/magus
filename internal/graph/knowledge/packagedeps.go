@@ -63,7 +63,7 @@ func (g *Graph) packageDepsExcept(skip func(file string) bool) packageGraph {
 	g.ensureAdj()
 	skipped := func(source string) bool {
 		file, _, _ := strings.Cut(source, ":")
-		return isTestSource(file) || skip != nil && skip(file)
+		return IsTestPath(file) || skip != nil && skip(file)
 	}
 	deps := packageGraph{}
 	add := func(from, to string) {

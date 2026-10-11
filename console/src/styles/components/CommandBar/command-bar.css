@@ -1,0 +1,118 @@
+/* The command bar (#command-bar, commandBar.ts) is a dmenu-style bar, the console's one fully custom
+   component (PatternFly has no dmenu analogue). It is pinned over the title bar at its exact height:
+   an accent "run" cap, a borderless combobox input, then the matching command tokens running
+   horizontally and clipped at the bar's end, with the selected command's plain-language label at the
+   far right. Selection rides data-selected. */
+
+#command-bar[hidden] { display: none; }
+.console-shell-commandbar {
+  /* Above the PF Drawer content (100), panel (200) and the title-bar popovers (300). */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--pf-t--global--z-index--lg);
+  display: flex;
+  align-items: stretch;
+  /* The title bar's own token, so they cannot drift apart. */
+  height: var(--console-titlebar-h);
+  font-size: var(--pf-t--global--font--size--body--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+  /* Square and flush; a drop shadow lifts it off the title bar it covers. */
+  border: 0;
+  box-shadow: var(--pf-t--global--box-shadow--lg);
+  overflow: hidden;
+}
+.console-shell-commandbar__prompt {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--pf-t--global--spacer--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 12%, transparent);
+}
+.console-shell-commandbar__input {
+  /* Wide enough to type a command path; the token run takes what is left. */
+  flex: 0 1 16rem;
+  min-width: 12rem;
+  margin: 0;
+  padding-inline: var(--pf-t--global--spacer--sm);
+  font: inherit;
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--regular);
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+.console-shell-commandbar__items {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  /* The run slides in via translateX (up to 2.6rem when empty), shifting its painted right edge, so
+     the gap keeps those tokens off the preview label. */
+  margin-inline-end: var(--pf-t--global--spacer--xl);
+  /* A fade so overflowing tokens dissolve instead of hard-clipping mid-word; any opaque colour masks. */
+  -webkit-mask-image: linear-gradient(to right, currentcolor calc(100% - 1.5rem), transparent);
+  mask-image: linear-gradient(to right, currentcolor calc(100% - 1.5rem), transparent);
+  /* At rest the run sits right of the prompt; the first keystroke sets data-typed and it eases left. */
+  transform: translateX(2.6rem);
+  transition: transform var(--pf-t--global--motion--duration--lg) var(--pf-t--global--motion--timing-function--decelerate, ease-out);
+}
+.console-shell-commandbar__items[data-typed] { transform: translateX(0.75rem); }
+/* A live region of its own: zero-width while empty, a sentence in the run's place when nothing matches. */
+.console-shell-commandbar__empty {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-commandbar__empty:empty { flex: 0 0 0; }
+.console-shell-commandbar__item {
+  /* The block margin insets each token so the selection reads as a rounded pill, not a slab. */
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  margin-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  border-radius: var(--pf-t--global--border--radius--medium);
+  font: inherit;
+  font-family: var(--pf-t--global--font--family--mono);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-commandbar__item:hover {
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--console-accent) 8%, transparent);
+}
+.console-shell-commandbar__item[data-selected] {
+  background: color-mix(in srgb, var(--console-accent) 20%, transparent);
+  color: var(--pf-t--global--text--color--regular);
+}
+/* Fuzzy-match hits stay legible on the faint selected tint. */
+.console-shell-commandbar__hit { color: var(--console-accent); font-weight: var(--pf-t--global--font--weight--body--bold); }
+.console-shell-commandbar__preview {
+  /* Reserve the label's width so it is never crushed; the cap keeps it from dominating a narrow bar. */
+  flex: 0 0 auto;
+  max-width: 40%;
+  min-width: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: var(--pf-t--global--spacer--sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pf-t--global--text--color--subtle);
+  border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-shell-commandbar__preview:empty { border-left: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .console-shell-commandbar__items { transform: none; transition: none; }
+}

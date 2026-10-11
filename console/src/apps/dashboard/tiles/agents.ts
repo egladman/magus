@@ -104,6 +104,13 @@ function applyHostAccent(element: HTMLElement, host: string): void {
   element.style.setProperty("--agent-host-accent", hostAccent(host));
 }
 
+// hostInitial is the letter a seat carries, so which host it belongs to does not rest on a hue the
+// reader may not be able to tell from its neighbours.
+function hostInitial(host: string): string {
+  const match = /[a-z0-9]/i.exec(host);
+  return match ? match[0].toUpperCase() : "?";
+}
+
 export function agentsTile(): Tile {
   const card = new Card("agents", "Orchestration", {
     note: "no agent traffic",
@@ -128,21 +135,18 @@ export function agentsTile(): Tile {
       " observed calls, so an agent that is thinking or waiting on a build shows none.",
   );
 
+  // One picture with one name: the cells are decoration over the host rows below, which carry the
+  // same sessions in words.
   const grid = h("div", "console-dashboard-agents__grid");
-  grid.setAttribute("aria-label", "Recently active agent sessions");
+  grid.setAttribute("role", "img");
   const seatKey = h("div", "console-dashboard-agents__key");
   const list = h("ul", "console-dashboard-rowlist");
-  const empty = h(
-    "p",
-    "console-dashboard-row__empty",
-    "No agent tool calls recently. Wire the guard hook to see them here.",
-  );
   // What agents actually DID, under the per-host totals.
   //
   // The counts alone stop exactly where the interesting question starts: "1 denied" tells you the
   // guard refused something and gives you no way to learn what, which is the only thing anyone
   // would want next. These rows name each recent call and how it was judged.
-  const recentHead = h("p", "console-dashboard-agents__subhead", "Recent calls");
+  const recentHead = h("h4", "console-dashboard-agents__subhead", "Recent calls");
   const recentList = h("ul", "console-dashboard-rowlist console-dashboard-agents__recent");
   // The recent list gets its OWN measured box rather than sharing the card body.
   //
@@ -153,7 +157,7 @@ export function agentsTile(): Tile {
   // Picture slot by 164px once the list was added.
   const recentWrap = h("div", "console-dashboard-agents__recentwrap");
   recentWrap.append(recentHead, recentList);
-  card.body.append(posture, caption, grid, seatKey, list, recentWrap, empty);
+  card.body.append(posture, caption, grid, seatKey, list, recentWrap);
 
   function renderRecent(view: AgentActivityView, now: number): void {
     const calls = view.recent;
@@ -183,7 +187,7 @@ export function agentsTile(): Tile {
         const bits = [c.mcp ? "mcp" : hostLabel(c.host)];
         if (c.decision && c.decision !== "pass") bits.push(c.decision);
         bits.push(age < 60 ? age + "s ago" : Math.round(age / 60) + "m ago");
-        meta.textContent = bits.join(" - ");
+        meta.textContent = bits.join(", ");
         li.append(meta);
         return li;
       }),
@@ -199,7 +203,10 @@ export function agentsTile(): Tile {
   function renderSeatKey(hosts: AgentHostView[]): void {
     seatKey.replaceChildren(
       ...hosts.map((hv) => {
-        const item = h("span", "console-dashboard-agents__keyitem", hostLabel(hv.host));
+        const item = h("span", "console-dashboard-agents__keyitem");
+        const mark = h("span", "console-dashboard-agents__keymark", hostInitial(hv.host));
+        mark.setAttribute("aria-hidden", "true");
+        item.append(mark, document.createTextNode(" " + hostLabel(hv.host)));
         applyHostAccent(item, hv.host);
         return item;
       }),
@@ -214,15 +221,19 @@ export function agentsTile(): Tile {
     const cells: HTMLElement[] = [];
     for (const hostView of view.hosts) {
       for (let i = 0; i < hostView.sessions && cells.length < 64; i++) {
-        const cell = h("div", "console-dashboard-agents__seat");
+        const cell = h("div", "console-dashboard-agents__seat", hostInitial(hostView.host));
         applyHostAccent(cell, hostView.host);
         cell.dataset.warm = now - hostView.lastMs < RECENT_MS ? "yes" : "no";
-        cell.title = hostLabel(hostView.host) + " - " + hostView.calls + " calls";
         cells.push(cell);
       }
     }
     grid.replaceChildren(...cells);
     grid.hidden = cells.length === 0;
+    grid.setAttribute(
+      "aria-label",
+      "Recently active agent sessions: " +
+        view.hosts.map((hv) => hostLabel(hv.host) + " " + hv.sessions).join(", "),
+    );
   }
 
   function renderHosts(hosts: AgentHostView[]): void {
@@ -244,7 +255,7 @@ export function agentsTile(): Tile {
         // and burying it behind the counts would make the tile a traffic meter rather than a signal.
         if (hv.denied > 0) bits.push(hv.denied + " denied");
         if (hv.advised > 0) bits.push(hv.advised + " advised");
-        meta.textContent = bits.join(" - ");
+        meta.textContent = bits.join(", ");
         li.append(meta);
         return li;
       }),
@@ -252,11 +263,9 @@ export function agentsTile(): Tile {
   }
 
   function render(view: AgentActivityView | null): void {
-    // Hidden entirely until there is something to say. The board already has plenty to read, and a
-    // permanently empty "0 agents" tile on a machine nobody drives with an agent is pure noise.
+    // The card keeps its place until there is something to say, and says why it is quiet.
     const has = !!view && (view.totalCalls > 0 || view.mcpCalls > 0);
-    card.el.hidden = !has;
-    empty.hidden = has;
+    card.setEmpty(has ? null : "No agent tool calls yet. Wire the guard hook to see them here.");
     if (!view || !has) {
       card.setNote("no agent traffic");
       grid.hidden = true;
@@ -295,7 +304,7 @@ export function agentsTile(): Tile {
     ];
     if (view.mcpCalls > 0) parts.push(view.mcpCalls + " MCP");
     if (view.denied > 0) parts.push(view.denied + " denied");
-    card.setNote(parts.join(" / "));
+    card.setNote(parts.join(", "));
   }
 
   // Trim the host list to the slot, like every other list on the board. The tile is the shortest

@@ -1,0 +1,79 @@
+/* The Activity app's own rules; the frame it shares with the log viewer is layouts/Frame. */
+@import "../../styles/layouts/Frame/frame.css";
+
+.console-activity-conn {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+/* A failed refresh sits above the events that stayed on screen. */
+.console-activity-notice {
+  padding-block: var(--pf-t--global--spacer--sm) 0;
+  padding-inline: var(--log-pad);
+}
+.console-activity-notice[hidden] { display: none; }
+.console-activity-more {
+  margin-block: var(--pf-t--global--spacer--md);
+  margin-inline: var(--log-pad);
+}
+
+/* An event's head is structure. The source and outcome are PF Labels that never shrink; the action
+   gives way first in a narrow pane, then the actor; the duration and time are their own elements, so
+   a truncated string never loses them. */
+.console-render-section__title[data-structured] {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  white-space: nowrap;
+}
+.console-activity-head__kind,
+.console-activity-head__outcome { flex: 0 0 auto; }
+.console-activity-head__action {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-activity-head__actor {
+  flex: 0 4 auto;
+  min-inline-size: 0;
+  max-inline-size: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-activity-head__meta,
+.console-activity-head__time {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* The session id is opaque, so it is quiet and monospaced to stay comparable when truncated. */
+.console-activity-index__session { font-family: var(--pf-t--global--font--family--mono); }
+
+@keyframes console-activity-spin {
+  to { transform: rotate(360deg); }
+}
+.console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg {
+  animation: console-activity-spin var(--console-motion-spin) linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-log-runs__head .pf-v6-c-button[aria-busy="true"] svg { animation: none; }
+}
+
+/* No single line holds the labels, action and time in a narrow pane, and truncation clipped the time.
+   The head wraps: source, outcome and time lead, and the action and actor take a line beneath. */
+@container console-pane (max-width: 34rem) {
+  .console-render-section__title[data-structured] {
+    flex-wrap: wrap;
+    row-gap: var(--pf-t--global--spacer--xs);
+    white-space: normal;
+  }
+  .console-activity-head__time { order: 1; margin-inline-start: auto; }
+  .console-activity-head__meta { order: 2; }
+  .console-activity-head__action { order: 3; flex: 1 1 100%; }
+  .console-activity-head__actor { order: 4; flex: 1 1 100%; max-inline-size: none; }
+  .console-render-section__count { display: none; }
+}

@@ -112,6 +112,37 @@ test("Escape backs out of the target list; a second Escape closes the bar", () =
   assert.deepEqual(b.ran, []);
 });
 
+// The input is the combobox: focus never leaves it, and aria-activedescendant names the option the
+// arrow keys are on, so a screen reader follows the selection without the options taking focus.
+test("the input is a combobox that controls the listbox and follows the selection", () => {
+  const b = bar();
+  b.open();
+  assert.equal(b.input.getAttribute("role"), "combobox");
+  assert.equal(b.input.getAttribute("aria-label"), "Search commands");
+  const list = document.getElementById(b.input.getAttribute("aria-controls") ?? "");
+  assert.equal(list?.getAttribute("role"), "listbox");
+  assert.equal(b.input.getAttribute("aria-expanded"), "true");
+  const first = b.input.getAttribute("aria-activedescendant");
+  assert.ok(first && document.getElementById(first)?.getAttribute("role") === "option");
+  b.key("ArrowRight");
+  const second = b.input.getAttribute("aria-activedescendant");
+  assert.notEqual(second, first, "the arrow moved the active option");
+  assert.equal(document.getElementById(second ?? "")?.getAttribute("aria-selected"), "true");
+});
+
+test("no match says so in a live region, and collapses the combobox", () => {
+  const b = bar();
+  b.open();
+  b.type("zzzzzz");
+  const status = b.el.querySelector('[role="status"]');
+  assert.equal(status?.textContent, "No matching commands");
+  assert.equal(b.input.getAttribute("aria-expanded"), "false");
+  assert.equal(b.input.getAttribute("aria-activedescendant"), null);
+  assert.deepEqual(b.rows(), []);
+  b.type("");
+  assert.equal(status?.textContent, "", "the message clears when there are matches again");
+});
+
 test("reopening after a target was picked starts a fresh question, not mid-stage", () => {
   const b = bar();
   b.open();

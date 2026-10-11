@@ -15,12 +15,7 @@ const PRECACHE = [
   BASE + "index.html",
   BASE + "console.js",
   BASE + "console.css",
-  // PatternFly Core is the console's only design system now. The Pico-era sheets (pico.min.css,
-  // site.css, ui-panels.css, theme.css) were removed at the W4 cutover; BUILD_ID is bumped so
-  // clients drop the old cache and refetch the PF-only shell.
   BASE + "patternfly.css",
-  BASE + "tokens.css",
-  BASE + "overrides.css",
   BASE + "theme.js",
   BASE + "logs/logs.js",
   BASE + "logs/logs.css",

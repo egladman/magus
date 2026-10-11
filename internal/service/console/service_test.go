@@ -128,6 +128,21 @@ func TestResolveStatusAddr(t *testing.T) {
 	assert.Equal(t, "unix:///seam.sock", addr)
 }
 
+func TestDiffWithPassesTheOptionsToTheAnnotation(t *testing.T) {
+	var got []types.DiffOptions
+	svc := &Service{diffFn: func(_ context.Context, _ []string, opts types.DiffOptions) (types.Diff, error) {
+		got = append(got, opts)
+		return types.Diff{}, nil
+	}}
+
+	_, err := svc.Diff(context.Background(), []string{"a.go"})
+	require.NoError(t, err)
+	_, err = svc.DiffWith(context.Background(), []string{"a.go"}, types.DiffOptions{SkipOrder: true})
+	require.NoError(t, err)
+
+	assert.Equal(t, []types.DiffOptions{{}, {SkipOrder: true}}, got, "Diff asks for the order; a brief opts out")
+}
+
 func TestIsGraphRelevant(t *testing.T) {
 	assert.True(t, isGraphRelevant([]string{"a/b.buzz"}))
 	assert.True(t, isGraphRelevant([]string{"docs/x.md"}))

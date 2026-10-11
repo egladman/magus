@@ -1,0 +1,15 @@
+/* The tile frame, drawn once for every app.
+   Each app mounts it as a pane. */
+.tile {
+  /* The ring is drawn inside the box. */
+  outline-offset: -2px;
+  /* The grid keeps the header and body apart. */
+  display: grid;
+  /* A gap rather than a margin, so wrapping stays even. */
+  gap: 1rem;
+  /* Padding comes from the spacer scale. */
+  padding: 1rem;
+  /* Inherit the pane's colour. */
+  /* Nothing here sets a width. */
+  color: inherit;
+}

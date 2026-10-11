@@ -1,0 +1,153 @@
+/* The tab strip (#console-tabs) in the title bar: the PF Tabs box variant with the console's overrides.
+   The strip is painted the content colour, inactive tabs take the chrome fill and recede, and the
+   current tab wears the content colour. */
+#console-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  /* Drops PF's accent line, which floated on the title bar as debris. */
+  --pf-v6-c-tabs__link--after--BorderColor: transparent;
+}
+/* The trailing edge, where the scrolling run ends and the fixed controls begin. Straight: the inactive
+   tabs' run is the line across the strip's bottom, so a radius would need a doubling border. Below
+   48rem the tabs and controls are stacked rows with nothing to divide. */
+@media (min-width: 48rem) {
+  #console-tabs { border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default); }
+}
+/* PF re-declares the property on .pf-m-current itself, and a declaration on the element beats one
+   inherited from an ancestor whatever the ancestor's specificity. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
+/* A property rather than --pf-v6-c-tabs__link--BorderRadius: PF declares that variable on
+   .pf-v6-c-tabs itself, a closer ancestor than this host. */
+#console-tabs .pf-v6-c-tabs__item,
+#console-tabs .pf-v6-c-tabs__link { border-radius: 0; }
+#console-tabs .pf-v6-c-tabs__item {
+  align-items: center;
+  background: var(--console-chrome);
+  /* One hairline per tab on the trailing edge only: the first tab's leading edge is the frame's own,
+     and a hairline there doubles it. */
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+#console-tabs .pf-v6-c-tabs__item.pf-m-current {
+  background: transparent;
+  /* Lifted on the sides, where its neighbours are; top and bottom are the strip's own edges. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
+  /* Items are opaque and tie on z-index, so without this only the left cast would be visible. */
+  position: relative;
+  z-index: 1;
+}
+/* The first tab casts only right: left of it is the frame's edge, and the cast smudged that hairline. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current:first-child {
+  box-shadow: var(--pf-t--global--box-shadow--sm--right);
+}
+#console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
+#console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
+#console-tabs .pf-v6-c-tabs__item:not(.pf-m-current):hover { background: var(--pf-t--global--background--color--secondary--hover); }
+
+/* PF's tab action button is baseline-aligned for a webfont glyph; an inline svg would hang below the
+   row. The container and button are centred in a square that meets the 24px target. */
+#console-tabs .pf-v6-c-tabs__item-action button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  line-height: 1;
+}
+#console-tabs .pf-v6-c-tabs__item-action-icon { display: inline-flex; align-items: center; justify-content: center; height: auto; line-height: 0; }
+#console-tabs .pf-v6-c-tabs__item-action-icon > svg { display: block; }
+
+/* Overflow controls (main.ts wireTabOverflowCue): one per edge, naming how many tabs they hide. They
+   sit outside the phone query because a narrow desktop window overflows too, and they are absolute
+   over the strip: as siblings they would shorten the scroller whenever they appeared, which changes
+   what overflows, so the layout would oscillate. */
+.console-shell-tabs__more {
+  position: absolute;
+  inset-block: 0;
+  z-index: 1;
+  display: none;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  border: 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1;
+  cursor: pointer;
+}
+.console-shell-tabs__more[hidden] { display: none; }
+/* The background is the transition: a ramp to the strip colour dissolves the run into the control, and
+   reaches solid before the padding ends so the last tab and the count never read as one string. */
+.console-shell-tabs__more[data-tab-scroll="start"] {
+  inset-inline-start: 0;
+  padding-inline: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xl);
+  background: linear-gradient(to right, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
+.console-shell-tabs__more[data-tab-scroll="end"] {
+  inset-inline-end: 0;
+  padding-inline: var(--pf-t--global--spacer--xl) var(--pf-t--global--spacer--sm);
+  background: linear-gradient(to left, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
+#console-tabs[data-tab-overflow="start"] .console-shell-tabs__more[data-tab-scroll="start"],
+#console-tabs[data-tab-overflow="end"] .console-shell-tabs__more[data-tab-scroll="end"],
+#console-tabs[data-tab-overflow="both"] .console-shell-tabs__more { display: flex; }
+/* Colour only on hover: a flat fill would snap the hard edge back when the pointer arrived. */
+.console-shell-tabs__more:hover { color: var(--pf-t--global--text--color--regular); }
+.console-shell-tabs__more-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+.console-shell-tabs__more svg { inline-size: 1rem; block-size: 1rem; }
+
+/* The parent path on a tab whose name another open tab shares (tabBar.ts disambiguate). PF Tabs has no
+   sub-part for it. */
+.console-shell-tabs__hint {
+  margin-inline-start: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* contextMenu.ts positions the tab menu and rail menu, so they are fixed and body-mounted. */
+.console-shell-tabs__menu,
+.console-shell-railmenu {
+  position: fixed;
+  min-width: 12rem;
+  max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
+  /* Over the title bar and its popovers (300). */
+  z-index: var(--pf-t--global--z-index--lg);
+}
+
+/* Drag to adopt (tabBar.ts wireTabDrag, or a Panes-map cell dropped on the strip): the dragged tab
+   dims and the tab under the pointer gets the same "drop here" outline as the Panes map. */
+#console-tabs .pf-v6-c-tabs__link[data-dragging] { opacity: 0.5; }
+#console-tabs .pf-v6-c-tabs__link[data-tab-drop] {
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
+  outline-offset: -2px;
+}
+/* The shell's keyboard-focus cue. The rail is listed because PF gives a focused nav link only the
+   tint it gives a hovered one. */
+#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible,
+#console-sidebar :focus-visible { outline-offset: var(--console-focus-inset); }
+
+/* On a phone the strip scrolls: swiping is the native gesture, and tabs keep their intrinsic width. */
+@media (max-width: 47.999rem) {
+  #console-tabs {
+    height: var(--console-titlebar-h);
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  #console-tabs::-webkit-scrollbar { display: none; }
+  #console-tabs .pf-v6-c-tabs__list { flex-wrap: nowrap; }
+  #console-tabs .pf-v6-c-tabs__item { flex: 0 0 auto; }
+  /* Inactive tabs ellipsize; the current one keeps its whole label, since it names what you are viewing. */
+  #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__item-text {
+    display: block;
+    max-width: 5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

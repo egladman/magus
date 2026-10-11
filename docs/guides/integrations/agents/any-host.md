@@ -92,9 +92,13 @@ Three decisions are yours to make:
   it. Suppressed, an advise renders nothing at all. None of the four documented
   hosts needs it today.
 - **What happens when magus cannot be found or cannot judge.** Failing open
-  keeps the session usable and is what every shipped template does. Say so
-  visibly rather than exiting quietly, because an unguarded session you know
-  about beats one you do not.
+  keeps the session usable and is what every shipped template does when magus is
+  missing or too old to run `magus shell`. Say so visibly rather than exiting
+  quietly, because an unguarded session you know about beats one you do not. A
+  magus that runs but cannot load the workspace is not that case: `magus shell`
+  itself denies every call that changes state, so the template only has to carry
+  the deny to the model. The orchestrator or the person rebuilds `./magus`; a
+  leased worker asks the orchestrator to place one.
 
 If you contribute the result back, add a `magus-guard-coverage: schema=2` line
 declaring what your glue carries per `input=` and decision. A parity gate reads those lines

@@ -52,8 +52,10 @@
 //                    goes to `magus shell --message`, which records the topics it raises,
 //                    and this file prints NOTHING for it. A message hook's output reaches
 //                    the model, and recording one is not something to tell the model about
-//   HOST_CWD_PATH    dot-path to the directory the call runs in, whose checkout's own
-//                    ./magus judges it (default cwd)
+//   HOST_CWD_PATH    dot-path to the directory the call runs in. The ./magus beside the
+//                    nearest magus.yaml above it judges the call, so a call from a
+//                    subdirectory with its own magusfile.buzz (console/, docs/) still
+//                    uses the root's build (default cwd)
 //   HOST_RESPONSE    Go template rendering your host's reply
 //   HOST_ADVISE_BRANCH  the advise arm of that template
 //   HOST_ASK_BRANCH  the ask arm of that template: the reply that puts the call in
@@ -88,7 +90,10 @@
 //
 // On a missing magus this prints a visible notice rather than exiting quietly. A
 // guard that exits silently never runs and nothing says so, and an unguarded
-// session you know about beats one you do not.
+// session you know about beats one you do not. That is the case where no magus exists
+// to ask. A magus that runs but cannot load the tree (older than it, or a checkout with
+// no ./magus) is judged by that magus itself, which denies every call that changes
+// state until a binary loads the tree.
 //
 // NOTHING here may raise. Claude Code reads a non-zero hook exit other than 2 as a
 // non-blocking error and runs the call anyway, and exit 2 BLOCKS with stderr as the
@@ -111,7 +116,7 @@
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human

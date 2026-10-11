@@ -175,8 +175,8 @@ test("payloadRefs lists request then response, and nothing for an event with no 
 
 test("payloadLabel names the body, and its size only when one was recorded", () => {
   const response = { label: "response", ref: "mcpbbbb", bytes: 2048 };
-  assert.equal(payloadLabel(response), "show response (2.0 KB)");
-  assert.equal(payloadLabel({ label: "request", ref: "mcpaaaa", bytes: 0 }), "show request");
+  assert.equal(payloadLabel(response), "Show response (2.0 KB)");
+  assert.equal(payloadLabel({ label: "request", ref: "mcpaaaa", bytes: 0 }), "Show request");
 });
 
 test("payloadLines splits a body and treats a trailing newline as a terminator", () => {

@@ -14,6 +14,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Command, Keymap } from "./commands";
 import { createKeybindingsOverlay } from "./keybindings";
+import { must } from "../lib/guards";
 import type { Persisted } from "../lib/persist";
 
 const commands: Command[] = [{ id: "tab.new", label: "New tab", group: "Tabs", run() {} }];
@@ -89,5 +90,41 @@ test("closing the overlay mid-Record abandons the pending rebind", async () => {
   await new Promise((r) => setTimeout(r, 1000));
   assert.deepEqual(keymap.get(), {}, "a dismissed recording must not rebind the command later");
 
+  overlay.el.remove();
+});
+
+// Every row carries the same three controls, so each is named for the command it acts on, by the
+// editor itself rather than a stamp laid over it afterwards.
+test("each row's Record, Clear and reset controls name their command", () => {
+  const keymap = cell();
+  const overlay = createKeybindingsOverlay({ commands, defaults, keymap });
+  document.body.append(overlay.el);
+  overlay.open();
+
+  const names = (): (string | null)[] =>
+    [...overlay.el.querySelectorAll('[data-command="tab.new"] [data-kactions] button')].map((b) =>
+      b.getAttribute("aria-label"),
+    );
+  assert.deepEqual(names(), [
+    "Record a shortcut for New tab",
+    "Clear the shortcut for New tab",
+    "Reset to default: New tab",
+  ]);
+  startRecording(overlay.el);
+  assert.equal(names()[0], "Cancel recording the shortcut for New tab");
+
+  overlay.close();
+  overlay.el.remove();
+});
+
+// The modal's description is the editor's help, said once: the editor leaves its own paragraph out.
+test("the overlay describes itself with one help paragraph", () => {
+  const overlay = createKeybindingsOverlay({ commands, defaults, keymap: cell() });
+  document.body.append(overlay.el);
+  const box = must(overlay.el.querySelector<HTMLElement>(".pf-v6-c-modal-box"));
+  const description = must(box.querySelector<HTMLElement>(".pf-v6-c-modal-box__description"));
+  assert.equal(box.getAttribute("aria-describedby"), description.id);
+  assert.ok(box.querySelector(".pf-v6-c-modal-box__header-main .pf-v6-c-modal-box__title"));
+  assert.equal(overlay.el.querySelectorAll("[data-kbdesc]").length, 0);
   overlay.el.remove();
 });

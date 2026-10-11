@@ -421,8 +421,8 @@ func TestWantsUsage(t *testing.T) {
 // being usage, and that is the regression worth catching.
 //
 // Every printer here writes to os.Stderr, which is the convention across the package:
-// TestDiffUsageNamesEveryBoundFlag catches the drift that hid --rev, --patch and
-// --prompt from `magus diff -h`: the flag set is generated from the registry, but the
+// TestDiffUsageNamesEveryBoundFlag catches the drift that hid --rev and --patch from
+// `magus diff -h`: the flag set is generated from the registry, but the
 // usage prose is hand-written, so a new flag lands in the binding and never in the help.
 // Deriving the expectation from the bound flags rather than a hand-list makes the help
 // self-check against what the command actually accepts.
@@ -503,7 +503,7 @@ func TestUsagePrintersNameTheirCommands(t *testing.T) {
 		{
 			name:  "diff",
 			print: func() { diffUsage(os.Stderr) },
-			want:  []string{"Usage: magus diff", "--generated", "--no-tui", "--rev", "--patch", "--prompt", "magus graph build"},
+			want:  []string{"Usage: magus diff", "--generated", "--no-tui", "--rev", "--patch", "--unread", "--thread", "magus graph build"},
 		},
 		{
 			name:  "graph",

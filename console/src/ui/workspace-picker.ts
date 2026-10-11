@@ -22,6 +22,9 @@ import {
   shortName,
   workspaceScope,
 } from "../lib/scope";
+import { must } from "../lib/guards";
+import { wireMenu } from "./menu";
+import { menuToggle } from "./menu-toggle";
 
 export interface WorkspacePickerOptions {
   // Enter or leave the server-free demo. This is the ONLY way in now - the seven per-app
@@ -38,9 +41,9 @@ export interface WorkspacePickerOptions {
 export interface WorkspacePicker {
   // The server told us which workspaces it has loaded; rebuild the menu around them.
   setWorkspaces(roots: readonly string[]): void;
-  // Releases the document listeners and the scope subscription, and removes the control. The two
-  // listeners live on `document`, not on the control, so dropping the reference alone would leak them
-  // and leave a dead menu answering outside clicks for the life of the page.
+  // Releases the document listener and the scope subscription, and removes the control. The listener
+  // lives on `document`, not on the control, so dropping the reference alone would leak it and leave
+  // a dead menu answering outside clicks for the life of the page.
   destroy(): void;
 }
 
@@ -64,23 +67,12 @@ export function initWorkspacePicker(
   caption.id = "console-scope-caption";
   caption.textContent = "Workspace";
 
-  const btn = document.createElement("button");
+  // A menu toggle, whose caret is what tells a sighted reader this opens a menu: without it the value
+  // reads as a status readout rather than as something to press.
+  const btn = menuToggle({ text: "", variant: "plain" });
   btn.id = "console-scope-btn";
-  btn.type = "button";
-  btn.className = "pf-v6-c-button pf-m-plain";
-  btn.setAttribute("aria-haspopup", "true");
-  btn.setAttribute("aria-expanded", "false");
-  const label = document.createElement("span");
-  label.className = "console-shell-scope__label";
-  // A caret, because aria-haspopup tells a screen reader this opens a menu and nothing told anyone
-  // else. Without it the value reads as a status readout rather than as something to press.
-  const caret = document.createElement("span");
-  caret.className = "console-shell-scope__caret";
-  caret.innerHTML =
-    '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M6 9l6 6 6-6"/></svg>';
-  btn.append(label, caret);
+  const label = must(btn.querySelector<HTMLElement>(".pf-v6-c-menu-toggle__text"));
+  label.classList.add("console-shell-scope__label");
   wrap.append(caption, btn);
 
   const menu = document.createElement("div");
@@ -89,17 +81,11 @@ export function initWorkspacePicker(
   const list = document.createElement("ul");
   list.className = "pf-v6-c-menu__list";
   list.setAttribute("role", "menu");
+  list.setAttribute("aria-label", "Workspace");
   const content = document.createElement("div");
   content.className = "pf-v6-c-menu__content";
   content.append(list);
   menu.append(content);
-
-  let open = false;
-  const setOpen = (v: boolean): void => {
-    open = v;
-    menu.hidden = !v;
-    btn.setAttribute("aria-expanded", v ? "true" : "false");
-  };
 
   let roots: readonly string[] = [];
 
@@ -161,10 +147,6 @@ export function initWorkspacePicker(
       }
       b.append(main);
       b.addEventListener("click", () => {
-        setOpen(false);
-        // Focus would otherwise sit on an element that just became hidden, which drops it to the body
-        // and restarts the next Tab at the top of the page.
-        btn.focus();
         setWorkspaceScope(root);
       });
       li.append(b);
@@ -213,44 +195,15 @@ export function initWorkspacePicker(
     main.append(tag);
     b.append(main);
     b.addEventListener("click", () => {
-      setOpen(false);
-      btn.focus();
       opts.onDemo(true);
     });
     li.append(b);
     return li;
   };
 
-  const listeners = new AbortController();
-  const { signal } = listeners;
-
-  btn.addEventListener(
-    "click",
-    (e) => {
-      e.stopPropagation();
-      if (!open) rebuild();
-      setOpen(!open);
-    },
-    { signal },
-  );
-  document.addEventListener(
-    "click",
-    (e) => {
-      const target = e.target instanceof Node ? e.target : null;
-      if (open && !menu.contains(target) && !btn.contains(target)) setOpen(false);
-    },
-    { signal },
-  );
-  document.addEventListener(
-    "keydown",
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape" && open) {
-        setOpen(false);
-        btn.focus();
-      }
-    },
-    { signal },
-  );
+  // Rows are rebuilt on open so the checked one is current. Picking a row closes the menu and, if the
+  // row left focus inside it, returns focus to the control (menu.ts).
+  const unwire = wireMenu(menu, btn, { onOpen: rebuild });
 
   host.prepend(menu);
   host.prepend(wrap);
@@ -266,10 +219,10 @@ export function initWorkspacePicker(
       if (next.length === roots.length && next.every((r, i) => r === roots[i])) return;
       roots = [...next];
       paint();
-      if (open) rebuild();
+      if (!menu.hidden) rebuild();
     },
     destroy() {
-      listeners.abort();
+      unwire();
       unsubscribe();
       wrap.remove();
       menu.remove();
