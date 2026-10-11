@@ -302,6 +302,7 @@ func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
 	case err == nil:
 		return types.JobAttempt{
 			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
+			AttemptID: d.Attempt, DurationMs: d.DurationMs, Revision: d.Revision, Dirty: d.Dirty,
 		}, nil
 	case errors.Is(err, fs.ErrNotExist):
 		return types.JobAttempt{}, nil
@@ -893,7 +894,7 @@ func (l *listFlag) Set(value string) error {
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
 const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
 	types.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
-	" and none may change after the run; repeatable"
+	" and as the run read them: at its revision for a run of a clean tree, else unchanged since it started; repeatable"
 
 // evidenceFlag collects `--evidence <goal>=<ref>` pairs. A goal named twice is refused
 // rather than resolved to whichever came last, since the two refs may be different runs.
@@ -1447,7 +1448,10 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "that goal's own check. It is refused for a goal the job does not hold, one that is")
 			fmt.Fprintln(os.Stderr, "not a check, and one the job's own evidence already passes. Every changed path")
 			fmt.Fprintln(os.Stderr, "the result names must read byte for byte the same here as in the job's checkout,")
-			fmt.Fprintln(os.Stderr, "so the run here covers the work it stands in for. The goals that took a run from")
+			fmt.Fprintln(os.Stderr, "and as the run read them: a run of a clean tree read its recorded revision, so they")
+			fmt.Fprintln(os.Stderr, "must read now as they do there; any other run is held to file times, and nothing")
+			fmt.Fprintln(os.Stderr, "under or above them may have changed since it started. Only then does the run here")
+			fmt.Fprintln(os.Stderr, "cover the work it stands in for. The goals that took a run from")
 			fmt.Fprintln(os.Stderr, "here are recorded on the job, beside the runs it was exited with.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--integration asks whether the work still passes in THIS tree, such as a branch")

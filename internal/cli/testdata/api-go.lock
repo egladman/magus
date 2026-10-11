@@ -1878,10 +1878,14 @@ github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_path
 github.com/egladman/magus/types.Job.WriteProof field JobWriteProof "json:\"write_proof,omitempty\" yaml:\"write_proof,omitempty\""
 github.com/egladman/magus/types.JobAncestors func(rows []Job, id string) []Job
 github.com/egladman/magus/types.JobAttempt type struct
+github.com/egladman/magus/types.JobAttempt.AttemptID field string "json:\"attempt_id,omitempty\" yaml:\"attempt_id,omitempty\""
+github.com/egladman/magus/types.JobAttempt.Dirty field bool "json:\"dirty,omitempty\" yaml:\"dirty,omitempty\""
+github.com/egladman/magus/types.JobAttempt.DurationMs field int64 "json:\"duration_ms,omitempty\" yaml:\"duration_ms,omitempty\""
 github.com/egladman/magus/types.JobAttempt.Failed field bool "json:\"failed,omitempty\" yaml:\"failed,omitempty\""
 github.com/egladman/magus/types.JobAttempt.Found field bool "json:\"found\" yaml:\"found\""
 github.com/egladman/magus/types.JobAttempt.Project field string "json:\"project,omitempty\" yaml:\"project,omitempty\""
 github.com/egladman/magus/types.JobAttempt.Ref field string "json:\"ref,omitempty\" yaml:\"ref,omitempty\""
+github.com/egladman/magus/types.JobAttempt.Revision field string "json:\"revision,omitempty\" yaml:\"revision,omitempty\""
 github.com/egladman/magus/types.JobAttempt.Spell field string "json:\"spell,omitempty\" yaml:\"spell,omitempty\""
 github.com/egladman/magus/types.JobAttempt.String method func() string
 github.com/egladman/magus/types.JobAttempt.Target field string "json:\"target,omitempty\" yaml:\"target,omitempty\""

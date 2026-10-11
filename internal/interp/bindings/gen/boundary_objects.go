@@ -2837,6 +2837,10 @@ func ObjectJobAttempt(v types.JobAttempt) vm.Value {
 	out.MapSet("target", vm.StrValue(v.Target))
 	out.MapSet("spell", vm.StrValue(v.Spell))
 	out.MapSet("failed", vm.BoolValue(v.Failed))
+	out.MapSet("attemptID", vm.StrValue(v.AttemptID))
+	out.MapSet("durationMs", vm.IntValue(int64(v.DurationMs)))
+	out.MapSet("revision", vm.StrValue(v.Revision))
+	out.MapSet("dirty", vm.BoolValue(v.Dirty))
 	return out
 }
 

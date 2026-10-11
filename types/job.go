@@ -590,6 +590,16 @@ type JobAttempt struct {
 	Target      string `json:"target,omitempty" yaml:"target,omitempty"`
 	Spell       string `json:"spell,omitempty" yaml:"spell,omitempty"`
 	Failed      bool   `json:"failed,omitempty" yaml:"failed,omitempty"`
+	// AttemptID names this execution alone, where Ref may name its step, which a later run
+	// of the same step takes over.
+	AttemptID string `json:"attempt_id,omitempty" yaml:"attempt_id,omitempty"`
+	// DurationMs is how long the run took; TimestampMs is when it ENDED, so the run started
+	// at TimestampMs-DurationMs.
+	DurationMs int64 `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
+	// Revision is the VCS revision the run read its inputs at, empty when unknown. Dirty says
+	// the tree also held uncommitted changes then, so Revision alone does not name what it read.
+	Revision string `json:"revision,omitempty" yaml:"revision,omitempty"`
+	Dirty    bool   `json:"dirty,omitempty" yaml:"dirty,omitempty"`
 }
 
 // JobGateAttempt is the stored output record for one goal.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -927,7 +928,13 @@ var (
 
 func exitedWithRuns(t *testing.T, row types.Job, result types.JobResult, holderRuns map[string]types.JobAttempt) waiterEvidenceJob {
 	t.Helper()
-	holder, waiter := t.TempDir(), t.TempDir()
+	return exitedWithRunsIn(t, t.TempDir(), row, result, holderRuns)
+}
+
+// exitedWithRunsIn is exitedWithRuns with waiter as the waiter's checkout.
+func exitedWithRunsIn(t *testing.T, waiter string, row types.Job, result types.JobResult, holderRuns map[string]types.JobAttempt) waiterEvidenceJob {
+	t.Helper()
+	holder := t.TempDir()
 	for _, changed := range result.ChangedPaths {
 		for _, dir := range []string{holder, waiter} {
 			p := filepath.Join(dir, filepath.FromSlash(changed))
@@ -1194,11 +1201,213 @@ func TestSameContentComparesLinksWithoutFollowingThem(t *testing.T) {
 	for _, dir := range []string{left, right} {
 		require.NoError(t, os.Symlink(".", filepath.Join(dir, "loop")))
 	}
-	assert.True(t, sameContent(left, right), "a link to its own directory is compared by target, never walked")
+	assert.True(t, sameContent(t.Context(), left, right), "a link to its own directory is compared by target, never walked")
 
 	require.NoError(t, os.Remove(filepath.Join(right, "loop")))
 	require.NoError(t, os.Symlink("..", filepath.Join(right, "loop")))
-	assert.False(t, sameContent(left, right))
+	assert.False(t, sameContent(t.Context(), left, right))
+}
+
+// Two checkouts of one submodule commit hold different .git files, each naming its own
+// checkout's metadata; the commit checked out is what they share.
+func TestSameContentComparesASubmoduleByItsHead(t *testing.T) {
+	t.Parallel()
+
+	origin := testkit.NewRepo(t, map[string]string{"x.go": "package x\n"})
+	first := origin.Head()
+	second := origin.Commit("same tree, another commit", nil)
+	checkout := func(rev string) string {
+		dir := filepath.Join(t.TempDir(), "sub")
+		origin.Git("worktree", "add", "-q", "--detach", dir, rev)
+		return dir
+	}
+	left, right, moved := checkout(first), checkout(first), checkout(second)
+	l, err := os.ReadFile(filepath.Join(left, ".git"))
+	require.NoError(t, err)
+	r, err := os.ReadFile(filepath.Join(right, ".git"))
+	require.NoError(t, err)
+	require.NotEqual(t, string(l), string(r), "the control: each checkout's .git names its own metadata")
+
+	assert.True(t, sameContent(t.Context(), left, right), "the same HEAD and the same files")
+	assert.False(t, sameContent(t.Context(), left, moved), "the same files at another HEAD")
+	require.NoError(t, os.WriteFile(filepath.Join(right, "x.go"), []byte("package y\n"), 0o644))
+	assert.False(t, sameContent(t.Context(), left, right), "the same HEAD with other files")
+}
+
+// ageTree dates root and everything beneath it at.
+func ageTree(t *testing.T, root string, at time.Time) {
+	t.Helper()
+	require.NoError(t, filepath.WalkDir(root, func(p string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chtimes(p, at, at)
+	}))
+}
+
+// A run that started before the job's files changed graded other files, however late it
+// ended: its record dates its end. The waiter's tree is dated two hours back and the run
+// started one hour back, so only what happens after it reads as later.
+func TestWaitEvidenceDatesARunByItsStart(t *testing.T) {
+	t.Parallel()
+
+	spanning := passedHere
+	spanning.TimestampMs = time.Now().Add(time.Hour).UnixMilli()
+	spanning.DurationMs = (2 * time.Hour).Milliseconds()
+	tests := map[string]struct {
+		extra string
+		alter func(t *testing.T, j waiterEvidenceJob)
+		want  string
+	}{
+		"nothing changed since it started": {},
+		"a file written while it ran": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				for _, dir := range []string{j.holder, j.waiter} {
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "cmd", "magus", "ledger.go"), []byte("package b\n"), 0o644))
+				}
+			},
+			want: "cmd/magus/ledger.go",
+		},
+		"a top-level file deleted after it started": {
+			extra: "tools.go",
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				require.NoError(t, os.Remove(filepath.Join(j.waiter, "tools.go")))
+			},
+			want: "tools.go",
+		},
+		"a top-level directory deleted after it started": {
+			extra: "legacy/old.go",
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				require.NoError(t, os.RemoveAll(filepath.Join(j.waiter, "legacy")))
+			},
+			want: "legacy/old.go",
+		},
+		"a file renamed into place with its old time": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				staged := filepath.Join(j.waiter, "staged.go")
+				for _, p := range []string{staged, filepath.Join(j.holder, "cmd", "magus", "ledger.go")} {
+					require.NoError(t, os.WriteFile(p, []byte("package b\n"), 0o644))
+				}
+				old := time.Now().Add(-2 * time.Hour)
+				require.NoError(t, os.Chtimes(staged, old, old))
+				require.NoError(t, os.Rename(staged, filepath.Join(j.waiter, "cmd", "magus", "ledger.go")))
+				require.NoError(t, os.Chtimes(j.waiter, old, old))
+			},
+			want: "cmd/magus/ledger.go",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			j := failedPrimary(t)
+			observed := claimed(j.result)
+			if tc.extra != "" {
+				p := filepath.Join(j.waiter, filepath.FromSlash(tc.extra))
+				require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+				require.NoError(t, os.WriteFile(p, []byte("package a\n"), 0o644))
+				observed.Changed = append(slices.Clone(observed.Changed), tc.extra)
+			}
+			ageTree(t, j.waiter, time.Now().Add(-2*time.Hour))
+			if tc.alter != nil {
+				tc.alter(t, j)
+			}
+
+			status, err := j.waitObserving(t, map[string]types.JobAttempt{"here": spanning}, map[string]string{types.PrimaryGoalID: "here"},
+				func(context.Context, types.Job) (Observed, error) { return observed, nil })
+
+			if tc.want == "" {
+				require.NoError(t, err)
+				assert.True(t, status.Verified, status.Violations)
+				return
+			}
+			require.ErrorContains(t, err, "did not change after it started")
+			assert.Contains(t, err.Error(), tc.want)
+			j.requireUnmoved(t)
+		})
+	}
+}
+
+// A run of a clean tree read its recorded revision, so a path has to read now as it does
+// there, whenever the run ended; file times are not consulted.
+func TestWaitEvidenceHoldsACleanRunToItsRevision(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		alter func(t *testing.T, j waiterEvidenceJob)
+		want  string
+	}{
+		"nothing changed since the revision": {},
+		"a file changed after the revision": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				for _, dir := range []string{j.holder, j.waiter} {
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "cmd", "magus", "ledger.go"), []byte("package b\n"), 0o644))
+				}
+			},
+			want: "cmd/magus/ledger.go",
+		},
+		"a top-level file deleted after the revision": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				for _, dir := range []string{j.holder, j.waiter} {
+					require.NoError(t, os.Remove(filepath.Join(dir, "tools.go")))
+				}
+			},
+			want: "tools.go",
+		},
+		"a file the revision lacks": {
+			alter: func(t *testing.T, j waiterEvidenceJob) {
+				for _, dir := range []string{j.holder, j.waiter} {
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "new.go"), []byte("package a\n"), 0o644))
+				}
+			},
+			want: "new.go",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := testkit.NewRepo(t, map[string]string{"tools.go": "package a\n"})
+			j := exitedWithRunsIn(t, repo.Root(), acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+			require.NoError(t, os.WriteFile(filepath.Join(j.holder, "tools.go"), []byte("package a\n"), 0o644))
+			clean := passedHere
+			clean.Revision = repo.Commit("the work", nil)
+			observed := claimed(j.result)
+			observed.Changed = append(slices.Clone(observed.Changed), "tools.go", "new.go")
+			if tc.alter != nil {
+				tc.alter(t, j)
+			}
+
+			status, err := j.waitObserving(t, map[string]types.JobAttempt{"here": clean}, map[string]string{types.PrimaryGoalID: "here"},
+				func(context.Context, types.Job) (Observed, error) { return observed, nil })
+
+			if tc.want == "" {
+				require.NoError(t, err)
+				assert.True(t, status.Verified, status.Violations)
+				return
+			}
+			require.ErrorContains(t, err, "the clean revision run here read")
+			assert.Contains(t, err.Error(), tc.want)
+			j.requireUnmoved(t)
+		})
+	}
+}
+
+// A ref may name a step, which its next run answers for; the job records the execution
+// the ref resolved to.
+func TestWaitEvidenceRecordsTheAttemptTheRefResolvedTo(t *testing.T) {
+	t.Parallel()
+
+	j := failedPrimary(t)
+	run := passedHere
+	run.AttemptID = "1a2b3c4d5e6f"
+	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": run}, map[string]string{types.PrimaryGoalID: "here"})
+	require.NoError(t, err)
+	require.True(t, status.Verified, status.Violations)
+
+	row := j.stored(t)
+	require.NotNil(t, row.WaiterEvidence)
+	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "1a2b3c4d5e6f"}}, row.WaiterEvidence.Gates)
 }
 
 func TestWaitEvidenceNeedsTheFiledResult(t *testing.T) {

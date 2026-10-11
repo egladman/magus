@@ -2,6 +2,7 @@ package job
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -180,9 +181,10 @@ type graded struct {
 //
 // It refuses a goal the job does not hold as a check, and a goal that already passes on
 // the holder's evidence, which another run would only hide. It also refuses unless the
-// files the job changed read the same here as in the holder's checkout and none changed
-// here after the oldest run taken (see [sameChangedPaths]): only then is a run here a run
-// of the holder's tree.
+// files the job changed read the same here as in the holder's checkout and each run taken
+// read them as they read here now (see [sameChangedPaths]): only then is a run here a run
+// of the holder's tree. A goal records its run's attempt id where the store gave one: the
+// ref typed may name a step, which the step's next run would answer for instead.
 func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types.Job, refs map[string]string, resolve AttemptResolver, seen Observed) (graded, *types.JobIntegration, error) {
 	if resolve == nil {
 		return graded{}, nil, errors.New("job: no output resolver reads the runs recorded in this checkout")
@@ -217,7 +219,7 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 	out := graded{result: ev.result, attempt: ev.attempt, gateAttempts: slices.Clone(ev.gateAttempts)}
 	out.result.GateEvidence = slices.Clone(ev.result.GateEvidence)
 	taken := &types.JobIntegration{Checkout: here}
-	var oldest int64
+	runs := make([]types.JobAttempt, 0, len(ids))
 	for _, goalID := range ids {
 		ref := strings.TrimSpace(refs[goalID])
 		found, err := resolve(ctx, ref)
@@ -227,18 +229,17 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 		if !found.Found {
 			return graded{}, nil, fmt.Errorf("job: goal %q output ref %q names no run this checkout recorded", goalID, ref)
 		}
-		if oldest == 0 || found.TimestampMs < oldest {
-			oldest = found.TimestampMs
-		}
+		ref = cmp.Or(found.AttemptID, ref)
 		out.setGoalRun(goalID, ref, found)
 		taken.Gates = append(taken.Gates, types.GateStatus{ID: goalID, OutputRef: ref})
+		runs = append(runs, found)
 	}
 
 	if !seen.ChangedKnown {
 		return graded{}, nil, errors.New("job: the job's diff could not be read, so nothing names the files a run here has to share with the holder's checkout")
 	}
 	changed := slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(seen.Changed), ev.result.ChangedPaths...))))
-	if err := sameChangedPaths(row.CheckoutRoot, here, changed, time.UnixMilli(oldest)); err != nil {
+	if err := sameChangedPaths(ctx, row.CheckoutRoot, here, changed, runs); err != nil {
 		return graded{}, nil, err
 	}
 	return out, taken, nil
@@ -296,46 +297,125 @@ func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *t
 }
 
 // sameChangedPaths refuses unless every changed path reads the same under the holder's
-// checkout and this one, a path absent from both counting as the same, and none changed
-// here after ranAt. The bytes are compared now, so ranAt is what ties them to the run: a
-// run made before the job's changes arrived here graded other files.
+// checkout and this one, a path absent from both counting as the same, and each of runs
+// read every changed path as it reads here now. The bytes are compared now, so that second
+// half is what ties them to the runs: a run made before the job's changes arrived here, or
+// while they arrived, graded other files.
 //
-// A path is changed here when its modification time, or for a directory that of anything
-// beneath it, is after ranAt. An absent path is changed when the nearest directory above
-// it inside the checkout is: removing a file stamps its directory. The checkout's own root
-// is never read for that, since recording a run creates entries there.
-func sameChangedPaths(holder, here string, changed []string, ranAt time.Time) error {
+// A run is tied to the tree by the best witness its record carries:
+//   - A run of a clean tree at a recorded revision read exactly that revision, so each path
+//     must read here now as it does there (see [readsAsRevision]). Only a directory, such as
+//     a submodule, falls to the next witness, since a revision holds none as one file.
+//   - Any other run, of a dirty tree or with no revision recorded, is held to modification
+//     times against its START, TimestampMs less DurationMs (see [modifiedSince]). Times are
+//     the weaker witness: a filesystem with coarse timestamps can date a change made in the
+//     run's first second or two before it, and a copy that keeps its times shows only
+//     through the directory it lands in.
+func sameChangedPaths(ctx context.Context, holder, here string, changed []string, runs []types.JobAttempt) error {
 	if holder == "" {
 		return errors.New("job: the job records no checkout for its holder, so nothing shows this one holds the work the holder changed")
 	}
 	if info, err := os.Stat(holder); err != nil || !info.IsDir() {
 		return fmt.Errorf("job: the holder's checkout %s is not there to compare against", holder)
 	}
-	var differ, later []string
+	var differ, local []string
 	for _, c := range changed {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(c)))
 		rel := filepath.FromSlash(p)
-		if !filepath.IsLocal(rel) {
+		if !filepath.IsLocal(rel) || holder != here && !sameContent(ctx, filepath.Join(holder, rel), filepath.Join(here, rel)) {
 			differ = append(differ, p)
 			continue
 		}
-		if holder != here && !sameContent(filepath.Join(holder, rel), filepath.Join(here, rel)) {
-			differ = append(differ, p)
-			continue
+		local = append(local, p)
+	}
+	if len(differ) > 0 {
+		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read the same in both checkouts,"+
+			" and %d differ between %s and %s: %s", len(differ), holder, here, listPaths(differ))
+	}
+	for _, run := range runs {
+		if err := readAsNow(ctx, here, local, run); err != nil {
+			return err
 		}
-		if changedAfter(here, rel, ranAt) {
+	}
+	return nil
+}
+
+// readAsNow refuses unless run read each of paths, local slash paths under here, as they
+// read now; see [sameChangedPaths] for the witnesses.
+func readAsNow(ctx context.Context, here string, paths []string, run types.JobAttempt) error {
+	name := cmp.Or(run.AttemptID, run.Ref)
+	var driver types.VCSDriver
+	if run.Revision != "" && !run.Dirty {
+		driver = revisionReader(ctx, here, run.Revision)
+	}
+	started := time.UnixMilli(run.TimestampMs - run.DurationMs)
+	var moved, later []string
+	for _, p := range paths {
+		if driver != nil {
+			if same, decided := readsAsRevision(ctx, driver, here, run.Revision, p); decided {
+				if !same {
+					moved = append(moved, p)
+				}
+				continue
+			}
+		}
+		if modifiedSince(here, filepath.FromSlash(p), started) {
 			later = append(later, p)
 		}
 	}
 	switch {
-	case len(differ) > 0:
-		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read the same in both checkouts,"+
-			" and %d differ between %s and %s: %s", len(differ), holder, here, listPaths(differ))
+	case len(moved) > 0:
+		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read now as the run read them,"+
+			" and %d in %s differ from %s, the clean revision run %s read: %s", len(moved), here, run.Revision, name, listPaths(moved))
 	case len(later) > 0:
-		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths did not change after it,"+
-			" and %d changed in %s after %s: %s", len(later), here, ranAt.UTC().Format(time.RFC3339), listPaths(later))
+		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths did not change after it started,"+
+			" and %d changed in %s after %s, when run %s started: %s", len(later), here, started.UTC().Format(time.RFC3339), name, listPaths(later))
 	}
 	return nil
+}
+
+// revisionReader is the VCS that reads revision in root, or nil when none can: without one
+// a path missing at the revision and a revision missing from the store read alike.
+func revisionReader(ctx context.Context, root, revision string) types.VCSDriver {
+	driver, _ := resolveDriver(ctx, root)
+	if driver == nil {
+		return nil
+	}
+	if _, err := driver.FindCommit(ctx, root, revision); err != nil {
+		return nil
+	}
+	return driver
+}
+
+// readsAsRevision reports whether p, a local slash path under root, reads now as it does at
+// revision, a path absent from both reading the same. decided is false for a directory
+// here: a revision holds one as a tree, or a submodule as another repository's commit,
+// and neither compares with a file.
+func readsAsRevision(ctx context.Context, driver types.VCSDriver, root, revision, p string) (same, decided bool) {
+	full := filepath.Join(root, filepath.FromSlash(p))
+	info, err := os.Lstat(full)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		_, err := driver.ReadFileAt(ctx, root, revision, p)
+		return err != nil, true
+	case err != nil:
+		return false, true
+	case info.IsDir():
+		return false, false
+	}
+	then, err := driver.ReadFileAt(ctx, root, revision, p)
+	if err != nil {
+		return false, true
+	}
+	switch {
+	case info.Mode()&fs.ModeSymlink != 0:
+		target, err := os.Readlink(full)
+		return err == nil && target == then, true
+	case info.Mode().IsRegular():
+		now, err := os.ReadFile(full)
+		return err == nil && string(now) == then, true
+	}
+	return false, true
 }
 
 // listPaths names the first five of paths and counts the rest.
@@ -347,18 +427,23 @@ func listPaths(paths []string) string {
 	return strings.Join(shown, ", ")
 }
 
-// changedAfter reports whether rel, a local path under root, was modified after t. A read
-// failure other than absence reports true: an unread file proves nothing unchanged.
-func changedAfter(root, rel string, t time.Time) bool {
+// modifiedSince reports whether rel, a local path under root, anything beneath it, or any
+// directory above it up to and including root was modified after t. The directories count
+// because removing or renaming an entry stamps its directory alone: a deletion leaves no
+// file to date, and a file renamed into place keeps its old time. A read failure other
+// than absence reports true: an unread file proves nothing unchanged.
+func modifiedSince(root, rel string, t time.Time) bool {
+	for dir := filepath.Dir(rel); ; dir = filepath.Dir(dir) {
+		info, err := os.Lstat(filepath.Join(root, dir))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) || err == nil && info.ModTime().After(t) {
+			return true
+		}
+		if dir == "." {
+			break
+		}
+	}
 	full := filepath.Join(root, rel)
 	if _, err := os.Lstat(full); errors.Is(err, fs.ErrNotExist) {
-		for dir := filepath.Dir(rel); dir != "."; dir = filepath.Dir(dir) {
-			info, err := os.Lstat(filepath.Join(root, dir))
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return err != nil || info.ModTime().After(t)
-		}
 		return false
 	}
 	later := false
@@ -381,8 +466,11 @@ func changedAfter(root, rel string, t time.Time) bool {
 
 // sameContent reports whether left and right hold the same thing: the same bytes for a
 // file, the same target for a symbolic link, which is never followed, and for a directory
-// the same entries, each the same. Both absent is the same; any other read failure is not.
-func sameContent(left, right string) bool {
+// the same entries, each the same. A directory holding .git is a nested repository, such
+// as a submodule, and is the same at the same HEAD with the same other entries: its .git
+// points at metadata of its own checkout, which never matches another's. Both absent is
+// the same; any other read failure is not.
+func sameContent(ctx context.Context, left, right string) bool {
 	li, lerr := os.Lstat(left)
 	ri, rerr := os.Lstat(right)
 	if lerr != nil || rerr != nil {
@@ -399,11 +487,21 @@ func sameContent(left, right string) bool {
 	case li.IsDir():
 		l, lerr := os.ReadDir(left)
 		r, rerr := os.ReadDir(right)
-		if lerr != nil || rerr != nil || len(l) != len(r) {
+		if lerr != nil || rerr != nil {
+			return false
+		}
+		isGit := func(e fs.DirEntry) bool { return e.Name() == ".git" }
+		if slices.ContainsFunc(l, isGit) || slices.ContainsFunc(r, isGit) {
+			if !sameHead(ctx, left, right) {
+				return false
+			}
+			l, r = slices.DeleteFunc(l, isGit), slices.DeleteFunc(r, isGit)
+		}
+		if len(l) != len(r) {
 			return false
 		}
 		for i := range l {
-			if l[i].Name() != r[i].Name() || !sameContent(filepath.Join(left, l[i].Name()), filepath.Join(right, r[i].Name())) {
+			if l[i].Name() != r[i].Name() || !sameContent(ctx, filepath.Join(left, l[i].Name()), filepath.Join(right, r[i].Name())) {
 				return false
 			}
 		}
@@ -414,6 +512,24 @@ func sameContent(left, right string) bool {
 		return lerr == nil && rerr == nil && bytes.Equal(l, r)
 	}
 	return false
+}
+
+// sameHead reports whether the repositories checked out at left and right both read a
+// HEAD, and the same one.
+func sameHead(ctx context.Context, left, right string) bool {
+	head := func(dir string) string {
+		driver, _ := resolveDriver(ctx, dir)
+		if driver == nil {
+			return ""
+		}
+		c, err := driver.FindCommit(ctx, dir, "")
+		if err != nil {
+			return ""
+		}
+		return c.ID
+	}
+	l := head(left)
+	return l != "" && l == head(right)
 }
 
 // resolveResultAttempts takes a portable snapshot for every evidence reference the

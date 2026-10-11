@@ -862,6 +862,10 @@ export object JobAttempt {
     target: str = "",
     spell: str = "",
     failed: bool = false,
+    attemptID: str = "",
+    durationMs: int = 0,
+    revision: str = "",
+    dirty: bool = false,
 }
 
 export object JobGateAttempt {

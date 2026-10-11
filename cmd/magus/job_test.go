@@ -607,8 +607,9 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	worker := t.TempDir()
 	recorded, err := cache.NewOutputStore(filepath.Join(worker, ".magus")).
-		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test"})
+		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test", DurationMs: 1500, Revision: "abc123", Dirty: true})
 	require.NoError(t, err)
+	require.NotEmpty(t, recorded.Attempt)
 
 	row := leaseRow("w", "")
 	row.CheckoutRoot, row.Registered = worker, 1
@@ -620,7 +621,10 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 
 	stored, err := job.Exit(t.Context(), store, row.ID, &result, here)
 	require.NoError(t, err)
-	assert.Equal(t, &types.JobAttempt{Found: true, Ref: recorded.Ref, Project: ".", Target: "test"}, stored.Attempt)
+	assert.Equal(t, &types.JobAttempt{
+		Found: true, Ref: recorded.Ref, Project: ".", Target: "test",
+		AttemptID: recorded.Attempt, DurationMs: 1500, Revision: "abc123", Dirty: true,
+	}, stored.Attempt, "the attempt carries what freshness is judged by: the execution, its start and the tree it read")
 }
 
 // --evidence names a run the WAITER recorded. The holder's checkout is the primary one, the
