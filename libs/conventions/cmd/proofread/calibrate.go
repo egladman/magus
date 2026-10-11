@@ -19,8 +19,13 @@ import (
 // runCalibrate replays the labeled cases and prints each rule's precision and
 // recall, or with -gates each rule's shipped default against what that
 // precision supports. With -sample it instead judges one field of each JSON-lines record
-// as -kind and prints each rule's firing rate per value of -group.
+// as -kind and prints each rule's firing rate per value of -group. calibrate
+// round sample, freeze and score run a labeling round (see runRound).
 func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "round" {
+		return runRound(args[1:], stdout, stderr)
+	}
+
 	fset := flag.NewFlagSet("proofread calibrate", flag.ContinueOnError)
 	fset.SetOutput(stderr)
 	casesDir := fset.String("cases", "", "read labeled case files from this `dir` instead of the ones proofread carries")
