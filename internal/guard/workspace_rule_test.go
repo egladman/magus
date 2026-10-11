@@ -124,8 +124,7 @@ func TestLoadFailureDenyNamesTheBootstrapWhereThereIsNoBinary(t *testing.T) {
 	ownCheckout(t, ctx, false)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, "the magus judging this is older than this workspace and cannot load its guard policy; "+
-		"bootstrap ./magus with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`.")
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, noBinaryOwnSay)
 	assert.NotContains(t, stored, "mv magus magus.old")
 }
 

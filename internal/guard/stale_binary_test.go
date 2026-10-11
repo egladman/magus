@@ -235,7 +235,7 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 
 	worker := Judge(ctx, deps, Request{Input: line, Host: "claude-code", Session: "s1", Lease: "lease-a"})
 	stored := shortDeny(t, hookLocation(ctx, Dependencies{}).cacheDir, worker, denyRuleRawTool,
-		"a worker never builds magus; the main session places it: "+workerPlacementAt+".")
+		"a worker does not build magus; ask the main session to place ./magus, then run "+workerPlacementAt+".")
 	assert.Contains(t, stored, "There is one binary per base, so a worker never builds one.")
 }
 

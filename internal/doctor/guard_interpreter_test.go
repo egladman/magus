@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -158,10 +159,17 @@ func TestCheckGuardBinaryFailsForAWorktreeWithoutABinary(t *testing.T) {
 
 	got := r.checkGuardBinaryEverywhere(nil)
 
-	assert.Equal(t, types.CheckFail, got.Status)
-	assert.Equal(t, "this worktree has no ./magus", got.Message)
-	assert.Contains(t, got.Details, "its guard hooks judge with the magus on PATH, which may not load this tree")
-	assert.Contains(t, got.Details, "place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>")
+	assert.Equal(t, types.Check{
+		Name:    guardBinaryCheck,
+		Status:  types.CheckFail,
+		Message: "this worktree has no ./magus",
+		Details: []string{
+			"its guard hooks judge with the magus on PATH, which may not load this tree",
+			"the main session builds one ./magus per base and places a copy here",
+			"place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>",
+			"on your own: build one with " + hint.Run.With("build", ".") + ", or bootstrap it with the command the guard prints",
+		},
+	}, got)
 
 	require.NoError(t, os.Remove(filepath.Join(root, ".git")))
 	require.NoError(t, os.Mkdir(filepath.Join(root, ".git"), 0o755))

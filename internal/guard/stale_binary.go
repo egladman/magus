@@ -356,7 +356,7 @@ func staleBinaryDenial(call unloadedCall, cause string, failures []string, own b
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
 	switch {
-	case cause == causeNoBinary:
+	case cause == causeNoBinary, own && !hasBinary:
 		problem = "this checkout has no ./magus to load its guard policy"
 	case own && hasBinary:
 		problem = "./magus is older than this workspace and cannot load its guard policy"
@@ -416,7 +416,7 @@ func placementCommand(lease string) string {
 // workerBuildVerdict is the verdict for a worker building magus: the main session places
 // it, so the worker reads the command it asks the main session to run.
 func workerBuildVerdict(lease string) string {
-	return "a worker never builds magus; the main session places it: `" + placementCommand(lease) + "`."
+	return "a worker does not build magus; ask the main session to place ./magus, then run `" + placementCommand(lease) + "`."
 }
 
 // soleCall is the line's call when it is one command and nothing else: no pipe, chain,
