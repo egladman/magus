@@ -589,8 +589,16 @@ const (
 	FlagShellAgent = "agent"
 	// shell: --agent-name
 	FlagShellAgentName = "agent-name"
+	// shell: --call-background
+	FlagShellCallBackground = "call-background"
+	// shell: --call-timeout-ms
+	FlagShellCallTimeoutMs = "call-timeout-ms"
 	// shell: --event
 	FlagShellEvent = "event"
+	// shell: --foreground-default-ms
+	FlagShellForegroundDefaultMs = "foreground-default-ms"
+	// shell: --foreground-max-ms
+	FlagShellForegroundMaxMs = "foreground-max-ms"
 	// shell: --lease
 	FlagShellLease = "lease"
 	// shell: --message
@@ -1208,19 +1216,23 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path          bool   // --path
-	Observe       bool   // --observe
-	Message       bool   // --message
-	Lease         string // --lease
-	AgentName     string // --agent-name
-	Transport     string // --transport
-	Session       string // --session
-	Agent         string // --agent
-	Transcript    string // --transcript
-	Event         string // --event
-	ReportsSkills bool   // --reports-skills
-	RendersAsk    bool   // --renders-ask
-	RewritesInput bool   // --rewrites-input
+	Path                bool   // --path
+	Observe             bool   // --observe
+	Message             bool   // --message
+	Lease               string // --lease
+	AgentName           string // --agent-name
+	Transport           string // --transport
+	Session             string // --session
+	Agent               string // --agent
+	Transcript          string // --transcript
+	Event               string // --event
+	ReportsSkills       bool   // --reports-skills
+	RendersAsk          bool   // --renders-ask
+	RewritesInput       bool   // --rewrites-input
+	CallBackground      bool   // --call-background
+	CallTimeoutMs       int    // --call-timeout-ms
+	ForegroundDefaultMs int    // --foreground-default-ms
+	ForegroundMaxMs     int    // --foreground-max-ms
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1239,6 +1251,10 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.RewritesInput, FlagShellRewritesInput, false, "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed")
+	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
+	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
+	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
+	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
 	return &f
 }
 

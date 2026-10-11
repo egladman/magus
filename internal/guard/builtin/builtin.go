@@ -89,6 +89,7 @@ var defaults = map[string]Decision{
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
 	"whole-tree":            Deny,
+	"worker-background-run": Deny,
 	"worker-check-only":     Deny,
 	"worktree-remove":       Deny,
 
@@ -96,6 +97,7 @@ var defaults = map[string]Decision{
 	// raise one to deny or turn it off. lease-state, lease-invalid and lease-terminal are
 	// advisories, not the lease-* denies above.
 	"capture-filter":     Advise,
+	"check-timeout":      Advise,
 	"checkpoint-state":   Advise,
 	"dependency-install": Advise,
 	"dependency-update":  Advise,

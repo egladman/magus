@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -1576,6 +1577,30 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &allowed,
 		[]string{"--agent-name", "claude-code", "--reports-skills", "-o", "name"}))
 	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
+}
+
+// The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
+// same run in the foreground passes, and the foreground limits parse as milliseconds.
+func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
+	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+	run := func(flags ...string) guard.Verdict {
+		var out bytes.Buffer
+		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
+		_ = shellStdin(ctx, strings.NewReader("magus run test ."), &out, args)
+		var v guard.Verdict
+		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+		return v
+	}
+	refused := run("--call-background")
+	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
+	assert.Equal(t, "pass", run("--call-timeout-ms", "600000", "--foreground-default-ms", "120000", "--foreground-max-ms", "600000").Decision)
 }
 
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule

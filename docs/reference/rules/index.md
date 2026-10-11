@@ -41,6 +41,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store            |
 | [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
+| [worker-background-run](worker-background-run.md) | a bound worker running a magus target in the background                                              |
 | [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths            |
 | [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                              |
 
@@ -54,6 +55,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [buzz-unbriefed](buzz-unbriefed.md)                     | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill  |
 | [capture-filter](capture-filter.md)                     | a filter over a run capture or log, which cuts the failure block apart                             |
 | [chained-run](chained-run.md)                           | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast  |
+| [check-timeout](check-timeout.md)                       | a bound worker's magus run whose timeout is shorter than the target's last real run allows for     |
 | [checkpoint-state](checkpoint-state.md)                 | a command reaching for a tree's identity, which a revision alone cannot give                       |
 | [dependency-install](dependency-install.md)             | a raw package install that the cached install target already runs                                  |
 | [dependency-update](dependency-update.md)               | a raw dependency update outside a target's update charm                                            |

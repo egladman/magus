@@ -230,6 +230,12 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		// And again: only a glue that renders updated_command into the host's reply can
 		// say the host will run it.
 		RewritesInput: sf.RewritesInput,
+		// The call's own word on how the host runs it, and the host's foreground limits
+		// as the wiring declares them; a flag left out leaves the rules that read it silent.
+		Background:        sf.CallBackground,
+		Timeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
+		ForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
+		ForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
 	})
 	stopJudge()
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly

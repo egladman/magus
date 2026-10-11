@@ -293,6 +293,12 @@ var denyRuleDocs = []types.RuleDoc{
 			"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
 			"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`) is not on the list either: there is one binary per base, the main session builds it and places a copy in the worker's checkout. An unbound caller, a row that owns the gate and a row declaring no check are untouched. " +
 			"The same rule grades a spawn or continuation brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists."},
+	{Name: string(denyRuleWorkerBackgroundRun),
+		Catches: "a bound worker running a magus target in the background",
+		Why: "A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. " +
+			"It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not own the gate. A run that only reports (--plan, --dry-run, --graph, --help) passes. " +
+			"A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. " +
+			"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check."},
 	{Name: string(denyRuleWorktreeRemove),
 		Catches: "removing a worktree magus cannot prove holds nothing that would be lost",
 		Why: "A worktree may be where another session is working right now, and what it holds may exist nowhere else. " +
@@ -320,6 +326,13 @@ var advisoryDocs = []types.RuleDoc{
 			"It ADVISES rather than refuses: most such filters are a search the reader needs, and a refused reader then reads the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(advisoryCheckTimeout),
+		Catches: "a bound worker's magus run whose timeout is shorter than the target's last real run allows for",
+		Why: "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
+			"The duration is the newest run of that target and project that really ran, from the newest invocations in the repository's session store; a replay or a run refused before it started does not count. " +
+			"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the last run alone took longer than the maximum it says the check cannot finish in the foreground and to ask the orchestrator for a narrower one. " +
+			"It reads the host's foreground default and maximum from the wiring, which declares them, and the call's own timeout, and is silent when either limit is undeclared, when the target has no recorded run, and for anyone but a worker under a live lease that does not own the gate. " +
+			"Held to one firing per target per session."},
 	{Name: string(advisoryDependencyInstall), Catches: "a raw package install that the cached install target already runs"},
 	{Name: string(advisoryDependencyUpdate), Catches: "a raw dependency update outside a target's update charm"},
 	{Name: string(advisoryEchoOnSuccess), Catches: "an `&& echo` that restates what the exit status already says"},
@@ -459,7 +472,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryInstruction,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
-	advisoryGraphPipe, advisoryStdinClosed, advisorySharedCheckout,
+	advisoryGraphPipe, advisoryStdinClosed, advisorySharedCheckout, advisoryCheckTimeout,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the

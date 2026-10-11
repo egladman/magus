@@ -490,6 +490,17 @@ type Request struct {
 	// because a glue that predates the decision renders it as nothing and its host reads
 	// nothing as allow.
 	RendersAsk bool
+	// Background is the wiring's word that the host runs this shell command in the
+	// background, as the call asked; a bound worker's magus run is then refused.
+	Background bool
+	// Timeout is the one the call gave its shell command, zero when it named none.
+	Timeout time.Duration
+	// ForegroundDefault is the host's timeout for a shell command that names none, and
+	// ForegroundMax the longest one it allows, both declared by the wiring. With either
+	// zero the advice that reads them stands down: a fact nobody declared is not "no
+	// timeout".
+	ForegroundDefault time.Duration
+	ForegroundMax     time.Duration
 }
 
 // Verdict is the neutral result of evaluating one shell command: exactly
@@ -658,6 +669,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		input = env.Value
+		req.Background = req.Background || env.Background
+		req.Timeout = cmp.Or(req.Timeout, env.Timeout)
 		mcpTool, readOnlyTool = env.MCPTool, env.ReadOnlyTool
 		description = env.Description
 		write = env.Write
@@ -1014,6 +1027,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 				refuseWith(rule.name, d)
 			}
 		}
+		call := hostCall{background: req.Background, timeout: req.Timeout, foregroundDefault: req.ForegroundDefault, foregroundMax: req.ForegroundMax}
+		// Not stood down by a pre-authorization: a served next is a command line, and
+		// whether the host backgrounds it is the call's, not the line's.
+		if verdict.Decision != "deny" {
+			if d := denyWorkerBackgroundRun(ctx, deps, actingLease, input, call); d.refused() {
+				refuseWith(denyRuleWorkerBackgroundRun, d)
+			}
+		}
 		// The focus rule. Its DENY outranks any advisory above it, because that one is
 		// about a boundary an orchestrator declared; its advisory only fills a silence.
 		// Nothing runs once a deny stands: a wrong tree is a bigger mistake than a wrong
@@ -1106,6 +1127,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 					verdict.Context = held
 					verdict.Rule = string(advisorySplitRun)
 					whys[a.Say] = a.Why
+				}
+			}
+		}
+		// Added to whatever advice stands rather than waiting for silence: a worker that
+		// misses it parks, which no other advice on the line costs.
+		if verdict.Decision == "pass" || verdict.Decision == "advise" {
+			if a, key := adviseCheckTimeout(ctx, deps, location, actingLease, input, call); a.Say != "" {
+				if held := deps.heldBy(markers, string(advisoryCheckTimeout)).Once(key, a.Say); held != "" {
+					whys[a.Say] = a.Why
+					if verdict.Decision == "advise" {
+						verdict.Context += "\n\n" + held
+					} else {
+						verdict.Decision, verdict.Context, verdict.Rule = "advise", held, string(advisoryCheckTimeout)
+					}
 				}
 			}
 		}
@@ -1489,6 +1524,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
+		// Only an explicit true, as for a spawn. A JSON number decodes as float64.
+		req.Background = env.ToolInput["run_in_background"] == true
+		if ms, ok := env.ToolInput["timeout"].(float64); ok && ms > 0 {
+			req.Timeout = time.Duration(ms) * time.Millisecond
+		}
 	case env.Command != "":
 		req.Value = env.Command
 	case nativeSearchLine(env.ToolInput) != "" && envelopeWritePath(env.ToolInput) == "":
@@ -1657,6 +1697,11 @@ type hookRequest struct {
 	// none. Recorded rather than judged: it is what lets a later spawn ask whether the
 	// session read its brief. See denySpawnWithoutBrief.
 	LoadedSkill string
+	// Background and Timeout are what a shell command's tool_input asked of the host: to
+	// run it in the background, and how long to wait on it in the foreground (zero when it
+	// named none).
+	Background bool
+	Timeout    time.Duration
 	// AgentTranscript is the log of the subagent a nothing-to-judge envelope reports on,
 	// "" when it names none. Its last usage record is the subagent's context size.
 	AgentTranscript string
