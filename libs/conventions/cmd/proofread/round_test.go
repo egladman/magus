@@ -578,6 +578,204 @@ func TestRoundFreezeSealsTheRuleCommit(t *testing.T) {
 	runRoundCmd(t, 0, "score", "-dir", dir, "-replay")
 }
 
+// poolTestRound is a scored round as pooling reads it: each rule's n and
+// correct count, drawn from the one source.
+func poolTestRound(round int, source, sha string, rules map[string][2]int) *poolRound {
+	score := &scoresRecord{Round: round, Rules: map[string]*ruleScore{}}
+
+	for name, nc := range rules {
+		score.Rules[name] = &ruleScore{tally: tally{N: nc[0], Correct: nc[1], AgreementGate: true}}
+	}
+
+	g := defaultGates()
+
+	return &poolRound{Round: round, RuleCommit: "abc", Sources: []poolSource{{source, sha}}, Gates: g, Score: score}
+}
+
+func TestPoolRoundsDecidesDenyFromPooledFirings(t *testing.T) {
+	a := poolTestRound(5, "aidev-pr", "sha-a", map[string][2]int{
+		"passes": {40, 40}, "one-wrong": {40, 39}, "two-wrong": {40, 38}, "short": {30, 30}, "lone": {70, 70}, "quiet": {0, 0},
+	})
+	b := poolTestRound(6, "git-commit", "sha-b", map[string][2]int{
+		"passes": {30, 30}, "one-wrong": {30, 30}, "two-wrong": {30, 30}, "short": {20, 20}, "quiet": {45, 45},
+	})
+
+	rec, err := poolRounds([]*poolRound{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type row struct {
+		n, wrong int
+		deny     string
+		why      string
+	}
+
+	want := map[string]row{
+		"passes":    {70, 0, "true", ""},
+		"one-wrong": {70, 1, "true", ""},
+		"two-wrong": {70, 2, "false", "wrong 2 > 1"},
+		"short":     {50, 0, "false", "pooled n 50 < 60"},
+		// A rule that fired in one round has no verdict, however clean.
+		"lone":  {70, 0, "nil", "fired in round 5 only, and one round never decides a deny"},
+		"quiet": {45, 0, "nil", "fired in round 6 only, and one round never decides a deny"},
+	}
+
+	got := map[string]row{}
+
+	for name, pr := range rec.Rules {
+		deny := "nil"
+		if pr.DenyGate != nil {
+			deny = fmt.Sprint(*pr.DenyGate)
+		}
+
+		got[name] = row{pr.N, pr.Wrong, deny, pr.Why}
+	}
+
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("pool = %v, want %v", got, want)
+	}
+
+	if pr := rec.Rules["one-wrong"]; *pr.WilsonLB != 0.9234 || len(pr.Rounds) != 2 || pr.Rounds[0].Wrong != 1 {
+		t.Errorf("one-wrong = %+v, want lower bound 0.9234 and its wrong in round 5", pr)
+	}
+}
+
+func TestPoolRoundsRefusesSharedSourcesAndDifferentGates(t *testing.T) {
+	rules := map[string][2]int{"claim": {40, 40}}
+
+	otherGates := poolTestRound(6, "git-commit", "sha-b", rules)
+	otherGates.Gates.Deny.PooledFirings = 30
+
+	tests := []struct {
+		name string
+		b    *poolRound
+		want string
+	}{
+		{"same source name", poolTestRound(6, "aidev-pr", "sha-b", rules), "both draw from source aidev-pr"},
+		{"same data under another name", poolTestRound(6, "renamed", "sha-a", rules), "share sha256 sha-a"},
+		{"different deny gates", otherGates, "different deny gates"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := poolRounds([]*poolRound{poolTestRound(5, "aidev-pr", "sha-a", rules), tt.b})
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Errorf("err = %v, want one naming %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestRoundPoolReadsTwoFrozenRoundsAndWritesNothingBeside(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not on PATH")
+	}
+
+	repo := t.TempDir()
+	t.Chdir(repo)
+
+	ruleFile := filepath.Join(repo, "libs", "conventions", "proofread", "rule.go")
+	if err := os.MkdirAll(filepath.Dir(ruleFile), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(ruleFile, []byte("package proofread\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, "init", "-q")
+	git(t, "add", ".")
+	git(t, "commit", "-q", "-m", "add a rule")
+
+	guideline := filepath.Join(t.TempDir(), "guideline.md")
+	if err := os.WriteFile(guideline, []byte("# guideline\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two sources of 6 claims each; the pool's gate is set to 10 firings.
+	round := func(n int, source string, texts []string, wrong int) string {
+		data := filepath.Join(t.TempDir(), source+".jsonl")
+		writeJSONL(t, data, replies(texts...)...)
+
+		dir := filepath.Join(t.TempDir(), fmt.Sprintf("round%d", n))
+		runRoundCmd(t, 0, "sample", "-rules", "claim", "-seed", "3", "-out", dir, source+"="+data)
+		runRoundCmd(t, 0, "freeze", "-dir", dir, "-guideline", guideline, "-gates", "deny-firings=10")
+
+		var rows []any
+
+		for i, c := range readCandidates(t, dir) {
+			label := "CORRECT"
+			if i < wrong {
+				label = "WRONG"
+			}
+
+			rows = append(rows, labelRow{ID: c.ID, Label: label})
+		}
+
+		writeJSONL(t, filepath.Join(dir, labelsAFile), rows...)
+		writeJSONL(t, filepath.Join(dir, labelsBFile), rows...)
+
+		return dir
+	}
+
+	a := round(5, "alpha", claims[:6], 0)
+	b := round(6, "beta", claims[6:], 1)
+
+	var pooled poolRecord
+	if err := json.Unmarshal([]byte(runRoundCmd(t, 0, "pool", "-dir", a, "-dir", b)), &pooled); err != nil {
+		t.Fatal(err)
+	}
+
+	claim := pooled.Rules["claim"]
+	if claim == nil || claim.N != 12 || claim.Wrong != 1 || claim.DenyGate == nil || !*claim.DenyGate || len(pooled.Rounds) != 2 {
+		t.Fatalf("pool = %+v, want claim n 12 with 1 wrong passing", pooled)
+	}
+
+	out := filepath.Join(t.TempDir(), "pool.json")
+	if table := runRoundCmd(t, 0, "pool", "-dir", a, "-dir", b, "-out", out); !strings.Contains(table, "pass") {
+		t.Errorf("table:\n%s", table)
+	}
+
+	for _, d := range []string{a, b} {
+		if _, err := os.Stat(filepath.Join(d, "pool.json")); err == nil {
+			t.Errorf("pool wrote into %s", d)
+		}
+	}
+
+	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", b, "-out", filepath.Join(a, "pool.json")); !strings.Contains(got, "inside the round directory") {
+		t.Errorf("an -out inside a round: %s", got)
+	}
+
+	if got := runRoundCmd(t, exitError, "pool", "-dir", a); !strings.Contains(got, "twice") {
+		t.Errorf("one -dir: %s", got)
+	}
+
+	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", a); !strings.Contains(got, "both draw from source alpha") {
+		t.Errorf("the same round twice: %s", got)
+	}
+
+	// A committed rule change after the freeze voids both rounds.
+	if err := os.WriteFile(ruleFile, []byte("package proofread\n\nvar y = 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, "commit", "-q", "-am", "tune the rule")
+
+	if got := runRoundCmd(t, exitError, "pool", "-dir", a, "-dir", b); !strings.Contains(got, "is void") {
+		t.Errorf("a pool after a rule change: %s", got)
+	}
+
+	// A round with no freeze is refused.
+	if err := os.Remove(filepath.Join(b, freezeFile)); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := runRoundCmd(t, exitError, "pool", "-dir", b, "-dir", a); !strings.Contains(got, "only once frozen") {
+		t.Errorf("an unfrozen round: %s", got)
+	}
+}
+
 func mustRead(t *testing.T, p string) []byte {
 	t.Helper()
 
