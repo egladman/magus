@@ -248,8 +248,8 @@ var leaks = []tell{
 }
 
 // buzzwords read three words only in their buzzword sense. "vibrant" counts
-// before an abstract noun ("a vibrant ecosystem"): before a colour or a theme
-// it describes the colour. "on the same page" counts after a person ("we are
+// before an abstract noun ("a vibrant ecosystem"): before a color or a theme
+// it describes the color. "on the same page" counts after a person ("we are
 // all on the same page"): after anything else it is a page. "deep dive"
 // counts before into, on, of or through, or ending its phrase: before a noun
 // it names a kind of document ("the deep dive doc").

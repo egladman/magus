@@ -290,7 +290,7 @@ var coreTexts = map[Rule]ruleText{
 			"changelog fragments and merged pull requests. Measured 2026-10-10 before a fix: 85.7% " +
 			"precision on its cases (6 of 7), firing on 0.1% of AIDev pull requests and 1 magus commit " +
 			"body; of 40 pull request firings read, 18 were wrong: \"on the same page\" as a page (7), " +
-			"\"deep dive\" naming a document (5), \"vibrant\" as a colour (4), \"underscores\" as the " +
+			"\"deep dive\" naming a document (5), \"vibrant\" as a color (4), \"underscores\" as the " +
 			"character. Those now count only in their buzzword sense: after a person, before into or " +
 			"ending the phrase, before an abstract noun, and as a verb. After: 100% on its cases; " +
 			"firing rates measured at merge.",

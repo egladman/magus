@@ -18,7 +18,7 @@ Let me delve into the race.
 - Clicking the badge scrolls to the import section on the same page.
 - Isolates the filters of two tables on the same page.
 - Adds the deep dive doc for the parser and links it from the README.
-- Gives the link text a more vibrant colour.
+- Gives the link text a more vibrant color.
 - Ships a theme with vibrant accents.
 -- pass/reference --
 Caching interplay between workers is described below.

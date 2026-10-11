@@ -49,8 +49,6 @@ export final BASELINE: [str] = [
     "The base's own regeneration `command` and its arguments, run",
     "The mergequeue.changes/v1 `document`, or - for stdin",
     "The records to apply: a file, or - for stdin; one JSON job, ",
-    "Verify a descriptor and its configured hook file by actually",
-    "With --cache: list every key input line, so you can confirm ",
     "With --plan: add per-shard detail - the invocation, its spel",
     "output <ref>: show the run's identity - descriptor, lineage,",
 ];

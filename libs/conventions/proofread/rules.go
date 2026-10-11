@@ -23,8 +23,8 @@ const fillerWords = `Note that|Please note|It should be noted|It is worth noting
 	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say`
 
 // docFillerWords open a doc comment where the symbol's name belongs. In a
-// reply or a description they point at the code under discussion ("This
-// function returns a Result, so ..."), and `this function's job` is a
+// reply or a description they point at the code under discussion
+// (`This function returns a Result, so ...`), and `this function's job` is a
 // contract.
 const docFillerWords = `This function|This method`
 
