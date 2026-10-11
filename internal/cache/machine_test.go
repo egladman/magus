@@ -489,13 +489,26 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	// refusal that emitted none left them showing a run that never happened.
 	events := sink.snapshot()
 	require.Len(t, events, 1)
-	assert.Equal(t, journal.KindResult, events[0].Kind)
-	assert.Equal(t, journal.StatusFail, events[0].Status)
-	assert.Equal(t, string(types.MachineBudgetExhausted), events[0].Code)
-	assert.Equal(t, "test", events[0].Target)
-	assert.Equal(t, "invrefused", events[0].Inv)
-	assert.Empty(t, events[0].Ref, "nothing ran, so nothing was captured")
-	assert.Contains(t, events[0].Text, "build budget is full")
+	assert.Equal(t, refusalEvent("invrefused"), normalizeRefusal(t, events[0]),
+		"nothing ran, so nothing was captured and there is no ref")
+}
+
+// refusalEvent is the result event a machine refusal of `.`'s test journals, with the
+// volatile fields normalizeRefusal clears.
+func refusalEvent(inv string) journal.Event {
+	return journal.Event{
+		Inv: inv, Project: ".", Target: "test", Kind: journal.KindResult, Level: "error",
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	}
+}
+
+// normalizeRefusal clears a refusal event's timestamp and its cause text, which names the
+// holder's figures, once the text is checked to give the cause.
+func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
+	t.Helper()
+	assert.Contains(t, e.Text, "build budget is full")
+	e.Ts, e.Text = 0, ""
+	return e
 }
 
 // RunAside has no batch to report the refusal to, so its caller sees only the returned
@@ -522,8 +535,18 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	require.ErrorIs(t, err, types.MachineBudgetExhausted)
 	events := sink.snapshot()
 	require.Len(t, events, 1)
-	assert.Equal(t, journal.StatusFail, events[0].Status)
-	assert.Equal(t, string(types.MachineBudgetExhausted), events[0].Code)
+	assert.Equal(t, refusalEvent(events[0].Inv), normalizeRefusal(t, events[0]))
+
+	// A claim that ends because the run was cancelled is not a refusal to put on record.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = c.RunAside(cancelled, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a cancelled step must not run")
+			return nil
+		})
+	require.Error(t, err)
+	assert.Len(t, sink.snapshot(), 1, "a cancelled claim journals nothing")
 }
 
 // cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the

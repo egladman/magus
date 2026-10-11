@@ -95,7 +95,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurationMs: 20, Ref: "out1"})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
 	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
-	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusFail, Code: "MGS3009"})
+	emitFact(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusFail, DiagnosticCode: "MGS3009"})
 
 	dir, err := Dir(root)
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 		{Target: "build", Project: "api", Outcome: OutcomePass, DurationMs: 20, Ref: "out1"},
 		{Target: "test", Project: "api", Outcome: OutcomeFail},
 		{Target: "lint", Project: "web", Outcome: OutcomePass, Replayed: true},
-		{Target: "ci", Project: "api", Outcome: OutcomeFail, Code: "MGS3009"},
+		{Target: "ci", Project: "api", Outcome: OutcomeFail, DiagnosticCode: "MGS3009"},
 	}, summaries[0].Targets)
 }
 

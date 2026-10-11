@@ -1176,34 +1176,35 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 // step is put on: counted, logged as cache.error, and handed to the result observers.
 // Run's fail does that for a step that ran; a refusal never reaches Run, and the CLI
 // prints no error of its own for an ExitError, so this is the only place it is said.
-func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error) {
+func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s *Step, err error) {
 	c.errs.Add(1)
 	c.log.ErrorContext(ctx,
 		"cache.error",
 		withWhy(err,
 			slog.String("project", s.ProjectPath),
 			slog.String("label", s.Label),
-			slog.String("target", reproTarget(s)),
+			slog.String("target", reproTarget(*s)),
 			slog.String("error", types.CauseText(err)),
 			slog.Bool("refused", true),
 		)...,
 	)
-	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+	rc.fireResults(s, &Result{ProjectPath: s.ProjectPath}, err)
 	emitRefusal(ctx, s, err)
 }
 
 // emitRefusal journals a refusal as a failed result carrying its MGS code, so the
 // invocation's facts, `magus session` and its brief show a run that did nothing. There is
-// no ref: nothing ran, so nothing was captured.
-func emitRefusal(ctx context.Context, s Step, err error) {
+// no ref: nothing ran, so nothing was captured. Callers journal only a refusal made while
+// ctx was live: one that is the run's own cancellation is not a finding.
+func emitRefusal(ctx context.Context, s *Step, err error) {
 	var code string
 	var coded *types.DiagnosticError
 	if errors.As(err, &coded) {
 		code = string(coded.Code)
 	}
 	journal.Emit(ctx, journal.Event{
-		Project: s.ProjectPath, Target: reproTarget(s), Kind: journal.KindResult,
-		Level: "error", Status: journal.StatusFail, Text: types.CauseText(err), Code: code,
+		Project: s.ProjectPath, Target: reproTarget(*s), Kind: journal.KindResult,
+		Level: "error", Status: journal.StatusFail, Text: types.CauseText(err), DiagnosticCode: code,
 	})
 }
 
@@ -1349,7 +1350,9 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	}
 	ctx, releaseMachine, err := c.claimMachine(ctx, s, stepSlots(s, lim))
 	if err != nil {
-		emitRefusal(ctx, s, err)
+		if ctx.Err() == nil {
+			emitRefusal(ctx, &s, err)
+		}
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
@@ -1585,7 +1588,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					// did nothing reports success.
 					ran = gctx.Err() == nil
 					if ran {
-						c.reportRefusal(gctx, rc, s, machineErr)
+						c.reportRefusal(gctx, rc, &s, machineErr)
 					}
 					return fail(machineErr)
 				}

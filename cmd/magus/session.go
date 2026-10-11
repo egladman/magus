@@ -382,8 +382,8 @@ func summarizeTargets(targets []sessions.TargetResult) string {
 			label += " " + t.Project
 		}
 		label += " (" + t.Outcome
-		if t.Code != "" {
-			label += ", " + t.Code
+		if t.DiagnosticCode != "" {
+			label += ", " + t.DiagnosticCode
 		}
 		if t.Replayed {
 			label += ", cached"

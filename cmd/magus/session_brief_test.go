@@ -240,7 +240,7 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 	require.NotNil(t, refused)
 	emitJournalEvent(t, refused, journal.Event{
 		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
-		Status: journal.StatusFail, Code: string(types.MachineBudgetExhausted),
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
 	})
 	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
 	other := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
@@ -251,9 +251,9 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 
 	failures := lastRunFailures(root)
 	require.Len(t, failures, 1)
-	assert.Equal(t, "ci", failures[0].Target)
-	assert.Equal(t, "MGS3009", failures[0].Code)
-	assert.Empty(t, failures[0].Ref)
+	require.NotEmpty(t, failures[0].At)
+	assert.Equal(t, briefFailure{Target: "ci", Project: "pkg", DiagnosticCode: "MGS3009", At: failures[0].At}, failures[0],
+		"a refusal carries its code and no ref to inspect")
 
 	var text strings.Builder
 	sessionBrief{Failures: failures}.writeFailures(&text)

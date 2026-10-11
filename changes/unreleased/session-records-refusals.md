@@ -2,7 +2,7 @@
 
 - **`magus session` records a run the machine refused.** A step turned away because the
   machine's build budget was full (MGS3009) is now a failed target in the session store,
-  with its code, so `magus session` and `magus session --brief` show the refusal instead
+  with its code (`diagnostic_code` in JSON), so `magus session` and `magus session --brief` show the refusal instead
   of an empty history. A refusal has no output ref because nothing ran.
 - **`magus session --all`** lists invocations from every checkout of the repository.
 

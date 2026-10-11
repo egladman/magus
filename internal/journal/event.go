@@ -82,9 +82,9 @@ type Event struct {
 	// the yield check degrades rather than guessing when it is absent.
 	CacheKey string `json:"cache_key,omitempty"`
 	Text     string `json:"text,omitempty"` // output line or message
-	// Code is the MGS code behind a failed result that never ran, such as an admission
-	// refusal, which has no output ref to read the cause from.
-	Code string `json:"code,omitempty"`
+	// DiagnosticCode is the MGS code behind a failed result that never ran, such as an
+	// admission refusal, which has no output ref to read the cause from.
+	DiagnosticCode string `json:"diagnostic_code,omitempty"`
 
 	// Set ONLY on the started event (Kind==KindStarted): the run's identity, carried in the
 	// stream itself so both the durable file and any live watcher learn which command
