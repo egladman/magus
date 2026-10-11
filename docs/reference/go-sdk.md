@@ -294,10 +294,11 @@ Go and attach it with `WithSpell`; see `ExampleWorkspaceRegistry_withSpell`.
 
 **Programmatic spells.** `project.DefaultSpellRegistry()` is process-global, so
 two tests that register the same name in parallel race, and a spell left
-registered leaks into every later test. `spelltest.Register(tb, name, targets)`
-in `libs/testkit/spelltest` registers a spell with those targets for the
-duration of `tb`. Give each test its own name, and keep tests that register
-spells out of `t.Parallel`.
+registered leaks into every later test. `fakespell.Register(tb, name, opts ...spells.Option)` in
+`libs/testkit/fakespell` registers a spell for the duration of `tb` and
+returns its name. It takes the options of the `spells` package itself, such as
+`spells.WithTargets` and `spells.WithInvoker`. Give each test its own name,
+and keep tests that register spells out of `t.Parallel`.
 
 ## What this SDK does not give you
 
