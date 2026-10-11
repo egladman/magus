@@ -45,6 +45,9 @@ func TestParticiplesReportsATextOverTheRate(t *testing.T) {
 		{"a noun after the comma", padded(14, "It returns a key, a string, nothing else, a warning."), nil},
 		{"in code", padded(14, "It runs `go test, using the cache, keeping the key`."), nil},
 		{"an -ing word ending its clause", padded(14, "The key it reads is stable, unchanging. It is fixed, unyielding."), nil},
+		{"a clause naming an issue", padded(14, "The worker reads the key, closing #12, keeping the order."), nil},
+		{"an open task item", padded(14, "The worker reads the key.") +
+			"\n\n- [ ] Have you read the key, using the lock, keeping the order?", nil},
 	}
 
 	for _, tc := range cases {

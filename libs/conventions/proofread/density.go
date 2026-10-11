@@ -39,7 +39,12 @@ var densityTexts = map[Rule]ruleText{
 			"hand-written docs pages ran 1.5 (p90 3.1, 2 percent over) and its 61 commit bodies 0.5 (none " +
 			"over), both written by people and agents together. Review comments ran 0.6 by people and 2.6 " +
 			"by bots, pooled. The docs are a different genre from a pull request, and the rule cannot " +
-			"tell a participle from a gerund without a tagger, so it advises.",
+			"tell a participle from a gerund without a tagger, so it advises. Measured 2026-10-11 over the " +
+			"adjudicated labeling round 2: 81.0% precision (34 of 42) before, 85.0% (34 of 40) after. A " +
+			"clause naming an issue (\"addressing #2782\") and an open task item a template wrote are no " +
+			"longer counted. The rest turn on whether a tail claims a benefit or states a fact (\", " +
+			"renaming the types\"), which the rule cannot read. It stays off until a fresh labeling round " +
+			"measures it.",
 	},
 	RuleNominalizations: {
 		code:      "PRF4021",
@@ -85,10 +90,14 @@ func participles(in input) []Finding {
 	words, hits := 0, 0
 
 	for _, para := range densityParagraphs(in) {
+		if uncheckedTask.MatchString(para.text) {
+			continue
+		}
+
 		words += countWords(para.text)
 
 		for _, m := range participleTail.FindAllStringSubmatchIndex(para.text, -1) {
-			if participleClause(para.text, m[2], m[3]) {
+			if participleClause(para.text, m[2], m[3]) && !citesReference(para.text[m[3]:]) {
 				hits++
 			}
 		}
@@ -103,6 +112,23 @@ func participles(in input) []Finding {
 
 	return densityFinding(words, hits, maxParticiplesPerK, "present participial clauses",
 		"Give each -ing clause its own sentence with a subject, or cut the clause.")
+}
+
+// uncheckedTask is an open task-list item, which a pull request template
+// writes for its author to tick ("[ ] Have you done a self-review, ...").
+var uncheckedTask = regexp.MustCompile(`^\s*(?:[-*+]\s+)?\[ \]`)
+
+// issueRef is an issue or pull request a clause names.
+var issueRef = regexp.MustCompile(`#\d+\b`)
+
+// citesReference reports whether the clause rest opens names an issue, which
+// makes it a checkable fact ("addressing issue #2782"), not a claim.
+func citesReference(rest string) bool {
+	if end := strings.IndexAny(rest, ",.;:"); end >= 0 {
+		rest = rest[:end]
+	}
+
+	return issueRef.MatchString(rest)
 }
 
 // participleClause reports whether the -ing word at text[from:to] after a
