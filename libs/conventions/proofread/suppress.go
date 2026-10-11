@@ -16,7 +16,7 @@ const RuleSuppressionUnused Rule = "suppression-unused"
 var everyKind = []Kind{
 	KindDocComment, KindReference, KindChangeDescription, KindAgentInstructions, KindAgentInstructionsTemplate,
 	KindGuide, KindReviewReply, KindMessage, KindCommitMessage, KindCLIHelp, KindIssue, KindReleaseNotes,
-	KindChangelog,
+	KindChangelog, KindAgentReply, KindToolDescription,
 }
 
 // suppressUnusedCheck has no judge: [input.suppress] reports its findings

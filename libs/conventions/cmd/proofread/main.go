@@ -136,6 +136,8 @@ var subcommands = []subcommand{
 	{"issue", proofread.KindIssue, "", "judge an issue on stdin, its title on the first line"},
 	{"release-notes", proofread.KindReleaseNotes, "FILE...", "judge the notes a release ships with"},
 	{"changelog", proofread.KindChangelog, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
+	{"agent-reply", proofread.KindAgentReply, "", "judge what a coding agent writes back to its person, on stdin"},
+	{"tool-description", proofread.KindToolDescription, "", "judge a tool's or a skill's description, on stdin"},
 	{"rules", "", "", "write every rule as the docs render it, as JSON"},
 	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
 	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
@@ -397,6 +399,7 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 var stdinKinds = []proofread.Kind{
 	proofread.KindChangeDescription, proofread.KindReviewReply, proofread.KindMessage,
 	proofread.KindCommitMessage, proofread.KindCLIHelp, proofread.KindIssue,
+	proofread.KindAgentReply, proofread.KindToolDescription,
 }
 
 func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {

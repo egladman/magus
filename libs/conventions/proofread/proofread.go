@@ -138,6 +138,14 @@ const (
 	// fragment of it: entries under Added, Changed, Deprecated, Removed, Fixed
 	// and Security, each saying what changed for the person using it.
 	KindChangelog Kind = "changelog"
+	// KindAgentReply is what a coding agent writes back to the person it works
+	// for at the end of a turn: Markdown read once, right away, by someone who
+	// asked for the work and wants its result.
+	KindAgentReply Kind = "agent-reply"
+	// KindToolDescription is the description a tool or a skill gives a model
+	// choosing among many: an MCP tool's description or a skill's frontmatter
+	// description, plain text read to decide whether to call it.
+	KindToolDescription Kind = "tool-description"
 )
 
 // Decision is what a finding costs the caller that reads it, in the words a
@@ -210,7 +218,7 @@ func (c check) defaultDecision(kind Kind) Decision {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, suppressChecks, []check{templateCheck})
+	issueChecks, densityChecks, reviewChecks, suppressChecks, agentReplyChecks, toolChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},

@@ -20,6 +20,8 @@ type RuleDoc struct {
 	// House marks a rule that encodes one repository's conventions rather than
 	// writing a teammate reads, so it runs only where a decisions table names it.
 	House bool `json:"house"`
+	// Dimension is what the rule protects for the reader.
+	Dimension Dimension `json:"dimension"`
 	// Catches says in one line what the rule fires on.
 	Catches string `json:"catches"`
 	// Why is the reason for the rule and for its defaults, as measured.
@@ -42,7 +44,7 @@ func Catalog() []RuleDoc {
 		t := ruleTexts[c.rule]
 		out[i] = RuleDoc{
 			Name: c.rule, Code: t.code, Kinds: slices.Clone(c.on), Decisions: decisions, House: c.house,
-			Catches: t.catches, Why: t.why,
+			Catches: t.catches, Why: t.why, Dimension: t.dimension,
 		}
 	}
 
@@ -64,8 +66,30 @@ var prf = diagnostics.New(func(c diagnostics.Code) string {
 
 type ruleText struct {
 	code         diagnostics.Code
+	dimension    Dimension
 	catches, why string
 }
+
+// Dimension is what a rule protects for the reader, the axis a finding is
+// counted on: shaped after the MQM error typology, with Hyland's metadiscourse
+// inside stance and evidence. A rule's PRF family says where it came from; its
+// dimension says what it costs the reader.
+type Dimension string
+
+const (
+	// DimensionEvidence is whether a claim carries what supports it.
+	DimensionEvidence Dimension = "evidence"
+	// DimensionStance is how the writer stands toward the reader and the work:
+	// tone, hedging, credit and blame.
+	DimensionStance Dimension = "stance"
+	// DimensionStructure is the order a reader meets things in: a lead, a
+	// heading, a step, a subject line.
+	DimensionStructure Dimension = "structure"
+	// DimensionEconomy is words that cost reading time and carry nothing.
+	DimensionEconomy Dimension = "economy"
+	// DimensionConventions is the house's spelling, typography and form.
+	DimensionConventions Dimension = "conventions"
+)
 
 // ruleTexts numbers the rules by family: PRF1xxx the shape of a text, PRF2xxx
 // tone, PRF3xxx claims and hedges, PRF4xxx generated-writing tells, PRF5xxx
@@ -73,7 +97,8 @@ type ruleText struct {
 // review replies and PRF9xxx messages a program prints. A code is never
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
-var ruleTexts = mergeTexts(coreTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts)
+var ruleTexts = mergeTexts(coreTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts,
+	agentReplyTexts, toolTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
 	out := map[Rule]ruleText{}
