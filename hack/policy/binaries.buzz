@@ -7,6 +7,7 @@ import "std";
 import "fs";
 import "path";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/policy/builds" as builds;
 
 // Where is where a command runs: the directory the host reported, and the workspace root
@@ -93,8 +94,9 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
     if (sameFile("{target}/magus", p.path)) { return ""; }
     final hasBinary = disk.hasBinary;
     if (places(p.args, built: built, dir: where.dir) and !hasBinary(target)) { return ""; }
-    return ("`{p.path}` was built in {built} and runs here against {target}, another checkout of magus; "
-        + "run {target}'s own binary: `{target}/magus --root {target} ...`.\n"
+    return ("a binary from another checkout runs here; use `{target}/magus`\n"
+        + "`{p.path}` was built in {built} and runs against {target}, another checkout of magus; "
+        + "run {target}'s own binary: `{target}/magus --root {target} ...`. "
         + "A binary carries the guard rules, host declarations and spell bytecode of the tree "
         + "it was built from, so its verdicts describe {built}, and what it regenerates lands in {target} "
         + "unmarked. " + ownBinaryHint(target, disk: disk, lease: where.lease)).trim();
@@ -118,14 +120,15 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     if (bootstrap(call.args)) {
         final hasBinary = disk.hasBinary;
         if (!hasBinary(root)) { return ""; }
-        return "not a bootstrap: {root} already has a magus binary; rebuild it with "
-            + "`{root}/magus --root {root} run go-build .`.\nIf that binary cannot load the tree "
+        return "not a bootstrap: that checkout already has a magus binary\n"
+            + "{root} has one; rebuild it with `{root}/magus --root {root} run go-build .`. "
+            + "If that binary cannot load the tree "
             + "(MGS1021 after a pull or merge), move it aside first, then bootstrap: "
             + "`mv {root}/magus {root}/magus.old`, then `{bootstrapIn(root)}`.";
     }
-    return ("`go -C {root} {verb}` runs a toolchain command in another checkout of magus, outside its "
-        + "cache and its drift tracking; run the target from that checkout: "
-        + "`{root}/magus --root {root} run <target> .`.\n" + ownBinaryHint(root, disk: disk, lease: where.lease)).trim();
+    return ("go -C into another checkout of magus runs outside its cache and its drift tracking\n"
+        + "`go -C {root} {verb}` runs a toolchain command in another checkout of magus; run the target from that checkout: "
+        + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk, lease: where.lease)).trim();
 }
 
 // placementScript copies an eligible ./magus into a fresh worktree and refuses any other.
@@ -209,7 +212,11 @@ final twoCheckouts = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a", "/w/b"]);
 final inB = Where{ dir = "/w/b", workspace = "/w/b" };
 
 fun binaryDenial(argvs: [[str]], where: Where, disk: Disk) > str {
-    return decideBinaries(helpers\request(argvs), where: where, disk: disk, worker: false);
+    final denial = decideBinaries(helpers\request(argvs), where: where, disk: disk, worker: false);
+    if (denial != "") {
+        verdict\assertVerdict(denial, label: argvs.map(fun (index: int, argv: [str]) > str => argv.join(" ")).join(" ; "));
+    }
+    return denial;
 }
 
 test "another checkout's binary run against this one is denied, naming this one's binary" {
@@ -306,14 +313,16 @@ test "a leased worker is placed a binary and never builds one, bootstrap include
         ["/w/b/magus", "run", "go-build", "."],
     ]) {
         final denial = decideBinaries(helpers\request([argv]), where: worker, disk: fresh, worker: true);
+        verdict\assertVerdict(denial, label: argv.join(" "));
         std\assert(denial.indexOf("a worker does not build magus; ask the main session to place ./magus") == 0, message: argv.join(" "));
-        std\assert(denial.split("\n")[0].indexOf("buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`") != null, message: "names the placement: " + argv.join(" "));
+        std\assert(denial.split("\n")[1].indexOf("buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`") != null, message: "names the placement: " + argv.join(" "));
         std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it: " + argv.join(" "));
         std\assert(denial.indexOf("not a bootstrap") == null, message: "not the deadlock advice");
         std\assert(binaryDenial([argv], where: Where{ dir = "/w/b", workspace = "/w/b" }, disk: fresh).indexOf("one binary per base commit") == null,
             message: "the main session and a person are not told so: " + argv.join(" "));
     }
     final noBinary = decideBinaries(helpers\request([["/w/a/magus", "ls"]]), where: worker, disk: fakeDisk(["/w/a", "/w/b"], binaries: ["/w/a"]), worker: true);
+    verdict\assertVerdict(noBinary, label: "no binary to run");
     std\assert(noBinary.indexOf("ask the main session to place one") != null, message: "the hint asks for placement");
     std\assert(noBinary.indexOf("go -C /w/b run") == null, message: "and never serves the bootstrap");
     std\assert(decideBinaries(helpers\request([["/w/b/magus", "run", "lint", "."]]), where: worker, disk: fresh, worker: true) == "", message: "other targets pass");
@@ -333,6 +342,7 @@ test "only the main session bootstraps" {
     final fresh = fakeDisk(["/w/a", "/w/b"], binaries: []);
     final line = [["go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."]];
     final denial = decideBinaries(helpers\request(line), where: inB, disk: fresh, worker: true);
+    verdict\assertVerdict(denial, label: "the bootstrap");
     std\assert(denial.indexOf("a worker does not build magus") == 0, message: denial);
     std\assert(denial.indexOf("--from") != null, message: "names the placement");
     std\assert(decideBinaries(helpers\request(line), where: inB, disk: fresh, worker: false) == "", message: "the main session builds");

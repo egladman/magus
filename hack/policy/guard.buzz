@@ -79,6 +79,7 @@ import "magus";
 import "fs";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/policy/gh" as gh;
 import "./hack/policy/cadence" as cadence;
 import "./hack/policy/binaries" as binaries;
@@ -126,12 +127,12 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return branchTopic(req.dir);
     };
     final texts = withHeredocs(programs, line: req.command);
-    final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
+    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\branchDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic });
-    if (verdict.decision != "allow" or stale\rebuilds(programs)) {
-        return verdict;
+    if (decided.decision != "allow" or stale\rebuilds(programs)) {
+        return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
 }
@@ -320,9 +321,9 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     if (authority.decision != "allow") {
         return authority;
     }
-    final verdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
-    if (verdict.decision != "allow") {
-        return verdict;
+    final cadenceVerdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
+    if (cadenceVerdict.decision != "allow") {
+        return cadenceVerdict;
     }
     final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
         topic: publishing.topic, once: once);
@@ -366,6 +367,30 @@ test "the remote's base is read from the caller's checkout, and one that cannot 
     final missing = (fs\tempDir("remote-of") catch "") + "/gone";
     final gone = requestRemote(CommandRequest{ dir = missing });
     std\assert(gone.unreadable.indexOf(missing) != null, message: gone.unreadable);
+}
+
+test "a commit and a pull request text denied together open with one verdict" {
+    final line = helpers\vcsRequest([["git", "commit", "-m", "Fixed the port."]])
+        + helpers\request([["gh", "pr", "create", "--title", "Fixed the port.", "--body", "Pins the port."]]);
+    final diff = fun (base: str) > pullRequests\Facts {
+        return pullRequests\unknownFacts();
+    };
+    final judge = fun (text: str) > [pullRequests\Judged] {
+        return [<pullRequests\Judged>];
+    };
+    final once = fun (key: str) > bool {
+        return true;
+    };
+    final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once);
+    std\assert(both.decision == "deny", message: both.reason);
+    verdict\assertVerdict(both.reason, label: "a commit and a pull request together");
+    std\assert(both.reason.indexOf("this pull request text breaks") != null, message: "both rationales are kept: " + both.reason);
+}
+
+test "a write into a run log is denied with the verdict a command's read gets" {
+    final write = judgeWrite(WriteRequest{ workspace = "/w", path = ".magus/logs/abc.log", content = "x" });
+    std\assert(write.decision == "deny", message: write.decision);
+    verdict\assertVerdict(write.reason, label: "a write into a run log");
 }
 
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {

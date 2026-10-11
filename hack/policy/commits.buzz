@@ -8,6 +8,7 @@ namespace agentpolicy\commits;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/magusfile/commits" as conventional;
 
 // One subject cap everywhere: pr-title and the commit-msg hook read the same one.
@@ -288,11 +289,18 @@ export fun decideCommit(programs: [helpers\Program], baseBranch: str) > GuardVer
     if (baseBranch != "") {
         fix = baseFix(baseBranch);
     }
-    return magus\guard.deny("this commit message breaks a subject rule: {problems[0]}\n  - " + problems.join("\n  - ") + "\n" + fix);
+    return magus\guard.deny(verdict\opening("this commit message breaks a subject rule", problem: problems[0])
+        + "\n  - " + problems.join("\n  - ") + "\n" + fix);
+}
+
+// judged is decideCommit with every denial held to the verdict shape.
+fun judged(programs: [helpers\Program], baseBranch: str) > GuardVerdict {
+    final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
+    return verdict\checked(decideCommit(programs, baseBranch: baseBranch), label: label);
 }
 
 fun ask(call: [str]) > GuardVerdict {
-    return decideCommit(helpers\vcsRequest([call]), baseBranch: "");
+    return judged(helpers\vcsRequest([call]), baseBranch: "");
 }
 
 fun askReason(call: [str]) > str {
@@ -392,7 +400,7 @@ test "a subject sells nothing" {
 
 test "a commit on the base branch has its wording judged after the prefix" {
     final onBase = fun (subject: str) > GuardVerdict {
-        return decideCommit(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
+        return judged(helpers\vcsRequest([["git", "commit", "-m", subject]]), baseBranch: "main");
     };
     std\assert(onBase("feat(prose): adds a vale spell").reason.indexOf("not 'added' or 'adds'") != null, message: "third person");
     std\assert(onBase("fix(cache): add a robust key").reason.indexOf("drop it and say what changed") != null, message: "puffery");
@@ -410,7 +418,7 @@ test "a body, a second -m and an attribution are denied" {
 
 test "a commit on the base branch takes the conventional subject the commit-msg hook requires" {
     final onBase = fun (call: [str]) > GuardVerdict {
-        return decideCommit(helpers\vcsRequest([call]), baseBranch: "main");
+        return judged(helpers\vcsRequest([call]), baseBranch: "main");
     };
     foreach (call in [
         ["git", "commit", "-m", "fix(cache): keep the key stable across runs"],
@@ -435,16 +443,16 @@ test "every problem is named, once, across chained commits" {
         ["git", "commit", "-m", "Fix the port."],
         ["jj", "commit", "-m", "Keep the key."],
     ]);
-    final v = decideCommit(line, baseBranch: "");
+    final v = judged(line, baseBranch: "");
     std\assert(v.decision == "deny", message: "denied");
     std\assert(v.reason.split("- a trailing period").len() == 2, message: "named once");
     final second = helpers\vcsRequest([["git", "commit", "-m", "trim a fragment"], ["git", "commit", "-m", "Keep the key"]]);
-    std\assert(decideCommit(second, baseBranch: "").decision == "deny", message: "the second commit is judged on its own");
+    std\assert(judged(second, baseBranch: "").decision == "deny", message: "the second commit is judged on its own");
 }
 
 test "a line that only mentions a commit, and other version-control calls, stay silent" {
     final quiet = helpers\request([["rg", "git commit"], ["echo", "git", "commit", "-m", "Bad."]]);
-    std\assert(decideCommit(quiet, baseBranch: "").decision == "allow", message: "no version control ran");
+    std\assert(judged(quiet, baseBranch: "").decision == "allow", message: "no version control ran");
     foreach (call in [
         ["git", "log", "-m", "Bad."],
         ["git", "help", "commit"],
@@ -467,21 +475,30 @@ test "a message written through a heredoc substitution is judged from its body" 
     }
     std\assert(slots[0].len() == 1 and slots[0][0] == 1, message: "the -m value is the slot");
     final filled = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs(line));
-    final v = decideCommit(filled, baseBranch: "");
+    final v = judged(filled, baseBranch: "");
     std\assert(v.decision == "deny", message: "denied");
     foreach (want in ["an attribution", "line break", "capitalized first word", "trailing period"]) {
         std\assert(v.reason.indexOf(want) != null, message: want);
     }
     final plain = helpers\fillSlots(programs, slots: slots, texts: helpers\substitutedHeredocs("git commit -m \"$(cat <<'EOF'\ntrim a fragment\nEOF\n)\""));
-    std\assert(decideCommit(plain, baseBranch: "").decision == "allow", message: "a one-line heredoc subject passes");
-    std\assert(decideCommit(programs, baseBranch: "").decision == "allow", message: "a value known only at run time goes unjudged");
+    std\assert(judged(plain, baseBranch: "").decision == "allow", message: "a one-line heredoc subject passes");
+    std\assert(judged(programs, baseBranch: "").decision == "allow", message: "a value known only at run time goes unjudged");
 }
 
 test "no message sends the reader to a skill" {
     foreach (reason in [
         askReason(["git", "commit", "-m", "Fix the port."]),
-        decideCommit(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment"]]), baseBranch: "main").reason,
+        judged(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment"]]), baseBranch: "main").reason,
     ]) {
         std\assert(reason != "" and reason.indexOf("Skill(") == null, message: reason);
+    }
+}
+
+test "a problem that quotes a long subject keeps the verdict to one short line" {
+    final long = "Fixed the `cache` key so it stays stable across every run of the build, however many shards it fans out to";
+    foreach (baseBranch in ["", "main"]) {
+        final v = judged(helpers\vcsRequest([["git", "commit", "-m", long]]), baseBranch: baseBranch);
+        std\assert(v.decision == "deny", message: baseBranch);
+        std\assert(v.reason.split("\n")[0].startsWith("this commit message breaks a subject rule"), message: v.reason);
     }
 }

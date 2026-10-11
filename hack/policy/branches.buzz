@@ -36,6 +36,7 @@ namespace agentpolicy\branches;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 
 final maxWords = 4;
 final maxChars = 28;
@@ -632,8 +633,8 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         return magus\guard.allow();
     }
     if (remote.unreadable != "") {
-        return magus\guard.deny("a push to the base branch cannot be told from a topic branch: "
-            + "{remote.unreadable}; fix the checkout's version control, then push again.");
+        return magus\guard.deny("a push to the base branch cannot be told from a topic branch; fix the checkout's version control, then push again\n"
+            + "The base could not be resolved: {remote.unreadable}.");
     }
     final baseParts = remote.base.split("/");
     final baseName = baseParts[baseParts.len() - 1];
@@ -659,6 +660,9 @@ export fun decideNames(programs: [helpers\Program], current: str, remote: Remote
         }
         var mechanical = false;
         final lines = mut ["`{p.name}` is not a branch name to publish."];
+        if (lines[0].utf8Len() > 160) {
+            lines[0] = "this branch name is not one to publish\nThe name is `{p.name}`.";
+        }
         foreach (f in verdict.failures) {
             lines.append("- {f.rule}: {f.why}");
             if (f.rule != "topic") { mechanical = true; }
@@ -847,15 +851,23 @@ test "a bad name is denied with every rule, the served name and the commands to 
     final push = helpers\vcsRequest([["git", "push", "-u", "origin", "HEAD:feat/practical-gates-e9x4tl"]]);
     final v = decideNames(push, current: "feat/practical-gates-e9x4tl", remote: remote([<str>]), topic: practical, once: helpers\counter());
     std\assert(v.decision == "deny", message: "denied");
+    verdict\assertVerdict(v.reason, label: "a bad name");
     foreach (want in ["type-prefix: `feat/`", "generated-id: `e9x4tl`", "topic:", "gopherbuzz",
         "git push -u origin HEAD:comparison-practical-gates",
         "git branch -m feat/practical-gates-e9x4tl comparison-practical-gates"]) {
         std\assert(v.reason.indexOf(want) != null, message: "names {want}: {v.reason}");
     }
     final jj = decideNames(helpers\vcsRequest([["jj", "git", "push", "-b", "fix/thing"]]), current: "", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    verdict\assertVerdict(jj.reason, label: "a bad jj bookmark");
     std\assert(jj.reason.indexOf("jj bookmark rename fix/thing comparison-thing") != null, message: "in jj's own words: {jj.reason}");
     final sl = decideNames(helpers\vcsRequest([["sl", "push", "--to", "fix/thing"]]), current: "", remote: remote([<str>]), topic: practical, once: helpers\counter());
     std\assert(sl.reason.indexOf("sl push --to comparison-thing") != null, message: "in sl's own words: {sl.reason}");
+    verdict\assertVerdict(sl.reason, label: "a bad sl bookmark");
+    final long = "feat/" + "a-very-long-branch-name-".repeat(8) + "e9x4tl";
+    final overlong = decideNames(helpers\vcsRequest([["git", "push", "origin", "HEAD:" + long]]), current: "", remote: remote([<str>]), topic: practical, once: helpers\counter());
+    std\assert(overlong.decision == "deny", message: "a name past the verdict line");
+    verdict\assertVerdict(overlong.reason, label: "a name past the verdict line");
+    std\assert(overlong.reason.indexOf(long) != null, message: "the name is still quoted");
 }
 
 test "a good name, the base branch and a version pass" {
@@ -874,6 +886,7 @@ test "a push whose base cannot be resolved is denied, naming why" {
     final push = helpers\vcsRequest([["git", "push", "origin", "main"]]);
     final v = decideNames(push, current: "main", remote: broken, topic: practical, once: helpers\counter());
     std\assert(v.decision == "deny", message: v.reason);
+    verdict\assertVerdict(v.reason, label: "an unreadable base");
     std\assert(v.reason.indexOf("`/gone`") != null, message: v.reason);
     final commit = helpers\vcsRequest([["git", "commit", "-m", "x"]]);
     std\assert(decideNames(commit, current: "main", remote: broken, topic: practical, once: helpers\counter()).decision == "allow",
@@ -895,6 +908,7 @@ test "an update to a branch the remote has, and a pull request, are judged once 
     final known = remote(["origin/feat/practical-gates-e9x4tl"]);
     final first = decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once);
     std\assert(first.decision == "deny", message: "first");
+    verdict\assertVerdict(first.reason, label: "an update to a known branch");
     std\assert(first.reason.indexOf("already has") != null, message: "says why it lets the next one through");
     std\assert(decideNames(push, current: "feat/practical-gates-e9x4tl", remote: known, topic: practical, once: once).decision == "allow", message: "then the update goes through");
     final fresh = helpers\vcsRequest([["git", "push", "origin", "HEAD:feat/other-a1b2c3"]]);
@@ -927,6 +941,7 @@ test "only the main session may publish" {
         foreach (i, caller in denied) {
             final v = decideAuthority(line, caller: caller);
             std\assert(v.decision == "deny", message: why[i]);
+            verdict\assertVerdict(v.reason, label: why[i]);
             std\assert(v.reason.indexOf(why[i]) != null, message: v.reason);
         }
     }

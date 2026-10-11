@@ -4,6 +4,7 @@ namespace agentpolicy\gh;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 
 // The one command that answers CI for every open pull request.
 final board = "gh pr list --state open --json number,mergeable,statusCheckRollup";
@@ -21,7 +22,7 @@ final ciBatchAdvice = "You are reading one pull request's CI. Ask for the whole 
 final queuePollAdvice = "You are reading the merge queue's state through GitHub piecemeal. Ask the "
     + "queue itself: `magus queue ls` lists every change with merge intent and its state in one call.";
 
-final adminMergeDenial = "`--admin` merges past the merge queue, unvalidated and unordered; the person queues it "
+final adminMergeDenial = "--admin merges past the merge queue, unvalidated and unordered; the person queues it "
     + "with `gh pr merge <number> --auto --squash`, never you.\n"
     + "Nothing validates the pull request on main, and nothing orders it against the others. "
     + "--rebase queues it too. The queue validates it on main's tip and merges it; `magus queue ls` shows "
@@ -234,8 +235,14 @@ fun jsonFields(args: [str]) > [str] {
 }
 
 // ask judges one command with a fresh gate.
+// judged is decideGitHub with every denial held to the verdict shape.
+fun judged(programs: [helpers\Program], once: fun (key: str) > bool, line: str = "") > GuardVerdict {
+    final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
+    return verdict\checked(decideGitHub(programs, once: once, line: line), label: label);
+}
+
 fun ask(argv: [str]) > GuardVerdict {
-    return decideGitHub(helpers\request([argv]), once: helpers\counter());
+    return judged(helpers\request([argv]), once: helpers\counter());
 }
 
 test "a gh call that blocks until CI finishes is denied" {
@@ -254,7 +261,7 @@ test "a gh call that blocks until CI finishes is denied" {
 }
 
 test "a CI read that a loop or watch repeats is a watch too" {
-    final looped = decideGitHub(helpers\request([["loop:", "gh", "pr", "checks", "183"], ["loop:", "sleep", "30"]]), once: helpers\counter());
+    final looped = judged(helpers\request([["loop:", "gh", "pr", "checks", "183"], ["loop:", "sleep", "30"]]), once: helpers\counter());
     std\assert(looped.decision == "deny", message: "a while loop over gh pr checks");
     std\assert(ask(["watch", "-n", "30", "gh", "pr", "view", "183", "--json", "statusCheckRollup"]).decision == "deny", message: "the watch program over gh pr view");
 }
@@ -280,10 +287,10 @@ test "reading one pull request's CI is advised once per session" {
     ]) {
         std\assert(ask(argv).decision == "advise", message: argv.join(" "));
     }
-    final first = decideGitHub(helpers\request([["gh", "pr", "checks", "183"]]), once: once);
+    final first = judged(helpers\request([["gh", "pr", "checks", "183"]]), once: once);
     std\assert(first.decision == "advise", message: "the first read is advised");
     std\assert(first.reason.indexOf(board) != null, message: "names the board");
-    std\assert(decideGitHub(helpers\request([["gh", "pr", "checks", "184"]]), once: once).decision == "allow", message: "and only once");
+    std\assert(judged(helpers\request([["gh", "pr", "checks", "184"]]), once: once).decision == "allow", message: "and only once");
 }
 
 test "polling the merge queue through GitHub is advised once per session" {
@@ -299,8 +306,8 @@ test "polling the merge queue through GitHub is advised once per session" {
         std\assert(v.reason.indexOf("magus queue ls") != null, message: "names the queue's answer, not the board");
     }
     final poll = helpers\request([["gh", "run", "list", "--workflow", "queue.yaml"]]);
-    std\assert(decideGitHub(poll, once: once).decision == "advise", message: "first");
-    std\assert(decideGitHub(poll, once: once).decision == "allow", message: "only once");
+    std\assert(judged(poll, once: once).decision == "advise", message: "first");
+    std\assert(judged(poll, once: once).decision == "allow", message: "only once");
 }
 
 test "the board itself, an unrelated gh run list, and other programs stay silent" {
@@ -343,7 +350,7 @@ fun chain(merge: [str]) > [helpers\Program] {
 }
 
 test "an admin merge anywhere on a line is denied" {
-    final v = decideGitHub(chain(["gh", "pr", "merge", "topic", "--squash", "--admin"]), once: helpers\counter());
+    final v = judged(chain(["gh", "pr", "merge", "topic", "--squash", "--admin"]), once: helpers\counter());
     std\assert(v.decision == "deny", message: "the chained line that merged past the queue");
     std\assert(v.reason.indexOf("--auto --squash") != null, message: "names the entry");
     foreach (target in ["417", "topic", "https://github.com/egladman/magus/pull/417"]) {
@@ -354,7 +361,7 @@ test "an admin merge anywhere on a line is denied" {
             helpers\request([["git", "status"], merge, ["echo", "merged"]]),
             chain(merge),
         ]) {
-            std\assert(decideGitHub(programs, once: helpers\counter()).decision == "deny", message: target);
+            std\assert(judged(programs, once: helpers\counter()).decision == "deny", message: target);
         }
     }
 }
@@ -364,7 +371,7 @@ test "a queued merge on the same line is denied, handing the command to the pers
         ["gh", "pr", "merge", "topic", "--auto", "--squash"],
         ["gh", "pr", "merge", "417", "--auto", "--rebase"],
     ]) {
-        final v = decideGitHub(chain(merge), once: helpers\counter());
+        final v = judged(chain(merge), once: helpers\counter());
         std\assert(v.decision == "deny", message: merge.join(" "));
         std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
@@ -377,7 +384,7 @@ test "a pull request's state read again and again is denied, naming the monitor"
         [["loop:", "gh", "api", "repos/egladman/magus/pulls/300", "--jq", ".merged"]],
         [["loop:", "gh", "pr", "status"]],
     ]) {
-        final v = decideGitHub(helpers\request(argvs), once: helpers\counter());
+        final v = judged(helpers\request(argvs), once: helpers\counter());
         std\assert(v.decision == "deny", message: argvs[0].join(" "));
         std\assert(v.reason.indexOf("CI monitor") != null, message: "names the host's monitor");
     }
@@ -390,7 +397,7 @@ test "one read of a pull request's state, and a loop over its content, stay sile
         [["loop:", "gh", "pr", "view", "300", "--json", "title,body"]],
         [["loop:", "gh", "api", "repos/egladman/magus/pulls/300/files"]],
     ]) {
-        final v = decideGitHub(helpers\request(argvs), once: helpers\counter());
+        final v = judged(helpers\request(argvs), once: helpers\counter());
         std\assert(v.decision == "allow", message: argvs[0].join(" "));
     }
 }
@@ -422,14 +429,14 @@ test "enabling auto-merge through gh api is denied" {
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("a person enables auto-merge") != null, message: "says a person enables it");
     }
-    final fed = decideGitHub(helpers\request([["gh", "api", "graphql", "--input", "-"]]), once: helpers\counter(),
+    final fed = judged(helpers\request([["gh", "api", "graphql", "--input", "-"]]), once: helpers\counter(),
         line: "gh api graphql --input - <<'EOF'\n" + mutation + "\nEOF");
     std\assert(fed.decision == "deny", message: "a body fed through a heredoc");
 }
 
 test "the admin merge's denial hands the person the queue's command, not an order to run it" {
     final v = ask(["gh", "pr", "merge", "12", "--admin"]);
-    std\assert(v.reason.startsWith("`--admin` merges past the merge queue"), message: v.reason);
+    std\assert(v.reason.startsWith("--admin merges past the merge queue"), message: v.reason);
     std\assert(v.reason.split("\n")[0].indexOf("the person queues it with `gh pr merge <number> --auto --squash`") != null, message: v.reason);
     std\assert(v.reason.indexOf("queue it:") == null and v.reason.indexOf("never run it") != null, message: v.reason);
 }
@@ -449,7 +456,7 @@ test "disabling or reading auto-merge, and other gh calls, stay silent" {
 
 test "auto-merge enabled anywhere on a chained line is denied" {
     foreach (merge in [["gh", "pr", "merge", "topic", "--squash", "--auto"], ["gh", "pr", "merge", "--auto", "topic"]]) {
-        std\assert(decideGitHub(chain(merge), once: helpers\counter()).decision == "deny", message: merge.join(" "));
+        std\assert(judged(chain(merge), once: helpers\counter()).decision == "deny", message: merge.join(" "));
     }
 }
 

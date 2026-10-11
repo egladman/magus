@@ -8,6 +8,7 @@ import "std";
 import "fs";
 import "path";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 
 // The go verbs that compile a package into something runnable.
 final goVerbs = ["run", "build", "install"];
@@ -58,7 +59,9 @@ fun isMagusPackage(arg: str) > bool {
 export final placementScript = "hack/dev/bootstrap-worktree.buzz";
 
 // workerPlacement is the denial every worker gets for building magus, leased or not: the
-// same verdict and the same command, with built naming what it ran when that is known.
+// same verdict and the same command, with built naming what it ran when that is known. The
+// policy API carries one string, so the command the worker runs once ./magus is placed sits
+// on the second line, ahead of the rationale.
 export fun workerPlacement(built: str, lease: str) > str {
     var cause = "";
     if (built != "") {
@@ -68,8 +71,8 @@ export fun workerPlacement(built: str, lease: str) > str {
         }
         cause = cause + ". ";
     }
-    return "a worker does not build magus; ask the main session to place ./magus, then run "
-        + "`<main checkout>/magus buzz {placementScript} -- --job <id> --from <main checkout>`.\n"
+    return "a worker does not build magus; ask the main session to place ./magus\n"
+        + "once placed, run `<main checkout>/magus buzz {placementScript} -- --job <id> --from <main checkout>`.\n"
         + cause + "The main session places one binary per base commit: it builds ./magus once, in the root checkout, "
         + "and {placementScript} copies it into a worker checkout whenever no Go build input differs. "
         + "A build per worker is two Go compiles each, and a fan-out runs a dozen at once. Use the ./magus "
@@ -106,7 +109,8 @@ export fun briefDenial(brief: str) > str {
         if (negates(line) or (fenced and negates(introduced))) { continue; }
         foreach (p in programsIn(line)) {
             if (buildOf(p) != "") {
-                return "the brief tells the worker to build magus (`{line}`); drop the step.\n"
+                return "the brief tells the worker to build magus; drop the step\n"
+                    + "the line reads: {line}\n"
                     + "The main session places one binary per base commit: it builds ./magus once, in the root "
                     + "checkout, and {placementScript} copies it into each worker checkout. A worker that compiles "
                     + "it adds two Go builds per worker, and a fan-out runs a dozen at once. The worker uses the "
@@ -206,8 +210,9 @@ test "a worker lease denies a build of magus, naming the script and the one bina
     ]) {
         final denial = workerBuildDenial(program(argv), lease: "ui-logs");
         std\assert(denial.indexOf("a worker does not build magus; ask the main session to place ./magus") == 0, message: denial);
-        std\assert(denial.split("\n")[0].endsWith("`<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`."),
-            message: "the first line carries the placement command: " + argv.join(" "));
+        verdict\assertVerdict(denial, label: argv.join(" "));
+        std\assert(denial.split("\n")[1] == "once placed, run `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`.",
+            message: "the second line carries the placement command: " + argv.join(" "));
         std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it");
         std\assert(denial.indexOf("`ui-logs`") != null, message: "names the lease");
     }
@@ -216,7 +221,9 @@ test "a worker lease denies a build of magus, naming the script and the one bina
 test "a leased worker and an unleased one read the same verdict and command" {
     final leased = workerPlacement("go build ./cmd/magus", lease: "ui-logs");
     final unleased = workerPlacement("", lease: "");
+    verdict\assertVerdict(unleased, label: "unleased");
     std\assert(leased.split("\n")[0] == unleased.split("\n")[0], message: leased);
+    std\assert(leased.split("\n")[1] == unleased.split("\n")[1], message: leased);
     std\assert(unleased.indexOf("lease") == null, message: "no lease to name");
 }
 
@@ -241,12 +248,12 @@ test "a brief that tells the worker to build magus is denied, quoting the line" 
         "Setup:\n\n```sh\ncd /w/a\nGOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .\n```\n",
     ]) {
         final denial = briefDenial(brief);
-        std\assert(denial.indexOf("the brief tells the worker to build magus (`") == 0, message: brief);
-        std\assert(denial.split("\n")[0].endsWith("); drop the step."), message: "one verdict line");
+        verdict\assertVerdict(denial, label: brief);
+        std\assert(denial.split("\n")[0] == "the brief tells the worker to build magus; drop the step", message: "one verdict line");
         std\assert(denial.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
         std\assert(denial.indexOf("one binary per base commit") != null, message: "says who places it");
     }
-    std\assert(briefDenial("1. ok\n2. Build: `go build ./cmd/magus`").indexOf("(`2. Build: `go build ./cmd/magus``);") != null, message: "quotes the line");
+    std\assert(briefDenial("1. ok\n2. Build: `go build ./cmd/magus`").indexOf("\nthe line reads: 2. Build: `go build ./cmd/magus`\n") != null, message: "quotes the line");
 }
 
 test "a brief that only names the build to forbid it, or builds something else, passes" {
