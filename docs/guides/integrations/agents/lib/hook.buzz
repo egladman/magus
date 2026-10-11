@@ -217,28 +217,51 @@ export fun workspaceRootAt(dir: str) > str {
 // subagent's hooks from the session's directory while the subagent works in its own
 // worktree, whose binary is the one that tree builds.
 //
-// A ./magus that exists but cannot be run still falls through to PATH, and the PATH
-// copy may predate the checkout's rules. A caller that passes file (and the session,
-// when the host reports one) has that said once per session on stderr.
+// A workspace with no runnable ./magus falls through to PATH, and the PATH copy may
+// predate the checkout's rules. A caller that passes file (and the session, when the
+// host reports one) has that said once per session on stderr: for a ./magus that cannot
+// run, and for a checkout of magus itself with none, naming the PATH copy and where its
+// link points. Anywhere else PATH is where magus is meant to come from. The version is
+// left to the trail row: asking costs a process on the hook that says it.
 export fun resolveBin(cwd: str = "", session: str = "", file: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }
     var root = "";
     if (cwd != "") { root = workspaceRootAt(cwd); }
     if (root == "") { root = workspaceRoot(); }
-    if (root != "") {
-        final candidate = "{root}/magus";
-        if (isExecutable(candidate)) { return candidate; }
-        // The root was found and the binary beside it cannot be run. Falling
-        // through to PATH here is the same answer the walk's `break` gave: do not
-        // keep climbing into a parent checkout.
+    if (root == "") { return proc\which("magus") catch ""; }
+    final candidate = "{root}/magus";
+    if (isExecutable(candidate)) { return candidate; }
+    // The root was found and the binary beside it cannot be run. Falling through to
+    // PATH here is the same answer the walk's `break` gave: do not keep climbing into
+    // a parent checkout.
+    final onPath = proc\which("magus") catch "";
+    if (file != "") {
         final present = (fs\stat(candidate) catch null) != null;
-        if (present and file != "" and noticeOnce(session, family: "bin-not-executable", file: file)) {
+        if (present and noticeOnce(session, family: "bin-not-executable", file: file)) {
             io\stderr.write("{file}: {candidate} exists but is not executable, so this hook judges with the magus on PATH, "
                 + "which may predate this checkout's rules; run `chmod +x {candidate}`\n") catch void;
         }
+        if (!present and onPath != "" and buildsMagus(root) and noticeOnce(session, family: "bin-absent", file: file)) {
+            io\stderr.write("{file}: {root} has no ./magus, so this hook judges with the magus on PATH, "
+                + "{describeBin(onPath)}, which may predate this checkout's rules\n") catch void;
+        }
     }
-    return proc\which("magus") catch "";
+    return onPath;
+}
+
+// buildsMagus reports whether root is a checkout of magus, which judges with the ./magus it
+// builds.
+fun buildsMagus(root: str) > bool {
+    final mod = fs\readFile("{root}/go.mod") catch "";
+    return mod.startsWith("module github.com/egladman/magus\n");
+}
+
+// describeBin names bin and, when it is a link, where the link points.
+fun describeBin(bin: str) > str {
+    final target = fs\readlink(bin) catch "";
+    if (target == "") { return bin; }
+    return "{bin} (a link to {target})";
 }
 
 fun fileSafe(key: str) > str {
