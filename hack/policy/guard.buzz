@@ -130,7 +130,8 @@ export fun judge(req: CommandRequest) > GuardVerdict {
     final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\branchDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
-        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic });
+        publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic },
+        reads: host\readsFrom(req.workspace, dir: req.dir));
     if (decided.decision != "allow" or stale\rebuilds(programs)) {
         return decided;
     }
@@ -310,10 +311,11 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // commit and pull request text denials, then the gh advisories, then the pull request text
 // advisories, then the branch name advisories. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
-// files it names, diff reads the branch's diff for a description's budget, and judge runs
-// the prose judge over a pull request's title and description.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing) > GuardVerdict {
-    final hostVerdict = host\decideHost(programs);
+// files it names, diff reads the branch's diff for a description's budget, judge runs
+// the prose judge over a pull request's title and description, and reads gives the host
+// rule a task capture's text and whether the workspace holds a ./magus.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
+    final hostVerdict = host\decideHost(programs, reads: reads);
     if (hostVerdict.decision != "allow") {
         return hostVerdict;
     }
