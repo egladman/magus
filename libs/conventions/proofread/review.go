@@ -14,7 +14,8 @@ const (
 	// identifier, example or reason. A failure the reader can find ("tests are
 	// failing") is a reason. A reply [WithAnchored] marks sits on its line, and
 	// one holding a block quote answers the quoted comment; neither is judged.
-	// Nor are words in single quotes.
+	// Nor are words in single quotes, the writer's own fault or fix ("my bad",
+	// "I'll fix it"), or thanks and a conceded point that ask for nothing.
 	RuleNonspecific Rule = "nonspecific"
 	// RuleWhyOpener reports a review reply sentence that opens by asking the
 	// author why they did something ("Why did you").
@@ -63,8 +64,9 @@ var reviewTexts = map[Rule]ruleText{
 			"named (\"something went wrong, please try again\") is still reported. Many of its other wrong " +
 			"firings judged words the writer quoted. A block quote is the comment the reply answers, its " +
 			"referent as an anchored reply's line is, so a reply holding one is left alone, and so is a " +
-			"judgment in single quotes. A reply CodeRabbit marks as its own auto-generated reply is not the " +
-			"author's.",
+			"judgment in single quotes. An apology owning the writer's fault (\"my bad\"), a fix the writer " +
+			"takes on (\"will fix it\"), and thanks or a conceded point that asks for nothing judge nobody's " +
+			"work. A reply CodeRabbit marks as its own auto-generated reply is not the author's.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -207,11 +209,83 @@ func leadingWord(rest string) string {
 	return rest[:end]
 }
 
+var (
+	// acknowledgement opens a sentence that answers a review: thanks or a
+	// point conceded ("Good catch, it was redundant").
+	acknowledgement = regexp.MustCompile(`(?i)^\W*(?:thanks|thank you|thx|you're right|you are right|` +
+		`good catch|nice catch|good point|fair point|fair enough|agreed|true|indeed|makes sense|noted|got it|` +
+		`understood)\b`)
+	// contrast turns what follows an acknowledgement into a judgment of its
+	// own ("thanks, but this is wrong").
+	contrast = regexp.MustCompile(`(?i)\b(?:but|however|though|although|still|yet)\b`)
+	// asksChange is a request in a sentence that also acknowledges, and
+	// requestForm a judgment that is one.
+	asksChange  = regexp.MustCompile(`(?i)\b(?:please|pls|should|must|needs? to|can you|could you|would you)\b`)
+	requestForm = regexp.MustCompile(`(?i)^(?:fix|change|clean|improve|rework|redo|rewrite|update)\b`)
+
+	// interjection may open the clause a writer owns ("oops, I was wrong").
+	interjection = wordSet("sorry", "oops", "whoops", "ah", "oh", "ok", "okay", "yes", "yeah", "yep", "right", "no")
+	// writerVerb may stand between the writer and what they own: "I was
+	// wrong", "I'll fix it", "I got that wrong". "Would" and "could" are
+	// left out: "I'd change this" suggests a change to the author.
+	writerVerb = wordSet("am", "was", "were", "will", "can", "should", "shall", "have", "had", "got", "did",
+		"just", "also", "now", "then", "probably", "definitely", "going", "to", "try", "need", "me", "us",
+		"it", "this", "that", "be", "been", "totally", "completely", "clearly")
+	// writerWords open a clause whose subject is the writer, said or left
+	// out ("will fix it").
+	writerWords  = wordSet("i", "i'm", "i'll", "i've", "we'll", "let", "let's", "will", "gonna")
+	functionWord = wordSet("this", "that", "it", "the", "a", "an", "these", "those", "its", "their", "your",
+		"our", "his", "her")
+)
+
+// writerOwns reports whether before, the words of a sentence before its
+// judgment, make the writer its subject: an apology ("my bad", "I was
+// wrong", "my patch was wrong") or a fix the writer takes on ("I'll fix
+// it", "thanks, will update that"). Neither judges the author's code.
+func writerOwns(before string) bool {
+	clause := before[strings.LastIndexAny(before, ",;:.!?()")+1:]
+	words := strings.Fields(strings.ToLower(clause))
+
+	for len(words) > 0 && interjection[strings.Trim(words[0], "!")] {
+		words = words[1:]
+	}
+
+	if len(words) == 0 {
+		return false
+	}
+
+	if words[0] == "my" {
+		// "my bad", "my patch was"; a determiner after "my" opens another
+		// subject ("my take this is").
+		rest := words[1:]
+		if n := len(rest); n > 0 && (rest[n-1] == "is" || rest[n-1] == "was") {
+			rest = rest[:n-1]
+		}
+
+		return len(rest) <= 2 && !slices.ContainsFunc(rest, func(w string) bool { return functionWord[w] })
+	}
+
+	if !writerWords[words[0]] {
+		return false
+	}
+
+	return !slices.ContainsFunc(words[1:], func(w string) bool { return !writerVerb[w] })
+}
+
+// acknowledges reports whether text, one sentence, thanks or concedes
+// without asking for the change it holds.
+func acknowledges(text, match string) bool {
+	return acknowledgement.MatchString(text) && !contrast.MatchString(text) && !asksChange.MatchString(text) &&
+		!requestForm.MatchString(match)
+}
+
 // judged is the first judgment in text, one sentence, of the author's work:
-// not a mention in single quotes.
+// not a mention in single quotes, not the writer's own fault or fix, and
+// not a point conceded.
 func judged(text string) []int {
 	for _, at := range judgment.FindAllStringIndex(text, -1) {
-		if !singleQuoted(text, at[0]) {
+		m := text[at[0]:at[1]]
+		if !singleQuoted(text, at[0]) && !writerOwns(text[:at[0]]) && !acknowledges(text, m) {
 			return at
 		}
 	}
@@ -222,7 +296,7 @@ func judged(text string) []int {
 // nonspecific reports the first judgment in a top-level reply that names
 // nothing to act on. A judgment with a reason beside it in its sentence, or
 // one that names what it judges, is left alone, and so are the words the
-// writer quotes.
+// writer quotes, owns or concedes.
 func nonspecific(in input) []Finding {
 	// A block quote is the comment the reply answers: its referent, as the
 	// line is an anchored reply's, and words the writer did not write.

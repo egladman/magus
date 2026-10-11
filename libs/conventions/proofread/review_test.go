@@ -126,6 +126,27 @@ func TestNonspecificJudgesOnlyTheWritersOwnWords(t *testing.T) {
 	})
 }
 
+// An apology owns the writer's fault, and thanks or a conceded point answers a
+// review; neither judges the author's work unless it also asks for a change.
+func TestNonspecificLeavesAnApologyOrAcknowledgementAlone(t *testing.T) {
+	runTextCases(t, RuleNonspecific, []textCase{
+		{"my bad", KindReviewReply, "Oops, my bad.", nil},
+		{"the writer was wrong", KindReviewReply, "Sorry, I was wrong.", nil},
+		{"the writer got it wrong", KindReviewReply, "I got that wrong, sorry.", nil},
+		{"the writer's patch", KindReviewReply, "Ah, my patch was wrong.", nil},
+		{"a fix the writer takes on", KindReviewReply, "Thanks, will fix it.", nil},
+		{"the writer will update it", KindReviewReply, "I'll update it tonight.", nil},
+		{"a point conceded", KindReviewReply, "Good catch, it was redundant.", nil},
+		{"agreement", KindReviewReply, "You're right, that is unnecessary.", nil},
+		{"thanks with a contrast", KindReviewReply, "Thanks, but this is wrong.", []string{"1:wrong"}},
+		{"thanks with a request", KindReviewReply, "Thanks, please fix this.", []string{"1:fix this"}},
+		{"thanks and a command", KindReviewReply, "Thanks. Fix it.", []string{"1:Fix it"}},
+		{"a softened verdict", KindReviewReply, "Sorry, this is confusing.", []string{"1:confusing"}},
+		{"a change suggested", KindReviewReply, "I'd change this.", []string{"1:change this"}},
+		{"an opinion", KindReviewReply, "I think it is wrong.", []string{"1:wrong"}},
+	})
+}
+
 func TestWhyOpenerReportsAQuestionAboutTheAuthorsChoice(t *testing.T) {
 	runTextCases(t, RuleWhyOpener, []textCase{
 		{"why did you", KindReviewReply, "Why did you add the lock?", []string{"1:Why did you"}},
