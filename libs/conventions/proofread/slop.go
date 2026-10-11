@@ -286,8 +286,10 @@ var closers = []tell{
 	opening(`^(?:In summary|In conclusion|To summarize|To sum up|All in all),`),
 }
 
+// ingTails leaves "underscoring" to [buzzwords], which reports the word
+// however the sentence uses it.
 var ingTails = []tell{
-	anywhere(`(?i),\s+(?:highlighting|underscoring|emphasi[sz]ing|reflecting|symboli[sz]ing|contributing to|` +
+	anywhere(`(?i),\s+(?:highlighting|emphasi[sz]ing|reflecting|symboli[sz]ing|contributing to|` +
 		`cultivating|fostering|encompassing|showcasing|resonating)\b`),
 }
 

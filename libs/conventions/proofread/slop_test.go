@@ -243,7 +243,8 @@ func TestIngTailReportsAParticipleClaimingSignificance(t *testing.T) {
 		// internal/render/target_graph.go: the participle states a postcondition.
 		{"ensuring", KindReference, "Hash the inputs, ensuring the lock is released.", nil},
 		{"highlighting", KindReference, "The cache stores blobs, highlighting the importance of the key.", []string{"1:, highlighting"}},
-		{"underscoring", KindReference, "The key sorts, underscoring the design.", []string{"1:, underscoring"}},
+		{"underscoring is left to buzzword", KindReference, "The key sorts, underscoring the design.", nil},
+		{"emphasizing", KindReference, "The key sorts, emphasizing the design.", []string{"1:, emphasizing"}},
 		{"showcasing", KindChangeDescription, pr("- Sorts the inputs, showcasing the new hasher."), []string{"4:, showcasing"}},
 	})
 }
