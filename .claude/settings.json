@@ -137,6 +137,11 @@
             "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
+          },
+          {
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s hack/policy/reply.buzz",
+            "timeout": 10,
+            "type": "command"
           }
         ]
       }
