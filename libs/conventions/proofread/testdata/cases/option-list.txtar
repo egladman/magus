@@ -39,13 +39,14 @@ You have a few options to rebase this branch:
 To give a proper English translation like the other changelog, I have a few options:
 However, there are a few approaches we could consider:
 -- fp/agent-reply --
+The updated test now tries three approaches with proper environment settings and should find the root cause of the missing header.
+-- pass/agent-reply --
 The dialog now shows three options: "Stash changes", "Discard changes", and "Don't show again".
 - An evaluation framework with test scenarios and metrics for comparing the three approaches (no instructions, reference only, full instructions)
 **The three options are:**
 The voice selection has grown from a simple checkbox to a system with three options:
 The new text clarifies that: (1) when one operand is integer and the other is floating-point, computation is performed in floating-point, and (2) when both operands are floating-point of different precisions, computation uses the higher precision.
 Option B completed successfully.
-The updated test now tries three approaches with proper environment settings and should find the root cause of the missing header.
 The dialog now shows three options when orphaned bookmarks exist: "Delete label and bookmarks", "Delete label only", or "Cancel".
 **Match dropdown** with three options:
 I've built an evaluation framework to compare the three approaches you suggested.

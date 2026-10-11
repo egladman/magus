@@ -89,6 +89,20 @@ func TestClosingOfferJudgesOnlyTheLastParagraph(t *testing.T) {
 	})
 }
 
+func TestOptionListReportsAMenuOfChoices(t *testing.T) {
+	runTextCases(t, RuleOptionList, []textCase{
+		{"a label", KindAgentReply, "**Option A**: Keep the map.", []string{"1:**Option A"}},
+		{"a heading", KindAgentReply, "### Option 1: Split the store", []string{"1:Option 1"}},
+		{"a count", KindAgentReply, "We have two options:", []string{"1:two options"}},
+		{"inline alternatives", KindAgentReply, "Either (a) keep the map or (b) drop it.",
+			[]string{"1:(a) keep the map or (b)"}},
+		{"a label a sentence goes on from", KindAgentReply, "Option B completed.", nil},
+		{"options already named", KindAgentReply, "I compared the three approaches you suggested.", nil},
+		{"a thing's own settings", KindAgentReply, "The dialog now shows three options:", nil},
+		{"steps of one plan", KindAgentReply, "It took two changes: (1) a timeout and (2) new metadata.", nil},
+	})
+}
+
 func TestUnbackedDoneTakesEvidenceFromItsParagraph(t *testing.T) {
 	runTextCases(t, RuleUnbackedDone, []textCase{
 		{"a bare claim", KindAgentReply, "Done. The branch is ready.", []string{"1:Done"}},

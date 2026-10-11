@@ -91,7 +91,11 @@ var agentReplyTexts = map[Rule]ruleText{
 		why: "Options the person did not ask for move a decision the agent could make back to them. " +
 			"Measured 2026-10-10: it fires on 6 of the 400 replies (1.5%), and a broader pattern found " +
 			"158 of all 7088 (2.2%). It advises: the rule cannot see whether the person asked for the " +
-			"choices.",
+			"choices. Measured 2026-10-11 over the adjudicated labeling round 2: 70.5% precision (31 of 44) " +
+			"before, 96.9% (31 of 32) after. A label a sentence goes on from (\"Option B completed\"), a " +
+			"count of options already named or owned by a thing (\"the three approaches you suggested\", " +
+			"\"a dropdown with three options\") and inline (1) and (2) joined by \"and\", which are steps, " +
+			"are left alone. It stays off until a fresh labeling round measures it.",
 	},
 	RuleUnbackedDone: {
 		code:      "PRF8024",
@@ -229,14 +233,39 @@ func openingFinding(in input, re *regexp.Regexp, message string) []Finding {
 	return nil
 }
 
-var labeledOptions = regexp.MustCompile(`(?im)^(?:(?:[-*+]|\d+\.)\s+)?(?:\*\*|__)?(?:option|approach|alternative) ` +
-	`(?:[A-D1-4]|one|two|three)\b|\((?:a|1)\)[^()\n]{3,200}\((?:b|2)\)|` +
-	`\b(?:two|three|four|a few) (?:options|approaches|alternatives|choices|paths forward|ways (?:forward|to go))\b`)
+// labeledOptions is a menu: a labeled option opening a line as its label
+// ("**Option A**:", "Option 1 (Recommended)"), inline (a) and (b), or a
+// count of options. A label a sentence goes on from ("Option B completed")
+// names one option already laid out.
+var labeledOptions = regexp.MustCompile(`(?im)(^(?:(?:[-*+]|\d+\.)\s+)?(?:\*\*|__)?(?:option|approach|` +
+	`alternative) (?:[A-D1-4]|one|two|three)\b)(?:\s*(?:[:()*_-]|$))|(\((?:a|1)\)[^()\n]{3,200}\((?:b|2)\))|` +
+	`(\b(?:two|three|four|a few) (?:options|approaches|alternatives|choices|paths forward|ways (?:forward|to go))\b)`)
+
+// knownOptions are the words before a count of options that make them ones
+// already named ("the three approaches you suggested", "all three options")
+// or a thing's own settings ("a dropdown with three options", "the dialog
+// shows three options").
+var knownOptions = regexp.MustCompile(`(?i)\b(?:the|all|these|those|with|shows|includes|offers|supports|` +
+	`provides|exposes)\s+$`)
+
+// stepsJoined is inline (1) and (2) joined by "and": the steps of one plan.
+var stepsJoined = regexp.MustCompile(`\band\s+\((?:b|2)\)$`)
 
 func optionList(in input) []Finding {
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		if at := labeledOptions.FindStringIndex(para.text); at != nil {
+		for _, sub := range labeledOptions.FindAllStringSubmatchIndex(para.text, -1) {
+			var at []int
+
+			for g := 2; g+1 < len(sub); g += 2 {
+				if sub[g] >= 0 {
+					at = sub[g : g+2]
+				}
+			}
+
 			m := para.text[at[0]:at[1]]
+			if knownOptions.MatchString(para.text[:at[0]]) || stepsJoined.MatchString(m) {
+				continue
+			}
 
 			return []Finding{{
 				Message: fmt.Sprintf("Recommend one and say why instead of '%s', unless the person asked to "+
