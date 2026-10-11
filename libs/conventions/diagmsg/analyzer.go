@@ -8,6 +8,11 @@
 // which is held to the message-tag rule alone. String constants and concatenations resolve to
 // their text; a format verb, or an operand only known at run time, counts as
 // one rune.
+//
+// The message-tag rule also catches a tag of two or three words, "diff
+// session: ", unless a word of it shows the opening is a sentence ("cannot
+// open the file: "). A message opening with one of [Options.Prefixes] is
+// labeled on purpose and passes.
 package diagmsg
 
 import (
@@ -398,7 +403,16 @@ func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 		return
 	}
 	j.seen[pos] = true
-	for _, f := range prose.JudgeMessage(text, j.opts.MaxRunes) {
+	findings := prose.JudgeMessage(text, j.opts.MaxRunes)
+	if tag := j.phraseTag(text); tag != "" {
+		findings = append(findings, prose.Finding{
+			Rule:    prose.RuleMessageTag,
+			Message: fmt.Sprintf("Drop the leading '%s' tag: open with the verdict.", tag),
+			Match:   tag,
+			Line:    1,
+		})
+	}
+	for _, f := range findings {
 		if len(j.opts.Rules) > 0 && !slices.Contains(j.opts.Rules, f.Rule) {
 			continue
 		}
@@ -411,6 +425,45 @@ func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 			Message:  source.Hint(fmt.Sprintf("%s: %s", f.Rule, strings.TrimSuffix(f.Message, ".")), j.opts.Hint),
 		})
 	}
+}
+
+// phraseTagPattern matches two or three lowercase words and a colon opening a
+// message, such as "diff session: " or "server check-drift: ". The prose
+// rule has the one-word form.
+var phraseTagPattern = regexp.MustCompile(`^\s*([a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*){1,2}): `)
+
+// sentenceWords are words a component tag never holds, so a clause such as
+// "cannot open the file: " or "unknown flag: " opening with one is a
+// sentence chaining context, never a speaker's label. A word ending in "ed"
+// or "ing", or an irregular past form such as "rebuilt", is a verb form for
+// the same reason.
+var sentenceWords = map[string]bool{
+	"a": true, "an": true, "the": true, "this": true, "that": true, "these": true, "those": true,
+	"to": true, "of": true, "in": true, "on": true, "at": true, "for": true, "from": true,
+	"with": true, "by": true, "into": true, "and": true, "or": true, "but": true, "as": true,
+	"is": true, "are": true, "was": true, "were": true, "be": true, "has": true, "have": true,
+	"no": true, "not": true, "cannot": true, "can't": true, "could": true, "would": true,
+	"should": true, "must": true, "unable": true, "unknown": true, "invalid": true,
+	"missing": true, "bad": true, "unsupported": true, "unexpected": true, "error": true,
+	"errors": true, "failure": true, "timeout": true, "too": true,
+	"built": true, "rebuilt": true, "found": true, "sent": true, "kept": true, "made": true,
+	"lost": true, "done": true, "written": true, "wrote": true, "ran": true,
+}
+
+// phraseTag returns the leading multi-word component tag of text, with its
+// colon, or "". A message opening with one of [Options.Prefixes] is labeled
+// on purpose, and a clause holding a sentence word is a sentence.
+func (j *judge) phraseTag(text string) string {
+	m := phraseTagPattern.FindStringSubmatch(text)
+	if m == nil || slices.ContainsFunc(j.opts.Prefixes, func(p string) bool { return strings.HasPrefix(strings.TrimSpace(text), p) }) {
+		return ""
+	}
+	for _, w := range strings.Fields(m[1]) {
+		if sentenceWords[w] || strings.HasSuffix(w, "ed") || strings.HasSuffix(w, "ing") {
+			return ""
+		}
+	}
+	return m[1] + ":"
 }
 
 func (j *judge) allowed(rule prose.Rule) bool {

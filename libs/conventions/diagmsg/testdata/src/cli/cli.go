@@ -25,6 +25,20 @@ func calls(name string) {
 	_ = fmt.Errorf("cache: %s; so on, so forth", name)
 }
 
+// A tag of more than one word is a tag; a clause that happens to hold a colon is not.
+func phrases(name string) {
+	_ = diag.Errorf(1, "diff session: not open")               // want `message-tag: Drop the leading 'diff session:' tag`
+	_ = diag.Format(1, "server check-drift: "+name)            // want `message-tag: Drop the leading 'server check-drift:' tag`
+	_ = diag.Domain{}.Errorf(1, "magus graph build: %s", name) // want `message-tag: Drop the leading 'magus graph build:' tag`
+	_ = diag.Errorf(1, "cannot open the file: run `magus init`")
+	_ = diag.Errorf(1, "unknown flag: %s", name)
+	_ = diag.Errorf(1, "write failed: run `magus doctor`")
+	_ = diag.Errorf(1, "opening the cache: run `magus clean`")
+	_ = diag.Errorf(1, "Diff session: not open")
+	_ = diag.Errorf(1, "four lower case words here: nothing")
+	_ = diag.Errorf(1, "no cache here, run `magus run build`")
+}
+
 func fields(name string) guard.Verdict {
 	_ = guard.Other{Deny: "other: not judged"}
 	v := guard.Verdict{

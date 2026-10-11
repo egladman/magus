@@ -17,6 +17,12 @@ func calls(ctx context.Context, log *slog.Logger, name string) {
 	log.Debug("[AGENT] read " + name)                                 // want `message-tag: Drop the '\[AGENT\]' marker`
 	log.WarnContext(ctx, "server: not running", "name", name)         // want `message-tag: Drop the leading 'server:' tag`
 	log.With("component", "server").Info("not running")
+	slog.Warn("diff session: not open")                      // want `message-tag: Drop the leading 'diff session:' tag`
+	slog.InfoContext(ctx, "server check-drift: "+name)       // want `message-tag: Drop the leading 'server check-drift:' tag`
+	log.Error(fmt.Sprintf("graph build: %s is stale", name)) // want `message-tag: Drop the leading 'graph build:' tag`
+	slog.Warn("cannot open the file: " + name)
+	slog.Warn("write failed: " + name)
+	slog.Warn("knowledge graph rebuilt: " + name)
 
 	// Only the tag rule judges a log message: this one is long, gives two
 	// reasons and names two commands, and none of that is reported.
