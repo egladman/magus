@@ -367,7 +367,7 @@ func dash(in input) []Finding {
 				from, to = from-1, to+1
 			}
 
-			report(from, to, dashFor(para.text, from, to))
+			report(from, to, dashReplacement(para.text, from, to))
 		}
 
 		for i := 0; ; {
@@ -379,7 +379,7 @@ func dash(in input) []Finding {
 			at := i + j + 1
 			if at > 1 && para.text[at-2] != ' ' && at+3 < len(para.text) && para.text[at+3] != ' ' {
 				from, to := wordBefore(para.text, at), wordAfter(para.text, at+1)
-				report(from, to, para.text[from:at-1]+dashFor(para.text, at-1, at+3)+para.text[at+3:to])
+				report(from, to, para.text[from:at-1]+dashReplacement(para.text, at-1, at+3)+para.text[at+3:to])
 			}
 
 			i = at + 2

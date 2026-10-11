@@ -85,9 +85,9 @@ func exemptSubject(subject string) bool {
 	return false
 }
 
-// subjectOf returns the first line of a commit message, or "" when the message
+// subjectLine returns the first line of a commit message, or "" when the message
 // is empty or the subject a tool writes.
-func subjectOf(in input) string {
+func subjectLine(in input) string {
 	if len(in.source) == 0 || exemptSubject(in.source[0]) {
 		return ""
 	}
@@ -147,7 +147,7 @@ var moodForms = func() map[string]string {
 // subjectMood reports the subject's first word when it is a past, third-person
 // or gerund form from [moodForms], read after any conventional prefix.
 func subjectMood(in input) []Finding {
-	subject := subjectOf(in)
+	subject := subjectLine(in)
 	if subject == "" {
 		return nil
 	}
@@ -182,7 +182,7 @@ func subjectMood(in input) []Finding {
 var pullRequestSuffix = regexp.MustCompile(` \(#\d+\)$`)
 
 func subjectLength(in input) []Finding {
-	subject := pullRequestSuffix.ReplaceAllString(subjectOf(in), "")
+	subject := pullRequestSuffix.ReplaceAllString(subjectLine(in), "")
 	if len(subject) <= subjectMaxBytes {
 		return nil
 	}
@@ -195,7 +195,7 @@ func subjectLength(in input) []Finding {
 }
 
 func subjectPeriod(in input) []Finding {
-	subject := subjectOf(in)
+	subject := subjectLine(in)
 	if !strings.HasSuffix(subject, ".") || strings.HasSuffix(subject, "..") {
 		return nil
 	}
@@ -216,7 +216,7 @@ func subjectPeriod(in input) []Finding {
 var trailerLine = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9-]*|BREAKING CHANGE): \S`)
 
 func bodySeparator(in input) []Finding {
-	if subjectOf(in) == "" || len(in.source) < 2 || strings.TrimSpace(in.source[1]) == "" {
+	if subjectLine(in) == "" || len(in.source) < 2 || strings.TrimSpace(in.source[1]) == "" {
 		return nil
 	}
 

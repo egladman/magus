@@ -241,11 +241,11 @@ var asciiFor = map[string]string{"‘": "'", "’": "'", "“": `"`, "”": `"`,
 var dashClause = wordSet("then", "and", "but", "so", "or", "which", "who", "not", "because", "while", "though",
 	"although", "since", "unless", "until", "where", "when", "yet")
 
-// dashFor is what to write in place of the dash at text[from:to], the spaces
+// dashReplacement is what to write in place of the dash at text[from:to], the spaces
 // around it included: "-" in a numeric range, ", " for one of a pair of
 // dashes in a sentence or before a joined clause, and ": " where the dash
 // introduces what follows.
-func dashFor(text string, from, to int) string {
+func dashReplacement(text string, from, to int) string {
 	before, after := text[:from], text[to:]
 
 	switch {

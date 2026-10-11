@@ -113,7 +113,7 @@ func LoadCases(fsys fs.FS) ([]Case, error) {
 func parseCases(name string, data []byte) ([]Case, error) {
 	rule := Rule(strings.TrimSuffix(path.Base(name), ".txtar"))
 
-	c, ok := checkFor(rule)
+	c, ok := ruleCheck(rule)
 	if !ok {
 		return nil, fmt.Errorf("%s: no rule is named %q", name, rule)
 	}
@@ -214,7 +214,7 @@ func parseHeader(header string, c check) (Case, bool, error) {
 	return out, whole, nil
 }
 
-func checkFor(rule Rule) (check, bool) {
+func ruleCheck(rule Rule) (check, bool) {
 	for _, c := range checks {
 		if c.rule == rule {
 			return c, true
@@ -231,7 +231,7 @@ func checkFor(rule Rule) (check, bool) {
 func (c Case) Fires() bool {
 	opts := []Option{WithThreadLength(c.ThreadLength)}
 
-	if ch, ok := checkFor(c.Rule); ok && ch.defaultDecision(c.Kind) == DecisionOff {
+	if ch, ok := ruleCheck(c.Rule); ok && ch.defaultDecision(c.Kind) == DecisionOff {
 		opts = append(opts, WithDecisions(map[Rule]Decision{c.Rule: DecisionDeny}))
 	}
 
