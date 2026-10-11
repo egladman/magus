@@ -17,15 +17,16 @@ import (
 // content-addressed, so a hit in either store is the payload ref names, and nothing is
 // written to the other checkout.
 //
-// A miss returns an error wrapping fs.ErrNotExist that names every cache dir searched. A
-// malformed ref is an error before any store is read.
-func (m *Magus) PayloadByRef(ref string) ([]byte, error) {
+// ctx bounds the search of the other checkouts. A miss returns an error wrapping
+// fs.ErrNotExist that names every cache dir searched. A malformed ref is an error before
+// any store is read.
+func (m *Magus) PayloadByRef(ctx context.Context, ref string) ([]byte, error) {
 	searched := []string{m.CacheDir()}
 	data, err := trail.ReadBlob(m.CacheDir(), ref)
 	if errors.Is(err, fs.ErrNotExist) {
 		// The session store records output refs only, so the primary checkout is the one
 		// other store searched.
-		_, err = m.searchOtherCheckouts(context.Background(), ref, func(dir string) (err error) {
+		_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
 			searched = append(searched, dir)
 			data, err = trail.ReadBlob(dir, ref)
 			return err

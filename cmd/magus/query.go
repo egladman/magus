@@ -460,7 +460,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 	if err != nil {
 		return err
 	}
-	data, err := m.PayloadByRef(ref)
+	data, err := m.PayloadByRef(ctx, ref)
 	if errors.Is(err, fs.ErrNotExist) {
 		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
 		slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))

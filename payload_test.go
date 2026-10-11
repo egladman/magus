@@ -27,19 +27,19 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	opened, err := Inspect(context.Background(), worktree)
 	require.NoError(t, err)
 	m := opened.(*Magus)
-	got, err := m.PayloadByRef(ref)
+	got, err := m.PayloadByRef(context.Background(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, "the full verdict", string(got))
 
 	missing := "grd" + strings.Repeat("0", 16)
-	_, err = m.PayloadByRef(missing)
+	_, err = m.PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.Contains(t, err.Error(), m.CacheDir())
 	assert.Contains(t, err.Error(), primaryCache)
 
 	opened, err = Inspect(context.Background(), primary)
 	require.NoError(t, err)
-	_, err = opened.(*Magus).PayloadByRef(missing)
+	_, err = opened.(*Magus).PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.NotContains(t, err.Error(), m.CacheDir(), "the primary checkout reads its own store alone")
 }
