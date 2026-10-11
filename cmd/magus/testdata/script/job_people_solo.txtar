@@ -98,9 +98,9 @@ total() { echo $(( $1 + $2 )); }
 -- fork.out --
 forked refactor/pricing, declared, with 1 write path(s). Its holder reads the terms with `magus describe job refactor/pricing` and takes it with `magus job exec refactor/pricing`
 -- ls-declared.out --
-JOB               HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
-refactor/pricing  -       declared  -      1      alone  magus run test .
-refactor/tax      -       declared  -      1      alone  magus run test .
+JOB               HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
+refactor/pricing  -       declared  -      1      alone     magus run test .
+refactor/tax      -       declared  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- exec.out --
@@ -138,8 +138,8 @@ goal check: verified (out<hex>)
 footprint: where its diff since the checkpoint landed
   pricing/total.sh:1-1
 -- ls-done.out --
-JOB               HOLDER        STATE      MODEL  PATHS  PROOF  CHECK
-refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
-refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
+JOB               HOLDER        STATE      MODEL  PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       -      1      alone     magus run test .
+refactor/tax      shop-tax      no_return  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
