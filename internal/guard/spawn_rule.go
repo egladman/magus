@@ -85,8 +85,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	var held heldAdvice
 	// why is the rationale of the built-in deny standing, kept behind the deny's ref.
 	why := ""
+	verdictRef := ""
 	if env.IsSpawn {
-		verdict = spawnBuiltIns(ctx, req, who, at)
+		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
 		if verdict.Decision == "deny" {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
 				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
@@ -108,7 +109,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
 		held.speak(gate, &verdict, whys)
 		if verdict.Decision == "advise" {
-			verdict.Context, _ = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
+			verdict.Context, verdictRef = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
 		}
 		if verdict.Decision != "pass" {
 			decided = decidedByBuiltin
@@ -150,9 +151,10 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
 	if verdict.Decision == "deny" && verdict.Rule != "" {
-		verdict.Reason, _, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
+		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
+		verdictRef:   verdictRef,
 		policyDigest: digest,
 		decidedBy:    decided,
 		target:       resolveAgentID(facts, env.Target),
@@ -166,19 +168,19 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and
 // never the prompt.
-func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) Verdict {
+func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) (Verdict, string) {
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
 	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
-		shown, _ := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}
+		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
-	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}, ""
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
