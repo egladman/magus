@@ -802,7 +802,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 			if body := buzz.TargetRunsFromContext(memberCtx); body != nil {
 				body.MarkDone(r.runs.Passed(p.Path)...)
 			}
-			_, err := r.m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
+			res, err := r.m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
 				if !member.NoCache {
 					// A cacheable member is now the lexical cache boundary: its own needs
 					// calls remain inline on a miss and do not acquire extra entries.
@@ -810,7 +810,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 				}
 				return invoke(workerCtx)
 			}, r.cacheOpts...)
-			return err
+			return cache.WrapNeedFailure(err, name, res.Ref)
 		})
 	}
 }
