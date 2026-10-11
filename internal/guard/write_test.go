@@ -63,7 +63,7 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 // directories, so a guard test never reads or writes the checkout's real ledger.
 func fleetFixture(t *testing.T, leases ...types.Job) (context.Context, string) {
 	t.Helper()
-	root, cacheDir := fixture.Ledger(t, leases...)
+	root, cacheDir := fixture.SeedLeases(t, leases...)
 	location := location{cacheDir: cacheDir, workspace: root}
 	return context.WithValue(t.Context(), locationKey{}, location), root
 }

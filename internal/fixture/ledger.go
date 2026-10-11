@@ -9,12 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Ledger isolates the environment, creates a workspace root and a cache dir, and seeds
+// SeedLeases isolates the environment, creates a workspace root and a cache dir, and seeds
 // the job store with leases. The ledger lives in the per-repository state directory and
 // the guard resolves it with no seam a test can reach, so the isolation is what keeps a
 // test off the developer's own ledger. It returns the workspace root, then the cache dir
 // the store lives under.
-func Ledger(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
+func SeedLeases(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
 	root, cacheDir = tb.TempDir(), tb.TempDir()

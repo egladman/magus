@@ -55,7 +55,7 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 // returns the context pinning both, the workspace root, and the resolved cache dir.
 func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
-	root, cacheDir = fixture.Ledger(t, leases...)
+	root, cacheDir = fixture.SeedLeases(t, leases...)
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
 }
 
