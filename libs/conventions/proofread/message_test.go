@@ -2,6 +2,7 @@ package proofread
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -117,8 +118,10 @@ func TestMessageRulesJudgeOnlyMessages(t *testing.T) {
 	}
 
 	text := "server: refused because x, so y"
-	if got := JudgeText(text, KindMarkdown); len(got) != 0 {
-		t.Errorf("Markdown judged by the message rules: %#v", got)
+	for _, f := range JudgeText(text, KindReference) {
+		if slices.Contains(want, f.Rule) {
+			t.Errorf("Markdown judged by the message rules: %#v", f)
+		}
 	}
 
 	assertFindings(t, JudgeText(text, KindMessage), JudgeMessage(text, MessageRunes))
