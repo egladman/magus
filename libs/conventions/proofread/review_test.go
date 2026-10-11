@@ -91,6 +91,23 @@ func TestNonspecificReportsAJudgmentNamingNothingToActOn(t *testing.T) {
 	})
 }
 
+// A failure the reader can go and find is the reason for the change asked.
+func TestNonspecificTakesAFindableSymptomAsTheReason(t *testing.T) {
+	runTextCases(t, RuleNonspecific, []textCase{
+		{"failing tests", KindReviewReply, "some tests are failing, please fix it", nil},
+		{"a failed CI run", KindReviewReply, "CI failed. Fix this.", nil},
+		{"failed jobs", KindReviewReply, "look at the failed jobs and fix it", nil},
+		{"a quoted command", KindReviewReply, "'make dist' is failing, fix it", nil},
+		{"a timeout", KindReviewReply, "the tests are timing out. Fix that.", nil},
+		{"in the next sentence", KindReviewReply, "the tests are not good.They keep failing", nil},
+		{"a compile error", KindReviewReply, "This does not compile. Fix this.", nil},
+		{"a failure naming nothing", KindReviewReply, "It failed again, fix it", []string{"1:fix it"}},
+		{"nothing works", KindReviewReply, "This doesn't work.", []string{"1:doesn't work"}},
+		{"a retry naming nothing", KindReviewReply, "seems like something went wrong, please try again",
+			[]string{"1:wrong"}},
+	})
+}
+
 func TestWhyOpenerReportsAQuestionAboutTheAuthorsChoice(t *testing.T) {
 	runTextCases(t, RuleWhyOpener, []textCase{
 		{"why did you", KindReviewReply, "Why did you add the lock?", []string{"1:Why did you"}},

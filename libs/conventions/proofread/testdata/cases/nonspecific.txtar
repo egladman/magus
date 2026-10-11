@@ -62,3 +62,11 @@ remove this file it's not needed
 please fix this comment
 ok, strange that we have two correlation IDs but that's a topic for another time.
 Inconsistent data format for routing form responses
+-- pass/review-reply --
+@agent the unit tests are failing now, fix it
+look at the failed jobs and fix it
+'make dist' is failing, please fix it
+the build keeps timing out. Try again to fix it.
+-- hit/review-reply --
+@agent something went wrong, please try again
+It failed again, fix it

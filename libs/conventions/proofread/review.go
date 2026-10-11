@@ -11,8 +11,9 @@ import (
 const (
 	// RuleNonspecific reports a top-level review comment that judges code or
 	// asks for a change and names nothing to act on: no code, path, line,
-	// identifier, example or reason. A reply [WithAnchored] marks sits on its
-	// line, and is not judged.
+	// identifier, example or reason. A failure the reader can find ("tests are
+	// failing") is a reason. A reply [WithAnchored] marks sits on its line, and
+	// is not judged.
 	RuleNonspecific Rule = "nonspecific"
 	// RuleWhyOpener reports a review reply sentence that opens by asking the
 	// author why they did something ("Why did you").
@@ -54,7 +55,11 @@ var reviewTexts = map[Rule]ruleText{
 			"of 11) after. Most firings named what they judged in a noun phrase (\"the indentation\", " +
 			"\"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), so only a " +
 			"verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the " +
-			"line they judge. It advises, and stays off until a fresh labeling round measures it.",
+			"line they judge. It advises, and stays off until a fresh labeling round measures it. Labeling " +
+			"round 5 measured 32.5% (13 of 40, lower bound 0.20); seven of its wrong firings named a failure " +
+			"the reader can find (\"tests are failing\", \"CI failed\", a command that times out), which is " +
+			"the reason for the change asked, so such a reply is left alone. A retry asked with nothing " +
+			"named (\"something went wrong, please try again\") is still reported.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -126,6 +131,20 @@ var (
 		`"[^"\n]{2,}"|^\s{4}\S`)
 )
 
+// symptom names a failure a reader can go and find: a check that fails, a
+// build that breaks, a command that times out ("tests are failing", "CI
+// failed", "'yarn build' is failing"). It is the reason for the change it
+// asks, so a reply naming one is specific. "It doesn't work" names nothing
+// to look at.
+var symptom = regexp.MustCompile(`(?i)\b(?:tests?|specs?|ci|builds?|checks?|jobs?|pipelines?|workflows?|` +
+	`lint(?:er|ing)?|type ?checks?|compil(?:er|ation)|deploys?|deployments?)\b(?:\W+\w+){0,5}?\W+` +
+	`(?:fail(?:s|ed|ing)?|failling|tim(?:e|es|ed|ing) out|broken|break(?:s|ing)?|crash(?:es|ed|ing)?|` +
+	`hang(?:s|ing)?)\b|` +
+	`\b(?:failed|failing|broken)\W+(?:\w+\W+)?(?:tests?|specs?|ci|builds?|checks?|jobs?|pipelines?|workflows?)\b|` +
+	`'[^'\n]{2,}'\s+(?:is |was |keeps )?(?:fail(?:s|ed|ing)?|failling|tim(?:e|es|ed|ing) out|broken|` +
+	`crash(?:es|ed|ing)?)\b|` +
+	`\b(?:doesn't|does not|won't|can't|cannot|fails? to) compile\b|\b(?:merge )?conflicts\b`)
+
 var (
 	// namedThing is a determiner opening a noun phrase: "the naming", "this
 	// logic", "an OR condition". A sentence holding one names what it judges.
@@ -195,6 +214,10 @@ func nonspecific(in input) []Finding {
 		if specific.MatchString(ln) {
 			return nil
 		}
+	}
+
+	if symptom.MatchString(strings.Join(in.source, "\n")) {
+		return nil
 	}
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
