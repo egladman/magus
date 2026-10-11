@@ -1,17 +1,17 @@
 ---
 title: "nominalizations"
-description: "An advisory by default: it explains, and blocks nothing, on a text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate."
+description: "An advisory by default: it explains, and blocks nothing, on a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate."
 tags: [proofread, rules, nominalizations, advise]
 aliases: [reference/prose/nominalizations]
 ---
 
 # nominalizations
 
-An advisory by default: it explains, and blocks nothing, on a text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate.
+An advisory by default: it explains, and blocks nothing, on a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate.
 
 ## What it catches
 
-A text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate.
+A text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate.
 
 ## Why
 

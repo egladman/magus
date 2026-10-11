@@ -55,23 +55,23 @@ same list as JSON.
 
 ## Generated-writing tells
 
-| Rule                                  | Code    | Default        | Catches                                                                                          |
-| ------------------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------ |
-| [filler](filler.md)                   | PRF4001 | deny           | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                         |
-| [wordy](wordy.md)                     | PRF4002 | deny           | a phrase with a shorter equivalent ("in order to")                                               |
-| [signpost](signpost.md)               | PRF4003 | deny           | an announcement standing where the point should be ("Here's the thing", "Let's dive in")         |
-| [chatbot](chatbot.md)                 | PRF4004 | deny           | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer          |
-| [leak](leak.md)                       | PRF4005 | deny           | residue of a tool or a template: a citation marker or an unfilled placeholder                    |
-| [buzzword](buzzword.md)               | PRF4006 | deny           | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")           |
-| [buzzword-weak](buzzword-weak.md)     | PRF4007 | advise         | a buzzword that also has an ordinary sense ("crucial", "landscape")                              |
-| [vague](vague.md)                     | PRF4008 | deny           | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")         |
-| [closer](closer.md)                   | PRF4009 | deny           | a sentence that opens by announcing it restates the text above ("In conclusion,")                |
-| [contrast](contrast.md)               | PRF4010 | varies by kind | a claim made by denying its opposite first ("not just X, it is Y")                               |
-| [ing-tail](ing-tail.md)               | PRF4011 | advise         | a participle clause added to claim significance (", highlighting the importance of")             |
-| [staccato](staccato.md)               | PRF4012 | varies by kind | three or more consecutive sentences of six words or fewer in one paragraph                       |
-| [heading-case](heading-case.md)       | PRF4013 | advise         | a heading whose every word after the first is capitalized                                        |
-| [participles](participles.md)         | PRF4020 | advise         | a text that hangs present participial clauses on its sentences at a generated-writing rate       |
-| [nominalizations](nominalizations.md) | PRF4021 | advise         | a text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate |
+| Rule                                  | Code    | Default        | Catches                                                                                                 |
+| ------------------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------- |
+| [filler](filler.md)                   | PRF4001 | deny           | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                                |
+| [wordy](wordy.md)                     | PRF4002 | deny           | a phrase with a shorter equivalent ("in order to")                                                      |
+| [signpost](signpost.md)               | PRF4003 | deny           | an announcement standing where the point should be ("Here's the thing", "Let's dive in")                |
+| [chatbot](chatbot.md)                 | PRF4004 | deny           | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer                 |
+| [leak](leak.md)                       | PRF4005 | deny           | residue of a tool or a template: a citation marker or an unfilled placeholder                           |
+| [buzzword](buzzword.md)               | PRF4006 | deny           | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")                  |
+| [buzzword-weak](buzzword-weak.md)     | PRF4007 | advise         | a buzzword that also has an ordinary sense ("crucial", "landscape")                                     |
+| [vague](vague.md)                     | PRF4008 | deny           | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")                |
+| [closer](closer.md)                   | PRF4009 | deny           | a sentence that opens by announcing it restates the text above ("In conclusion,")                       |
+| [contrast](contrast.md)               | PRF4010 | varies by kind | a claim made by denying its opposite first ("not just X, it is Y")                                      |
+| [ing-tail](ing-tail.md)               | PRF4011 | advise         | a participle clause added to claim significance (", highlighting the importance of")                    |
+| [staccato](staccato.md)               | PRF4012 | varies by kind | three or more consecutive sentences of six words or fewer in one paragraph                              |
+| [heading-case](heading-case.md)       | PRF4013 | advise         | a heading whose every word after the first is capitalized                                               |
+| [participles](participles.md)         | PRF4020 | advise         | a text that hangs present participial clauses on its sentences at a generated-writing rate              |
+| [nominalizations](nominalizations.md) | PRF4021 | advise         | a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate |
 
 ## House style
 

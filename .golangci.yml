@@ -469,6 +469,7 @@ linters:
             - libproc   # the Darwin API
             - vmstat    # the Darwin tool
             - jobserver # GNU make's name for the token protocol internal/proc/run implements
+            - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
 
       nameoutput:
         type: module

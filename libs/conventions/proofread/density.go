@@ -42,7 +42,7 @@ var densityTexts = map[Rule]ruleText{
 	},
 	RuleNominalizations: {
 		code:    "PRF4021",
-		catches: "a text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate",
+		catches: "a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate",
 		why: "Reinhart et al. (PNAS 2025) measured GPT-4o using nominalizations at 2.1 times the human " +
 			"rate. A suffix is a guess at a nominalization, so the rule advises over a whole text and " +
 			"never points at one word. Over texts of 200 words or more, measured 2026-10-10: 808 agent " +

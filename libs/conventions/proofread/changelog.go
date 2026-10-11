@@ -8,7 +8,7 @@ import (
 
 const (
 	// RuleChangelogHeading reports a changelog version heading that is not
-	// "## [version] - date" or "## [Unreleased]".
+	// `## [version] - date` or `## [Unreleased]`.
 	RuleChangelogHeading Rule = "changelog-heading"
 	// RuleChangelogGroup reports a heading that does not name a Keep a
 	// Changelog group.
