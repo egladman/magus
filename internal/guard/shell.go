@@ -146,6 +146,7 @@ const (
 	denyRuleFilterWithoutInput   denyRuleName = "filter-without-input"
 
 	denyRuleInterpreterRewrite denyRuleName = "interpreter-rewrite"
+	denyRuleConflictRewrite    denyRuleName = "conflict-rewrite"
 	denyRuleUnknownEnv         denyRuleName = "unknown-env"
 
 	// Not shell rules: one fires on a SPAWN and one on a FILE WRITE, and neither reaches a

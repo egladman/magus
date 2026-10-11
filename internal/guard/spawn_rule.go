@@ -145,7 +145,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		denied := asked.unloaded && denyUnloaded(&asked, call, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied && !asked.timedOut {
-			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered, loadFailureLead(deps.LoadFailure, at.workspace)), advisorySpawnRuleFailed)
 		}
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and

@@ -87,7 +87,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	if denied || asked.timedOut {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamWrite, asked.failures, asked.answered)
+	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamWrite, asked.failures, asked.answered, loadFailureLead(deps.LoadFailure, at.workspace))
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 

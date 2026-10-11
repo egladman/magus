@@ -49,6 +49,10 @@ PY`,
 		"python3 - <<'PY'\np = 'internal/ledger/store.go'\ns = open(p).read()\nopen(p, 'w').write(s)\nPY",
 		`python3 -c "from pathlib import Path; Path('internal/ledger/store.go').write_text(x)"`,
 		"python3 - internal/ledger/store.go <<'PY'\nimport sys\nopen(sys.argv[1], 'w').write(x)\nPY",
+		// A loop variable, bound to its list directly or through a name.
+		"python3 - <<'PY'\nfor path in ['internal/ledger/store.go']:\n    open(path, 'w').write(fix(open(path).read()))\nPY",
+		"python3 - <<'PY'\nfiles = ['internal/ledger/store.go']\nfor i, p in enumerate(files):\n    open(p, 'w').write(x)\nPY",
+		`node -e "for (const f of ['internal/ledger/store.go']) require('fs').writeFileSync(f, out)"`,
 		// A JavaScript binding names its destination behind a declaring keyword.
 		`node -e "const p = 'internal/ledger/store.go'; require('fs').writeFileSync(p, out)"`,
 		// Buzz carried on the line: an -e snippet, or a heredoc on stdin.

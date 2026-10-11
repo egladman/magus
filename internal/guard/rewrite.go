@@ -179,8 +179,14 @@ func denyInterpreterRewrite(location location, command string, d Dialect) string
 // candidate: a tracked path the program merely carries, in a list it prints or a report
 // it writes to scratch, is data.
 func rewrittenWorkspaceFile(location location, name, script string, args []string) string {
+	candidates, _ := writeCandidates(name, script, args)
+	return existingWorkspaceFile(location.workspace, candidates)
+}
+
+// writeCandidates are the paths the program's writes may land on, less any aimed at a
+// scratch or temp path. unknown reports a destination spelled from no literal at all.
+func writeCandidates(name, script string, args []string) (candidates []string, unknown bool) {
 	targets, unknown := scriptWriteTargets(name, script, args)
-	var candidates []string
 	for _, literals := range targets {
 		switch {
 		case len(literals) == 0:
@@ -194,7 +200,7 @@ func rewrittenWorkspaceFile(location location, name, script string, args []strin
 	if unknown {
 		candidates = append(candidates, args...)
 	}
-	return existingWorkspaceFile(location.workspace, candidates)
+	return candidates, unknown
 }
 
 // buzzRewrittenFile names the first file already in the workspace that a Buzz program
@@ -360,12 +366,47 @@ func scriptWriteTargets(name, script string, args []string) (targets [][]string,
 // identifier in it read through its assignments, one level deep. A declaring keyword and a
 // type annotation are allowed before the `=`, which is how Buzz (`final p: str = ...`) and
 // JavaScript (`const p = ...`) bind one.
+//
+// A loop variable is bound too, to what its loop iterates, read through that iterable's
+// own assignments: `for p in paths:` over `paths = ['a.go']` writes a.go. A merge resolved
+// file by file is written exactly that way.
 func destinationLiterals(script, expr string) []string {
+	out := assignedLiterals(script, expr)
+	for _, ident := range identRe.FindAllString(expr, -1) {
+		for _, iter := range loopIterables(script, ident) {
+			out = append(out, assignedLiterals(script, iter)...)
+		}
+	}
+	return out
+}
+
+// assignedLiterals are the quoted strings in expr and in the assignments of each identifier
+// it names.
+func assignedLiterals(script, expr string) []string {
 	out := quotedLiterals(expr)
 	for _, ident := range identRe.FindAllString(expr, -1) {
 		assign := regexp.MustCompile(`(?m)^\s*(?:(?:final|var|const|let)\s+)?` + regexp.QuoteMeta(ident) + `(?:\s*:[^=\n]*)?\s*=\s*([^=\n].*)$`)
 		for _, m := range assign.FindAllStringSubmatch(script, -1) {
 			out = append(out, quotedLiterals(m[1])...)
+		}
+	}
+	return out
+}
+
+// loopIterables are the expressions a loop binding ident iterates over: python's
+// `for a, ident in ...`, JavaScript's `for (const ident of ...)` and perl's
+// `for my $ident (...)`.
+func loopIterables(script, ident string) []string {
+	id := regexp.QuoteMeta(ident)
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?m)(?:^|;)\s*(?:async\s+)?for\s+\(?(?:[A-Za-z_]\w*\s*,\s*)*` + id + `(?:\s*,\s*[A-Za-z_]\w*)*\s*\)?\s+in\s+([^\n]+)`),
+		regexp.MustCompile(`for\s*\(\s*(?:const|let|var)\s+(?:\[[^\]\n]*\b` + id + `\b[^\]\n]*\]|` + id + `)\s+of\s+([^\n]+)`),
+		regexp.MustCompile(`for(?:each)?\s+my\s+\$` + id + `\s*\(([^\n]+)`),
+	}
+	var out []string
+	for _, re := range patterns {
+		for _, m := range re.FindAllStringSubmatch(script, -1) {
+			out = append(out, m[1])
 		}
 	}
 	return out
