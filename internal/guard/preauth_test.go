@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -236,15 +236,12 @@ func denyRemedyFixtures() []denyRemedyFixture {
 			return "grep -n 'func HandleRequest' -A20 handler.go", "sed -n 3,4p handler.go"
 		}},
 		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T, _ string) (string, string) {
-			const spellName = "guard-remedy-test"
-			project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-				spellName,
+			spellName := fakespell.Register(t, "guard-remedy-test",
 				spells.WithTargets("check"),
 				spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 					return "remedy-tool", []string{"check"}, target == "check", nil
 				}),
-			))
-			t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+			)
 			return "remedy-tool check", "magus run " + spellName + "::check"
 		}},
 		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ string) (string, string) {

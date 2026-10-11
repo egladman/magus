@@ -10,10 +10,11 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/cli"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -832,9 +833,7 @@ func TestParseGuardCommandsUnparsable(t *testing.T) {
 }
 
 func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
-	const spellName = "guard-catalog-test"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-		spellName,
+	spellName := fakespell.Register(t, "guard-catalog-test",
 		spells.WithTargets("verify"),
 		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			if target != "verify" {
@@ -842,8 +841,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 			}
 			return "catalog-tool", []string{"verify"}, true, nil
 		}),
-	))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	)
 
 	match, ok := rawToolMatch(strict(testDependencies()), hint.Invocation{Name: "catalog-tool", Args: []string{"verify", "./..."}})
 	require.True(t, ok)
@@ -855,9 +853,7 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 // first by name are both the wrong one: the invocation carries every argument of the
 // second and misses the first's `^$`.
 func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
-	const spellName = "guard-shared-subcommand-test"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-		spellName,
+	spellName := fakespell.Register(t, "guard-shared-subcommand-test",
 		spells.WithTargets("alpha-fuzz", "beta-test"),
 		spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 			switch target {
@@ -868,8 +864,7 @@ func TestRawToolGuardPicksTheClosestOpOfASharedSubcommand(t *testing.T) {
 			}
 			return "", nil, false, nil
 		}),
-	))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	)
 
 	match, ok := rawToolMatch(strict(testDependencies()), hint.Invocation{Name: "shared-tool", Args: []string{"test", "./...", "-run", "TestFocused"}})
 	require.True(t, ok)
@@ -2633,7 +2628,7 @@ func TestRefsRenameIsNotAGraphRead(t *testing.T) {
 // A rename's process names no session, so its writes are graded under the lease it claims,
 // and in a checkout where a lease is held, claiming none is refused rather than ungraded.
 func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetLeases()...)
+	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	edit := func(rel string) Verdict {
 		return JudgeEdit(ctx, Dependencies{}, root, rel, []byte("package x\n"), []byte("package y\n"), false)
 	}
@@ -2660,7 +2655,7 @@ func TestRefsRenameEditIsGradedUnderTheClaimedLease(t *testing.T) {
 
 // `refs --rename --dry-run` grades each file as the rename would and leaves no activity line.
 func TestJudgeEditDryRunRecordsNothing(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetLeases()...)
+	ctx, root := fleetFixture(t, fixture.FleetLeases()...)
 	t.Setenv(trail.EnvBaggage, trail.BaggageLease+"=lease-a")
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	edit := func(rel string, dryRun bool) Verdict {

@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -400,7 +401,6 @@ func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 // nothing else to key on, so every such caller in the checkout reads it, and no caller its
 // host names ever does.
 func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	ctx, _ := fleetFixture(t, narrowLease())
 	bindCaller(t, ctx, hookAttribution{Host: "opencode"}, narrowLease().ID)
 
@@ -641,9 +641,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 // reached by any checkout of it, stays refused.
 func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepo(t)
-	scratch := filepath.Join(r.parent, "scratch")
-	require.NoError(t, os.MkdirAll(scratch, 0o755))
-	r.git(scratch, "init", "-q", "-b", "main")
+	scratch := testkit.NewRepo(t, nil).Root()
 
 	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
 	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch))
@@ -704,7 +702,6 @@ func TestUndeclaredLeaseRepairsReadsPastWritingSpellings(t *testing.T) {
 // ended, never as unbound: its work is refused with the reason and the one command that
 // binds it again, and that command still runs and rebinds over the tombstone.
 func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	gone := t.TempDir()
 	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, CheckoutRoot: gone, Registered: 1, ReportedBase: "77aa01c"}
 	next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
@@ -757,7 +754,6 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 // next call releases a row the wait moved to pass or fail. A rejected wait leaves the row
 // exited, which still holds its holder.
 func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	moves := func(state types.JobState) func(*testing.T, *job.Store, string) {
 		return func(t *testing.T, s *job.Store, id string) {
 			_, err := s.Update(t.Context(), id, func(cur *types.Job) { cur.State = state })
@@ -844,7 +840,6 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 // A binding whose row someone else removed is a tombstone, never an unbound caller, and
 // the caller can still read with sed while it is refused work.
 func TestABindingToARemovedRowIsATombstone(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
 	ctx, _ := fleetFixture(t, held)
 	at := hookLocation(ctx, Dependencies{})

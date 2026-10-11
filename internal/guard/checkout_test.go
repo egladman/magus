@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +23,7 @@ func testSiblingCheckoutDeny(command string) string {
 // keeps the test running where git is absent.
 func twoCheckouts(t *testing.T) (main, worktree string) {
 	t.Helper()
-	root := t.TempDir()
-	// EvalSymlinks on both sides of the comparison, so the fixture has to agree:
-	// macOS hands out /var/folders/... temp dirs that resolve to /private/var.
-	if real, err := filepath.EvalSymlinks(root); err == nil {
-		root = real
-	}
+	root := testkit.NewWorkspace(t).Root()
 	main = filepath.Join(root, "repo")
 	worktree = filepath.Join(root, "wt-feature")
 	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git", "worktrees", "wt-feature"), 0o755))

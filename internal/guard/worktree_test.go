@@ -3,7 +3,6 @@ package guard
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -18,36 +17,27 @@ import (
 // ref, with linked worktrees added beside it.
 type worktreeRepo struct {
 	t      *testing.T
+	origin *testkit.Repo
 	main   string
 	parent string
 }
 
 func newWorktreeRepo(t *testing.T) worktreeRepo {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	root := realPath(t.TempDir())
-	origin := filepath.Join(root, "origin")
-	require.NoError(t, os.MkdirAll(origin, 0o755))
-	r := worktreeRepo{t: t, main: filepath.Join(root, "main"), parent: root}
-	r.git(origin, "init", "-q", "-b", "main")
-	require.NoError(t, os.WriteFile(filepath.Join(origin, "a.txt"), []byte("a\n"), 0o644))
-	r.git(origin, "add", "a.txt")
-	r.git(origin, "commit", "-q", "-m", "init")
-	r.git(root, "clone", "-q", origin, r.main)
+	origin := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	parent := testkit.NewWorkspace(t)
+	r := worktreeRepo{t: t, origin: origin, main: parent.Path("main"), parent: parent.Root()}
+	r.git(parent.Root(), "clone", "-q", origin.Root(), r.main)
 	for _, kv := range [][2]string{{"maintenance.auto", "false"}, {"gc.auto", "0"}, {"user.name", "test"}, {"user.email", "test@example.com"}} {
 		r.git(r.main, "config", kv[0], kv[1])
 	}
 	return r
 }
 
+// git runs in dir through the origin's runner, which owns the fixture environment.
 func (r worktreeRepo) git(dir string, args ...string) {
 	r.t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=test", "-c", "user.email=test@example.com"}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_SYSTEM="+os.DevNull)
-	out, err := cmd.CombinedOutput()
-	require.NoError(r.t, err, "git %v: %s", args, out)
+	r.origin.Git(append([]string{"-C", dir}, args...)...)
 }
 
 // add makes a clean linked worktree on a new branch at origin/main.
@@ -128,8 +118,8 @@ func TestWorktreeRemoveDeniesEachUnsafeCondition(t *testing.T) {
 
 	assertRemovalDenied(t, r.judge("git worktree remove "+r.main), "it is the main worktree")
 	assertRemovalDenied(t, r.judgeFrom(filepath.Join(held), "git worktree remove "+held), "this session runs in it")
-	assertRemovalDenied(t, r.judge("git worktree remove "+filepath.Join(r.parent, "origin")), "not a worktree of this repository")
-	assertRemovalDenied(t, r.judge("cd "+r.parent+"/origin && git worktree remove "+held), "another repository")
+	assertRemovalDenied(t, r.judge("git worktree remove "+r.origin.Root()), "not a worktree of this repository")
+	assertRemovalDenied(t, r.judge("cd "+r.origin.Root()+" && git worktree remove "+held), "another repository")
 }
 
 // --force never reaches past a condition, and every failed one is listed together.

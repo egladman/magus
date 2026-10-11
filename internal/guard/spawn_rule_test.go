@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -47,7 +46,7 @@ func (p *spawnRuleProbe) rule() workspace.SpawnRule {
 func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
-	root := t.TempDir()
+	root := testkit.NewWorkspace(t).Root()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), cacheDir
 }
@@ -969,7 +968,6 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 // through a child id it made up; it may hand out only its own lease or a job forked beneath
 // it. An unleased spawner, the orchestrator or a person, may name any live job.
 func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	running := func(id, parent string) types.Job {
 		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	}
@@ -1080,7 +1078,6 @@ func gradedAs(v Verdict) graded { return graded{v.Decision == "deny", v.Lease, v
 // CLI wrote a checkout-wide marker, the orchestrator's session fell back to it, and its
 // next `job fork` and `git merge` were refused as the worker's.
 func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Criteria: "research only", ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
 	ctx, root := fleetFixture(t,
 		types.Job{ID: "harness-audit", Criteria: "the audit", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
@@ -1116,7 +1113,6 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 // Exec binds exactly the identity the host named on the call, through either door, and
 // nobody sharing its session or checkout.
 func TestExecBindsTheCallersIdentity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	running := func(id string) types.Job {
 		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	}
@@ -1156,7 +1152,6 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 // on it, so a caller held to it could be stuck for good. A job a verdict ended has
 // released its caller by the time the exec is graded.
 func TestExecAfterAnEndedJobRebinds(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
 		t.Run(string(state), func(t *testing.T) {
 			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
@@ -1179,7 +1174,6 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 // A job still declared or running holds its caller: taking another is how a worker would
 // be graded against a boundary nobody handed it. Taking its own again passes.
 func TestExecUnderARunningJobIsRefused(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
 		t.Run(string(state), func(t *testing.T) {
 			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
@@ -1202,7 +1196,6 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 // A worker its spawn already attributed is bound; its exec records the base and binds
 // nothing new, here or in the checkout.
 func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	ctx, _ := fleetFixture(t, row)
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
@@ -1247,20 +1240,9 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 // whose working tree then holds worktree in its place.
 func committedSpawnRule(t *testing.T, worktree string) string {
 	t.Helper()
-	root := t.TempDir()
-	runGit := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=test@example.com", "-c", "user.name=test"}, args...)...).CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	runGit("init", "-q")
-	magusfile := filepath.Join(root, "magusfile.buzz")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(magusfile, []byte(denyEverySpawn), 0o644))
-	runGit("add", "-A")
-	runGit("commit", "-q", "-m", "init")
-	require.NoError(t, os.WriteFile(magusfile, []byte(worktree), 0o644))
-	return root
+	r := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEverySpawn})
+	r.Magusfile(worktree)
+	return r.Root()
 }
 
 func inspectMagus(t *testing.T, root string) *magus.Magus {

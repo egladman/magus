@@ -67,7 +67,6 @@ func TestWorkerBackgroundRun(t *testing.T) {
 // TestJudgeRefusesABackgroundedWorkerRun reads the background request both ways a wiring
 // hands it over: as the flag beside a bare command, and inside the whole envelope.
 func TestJudgeRefusesABackgroundedWorkerRun(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	row := figuresLease()
 	ctx, _ := fleetFixture(t, row)
 	const command = "./magus run diagrams_generate docs"
@@ -156,7 +155,6 @@ func TestCheckTimeoutAdvice(t *testing.T) {
 	})
 
 	t.Run("once per target per session through Judge", func(t *testing.T) {
-		t.Setenv("BAGGAGE", "")
 		row := figuresLease()
 		ctx, root := fleetFixture(t, row)
 		recordRun(t, root, "docs", "diagrams-generate", 5*time.Minute)

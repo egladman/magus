@@ -13,8 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -27,12 +29,6 @@ var errMissingMember = errors.New(`magusfile: exec magusfile.buzz: buzz: line 15
 func declareGuardRule(t *testing.T, root string) {
 	t.Helper()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\nmagus\\guard.command(judge);\n"), 0o644))
-}
-
-// installBinary leaves an executable ./magus in root.
-func installBinary(t *testing.T, root string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\n"), 0o755))
 }
 
 // judgeUnloaded judges line in a session of its own, so each deny is a first firing.
@@ -193,7 +189,7 @@ func TestStaleBinaryRepeatNamesTheRule(t *testing.T) {
 // is served the placement of its base's binary, which passes, and neither the worker's
 // deny nor its bootstrap names a build.
 func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
-	ctx, _ := fleetFixture(t, fleetLeases()[0])
+	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
@@ -224,7 +220,7 @@ func TestStaleBinaryRemedyFollowsTheCaller(t *testing.T) {
 // `job exit` and `buzz --record` pass for it, and stay denied for a lease that writes.
 func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
 	scout := types.Job{ID: "scout", ReadOnly: true, State: types.StateRunning, Registered: 1}
-	ctx, _ := fleetFixture(t, fleetLeases()[0], scout)
+	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0], scout)
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))
@@ -250,7 +246,7 @@ func TestStaleBinaryLetsAReadOnlyScoutRecord(t *testing.T) {
 // The raw bootstrap in a binary-less checkout is advised through for the main session and
 // refused for a leased worker, who is handed the command the main session places it with.
 func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetLeases()[0])
+	ctx, root := fleetFixture(t, fixture.FleetLeases()[0])
 	// The bootstrap rule reads the directory the call runs in, which the fleet fixture leaves unset.
 	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
 	ownCheckout(t, ctx, false)
@@ -269,7 +265,7 @@ func TestBootstrapIsTheMainSessionsNotAWorkers(t *testing.T) {
 
 // A worker never gets the stale-binary bootstrap either: the main session places ./magus.
 func TestBootstrapWhileStaleIsTheMainSessionsNotAWorkers(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetLeases()[0])
+	ctx, root := fleetFixture(t, fixture.FleetLeases()[0])
 	ctx = WithLocation(ctx, hookLocation(ctx, Dependencies{}).cacheDir, root, root)
 	ownCheckout(t, ctx, true)
 	loads := 0
@@ -383,8 +379,10 @@ func clearVolatile(e trail.Event) trail.Event {
 }
 
 func TestUnloadCause(t *testing.T) {
-	bare, withBinary := t.TempDir(), t.TempDir()
-	installBinary(t, withBinary)
+	bare := testkit.NewWorkspace(t).Root()
+	binary := testkit.NewWorkspace(t)
+	binary.Executable("magus", "#!/bin/sh\n")
+	withBinary := binary.Root()
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "older")
 	typo := errors.New("magusfile.buzz:3:1: expected expression")
 
@@ -547,7 +545,7 @@ func TestStaleBinaryDeniesStateChangingMCPTools(t *testing.T) {
 
 // A leased worker is told to ask the main session for a binary, never to build one.
 func TestStaleBinaryMCPDenyFollowsTheCaller(t *testing.T) {
-	ctx, _ := fleetFixture(t, fleetLeases()[0])
+	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	root := ownCheckout(t, ctx, true)
 	declareGuardRule(t, root)
 	deps := unloadedDepsFor(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "%s", errMissingMember))

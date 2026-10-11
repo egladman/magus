@@ -231,7 +231,6 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // A command typed at a terminal is the CLI's: it records no session and is not an agent's,
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), types.EntryPointCLI)
 
@@ -430,8 +429,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	}
 
 	t.Run("host-capture/a task capture outside the workspace names its own ref", func(t *testing.T) {
-		ws := t.TempDir()
-		placeBinary(t, ws)
+		wsRoot := testkit.NewWorkspace(t)
+		wsRoot.Executable("magus", "#!/bin/sh\n")
+		ws := wsRoot.Root()
 		hostTemp, err := os.MkdirTemp("/private/tmp", "capture-test-")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(hostTemp) })
@@ -577,12 +577,12 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	}
 	checkout := func(t *testing.T, withBinary bool) string {
 		t.Helper()
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
 		if withBinary {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("binary"), 0o755))
+			w.Executable("magus", "binary")
 		}
-		return dir
+		return w.Root()
 	}
 
 	covered["foreign-binary"] = true
@@ -647,8 +647,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 // not this workspace's to advise on, and the audit caught advisories on exactly those.
 // The same write inside the root still is.
 func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
 	root, elsewhere := t.TempDir(), t.TempDir()
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	write := func(path string) Verdict {
@@ -796,7 +795,6 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, deps, req := tc.setup(t)
-			t.Setenv(trail.EnvBaggage, "")
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
 			checked.DryRun = true
@@ -972,7 +970,6 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 // to, and a reader of it waits forever. Where the wiring can hand the host a rewrite, the
 // guard closes it, says so once per session, and records that it did.
 func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(t.Context(), dir, "/repo", "")
 	judge := func(input string, rewrites bool) Verdict {
@@ -1018,7 +1015,6 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 // off keeps the rewrite and drops the notice, and deny refuses every line that leaves
 // stdin open, without rewriting it.
 func TestJudgeStdinClosedHonorsEveryDecision(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	refused := Verdict{Decision: "deny", Rule: string(advisoryStdinClosed)}
 	for _, tt := range []struct {
 		decision     builtin.Decision
@@ -1067,7 +1063,6 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 		} {
 			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
-				t.Setenv(trail.EnvBaggage, "")
 				deps := withSetting(string(notice.rule), tt.decision)
 				judge := func() Verdict {
 					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})

@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,7 +133,7 @@ func TestLoadFailureDenyNamesTheBootstrapWhereThereIsNoBinary(t *testing.T) {
 
 // A leased worker is never told to build: the main session places one binary per base.
 func TestLoadFailureDenyNamesTheMainSessionForALeasedWorker(t *testing.T) {
-	ctx, _ := fleetFixture(t, fleetLeases()[0])
+	ctx, _ := fleetFixture(t, fixture.FleetLeases()[0])
 	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
 	recordLoadedPolicy(t, cacheDir)
 	ownCheckout(t, ctx, true)
@@ -216,8 +218,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		ownCheckout(t, ctx, true)
-		other := filepath.Join(t.TempDir(), "magus")
-		require.NoError(t, os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755))
+		other := testkit.NewWorkspace(t).Executable("magus", "#!/bin/sh\n")
 		deps := unloadedDepsFor(staleMsg)
 		deps.Binary, deps.BinaryVersion = other, version
 

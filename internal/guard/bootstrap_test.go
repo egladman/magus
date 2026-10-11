@@ -3,7 +3,6 @@ package guard
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -17,12 +16,12 @@ import (
 // checkoutFixture writes a go.mod declaring module, and a magus binary when withBinary.
 func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+module+"\n\ngo 1.26\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
 	if withBinary {
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("binary"), 0o755))
+		w.Executable("magus", "binary")
 	}
-	return root
+	return w.Root()
 }
 
 func judgeOwnBuild(cwd, command string) ShellVerdict {

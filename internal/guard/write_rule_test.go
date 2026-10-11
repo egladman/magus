@@ -3,7 +3,6 @@ package guard
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,8 +36,9 @@ func (p *writeRuleProbe) rule() workspace.WriteRule {
 func writeFixture(t *testing.T) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
-	root = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "{}\n")
+	root = w.Root()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), root, cacheDir
 }
