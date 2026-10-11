@@ -186,27 +186,47 @@ func checkGrader(root string) job.CheckGrader {
 	return func(ctx context.Context, row types.Job) job.CheckVerdict {
 		once.Do(func() { deps = guardDependencies(ctx, root) })
 		return gradeCheck(ctx, deps, row, func(msg string) {
-			slog.WarnContext(ctx, msg, attr.Notice(""), attr.Component("magus job fork"))
+			slog.WarnContext(ctx, msg, attr.Notice(""), attr.Component("magus job"))
 		})
 	}
 }
 
+// compilingCheck is the check gradeCheck judges to tell a deny of the declared check from a
+// deny of every command the worker runs. It is the target a refusal recommends.
+var compilingCheck = types.LeaseCheck{Target: "go::go-vet", Project: "."}
+
 // gradeCheck judges row's check as the guard would judge its holder typing it, with the row
-// standing in for a lease the store does not carry yet. A workspace whose rules did not load
-// is not graded, and say reports it: a refusal has to come from a verdict.
+// standing in for a lease the store does not carry yet.
+//
+// Only a deny of the check itself refuses. A deny that holds just as well for the
+// compilingCheck describes the binary or the workspace (a stale hook binary, rules that
+// would not load) and not the command, so it is not graded and say reports it: a refusal
+// has to come from a verdict on the check.
 func gradeCheck(ctx context.Context, deps guard.Dependencies, row types.Job, say func(string)) job.CheckVerdict {
-	if deps.LoadFailure != nil {
-		say("job " + row.ID + "'s check was not graded against the guard: the workspace's rules did not load: " + deps.LoadFailure.Error())
+	notGraded := func(why string) job.CheckVerdict {
+		say("job " + row.ID + "'s check was not graded against the guard: " + why)
 		return job.CheckVerdict{}
 	}
-	verdict := guard.Judge(ctx, deps, guard.Request{
-		Input:     "./" + row.Check.String(),
-		DryRun:    true,
-		Lease:     row.ID,
-		Candidate: &row,
-	})
+	if deps.LoadFailure != nil {
+		return notGraded("the workspace's rules did not load: " + deps.LoadFailure.Error())
+	}
+	judge := func(row types.Job) guard.Verdict {
+		return guard.Judge(ctx, deps, guard.Request{
+			Input:     "./" + row.Check.String(),
+			DryRun:    true,
+			Lease:     row.ID,
+			Candidate: &row,
+		})
+	}
+	verdict := judge(row)
 	if verdict.Decision != "deny" {
 		return job.CheckVerdict{}
+	}
+	baseline := row
+	baseline.Check = &compilingCheck
+	if again := judge(baseline); again.Decision == "deny" {
+		first, _, _ := strings.Cut(strings.TrimSpace(again.Reason), "\n")
+		return notGraded("the guard denies this worker `" + baseline.Check.String() + "` as well, so the deny describes the binary or the workspace and not the check: " + first)
 	}
 	return job.CheckVerdict{Denied: true, Rule: verdict.Rule, Reason: verdict.Reason}
 }

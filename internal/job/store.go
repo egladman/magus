@@ -144,6 +144,11 @@ type Location struct {
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
 	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader}
+	if s.grader == nil {
+		if forRoot := defaultGrader.Load(); forRoot != nil {
+			s.grader = (*forRoot)(loc.Root)
+		}
+	}
 	s.path, s.err = jobsPath(loc)
 	return s
 }

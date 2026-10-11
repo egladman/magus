@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
 
@@ -36,6 +37,20 @@ type CheckVerdict struct {
 // CheckGrader judges row's check the way the guard will judge row's holder running it.
 // The guard lives above this package, so the CLI supplies the implementation.
 type CheckGrader func(ctx context.Context, row types.Job) CheckVerdict
+
+var defaultGrader atomic.Pointer[func(root string) CheckGrader]
+
+// UseGrader sets the grader a Store gets when its Location names none, built for the
+// Store's workspace root. The composition root calls it once at startup: the doors that
+// open their own Store (magus\job.put in std) cannot import the guard, and would otherwise
+// fork unchecked. Nil removes it.
+func UseGrader(forRoot func(root string) CheckGrader) {
+	if forRoot == nil {
+		defaultGrader.Store(nil)
+		return
+	}
+	defaultGrader.Store(&forRoot)
+}
 
 // RefuseDeniedCheck refuses a job whose declared check the guard would deny its holder. The
 // holder runs the check under the lease, so a denied one leaves the job unable to verify

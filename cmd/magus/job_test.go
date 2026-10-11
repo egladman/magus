@@ -1025,3 +1025,49 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 	assert.Contains(t, said[0], "job w's check was not graded against the guard")
 	assert.Contains(t, said[0], "magusfile.buzz:3: expected ';'")
 }
+
+// denyEveryWorkerRule is a magusfile whose command rule denies a worker every command, the
+// way the stale-binary rule does: it describes the binary, not the check.
+const denyEveryWorkerRule = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    if (req.role == "worker") {
+        return magus\guard.deny("the hook binary is older than the tree\nrebuild it");
+    }
+    return magus\guard.allow();
+});
+`
+
+// A deny that holds for the compiling check too is about the binary or the workspace, so
+// the fork is not refused over it and says the check was not graded.
+func TestJobForkSkipsADenyThatDoesNotJudgeTheCheck(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := initGitRepo(t)
+	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-q", "-m", "init")
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+
+	var said []string
+	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), row, func(msg string) { said = append(said, msg) })
+
+	assert.False(t, verdict.Denied)
+	require.Len(t, said, 1)
+	assert.Contains(t, said[0], "job w's check was not graded against the guard")
+	assert.Contains(t, said[0], "denies this worker `magus run go::go-vet .` as well")
+	assert.Contains(t, said[0], "the hook binary is older than the tree", "the first line of the verdict is quoted")
+	assert.NotContains(t, said[0], "rebuild it")
+
+	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the fork went through")
+}

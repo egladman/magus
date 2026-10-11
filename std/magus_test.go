@@ -890,3 +890,45 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 		assert.True(t, describe[method], "magus.cmd(\"describe\", [%q]) points at magus\\describe.%s, which does not exist", noun, method)
 	}
 }
+
+// magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
+// held to the guard's verdict on the check the way `magus job fork` is: the grader the
+// composition root installed refuses a denied check, with nothing written.
+func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
+	testkit.Isolate(t)
+	var roots []string
+	job.UseGrader(func(root string) job.CheckGrader {
+		roots = append(roots, root)
+		return func(_ context.Context, row types.Job) job.CheckVerdict {
+			if row.Check.Target != "go-build" {
+				return job.CheckVerdict{}
+			}
+			return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
+		}
+	})
+	t.Cleanup(func() { job.UseGrader(nil) })
+
+	root := t.TempDir()
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	put := func(check string) error {
+		_, err := MagusPutJob(ctx, "w", map[string]any{"write_paths": []any{"run.go"}, "check": check})
+		return err
+	}
+
+	err := put("go-build .")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "would be denied to its worker by the guard (worker-builds-magus)")
+	assert.Contains(t, err.Error(), "`go::go-vet .`")
+	assert.Equal(t, []string{root}, roots, "the grader is built for the workspace the put runs in")
+
+	stored, err := jobStoreFromContext(ctx, "job.list")
+	require.NoError(t, err)
+	rows, err := stored.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a refused put writes nothing")
+
+	require.NoError(t, put("go::go-vet ."))
+	rows, err = stored.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+}
