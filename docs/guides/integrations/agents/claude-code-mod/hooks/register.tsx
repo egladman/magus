@@ -1,6 +1,6 @@
-import type { EngineInterface, ProcessRunResult, Register, TurnUsage } from 'claude-code'
+import type { AgentSpawnInput, EngineInterface, ProcessRunResult, Register, TurnUsage } from 'claude-code'
 
-import type { AgentRow, CacheState, Filter, Report, Tab, Ttl } from '../types'
+import type { AgentRow, CacheState, Filter, Report, Spend, Tab, Ttl } from '../types'
 import {
   candidateJobs,
   connectError,
@@ -13,14 +13,24 @@ import {
   socketFromStatus,
 } from './api'
 import {
+  budgetNotice,
   cacheNotice,
   cacheStatus,
   formatTokens,
   formatUsd,
+  frontmatterModel,
   inferTtl,
+  overSpawnCap,
   parseRates,
+  priceStepNotice,
+  pricedModel,
   rateAgeDays,
   requestUsd,
+  sessionUsd,
+  spawnRefusal,
+  spawnWarning,
+  spendBreakdown,
+  spendStatus,
   totalTokens,
 } from './cost'
 import type { RateTable, Usage } from './cost'
@@ -28,7 +38,7 @@ import { assess, signature, statusText } from './health'
 import type { BinaryInfo, Probe, ServerInfo } from './health'
 import { DEFAULT_RATES } from './rates'
 import { readSettings } from './settings'
-import type { Settings } from './settings'
+import type { Gate, Settings } from './settings'
 import { age, COLOR, GLYPH, leaf, treeLines } from './tree'
 
 const PANE = 'magus'
@@ -54,6 +64,7 @@ const WATCH_LINES = { plugin: 'magus', key: 'watchLines' } as const
 const AGENTS = { plugin: 'magus', key: 'agents' } as const
 const CACHE = { plugin: 'magus', key: 'cache' } as const
 const HELD_FOR = { plugin: 'magus', key: 'heldFor' } as const
+const SPEND = { plugin: 'magus', key: 'spend' } as const
 const RATES_ERROR = { plugin: 'magus', key: 'ratesError' } as const
 const TICK = { plugin: 'magus', key: 'tick' } as const
 
@@ -66,6 +77,8 @@ let healthInFlight: Promise<void> | null = null
 let healthAt = 0
 // The server's socket, found once and found again after a call through it fails.
 let socket: string | null = null
+
+const NO_SPEND: Spend = { mainUsd: 0, agentUsd: 0, isPartial: false }
 
 const usageOf = (u: TurnUsage): Usage => ({
   input: u.input_tokens,
@@ -172,11 +185,16 @@ async function checkHealthOnce($: EngineInterface): Promise<void> {
 // ---------- status line ----------
 
 // One entry for the whole mod, which the engine labels with the mod's name: the health
-// issues and the cache countdown, or nothing when there is neither.
+// issues, the cache countdown and the session's spend, or nothing when there is none.
 async function refreshStatus($: EngineInterface): Promise<void> {
   const { value: report = null } = await $.state.get(REPORT)
   const { value: cache = null } = await $.state.get(CACHE)
-  const parts = [report ? statusText(report.issues) : undefined, cacheStatus(cache, await $.clock.now())]
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  const parts = [
+    report ? statusText(report.issues) : undefined,
+    cacheStatus(cache, await $.clock.now()),
+    spendStatus(spend, settings.sessionBudgetUsd),
+  ]
   const text = parts.filter(Boolean).join(' · ')
   $.ui.status(text || undefined)
 }
@@ -222,16 +240,27 @@ async function recordMainResponse($: EngineInterface, usage: TurnUsage | undefin
     ...resolveTtl(observed, prev),
   }
   await $.state.set(CACHE, next)
+  if (usage && u) await addSpend($, 'mainUsd', requestUsd(rates, usage.model, u, next.ttl))
   await refreshStatus($)
+}
+
+// Adds one response's cost to the session's total; a null cost is a model the rates do not
+// price, which marks the total as a floor.
+async function addSpend($: EngineInterface, who: 'mainUsd' | 'agentUsd', usd: number | null): Promise<void> {
+  const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+  await $.state.set(SPEND, usd === null ? { ...spend, isPartial: true } : { ...spend, [who]: spend[who] + usd })
 }
 
 async function recordAgentUsage($: EngineInterface, agentId: string, usage: TurnUsage): Promise<void> {
   const { value: rows = [] } = await $.state.get(AGENTS)
-  const row = rows.find(r => r.agentId === agentId)
-  if (!row) return
   const { value: cache = null } = await $.state.get(CACHE)
   const u = usageOf(usage)
   const usd = requestUsd(rates, usage.model, u, cache?.ttl ?? '5m')
+  // Counted before the row lookup: the list keeps 50 agents, the session's spend keeps all.
+  await addSpend($, 'agentUsd', usd)
+  await refreshStatus($)
+  const row = rows.find(r => r.agentId === agentId)
+  if (!row) return
   const tokens = row.tokens + totalTokens(u)
   const budget = settings.subagentTokenBudget
   if (budget > 0 && row.tokens <= budget && tokens > budget) {
@@ -241,6 +270,39 @@ async function recordAgentUsage($: EngineInterface, agentId: string, usage: Turn
     AGENTS,
     rows.map(r => (r.agentId === agentId ? { ...r, tokens, usd: usd === null || r.usd === null ? null : r.usd + usd } : r)),
   )
+}
+
+// The model a spawn will run on, as the table prices it, read before the engine resolves
+// one. The engine's order is the Agent call's model, the agent definition's, then
+// CLAUDE_CODE_SUBAGENT_MODEL, then the parent's. null when it cannot be known here: the
+// definition is a built-in or a plugin's, which no API exposes.
+async function spawnModel($: EngineInterface, e: AgentSpawnInput): Promise<string | null> {
+  if (e.fork) return pricedModel(rates, e.parentModel, e.parentModel)
+  let model = e.model
+  if (!model) {
+    const def = await definitionModel($, e.subagentType)
+    if (def === null) return null
+    model = def || (await $.env.get('CLAUDE_CODE_SUBAGENT_MODEL')) || e.parentModel
+  }
+  return pricedModel(rates, model, e.parentModel)
+}
+
+// The model line of the agent's markdown definition: '' when it sets none, null when no
+// file by that name exists. `general-purpose` has no file and sets none. The file name
+// stands for the agent's name, which is how agent files are written.
+async function definitionModel($: EngineInterface, type: string): Promise<string | null> {
+  if (type === 'general-purpose') return ''
+  if (!/^[\w.-]+$/.test(type)) return null
+  const home = await $.env.get('HOME')
+  for (const dir of [`${await $.session.root()}/.claude/agents`, home ? `${home}/.claude/agents` : '']) {
+    if (dir === '') continue
+    try {
+      return frontmatterModel(await $.fs.read(`${dir}/${type}.md`)) ?? ''
+    } catch {
+      // No definition by that name here; the next directory may have it.
+    }
+  }
+  return null
 }
 
 // ---------- jobs pane ----------
@@ -427,24 +489,53 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (settings.cacheGate === 'off' || (e.origin && e.origin.kind !== 'composer')) return next(e)
+    if (e.origin && e.origin.kind !== 'composer') return next(e)
     const { value: cache = null } = await $.state.get(CACHE)
-    const notice = cacheNotice(cache, await $.clock.now(), 0, settings.gateMinTokens, rates)
-    if (cache === null || notice === null || !notice.isExpired) return next(e)
-    if (settings.cacheGate === 'warn') {
-      $.ui.toast(notice.text)
-      return next(e)
+    if (cache === null) return next(e)
+    const { value: spend = NO_SPEND } = await $.state.get(SPEND)
+
+    const found: { mode: Gate; text: string }[] = []
+    if (settings.cacheGate !== 'off') {
+      const n = cacheNotice(cache, await $.clock.now(), 0, settings.gateMinTokens, rates)
+      if (n?.isExpired) found.push({ mode: settings.cacheGate, text: n.text })
     }
+    if (settings.priceStepGate !== 'off') {
+      const n = priceStepNotice(rates, cache.model, cache.contextTokens, settings.priceStepMarginTokens)
+      if (n) found.push({ mode: settings.priceStepGate, text: n.text })
+    }
+    if (settings.budgetGate !== 'off') {
+      const text = budgetNotice(spend, settings.sessionBudgetUsd)
+      if (text) found.push({ mode: settings.budgetGate, text })
+    }
+    for (const g of found) if (g.mode === 'warn') $.ui.toast(g.text)
+
+    const holds = found.filter(g => g.mode === 'confirm')
+    if (holds.length === 0) return next(e)
+    // One hold per response covers every gate: each reads what that response left.
     const { value: heldFor = 0 } = await $.state.get(HELD_FOR)
     if (heldFor === cache.lastResponseAt) return next(e)
     await $.state.set(HELD_FOR, cache.lastResponseAt)
     const text = e.text
     $.clock.after(0, () => void $.prompt.fill({ text }))
-    return { drop: `Held: ${notice.text} Submit again to send it.` }
+    return { drop: `Held: ${holds.map(g => g.text).join(' ')} Submit again to send it.` }
   })
 
   on('agent.spawn', async ($, e, next) => {
+    const cap = settings.spawnMaxInputUsdPerMTok
+    const isGated = settings.spawnGate !== 'off'
+    // A failed read must not stop the spawn from being recorded below.
+    const model = isGated ? await spawnModel($, e).catch(() => null) : null
+    const over = model === null ? null : overSpawnCap(rates, model, cap)
+    if (over && settings.spawnGate === 'deny') return { deny: spawnRefusal(over, cap, e.fork) }
+    if (over) $.ui.toast(spawnWarning(over, cap))
+
     const r = await next(e)
+    // An unreadable definition leaves the model unknown until the engine resolves it. The
+    // spawn has started by then, so even deny mode can only say so.
+    if (isGated && model === null && !r.deny) {
+      const late = overSpawnCap(rates, pricedModel(rates, r.model, e.parentModel) ?? '', cap)
+      if (late) $.ui.toast(spawnWarning(late, cap))
+    }
     if (!r.deny && r.agentId) {
       await recordSpawn($, {
         agentId: r.agentId,
@@ -538,11 +629,19 @@ export const register: Register = (on, options) => {
         onPress={() => $.clock.after(0, () => void showTab($, t))}
       />
     )
+    const { value: spend = NO_SPEND } = await $.state.get(SPEND)
     const header = (
-      <Box gap={1}>
-        {tabButton('jobs', 'Jobs', '1')}
-        {tabButton('runs', 'Runs', '2')}
-        {tabButton('agents', 'Agents', '3')}
+      <Box flexDirection="column">
+        <Box gap={1}>
+          {tabButton('jobs', 'Jobs', '1')}
+          {tabButton('runs', 'Runs', '2')}
+          {tabButton('agents', 'Agents', '3')}
+        </Box>
+        {sessionUsd(spend) > 0 || spend.isPartial ? (
+          <Text key="spend" dimColor wrap="truncate-end">
+            Session spend {spendStatus(spend, settings.sessionBudgetUsd)} ({spendBreakdown(spend)})
+          </Text>
+        ) : null}
       </Box>
     )
     const errorLine = error !== null ? <Text color="red" wrap="wrap">{error}</Text> : null

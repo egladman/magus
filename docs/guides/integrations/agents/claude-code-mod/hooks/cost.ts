@@ -1,6 +1,6 @@
-import type { CacheState, Ttl } from '../types'
+import type { CacheState, Spend, Ttl } from '../types'
 
-export type { CacheState, Ttl }
+export type { CacheState, Spend, Ttl }
 
 // USD per million tokens. cacheRead absent means the table's default multiplier of input.
 export type Tier = { abovePromptTokens: number; input: number; output: number; cacheRead?: number }
@@ -43,14 +43,16 @@ export function parseRates(text: string): RateTable {
   return { ...(t as RateTable), checked: String(t.checked ?? ''), source: String(t.source ?? '') }
 }
 
-// The rates for model at a prompt of promptTokens, or null when the table has no entry.
-// The longest matching prefix wins, so `claude-opus-5-5` beats `claude-opus`, and a
-// bracketed variant suffix (`[1m]`) is ignored.
-export function ratesFor(table: RateTable, model: string, promptTokens: number): Rates | null {
+// The table entry for model: the longest matching prefix wins, so `claude-opus-5-5` beats
+// `claude-opus`, and a bracketed variant suffix (`[1m]`) is ignored.
+function entryFor(table: RateTable, model: string): ModelRates | undefined {
   const id = model.replace(/\[.*\]$/, '')
-  const entry = table.models
-    .filter(m => id.startsWith(m.match))
-    .sort((a, b) => b.match.length - a.match.length)[0]
+  return table.models.filter(m => id.startsWith(m.match)).sort((a, b) => b.match.length - a.match.length)[0]
+}
+
+// The rates for model at a prompt of promptTokens, or null when the table has no entry.
+export function ratesFor(table: RateTable, model: string, promptTokens: number): Rates | null {
+  const entry = entryFor(table, model)
   if (!entry) return null
   const tier = (entry.tiers ?? [])
     .filter(t => promptTokens > t.abovePromptTokens)
@@ -128,6 +130,85 @@ export function cacheStatus(cache: CacheState | null, now: number): string | und
   const left = cacheRemainingMs(cache, now)
   if (left === null) return undefined
   return left > 0 ? `cache ${formatDuration(left)}` : 'cache expired'
+}
+
+export type StepNotice = { isPast: boolean; text: string }
+
+// The price step the next request meets, or null while the context is more than marginTokens
+// under every step of model's tiers, or the model has none. A request re-sends the whole
+// context, so past a step every request pays the higher rate until the context shrinks.
+export function priceStepNotice(table: RateTable, model: string, contextTokens: number, marginTokens: number): StepNotice | null {
+  const tier = (entryFor(table, model)?.tiers ?? [])
+    .filter(t => contextTokens > t.abovePromptTokens - marginTokens)
+    .sort((a, b) => b.abovePromptTokens - a.abovePromptTokens)[0]
+  if (!tier) return null
+  const low = ratesFor(table, model, tier.abovePromptTokens)
+  const high = ratesFor(table, model, tier.abovePromptTokens + 1)
+  if (!low || !high) return null
+  const step = formatTokens(tier.abovePromptTokens)
+  const tokens = formatTokens(contextTokens)
+  const isPast = contextTokens > tier.abovePromptTokens
+  const text = isPast
+    ? `Context is ${tokens} tokens, past the ${step} step: every request on ${model} now pays ${formatUsd(high.input)} per MTok input and ${formatUsd(high.output)} output, up from ${formatUsd(low.input)} and ${formatUsd(low.output)}. Consider /compact.`
+    : `Context is ${tokens} tokens, ${formatTokens(tier.abovePromptTokens - contextTokens)} under the ${step} step where ${model} rises from ${formatUsd(low.input)} to ${formatUsd(high.input)} per MTok input and ${formatUsd(low.output)} to ${formatUsd(high.output)} output. Consider /compact before it crosses.`
+  return { isPast, text }
+}
+
+// The table id a subagent's model setting prices as. `inherit` is the parent's model; an
+// alias (`haiku`) is the table's first entry of that family, since the table is the only
+// source of prices. null when the table prices nothing under it.
+export function pricedModel(table: RateTable, model: string, parentModel: string): string | null {
+  const m = model.replace(/\[.*\]$/, '').trim().toLowerCase()
+  const id = m === '' || m === 'inherit' ? parentModel : m
+  if (entryFor(table, id)) return id
+  return table.models.find(e => e.match.split('-')[1] === id)?.match ?? null
+}
+
+// The `model:` value of a markdown agent definition's frontmatter, if it sets one.
+export function frontmatterModel(text: string): string | undefined {
+  const head = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1]
+  const value = head && /^model:\s*(.+?)\s*$/m.exec(head)?.[1]
+  return value ? value.replace(/^["']|["']$/g, '') : undefined
+}
+
+export type SpawnCost = { model: string; input: number }
+
+// The spawn's model and its input rate when that rate is over capUsd per MTok. null when
+// the cap is off, the model is unpriced, or the rate is within the cap.
+export function overSpawnCap(table: RateTable, model: string, capUsd: number): SpawnCost | null {
+  const r = capUsd > 0 ? ratesFor(table, model, 0) : null
+  return r && r.input > capUsd ? { model, input: r.input } : null
+}
+
+export function spawnWarning(c: SpawnCost, capUsd: number): string {
+  return `Subagent will run on ${c.model} at ${formatUsd(c.input)} per MTok input, over your ${formatUsd(capUsd)} cap.`
+}
+
+export function spawnRefusal(c: SpawnCost, capUsd: number, isFork: boolean): string {
+  const route = isFork
+    ? 'A fork always inherits the session model: use the read-only magus-scout agent for a lookup or proof, or a non-fork agent with model: haiku.'
+    : 'Use the read-only magus-scout agent for a lookup or proof, or pass model: haiku.'
+  return `${spawnWarning(c, capUsd)} ${route}`
+}
+
+export const sessionUsd = (s: Spend): number => s.mainUsd + s.agentUsd
+
+// The status line's part: the total, against the budget when there is one. undefined
+// before anything is spent.
+export function spendStatus(s: Spend, budgetUsd: number): string | undefined {
+  if (sessionUsd(s) === 0 && !s.isPartial) return undefined
+  const total = `${formatUsd(sessionUsd(s))}${s.isPartial ? '+' : ''}`
+  return budgetUsd > 0 ? `${total}/${formatUsd(budgetUsd)}` : total
+}
+
+export function spendBreakdown(s: Spend): string {
+  return `main ${formatUsd(s.mainUsd)}, subagents ${formatUsd(s.agentUsd)}`
+}
+
+// The budget gate's warning; null while the budget is off or not yet passed.
+export function budgetNotice(s: Spend, budgetUsd: number): string | null {
+  if (budgetUsd <= 0 || sessionUsd(s) <= budgetUsd) return null
+  return `Session spend ${formatUsd(sessionUsd(s))} has passed your ${formatUsd(budgetUsd)} budget (${spendBreakdown(s)}).`
 }
 
 export function totalTokens(u: Usage): number {

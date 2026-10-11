@@ -97,6 +97,10 @@ export type CacheState = {
   model: string
 }
 
+// What the session has spent, in USD, priced from the rates table. isPartial: a response
+// ran on a model the table does not price, so the totals are a floor.
+export type Spend = { mainUsd: number; agentUsd: number; isPartial: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
     magus: {
@@ -114,6 +118,7 @@ declare module 'claude-code' {
       cache: CacheState | null
       // The lastResponseAt a held prompt was held for; the next submit for it goes through.
       heldFor: number
+      spend: Spend
       ratesError: string | null
       // Bumped on a timer so the countdown in the band and status line redraws.
       tick: number
