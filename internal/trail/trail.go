@@ -422,6 +422,8 @@ type AgentSpawn struct {
 	Child         string
 	Context       string
 	DeclaredModel string
+	// VerdictRef is the grd blob a deny or advisory cites; see Event.VerdictRef.
+	VerdictRef string
 	// PolicyDigest and DecidedBy link the spawn's verdict to the rules that reached it;
 	// see Event.
 	PolicyDigest string
@@ -538,6 +540,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
+		VerdictRef:    spawn.VerdictRef,
 		PolicyDigest:  spawn.PolicyDigest,
 		DecidedBy:     spawn.DecidedBy,
 		Binary:        spawn.Binary,

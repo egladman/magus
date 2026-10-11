@@ -1951,6 +1951,8 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 
 // spawnVerdictRecord is what the trail keeps about how a spawn or continuation was judged.
 type spawnVerdictRecord struct {
+	// verdictRef is the grd blob the spawn's deny or advisory cites, empty when none was stored.
+	verdictRef   string
 	policyDigest string
 	decidedBy    string
 	// target is the agent a continuation addresses, resolved to its id when magus knows it.
@@ -1972,6 +1974,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
+		VerdictRef:    rec.verdictRef,
 		PolicyDigest:  rec.policyDigest,
 		DecidedBy:     rec.decidedBy,
 		Continue:      req.IsContinue,
