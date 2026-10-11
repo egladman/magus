@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
@@ -663,6 +664,143 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 	require.NoError(t, m.Run(context.Background(), targets), "first run")
 	require.NoError(t, m.Run(context.Background(), targets), "second run")
 	assert.Equal(t, int32(1), composer.Load(), "the first run was stored, so the second replays")
+}
+
+// TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn reproduces harness gap 8.
+// proto's lint inherits the project's gen/**, which generate declares. lint ran beside a
+// drift-failing generate and recorded the stale tree; after `generate:rw` and a commit,
+// each `affected ci` replayed lint first, which wrote the stale tree back, and generate's
+// drift check failed again on the same key until a run happened to miss lint.
+func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
+	const spellName = "zzz-foreign-output-spell"
+	var lint atomic.Int32
+	spell := spells.NewSpell(spellName,
+		spells.WithTargets("lint", "generate"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "lint" {
+				lint.Add(1)
+			}
+			return nil, nil
+		}),
+	)
+	project.DefaultSpellRegistry().RegisterSpell(spell)
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	generated := filepath.Join(root, "gen", "api.pb.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(generated), 0o755))
+	require.NoError(t, os.WriteFile(generated, []byte("stale\n"), 0o644))
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	p.Outputs = []types.Glob{{Pattern: "gen/**"}}
+	p.TargetOutputs = map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}
+
+	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs)
+	assert.Empty(t, m.buildStep(p, "generate").ForeignOutputs, "a target never treats its own declaration as foreign")
+
+	targets := []types.Target{{Path: ".", Name: "lint"}}
+	require.NoError(t, m.Run(context.Background(), targets), "first lint")
+	require.NoError(t, os.WriteFile(generated, []byte("regenerated\n"), 0o644))
+	require.NoError(t, m.Run(context.Background(), targets), "second lint")
+
+	assert.Equal(t, int32(1), lint.Load(), "the second lint replays")
+	got, err := os.ReadFile(generated)
+	require.NoError(t, err)
+	assert.Equal(t, "regenerated\n", string(got), "lint's hit wrote its stale copy of generate's output")
+}
+
+// TestComposerKeepsTheOutputsOfWhatItComposes: a composer inherits the baseline the same
+// way, but the targets it runs with ctx.needs write inside its window, so their outputs
+// stay its own to record and restore.
+func TestComposerKeepsTheOutputsOfWhatItComposes(t *testing.T) {
+	root := t.TempDir()
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	p.Outputs = []types.Glob{{Pattern: "gen/**"}, {Pattern: "dist/**"}}
+
+	assert.Empty(t, m.buildStep(p, "build").ForeignOutputs)
+	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs,
+		"only the overlapping declaration is foreign; dist/** stays lint's")
+}
+
+// TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt pins harness gap 8b: docs content-generate
+// renders the rules pages from magus\describe.rule(), the running binary's catalog, so a
+// binary rebuilt with new rules left the entry keyed on unchanged sources replaying the
+// old pages. A target reaching magus\describe or a nested magus, directly, through a
+// helper, or through an imported module's function, keys on the build; nothing else does.
+func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
+	root := t.TempDir()
+	const mf = `import "magus";
+import "./lib/index" as index;
+import "fs";
+export fun rules_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("rules.md");
+    final rules = magus\describe.rule();
+    fs\writeFile("rules.md", "{rules.len()}");
+}
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
+    index\render(".");
+}
+export fun nested(ctx: magus\Context, args: [str]) > void {
+    helper();
+}
+fun helper() > void {
+    magus\run(["build"]);
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    index\plain();
+    fs\writeFile("out.txt", "built");
+}
+`
+	const lib = `namespace index;
+import "magus";
+import "fs";
+export fun render(project: str) > void {
+    fs\writeFile("MAGUS.md", magus\describe.graphMarkdown([project]));
+}
+export fun plain() > void {}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "lib"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "lib", "index.buzz"), []byte(lib), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	stamp := proc.BuildStamp()
+	require.NotEmpty(t, stamp)
+	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
+		assert.Equal(t, stamp, m.buildStep(p, target).MagusBuild, target)
+		_, lines, err := m.ComputeTargetKey(context.Background(), ".", target, nil)
+		require.NoError(t, err, target)
+		assert.Contains(t, lines, "magus:"+stamp, "describe target --cache must mint the key a run does: %s", target)
+	}
+	assert.Empty(t, m.buildStep(p, "build").MagusBuild, "a target that never asks the binary keeps its key across rebuilds")
+	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "build", nil)
+	require.NoError(t, err)
+	assert.NotContains(t, lines, "magus:"+stamp)
 }
 
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a

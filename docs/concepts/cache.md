@@ -233,8 +233,18 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - `dep:` lines: the resolved cache keys of upstream dependencies, sorted. This
   is how a change ripples: a dependency's new key becomes an input line here, so a
   dependent misses transitively.
-- `spellDefVersion`: a binary fingerprint of the spell definition, so a magus
+- `spellDefVersion`: a fingerprint of the built-in spell definitions, so a magus
   upgrade that changes a spell forces a miss.
+- `magus`: the build of the running magus binary, a digest of its Go build ID, written
+  only for a target whose body asks that binary for its answer: a `magus\describe`
+  call, or a member that forks a nested magus (`magus\run`, `magus\cmd`,
+  `magus\doctor`, and the rest). A rules page rendered from `magus\describe.rule()` or
+  a `MAGUS.md` rendered by a nested `magus describe` changes when the binary is rebuilt
+  from changed code, and no file in the tree says so. magus finds these targets
+  statically, following the body into its own helpers and into functions of a Buzz
+  module it imports; a call it cannot follow does not count. Two builds of the same
+  source share the line, so a rebuild alone costs nothing, and every other target
+  writes no line, so its key survives every rebuild.
 - `tool:` lines: `spell:version` strings, sorted, so a toolchain upgrade
   (a new `go` or `prettier`) invalidates the key even when no source changed.
 
@@ -251,9 +261,9 @@ this list, it cannot move the key:
 <figure class="table-scroll">
 <table class="fold-table">
 <tr><td><code>keyVersion</code>: the schema of this very list</td>
-    <td rowspan="12">serialize<br>one line each,<br>stable order</td>
-    <td rowspan="12">SHA-256<br>= the key</td>
-    <td rowspan="12">look up<br>manifest stored: <strong>hit</strong>, replay outputs<br>none: <strong>miss</strong>, run and store</td></tr>
+    <td rowspan="13">serialize<br>one line each,<br>stable order</td>
+    <td rowspan="13">SHA-256<br>= the key</td>
+    <td rowspan="13">look up<br>manifest stored: <strong>hit</strong>, replay outputs<br>none: <strong>miss</strong>, run and store</td></tr>
 <tr><td><code>os</code>, <code>arch</code>: opt-in, for caches shared across platforms</td></tr>
 <tr><td><code>projectPath</code>, <code>target</code></td></tr>
 <tr><td><code>spell</code>: op-direct (<code>spell::op</code>) runs only</td></tr>
@@ -264,7 +274,8 @@ this list, it cannot move the key:
 <tr><td><code>obs:</code>: facts outside the tree, stated and probed, sorted</td></tr>
 <tr><td><code>exec:</code>: <code>ctx.withEnv</code>/<code>ctx.withCwd</code> overrides, sorted</td></tr>
 <tr><td><code>dep:</code>: each upstream target's resolved key, this same fold applied one level up</td></tr>
-<tr><td><code>spellDefVersion</code>, <code>tool:</code>: the spell definition and toolchain versions</td></tr>
+<tr><td><code>spellDefVersion</code>: the built-in spell definitions</td></tr>
+<tr><td><code>magus</code>, <code>tool:</code>: the magus build, for a target that asks it; toolchain versions</td></tr>
 </table>
 </figure>
 
@@ -280,6 +291,7 @@ hashed line above yields a new key, and thus a new (empty) slot:
   (a scanner database refreshing);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
+- a rebuilt magus binary, for a target that asks it for its answer (`magus`);
 - applying or dropping a charm;
 - renaming the project or target.
 
@@ -623,6 +635,15 @@ the run hierarchy.
 A run that "wins the race" against a cancellation is neither snapshotted nor
 published: its outputs may be incomplete, so magus surfaces the cancellation
 instead of recording a poisoned entry.
+
+A target that declares no outputs inherits the project's and its spells', and
+some of those belong to a sibling. With `"outputs": ["gen/**"]` on the project and
+`generate` declaring `gen/**`, a `lint` that only reads the generated tree would
+record it as found and, on its next hit, write that copy back over whatever
+`generate` has produced since; run just before a drift check, it fails the check
+on every run. So a glob another target declares is never recorded or restored by
+a target that inherits it, unless that target composes the declaring one with
+`ctx.needs`, whose writes land inside its own run. Nothing about the key changes.
 
 ## One owner per generated file
 

@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
@@ -474,6 +475,32 @@ func targetOutputGlobs(p *types.Project, target string) []types.Glob {
 	return out
 }
 
+// foreignOutputs is every glob another target declares with ctx.writesFiles that one of
+// outputs, target's inherited baseline, can overlap. A member of target's ctx.needs chain
+// is left out: its writes land inside this step's run, so this step's entry keeps
+// recording and restoring them.
+func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.Glob) []types.Glob {
+	composed := map[types.TargetRef]bool{}
+	_ = types.WalkChain(p, target, m.Get, func(v types.ChainVisit) error {
+		composed[types.TargetRef{Project: v.Project.Path, Target: v.Target}] = true
+		return nil
+	})
+	var out []types.Glob
+	for _, proj := range m.All() {
+		for name := range proj.TargetOutputs {
+			if composed[types.TargetRef{Project: proj.Path, Target: name}] {
+				continue
+			}
+			for _, g := range targetOutputGlobs(proj, name) {
+				if slices.ContainsFunc(outputs, func(o types.Glob) bool { return types.GlobsOverlap(o.Pattern, g.Pattern) }) {
+					out = append(out, g)
+				}
+			}
+		}
+	}
+	return types.CompactGlobs(out)
+}
+
 // buildStep assembles the cache.Step for running target on p.
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
@@ -537,6 +564,8 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
 		// which a check-only target never produces; see OutputsDeclared.
 		step.OutputsDeclared = true
+	} else if len(step.Outputs) > 0 {
+		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
 	}
 	sources := slices.Clone(step.Sources)
 	for _, s := range p.ResolvedSpells {
@@ -594,6 +623,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// ctx.observes: an external fact the answer depends on, keyed so the target stays
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
+	if m.nestedMagus[p.Path][target] {
+		step.MagusBuild = proc.BuildStamp()
+	}
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))

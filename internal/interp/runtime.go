@@ -1,17 +1,15 @@
 package interp
 
 import (
-	"bytes"
+	"cmp"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
 	"crypto/sha256"
-	"debug/elf"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
@@ -29,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -180,6 +179,142 @@ func magusRooted(e ast.Node, path []string) bool {
 	}
 	id, isIdent := e.(*ast.IdentExpr)
 	return isIdent && id.Name == "magus"
+}
+
+// binaryAnswers are the magus members whose answer comes from the running binary rather
+// than from the tree: the magus\describe namespace, and the members that fork a nested
+// magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
+// does, with no source the target could declare.
+var binaryAnswers = [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+
+// NestedMagusTargets returns the normalized keys of the exported targets in src whose
+// body reaches a binaryAnswers member. The walk follows calls into the file's own helpers
+// and into functions of a Buzz module src imports ("../hack/magusfile/index"), resolved
+// against dirs in order as "<dir>/<path>.buzz" or "<dir>/magusfiles/<path>.buzz" and read
+// through read. A call it cannot follow counts as nothing, so it under-reports
+// the way every static footprint does. A parse failure yields nil.
+func NestedMagusTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
+	prog, err := parsecache.Shared().ParseEmbedded(src)
+	if err != nil || prog == nil {
+		return nil
+	}
+	w := nestedMagusWalk{dirs: dirs, read: read, modules: map[string]*buzzModule{}, memo: map[string]bool{}}
+	root := w.module("", prog)
+	out := map[string]bool{}
+	for name, fd := range root.funcs {
+		if fd.IsExported && w.reaches(root, name, map[string]bool{}) {
+			out[types.Normalize(name)] = true
+		}
+	}
+	return out
+}
+
+type buzzModule struct {
+	path    string
+	funcs   map[string]*ast.FunDecl
+	imports map[string]string // namespace alias -> import path
+}
+
+type nestedMagusWalk struct {
+	dirs    []string
+	read    func(path string) ([]byte, error)
+	modules map[string]*buzzModule // by resolved file path; nil records a miss
+	memo    map[string]bool        // hits, by module path + "\x00" + function
+}
+
+func (w *nestedMagusWalk) module(path string, prog *ast.Program) *buzzModule {
+	m := &buzzModule{path: path, funcs: map[string]*ast.FunDecl{}, imports: map[string]string{}}
+	for _, stmt := range prog.Stmts {
+		switch s := stmt.(type) {
+		case *ast.FunDecl:
+			m.funcs[s.Name] = s
+		case *ast.ImportStmt:
+			// A host module or spell resolves to no file and is dropped by load; a project
+			// import is a target edge, not a library.
+			if s.Path == "magus" || strings.HasPrefix(s.Path, "magus/") || strings.HasPrefix(s.Path, "project/") ||
+				s.Alias == "_" || len(s.Only) > 0 {
+				continue
+			}
+			m.imports[cmp.Or(s.Alias, filepath.Base(s.Path))] = s.Path
+		}
+	}
+	return m
+}
+
+// load parses the module an import names, or returns nil when no dir holds it.
+func (w *nestedMagusWalk) load(importPath string) *buzzModule {
+	for _, dir := range w.dirs {
+		for _, file := range []string{
+			filepath.Join(dir, filepath.FromSlash(importPath)+".buzz"),
+			filepath.Join(dir, "magusfiles", filepath.FromSlash(importPath)+".buzz"),
+		} {
+			file = filepath.Clean(file)
+			if m, seen := w.modules[file]; seen {
+				if m != nil {
+					return m
+				}
+				continue
+			}
+			data, err := w.read(file)
+			if err != nil {
+				w.modules[file] = nil
+				continue
+			}
+			prog, err := parsecache.Shared().ParseEmbedded(string(data))
+			if err != nil || prog == nil {
+				w.modules[file] = nil
+				continue
+			}
+			m := w.module(file, prog)
+			w.modules[file] = m
+			return m
+		}
+	}
+	return nil
+}
+
+// reaches reports whether fn in m reaches a binaryAnswers member. visiting breaks a
+// recursion cycle.
+func (w *nestedMagusWalk) reaches(m *buzzModule, fn string, visiting map[string]bool) bool {
+	key := m.path + "\x00" + fn
+	if v, ok := w.memo[key]; ok {
+		return v
+	}
+	fd := m.funcs[fn]
+	if fd == nil || fd.Body == nil || visiting[key] {
+		return false
+	}
+	visiting[key] = true
+	found := false
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		switch e := n.(type) {
+		case *ast.MemberExpr:
+			found = slices.ContainsFunc(binaryAnswers, func(path []string) bool { return magusRooted(e, path) })
+		case *ast.CallExpr:
+			switch callee := e.Callee.(type) {
+			case *ast.IdentExpr:
+				found = w.reaches(m, callee.Name, visiting)
+			case *ast.MemberExpr:
+				alias, isIdent := callee.Object.(*ast.IdentExpr)
+				if !callee.Namespaced || !isIdent || m.imports[alias.Name] == "" {
+					break
+				}
+				if imported := w.load(m.imports[alias.Name]); imported != nil {
+					found = w.reaches(imported, callee.Name, visiting)
+				}
+			}
+		}
+		return !found
+	})
+	delete(visiting, key)
+	// Only a hit is final: a miss may be one a cycle cut short.
+	if found {
+		w.memo[key] = true
+	}
+	return found
 }
 
 // removedAPIErr reports a magusfile still calling an API magus no longer binds.
@@ -497,52 +632,11 @@ func compilerStamp() string {
 	return readCompilerStamp(exe)
 }
 
-func readCompilerStamp(exe string) string {
-	id := goBuildID(exe)
-	if id == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(sum[:])[:16]
-}
+// readCompilerStamp is the stamp the cache keys a nested-magus step on too
+// (proc.BuildStamp), so a chunk and an entry agree on what one build is.
+func readCompilerStamp(exe string) string { return proc.ReadBuildStamp(exe) }
 
-// goBuildID reads the build ID the Go linker writes at the start of the text
-// segment, which lies in the file's first 32 KiB (cmd/internal/buildid reads the
-// same window), or from ELF's .note.go.buildid when an external link moved text.
-func goBuildID(exe string) string {
-	f, err := os.Open(exe)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	head := make([]byte, 32<<10)
-	n, _ := io.ReadFull(f, head)
-	const marker = "\xff Go build ID: \""
-	if i := bytes.Index(head[:n], []byte(marker)); i >= 0 {
-		rest := head[i+len(marker) : n]
-		if j := bytes.IndexByte(rest, '"'); j > 0 {
-			return string(rest[:j])
-		}
-	}
-	ef, err := elf.NewFile(f)
-	if err != nil {
-		return ""
-	}
-	note := ef.Section(".note.go.buildid")
-	if note == nil {
-		return ""
-	}
-	// namesz, descsz, type, then "Go\x00\x00" and the ID.
-	data, err := note.Data()
-	if err != nil || len(data) < 16 {
-		return ""
-	}
-	size := int(ef.ByteOrder.Uint32(data[4:8]))
-	if len(data) < 16+size {
-		return ""
-	}
-	return string(data[16 : 16+size])
-}
+var goBuildID = proc.ReadBuildID
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no

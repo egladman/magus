@@ -291,6 +291,33 @@ func TestHashKeyByteLayout(t *testing.T) {
 	assert.Equal(t, expected, got, "cache key byte layout changed (layout:\n%s)", want.String())
 }
 
+// TestHashKeyByteLayoutMagusBuild pins where the magus build line lands, right after
+// spellDefVersion, and that a step without one hashes as TestHashKeyByteLayout's does:
+// the line is how a step that asks the binary for its answer keys on that binary, and no
+// other key may move for it.
+func TestHashKeyByteLayoutMagusBuild(t *testing.T) {
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	step := Step{ProjectPath: "docs", Target: "content-generate", SpellDefVersion: "v1", ToolVersions: []string{"go:1.25"}}
+
+	without, err := c.hashStep(t.Context(), &step)
+	require.NoError(t, err)
+	step.MagusBuild = "0123456789abcdef"
+	got, err := c.hashStep(t.Context(), &step)
+	require.NoError(t, err)
+
+	layout := func(magus string) string {
+		var b bytes.Buffer
+		fmt.Fprintf(&b, "keyVersion:%d\n", KeyVersion)
+		b.WriteString("projectPath:docs\ntarget:content-generate\nspellDefVersion:v1\n")
+		b.WriteString(magus)
+		b.WriteString("tool:go:1.25\n")
+		sum := sha256.Sum256(b.Bytes())
+		return hex.EncodeToString(sum[:])
+	}
+	assert.Equal(t, layout(""), without, "an empty MagusBuild writes no line")
+	assert.Equal(t, layout("magus:0123456789abcdef\n"), got)
+}
+
 // TestHashStepKeysExtraArgs locks in that args after `--` participate in the
 // cache key. Before this, a run with different args replayed the previous run's
 // result: the args changed what the target did but not what it hashed.

@@ -1169,6 +1169,58 @@ func TestRunDeterministicFailureNeverReplays(t *testing.T) {
 	assert.Equal(t, 3, calls)
 }
 
+// TestHitLeavesAForeignOutputAlone pins the proto drift gate's repeat failure (harness
+// gap 8): proto lint inherits the project's gen/**, which proto generate declares. Its
+// entry recorded the stale generated tree it found, and every later hit wrote that copy
+// over the regenerated one just ahead of the drift check. A foreign output is neither
+// recorded nor replayed, including from an entry written before the step carved it out.
+func TestHitLeavesAForeignOutputAlone(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	own := touchOut(t, root)
+	generated := filepath.Join(root, "test", "pkg", "gen", "x.pb.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(generated), 0o755))
+	require.NoError(t, os.WriteFile(generated, []byte("stale"), 0o644))
+
+	read := func(path string) string {
+		b, err := os.ReadFile(path)
+		require.NoError(t, err)
+		return string(b)
+	}
+
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt", "test/pkg/gen/**")
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return os.WriteFile(own, []byte("lint report"), 0o644)
+	}
+
+	// The entry an older binary wrote: it recorded the stale generated file as its own.
+	_, err := c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(miss)")
+	require.NoError(t, os.WriteFile(generated, []byte("regenerated"), 0o644))
+	require.NoError(t, os.Remove(own))
+
+	step.ForeignOutputs = types.MustParseGlobs("test/pkg/gen/**")
+	res, err := c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(hit)")
+	require.True(t, res.Hit, "ForeignOutputs is unhashed, so the key and its entry stay")
+	assert.Equal(t, 1, calls)
+	assert.Equal(t, "regenerated", read(generated), "a hit must not restore another target's output")
+	assert.Equal(t, "lint report", read(own), "the step's own output still replays")
+	assert.NotContains(t, res.Outputs, generated)
+
+	// A fresh entry never records the foreign file at all.
+	require.NoError(t, c.Delete(t.Context(), step.ProjectPath))
+	_, err = c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(miss after delete)")
+	require.NoError(t, os.WriteFile(generated, []byte("edited"), 0o644))
+	_, err = c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(hit)")
+	assert.Equal(t, "edited", read(generated))
+}
+
 // TestRunNoHintWhenInputsChanged verifies the warning is about the KEY: an edited source
 // hashes to a different one, which has no recorded failure to report.
 func TestRunNoHintWhenInputsChanged(t *testing.T) {

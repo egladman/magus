@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -338,6 +339,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// dependency on the WRITER, so the writer runs first and the owner's cache key is
 	// computed against the finished bytes.
 	var crossOut []crossOutput
+	nested := map[string]map[string]bool{}
+	defer func() { m.nestedMagus = nested }()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -358,6 +361,12 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), first.Name, first.Replacement, first.Line)
 			}
 			nodes := describe.Extract(source)
+			for name := range interp.NestedMagusTargets(source, []string{p.Dir, m.ws.Root}, readInside(m.ws.Root)) {
+				if nested[p.Path] == nil {
+					nested[p.Path] = map[string]bool{}
+				}
+				nested[p.Path][name] = true
+			}
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
 					r, rerr := file.ResolveImport(ref.Project, p.Path)
@@ -645,6 +654,17 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		op.InboundOutputs[co.writer] = append(op.InboundOutputs[co.writer], co.glob)
 	}
 	return nil
+}
+
+// readInside reads a file under root and refuses any other, as the interpreter's import
+// confinement does (MGS1047), so a static read never opens what a load would not.
+func readInside(root string) func(path string) ([]byte, error) {
+	return func(path string) ([]byte, error) {
+		if rel, err := filepath.Rel(root, path); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil, fs.ErrNotExist
+		}
+		return os.ReadFile(path)
+	}
 }
 
 // crossOutput is one target's declaration that it writes into ANOTHER project's tree:

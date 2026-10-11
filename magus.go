@@ -153,6 +153,11 @@ type Magus struct {
 	// load evaluated it, by project path. A project absent here was not evaluated.
 	magusfileExports map[string][]string
 
+	// nestedMagus are the targets whose bodies ask the running binary for their answer
+	// (interp.NestedMagusTargets), by project path then target. buildStep keys them on
+	// the build. Written once by the load, read by every run after.
+	nestedMagus map[string]map[string]bool
+
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver

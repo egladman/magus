@@ -168,6 +168,13 @@ type Step struct {
 	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
 	// targets always replayed.
 	OutputsDeclared bool
+	// ForeignOutputs are globs another target declares with ctx.writesFiles that this
+	// step's inherited Outputs can overlap. They are carved out of what a snapshot records
+	// and a hit writes, so a target that only reads a generated tree (a lint over a
+	// project whose baseline claims gen/**) never records it as found and never replays
+	// that copy over a regeneration. Unhashed, and still in Outputs for the source walk,
+	// so no key moves.
+	ForeignOutputs []types.Glob
 
 	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
 	// Outputs, and hashing either would change every existing key. They exist so
@@ -199,8 +206,13 @@ type Step struct {
 	// so a compile-only go::go-build must not satisfy (or be satisfied by) the
 	// go-build target's entry.
 	Spell           string
-	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
-	ToolVersions    []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
+	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
+	// MagusBuild is the running binary's build stamp, set only for a step whose body asks
+	// that binary for its answer (a magus\describe call, a nested magus). Such an answer
+	// moves when the binary is rebuilt from changed code, with no file in the tree to key
+	// on. Empty writes no key line, so every other step keeps its key across rebuilds.
+	MagusBuild   string
+	ToolVersions []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
 	// false (the default) keys the platform. See types.PlatformSensitivity.
@@ -247,6 +259,26 @@ type Step struct {
 	VCSName  string
 	Revision string
 	Dirty    bool
+}
+
+// withoutForeignOutputs is s with every ForeignOutputs pattern added to the exclusions
+// of each output glob it can overlap: the set a snapshot records and a hit replays.
+func (s Step) withoutForeignOutputs() Step {
+	if len(s.ForeignOutputs) == 0 {
+		return s
+	}
+	outs := make([]types.Glob, len(s.Outputs))
+	for i, g := range s.Outputs {
+		g.Except = slices.Clone(g.Except)
+		for _, f := range s.ForeignOutputs {
+			if types.GlobsOverlap(g.Pattern, f.Pattern) && !slices.Contains(g.Except, f.Pattern) {
+				g.Except = append(g.Except, f.Pattern)
+			}
+		}
+		outs[i] = g
+	}
+	s.Outputs = outs
+	return s
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -674,7 +706,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
 	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
-	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s), s.WorkspaceRoot, e.root)
+	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s.withoutForeignOutputs()), s.WorkspaceRoot, e.root)
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
@@ -866,7 +898,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	var snap *Manifest
 	if storable {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
-		m, outs, err := c.snapshot(ctx, s, hash, time.Since(start))
+		m, outs, err := c.snapshot(ctx, s.withoutForeignOutputs(), hash, time.Since(start))
 		endSnap(err)
 		if err != nil {
 			// Reported like the sibling runErr path: fn already succeeded, so without
