@@ -33,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -173,8 +174,12 @@ func openJobs(root string) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: checkGrader(root)}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: checkGrader}), nil
 }
+
+// magus\job.put opens its own Store inside std, which cannot import the guard, so the
+// grader reaches it through std's registration seam.
+func init() { std.RegisterJobGrader(checkGrader) }
 
 // checkGrader grades a declared check against the guard's rules for the workspace at root.
 // The rules load on the first check graded, so a fork that declares none pays nothing.
@@ -184,51 +189,54 @@ func checkGrader(root string) job.CheckGrader {
 		deps guard.Dependencies
 	)
 	return func(ctx context.Context, row types.Job) job.CheckVerdict {
-		once.Do(func() { deps = guardDependencies(ctx, root) })
-		return gradeCheck(ctx, deps, row, func(msg string) {
-			slog.WarnContext(ctx, msg, attr.Notice(""), attr.Component("magus job"))
-		})
+		// Every later grade reads what the first one loaded, so the first caller's
+		// cancellation must not decide it.
+		once.Do(func() { deps = guardDependencies(context.WithoutCancel(ctx), root) })
+		verdict, notGraded := gradeCheck(ctx, deps, root, row)
+		if notGraded != "" {
+			slog.WarnContext(ctx, "job "+row.ID+"'s check was not graded against the guard",
+				attr.Notice(""), attr.Why(notGraded), attr.Component("magus job"))
+		}
+		return verdict
 	}
 }
 
-// compilingCheck is the check gradeCheck judges to tell a deny of the declared check from a
-// deny of every command the worker runs. It is the target a refusal recommends.
-var compilingCheck = types.LeaseCheck{Target: "go::go-vet", Project: "."}
+// checkCommandPrefix is how a holder types a check: with the ./magus of its own checkout,
+// not whichever binary the PATH holds.
+const checkCommandPrefix = "./"
 
-// gradeCheck judges row's check as the guard would judge its holder typing it, with the row
-// standing in for a lease the store does not carry yet.
+// gradeCheck judges row's check as the guard would judge its holder typing it in the
+// checkout at root, with the row standing in for a lease the store does not carry yet.
 //
 // Only a deny of the check itself refuses. A deny that holds just as well for the
-// compilingCheck describes the binary or the workspace (a stale hook binary, rules that
-// would not load) and not the command, so it is not graded and say reports it: a refusal
-// has to come from a verdict on the check.
-func gradeCheck(ctx context.Context, deps guard.Dependencies, row types.Job, say func(string)) job.CheckVerdict {
-	notGraded := func(why string) job.CheckVerdict {
-		say("job " + row.ID + "'s check was not graded against the guard: " + why)
-		return job.CheckVerdict{}
-	}
+// compiling check describes the binary or the workspace (a stale hook binary, rules that
+// would not load) and not the command, so it is not graded and notGraded says why: a
+// refusal has to come from a verdict on the check.
+func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) (verdict job.CheckVerdict, notGraded string) {
 	if deps.LoadFailure != nil {
-		return notGraded("the workspace's rules did not load: " + deps.LoadFailure.Error())
+		return job.CheckVerdict{}, "the workspace's rules did not load: " + deps.LoadFailure.Error()
 	}
-	judge := func(row types.Job) guard.Verdict {
+	judge := func(pending types.Job) guard.Verdict {
 		return guard.Judge(ctx, deps, guard.Request{
-			Input:     "./" + row.Check.String(),
-			DryRun:    true,
-			Lease:     row.ID,
-			Candidate: &row,
+			Input:      checkCommandPrefix + pending.Check.String(),
+			DryRun:     true,
+			Lease:      pending.ID,
+			PendingRow: &pending,
+			Dir:        root,
 		})
 	}
-	verdict := judge(row)
-	if verdict.Decision != "deny" {
-		return job.CheckVerdict{}
+	declared := judge(row)
+	if declared.Decision != string(types.GuardDeny) {
+		return job.CheckVerdict{}, ""
 	}
 	baseline := row
-	baseline.Check = &compilingCheck
-	if again := judge(baseline); again.Decision == "deny" {
-		first, _, _ := strings.Cut(strings.TrimSpace(again.Reason), "\n")
-		return notGraded("the guard denies this worker `" + baseline.Check.String() + "` as well, so the deny describes the binary or the workspace and not the check: " + first)
+	compiling := job.CompilingCheck()
+	baseline.Check = &compiling
+	if baselineVerdict := judge(baseline); baselineVerdict.Decision == string(types.GuardDeny) {
+		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
+		return job.CheckVerdict{}, "the guard denies this worker `" + compiling.String() + "` as well, so the deny describes the binary or the workspace and not the check: " + first
 	}
-	return job.CheckVerdict{Denied: true, Rule: verdict.Rule, Reason: verdict.Reason}
+	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}, ""
 }
 
 // outputsIn resolves a ref against the output store of the checkout at root. That
@@ -1008,26 +1016,25 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseAmbiguousSymbols(ctx, row.Goals, jobSymbolReader(root)); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	candidate := types.Job{ID: row.ID, WritePaths: row.WritePaths, DenyPaths: row.DenyPaths, Parent: row.Parent, DependsOn: row.DependsOn}
-	if err := job.RefuseDirectoryWritePaths(store, row.ID, candidate); err != nil {
+	if err := job.RefuseDirectoryWritePaths(store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseUngradableClaims(ctx, store, row.ID, candidate); err != nil {
+	if err := job.RefuseUngradableClaims(ctx, store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseSharedCheckout(store, plan, row.ID, candidate); err != nil {
+	if err := job.RefuseSharedCheckout(store, plan, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseUnorderedFileShare(ctx, store, plan, row.ID, candidate); err != nil {
+	if err := job.RefuseUnorderedFileShare(ctx, store, plan, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseSkippedTests(store, row.ID, probe); err != nil {
+	if err := job.RefuseSkippedTests(root, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	if err := job.RefuseDeniedCheck(ctx, store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	proof := store.WriteProof(plan, row.ID, candidate)
+	proof := store.WriteProof(plan, row.ID, probe)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.

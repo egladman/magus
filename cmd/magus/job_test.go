@@ -949,7 +949,7 @@ func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
 
 	err := fork("go-test . -- -run Alpha")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pkg: TestBeta")
+	assert.Contains(t, err.Error(), "pkg (TestBeta)")
 	assert.Contains(t, err.Error(), "`Alpha|^(TestBeta)$`")
 
 	require.NoError(t, fork("go-test . -- -run Alpha|^(TestBeta)$"))
@@ -1009,6 +1009,34 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	require.Len(t, rows, 1)
 }
 
+// The grade follows the workspace the store was opened for, not the process's working
+// directory: a daemon serving magus\job.put runs from somewhere else, and a command graded
+// there would be judged for the wrong checkout.
+func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := initGitRepo(t)
+	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-q", "-m", "init")
+	resetWorkspaceMemo(t)
+	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "sub"), 0o755))
+
+	for name, cwd := range map[string]string{"the root": root, "a subdirectory": filepath.Join(root, "sub"), "outside any workspace": t.TempDir()} {
+		t.Run(name, func(t *testing.T) {
+			t.Chdir(cwd)
+			verdict, notGraded := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+			assert.Empty(t, notGraded)
+			assert.True(t, verdict.Denied, "the worker is denied the check wherever the process runs")
+			assert.Contains(t, verdict.Reason, "a worker does not build magus")
+		})
+	}
+}
+
 // A workspace whose rules did not load is not graded, and says so rather than refuse on a
 // verdict nobody reached.
 func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
@@ -1016,14 +1044,11 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 	testkit.Isolate(t)
 	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	var said []string
-	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, row,
-		func(msg string) { said = append(said, msg) })
+	verdict, notGraded := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
 
 	assert.False(t, verdict.Denied)
-	require.Len(t, said, 1)
-	assert.Contains(t, said[0], "job w's check was not graded against the guard")
-	assert.Contains(t, said[0], "magusfile.buzz:3: expected ';'")
+	assert.Contains(t, notGraded, "the workspace's rules did not load")
+	assert.Contains(t, notGraded, "magusfile.buzz:3: expected ';'")
 }
 
 // denyEveryWorkerRule is a magusfile whose command rule denies a worker every command, the
@@ -1040,7 +1065,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 
 // A deny that holds for the compiling check too is about the binary or the workspace, so
 // the fork is not refused over it and says the check was not graded.
-func TestJobForkSkipsADenyThatDoesNotJudgeTheCheck(t *testing.T) {
+func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
@@ -1054,15 +1079,12 @@ func TestJobForkSkipsADenyThatDoesNotJudgeTheCheck(t *testing.T) {
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	var said []string
-	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), row, func(msg string) { said = append(said, msg) })
+	verdict, notGraded := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
 
 	assert.False(t, verdict.Denied)
-	require.Len(t, said, 1)
-	assert.Contains(t, said[0], "job w's check was not graded against the guard")
-	assert.Contains(t, said[0], "denies this worker `magus run go::go-vet .` as well")
-	assert.Contains(t, said[0], "the hook binary is older than the tree", "the first line of the verdict is quoted")
-	assert.NotContains(t, said[0], "rebuild it")
+	assert.Contains(t, notGraded, "denies this worker `magus run go::go-vet .` as well")
+	assert.Contains(t, notGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
+	assert.NotContains(t, notGraded, "rebuild it")
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))

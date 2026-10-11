@@ -891,13 +891,22 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 }
 
+// withJobGrader registers forRoot for the test and restores whatever was registered. The
+// registration is process-wide, so a test that uses it does not run in parallel.
+func withJobGrader(t *testing.T, forRoot func(root string) job.CheckGrader) {
+	t.Helper()
+	previous := jobGrader
+	RegisterJobGrader(forRoot)
+	t.Cleanup(func() { RegisterJobGrader(previous) })
+}
+
 // magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
 // held to the guard's verdict on the check the way `magus job fork` is: the grader the
-// composition root installed refuses a denied check, with nothing written.
+// composition root registered refuses a denied check, with nothing written.
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
-	job.UseGrader(func(root string) job.CheckGrader {
+	withJobGrader(t, func(root string) job.CheckGrader {
 		roots = append(roots, root)
 		return func(_ context.Context, row types.Job) job.CheckVerdict {
 			if row.Check.Target != "go-build" {
@@ -906,7 +915,6 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 			return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
 		}
 	})
-	t.Cleanup(func() { job.UseGrader(nil) })
 
 	root := t.TempDir()
 	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
