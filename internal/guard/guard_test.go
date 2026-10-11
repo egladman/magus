@@ -270,6 +270,15 @@ type policyCase struct {
 	corruptStore bool
 	// lease is the job the caller acts under, "" for the orchestrator or a person.
 	lease string
+	// binary places an executable ./magus in the workspace, as every checkout a session runs in
+	// has; the capture rule answers differently when there is none.
+	binary bool
+}
+
+// placeBinary puts an executable file named magus at the workspace root.
+func placeBinary(t *testing.T, workspace string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "magus"), []byte("#!/bin/sh\n"), 0o755))
 }
 
 func agentSpawn(toolInput map[string]any) map[string]any {
@@ -351,7 +360,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
-		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
+		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: "deny", reason: "magus query output"},
+		{rule: "host-capture", name: "a cat of a run log where the workspace has no ./magus", input: bash("cat .magus/logs/0123abcd.log"), decision: "pass"},
 		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
 	}
 
@@ -360,6 +370,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		covered[tc.rule] = true
 		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
+			if tc.binary {
+				placeBinary(t, hookLocation(ctx, Dependencies{}).workspace)
+			}
 			store := job.NewStore(job.Location{CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
 			for _, row := range tc.jobs {
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
@@ -415,6 +428,23 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			})})
 		}
 	}
+
+	t.Run("host-capture/a task capture outside the workspace names its own ref", func(t *testing.T) {
+		ws := t.TempDir()
+		placeBinary(t, ws)
+		hostTemp, err := os.MkdirTemp("/private/tmp", "capture-test-")
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = os.RemoveAll(hostTemp) })
+		tasks := filepath.Join(hostTemp, "claude-501", "project", "session", "tasks")
+		require.NoError(t, os.MkdirAll(tasks, 0o755))
+		capture := filepath.Join(tasks, "bi3m8xyic.output")
+		require.NoError(t, os.WriteFile(capture, []byte("[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n"), 0o644))
+
+		v := shellIn(t, "trim-key", ws)("cat " + capture)
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Equal(t, workspaceCommandRule, v.Rule, "the policy decided, not a built-in")
+		assert.Contains(t, v.Reason, "`magus query output out1afa17d04e90`")
+	})
 
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {

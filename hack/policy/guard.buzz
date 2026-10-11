@@ -411,3 +411,25 @@ test "a push is refused to a subagent the host names, under no lease and unseen 
     std\assert(leased.decision == "deny", message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
 }
+
+test "the main session's cat of a task capture outside the workspace is denied naming the capture's ref" {
+    final ws = fs\tempDir("capture-ws") catch "";
+    final host = fs\tempDir("capture-host") catch "";
+    std\assert(ws != "" and host != "", message: "temp dirs");
+    fs\mkdirAll("{host}/claude-501/project/session/tasks");
+    final capture = "{host}/claude-501/project/session/tasks/bi3m8xyic.output";
+    fs\writeFile(capture, content: "[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n");
+    final cat = CommandInvocation{ program = "cat", args = [capture] };
+    final req = CommandRequest{ session = "s1", role = "root", dir = ws, workspace = ws, command = "cat {capture}", commands = [cat] };
+
+    fs\writeFile("{ws}/magus", content: "");
+    final denied = judge(req);
+    std\assert(denied.decision == "deny", message: "a workspace holding ./magus: " + denied.decision + " " + denied.reason);
+    std\assert(denied.reason.split("\n")[0].indexOf("`magus query output out1afa17d04e90`") != null, message: denied.reason);
+
+    fs\remove("{ws}/magus");
+    final allowed = judge(req);
+    std\assert(allowed.decision == "allow", message: "a workspace with no ./magus: " + allowed.decision + " " + allowed.reason);
+    fs\removeAll(ws);
+    fs\removeAll(host);
+}

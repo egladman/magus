@@ -27,8 +27,12 @@ final terminalsDenial = "a directory named terminals is a host session folder, n
     + "Do not create a terminals directory and do not read its files.";
 
 // captureBytes is the largest task capture decideHost scans for refs; a bigger one gets
-// the generic denial.
-final captureBytes = 4 * 1024 * 1024;
+// the generic denial. A workspace rule that outlives its 3 second budget is skipped, which
+// reads as an allow, so the scan stays small.
+final captureBytes = 1024 * 1024;
+
+// otherRefs is how many refs past the first the verdict lists.
+final otherRefs = 5;
 
 final refPattern = std\pattern("\\bout[0-9a-f]\{12\}\\b");
 final invocationPattern = std\pattern("\\binv[0-9a-z]\{6,\}\\b");
@@ -94,7 +98,15 @@ fun denialFor(path: str, reads: Reads) > str {
     if (refs.len() > 0) {
         var rest = "";
         if (refs.len() > 1) {
-            rest = "Other refs in this capture: {refs.sub(1, len: refs.len() - 1).join(", ")}.\n";
+            var shown = refs.len() - 1;
+            if (shown > otherRefs) {
+                shown = otherRefs;
+            }
+            rest = "Other refs in this capture: {refs.sub(1, len: shown).join(", ")}";
+            if (refs.len() - 1 > shown) {
+                rest = rest + ", and {refs.len() - 1 - shown} more";
+            }
+            rest = rest + ".\n";
         }
         rest = rest + "The whole invocation lists each failed target with its ref: ";
         if (invocations.len() > 0) {
@@ -376,6 +388,19 @@ test "a task capture holding refs is denied naming the first ref, the rest and t
     std\assert(v.reason.indexOf("outfedcba987654") != null, message: "the other ref follows the newline");
     std\assert(v.reason.indexOf("`magus query invocation invmsm3vcou1`") != null, message: "the invocation: " + v.reason);
     std\assert(v.reason.split("out0123456789ab").len() == 2, message: "a repeated ref is named once: " + v.reason);
+}
+
+test "a capture holding many refs lists the first few and counts the rest" {
+    final path = "tasks/9.output";
+    final lines = mut [<str>];
+    foreach (n in [10, 11, 12, 13, 14, 15, 16, 17]) {
+        lines.append("output: out0123456789{n}");
+    }
+    final v = judgedWith(capture(path), reads: fakeReads({path: lines.join("\n")}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.split("\n")[0].indexOf("`magus query output out012345678910`") != null, message: v.reason);
+    std\assert(v.reason.indexOf("out012345678915") != null and v.reason.indexOf("out012345678916") == null, message: "five others are named: " + v.reason);
+    std\assert(v.reason.indexOf("and 2 more") != null, message: v.reason);
 }
 
 test "a capture with one ref and no invocation id says where the id is printed" {
