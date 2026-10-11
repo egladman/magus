@@ -430,7 +430,7 @@ github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteExecutable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
-github.com/egladman/magus/libs/testkit/fakespell.Register func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
+github.com/egladman/magus/libs/testkit/register.Spell func(tb github.com/egladman/magus/libs/testkit.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/types.ActiveDispatch type struct
 github.com/egladman/magus/types.ActiveDispatch.Has method(ptr) func(dir string) bool
 github.com/egladman/magus/types.ActiveDispatch.Mark method(ptr) func(dir string)

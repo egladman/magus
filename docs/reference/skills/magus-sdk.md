@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 14084
-skill_short_bytes: 10660
+skill_full_bytes: 14079
+skill_short_bytes: 10655
 ---
 
 # magus-sdk
@@ -30,7 +30,7 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `source` | `magus` |
 | `agent-skill-version` | `120` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `6639565d131c` |
+| `skill-content` | `aa1794323c21` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -236,8 +236,8 @@ fake cannot tell you.
   methods to fake whole.
 - Magusfile targets do not run outside this module, so a test that writes one and calls
   `Run` proves nothing. Register a spell from Go with `WithSpell` instead.
-- Register a programmatic spell with `fakespell.Register(tb, name, opts ...spells.Option)`
-  (`libs/testkit/fakespell`), passing `spells.WithTargets` and the like.
+- Register a programmatic spell with `register.Spell(tb, name, opts ...spells.Option)`
+  (`libs/testkit/register`), passing `spells.WithTargets` and the like.
 
 ## Audit mode
 
@@ -499,8 +499,8 @@ fake cannot tell you.
   methods to fake whole.
 - Magusfile targets do not run outside this module, so a test that writes one and calls
   `Run` proves nothing. Register a spell from Go with `WithSpell` instead.
-- Register a programmatic spell with `fakespell.Register(tb, name, opts ...spells.Option)`
-  (`libs/testkit/fakespell`), passing `spells.WithTargets` and the like. The spell registry is process-global, so parallel
+- Register a programmatic spell with `register.Spell(tb, name, opts ...spells.Option)`
+  (`libs/testkit/register`), passing `spells.WithTargets` and the like. The spell registry is process-global, so parallel
   tests that register spells race.
 
 ## Audit mode
