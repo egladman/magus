@@ -108,6 +108,45 @@ func TestNonspecificTakesAFindableSymptomAsTheReason(t *testing.T) {
 	})
 }
 
+// A block quote is the comment a reply answers, so it is the reply's referent
+// and none of its words are the writer's; a judgment in single quotes is
+// mentioned, not made.
+func TestNonspecificJudgesOnlyTheWritersOwnWords(t *testing.T) {
+	runTextCases(t, RuleNonspecific, []textCase{
+		{"a judgment in the quote", KindReviewReply,
+			"> This looks wrong to me.\n\nMoved the retry behind a backoff.", nil},
+		{"a request after the quote", KindReviewReply,
+			"> Each handler opens a pool of its own.\n\nPlease fix this.", nil},
+		{"a verdict on the quote", KindReviewReply, "> pinned the linter to the old release\n\nThat's weird.", nil},
+		{"an earlier reply quoted", KindReviewReply,
+			"On Monday the reviewer wrote:\n> fix it...\n\nDone, the lockfile came from the base branch.", nil},
+		{"words in single quotes", KindReviewReply, "You said 'it is wrong here' and I agree.", nil},
+		{"the same words unquoted", KindReviewReply, "You said it is wrong here and I agree.", []string{"1:wrong"}},
+		{"no quote at all", KindReviewReply, "Please fix this.", []string{"1:fix this"}},
+	})
+}
+
+// An apology owns the writer's fault, and thanks or a conceded point answers a
+// review; neither judges the author's work unless it also asks for a change.
+func TestNonspecificLeavesAnApologyOrAcknowledgementAlone(t *testing.T) {
+	runTextCases(t, RuleNonspecific, []textCase{
+		{"my bad", KindReviewReply, "Oops, my bad.", nil},
+		{"the writer was wrong", KindReviewReply, "Sorry, I was wrong.", nil},
+		{"the writer got it wrong", KindReviewReply, "I got that wrong, sorry.", nil},
+		{"the writer's patch", KindReviewReply, "Ah, my patch was wrong.", nil},
+		{"a fix the writer takes on", KindReviewReply, "Thanks, will fix it.", nil},
+		{"the writer will update it", KindReviewReply, "I'll update it tonight.", nil},
+		{"a point conceded", KindReviewReply, "Good catch, it was redundant.", nil},
+		{"agreement", KindReviewReply, "You're right, that is unnecessary.", nil},
+		{"thanks with a contrast", KindReviewReply, "Thanks, but this is wrong.", []string{"1:wrong"}},
+		{"thanks with a request", KindReviewReply, "Thanks, please fix this.", []string{"1:fix this"}},
+		{"thanks and a command", KindReviewReply, "Thanks. Fix it.", []string{"1:Fix it"}},
+		{"a softened verdict", KindReviewReply, "Sorry, this is confusing.", []string{"1:confusing"}},
+		{"a change suggested", KindReviewReply, "I'd change this.", []string{"1:change this"}},
+		{"an opinion", KindReviewReply, "I think it is wrong.", []string{"1:wrong"}},
+	})
+}
+
 func TestWhyOpenerReportsAQuestionAboutTheAuthorsChoice(t *testing.T) {
 	runTextCases(t, RuleWhyOpener, []textCase{
 		{"why did you", KindReviewReply, "Why did you add the lock?", []string{"1:Why did you"}},

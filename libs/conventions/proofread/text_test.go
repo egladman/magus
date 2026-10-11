@@ -350,6 +350,28 @@ func TestCopilotTipMatchesUnderAnyProductName(t *testing.T) {
 	}
 }
 
+// A review bot that writes a whole reply opens it with its marker; the same
+// marker further down, or the same words without it, are judged.
+func TestJudgeTextSkipsAReplyABotWroteWhole(t *testing.T) {
+	const notice = "Something went wrong, please try again."
+
+	for _, tc := range []struct {
+		name, text string
+		want       []string
+	}{
+		{"opened by the marker", "\n<!-- This is an auto-generated reply by CodeRabbit -->\n" + notice, nil},
+		{"no marker", notice, []string{"nonspecific:1"}},
+		{"the marker after the text", notice + "\n<!-- This is an auto-generated reply by CodeRabbit -->",
+			[]string{"nonspecific:1"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ruleLines(JudgeText(tc.text, KindReviewReply, houseOn), RuleNonspecific); !slices.Equal(got, tc.want) {
+				t.Errorf("findings: got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // Only the platform's own shape is boilerplate: a marker with no partner
 // leaves the text after it judged, and so does a sentence quoting a tip.
 func TestJudgeTextKeepsATextThatOnlyResemblesBoilerplate(t *testing.T) {

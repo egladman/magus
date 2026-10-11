@@ -11,8 +11,9 @@ import (
 // it. Front matter, code (fenced, indented and in backticks), tables, HTML
 // comments and tags, link targets and URLs are not prose and are never judged.
 // Neither is what a platform wrote into a Markdown text: a coding agent's or
-// a review bot's footer and summary, the prompt a coding agent quotes, and a
-// checkbox a template left for its author to tick.
+// a review bot's footer and summary, a reply the bot wrote whole, the prompt
+// a coding agent quotes, and a checkbox a template left for its author to
+// tick.
 // Findings come in [Rules] order, then in the order their text appears, each
 // with its line in text.
 //
@@ -119,6 +120,10 @@ var botBlocks = []struct{ open, close *regexp.Regexp }{
 	{regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`), regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`)},
 }
 
+// botReply is the comment CodeRabbit opens a reply with when it wrote the
+// whole reply; no comment closes it.
+var botReply = regexp.MustCompile(`(?i)^\s*<!--\s*This is an auto-generated reply\b`)
+
 var (
 	// agentSuffix is the comment Copilot's coding agent writes before what it
 	// appends to a pull request it opens, the prompt it was given among them.
@@ -147,6 +152,12 @@ var (
 // an author's paragraph that mentions a tool stays prose.
 func blankBoilerplate(raw []string) []string {
 	lines := slices.Clone(raw)
+
+	if at := nextFilled(lines, 0); at < len(lines) && botReply.MatchString(lines[at]) {
+		clear(lines)
+
+		return lines
+	}
 
 	for _, b := range botBlocks {
 		for i := 0; i < len(lines); i++ {
