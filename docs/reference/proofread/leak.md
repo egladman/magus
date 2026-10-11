@@ -28,6 +28,11 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 | `guide`              | deny    |
 | `change-description` | deny    |
 | `agent-instructions` | deny    |
+| `commit-message`     | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
+| `changelog`          | deny    |
+| `cli-help`           | deny    |
 | `review-reply`       | deny    |
 
 ## Changing it

@@ -27,6 +27,10 @@ The code is `PRF4011`. The decision depends on the kind of text judged:
 | `guide`              | advise  |
 | `change-description` | advise  |
 | `agent-instructions` | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
 
 ## Changing it
 

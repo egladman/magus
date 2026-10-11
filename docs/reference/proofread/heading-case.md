@@ -26,6 +26,8 @@ The code is `PRF4013`. The decision depends on the kind of text judged:
 | `reference`          | advise  |
 | `guide`              | advise  |
 | `agent-instructions` | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
 
 ## Changing it
 

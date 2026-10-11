@@ -28,6 +28,11 @@ The code is `PRF5001`. The decision depends on the kind of text judged:
 | `guide`              | off     |
 | `change-description` | off     |
 | `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `cli-help`           | off     |
 | `review-reply`       | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not

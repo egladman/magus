@@ -1,13 +1,13 @@
 ---
 title: "contrast"
-description: "A rule that denies on `change-description` and advises on `reference`, `guide`, and `agent-instructions` by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\")."
+description: "A rule that denies on `change-description` and advises on `reference`, `guide`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\")."
 tags: [proofread, rules, contrast, deny]
 aliases: [reference/prose/contrast]
 ---
 
 # contrast
 
-A rule that denies on `change-description` and advises on `reference`, `guide`, and `agent-instructions` by default: it reports a claim made by denying its opposite first ("not just X, it is Y").
+A rule that denies on `change-description` and advises on `reference`, `guide`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` by default: it reports a claim made by denying its opposite first ("not just X, it is Y").
 
 ## What it catches
 
@@ -27,6 +27,10 @@ The code is `PRF4010`. The decision depends on the kind of text judged:
 | `guide`              | advise  |
 | `change-description` | deny    |
 | `agent-instructions` | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
 
 ## Changing it
 

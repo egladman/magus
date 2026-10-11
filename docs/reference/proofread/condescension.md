@@ -27,7 +27,12 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `guide`              | deny    |
 | `change-description` | deny    |
 | `agent-instructions` | deny    |
+| `commit-message`     | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
+| `changelog`          | deny    |
 | `review-reply`       | deny    |
+| `cli-help`           | deny    |
 
 ## Changing it
 

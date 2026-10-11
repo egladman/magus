@@ -1,13 +1,13 @@
 ---
 title: "staccato"
-description: "A rule that denies on `change-description` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph."
+description: "A rule that denies on `change-description`, `issue`, and `release-notes` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph."
 tags: [proofread, rules, staccato, deny]
 aliases: [reference/prose/staccato]
 ---
 
 # staccato
 
-A rule that denies on `change-description` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph.
+A rule that denies on `change-description`, `issue`, and `release-notes` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph.
 
 ## What it catches
 
@@ -25,6 +25,8 @@ The code is `PRF4012`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `reference`          | advise  |
 | `change-description` | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
 
 ## Changing it
 

@@ -25,6 +25,8 @@ The code is `PRF2001`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `change-description` | deny    |
 | `review-reply`       | deny    |
+| `commit-message`     | deny    |
+| `issue`              | deny    |
 
 ## Changing it
 

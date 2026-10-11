@@ -27,6 +27,10 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 | `guide`              | deny    |
 | `change-description` | deny    |
 | `agent-instructions` | deny    |
+| `commit-message`     | deny    |
+| `issue`              | deny    |
+| `release-notes`      | deny    |
+| `changelog`          | deny    |
 
 ## Changing it
 

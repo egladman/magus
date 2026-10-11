@@ -19,12 +19,21 @@ same list as JSON.
 
 ## Shape
 
-| Rule                              | Code    | Default | Catches                                                                                           |
-| --------------------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------- |
-| [lead-context](lead-context.md)   | PRF1001 | deny    | a change description that does not open with a paragraph naming what a reader can now do          |
-| [reply-voice](reply-voice.md)     | PRF1002 | deny    | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label |
-| [second-person](second-person.md) | PRF1003 | deny    | we, us, our or ours in a guide, which speaks to the reader as you                                 |
-| [step-verb](step-verb.md)         | PRF1004 | deny    | a numbered step of a guide that does not open with its imperative verb                            |
+| Rule                                        | Code    | Default        | Catches                                                                                               |
+| ------------------------------------------- | ------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| [lead-context](lead-context.md)             | PRF1001 | deny           | a change description that does not open with a paragraph naming what a reader can now do              |
+| [reply-voice](reply-voice.md)               | PRF1002 | deny           | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
+| [second-person](second-person.md)           | PRF1003 | deny           | we, us, our or ours in a guide, which speaks to the reader as you                                     |
+| [step-verb](step-verb.md)                   | PRF1004 | deny           | a numbered step of a guide that does not open with its imperative verb                                |
+| [subject-mood](subject-mood.md)             | PRF1010 | deny           | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
+| [subject-length](subject-length.md)         | PRF1011 | deny           | a commit subject over 100 bytes                                                                       |
+| [subject-period](subject-period.md)         | PRF1012 | deny           | a commit subject ending in a period                                                                   |
+| [body-separator](body-separator.md)         | PRF1013 | deny           | a commit body that starts on the line after the subject                                               |
+| [issue-repro](issue-repro.md)               | PRF1020 | advise         | a bug report with neither what happened against what was expected, nor steps to reproduce it          |
+| [changelog-heading](changelog-heading.md)   | PRF1030 | deny           | a changelog version heading that is not "## [version] - date" or "## [Unreleased]"                    |
+| [changelog-group](changelog-group.md)       | PRF1031 | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                |
+| [changelog-entry](changelog-entry.md)       | PRF1032 | advise         | a changelog entry that names a Go identifier and says little else                                     |
+| [suppression-unused](suppression-unused.md) | PRF1090 | deny           | a suppression comment that gives no reason or that matched no finding                                 |
 
 ## Tone
 
@@ -46,21 +55,23 @@ same list as JSON.
 
 ## Generated-writing tells
 
-| Rule                              | Code    | Default        | Catches                                                                                  |
-| --------------------------------- | ------- | -------------- | ---------------------------------------------------------------------------------------- |
-| [filler](filler.md)               | PRF4001 | deny           | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                 |
-| [wordy](wordy.md)                 | PRF4002 | deny           | a phrase with a shorter equivalent ("in order to")                                       |
-| [signpost](signpost.md)           | PRF4003 | deny           | an announcement standing where the point should be ("Here's the thing", "Let's dive in") |
-| [chatbot](chatbot.md)             | PRF4004 | deny           | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer  |
-| [leak](leak.md)                   | PRF4005 | deny           | residue of a tool or a template: a citation marker or an unfilled placeholder            |
-| [buzzword](buzzword.md)           | PRF4006 | deny           | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")   |
-| [buzzword-weak](buzzword-weak.md) | PRF4007 | advise         | a buzzword that also has an ordinary sense ("crucial", "landscape")                      |
-| [vague](vague.md)                 | PRF4008 | deny           | weight or consensus asserted with nothing named ("experts argue", "the stakes are high") |
-| [closer](closer.md)               | PRF4009 | deny           | a sentence that opens by announcing it restates the text above ("In conclusion,")        |
-| [contrast](contrast.md)           | PRF4010 | varies by kind | a claim made by denying its opposite first ("not just X, it is Y")                       |
-| [ing-tail](ing-tail.md)           | PRF4011 | advise         | a participle clause added to claim significance (", highlighting the importance of")     |
-| [staccato](staccato.md)           | PRF4012 | varies by kind | three or more consecutive sentences of six words or fewer in one paragraph               |
-| [heading-case](heading-case.md)   | PRF4013 | advise         | a heading whose every word after the first is capitalized                                |
+| Rule                                  | Code    | Default        | Catches                                                                                          |
+| ------------------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------ |
+| [filler](filler.md)                   | PRF4001 | deny           | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                         |
+| [wordy](wordy.md)                     | PRF4002 | deny           | a phrase with a shorter equivalent ("in order to")                                               |
+| [signpost](signpost.md)               | PRF4003 | deny           | an announcement standing where the point should be ("Here's the thing", "Let's dive in")         |
+| [chatbot](chatbot.md)                 | PRF4004 | deny           | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer          |
+| [leak](leak.md)                       | PRF4005 | deny           | residue of a tool or a template: a citation marker or an unfilled placeholder                    |
+| [buzzword](buzzword.md)               | PRF4006 | deny           | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")           |
+| [buzzword-weak](buzzword-weak.md)     | PRF4007 | advise         | a buzzword that also has an ordinary sense ("crucial", "landscape")                              |
+| [vague](vague.md)                     | PRF4008 | deny           | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")         |
+| [closer](closer.md)                   | PRF4009 | deny           | a sentence that opens by announcing it restates the text above ("In conclusion,")                |
+| [contrast](contrast.md)               | PRF4010 | varies by kind | a claim made by denying its opposite first ("not just X, it is Y")                               |
+| [ing-tail](ing-tail.md)               | PRF4011 | advise         | a participle clause added to claim significance (", highlighting the importance of")             |
+| [staccato](staccato.md)               | PRF4012 | varies by kind | three or more consecutive sentences of six words or fewer in one paragraph                       |
+| [heading-case](heading-case.md)       | PRF4013 | advise         | a heading whose every word after the first is capitalized                                        |
+| [participles](participles.md)         | PRF4020 | advise         | a text that hangs present participial clauses on its sentences at a generated-writing rate       |
+| [nominalizations](nominalizations.md) | PRF4021 | advise         | a text whose verbs are turned into nouns (-tion, -ment, -ity, -ness) at a generated-writing rate |
 
 ## House style
 
@@ -94,9 +105,14 @@ same list as JSON.
 
 ## Review replies
 
-| Rule                                    | Code    | Default | Catches                                                                         |
-| --------------------------------------- | ------- | ------- | ------------------------------------------------------------------------------- |
-| [reply-opener](reply-opener.md)         | PRF8001 | deny    | a sentence of a review reply that opens by contradicting ("No,", "As I said")   |
-| [judgment-as-fact](judgment-as-fact.md) | PRF8002 | advise  | a recommendation in a review reply stated as a fact, with no reason given       |
-| [stacked-hedge](stacked-hedge.md)       | PRF8003 | advise  | two softeners in one sentence of a review reply, or an apology before its point |
-| [long-thread](long-thread.md)           | PRF8004 | advise  | a review reply that is its author's fourth or later in a thread                 |
+| Rule                                    | Code    | Default | Catches                                                                                          |
+| --------------------------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------ |
+| [reply-opener](reply-opener.md)         | PRF8001 | deny    | a sentence of a review reply that opens by contradicting ("No,", "As I said")                    |
+| [judgment-as-fact](judgment-as-fact.md) | PRF8002 | advise  | a recommendation in a review reply stated as a fact, with no reason given                        |
+| [stacked-hedge](stacked-hedge.md)       | PRF8003 | advise  | two softeners in one sentence of a review reply, or an apology before its point                  |
+| [long-thread](long-thread.md)           | PRF8004 | advise  | a review reply that is its author's fourth or later in a thread                                  |
+| [nonspecific](nonspecific.md)           | PRF8010 | advise  | a review reply that judges or asks for a change and names no code, path, line, example or reason |
+| [why-opener](why-opener.md)             | PRF8011 | advise  | a review reply sentence that opens "Why did you" or "Why would you"                              |
+| [bare-imperative](bare-imperative.md)   | PRF8012 | advise  | a short command in a review reply that gives no reason anywhere ("Fix this.")                    |
+| [all-caps](all-caps.md)                 | PRF8013 | advise  | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                             |
+| [repeated-marks](repeated-marks.md)     | PRF8014 | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                      |

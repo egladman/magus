@@ -25,6 +25,8 @@ The code is `PRF3001`. The decision depends on the kind of text judged:
 | -------------------- | ------- |
 | `change-description` | advise  |
 | `review-reply`       | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
 
 ## Changing it
 
