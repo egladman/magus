@@ -42,8 +42,11 @@ var commitTexts = map[Rule]ruleText{
 		why: "A subject completes \"if applied, this commit will ...\", so it opens with the verb in the " +
 			"imperative. The rule reads a closed list of about 30 verbs in their past, third-person and " +
 			"gerund forms, not a tagger, so a plural noun that is also a verb (\"changes to the key\") " +
-			"is reported; the list is the one hack/policy/commits.buzz already denied. Over the 1729 " +
-			"commit messages on main it found nothing, so it denies at no cost.",
+			"was reported; the list is the one hack/policy/commits.buzz already denied. Over the 1729 " +
+			"commit messages on main it found nothing. Measured 2026-10-11 over the adjudicated labeling " +
+			"round: 83.7% precision (36 of 43) before, 100% (36 of 36, lower bound 0.90) after, so it " +
+			"denies: a third-person form before a preposition or \"made\" heads a noun phrase (\"Changes " +
+			"from the composer\", \"Fixes for the panel\") and is left alone.",
 	},
 	RuleSubjectLength: {
 		code:      "PRF1011",
@@ -148,6 +151,12 @@ var moodForms = func() map[string]string {
 	return out
 }()
 
+// pluralNoun follows a third-person form that is a plural noun heading the
+// subject: "Changes from the composer", "Fixes for the panel", "Changes made
+// by the agent".
+var pluralNoun = regexp.MustCompile(`^\s+(?:from|for|before|after|made|by|of|in|on|to|since|during|per|` +
+	`without|across)\b`)
+
 // subjectMood reports the subject's first word when it is a past, third-person
 // or gerund form from [moodForms], read after any conventional prefix.
 func subjectMood(in input) []Finding {
@@ -164,7 +173,7 @@ func subjectMood(in input) []Finding {
 	}
 
 	base, ok := moodForms[strings.ToLower(word)]
-	if !ok {
+	if !ok || (strings.HasSuffix(word, "s") && pluralNoun.MatchString(rest[len(word):])) {
 		return nil
 	}
 

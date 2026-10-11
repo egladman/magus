@@ -63,9 +63,13 @@ var reviewTexts = map[Rule]ruleText{
 		why: "Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request opening " +
 			"with \"Please\", read as less polite than one that gives its reason or asks. A command of " +
 			"five words or fewer counts, unless the reply gives a reason anywhere or the command names " +
-			"code. Measured 2026-10-10 over the AIDev review comments: 4.56 percent of 39639 written by " +
-			"people and 0.07 percent of 42076 written by bots. It advises: between teammates who share " +
-			"the context, a short command can be read as intended.",
+			"code or its target (\"change this to appsettings\"). Measured 2026-10-10 over the AIDev review " +
+			"comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. " +
+			"It advises: between teammates who share the context, a short command can be read as " +
+			"intended. Measured 2026-10-11 over the adjudicated labeling round: 37.2% precision (16 of " +
+			"43) before, 100% (16 of 16) after. Most firings followed a sentence stating the problem " +
+			"(\"Duplicate documentation. Remove it.\"), so only a reply made of bare commands is judged. " +
+			"It stays off until 30 labeled firings show it.",
 	},
 	RuleAllCaps: {
 		code:      "PRF8013",
@@ -75,7 +79,10 @@ var reviewTexts = map[Rule]ruleText{
 			"only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the " +
 			"AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 " +
 			"written by bots, which capitalize ALL and ANY in technical prose too, so the rule does not " +
-			"tell the two apart and only advises.",
+			"tell the two apart and only advises. Measured 2026-10-11 over the adjudicated labeling round: " +
+			"65.9% precision (27 of 41) before, 90.0% (27 of 30, lower bound 0.74) after, so it ships " +
+			"advise. AND or OR joining a condition is an operator, and capitals in single quotes, " +
+			"\"ALL CAPS\" and one capital word opening a name (\"IT Admin\") are left alone.",
 	},
 	RuleRepeatedMarks: {
 		code:      "PRF8014",
@@ -83,7 +90,11 @@ var reviewTexts = map[Rule]ruleText{
 		catches:   "a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")",
 		why: "Repeated marks read as exasperation where one mark asks the same question. Measured " +
 			"2026-10-10 over the AIDev review comments: 0.17 percent of 39639 written by people and 0.05 " +
-			"percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes.",
+			"percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes. " +
+			"Measured 2026-10-11 over the adjudicated labeling round: 46.5% precision (20 of 43) before, " +
+			"100% (20 of 20) after: every false positive was an operator or placeholder outside a code " +
+			"span, so a run set between spaces or brackets, or touching a word it opens (\"!!hit\", " +
+			"\"!!NAME!!\"), is left alone. It stays off until 30 labeled firings show it.",
 	},
 }
 
@@ -172,8 +183,13 @@ var (
 		`comply|support|allow|simplify|fix|stay|remain|make sure))\b`)
 )
 
-// bareImperative reports each short command in a reply that gives no reason
-// anywhere: a reason in another sentence explains the command too.
+// commandTarget names what a command changes something to: "change this to
+// appsettings", "make it a frozen set".
+var commandTarget = regexp.MustCompile(`\b(?:to|into|with) \w+|^\W*[Mm]ake it \w+`)
+
+// bareImperative reports each short command in a reply made only of bare
+// commands: a reason in another sentence explains the command too, and so
+// does a sentence stating the problem ("Duplicate documentation. Remove it.").
 func bareImperative(in input) []Finding {
 	paras := paragraphs(in.prose, mentionsMasked)
 
@@ -188,16 +204,22 @@ func bareImperative(in input) []Finding {
 	for _, para := range paras {
 		for _, span := range sentenceBounds(para.text) {
 			text := strings.TrimSpace(para.text[span[0]:span[1]])
-			// A command naming code in backticks or a number names what to act
-			// on.
-			m := bareCommand.FindStringSubmatch(text)
-			if m != nil && !commandNoun.MatchString(m[1]) && !strings.ContainsAny(text, "#0123456789") {
-				out = append(out, Finding{
-					Message: fmt.Sprintf("Give the reason with '%s', or ask, as in 'Could this use the shared "+
-						"client? Each new one opens its own pool.'", m[1]),
-					Match: m[1], Line: para.lineAt(span[0]),
-				})
+			if text == "" {
+				continue
 			}
+			// A command naming code in backticks, a number or its target names
+			// what to act on.
+			m := bareCommand.FindStringSubmatch(text)
+			if m == nil || commandNoun.MatchString(m[1]) || strings.ContainsAny(text, "#0123456789") ||
+				commandTarget.MatchString(m[1]) {
+				return nil
+			}
+
+			out = append(out, Finding{
+				Message: fmt.Sprintf("Give the reason with '%s', or ask, as in 'Could this use the shared "+
+					"client? Each new one opens its own pool.'", m[1]),
+				Match: m[1], Line: para.lineAt(span[0]),
+			})
 		}
 	}
 
@@ -245,12 +267,77 @@ func allCaps(in input) []Finding {
 	return out
 }
 
+var (
+	// logical are the capital words that also name a boolean operator.
+	logical = wordSet("AND", "OR", "NOT")
+
+	// condition is a sentence that states a condition, where a capital AND
+	// or OR is the operator: "only run when the label is present AND".
+	condition = regexp.MustCompile(`\b(?:when|whenever|if|logic|OR|conjunction|condition|true|false|enabled|` +
+		`disabled)\b`)
+
+	// titleWord opens a capitalized word that is not all capitals.
+	titleWord = regexp.MustCompile(`^\s+[A-Z][a-z]`)
+)
+
+// shouted reports whether run, spans of capital words in text, holds emphasis.
+// It does not when the words are quoted ('NEVER CANCEL'), when they mention
+// capitals ("ALL CAPS"), when AND or OR joins a condition, or when one word
+// opens a name ("IT Admin").
 func shouted(text string, run [][]int) bool {
+	if singleQuoted(text, run[0][0]) {
+		return false
+	}
+
+	operators := true
+
+	for _, at := range run {
+		w := text[at[0]:at[1]]
+		if w == "CAPS" {
+			return false
+		}
+
+		operators = operators && logical[w] && w != "NOT"
+	}
+
+	if operators && condition.MatchString(sentenceHolding(text, run[0][0])) {
+		return false
+	}
+
+	if len(run) == 1 && titleWord.MatchString(text[run[0][1]:]) {
+		return false
+	}
+
 	return slices.ContainsFunc(run, func(at []int) bool { return emphatic[text[at[0]:at[1]]] })
 }
 
 var markRun = regexp.MustCompile(`[?!]{2,}`)
 
+// repeatedMarks reports a run of marks closing a word or standing alone. A run
+// set between spaces or brackets, or opening a word, is an operator
+// ("a ?? b", "(??)", "!!hit") or a placeholder ("!!REPLACE!!").
 func repeatedMarks(in input) []Finding {
-	return matchFindings(in, markRun, nil, "Write one mark in place of '%s': a run reads as exasperation.")
+	return matchFindings(in, markRun, func(text string, at []int) bool {
+		before, after := byte(' '), byte(' ')
+		if at[0] > 0 {
+			before = text[at[0]-1]
+		}
+
+		if at[1] < len(text) {
+			after = text[at[1]]
+		}
+
+		opensWord := isWordByte(after) || after == '('
+		standsAlone := at[0] == 0 && at[1] == len(text)
+
+		word := at[0]
+		for word > 0 && isWordByte(text[word-1]) {
+			word--
+		}
+
+		closesPlaceholder := word < at[0] && strings.HasSuffix(text[:word], text[at[0]:at[1]])
+
+		return opensWord || closesPlaceholder || (!standsAlone && strings.IndexByte(" ([\\", before) >= 0 &&
+			(strings.IndexByte(" )]'\"", after) >= 0 || at[1] == len(text)))
+	}, "Write one mark in place of '%s': a run reads as exasperation.")
 }

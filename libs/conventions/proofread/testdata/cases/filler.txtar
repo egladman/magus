@@ -18,7 +18,6 @@ A state-of-the-art, world-class hasher.
 - The cap is critical to remember.
 - When it comes to hashing, the key sorts.
 - Makes the cache very fast.
-- Adds a more powerful parser.
 -- hit/review-reply --
 Actually, it races.
 Very simple, I like it.
@@ -97,16 +96,18 @@ This is simply programmatically changing the style of the view.
 let's just sync both always?
 I don't think that's very realistic.
 This test is basically the same as the one above it so we don't really need it.
--- fp/agent-reply --
+-- fn/change-description --
+- Adds a more powerful parser.
+-- pass/agent-reply --
 Under your misconfiguration rule it should either really bind or fail. Which one do you want?
 The unattributed local tier is heavily used. Just not the notes-flavoured one.
--- fp/commit-message --
+-- pass/commit-message --
 * drop the filler simply from three comments
 * excuse every ancestor claim; test the ancestry ctx runs really carry
--- fp/guide --
+-- pass/guide --
 The flag defaults to the host's instruction file and prints only when that file is really there.
--- fp/reference --
+-- pass/reference --
 *Just this binary, no server I/O*
--- fp/review-reply --
+-- pass/review-reply --
 Consider using a more comprehensive comparison or simplify the expected results to the fields being validated.
 Either merge the rows or, if both privileges really coexist, clarify when each one applies.

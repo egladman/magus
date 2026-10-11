@@ -62,10 +62,10 @@ var (
 // one it means advises: of these, only blame and reply-opener measured no
 // false positive over the last 200 merged pull requests.
 var toneChecks = []check{
-	{rule: RuleBlame, on: agentTone, advise: agentReply, judge: blame},
-	{rule: RuleVerdict, on: toneKinds, advise: toneKinds, judge: verdict},
+	{rule: RuleBlame, on: agentTone, advise: agentReply, judge: ownWords(blame)},
+	{rule: RuleVerdict, on: toneKinds, advise: toneKinds, judge: ownWords(verdict)},
 	{rule: RuleAbsolute, on: toneKinds, advise: toneKinds, judge: absolute},
-	{rule: RuleIntent, on: agentTone, advise: agentTone, judge: intent},
+	{rule: RuleIntent, on: agentTone, advise: agentTone, judge: ownWords(intent)},
 	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
 	{rule: RuleClaim, on: agentTone, advise: agentTone, judge: claim},
 	{rule: RuleReplyOpener, on: replyOnly, judge: replyOpening},
@@ -93,6 +93,105 @@ func matchFindings(in input, pattern *regexp.Regexp, exempt func(text string, at
 	return out
 }
 
+// quotedElement opens or closes an element a pasted issue, comment or prompt
+// arrives in.
+var quotedElement = regexp.MustCompile(`<(/?)(?:issue_description|issue_title|comment_new|comment_old|comments|` +
+	`agent_instructions)\b[^>]*>`)
+
+// quotesOthers are the kinds whose blockquote holds another author's words. A
+// page's blockquote is its own callout.
+var quotesOthers = slices.Concat(toneKinds, agentReply)
+
+// quotedLines reports, for each line of in.source, whether it holds another
+// author's words: a blockquote, or a line inside a [quotedElement].
+func quotedLines(in input) []bool {
+	out := make([]bool, len(in.source))
+	blockquote := slices.Contains(quotesOthers, in.kind)
+	depth := 0
+
+	for i, ln := range in.source {
+		out[i] = depth > 0 || (blockquote && quoteMarker.MatchString(ln) && strings.TrimSpace(ln) != "")
+
+		for _, m := range quotedElement.FindAllStringSubmatch(ln, -1) {
+			if m[1] == "" {
+				depth++
+				out[i] = true
+			} else if depth > 0 {
+				depth--
+			}
+		}
+	}
+
+	return out
+}
+
+// ownWords drops each finding of judge on a line that quotes another author:
+// the writer is answerable only for their own words.
+func ownWords(judge func(in input) []Finding) func(in input) []Finding {
+	return func(in input) []Finding { return unquoted(in, judge(in)) }
+}
+
+// unquoted drops each of found, judged from in, on a line that quotes another
+// author.
+func unquoted(in input, found []Finding) []Finding {
+	quoted := quotedLines(in)
+
+	return slices.DeleteFunc(found, func(f Finding) bool {
+		return f.Line > 0 && f.Line <= len(quoted) && quoted[f.Line-1]
+	})
+}
+
+// singleQuoted reports whether offset at of text sits inside a span opened by a
+// single quote after a space or bracket and closed by one before a space or
+// punctuation, as in 'NEVER CANCEL'. An apostrophe inside a word opens and
+// closes nothing.
+func singleQuoted(text string, at int) bool {
+	open := -1
+
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\'' {
+			continue
+		}
+
+		before := i == 0 || strings.ContainsRune(" ([{", rune(text[i-1]))
+		after := i+1 == len(text) || strings.ContainsRune(" .,;:!?)]}", rune(text[i+1]))
+
+		switch {
+		case open < 0 && before && !after:
+			open = i
+		case open >= 0 && after && !before:
+			if open < at && at < i {
+				return true
+			}
+
+			open = -1
+		}
+	}
+
+	return false
+}
+
+// sentenceBefore is the part of text's sentence that precedes offset at.
+func sentenceBefore(text string, at int) string {
+	return text[sentenceAt(text, at):at]
+}
+
+// sentenceHolding is the whole sentence of text that holds offset at.
+func sentenceHolding(text string, at int) string {
+	for _, b := range sentenceBounds(text) {
+		if b[0] <= at && at < b[1] {
+			return text[b[0]:b[1]]
+		}
+	}
+
+	return text
+}
+
+// parenthesized reports whether offset at of text sits inside parentheses.
+func parenthesized(text string, at int) bool {
+	return strings.Count(text[:at], "(") > strings.Count(text[:at], ")")
+}
+
 // predicative are the words before an adjective that says something of its
 // subject ("the fix was naive", "read as sloppy") rather than naming a kind of
 // thing ("a naive tail", "the wrong checkout").
@@ -114,22 +213,35 @@ var (
 		`(?:should(?:'ve| have)\s+` + participle + `|forgot to|neglected to)\b|` +
 		`\bwhoever (?:wrote|added|made|built|left)\b`)
 
-	// contempt judges the people behind code or a decision.
+	// contempt judges the people behind code or a decision. "lazy" is left
+	// out: in all 7 labeled firings it named evaluation on demand ("lazy
+	// decoding", "the computation is lazy").
 	contempt = regexp.MustCompile(`(?i)\b(?:sloppy|sloppily|incompetent(?:ly)?|stupid|idiotic|moronic|braindead|` +
-		`crazy|insane(?:ly)?|dumb|lazy|naive|careless)\b`)
+		`crazy|insane(?:ly)?|dumb|naive|careless)\b`)
 
 	// technique are the contempt words that also name a technique or a role
-	// before a noun: "a lazy fetch", "a naive tail", "the careless caller", "a
-	// dumb base implementation".
-	technique = wordSet("lazy", "naive", "careless", "dumb")
+	// before a noun: "a naive tail", "the careless caller", "a dumb base
+	// implementation".
+	technique = wordSet("naive", "careless", "dumb")
 
 	// overdoing are the words before a "crazy" that means overdoing it: "go
 	// too crazy", "how crazy we want to go".
 	overdoing = wordSet("go", "goes", "going", "went", "gone", "too", "how")
 
-	// lazyTechnique follows a "lazy" that names evaluation on demand, even
-	// after a copula: "the iframe is lazy loading".
-	lazyTechnique = regexp.MustCompile(`^ (?:load|eval|init)`)
+	// denied ends the part of a sentence before a contempt word that denies
+	// it: "Not crazy:", "it is not crazy", "rather than sloppy", "not because
+	// anyone was careless". "not doing stupid pipelines" still counts.
+	denied = regexp.MustCompile(`(?i)(?:^\W*not|\b(?:is|are|was|were|be|it's|that's) not|\b(?:isn't|aren't|wasn't|` +
+		`weren't)|\brather than)\s+$|\bnot because\b`)
+
+	// ownFault is a writer owning the fault a contempt word names: "sloppy
+	// phrasing on my part", "careless; I should have worked on a copy".
+	ownFault = regexp.MustCompile(`(?i)\b(?:my|on me|I should(?:'ve| have))\b`)
+
+	// hypothetical are the words before a counterfactual's subject that make
+	// it a supposed case or its object: "if they forgot to", "to whoever wrote
+	// the review".
+	hypothetical = wordSet("if", "when", "unless", "to")
 )
 
 // participle is a past participle after "should have": a regular one, or an
@@ -148,7 +260,9 @@ func blame(in input) []Finding {
 	const message = "Describe what happened instead of '%s', as in 'the rename left the old key' rather than " +
 		"'someone forgot to update the key'."
 
-	out := matchFindings(in, counterfactual, nil, message)
+	out := matchFindings(in, counterfactual, func(text string, at []int) bool {
+		return hypothetical[prevWord(text, at[0])] || singleQuoted(text, at[0])
+	}, message)
 	out = append(out, matchFindings(in, contempt, contemptExempt, message)...)
 
 	return out
@@ -157,22 +271,23 @@ func blame(in input) []Finding {
 // contemptExempt reports a contempt word used for something other than
 // contempt: a technique before a noun, part of a name ("crazy-max",
 // "dumb-init", "TERM=dumb"), a capitalized word inside a sentence (a title,
-// "Keep It Simple, Stupid"), "crazy" as overdoing it, and "lazy" naming
-// evaluation on demand.
+// "Keep It Simple, Stupid"), "crazy" as overdoing it, a word the sentence
+// denies, and a fault the writer owns.
 func contemptExempt(text string, at []int) bool {
 	word := text[at[0]:at[1]]
 	lower := strings.ToLower(word)
 	prev := prevWord(text, at[0])
+	before := sentenceBefore(text, at[0])
 
 	switch {
+	case denied.MatchString(before), ownFault.MatchString(sentenceHolding(text, at[0])):
+		return true
 	case at[0] > 0 && strings.ContainsRune("-/=_@.", rune(text[at[0]-1])),
 		at[1] < len(text) && strings.ContainsRune("-/_", rune(text[at[1]])):
 		return true
 	case unicode.IsUpper(rune(word[0])) && midSentence(text, at[0]):
 		return true
 	case lower == "crazy" && overdoing[prev]:
-		return true
-	case lower == "lazy" && lazyTechnique.MatchString(text[at[1]:]):
 		return true
 	}
 
@@ -199,18 +314,63 @@ var (
 	// selecting are the verdict words that pick out a thing before a noun ("a
 	// broken test", "the wrong checkout", "a bad plan") rather than judge it.
 	selecting = wordSet("broken", "wrong", "bad")
+
+	// verdictCause names the behavior beside a verdict word where
+	// [reasonGiven] does not: "wrong whenever the fields differ", "causes the
+	// path to be wrong".
+	verdictCause = regexp.MustCompile(`(?i)\b(?:whenever|until|while|causes?|caused|more often than)\b`)
+
+	// literalState is a subject whose verdict word states a plain fact, a
+	// broken test or link, or a test's status ("marked as broken").
+	literalState = regexp.MustCompile(`(?i)\b(?:tests?|links?|mark(?:ed|s|ing)?)\b`)
+
+	// verdictNegated ends the words before a verdict that deny it: "ensure
+	// nothing was broken", "not garbage".
+	verdictNegated = regexp.MustCompile(`(?i)\b(?:nothing|no|not|none)\b[^.,;:]{0,40}$`)
+
+	// supposed are the words before a "be" that make a verdict a possible or
+	// later state: "may be broken", "will be wrong until it is tagged".
+	supposed = wordSet("may", "might", "could", "would", "will", "should")
+
+	// verbParticle follows a verdict word used as a verb: "broken into lines",
+	// "mess around", "mess with the service".
+	verbParticle = regexp.MustCompile(`^\s+(?:into|up|down|out|off|around|with)\b`)
 )
 
 // verdict reports a judgment word about earlier work, which tells the reader
-// what to think in place of what happened.
+// what to think in place of what happened. A verdict with the behavior beside
+// it, in its sentence or a later one of its paragraph, is left alone: the
+// reader has the facts.
 func verdict(in input) []Finding {
-	return matchFindings(in, verdictWord, func(text string, at []int) bool {
-		w := strings.ToLower(text[at[0]:at[1]])
+	return matchFindings(in, verdictWord, verdictExempt, "Name the behavior '%s' stands for, as in 'the cache "+
+		"kept the old key after a rename' rather than 'the cache was broken'.")
+}
 
-		return (selecting[w] && !predicative[prevWord(text, at[0])]) ||
-			(w == "garbage" && strings.HasPrefix(text[at[1]:], " collect"))
-	}, "Name the behavior '%s' stands for, as in 'the cache kept the old key after a rename' rather than "+
-		"'the cache was broken'.")
+func verdictExempt(text string, at []int) bool {
+	w := strings.ToLower(text[at[0]:at[1]])
+	prev := prevWord(text, at[0])
+	before := sentenceBefore(text, at[0])
+	sentence := sentenceHolding(text, at[0])
+	words := strings.Fields(strings.ToLower(before))
+
+	switch {
+	case at[0] > 0 && text[at[0]-1] == '-', at[1] < len(text) && text[at[1]] == '-':
+		return true
+	case selecting[w] && !predicative[prev]:
+		return true
+	case w == "garbage" && strings.HasPrefix(text[at[1]:], " collect"):
+		return true
+	case (w == "broken" || w == "mess") && prev != "a" && prev != "the" && verbParticle.MatchString(text[at[1]:]):
+		return true
+	case reasonGiven.MatchString(sentence), verdictCause.MatchString(sentence):
+		return true
+	case literalState.MatchString(before), verdictNegated.MatchString(before):
+		return true
+	case len(words) >= 2 && words[len(words)-1] == "be" && supposed[words[len(words)-2]]:
+		return true
+	}
+
+	return sentenceAt(text, at[0]) != sentenceAt(text, len(text)-1)
 }
 
 var (
@@ -246,22 +406,75 @@ func absolute(in input) []Finding {
 }
 
 var (
+	// motive leaves out "don't care" and "do not care": in all 8 labeled
+	// firings the subject was the writer, their team or a user stating a
+	// preference ("we don't care about windows support").
 	motive = regexp.MustCompile(`(?i)\b(?:pretend(?:s|ed|ing)?|lie(?:s|d)?|lying|guess(?:es|ed)|` +
-		`(?:doesn't|does not|didn't|did not|don't|do not) care|hat(?:es|ed)|` +
+		`(?:doesn't|does not|didn't|did not) care|hat(?:es|ed)|` +
 		`refus(?:es|ed) to (?:understand|listen|accept|admit|believe|learn))\b`)
 
 	// liesWhere follows a "lies" that places something: "the cause lies in".
 	liesWhere = regexp.MustCompile(`^ (?:in|within|between|at|on|outside|beyond|with|behind|ahead|under|` +
 		`elsewhere|here|there|upstream|downstream|flat)\b`)
+
+	// lyingObject follows a "lying" that means laying a thing down: "lying the
+	// phone flat".
+	lyingObject = regexp.MustCompile(`^ (?:the|a|an|it|its)\b`)
+
+	// clauseEnd follows a word that ends its clause.
+	clauseEnd = regexp.MustCompile(`^\s*(?:[.,;:!?)]|$)`)
+
+	// placing opens a clause whose closing "lies" places something: "where
+	// the real issue lies".
+	placing = regexp.MustCompile(`(?i)\bwhere\b`)
+
+	// guessedClause follows a "guessed" that is a verb with an object or a
+	// clause ("guessed where it ran", "guessed the ID"), not an adjective
+	// before a noun ("the guessed page", "propagate guessed map types").
+	guessedClause = regexp.MustCompile(`^\s*(?:$|[.,;:!?)]|(?:where|what|which|that|how|whether|the|a|an|at|it|its|` +
+		`wrong|right|from)\b)`)
+
+	// indifferent are the subjects of a "doesn't care" that states a person's
+	// preference rather than give a tool a motive.
+	indifferent = wordSet("i", "we", "you", "they", "user", "users", "people")
+
+	// firstPersonAny is the writer, alone or with their team.
+	firstPersonAny = regexp.MustCompile(`(?i)\b(?:i|i'm|i've|i'd|my|me|we|our|us)\b`)
 )
 
 // intent reports a motive given to a tool or a person. A tool has a mechanism,
-// and a person given a motive in writing reads it as an accusation.
+// and a person given a motive in writing reads it as an accusation. The writer
+// owning a motive ("my first command guessed", "we should not pretend") is
+// candor, and is left alone.
 func intent(in input) []Finding {
-	return matchFindings(in, motive, func(text string, at []int) bool {
-		return strings.HasPrefix(strings.ToLower(text[at[0]:at[1]]), "li") && liesWhere.MatchString(text[at[1]:])
-	}, "Describe the mechanism in place of '%s', as in 'magus read the platform from the first binary on PATH' "+
-		"rather than 'magus guessed'.")
+	return matchFindings(in, motive, intentExempt, "Describe the mechanism in place of '%s', as in 'magus read "+
+		"the platform from the first binary on PATH' rather than 'magus guessed'.")
+}
+
+func intentExempt(text string, at []int) bool {
+	word := strings.ToLower(text[at[0]:at[1]])
+	rest := text[at[1]:]
+	before := sentenceBefore(text, at[0])
+
+	switch {
+	case at[0] > 0 && strings.ContainsRune("-/_.", rune(text[at[0]-1])),
+		at[1] < len(text) && strings.ContainsRune("-/_.", rune(text[at[1]])) && !clauseEnd.MatchString(rest):
+		return true
+	case firstPersonAny.MatchString(before):
+		return true
+	case strings.HasPrefix(word, "li") && liesWhere.MatchString(rest),
+		strings.HasPrefix(word, "lie") && clauseEnd.MatchString(rest) && placing.MatchString(before),
+		word == "lying" && (liesWhere.MatchString(rest) || lyingObject.MatchString(rest)):
+		return true
+	case word == "guessed":
+		return !guessedClause.MatchString(rest)
+	case strings.HasSuffix(word, "care"):
+		return indifferent[prevWord(text, at[0])]
+	case strings.HasPrefix(text[at[0]:at[1]], "Pretend"):
+		return strings.TrimLeft(before, " *_(") == ""
+	}
+
+	return false
 }
 
 var (
@@ -479,16 +692,38 @@ func cited(text string, source []string, first, last int) bool {
 
 // contradiction opens a sentence by telling the other person they are wrong.
 // "Actually," is left to filler, which reports it in a reply too.
-var contradiction = regexp.MustCompile(`^(?:No,|Wrong\b|As I (?:said|mentioned|wrote)\b|Again,|Like I said\b)`)
+// "Wrong" counts only as an exclamation: before a noun it labels a finding
+// ("Wrong indentation", "**Wrong config key**").
+var contradiction = regexp.MustCompile(`^(?:No,|Wrong(?:[,.!]|$)|As I (?:said|mentioned|wrote)\b|Again,|` +
+	`Like I said\b)`)
+
+// conceded is a "No," that agrees with the other person: "No, this wasn't
+// intentional, good catch."
+var conceded = regexp.MustCompile(`(?i)\bgood catch\b|\byou(?:'re| are) (?:right|correct)\b`)
 
 // replyOpening reports a sentence of a reply that opens by contradicting,
-// which reads as winning an argument whatever follows it.
+// which reads as winning an argument whatever follows it. A "No," answering
+// the question the reply quotes just above it is an answer, not a
+// contradiction.
 func replyOpening(in input) []Finding {
 	var out []Finding
 
+	quoted := quotedLines(in)
+
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
+		answers := answersQuestion(in.source, quoted, para.head.line)
+
 		for _, s := range sentenceStarts(para.text) {
-			if m := contradiction.FindString(strings.TrimLeft(para.text[s:], "*_(")); m != "" {
+			m := contradiction.FindString(strings.TrimLeft(para.text[s:], "*_("))
+			if m == "No," && ((answers && s == 0) || conceded.MatchString(sentenceHolding(para.text, s))) {
+				continue
+			}
+
+			if strings.HasPrefix(m, "Wrong") {
+				m = "Wrong"
+			}
+
+			if m != "" {
 				out = append(out, Finding{
 					Message: fmt.Sprintf("Drop '%s' and open with the fact and its evidence, as in 'This needs a "+
 						"lock: the map is written from two goroutines.'", m),
@@ -501,6 +736,18 @@ func replyOpening(in input) []Finding {
 	return out
 }
 
+// answersQuestion reports whether the last non-blank line of source before
+// line, 1-based, quotes a question.
+func answersQuestion(source []string, quoted []bool, line int) bool {
+	for i := line - 2; i >= 0 && i < len(source); i-- {
+		if strings.TrimSpace(source[i]) != "" {
+			return quoted[i] && strings.HasSuffix(strings.TrimSpace(source[i]), "?")
+		}
+	}
+
+	return false
+}
+
 var (
 	recommendation = regexp.MustCompile(`\b(?:[Ss]hould(?: be)?|[Nn]eeds? to(?: be)?|[Mm]ust(?: be)?)\b`)
 
@@ -509,21 +756,40 @@ var (
 		`to avoid|to keep)\b`)
 
 	// ownedCall labels a recommendation as the writer's own call.
-	ownedCall = regexp.MustCompile(`\bI(?:'d| would| think| prefer| suggest)\b`)
+	ownedCall = regexp.MustCompile(`\bI(?:'d| would| think| prefer| suggest| guess| don't think| do not think|` +
+		`'m (?:fairly |pretty )?(?:sure|certain)| will admit)\b`)
+
+	// groundGiven names the purpose or the authority behind a recommendation,
+	// which [reasonGiven] leaves out: "to match the guidelines", "per the
+	// spec", "for consistency".
+	groundGiven = regexp.MustCompile(`(?i)\b(?:to (?:match|ensure|explain|make sure|prevent)|according to|per|` +
+		`based on|for consistency)\b`)
 )
 
 // judgmentAsFact reports a recommendation stated as a fact with no reason:
 // "This should be a map." A question, a recommendation with its reason, and
-// one labelled as the writer's call are left alone.
+// one labelled as the writer's call are left alone. So is one in a reply of
+// more than one sentence, whose other sentences state the facts it rests on.
+// A capitalized "Should" inside a sentence names something ("Should -Throw"),
+// "would need" supposes, and a modal in parentheses or single quotes states
+// an expectation or quotes one.
 func judgmentAsFact(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		for _, span := range sentenceBounds(para.text) {
+		spans := sentenceBounds(para.text)
+		if len(spans) > 1 {
+			continue
+		}
+
+		for _, span := range spans {
 			text := strings.TrimSpace(para.text[span[0]:span[1]])
 
 			at := recommendation.FindStringIndex(text)
-			if at == nil || strings.HasSuffix(text, "?") || reasonGiven.MatchString(text) || ownedCall.MatchString(text) {
+			if at == nil || strings.HasSuffix(text, "?") || reasonGiven.MatchString(text) ||
+				ownedCall.MatchString(text) || groundGiven.MatchString(text) ||
+				(at[0] > 0 && text[at[0]] == 'S') || prevWord(text, at[0]) == "would" ||
+				parenthesized(text, at[0]) || singleQuoted(text, at[0]) {
 				continue
 			}
 

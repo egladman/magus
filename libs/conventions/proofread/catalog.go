@@ -156,8 +156,12 @@ var coreTexts = map[Rule]ruleText{
 			"So \"should have\" counts only before a past participle (\"you should have a tests file\" is " +
 			"possession, \"they should have been kept\" a thing), \"they\" only when it forgot or neglected " +
 			"to, and a contempt word is exempt inside a name (\"crazy-max\", \"dumb-init\"), capitalized " +
-			"mid-sentence (\"Keep It Simple, Stupid\"), as \"go too crazy\", and as \"lazy loading\". After: " +
-			"100% on its cases; firing rates measured at merge.",
+			"mid-sentence (\"Keep It Simple, Stupid\"), and as \"go too crazy\". Measured 2026-10-11 over " +
+			"the adjudicated labeling round: 52.0% precision (26 of 50) before, 92.9% (26 of 28) after. " +
+			"\"lazy\" is no longer read (all 7 labeled firings named evaluation on demand), and quoted " +
+			"words, a denied word (\"not crazy\", \"rather than sloppy\"), a fault the writer owns (\"on my " +
+			"part\") and a supposed one (\"if they forgot to\") are left alone. It stays off until 30 " +
+			"labeled firings show it.",
 	},
 	RuleVerdict: {
 		code:      "PRF2002",
@@ -165,7 +169,12 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\")",
 		why: "A verdict tells the reader what to think in place of what happened. It advises because " +
 			"\"broken\" and \"wrong\" also name a broken test or the wrong checkout; it moves to deny only " +
-			"after every firing on real text was right.",
+			"after every firing on real text was right. Measured 2026-10-11 over the adjudicated labeling " +
+			"round: 20.9% precision (9 of 43) before, 100% (9 of 9) after. Most firings named the " +
+			"behavior beside the word, so a verdict with a reason or cause in its sentence, or a later " +
+			"sentence in its paragraph, is left alone, as are quoted words, a broken test or link, a " +
+			"denied or supposed state (\"nothing was broken\", \"may be broken\"), and the verb senses " +
+			"(\"broken into lines\", \"mess with\"). It stays off until 30 labeled firings show it.",
 	},
 	RuleAbsolute: {
 		code:      "PRF2003",
@@ -180,7 +189,12 @@ var coreTexts = map[Rule]ruleText{
 		dimension: DimensionStance,
 		catches:   "a motive given to a tool or a person (\"guessed\", \"pretends\")",
 		why: "A tool has a mechanism, and a person given a motive in writing reads it as an accusation. " +
-			"It advises: \"lies\" also says where a file lies.",
+			"It advises: \"lies\" also says where a file lies. Measured 2026-10-11 over the adjudicated " +
+			"labeling round: 30.2% precision (13 of 43) before, 81.2% (13 of 16) after. \"don't care\" is " +
+			"no longer read (every labeled one stated a preference), and quoted words, the writer in the " +
+			"first person, a name (\"--pretend\", \"new-lies.md\"), \"guessed\" before a noun, \"lies\" " +
+			"closing a \"where\" clause and an imperative \"Pretend\" are left alone. It stays off until " +
+			"30 labeled firings show it.",
 	},
 	RuleCredit: {
 		code:      "PRF2005",
@@ -198,7 +212,11 @@ var coreTexts = map[Rule]ruleText{
 		why: "\"Simply run\" and \"of course\" tell a reader who is stuck that they should not be. Measured " +
 			"over the guides before the rule, none of 16 lowercase \"just\" minimized a step, so \"just\" " +
 			"counts only before a verb the reader carries out, and an \"easy\" that warns (\"easy to get " +
-			"wrong\") is left alone.",
+			"wrong\") is left alone. Measured 2026-10-11 over the adjudicated labeling round: 44.7% " +
+			"precision (21 of 47) before, 91.3% (21 of 23) after. \"Clearly\" before a verb says how " +
+			"(\"Clearly marks the flag\"), so it counts only before a comma, \"not\" or a subject; quoted " +
+			"words, an \"obviously\" about the writer's own doing and \"Of course,\" assenting in a reply " +
+			"are left alone. It stays off until 30 labeled firings show it.",
 	},
 	RuleClaim: {
 		code:      "PRF3001",
@@ -216,7 +234,10 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "a softener qualifying a claim (\"might fix\", \"could potentially\")",
 		why: "A hedge lets a claim stand with no evidence. A writer who is unsure scopes the claim instead: " +
 			"a sentence under a \"Not verified\" heading, or one opening with \"Not measured\" or " +
-			"\"Untested\", states a limit and is exempt.",
+			"\"Untested\", states a limit and is exempt. Measured 2026-10-11 over the adjudicated labeling " +
+			"round: 63.8% precision (30 of 47) before, 93.8% (30 of 32, lower bound 0.80) after, so it " +
+			"ships advise. \"tries to\" counts only with the change as its subject (code that tries names " +
+			"a mechanism), and words quoted or reported (\"the plan argues\") are left alone.",
 	},
 	RuleFiller: {
 		code:      "PRF4001",
@@ -233,8 +254,12 @@ var coreTexts = map[Rule]ruleText{
 			"so only the opener \"Actually,\" counts. Also exempt: a word hyphenated into a compound " +
 			"(\"all-powerful\"), \"very\" grading a size or position (\"a very long path\"), \"just\" after " +
 			"a negation other than a copula (\"don't just\"), before a literal or as recency (\"Just " +
-			"pushed\"), \"more robust\", and \"This function\" outside a doc comment, where it points at " +
-			"code. After: 100% on its cases; firing rates measured at merge.",
+			"pushed\"), and \"This function\" outside a doc comment, where it points at code. Measured " +
+			"2026-10-11 over the adjudicated labeling round: 86.2% precision (50 of 58) before, 100% (49 " +
+			"of 49, lower bound 0.93) after, which supports its declared deny. Also exempt now: " +
+			"lowercase \"really\" meaning in fact (\"should really bind\"), \"Just\" before a determiner " +
+			"or \"not\", a selling word in a comparison (\"a more comprehensive check\"; this loses " +
+			"\"a more powerful parser\"), and a word mentioned after \"the filler\".",
 	},
 	RuleWordy: {
 		code:      "PRF4002",
@@ -267,8 +292,11 @@ var coreTexts = map[Rule]ruleText{
 			"requests; 29 of 30 human review-comment firings read were a person answering in the thread " +
 			"(\"You're right, ...\", \"feel free to\", \"great catch\"). A review reply's reader saw the " +
 			"chat, so there an agreement, an invitation, an offer and an answer's opener are left alone; " +
-			"\"you're absolutely right\", \"great question\", \"I hope this helps\" and the disclaimers " +
-			"still count. After: 100% on its cases; firing rates measured at merge.",
+			"\"I hope this helps\" and the disclaimers still count. Measured 2026-10-11 over the " +
+			"adjudicated labeling round: 30.8% precision (16 of 52) before, 100% (14 of 14) after. In a " +
+			"reply, \"you're absolutely right\", \"great question\" and \"I'm sorry I\" were wrong in all 21 " +
+			"labeled firings, so they count only on a page or in a description, and words quoted from an " +
+			"issue or a comment are left alone. It stays off until 30 labeled firings show it.",
 	},
 	RuleLeak: {
 		code:      "PRF4005",
@@ -322,7 +350,12 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "a claim made by denying its opposite first (\"not just X, it is Y\")",
 		why: "Negative parallelism argues with a position nobody took. It denies in a change description, " +
 			"where 200 merged pull requests used it 0 times, and advises elsewhere, where the docs use it " +
-			"deliberately 15 times.",
+			"deliberately 15 times. Measured 2026-10-11 over the adjudicated labeling round: 61.2% " +
+			"precision (30 of 49) before, 100% (30 of 30, lower bound 0.89) after, so it ships advise " +
+			"everywhere. Left alone now: quoted words, a conditional (\"if it is not provided, it is " +
+			"derived\"), a correction in parentheses, \"not only\" before anything but an article, a " +
+			"contrast answering a position the paragraph reports (\"You proposed ...\"), and \"no X, no " +
+			"Y, just\" listing what happened.",
 	},
 	RuleIngTail: {
 		code:      "PRF4011",
@@ -338,7 +371,11 @@ var coreTexts = map[Rule]ruleText{
 		why: "A run of fragments reads as a drumbeat. At a cap of 4 words the rule found nothing and " +
 			"missed a real run; at 6 it found that run and docs/scope.md alone. It denies in a change " +
 			"description and advises on a page; a guide's steps and agent instructions are short by rule, " +
-			"so it does not judge them.",
+			"so it does not judge them. Measured 2026-10-11 over the adjudicated labeling round: 28.2% " +
+			"precision (11 of 39) before, 73.3% (11 of 15) after. Left alone now: quoted words, a title, " +
+			"a paragraph laid out as an HTML list, initials and abbreviations, and a run broken by a link, " +
+			"a label ending in a colon, or a line with no word (a path, an emoji, a log line). It stays " +
+			"off: terse template answers (\"Low. Only adding a registration.\") still fire.",
 	},
 	RuleHeadingCase: {
 		code:      "PRF4013",
@@ -460,15 +497,23 @@ var coreTexts = map[Rule]ruleText{
 		code:      "PRF8001",
 		dimension: DimensionStance,
 		catches:   "a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\")",
-		why: "A contradiction first reads as winning an argument whatever follows it. It measured no " +
-			"false positive, so it denies.",
+		why: "A contradiction first reads as winning an argument whatever follows it. Measured 2026-10-11 " +
+			"over the adjudicated labeling round: 44.2% precision (19 of 43) before, 95.0% (19 of 20) " +
+			"after. \"Wrong\" counts only as an exclamation, not before a noun (\"Wrong indentation\"), " +
+			"and a \"No,\" answering the question the reply quotes, or conceding (\"good catch\"), is left " +
+			"alone. It stays off until 30 labeled firings show it.",
 	},
 	RuleJudgmentAsFact: {
 		code:      "PRF8002",
 		dimension: DimensionStance,
 		catches:   "a recommendation in a review reply stated as a fact, with no reason given",
 		why: "\"This should be a map\" leaves the author to guess why; the reason, or a label saying it " +
-			"is the writer's call, invites an answer. It advises: a modal also states requirements.",
+			"is the writer's call, invites an answer. It advises: a modal also states requirements. " +
+			"Measured 2026-10-11 over the adjudicated labeling round: 23.8% precision (10 of 42) before, " +
+			"55.6% (10 of 18) after. A reply of more than one sentence gives its facts beside the " +
+			"recommendation, so only a one-sentence reply is judged; a purpose (\"to match the " +
+			"guidelines\"), an authority (\"per the spec\"), \"would need\", and a modal quoted or in " +
+			"parentheses are left alone. It stays off: a reason joined by \"and\" still fires.",
 	},
 	RuleStackedHedge: {
 		code:      "PRF8003",

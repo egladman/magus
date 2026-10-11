@@ -229,8 +229,12 @@ func within(offset int, spans [][]int) bool {
 // might still end" states a contract a caller relies on. Only a modal before a
 // verb of benefit hedges: "might fix" claims a fix without making it. A modal
 // before potentially, conceivably or theoretically hedges whatever follows.
+// "tries to" counts only with the change as its subject: in all 7 labeled
+// firings with another subject it named what code attempts ("the retry logic
+// tries to get the script").
 var hedging = regexp.MustCompile(`\b(?:(?:[Mm]ay|[Mm]ight|[Cc]ould) (?:help|improve|reduce|speed up|fix|solve|` +
-	`prevent|avoid|be worth)|[Ss]hould probably|[Pp]robably|[Aa]ims? to|[Tt]ries to|[Hh]opefully|[Aa]rguably|` +
+	`prevent|avoid|be worth)|[Ss]hould probably|[Pp]robably|[Aa]ims? to|` +
+	`(?:PR|pull request|change|patch|commit|fix) tries to|[Hh]opefully|[Aa]rguably|` +
 	`[Pp]erhaps|[Ss]eems? to|[Ii]t seems|(?:[Cc]ould|[Mm]ight|[Mm]ay|[Ww]ould|[Cc]an) ` +
 	`(?:potentially|conceivably|theoretically)|[Pp]otentially possibly|[Cc]onceivably)\b`)
 
@@ -285,7 +289,8 @@ func sentenceAt(text string, offset int) int {
 
 // hedge reports a softener qualifying a claim. A sentence that states a limit
 // ("Not measured on Linux") is exempt: it scopes the claim rather than
-// softening it.
+// softening it. So are another author's words, quoted or reported ("the plan
+// argues the level is probably right").
 func hedge(in input) []Finding {
 	var out []Finding
 
@@ -294,7 +299,8 @@ func hedge(in input) []Finding {
 
 	for i, para := range paras {
 		for _, at := range hedging.FindAllStringIndex(para.text, -1) {
-			if statesLimit(para, limits[i], at[0]) {
+			if statesLimit(para, limits[i], at[0]) || singleQuoted(para.text, at[0]) ||
+				reported.MatchString(sentenceBefore(para.text, at[0])) {
 				continue
 			}
 
@@ -306,8 +312,11 @@ func hedge(in input) []Finding {
 		}
 	}
 
-	return out
+	return unquoted(in, out)
 }
+
+// reported is a verb reporting another author's words.
+var reported = regexp.MustCompile(`\b(?:argues|argued|says|said|claims|claimed|suggests|suggested|writes|wrote)\b`)
 
 var (
 	// credit names a tool as the producer of the work. "written by an agent"

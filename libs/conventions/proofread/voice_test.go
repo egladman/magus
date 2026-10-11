@@ -99,8 +99,9 @@ func TestHedgeReportsASoftenerAndLeavesPermissionAlone(t *testing.T) {
 	runTextCases(t, RuleHedge, []textCase{
 		{"may help", KindReference, "The flag may help a slow runner.", []string{"1:may help"}},
 		{"might fix", KindChangeDescription, pr("- This might fix the flake."), []string{"4:might fix"}},
-		{"softeners", KindReference, "It aims to be fast and is arguably simpler. Hopefully it tries to cope.",
-			[]string{"1:aims to", "1:arguably", "1:Hopefully", "1:tries to"}},
+		{"softeners", KindReference, "It aims to be fast and is arguably simpler. Hopefully the change tries to cope.",
+			[]string{"1:aims to", "1:arguably", "1:Hopefully", "1:change tries to"}},
+		{"code that tries", KindReference, "The retry logic tries to read the script first.", nil},
 		{"should probably", KindReference, "You should probably pin it.", []string{"1:should probably"}},
 		// docs/concepts/projects.md grants a permission.
 		{"may granting permission", KindReference, "A workspace may declare its own spells.", nil},

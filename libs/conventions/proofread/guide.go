@@ -220,8 +220,15 @@ var (
 	// step" and "please open an issue" carry meaning on a page or in a reply.
 	presuming = regexp.MustCompile(`(?i)\b(?:of course|(?:as )?everyone knows|it goes without saying)\b`)
 
-	// booster opens a sentence by asserting it is beyond question.
-	booster = regexp.MustCompile(`^(?:Obviously|Clearly)\b`)
+	// booster opens a sentence by asserting it is beyond question. "Clearly"
+	// before a verb says how ("Clearly marks the flag as internal"), so it
+	// counts only before a comma, "not" or the subject of a claim.
+	booster = regexp.MustCompile(`^(?:(Obviously)\b|(Clearly)(?:,|\s+(?:not|the|this|that|it|there|we|you|they|a|an|` +
+		`these|those|no|nobody)\b))`)
+
+	// assent is "Of course," answering a reply's request: "Of course, makes
+	// sense."
+	assent = regexp.MustCompile(`^\W*Of course,`)
 
 	// obviously is a booster anywhere in text written to a teammate. On a page
 	// it also describes how something looks ("looked obviously correct") or
@@ -233,6 +240,9 @@ var (
 // condescension reports a word that tells the reader a step is easy or that
 // they should already know a fact. A word filler reports (`simply`, `just`
 // meaning merely, `Please note`) is left to it, so one word gives one finding.
+// Another author's quoted words, an "obviously" about the writer's own doing
+// ("obviously I didn't intend it"), and "Of course," assenting in a reply are
+// left alone.
 func condescension(in input) []Finding {
 	var out []Finding
 
@@ -254,8 +264,13 @@ func condescension(in input) []Finding {
 			}
 
 			for _, start := range sentenceStarts(para.text) {
-				if at := booster.FindStringIndex(para.text[start:]); at != nil && !within(start, spans) {
-					spans = append(spans, []int{start + at[0], start + at[1]})
+				if at := booster.FindStringSubmatchIndex(para.text[start:]); at != nil && !within(start, spans) {
+					word := at[2:4]
+					if word[0] < 0 {
+						word = at[4:6]
+					}
+
+					spans = append(spans, []int{start + word[0], start + word[1]})
 				}
 			}
 
@@ -263,7 +278,8 @@ func condescension(in input) []Finding {
 		}
 
 		for _, at := range spans {
-			if within(at[0], taken) || condescensionExempt(para.text, at) {
+			if within(at[0], taken) || condescensionExempt(para.text, at) ||
+				(in.kind == KindReviewReply && assent.MatchString(para.text[sentenceAt(para.text, at[0]):])) {
 				continue
 			}
 
@@ -276,7 +292,7 @@ func condescension(in input) []Finding {
 		}
 	}
 
-	return out
+	return unquoted(in, out)
 }
 
 var (
@@ -303,6 +319,9 @@ func condescensionExempt(text string, at []int) bool {
 		return !imperatives[strings.ToLower(firstWord(strings.TrimLeft(text[at[1]:], " ")))]
 	case "easy", "easily":
 		return negations[prevWord(text, at[0])] || easyMistake.MatchString(text[at[1]:])
+	case "obviously":
+		return firstPerson.MatchString(sentenceBefore(text, at[0])) ||
+			firstWord(strings.TrimLeft(text[at[1]:], " ")) == "I"
 	}
 
 	return false

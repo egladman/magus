@@ -43,7 +43,7 @@ adds support to run tool from a container
 chore: removing numbers from titles
 Updates the scan config `config.yaml`
 updates
--- fp/commit-message --
+-- pass/commit-message --
 Changes from background composer bc-725113d3
 Changes before error encountered
 Changes made by Agent

@@ -25,7 +25,10 @@ Delete file from PR.
 remove this empty line
 Don't add meaningless comments.
 Fix this
--- fp/review-reply --
+-- pass/review-reply whole --
+`BableTraceFile` There is a typo in this variable, it should be `BabelTraceFile`.
+Please fix it
+-- pass/review-reply --
 Remove this option. It should be on always
 Remove. This is specified in the root package
 The docstring names the singular table but the table name is plural. Update for consistency.
@@ -52,6 +55,3 @@ The route method already has documentation above, but another summary tag is add
 The file should end with exactly one blank line per the style guidelines. Remove the extra blank line.
 The capability key should be the singular "diagnostic" per the spec. Rename this field accordingly.
 Inspect isn't related to variables at all like that. remove
--- fp/review-reply whole --
-`BableTraceFile` There is a typo in this variable, it should be `BabelTraceFile`.
-Please fix it

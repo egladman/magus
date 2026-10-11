@@ -81,9 +81,16 @@ var measured = wordSet("long", "short", "large", "small", "big", "high", "low", 
 //
 // Lowercase "actually" states a contrast with what seemed or was configured
 // ("what the cache actually did", "wait for it to actually exit"); only the
-// sentence opener "Actually," is filler. "more robust" and "less robust"
-// compare. A word hyphenated into a compound ("all-powerful",
-// "just-in-time") is part of another word.
+// sentence opener "Actually," is filler. A word hyphenated into a compound
+// ("all-powerful", "just-in-time") is part of another word.
+//
+// Lowercase "really" means "in fact" ("it should really bind", "the runs
+// really carry it") except after a pronoun or a negation ("I really think",
+// "don't really need") or after a copula before anything but "there". "Just"
+// before a determiner or "not" means only ("Just this binary", "Just not the
+// notes one"). A selling word after more, less, most or least compares ("a
+// more robust check"), and a word after "filler", "word" or "adverb" is
+// mentioned, not used.
 func fillerExempt(text string, at []int) bool {
 	if (at[0] > 0 && text[at[0]-1] == '-') || (at[1] < len(text) && text[at[1]] == '-') {
 		return true
@@ -91,11 +98,16 @@ func fillerExempt(text string, at []int) bool {
 
 	word := text[at[0]:at[1]]
 	next := strings.TrimRight(strings.Fields(text[at[1]:] + " .")[0], ".,;:!?)")
+	prev := prevWord(text, at[0])
+
+	if mentioned(text, at[0]) || (comparing[prev] && selling.MatchString(word)) {
+		return true
+	}
 
 	switch strings.ToLower(word) {
 	case "just":
 		if word == "Just" {
-			return strings.HasSuffix(next, "ed")
+			return strings.HasSuffix(next, "ed") || only[strings.ToLower(next)]
 		}
 
 		return !merely(text, at[0]) || next == "as" || strings.HasSuffix(next, "ed") ||
@@ -104,13 +116,37 @@ func fillerExempt(text string, at []int) bool {
 		return sameLead[prevWord(text, at[0])] || measured[strings.ToLower(next)]
 	case "actually":
 		return word == "actually"
-	case "robust":
-		prev := prevWord(text, at[0])
-
-		return prev == "more" || prev == "less"
+	case "really":
+		return word == "really" && !intensified[prev] && (!mereLead[prev] || next == "there")
 	}
 
 	return false
+}
+
+var (
+	// only are the words after a "Just" that make it mean only.
+	only = wordSet("this", "that", "the", "these", "those", "one", "a", "not")
+
+	// intensified are the words before a "really" that make it an intensifier:
+	// a pronoun or what prevWord leaves of a negation.
+	intensified = wordSet("i", "we", "you", "they", "t", "not")
+
+	// comparing are the words before a selling word that make it a comparison.
+	comparing = wordSet("more", "less", "most", "least")
+
+	// mentioning are the words after "the" before a filler word that mention
+	// it: "drop the filler simply".
+	mentioning = wordSet("filler", "word", "adverb")
+
+	selling = regexp.MustCompile(`(?i)^(?:robust|comprehensive|seamless|powerful|elegant|effortless)`)
+)
+
+// mentioned reports whether the word at offset at of text follows "the
+// filler", "the word" or "the adverb".
+func mentioned(text string, at int) bool {
+	fields := strings.Fields(strings.ToLower(text[:at]))
+
+	return len(fields) >= 2 && fields[len(fields)-2] == "the" && mentioning[fields[len(fields)-1]]
 }
 
 // merely reports whether the word before at makes a "just" there mean merely:

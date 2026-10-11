@@ -75,7 +75,10 @@ var slopChecks = []check{
 		rule: RuleSignpost, on: agentWords, advise: agentReply,
 		judge: tellJudge("Drop '%s': state the point itself.", signposts...),
 	},
-	{rule: RuleChatbot, on: withReply, judge: tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)},
+	{
+		rule: RuleChatbot, on: withReply,
+		judge: ownWords(tellJudge("Drop '%s': it answers a chat the reader never saw.", chatbots...)),
+	},
 	{
 		rule: RuleLeak, on: everywhere, advise: agentReply,
 		judge: tellJudge("Remove '%s': it is left over from a tool or a template.", leaks...),
@@ -87,7 +90,8 @@ var slopChecks = []check{
 	},
 	{
 		rule: RuleContrast, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(notPullRequest, agentReply),
-		judge: tellJudge("State the positive claim directly: drop the negation in '%s'.", contrasts...),
+		judge: ownWords(tellJudgeExcept("State the positive claim directly: drop the negation in '%s'.",
+			contrastExempt, contrasts...)),
 	},
 	{rule: RuleVague, on: agentWords, judge: tellJudge("Name the specific thing '%s' stands for, or cut it.", vagues...)},
 	{rule: RuleCloser, on: agentWords, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
@@ -95,7 +99,7 @@ var slopChecks = []check{
 		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(proseKinds, agentReply),
 		judge: tellJudge("Make '%s' a sentence with a subject, or cut it.", ingTails...),
 	},
-	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: staccato},
+	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: ownWords(staccato)},
 	{rule: RuleDash, on: agentWords, house: true, judge: dash},
 	{rule: RuleASCII, on: agentWords, house: true, judge: ascii},
 	{rule: RuleHeadingCase, on: pageKinds, advise: pageKinds, judge: headingCase},
@@ -143,6 +147,12 @@ func (t tell) find(text string) [][]int {
 // the one that starts first stands, and the longer of two that start together.
 // message takes the matched text.
 func tellJudge(message string, tells ...tell) func(in input) []Finding {
+	return tellJudgeExcept(message, nil, tells...)
+}
+
+// tellJudgeExcept is [tellJudge] less the spans exempt reports, given the
+// paragraph's text and the span.
+func tellJudgeExcept(message string, exempt func(text string, at []int) bool, tells ...tell) func(in input) []Finding {
 	return func(in input) []Finding {
 		var out []Finding
 
@@ -156,6 +166,10 @@ func tellJudge(message string, tells ...tell) func(in input) []Finding {
 			}
 
 			for _, at := range leftmost(spans) {
+				if exempt != nil && exempt(para.text, at) {
+					continue
+				}
+
 				m := para.text[at[0]:at[1]]
 				out = append(out, Finding{Message: fmt.Sprintf(message, m), Match: m, Line: para.lineAt(at[0])})
 			}
@@ -207,21 +221,20 @@ var signposts = []tell{
 // a reply is one person answering another in a thread both can read, so an
 // agreement ("You're right, the argument is unused"), an invitation, an offer
 // or an answer's opener there answers a chat the reader did see. Only the
-// intensified agreement, flattery of a question and the tells no person
-// writes stay.
+// tells no person writes stay: in the labeled replies, "You're absolutely
+// right", "Great question" and "I'm sorry I" were wrong in all 21 firings.
 var chatbots = []tell{
 	anywhere(`(?i)\blet me know if\b|\bfeel free to\b|\bhappy to help\b|\b(?:would you like|want) me to\b|`+
-		`\bshould I (?:continue|go on|proceed)\b|\byou(?:'re| are) right\b|`+
-		`\b(?:great|excellent|fantastic) (?:point|catch|observation)\b`, proseKinds...),
+		`\bshould I (?:continue|go on|proceed)\b|\byou(?:'re| are) (?:(?:absolutely|completely|totally) )?right\b|`+
+		`\b(?:great|excellent|fantastic) (?:point|catch|observation)\b|`+
+		`\b(?:great|excellent|fantastic) question\b|\bI(?:'m| am) sorry,? (?:but )?I\b`, proseKinds...),
 	{
 		re:      regexp.MustCompile(`(?i)^(?:Certainly|Of course|Absolutely|Sure thing)[!,.]`),
 		opening: true,
 		kinds:   proseKinds,
 	},
 	anywhere(`(?i)\bI hope (?:this|that) helps\b|\bis there anything else\b|` +
-		`\byou(?:'re| are) (?:absolutely|completely|totally) right\b|` +
-		`\b(?:great|excellent|fantastic) question\b|` +
-		`\bas an? (?:ai|large) language model\b|\bI(?:'m| am) sorry,? (?:but )?I\b|` +
+		`\bas an? (?:ai|large) language model\b|` +
 		`\bI (?:cannot|can't) (?:help|assist) with\b|\bas of my (?:last )?(?:training|knowledge)|` +
 		`\bup to my last training\b|\bwhile specific details are (?:limited|scarce)\b|` +
 		`\bbased on (?:the )?(?:available|provided) (?:information|sources)\b|` +
@@ -291,8 +304,11 @@ var weakBuzzwords = []tell{
 	opening(`(?i)^Additionally\b`),
 }
 
+// contrasts read "not only ... but also" only before an article: before an
+// adjective or a phrase it adds a condition ("not only non-empty but also free
+// of whitespace", "merge not only within a layer but also across layers").
 var contrasts = []tell{
-	anywhere(`(?i)\bnot only\b[^.!?;]{1,100}\bbut (?:also|even)\b`),
+	anywhere(`(?i)\bnot only (?:a|an|the|about)\b[^.!?;]{1,100}\bbut (?:also|even)\b`),
 	anywhere(`(?i)\b(?:it|this|that)(?:'s| is) not (?:just|only|merely|simply) (?:about |a |an |the )?` +
 		`[^.!?;]{1,60}[;,] (?:it(?:'s| is)|but)\b`),
 	anywhere(`\bNot because [^.!?]{3,80}[.,;] (?:but )?[Bb]ecause\b`),
@@ -306,6 +322,32 @@ var contrasts = []tell{
 		`\b[Nn]ot (?:always|perfectly|exactly|quite|entirely|fully)\. (?:Not|But)\b`),
 	anywhere(`,\s+no\s+(?:guessing|surprises|guesswork|wasted \w+|fuss|magic|hassle|friction|ceremony|` +
 		`boilerplate)\s*[.;]`),
+}
+
+var (
+	// supposing opens a clause that states a condition, whose "is not X, it
+	// is Y" is a plain conditional: "If the alias is not provided, it is
+	// derived".
+	supposing = regexp.MustCompile(`(?i)\b(?:if|when|unless|assuming|whether)\b`)
+
+	// raisedPosition reports a position someone took, which a later "isn't X,
+	// it's Y" in the paragraph answers rather than invents: "You proposed
+	// joining ... So it isn't a join, it's an attribute".
+	raisedPosition = regexp.MustCompile(`(?i)\b(?:you|they|it) (?:proposed|suggested|said|asked|argued|assumed|` +
+		`wrote)\b|\bassum(?:ption|ed)\b|\bflagged\b`)
+
+	// eventList is a "no ..., no ..., just" listing what happened, not
+	// denying a claim: "no counts moved, no sections changed, just the
+	// fingerprint".
+	eventList = regexp.MustCompile(`^[Nn]o [a-z' -]*\b\w+ed,`)
+)
+
+// contrastExempt reports a contrast that answers a position stated before it
+// in its paragraph, states a condition, sits in parentheses as a plain
+// correction, or lists what happened.
+func contrastExempt(text string, at []int) bool {
+	return supposing.MatchString(sentenceBefore(text, at[0])) || parenthesized(text, at[0]) ||
+		raisedPosition.MatchString(text[:sentenceAt(text, at[0])]) || eventList.MatchString(text[at[0]:at[1]])
 }
 
 var vagues = []tell{
@@ -347,21 +389,40 @@ const (
 // stop to a byte of the same length, so the number does not end a sentence.
 var stepNumber = regexp.MustCompile(`(\d+)\.(\s|$)`)
 
+// abbreviation is an initial or an abbreviation and its full stop, which
+// staccato rewrites like a [stepNumber]: "Lee, A., Kim, B. C.", "(Ex. fill)".
+var abbreviation = regexp.MustCompile(`\b([A-Z]|Ex|ex|vs|etc|cf|Fig)\.`)
+
+// htmlList is markup that lays a paragraph out as a list or a heading.
+var htmlList = regexp.MustCompile(`(?i)<(?:li|br|ul|ol|h\d|td|tr)\b`)
+
 // staccato reports a paragraph holding a run of short sentences. A list item
-// is a list, not rhythm, and a heading is a label.
+// is a list, not rhythm, and a heading or a title is a label; so is a
+// paragraph laid out as a list in HTML. A sentence that is not prose breaks a
+// run: one with no word (a path, an emoji, a log line), a label ending in a
+// colon, or a link ("Source: [tool.proto:146].").
 func staccato(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		if para.head.item || para.head.heading {
+		if para.head.item || para.head.heading || (titled(in.kind) && para.head.line == 1) ||
+			htmlLaidOut(in.source, para) {
 			continue
 		}
 
 		var run []sentenceSpan
 
 		// A step number ("**2.**") is no sentence of one word.
-		for _, s := range sentenceSpans(stepNumber.ReplaceAllString(para.text, "$1#$2")) {
-			if s.words > staccatoWords {
+		text := abbreviation.ReplaceAllString(stepNumber.ReplaceAllString(para.text, "$1#$2"), "$1#")
+		spans := sentenceSpans(text)
+
+		for i, s := range spans {
+			end := len(text)
+			if i+1 < len(spans) {
+				end = spans[i+1].start
+			}
+
+			if s.words > staccatoWords || !readsAsProse(text[s.start:end]) {
 				run = run[:0]
 
 				continue
@@ -379,6 +440,35 @@ func staccato(in input) []Finding {
 	}
 
 	return out
+}
+
+// htmlLaidOut reports whether a source line of para holds [htmlList] markup.
+func htmlLaidOut(source []string, para paragraph) bool {
+	for _, s := range para.starts {
+		if s.line > 0 && s.line <= len(source) && htmlList.MatchString(source[s.line-1]) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// readsAsProse reports whether sentence reads as one: it holds a word of letters,
+// holds no link, and does not end in a colon.
+func readsAsProse(sentence string) bool {
+	fields := strings.Fields(sentence)
+	if len(fields) == 0 || strings.Contains(sentence, "[") ||
+		strings.HasSuffix(strings.TrimRight(fields[len(fields)-1], "*_"), ":") {
+		return false
+	}
+
+	notWord := func(r rune) bool { return !unicode.IsLetter(r) && r != '\'' && r != '-' }
+
+	return slices.ContainsFunc(fields, func(f string) bool {
+		f = strings.Trim(f, "*_\"'()[]:;,.!?")
+
+		return f != "" && strings.IndexFunc(f, notWord) < 0
+	})
 }
 
 // dash reports an em dash, an en dash, or a double hyphen set between words.

@@ -61,7 +61,7 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 				KindAgentInstructions: DecisionAdvise,
 			}},
 		{"staccato leaves a guide and agent instructions their short imperatives", RuleStaccato,
-			"It is fast. It is small. It is stable.", nil,
+			"fix: pin the key\n\nIt is fast. It is small. It is stable.", nil,
 			map[Kind]Decision{KindReference: DecisionAdvise, KindChangeDescription: DecisionDeny}},
 		{"a weak buzzword always advises", RuleBuzzwordWeak, "The landscape is stable.", nil, map[Kind]Decision{
 			KindReference: DecisionAdvise, KindGuide: DecisionAdvise, KindChangeDescription: DecisionAdvise,
@@ -90,10 +90,13 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
 				KindAgentInstructions: DecisionDeny,
 			}},
-		{"an intensified agreement is a tell in a reply too", RuleChatbot, "You're absolutely right, the key sorts.", nil,
+		// A reply agrees with someone the reader watched speak: every labeled
+		// "You're absolutely right" in a reply was a person's register.
+		{"an intensified agreement is a tell on a page, not in a reply", RuleChatbot,
+			"You're absolutely right, the key sorts.", nil,
 			map[Kind]Decision{
 				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
-				KindAgentInstructions: DecisionDeny, KindReviewReply: DecisionDeny,
+				KindAgentInstructions: DecisionDeny,
 			}},
 	}
 
@@ -131,7 +134,8 @@ func TestChatbotReportsTextAnsweringAChatTheReaderNeverSaw(t *testing.T) {
 			[]string{"4:I hope this helps", "4:Let me know if", "4:want me to"}},
 		{"an opener", KindReference, "Certainly! The key sorts its inputs.", []string{"1:Certainly!"}},
 		{"a disclaimer", KindReference, "As an AI language model, I cannot run the suite.", []string{"1:As an AI language model"}},
-		{"flattery in a reply", KindReviewReply, "Great question, the key sorts.", []string{"1:Great question"}},
+		{"flattery on a page", KindReference, "Great question, the key sorts.", []string{"1:Great question"}},
+		{"praise of a question in a reply", KindReviewReply, "Great question, the key sorts.", nil},
 		{"a cutoff", KindReference, "As of my last training the cache was off.", []string{"1:As of my last training"}},
 		// A letter is a legitimate subject on a page.
 		{"a salutation on a page", KindReference, "Dear Maintainers: the page opens a letter.", nil},

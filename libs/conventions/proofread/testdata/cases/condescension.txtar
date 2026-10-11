@@ -40,14 +40,41 @@ Fixing this is of course out of scope for this PR, but I hope you can explain th
 It would use normal namespaces rather than file-scoped namespaces, obviously.
 This file must not be checked in to the repo obviously.
 Clearly not, since the lending logic is separate in each branch.
--- fp/change-description --
+-- fp/review-reply --
+Updated the instruction to proceed with snapshot updates unless changes are obviously incorrect.
+Not critical of course.
+-- pass/change-description whole --
+fix: convert the minimum date explicitly
+
+> Obviously it's not something that we are the first to discover.
+-- pass/change-description whole --
+fix: stop predictive text in multiline fields
+
+> Of course the same is happening with a multiline text component.
+-- pass/change-description whole --
+fix: dispose the client safely
+
+> Clearly, I should be able to address that through thread synchronization.
+-- pass/change-description whole --
+fix: trim spaces in renamed identifiers
+
+> It adds that space everywhere the identifier is used, and obviously also where it's defined.
+-- pass/change-description whole --
+feat: add theme roles for front matter
+
+<agent_instructions>Of course we don't assign literal colors to these things, but each gets a different role.</agent_instructions>
+-- pass/change-description whole --
+feat: run the test framework natively
+
+<comment_new><body>Obviously we want to support running it natively, but this will take some time.</body></comment_new>
+-- pass/change-description --
 - Clearly emphasizes the production-ready features: statistics and confidence intervals
 - Clearly marks direct connections as development-only
 - Clearly separates fetch operations from other activities
 - Clearly distinguish between occupied and available beds
 - Clearly marked as advanced functions that bypass higher-level abstractions
 - Clearly categorizes implemented and missing interfaces
--- fp/commit-message --
+-- pass/commit-message --
 1. Clearly states what was changed
 - Clearly indicate that the interface may change in the future
 - Clearly identifies the remaining path mapping issue
@@ -55,35 +82,9 @@ Clearly not, since the lending logic is separate in each branch.
 - Clearly indicate the paid files are omitted from the open-source distribution
 - Clearly separate chart ingress from manual ingress options
 - Clearly identify breaking changes
--- fp/review-reply --
+-- pass/review-reply --
 - Clearly document that the server does **not** support streaming responses.
 I was surprised the `std::string(name)` syntax works (obviously I didn't intend to write it this way), and it's a good fix.
-Updated the instruction to proceed with snapshot updates unless changes are obviously incorrect.
 (Of course, I can do this when I get back to the other issue if you think it's needed.)
 I was using an automated spelling helper and it obviously goofed the spacing.
-Not critical of course.
 Of course, makes perfect sense.
--- fp/change-description whole --
-fix: convert the minimum date explicitly
-
-> Obviously it's not something that we are the first to discover.
--- fp/change-description whole --
-fix: stop predictive text in multiline fields
-
-> Of course the same is happening with a multiline text component.
--- fp/change-description whole --
-fix: dispose the client safely
-
-> Clearly, I should be able to address that through thread synchronization.
--- fp/change-description whole --
-fix: trim spaces in renamed identifiers
-
-> It adds that space everywhere the identifier is used, and obviously also where it's defined.
--- fp/change-description whole --
-feat: add theme roles for front matter
-
-<agent_instructions>Of course we don't assign literal colors to these things, but each gets a different role.</agent_instructions>
--- fp/change-description whole --
-feat: run the test framework natively
-
-<comment_new><body>Obviously we want to support running it natively, but this will take some time.</body></comment_new>
