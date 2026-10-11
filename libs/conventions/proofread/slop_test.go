@@ -85,6 +85,16 @@ func TestSlopRulesJudgeTheKindsAndDecisionsTheyOwn(t *testing.T) {
 			}},
 		{"a letter is a change description's alone", RuleChatbot, "I am writing to propose a change.", nil,
 			map[Kind]Decision{KindChangeDescription: DecisionDeny}},
+		{"an agreement answers the thread a reply is in", RuleChatbot, "You're right, the key sorts.", nil,
+			map[Kind]Decision{
+				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
+				KindAgentInstructions: DecisionDeny,
+			}},
+		{"an intensified agreement is a tell in a reply too", RuleChatbot, "You're absolutely right, the key sorts.", nil,
+			map[Kind]Decision{
+				KindReference: DecisionDeny, KindGuide: DecisionDeny, KindChangeDescription: DecisionDeny,
+				KindAgentInstructions: DecisionDeny, KindReviewReply: DecisionDeny,
+			}},
 	}
 
 	for _, tc := range cases {
@@ -156,7 +166,7 @@ func TestBuzzwordReportsAWordChosenToSoundSignificant(t *testing.T) {
 		{"a verb in the plain sense", KindReference, "Pivot the table on the first column.", nil},
 		{"a quoted word", KindReference, "The reviewer wrote \"delve\" and the rule left it alone.", nil},
 		{"delves", KindReference, "This change delves into the cache.", []string{"1:delves"}},
-		{"two in a bullet", KindChangeDescription, pr("- The key is a vibrant tapestry of inputs."), []string{"4:vibrant", "4:tapestry"}},
+		{"two in a bullet", KindChangeDescription, pr("- The key is a vibrant tapestry of inputs."), []string{"4:vibrant tapestry"}},
 		{"moving forward", KindReference, "Moving forward, the key sorts its inputs.", []string{"1:Moving forward"}},
 		{"a phrase read whole", KindReference, "The cache plays a vital role. It serves as a testament to the key.",
 			[]string{"1:plays a vital role", "1:serves as a testament"}},

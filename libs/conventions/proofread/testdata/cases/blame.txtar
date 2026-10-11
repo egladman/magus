@@ -7,11 +7,25 @@ A person or past work named as the subject of a fault.
 You failed to run the suite.
 Whoever wrote this left the lock out.
 The retry was naive.
+You should have reverted these files instead of editing them.
+This is dumb, drop the condition.
+This is some crazy code.
+They forgot to bump the schema version.
 -- pass/change-description --
 - Tells the careful and the careless caller the same sentence.
 - Skips the lazy fetch a naive shallow clone makes.
 - The commit failed to apply, so the rebase stops.
+- Replaces crazy-max with github-script.
+- Swaps the supervisor for dumb-init and runs the install under TERM=dumb.
+- Adds a dumb base implementation that the adapter overrides.
+- Fails fast, following KISS (Keep It Simple, Stupid).
+- Keeps the rows that were dropped when they should have been preserved.
+- Shows the image as lazy-initialized until it scrolls into view.
 -- pass/review-reply --
 I should have pinned the key; we forgot to.
--- fp/change-description --
-- Replaces crazy-max with github-script.
+You should have a tests file that exports the cases.
+You should have to press the key twice to exit.
+The two functions match, but they should have different behaviour, as the interface file says.
+Ignore the warning when they failed to load.
+The iframe is lazy loading, so it needs a placeholder.
+We could reuse the generated types without going too crazy.

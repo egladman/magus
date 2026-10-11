@@ -47,7 +47,7 @@ func runDecisionCases(t *testing.T, rule Rule, cases []textCase) {
 func TestBlameReportsAPersonOrPastWorkAsTheSubjectOfAFault(t *testing.T) {
 	runDecisionCases(t, RuleBlame, []textCase{
 		{"a person who should have", KindChangeDescription, pr("- The author should have pinned the key."),
-			[]string{"4:The author should have:deny"}},
+			[]string{"4:The author should have pinned:deny"}},
 		{"a pull request that forgot to", KindChangeDescription, pr("- #341 forgot to regenerate the index."),
 			[]string{"4:#341 forgot to:deny"}},
 		{"you failed to in a reply", KindReviewReply, "You failed to run the suite.", []string{"1:You failed to:deny"}},

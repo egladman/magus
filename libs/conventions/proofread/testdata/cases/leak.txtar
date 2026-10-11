@@ -2,6 +2,8 @@ Residue of a tool or a template.
 -- hit/change-description --
 - Pins the key.【4:0†source】
 - Owner: [insert team name]
+- Plays the sound on a quick action.【F:src/audio/mod.rs†L1-L239】
+- Owner: [TODO: name the team]
 -- hit/reference --
 Released on 2025-xx-xx.
 See turn0search1 for the source.
@@ -9,7 +11,15 @@ See turn0search1 for the source.
 Pins the key. TBD.
 -- hit/review-reply --
 Done, citeturn0search0.
+-- hit/agent-reply --
+The cap is set in [describe the file here].
 -- pass/reference --
 A `contentReference` field names the citation.
 Read [Your own hooks, in Buzz] first.
 Set the date to 2025-10-09.
+-- pass/agent-reply --
+The cap lives in [describe.go:668](internal/cli/describe.go#L668), which the flag reads.
+The list is built in [todo.go:42](cmd/todo.go#L42).
+-- pass/change-description --
+- Keeps the 【bug】 prefix the issue template adds to titles.
+- Marks search matches with lenticular brackets, as in 【match】.

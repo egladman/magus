@@ -2,6 +2,7 @@ Throat-clearing, filler adverbs and selling words.
 -- hit/doc-comment --
 Note that the cache keys a run on what it reads.
 It simply rereads the file.
+This function sorts the inputs before it hashes them.
 -- hit/doc-comment whole --
 The cache keys a run on what it reads. It is
 important to declare inputs.
@@ -15,18 +16,37 @@ A state-of-the-art, world-class hasher.
 -- hit/change-description --
 - The cap is critical to remember.
 - When it comes to hashing, the key sorts.
+- Makes the cache very fast.
+- Adds a more powerful parser.
 -- hit/review-reply --
 Actually, it races.
+Very simple, I like it.
+I really think the example belongs in the other package.
+It's just an old line nobody updated.
+Just fix the code and leave the tests alone.
 -- pass/change-description --
 - Say what each backend's preserve retains.
 - Gate the eval fixtures against what the binary renders.
--- fp/change-description --
 - Makes the agent guard actually fire.
 - Reports what the remote cache actually did, not what was configured.
 - Every daemon token was either the all-powerful cli token or a scoped one.
 - A listener on a very long path is the one case only Linux confirms.
--- fp/review-reply --
+- Compiles the template just-in-time on the first render.
+- Moves the check to the very first step of the run.
+- Reads the timestamp as milliseconds when it is actually in seconds.
+- Imports the helper from the module where it is actually defined.
+- Re-renders only when the values actually change.
+- Records when the speech actually began, not when the object was built.
+-- pass/review-reply --
 Should we wait for the process to actually exit?
+Did you actually run them on the hosted runners?
+Keep the name: the underscore says it is unused, but it is actually used.
+Wouldn't just stopping propagation be enough?
+Don't just walk to the innermost element; check each one on the way.
+Just spotted that the schedule names differ from the budget file.
+The constant should be just `VERSION`, without the prefix.
+Is there a more robust check we could run on the host name?
+This function returns a result, so can you say what its error means?
 -- pass/doc-comment --
 The cache keys a run on what it reads. A miss reruns it.
 It records a note that the queue reads. It is not this function's job.

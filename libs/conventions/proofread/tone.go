@@ -102,10 +102,16 @@ var predicative = wordSet("is", "are", "was", "were", "be", "been", "being", "as
 var (
 	// counterfactual is a person, or a numbered piece of work, as the subject
 	// of what it should have done. "The commit failed to apply" is a mechanism,
-	// so only a person fails to.
-	counterfactual = regexp.MustCompile(`(?i)\b(?:you|they|he|she|someone|somebody|the (?:original )?author|` +
-		`the reviewer)\s+(?:should(?:'ve| have)|failed to|forgot to|neglected to)\b|(?:#\d+|\b(?:the|that|this) ` +
-		`(?:PR|pull request|commit|squash))\s+(?:should(?:'ve| have)|forgot to|neglected to)\b|` +
+	// so only a person fails to. "should have" counts only before a past
+	// participle: "you should have a tests.ts file" is possession, "should have
+	// to" an obligation, and "should have been" a passive whose subject is
+	// nearly always a thing ("dropped when they should have been kept"). "they"
+	// names files and rows as often as people, so it counts only when it
+	// forgot or neglected to.
+	counterfactual = regexp.MustCompile(`(?i)\b(?:you|he|she|someone|somebody|the (?:original )?author|` +
+		`the reviewer)\s+(?:should(?:'ve| have)\s+` + participle + `|failed to|forgot to|neglected to)\b|` +
+		`\bthey\s+(?:forgot|neglected) to\b|(?:#\d+|\b(?:the|that|this) (?:PR|pull request|commit|squash))\s+` +
+		`(?:should(?:'ve| have)\s+` + participle + `|forgot to|neglected to)\b|` +
 		`\bwhoever (?:wrote|added|made|built|left)\b`)
 
 	// contempt judges the people behind code or a decision.
@@ -113,9 +119,24 @@ var (
 		`crazy|insane(?:ly)?|dumb|lazy|naive|careless)\b`)
 
 	// technique are the contempt words that also name a technique or a role
-	// before a noun: "a lazy fetch", "a naive tail", "the careless caller".
-	technique = wordSet("lazy", "naive", "careless")
+	// before a noun: "a lazy fetch", "a naive tail", "the careless caller", "a
+	// dumb base implementation".
+	technique = wordSet("lazy", "naive", "careless", "dumb")
+
+	// overdoing are the words before a "crazy" that means overdoing it: "go
+	// too crazy", "how crazy we want to go".
+	overdoing = wordSet("go", "goes", "going", "went", "gone", "too", "how")
+
+	// lazyTechnique follows a "lazy" that names evaluation on demand, even
+	// after a copula: "the iframe is lazy loading".
+	lazyTechnique = regexp.MustCompile(`^ (?:load|eval|init)`)
 )
+
+// participle is a past participle after "should have": a regular one, or an
+// irregular one a blame names. "been" is left out.
+const participle = `(?:\w+ed|done|made|run|put|set|kept|left|caught|thought|known|sent|built|written|told|taken|` +
+	`given|chosen|seen|read|got|gotten|brought|found|held|said|shown|split|spent|understood|hit|cut|let|` +
+	`thrown|forgotten|spoken|begun)`
 
 // blame reports a person or past work as the subject of a fault and words of
 // contempt for code or a decision. A writer who means "I" or "we" owns the
@@ -128,11 +149,47 @@ func blame(in input) []Finding {
 		"'someone forgot to update the key'."
 
 	out := matchFindings(in, counterfactual, nil, message)
-	out = append(out, matchFindings(in, contempt, func(text string, at []int) bool {
-		return technique[strings.ToLower(text[at[0]:at[1]])] && !predicative[prevWord(text, at[0])]
-	}, message)...)
+	out = append(out, matchFindings(in, contempt, contemptExempt, message)...)
 
 	return out
+}
+
+// contemptExempt reports a contempt word used for something other than
+// contempt: a technique before a noun, part of a name ("crazy-max",
+// "dumb-init", "TERM=dumb"), a capitalized word inside a sentence (a title,
+// "Keep It Simple, Stupid"), "crazy" as overdoing it, and "lazy" naming
+// evaluation on demand.
+func contemptExempt(text string, at []int) bool {
+	word := text[at[0]:at[1]]
+	lower := strings.ToLower(word)
+	prev := prevWord(text, at[0])
+
+	switch {
+	case at[0] > 0 && strings.ContainsRune("-/=_@.", rune(text[at[0]-1])),
+		at[1] < len(text) && strings.ContainsRune("-/_", rune(text[at[1]])):
+		return true
+	case unicode.IsUpper(rune(word[0])) && midSentence(text, at[0]):
+		return true
+	case lower == "crazy" && overdoing[prev]:
+		return true
+	case lower == "lazy" && lazyTechnique.MatchString(text[at[1]:]):
+		return true
+	}
+
+	return technique[lower] && !predicative[prev]
+}
+
+// midSentence reports whether the text before at ends in a word or a comma
+// rather than a sentence end, a bracket or emphasis.
+func midSentence(text string, at int) bool {
+	before := strings.TrimRight(text[:at], " ")
+	if before == "" {
+		return false
+	}
+
+	last := rune(before[len(before)-1])
+
+	return unicode.IsLetter(last) || unicode.IsDigit(last) || last == ','
 }
 
 var (

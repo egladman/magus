@@ -4,14 +4,24 @@ I hope this helps! Let me know if you want me to expand.
 I am writing to propose a change to the key.
 Dear Reviewers: please see below.
 I understand the concern about the cap.
+You're right, the key sorts its inputs.
+Feel free to modify or reject any of these changes.
 -- hit/reference --
 Certainly! The key sorts its inputs.
 As an AI language model, I cannot run the suite.
 As of my last training the cache was off.
 -- hit/review-reply --
 Great question, the key sorts.
--- fp/review-reply --
+You're absolutely right! I've updated the assertions.
+I hope this helps clear it up.
+-- pass/review-reply --
 You're right, the constructor no longer needs the argument.
+Yes, you are right; the check is not needed outside the two helpers.
+Feel free to parameterize this test instead.
+Let me know if another team owns this.
+Great catch, thank you!
+Would you like me to split this into two pull requests?
+Of course, a custom block can override it.
 -- pass/reference --
 The model's answer is cached under `I hope this helps`, a literal key.
 Ask the caller to let the lock holder know when the run ends.

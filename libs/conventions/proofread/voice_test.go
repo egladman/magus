@@ -152,7 +152,10 @@ func TestAttributionReportsCreditAndNarrativeButNotTheSubject(t *testing.T) {
 func TestFillerWidensForWrittenTextOnly(t *testing.T) {
 	runTextCases(t, RuleFiller, []textCase{
 		{"the wider list", KindReference, "It actually uses a robust, very seamless cache to leverage blobs.",
-			[]string{"1:actually", "1:robust", "1:very", "1:seamless", "1:leverage"}},
+			[]string{"1:robust", "1:very", "1:seamless", "1:leverage"}},
+		{"actually opening a sentence", KindReference, "Actually, the store is files.", []string{"1:Actually"}},
+		{"actually stating a contrast", KindReference,
+			"It reports what the cache actually did. Wait for the process to actually exit.", nil},
 		{"just meaning merely", KindReference, "The store is just files. Just run it.", []string{"1:just", "1:Just"}},
 		{"just carrying meaning", KindReference,
 			"It claims memory, not just cores. Read the CA you just installed. It extracts just the binary.", nil},

@@ -4,12 +4,20 @@ Here's the thing: the cache races on the key.
 Let's dive into how the key is derived.
 The key sorts. Honestly, it hashes.
 **Look,** the key sorts.
+Here's why it matters: the key races under load.
 -- hit/change-description --
 - Make no mistake. The key sorts its inputs.
 -- hit/review-reply --
 It turns out the key races.
--- fp/review-reply --
+What if I told you the key never sorts?
+Look, there is no need for a compatibility shim here.
+-- pass/review-reply --
 What if the caller is a user and not a service account?
+What if the pointee is a type variable?
+What if a project sets both properties?
+Here's how you could refactor it:
+-- pass/change-description --
+- Here's what changed:
 -- pass/reference --
 The `Here's the thing` opener is the phrase the rule refuses.
 The rest of this page names the flags. Let's Encrypt certificates are cached.

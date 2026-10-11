@@ -184,25 +184,43 @@ func leftmost(spans [][]int) [][]int {
 	return out
 }
 
+// signposts leave "Here's how you could refactor it:" and "Here's what I
+// changed:" alone: each captions the code or list below it, and only "why it
+// matters" or "the thing" is an announcement. "What if" counts only as "What
+// if I told you": any other "What if" asks a real question.
 var signposts = []tell{
-	opening(`^(?:Here(?:'s| is) (?:the thing|what|why|how|this|that|the (?:problem|catch|kicker|rub))\b|` +
+	opening(`^(?:Here(?:'s| is) (?:the thing|why (?:it|this|that) matters|what (?:matters|it means|this means)|` +
+		`the (?:problem|catch|kicker|rub))\b|` +
 		`(?:The )?(?:uncomfortable |honest |hard |plain )?truth is\b|It turns out\b|` +
 		`Let me be (?:clear|honest|upfront)\b|I(?:'ll| will) say it again\b|I'm going to be honest\b|` +
 		`Can we talk about\b|` +
 		`Let's (?:dive|explore|break|unpack|walk|take a look|get started|jump|look at|talk about|be honest)\b|` +
 		`Without further ado\b|Make no mistake\b|Let that sink in\b|Full stop\b|Period\.|Think about it\b|` +
-		`And that's (?:okay|ok|fine|alright)\b|What if\b|(?:Honestly|Frankly|Candidly)[,?]|Real talk\b|` +
+		`And that's (?:okay|ok|fine|alright)\b|What if I told you\b|(?:Honestly|Frankly|Candidly)[,?]|Real talk\b|` +
 		`The thing is\b|Look,|Plot twist\b|Spoiler\b|You already know this\b|As we'll see\b|` +
 		`In this (?:section|post|article|essay),? (?:we|I)\b|I want to (?:explore|discuss|talk about|walk)\b|` +
 		`Let me walk you through\b|That's it\. That's the\b)`),
 	anywhere(`\bI promise\b|\bcreeps in\b|\bThe rest of this (?:essay|post|article|piece)\b`),
 }
 
+// chatbots judge a review reply by fewer tells than a page or a description:
+// a reply is one person answering another in a thread both can read, so an
+// agreement ("You're right, the argument is unused"), an invitation, an offer
+// or an answer's opener there answers a chat the reader did see. Only the
+// intensified agreement, flattery of a question and the tells no person
+// writes stay.
 var chatbots = []tell{
-	anywhere(`(?i)\bI hope (?:this|that) helps\b|\blet me know if\b|\bfeel free to\b|\bhappy to help\b|` +
-		`\b(?:would you like|want) me to\b|\bshould I (?:continue|go on|proceed)\b|\bis there anything else\b|` +
-		`\byou(?:'re| are) (?:absolutely |completely |totally )?right\b|` +
-		`\b(?:great|excellent|fantastic) (?:question|point|catch|observation)\b|` +
+	anywhere(`(?i)\blet me know if\b|\bfeel free to\b|\bhappy to help\b|\b(?:would you like|want) me to\b|`+
+		`\bshould I (?:continue|go on|proceed)\b|\byou(?:'re| are) right\b|`+
+		`\b(?:great|excellent|fantastic) (?:point|catch|observation)\b`, proseKinds...),
+	{
+		re:      regexp.MustCompile(`(?i)^(?:Certainly|Of course|Absolutely|Sure thing)[!,.]`),
+		opening: true,
+		kinds:   proseKinds,
+	},
+	anywhere(`(?i)\bI hope (?:this|that) helps\b|\bis there anything else\b|` +
+		`\byou(?:'re| are) (?:absolutely|completely|totally) right\b|` +
+		`\b(?:great|excellent|fantastic) question\b|` +
 		`\bas an? (?:ai|large) language model\b|\bI(?:'m| am) sorry,? (?:but )?I\b|` +
 		`\bI (?:cannot|can't) (?:help|assist) with\b|\bas of my (?:last )?(?:training|knowledge)|` +
 		`\bup to my last training\b|\bwhile specific details are (?:limited|scarce)\b|` +
@@ -210,31 +228,49 @@ var chatbots = []tell{
 		`\bin the provided (?:sources|context|search results)\b|\bmaintains? a low profile\b|` +
 		`\bkeeps? (?:personal )?details private\b|` +
 		`\bnot (?:extensively |widely |publicly )?(?:documented|disclosed) in (?:readily )?available sources\b`),
-	opening(`(?i)^(?:Certainly|Of course|Absolutely|Sure thing)[!,.]|` +
-		`^Here (?:is|are) (?:a|an|the|some|your) (?:\w+ ){0,2}(?:overview|summary|draft|breakdown|rewrite)\b`),
+	opening(`(?i)^Here (?:is|are) (?:a|an|the|some|your) (?:\w+ ){0,2}(?:overview|summary|draft|breakdown|rewrite)\b`),
 	// A salutation is no tell on a page (a letter is a legitimate subject), so
 	// the letter patterns judge only a pull request.
 	anywhere(`\bDear [A-Z][\w ]{2,40}[:,]|\bI am writing to\b|\bhope this (?:message|email|note) finds you\b|`+
 		`\bI understand (?:the |your )?concerns?\b`, KindChangeDescription),
 }
 
+// leaks read a pair of lenticular brackets (U+3010, U+3011) as a citation only
+// around a dagger (U+2020), as in a source or a file-and-line marker: without
+// one the pair is CJK punctuation around a label. A placeholder word must end
+// at a space, a colon or the bracket, so link text naming a file
+// (`[describe.go:668]`, `[todo.go]`) is no placeholder.
 var leaks = []tell{
 	anywhere(`contentReference|oaicite|oai_citation|citeturn|\bturn\d+(?:search|image|news|file|view)\d+\b|` +
-		`\[cite: ?\d|\[span_\d|grok_card|grok_render|【[^】\n]*】|\[attached_file|\[web:\d|ppl-ai|:::writing`),
-	anywhere(`(?i)\b\d{4}-xx-xx\b|\bTBD\b|\blorem ipsum\b|\[(?:insert|describe|todo|tbd|fill in)\b[^\]\n]{0,40}\]`),
+		`\[cite: ?\d|\[span_\d|grok_card|grok_render|【[^】\n]*†[^】\n]*】|\[attached_file|\[web:\d|ppl-ai|` +
+		`:::writing`),
+	anywhere(`(?i)\b\d{4}-xx-xx\b|\bTBD\b|\blorem ipsum\b|\[(?:insert|describe|todo|tbd|fill in)(?:[\s:][^\]\n]{0,40})?\]`),
 }
 
+// buzzwords read three words only in their buzzword sense. "vibrant" counts
+// before an abstract noun ("a vibrant ecosystem"): before a colour or a theme
+// it describes the colour. "on the same page" counts after a person ("we are
+// all on the same page"): after anything else it is a page. "deep dive"
+// counts before into, on, of or through, or ending its phrase: before a noun
+// it names a kind of document ("the deep dive doc").
 var buzzwords = []tell{
-	anywhere(`(?i)\b(?:delv(?:e|es|ed|ing)|tapestr(?:y|ies)|testament|pivotal|vibrant|intricacies|intricate|` +
+	anywhere(`(?i)\b(?:delv(?:e|es|ed|ing)|tapestr(?:y|ies)|testament|pivotal|intricacies|intricate|` +
 		`garner(?:s|ed|ing)?|bolstered|meticulous(?:ly)?|multifaceted|nestled|breathtaking|groundbreaking|` +
 		`renowned|stunning(?:ly)?|game-chang(?:er|ing)|boasts|commendabl[ey])\b`),
+	anywhere(`(?i)\bvibrant (?:community|communities|ecosystems?|culture|hub|scene|city|tapestry|history|` +
+		`heritage|life|world|place|landscape|neighborhood|atmosphere|energy)\b`),
+	anywhere(`(?i)\b(?:we|we're|us|everyone|everybody|you|you're|they're|team)(?:\s+[\w']+){0,2}\s+` +
+		`on the same page\b`),
+	anywhere(`(?i)\bdeep dives?(?:\s+(?:into|on|of|through)\b|\s*[:.,;!?)*]|\s*$)`),
 	// "underscore" only as a verb: before an object, after a word that makes
 	// it one. A leading underscore and "replace underscores with" are the
-	// character.
-	anywhere(`(?i)\b(?:underscor(?:es|ed|ing)|(?:to|will|would|may|might|can|could|which|this|that|it|further|` +
-		`also|only) underscore)\s+(?:the|this|that|these|those|how|why|what|its|their|our|his|her|a|an)\b`),
-	anywhere(`(?i)\b(?:deep dive|lean(?:s|ed|ing)? into|circle back|moving forward|doubl(?:e|es|ed|ing) down|` +
-		`take a step back|on the same page|evolving landscape|rich tapestry|` +
+	// character, and so is a plural before "that" or an article ("double
+	// underscores that the loader replaces").
+	anywhere(`(?i)\b(?:underscor(?:ed|ing)|(?:to|will|would|may|might|can|could|which|this|that|it|further|` +
+		`also|only) underscore)\s+(?:the|this|that|these|those|how|why|what|its|their|our|his|her|a|an)\b|` +
+		`\bunderscores\s+(?:the|this|how|why|what|its|their|our|his|her)\b`),
+	anywhere(`(?i)\b(?:lean(?:s|ed|ing)? into|circle back|moving forward|doubl(?:e|es|ed|ing) down|` +
+		`take a step back|evolving landscape|rich tapestry|` +
 		`navigat(?:e|es|ed|ing) (?:the )?(?:challenges|complexit(?:y|ies)|uncertaint(?:y|ies)|landscape)|` +
 		`plays? an? (?:vital|crucial|pivotal|key|significant|important|critical) role|` +
 		`(?:serves?|stands?) as an? (?:testament|reminder|beacon|cornerstone)|setting the stage|indelible mark|` +

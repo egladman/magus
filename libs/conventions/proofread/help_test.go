@@ -100,8 +100,8 @@ func TestCLIHelpMeetsTheWordRules(t *testing.T) {
 	}{
 		{
 			name: "filler",
-			text: "With --cache: list every key input line, so you can confirm a declared file was actually hashed",
-			want: []Finding{{Rule: RuleFiller, Message: "Drop 'actually': state the fact.", Match: "actually", Line: 1}},
+			text: "With --cache: list every key input line, so you can simply confirm a declared file was hashed",
+			want: []Finding{{Rule: RuleFiller, Message: "Drop 'simply': state the fact.", Match: "simply", Line: 1}},
 		},
 		{
 			name: "a presuming word",

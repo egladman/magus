@@ -4,13 +4,24 @@ This change delves into the cache.
 Moving forward, the key sorts its inputs.
 The cache plays a vital role. It serves as a testament to the key.
 The key sorts, underscoring the design.
+Make sure we are all on the same page before the release.
+This underscores the need for a lock.
 -- hit/change-description --
 - The key is a vibrant tapestry of inputs.
+- Deep dive into the cache internals.
+- Adds a technical deep dive.
+- Joins a vibrant ecosystem of plugins.
 -- hit/review-reply --
 Let me delve into the race.
--- fp/change-description --
+-- pass/change-description --
 - Fixes two contradictions on the same page.
+- Clicking the badge scrolls to the import section on the same page.
+- Isolates the filters of two tables on the same page.
+- Adds the deep dive doc for the parser and links it from the README.
+- Gives the link text a more vibrant colour.
+- Ships a theme with vibrant accents.
 -- pass/reference --
 Caching interplay between workers is described below.
 Pivot the table on the first column.
 The reviewer wrote "delve" and the rule left it alone.
+Variables wrapped in double underscores that the loader replaces.

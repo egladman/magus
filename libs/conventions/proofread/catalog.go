@@ -150,8 +150,14 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "a person or past work as the subject of a fault, and contempt for code or a decision",
 		why: "Text loses its tone on the way to a reader, who fills the gap with intent the writer never " +
 			"had. \"Whoever wrote this forgot to\" reads as an accusation; \"the rename left the old key\" " +
-			"states the same fact. It measured no false positive over the last 200 merged pull requests, " +
-			"so it denies. The first person is left alone, since owning a fault reads as candor.",
+			"states the same fact. The first person is left alone, since owning a fault reads as candor. " +
+			"Measured 2026-10-10 before a fix: 85.7% precision on its cases (6 of 7), firing on 0.1% of " +
+			"human AIDev review comments and on 1 magus commit body; of 70 firings read, 30 were wrong. " +
+			"So \"should have\" counts only before a past participle (\"you should have a tests file\" is " +
+			"possession, \"they should have been kept\" a thing), \"they\" only when it forgot or neglected " +
+			"to, and a contempt word is exempt inside a name (\"crazy-max\", \"dumb-init\"), capitalized " +
+			"mid-sentence (\"Keep It Simple, Stupid\"), as \"go too crazy\", and as \"lazy loading\". After: " +
+			"100% on its cases; firing rates measured at merge.",
 	},
 	RuleVerdict: {
 		code:      "PRF2002",
@@ -218,7 +224,17 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")",
 		why: "The words carry nothing the sentence needs. Written text takes a wider list (\"actually\", " +
 			"\"robust\") than doc comments, which keep the narrow one until a sweep clears the wider; " +
-			"the senses that carry meaning (\"just\" as merely, \"very\" as the same one) are exempt.",
+			"the senses that carry meaning (\"just\" as merely, \"very\" as the same one) are exempt. " +
+			"Measured 2026-10-10 before a fix: 70.6% precision on its cases (12 of 17), firing on 21.8% " +
+			"of AIDev pull requests, 4.7% of human review comments (6.7% of their replies), 3.8% of " +
+			"AIDev commits and 5.5% of magus commit bodies; 18 of 45 firings read in human replies were " +
+			"wrong. Lowercase \"actually\" stated a contrast (\"what the cache actually did\", \"wait for it " +
+			"to actually exit\") in 10 of 11 human replies and about 22 of 25 agent pull request bodies, " +
+			"so only the opener \"Actually,\" counts. Also exempt: a word hyphenated into a compound " +
+			"(\"all-powerful\"), \"very\" grading a size or position (\"a very long path\"), \"just\" after " +
+			"a negation other than a copula (\"don't just\"), before a literal or as recency (\"Just " +
+			"pushed\"), \"more robust\", and \"This function\" outside a doc comment, where it points at " +
+			"code. After: 100% on its cases; firing rates measured at merge.",
 	},
 	RuleWordy: {
 		code:      "PRF4002",
@@ -232,7 +248,12 @@ var coreTexts = map[Rule]ruleText{
 		dimension: DimensionStructure,
 		catches:   "an announcement standing where the point should be (\"Here's the thing\", \"Let's dive in\")",
 		why: "A signpost delays the point it promises. It had zero hits in 261 docs pages, 665 changelog " +
-			"fragments and 200 merged pull requests, so it denies at no cost.",
+			"fragments and 200 merged pull requests. Measured 2026-10-10 before a fix: 85.7% precision on " +
+			"its cases (6 of 7), firing on 0.2% of AIDev pull requests and 0.1% of review comments; of 30 " +
+			"review-comment firings read, 23 were wrong: 6 \"What if\" real questions and 17 \"Here's " +
+			"how/what/why ...:\" lines captioning the code or list below. So \"What if\" counts only as " +
+			"\"What if I told you\", and \"Here's\" only before the thing, why it matters, or what it means. " +
+			"After: 100% on its cases; firing rates measured at merge.",
 	},
 	RuleChatbot: {
 		code:      "PRF4004",
@@ -240,21 +261,39 @@ var coreTexts = map[Rule]ruleText{
 		catches:   "text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer",
 		why: "\"I hope this helps\" and \"great question\" answer a chat the reader never saw. Zero hits " +
 			"over the docs pages, changelog fragments and merged pull requests; the letter patterns " +
-			"(\"Dear\", \"I am writing to\") judge only a change description, which is never a letter.",
+			"(\"Dear\", \"I am writing to\") judge only a change description, which is never a letter. " +
+			"Measured 2026-10-10 before a fix: 88.9% precision on its cases (8 of 9), firing on 0.3% of " +
+			"human review comments (1.2% of their replies), 4.2% of bot replies and 0.1% of AIDev pull " +
+			"requests; 29 of 30 human review-comment firings read were a person answering in the thread " +
+			"(\"You're right, ...\", \"feel free to\", \"great catch\"). A review reply's reader saw the " +
+			"chat, so there an agreement, an invitation, an offer and an answer's opener are left alone; " +
+			"\"you're absolutely right\", \"great question\", \"I hope this helps\" and the disclaimers " +
+			"still count. After: 100% on its cases; firing rates measured at merge.",
 	},
 	RuleLeak: {
 		code:      "PRF4005",
 		dimension: DimensionEvidence,
 		catches:   "residue of a tool or a template: a citation marker or an unfilled placeholder",
 		why: "`oaicite`, `[cite: 1]` and `[insert ...]` are unambiguous: no reader is served by them. " +
-			"They show up where text was pasted from a chat, so the rule judges doc comments too.",
+			"They show up where text was pasted from a chat, so the rule judges doc comments too. " +
+			"Measured 2026-10-10: 100% precision on its cases (6 of 6), but agent replies' link text " +
+			"naming a file and line (`[describe.go:668]`) read as a `[describe ...]` placeholder, and of " +
+			"71 AIDev pull request candidates many lenticular-bracket hits were CJK punctuation around a " +
+			"label. A placeholder word now ends at a space, a colon or the bracket, and a lenticular pair " +
+			"counts only around a dagger. Firing rates after are measured at merge.",
 	},
 	RuleBuzzword: {
 		code:      "PRF4006",
 		dimension: DimensionEconomy,
 		catches:   "a word chosen to sound significant rather than to say what is so (\"delve\", \"tapestry\")",
 		why: "The list holds words with no plain sense in technical text. Zero hits over the docs pages, " +
-			"changelog fragments and merged pull requests.",
+			"changelog fragments and merged pull requests. Measured 2026-10-10 before a fix: 85.7% " +
+			"precision on its cases (6 of 7), firing on 0.1% of AIDev pull requests and 1 magus commit " +
+			"body; of 40 pull request firings read, 18 were wrong: \"on the same page\" as a page (7), " +
+			"\"deep dive\" naming a document (5), \"vibrant\" as a colour (4), \"underscores\" as the " +
+			"character. Those now count only in their buzzword sense: after a person, before into or " +
+			"ending the phrase, before an abstract noun, and as a verb. After: 100% on its cases; " +
+			"firing rates measured at merge.",
 	},
 	RuleBuzzwordWeak: {
 		code:      "PRF4007",

@@ -159,7 +159,7 @@ func TestBodySeparatorWantsABlankLineAfterTheSubject(t *testing.T) {
 // A commit meets the word rules of a written text, but not the two a pull
 // request description alone is held to.
 func TestCommitMessageMeetsTheWordRulesButNotTheDescriptionShape(t *testing.T) {
-	const msg = "make the agent guard actually fire\n\n" +
+	const msg = "make the agent guard simply fire\n\n" +
 		"The hook never fired after a rename, because the matcher kept the old key."
 
 	got := JudgeText(msg, KindCommitMessage)
@@ -179,7 +179,7 @@ func TestCommitMessageMeetsTheWordRulesButNotTheDescriptionShape(t *testing.T) {
 		}
 	}
 
-	if got[0].Match != "actually" || got[0].Line != 1 || got[0].Decision != DecisionDeny {
+	if got[0].Match != "simply" || got[0].Line != 1 || got[0].Decision != DecisionDeny {
 		t.Errorf("filler: %+v", got[0])
 	}
 

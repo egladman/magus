@@ -16,12 +16,17 @@ const (
 )
 
 // fillerWords match case-sensitively. Throat-clearing opens a sentence
-// (`Note that`, `This function`), so those match only capitalized:
-// `a note that` names the notes feature, and `this function's job` is a
-// contract. The adverbs are filler wherever they sit.
+// (`Note that`), so it matches only capitalized: `a note that` names the
+// notes feature. The adverbs are filler wherever they sit.
 const fillerWords = `Note that|Please note|It should be noted|It is worth noting|` +
-	`It's worth noting|It is important to|It's important to|This function|This method|` +
+	`It's worth noting|It is important to|It's important to|` +
 	`[Ss]imply|[Bb]asically|[Ee]ssentially|[Nn]eedless to say`
+
+// docFillerWords open a doc comment where the symbol's name belongs. In a
+// reply or a description they point at the code under discussion ("This
+// function returns a Result, so ..."), and `this function's job` is a
+// contract.
+const docFillerWords = `This function|This method`
 
 // writtenFillerWords widen fillerWords for Markdown and pull requests with
 // adverbs, selling words and stock sentence openers, which are filler wherever
@@ -42,35 +47,84 @@ const writtenFillerWords = `[Jj]ust|[Rr]eally|[Vv]ery|[Aa]ctually|[Ll]everag(?:e
 	`worth noting|may vary)`
 
 var (
-	fillerPattern        = regexp.MustCompile(`\b(?:` + fillerWords + `)\b`)
+	fillerPattern        = regexp.MustCompile(`\b(?:` + fillerWords + `|` + docFillerWords + `)\b`)
 	writtenFillerPattern = regexp.MustCompile(`\b(?:` + fillerWords + `|` + writtenFillerWords + `)\b`)
 )
 
 // mereLead is the word before a "just" that means merely: a copula, or the
-// contracted one in "it's" and "isn't".
-var mereLead = wordSet("is", "are", "was", "were", "be", "s", "t")
+// contracted one in "it's".
+var mereLead = wordSet("is", "are", "was", "were", "be", "s")
+
+// mereNot are the negated copulas, after which "just" still means merely.
+// After any other "n't" ("don't just dig", "wouldn't just stopping") it
+// states a contrast.
+var mereNot = wordSet("isn't", "aren't", "wasn't", "weren't")
 
 // sameLead is the word before a "very" that means the same one.
 var sameLead = wordSet("the", "this", "that")
+
+// measured are the words after a "very" that grades a size or a position the
+// sentence turns on: "a very long path" is the case a socket limit hits, and
+// "the very first run" picks one out.
+var measured = wordSet("long", "short", "large", "small", "big", "high", "low", "few", "many", "old",
+	"first", "last", "end", "beginning", "start", "top", "bottom", "early", "late")
 
 // fillerExempt reports a widened word used in a sense that carries meaning.
 // Lowercase "just" means recency ("you just installed"), only
 // ("extracts just the binary") or contrast ("not just cores") everywhere but
 // after a copula, where it means merely ("it is just files"), unless it
-// compares ("just as true") or dates a participle ("were just squashed").
-// "Just" opening a sentence is an imperative's minimizer. "very" after the,
-// this or that means the same one.
+// compares ("just as true"), dates a participle ("were just squashed") or
+// limits a literal ("be just `VERSION`"). "Just" opening a sentence is an
+// imperative's minimizer, unless a participle makes it recency ("Just
+// pushed a fix"). "very" after the, this or that means the same one, and
+// before a [measured] word it grades what the sentence turns on.
+//
+// Lowercase "actually" states a contrast with what seemed or was configured
+// ("what the cache actually did", "wait for it to actually exit"); only the
+// sentence opener "Actually," is filler. "more robust" and "less robust"
+// compare. A word hyphenated into a compound ("all-powerful",
+// "just-in-time") is part of another word.
 func fillerExempt(text string, at []int) bool {
-	switch text[at[0]:at[1]] {
-	case "just":
-		next := strings.TrimRight(strings.Fields(text[at[1]:] + " .")[0], ".,;:!?)")
+	if (at[0] > 0 && text[at[0]-1] == '-') || (at[1] < len(text) && text[at[1]] == '-') {
+		return true
+	}
 
-		return !mereLead[prevWord(text, at[0])] || next == "as" || strings.HasSuffix(next, "ed")
-	case "very", "Very":
-		return sameLead[prevWord(text, at[0])]
+	word := text[at[0]:at[1]]
+	next := strings.TrimRight(strings.Fields(text[at[1]:] + " .")[0], ".,;:!?)")
+
+	switch strings.ToLower(word) {
+	case "just":
+		if word == "Just" {
+			return strings.HasSuffix(next, "ed")
+		}
+
+		return !merely(text, at[0]) || next == "as" || strings.HasSuffix(next, "ed") ||
+			strings.HasPrefix(next, "#") || strings.IndexFunc(next, unicode.IsDigit) == 0
+	case "very":
+		return sameLead[prevWord(text, at[0])] || measured[strings.ToLower(next)]
+	case "actually":
+		return word == "actually"
+	case "robust":
+		prev := prevWord(text, at[0])
+
+		return prev == "more" || prev == "less"
 	}
 
 	return false
+}
+
+// merely reports whether the word before at makes a "just" there mean merely:
+// a copula, or a negated one.
+func merely(text string, at int) bool {
+	prev := prevWord(text, at)
+	if prev != "t" {
+		return mereLead[prev]
+	}
+
+	fields := strings.Fields(text[:at])
+	last := strings.ReplaceAll(strings.ToLower(fields[len(fields)-1]), "’", "'")
+
+	return mereNot[last]
 }
 
 // termsPattern holds the spellings docs/glossary.md replaces. "Magus" is left
