@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/rpcerr"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -28,8 +29,8 @@ type TokenSuite struct {
 }
 
 func (s *TokenSuite) SetupTest() {
-	s.stateDir = s.T().TempDir()
-	s.T().Setenv("XDG_STATE_HOME", s.stateDir)
+	testkit.Isolate(s.T())
+	s.stateDir = os.Getenv("XDG_STATE_HOME")
 }
 
 func TestTokenSuite(t *testing.T) {
