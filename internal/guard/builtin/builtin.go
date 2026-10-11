@@ -134,6 +134,21 @@ var defaults = map[string]Decision{
 	"workspace-write-failed":   Advise,
 }
 
+// fixed maps each rule a workspace may not set, with any value, to why. Its entries are
+// notices that report on the workspace's own rules, so a setting would let a workspace
+// silence the report or promote it to a refusal. Every name is also in defaults.
+var fixed = map[string]string{
+	"workspace-command-failed": "a command rule",
+	"workspace-spawn-failed":   "a spawn rule",
+	"workspace-write-failed":   "a write rule",
+}
+
+// Fixed reports whether name is a rule a workspace may not set.
+func Fixed(name string) bool {
+	_, ok := fixed[name]
+	return ok
+}
+
 // Defaults returns every compiled rule's name mapped to the decision it takes when the
 // workspace declares nothing for it. The map is the caller's to modify.
 func Defaults() map[string]Decision {
@@ -142,8 +157,9 @@ func Defaults() map[string]Decision {
 
 // Resolve returns a setting for every compiled rule: the declared one where the workspace
 // declared it, the default otherwise. Every misdeclaration is reported at once, each as an
-// MGS1045 error: a name no rule has (naming the nearest one), a decision other than off,
-// advise or deny, Lines on a rule that takes no such parameter, or Lines below 1.
+// MGS1045 error: a name no rule has (naming the nearest one), a rule that is fixed, a
+// decision other than off, advise or deny, Lines on a rule that takes no such parameter,
+// or Lines below 1.
 func Resolve(declared map[string]Setting) (map[string]Setting, error) {
 	out := make(map[string]Setting, len(defaults))
 	for name, d := range defaults {
@@ -172,6 +188,11 @@ func validate(name string, s Setting) error {
 		}
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"unknown built-in rule %q; `magus describe rules` lists every name", name)
+	}
+	if what, ok := fixed[name]; ok {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q cannot be set: it is how a workspace learns that %s of its own judged nothing, so it can be neither silenced nor promoted; remove it from the declaration",
+			name, what)
 	}
 	if rank(s.Decision) < 0 {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,

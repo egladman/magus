@@ -395,17 +395,20 @@ var advisoryDocs = []types.RuleDoc{
 		Catches: "a command the workspace's rule could not judge, so only the built-in rules graded it",
 		Why: "A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. " +
 			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
-			"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict."},
+			"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
 	{Name: string(advisoryWriteRuleFailed),
 		Catches: "a file write the workspace's rule could not judge, so only the built-in rules graded it",
 		Why: "A workspace write rule that fails to load or errors judges nothing, and a write reaching a verdict without it must say so rather than read as fully judged. " +
 			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
-			"It stands alone only when the built-in rules passed the write; on any other verdict the note is appended to that verdict."},
+			"It stands alone only when the built-in rules passed the write; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
 	{Name: string(advisorySpawnRuleFailed),
 		Catches: "a spawn the workspace's rule could not judge, so only the built-in rules graded it",
 		Why: "A workspace spawn rule that fails to load or errors judges nothing, and a spawn or continuation reaching a verdict without it must say so rather than read as fully judged. " +
 			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
-			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict."},
+			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
 }
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
