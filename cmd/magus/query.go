@@ -368,7 +368,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.open {
 		// The viewer ingests a magus.viewer.v1alpha1 Journal, so hand it the ref's display events:
 		// the browser renders pretty from structure.
-		data, desc, err := m.OutputByRef(ref)
+		data, desc, err := m.OutputByRef(ctx, ref)
 		if err != nil {
 			return reportRefLookupError(ctx, m, ref, err)
 		}
@@ -384,7 +384,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		// machine-vs-machine key comparison. Best-effort: a run predating key-input
 		// persistence just opens without them.
 		var keyDigests string
-		if lines, lerr := m.OutputKeyInputs(ref); lerr == nil {
+		if lines, lerr := m.OutputKeyInputs(ctx, ref); lerr == nil {
 			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
 			for _, c := range cache.ClassDigests(lines) {
 				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
@@ -473,7 +473,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 // execution-unique handle, and passing a full attempt id to `magus query output`
 // retrieves that exact execution's bytes.
 func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
-	list, err := m.OutputAttempts(ref)
+	list, err := m.OutputAttempts(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
@@ -635,12 +635,12 @@ type outputIdentityRecord struct {
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
 func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
-	desc, err := m.OutputDescriptorByRef(ref)
+	desc, err := m.OutputDescriptorByRef(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
 	var digests []cache.ClassDigest
-	lines, lerr := m.OutputKeyInputs(ref)
+	lines, lerr := m.OutputKeyInputs(ctx, ref)
 	switch {
 	case lerr == nil:
 		digests = cache.ClassDigests(lines)

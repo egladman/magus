@@ -1654,7 +1654,7 @@ func storedAttempt(ctx context.Context, root, ref string) (types.JobAttempt, err
 	if err != nil {
 		return types.JobAttempt{}, err
 	}
-	switch d, err := m.OutputDescriptorByRef(ref); {
+	switch d, err := m.OutputDescriptorByRef(ctx, ref); {
 	case err == nil:
 		return types.JobAttempt{
 			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,

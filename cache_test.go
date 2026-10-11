@@ -132,21 +132,22 @@ func TestOutputLookupsOnAnEmptyStore(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
 	const ref = "outdeadbe"
 
-	_, _, err := m.OutputByRef(ref)
+	ctx := t.Context()
+	_, _, err := m.OutputByRef(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputAttempts(ref)
+	_, err = m.OutputAttempts(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputDescriptorByRef(ref)
+	_, err = m.OutputDescriptorByRef(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputKeyInputs(ref)
+	_, err = m.OutputKeyInputs(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
 	// With a live cache the remote namespace is consulted too; with no backend
 	// wired it still comes back as unknown rather than hanging or panicking.
-	_, _, err = m.OutputByRefRemote(context.Background(), ref)
+	_, _, err = m.OutputByRefRemote(ctx, ref)
 	assert.Error(t, err)
 }
 

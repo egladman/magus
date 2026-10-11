@@ -323,23 +323,25 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 type RefNotFoundError struct {
 	Ref    string
 	Stores []string
-	// Holder is the other checkout the session store says ran Ref, empty when none is
-	// recorded. A ref lives in the store of the checkout that ran it, so naming the
-	// holder is the whole remedy.
-	Holder string
-	// HolderGone reports that Holder is no longer on disk.
-	HolderGone bool
+	// Checkout is another checkout the session store says ran Ref and whose store was not
+	// read: gone from disk, or with a config that does not load. Empty when none is
+	// recorded, or when every recorded one was read (Stores names it) and missed. A ref
+	// lives in the store of the checkout that ran it, so naming that checkout is the
+	// whole remedy.
+	Checkout string
+	// CheckoutGone reports that Checkout is no longer on disk.
+	CheckoutGone bool
 }
 
 func (e *RefNotFoundError) Error() string {
 	msg := fmt.Sprintf("no stored output for ref %q, consulted %s", e.Ref, strings.Join(e.Stores, ", "))
 	switch {
-	case e.Holder == "":
+	case e.Checkout == "":
 		return msg + fmt.Sprintf("; if another checkout ran it, read it there with `magus query output %s`", e.Ref)
-	case e.HolderGone:
-		return msg + fmt.Sprintf("; it was recorded by %s, which is no longer on disk; if that checkout is restored, `cd %s && magus query output %s` reads it", e.Holder, e.Holder, e.Ref)
+	case e.CheckoutGone:
+		return msg + fmt.Sprintf("; it was recorded by %s, which is no longer on disk; if that checkout is restored, `cd %s && magus query output %s` reads it", e.Checkout, e.Checkout, e.Ref)
 	default:
-		return msg + fmt.Sprintf("; it was recorded by %s; read it there with `cd %s && magus query output %s`", e.Holder, e.Holder, e.Ref)
+		return msg + fmt.Sprintf("; it was recorded by %s; read it there with `cd %s && magus query output %s`", e.Checkout, e.Checkout, e.Ref)
 	}
 }
 

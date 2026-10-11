@@ -1,16 +1,13 @@
 package magus
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/vcs"
 )
 
 // PayloadByRef returns the payload the activity trail stored under ref: a guard verdict
@@ -24,18 +21,20 @@ import (
 // malformed ref is an error before any store is read.
 func (m *Magus) PayloadByRef(ref string) ([]byte, error) {
 	searched := []string{m.CacheDir()}
-	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok {
-		if dir, ok := peerCacheDir(primary); ok && !slices.Contains(searched, dir) {
+	data, err := trail.ReadBlob(m.CacheDir(), ref)
+	if errors.Is(err, fs.ErrNotExist) {
+		// The session store records output refs only, so the primary checkout is the one
+		// other store searched.
+		_, err = m.searchOtherCheckouts(context.Background(), ref, func(dir string) (err error) {
 			searched = append(searched, dir)
-		}
+			data, err = trail.ReadBlob(dir, ref)
+			return err
+		})
 	}
-	for _, dir := range searched {
-		data, err := trail.ReadBlob(dir, ref)
-		if !errors.Is(err, fs.ErrNotExist) {
-			return data, err
-		}
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, payloadMissingError{ref: ref, searched: searched}
 	}
-	return nil, payloadMissingError{ref: ref, searched: searched}
+	return data, err
 }
 
 type payloadMissingError struct {
@@ -48,31 +47,3 @@ func (e payloadMissingError) Error() string {
 }
 
 func (payloadMissingError) Unwrap() error { return fs.ErrNotExist }
-
-// primaryCheckoutRoot is root's counterpart in the primary checkout when root sits in a
-// linked git worktree, keeping a workspace nested below its checkout nested. The primary
-// is the checkout whose .git is a directory; vcs.Checkouts lists it first when it exists.
-// There is none from the primary checkout itself, or in a bare repository.
-func primaryCheckoutRoot(root string) (string, bool) {
-	checkout, others, err := vcs.Checkouts(root)
-	if err != nil || len(others) == 0 || hasGitDir(checkout) || !hasGitDir(others[0]) {
-		return "", false
-	}
-	rel, err := filepath.Rel(checkout, root)
-	if err != nil {
-		return "", false
-	}
-	return filepath.Join(others[0], rel), true
-}
-
-// peerCacheDir is the cache dir another checkout's workspace at root would use; ok is false
-// when its config does not load, which leaves that checkout out of a search.
-func peerCacheDir(root string) (string, bool) {
-	dir, err := ResolveCacheDir(root)
-	return dir, err == nil
-}
-
-func hasGitDir(checkout string) bool {
-	info, err := os.Stat(filepath.Join(checkout, ".git"))
-	return err == nil && info.IsDir()
-}

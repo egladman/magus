@@ -782,7 +782,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	var storedLines []string
 	var storedRef, storedKey string
 	if against != "" {
-		desc, aerr := m.OutputDescriptorByRef(against)
+		desc, aerr := m.OutputDescriptorByRef(ctx, against)
 		if aerr != nil {
 			return reportRefLookupError(ctx, m, against, aerr)
 		}
@@ -790,7 +790,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if storedRef == "" {
 			storedRef = against
 		}
-		storedLines, err = m.OutputKeyInputs(against)
+		storedLines, err = m.OutputKeyInputs(ctx, against)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			slog.ErrorContext(ctx, fmt.Sprintf("ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them", storedRef),

@@ -1,0 +1,242 @@
+package magus
+
+import (
+	"bytes"
+	"context"
+	"io/fs"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/sessions"
+)
+
+// linkedWorktrees makes a git repository with a magusfile and one linked worktree per name,
+// and returns the primary checkout and the worktrees in name order. Paths are symlink-free,
+// so they compare equal to the roots a workspace records.
+func linkedWorktrees(t *testing.T, names ...string) (primary string, worktrees []string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	primary, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	git := func(args ...string) {
+		t.Helper()
+		out, err := exec.Command("git", append([]string{"-C", primary}, args...)...).CombinedOutput()
+		require.NoErrorf(t, err, "git %v: %s", args, out)
+	}
+	git("init", "-q")
+	git("config", "user.email", "test@example.com")
+	git("config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), nil, 0o644))
+	git("add", "-A")
+	git("commit", "-q", "-m", "init")
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	for _, name := range names {
+		tree := filepath.Join(base, name)
+		git("worktree", "add", "-q", tree)
+		worktrees = append(worktrees, tree)
+	}
+	return primary, worktrees
+}
+
+// recordRun files, in the session store of the repository repoRoot belongs to, the fact
+// `magus session` would hold for a target that ran in workspace and printed ref: the only
+// thing that ties a ref to the checkout whose store has it.
+func recordRun(t *testing.T, repoRoot, workspace, ref string) {
+	t.Helper()
+	dir, err := sessions.Dir(repoRoot)
+	require.NoError(t, err)
+	w, err := sessions.Open(dir, "inv"+strings.ToLower(strings.NewReplacer("/", "", "-", "").Replace(filepath.Base(workspace))), sessions.InvocationStart{Workspace: workspace})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{Target: "lint", Project: ".", Outcome: sessions.OutcomeFail, Ref: ref}))
+}
+
+// persistRun puts a failed run's output and key inputs in workspace's own output store and
+// returns the ref it prints.
+func persistRun(t *testing.T, workspace string) string {
+	t.Helper()
+	dir, err := ResolveCacheDir(workspace)
+	require.NoError(t, err)
+	store := cache.NewOutputStore(dir)
+	key := strings.Repeat("ab", 32)
+	d, err := store.Persist(context.Background(), key, []byte("lint log\n"), cache.OutputDescriptor{Project: ".", Target: "lint", Failed: true, ErrMsg: "findings"})
+	require.NoError(t, err)
+	require.NoError(t, store.PersistKeyInputs(context.Background(), key, []string{"os:linux"}))
+	return d.Ref
+}
+
+// fileFingerprints maps every file under dir to its size plus modification time, so two
+// calls compare equal only when nothing under dir was written.
+func fileFingerprints(t *testing.T, dir string) map[string]int64 {
+	t.Helper()
+	files := map[string]int64{}
+	require.NoError(t, filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		files[path] = info.Size() + info.ModTime().UnixNano()
+		return nil
+	}))
+	return files
+}
+
+// A ref a worker is handed was printed by another worktree's run. The session store is shared
+// by every checkout of the repository and records which one ran it, so every ref lookup reads
+// that checkout's output store, read-only, and says so.
+func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	_, trees := linkedWorktrees(t, "worker", "orchestrator")
+	worker, orchestrator := trees[0], trees[1]
+	ref := persistRun(t, orchestrator)
+	recordRun(t, worker, orchestrator, ref)
+	holderCache, err := ResolveCacheDir(orchestrator)
+	require.NoError(t, err)
+	before := fileFingerprints(t, holderCache)
+
+	var notices bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&notices, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	ctx := t.Context()
+	opened, err := Inspect(ctx, worker)
+	require.NoError(t, err)
+	m := opened.(*Magus)
+
+	data, desc, err := m.OutputByRef(ctx, ref)
+	require.NoError(t, err)
+	assert.Equal(t, "lint log\n", string(data))
+	assert.Equal(t, "lint", desc.Target)
+	assert.Contains(t, notices.String(), orchestrator, "stderr says which checkout was read")
+
+	data, _, err = m.OutputByRefRemote(ctx, ref[:8])
+	require.NoError(t, err, "a unique prefix resolves in the other checkout as it does locally")
+	assert.Equal(t, "lint log\n", string(data))
+
+	d, err := m.OutputDescriptorByRef(ctx, ref)
+	require.NoError(t, err)
+	assert.True(t, d.Failed)
+	assert.Equal(t, "findings", d.ErrMsg)
+
+	attempts, err := m.OutputAttempts(ctx, ref)
+	require.NoError(t, err)
+	assert.Len(t, attempts, 1)
+
+	lines, err := m.OutputKeyInputs(ctx, ref)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"os:linux"}, lines)
+
+	workerCache, err := ResolveCacheDir(worker)
+	require.NoError(t, err)
+	assert.NoDirExists(t, filepath.Join(workerCache, "outputs"), "nothing is copied into the reading checkout")
+	assert.Equal(t, before, fileFingerprints(t, holderCache), "the other checkout's store is read, never written")
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, _, err = m.OutputByRef(cancelled, ref)
+	require.ErrorIs(t, err, context.Canceled, "an ended context stops the search of other checkouts")
+}
+
+// A miss says which checkout to read the ref in when the session store knows one whose
+// store was not read: it may be gone with its worktree. One that was read and missed (the
+// output aged out) is named among the stores consulted, never as where to read it. An
+// unrecorded ref still names the command.
+func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	_, trees := linkedWorktrees(t, "worker", "orchestrator")
+	worker, orchestrator := trees[0], trees[1]
+	gone := filepath.Join(t.TempDir(), "removed-worktree")
+	const (
+		goneRef  = "outdead00000001"
+		agedRef  = "outa9ed00000002"
+		otherRef = "outfeed00000003"
+	)
+	recordRun(t, worker, gone, goneRef)
+	recordRun(t, worker, orchestrator, agedRef)
+
+	ctx := t.Context()
+	opened, err := Inspect(ctx, worker)
+	require.NoError(t, err)
+	m := opened.(*Magus)
+	lookups := map[string]func(ref string) error{
+		"OutputByRef":           func(ref string) error { _, _, err := m.OutputByRef(ctx, ref); return err },
+		"OutputByRefRemote":     func(ref string) error { _, _, err := m.OutputByRefRemote(ctx, ref); return err },
+		"OutputDescriptorByRef": func(ref string) error { _, err := m.OutputDescriptorByRef(ctx, ref); return err },
+		"OutputAttempts":        func(ref string) error { _, err := m.OutputAttempts(ctx, ref); return err },
+	}
+	for name, lookup := range lookups {
+		t.Run(name, func(t *testing.T) {
+			var missing *cache.RefNotFoundError
+
+			err := lookup(goneRef)
+			require.ErrorIs(t, err, fs.ErrNotExist)
+			require.ErrorAs(t, err, &missing)
+			assert.Equal(t, gone, missing.Checkout)
+			assert.True(t, missing.CheckoutGone)
+			assert.Contains(t, err.Error(), "recorded by "+gone+", which is no longer on disk")
+			assert.Contains(t, err.Error(), "`cd "+gone+" && magus query output "+goneRef+"`")
+
+			err = lookup(agedRef)
+			require.ErrorIs(t, err, fs.ErrNotExist)
+			require.ErrorAs(t, err, &missing)
+			assert.Empty(t, missing.Checkout, "its store was read and missed, so reading it there cannot help")
+			assert.Contains(t, err.Error(), "checkout "+orchestrator, "the store read is named among those consulted")
+			assert.NotContains(t, err.Error(), "cd "+orchestrator)
+
+			err = lookup(otherRef)
+			require.ErrorIs(t, err, fs.ErrNotExist)
+			require.ErrorAs(t, err, &missing)
+			assert.Empty(t, missing.Checkout)
+			assert.Contains(t, err.Error(), "if another checkout ran it, read it there with `magus query output "+otherRef+"`")
+		})
+	}
+}
+
+// A fact may record this checkout under a symlinked path; it is still this checkout, so it
+// is neither searched a second time nor named as where the ref lives.
+func TestRecordedCheckoutsLeaveOutThisCheckoutThroughASymlink(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	_, trees := linkedWorktrees(t, "worker", "orchestrator")
+	worker, orchestrator := trees[0], trees[1]
+	alias := filepath.Join(t.TempDir(), "worker-link")
+	require.NoError(t, os.Symlink(worker, alias))
+	const ref = "outbeef00000004"
+	recordRun(t, worker, alias, ref)
+	recordRun(t, worker, orchestrator, ref)
+
+	opened, err := Inspect(t.Context(), worker)
+	require.NoError(t, err)
+	assert.Equal(t, []string{orchestrator}, opened.(*Magus).recordedCheckouts(ref))
+}
+
+// A fact's ref is matched by prefix either way, but only between ref-shaped strings: the
+// store resolves nothing for a bare "out", so neither may a fact.
+func TestRecordedRefMatchesOnlyRefShapedPrefixes(t *testing.T) {
+	cases := []struct {
+		recorded, ref string
+		want          bool
+	}{
+		{"outab12cd34", "outab12", true},
+		{"outab12", "outab12cd34", true},
+		{"outab12cd34", "out", false},
+		{"outab12cd34", "outff", false},
+		{"", "outab12", false},
+	}
+	for _, c := range cases {
+		assert.Equal(t, c.want, recordedRefMatches(c.recorded, c.ref), "recorded %q, ref %q", c.recorded, c.ref)
+	}
+}

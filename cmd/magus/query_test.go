@@ -171,7 +171,7 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 	require.NoError(t, err, "ComputeTargetKey")
 	ref := cache.PortableRef(key)
 
-	_, _, lookupErr := m.OutputByRef(ref)
+	_, _, lookupErr := m.OutputByRef(ctx, ref)
 	require.Error(t, lookupErr, "ref must not already be stored")
 
 	out := captureStderr(t, func() {

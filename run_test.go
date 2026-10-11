@@ -1191,7 +1191,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 
 	key, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
 	require.NoError(t, err, "ComputeTargetKey")
-	desc, err := m.OutputDescriptorByRef(cache.PortableRef(key))
+	desc, err := m.OutputDescriptorByRef(ctx, cache.PortableRef(key))
 	require.NoError(t, err, "OutputDescriptorByRef")
 	assert.Empty(t, desc.Revision, "no VCS: revision is unknown, not an error")
 	assert.False(t, desc.Dirty)

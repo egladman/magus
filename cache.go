@@ -346,54 +346,34 @@ func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 // ref matches, or *cache.AmbiguousRefError when a prefix matches several.
 //
 // A ref this checkout does not hold is read from the checkout the repo-wide session store
-// records as having run it, read-only, with a notice naming that checkout. A miss is a
-// *cache.RefNotFoundError that names the holder and the command to read it there.
-func (m *Magus) OutputByRef(ref string) ([]byte, OutputDescriptor, error) {
-	data, d, _, err := m.outputByRefHeld(context.Background(), ref)
-	return data, d, err
-}
-
-// outputByRefHeld is [Magus.OutputByRef] with the holder lookup's findings, which the
-// remote-aware lookup folds into its own miss.
-func (m *Magus) outputByRefHeld(ctx context.Context, ref string) ([]byte, OutputDescriptor, refMiss, error) {
-	data, d, err := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).ByRef(ref)
-	if !errors.Is(err, fs.ErrNotExist) {
-		return data, newOutputDescriptor(d), refMiss{}, err
-	}
-	type found struct {
-		data []byte
-		d    cache.OutputDescriptor
-	}
-	f, miss, err := readHeld(ctx, m, ref, true, func(s *cache.OutputStore) (found, error) {
-		data, d, err := s.ByRef(ref)
-		return found{data, d}, err
+// records as having run it, read-only, with a notice naming that checkout on ctx's logger.
+// A miss is a *cache.RefNotFoundError (through errors.As) that names that checkout and the
+// command to read it there.
+func (m *Magus) OutputByRef(ctx context.Context, ref string) ([]byte, OutputDescriptor, error) {
+	var data []byte
+	var d cache.OutputDescriptor
+	err := m.readRef(ctx, ref, func(dir string) (err error) {
+		data, d, err = cache.NewOutputStore(dir).ByRef(ref)
+		return err
 	})
-	switch {
-	case err == nil:
-		return f.data, newOutputDescriptor(f.d), miss, nil
-	case errors.Is(err, fs.ErrNotExist):
-		return nil, OutputDescriptor{}, miss, miss.notFound(ref, "local cache")
-	default:
-		return nil, OutputDescriptor{}, miss, err
+	if err != nil {
+		return nil, OutputDescriptor{}, err
 	}
+	return data, newOutputDescriptor(d), nil
 }
 
 // OutputAttempts lists every stored execution of the step ref names, newest first: the
 // keep-last-K history behind one portable ref, for `magus query output <ref> --attempts`.
 // Like OutputByRef it reads the store straight off the resolved cache dir, so Inspect
-// workspaces work too. Returns fs.ErrNotExist when no ref matches, or
-// *cache.AmbiguousRefError when a prefix matches several.
-func (m *Magus) OutputAttempts(ref string) ([]OutputDescriptor, error) {
-	list, err := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).Attempts(ref)
-	if errors.Is(err, fs.ErrNotExist) {
-		var miss refMiss
-		list, miss, err = readHeld(context.Background(), m, ref, true, func(s *cache.OutputStore) ([]cache.OutputDescriptor, error) {
-			return s.Attempts(ref)
-		})
-		if errors.Is(err, fs.ErrNotExist) {
-			err = miss.notFound(ref, "local cache")
-		}
-	}
+// workspaces work too, and reads another checkout's as OutputByRef does. Returns an error
+// that is fs.ErrNotExist when no ref matches, or *cache.AmbiguousRefError when a prefix
+// matches several.
+func (m *Magus) OutputAttempts(ctx context.Context, ref string) ([]OutputDescriptor, error) {
+	var list []cache.OutputDescriptor
+	err := m.readRef(ctx, ref, func(dir string) (err error) {
+		list, err = cache.NewOutputStore(dir).Attempts(ref)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -424,8 +404,9 @@ func (m *Magus) PublishOutput(ctx context.Context, ref string) (string, error) {
 // the target. Requires a live cache (the remote backend and trust set live there); on
 // an Inspect workspace it degrades to the local-only path.
 func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, OutputDescriptor, error) {
-	data, desc, miss, err := m.outputByRefHeld(ctx, ref)
-	if m.cache == nil || !errors.Is(err, fs.ErrNotExist) {
+	data, desc, err := m.OutputByRef(ctx, ref)
+	var miss *refMiss
+	if m.cache == nil || !errors.As(err, &miss) {
 		return data, desc, err
 	}
 	// Another checkout's store is local and free; the remote namespace is a network call,
@@ -433,7 +414,7 @@ func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, Outp
 	data, d, err := m.cache.OutputByRef(m.ContextWithSecrets(ctx), ref)
 	var missing *cache.RefNotFoundError
 	if errors.As(err, &missing) {
-		miss.apply(missing)
+		miss.foldInto(missing)
 	}
 	return data, newOutputDescriptor(d), err
 }
@@ -441,19 +422,17 @@ func (m *Magus) OutputByRefRemote(ctx context.Context, ref string) ([]byte, Outp
 // OutputDescriptorByRef resolves a ref to just its stored descriptor, without reading
 // the output blob. The metadata views (`query output <ref> --meta`, `describe target
 // --cache --against <ref>`) want the identity, not the bytes, and a captured log can
-// be large.
-func (m *Magus) OutputDescriptorByRef(ref string) (OutputDescriptor, error) {
-	d, err := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).DescriptorByRef(ref)
-	if errors.Is(err, fs.ErrNotExist) {
-		var miss refMiss
-		d, miss, err = readHeld(context.Background(), m, ref, true, func(s *cache.OutputStore) (cache.OutputDescriptor, error) {
-			return s.DescriptorByRef(ref)
-		})
-		if errors.Is(err, fs.ErrNotExist) {
-			err = miss.notFound(ref, "local cache")
-		}
+// be large. It reads another checkout's store as [Magus.OutputByRef] does.
+func (m *Magus) OutputDescriptorByRef(ctx context.Context, ref string) (OutputDescriptor, error) {
+	var d cache.OutputDescriptor
+	err := m.readRef(ctx, ref, func(dir string) (err error) {
+		d, err = cache.NewOutputStore(dir).DescriptorByRef(ref)
+		return err
+	})
+	if err != nil {
+		return OutputDescriptor{}, err
 	}
-	return newOutputDescriptor(d), err
+	return newOutputDescriptor(d), nil
 }
 
 // OutputKeyInputs returns the pre-hash key inputs stored behind ref: the deterministic
@@ -461,23 +440,25 @@ func (m *Magus) OutputDescriptorByRef(ref string) (OutputDescriptor, error) {
 // write. They feed `magus query output <ref> --meta`
 // (component-class digests) and `describe target --cache --against <ref>` (the exact
 // disagreeing line). Returns fs.ErrNotExist when the ref resolves but the run predates
-// key-input persistence.
-func (m *Magus) OutputKeyInputs(ref string) ([]string, error) {
+// key-input persistence. A ref this checkout does not know is read from another
+// checkout's store as [Magus.OutputByRef] does, without a notice: the descriptor lookup
+// that precedes this call has already said which checkout answered.
+func (m *Magus) OutputKeyInputs(ctx context.Context, ref string) ([]string, error) {
 	store := cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg))
 	lines, err := store.KeyInputsByRef(ref)
 	if !errors.Is(err, fs.ErrNotExist) {
 		return lines, err
 	}
 	// A ref that resolves here but has no lines predates persistence; only an unknown ref
-	// is another checkout's. The descriptor lookup that precedes this call has already
-	// said which checkout answered, so this read stays quiet.
+	// is another checkout's.
 	if _, derr := store.DescriptorByRef(ref); derr == nil {
 		return nil, err
 	}
-	lines, _, herr := readHeld(context.Background(), m, ref, false, func(s *cache.OutputStore) ([]string, error) {
-		return s.KeyInputsByRef(ref)
+	_, err = m.searchOtherCheckouts(ctx, ref, func(dir string) (err error) {
+		lines, err = cache.NewOutputStore(dir).KeyInputsByRef(ref)
+		return err
 	})
-	return lines, herr
+	return lines, err
 }
 
 // LastRecordedRun returns the most recent cache entry recorded for target in projectPath

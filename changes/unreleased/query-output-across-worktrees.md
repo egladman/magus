@@ -10,8 +10,13 @@
 
 ### Changed
 
+- **Breaking for SDK callers: `OutputByRef`, `OutputAttempts`, `OutputDescriptorByRef` and
+  `OutputKeyInputs` take a `context.Context` first.** A miss now reads other checkouts'
+  stores; the context ends that search and carries the notice naming the checkout read.
+  Pass the caller's context.
 - **A ref that no store holds names the checkout that ran it.** The MGS8001 message gives
   that checkout and `cd <checkout> && magus query output <ref>`, also when the checkout is
-  gone, and gives the command alone when no checkout recorded the ref.
+  gone, and gives the command alone when no checkout recorded the ref. A recorded
+  checkout whose store was read and missed is listed among the stores consulted.
 - **`magus query invocation <id>` shows the project, target and output ref on each result
   line.**
