@@ -16,31 +16,33 @@ name is the entry below. `magus describe rules` prints the same list.
 
 ## Denies by default
 
-| Rule                                              | Catches                                                                                          |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| [agent-sign-off](agent-sign-off.md)               | an agent stamping a read receipt or closing an attention request, which only a person may do     |
-| [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                       |
-| [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                             |
-| [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)          |
-| [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                    |
-| [focus-read](focus-read.md)                       | a read outside the paths a focus lease was given                                                 |
-| [hook-wiring-write](hook-wiring-write.md)         | a leased or agent-attributed write to the hook wiring the guard is installed by                  |
-| [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs               |
-| [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                            |
-| [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                  |
-| [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                 |
-| [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned          |
-| [lease-vcs](lease-vcs.md)                         | a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout |
-| [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns       |
-| [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                    |
-| [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                         |
-| [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused              |
-| [shared-stash](shared-stash.md)                   | a bare stash push or pop, on a stack every worktree shares                                       |
-| [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store        |
-| [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                 |
-| [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                       |
-| [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths        |
-| [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                          |
+| Rule                                              | Catches                                                                                              |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [agent-sign-off](agent-sign-off.md)               | an agent stamping a read receipt or closing an attention request, which only a person may do         |
+| [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                           |
+| [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                                 |
+| [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)              |
+| [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                        |
+| [focus-read](focus-read.md)                       | a read outside the paths a focus lease was given                                                     |
+| [hook-wiring-write](hook-wiring-write.md)         | a leased or agent-attributed write to the hook wiring the guard is installed by                      |
+| [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                   |
+| [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                                |
+| [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                      |
+| [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                     |
+| [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
+| [lease-vcs](lease-vcs.md)                         | a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout     |
+| [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns           |
+| [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                        |
+| [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                             |
+| [policy-unloaded](policy-unloaded.md)             | a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load |
+| [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
+| [shared-stash](shared-stash.md)                   | a bare stash push or pop, on a stack every worktree shares                                           |
+| [stale-binary](stale-binary.md)                   | a call that changes state while the magus judging it cannot load this tree's guard policy            |
+| [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store            |
+| [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
+| [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
+| [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths            |
+| [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                              |
 
 ## Advises by default
 

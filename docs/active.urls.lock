@@ -154,6 +154,7 @@ decisions/0003-running-an-invocation-on-another-operating-system/
 decisions/0004-running-a-branch-on-a-hosted-runner/
 decisions/0005-deterministic-answers/
 decisions/0006-the-person-drives-review/
+decisions/0007-verbosity-decides-which-parts-print/
 dependencies/
 development/
 development/cmd-magus-starter/
@@ -681,6 +682,7 @@ reference/rules/notes-author/
 reference/rules/output-pipe/
 reference/rules/output-redirect/
 reference/rules/person-only/
+reference/rules/policy-unloaded/
 reference/rules/precedent-search/
 reference/rules/process-poll/
 reference/rules/push-gate/
@@ -1129,6 +1131,7 @@ tags/upgrade/
 tags/uv/
 tags/validation/
 tags/vcs/
+tags/verbosity/
 tags/verify/
 tags/version/
 tags/versioning/

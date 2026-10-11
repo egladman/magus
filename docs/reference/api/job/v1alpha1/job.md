@@ -1,13 +1,13 @@
 ---
 title: JobService
 generated_from: reference/api/
-description: "JobService is the server's control service for background maintenance jobs."
+description: "JobService is the daemon's control service for background maintenance jobs."
 tags: [api, proto, connect, grpc, jobservice]
 ---
 
 # JobService
 
-JobService is the server's control service for background maintenance jobs. Trigger RPCs submit a job and return immediately; ListJobs reports every job's state. Reads stay on the per-domain services - this one only mutates.
+JobService is the daemon's control service for background maintenance jobs. Trigger RPCs submit a job and return immediately; ListJobs reports every job's state. Reads stay on the per-domain services - this one only mutates.
 
 Package `magus.job.v1alpha1`, defined in `proto/magus/job/v1alpha1/job.proto`. Source: [job.proto:23](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L23). Part of the [daemon API](../../index.md).
 
@@ -359,7 +359,7 @@ Source: [job.proto:323](https://github.com/egladman/magus/blob/main/proto/magus/
 | `orphans`         | repeated string                      | 5 |                                                                                                                                                        |
 | `stale`           | repeated string                      | 6 |                                                                                                                                                        |
 | `blocked`         | [repeated JobBlock](#jobblock)       | 7 | live jobs waiting on a dependency that has not passed                                                                                                  |
-| `read_only`       | [repeated JobReadOnly](#jobreadonly) | 8 | rows this server's binary can read but not write                                                                                                       |
+| `read_only`       | [repeated JobReadOnly](#jobreadonly) | 8 | rows this daemon's binary can read but not write                                                                                                       |
 
 Used by: [ListJobs (response)](job.md#listjobs).
 
@@ -396,7 +396,7 @@ Source: [job.proto:50](https://github.com/egladman/magus/blob/main/proto/magus/j
 | --------------- | --------------------------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `state`         | [SubmitState](#submitstate) | 1 |                                                                                                                                                                                                                                                                                                                 |
 | `invocation_id` | string                      | 2 | the running job's invocation id (the new one, or the coalesced one)                                                                                                                                                                                                                                             |
-| `console_url`   | string                      | 3 | Where to watch this job: the console's runs app scoped to invocation\_id. A PATH, not an absolute URL, because the reader is the console itself and resolves it against its own origin. Empty only when the server coalesced a submit it could not name, since a run with no invocation has nothing to link to. |
+| `console_url`   | string                      | 3 | Where to watch this job: the console's runs app scoped to invocation\_id. A PATH, not an absolute URL, because the reader is the console itself and resolves it against its own origin. Empty only when the daemon coalesced a submit it could not name, since a run with no invocation has nothing to link to. |
 | `job`           | [Job](#job)                 | 4 | the job's descriptor plus its last-run and current-size metadata                                                                                                                                                                                                                                                |
 
 Used by: [RunJob (response)](job.md#runjob).
@@ -405,7 +405,7 @@ Used by: [RunJob (response)](job.md#runjob).
 
 ### JobHolder
 
-JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the server's own housekeeping from work a session was handed without asking a second door.
+JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the daemon's own housekeeping from work a session was handed without asking a second door.
 
 Source: [job.proto:63](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L63).
 
@@ -413,7 +413,7 @@ Source: [job.proto:63](https://github.com/egladman/magus/blob/main/proto/magus/j
 | ------------------------ | - | ------------------------------------------------------- |
 | `JOB_HOLDER_UNSPECIFIED` | 0 |                                                         |
 | `JOB_HOLDER_SESSION`     | 2 | work an orchestrator declared for somebody else to hold |
-| `JOB_HOLDER_SERVER`      | 3 | the server's own maintenance catalog                    |
+| `JOB_HOLDER_SERVER`      | 3 | the daemon's own maintenance catalog                    |
 
 _Reserved: 1; `JOB_HOLDER_DAEMON`._
 
