@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -187,9 +188,7 @@ func TestRegions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			isolateGitConfig(t)
-			dir := t.TempDir()
-			gitInitRepo(t, dir, map[string]string{
+			dir := testkit.NewRepo(t, map[string]string{
 				".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.spell diff=spell\n",
 				"a.go":           regionsGo,
 				"plain.txt":      regionsGo,
@@ -197,7 +196,7 @@ func TestRegions(t *testing.T) {
 				"x.spell":        "target one\n\trun one\ntarget two\n\trun two\n",
 				"sub/s.txt":      "s\n",
 				"blob.bin":       "\x00\x01\x02",
-			})
+			}).Root()
 			for k, v := range tc.config {
 				gitRun(t, dir, "config", k, v)
 			}
@@ -216,9 +215,7 @@ func TestRegions(t *testing.T) {
 
 // Regions refine files, so no files is nothing to refine, never the whole tree.
 func TestRegionsOfNoFilesIsNothing(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	writeRepoFile(t, dir, "a.txt", "b\n")
 
 	got, err := gitVCS{}.Regions(t.Context(), dir, "HEAD", nil)
@@ -227,9 +224,7 @@ func TestRegionsOfNoFilesIsNothing(t *testing.T) {
 }
 
 func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	writeRepoFile(t, dir, "a.txt", "b\n")
 	files := []types.FileChange{{Path: "a.txt"}}
 
@@ -246,10 +241,7 @@ func TestRegionsRefusesABaseItCannotResolve(t *testing.T) {
 // still yields nothing, where diffing against base itself would report base's own commit
 // reversed.
 func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"mine.txt": "a\n", "theirs.txt": "a\n"})
-	gitRun(t, dir, "branch", "-M", "main")
+	dir := testkit.NewRepo(t, map[string]string{"mine.txt": "a\n", "theirs.txt": "a\n"}).Root()
 	gitRun(t, dir, "switch", "-q", "-c", "work")
 	gitRun(t, dir, "switch", "-q", "main")
 	writeRepoFile(t, dir, "theirs.txt", "b\n")
@@ -275,9 +267,7 @@ func TestRegionsStayInsideTheFilesGiven(t *testing.T) {
 }
 
 func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": regionsGo})
+	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "a.go": regionsGo}).Root()
 	for k, v := range map[string]string{
 		"diff.noprefix": "true", "diff.relative": "true", "diff.interHunkContext": "10",
 		"diff.algorithm": "myers", "diff.indentHeuristic": "false", "color.ui": "always",
@@ -302,9 +292,7 @@ func TestRegionsIgnoresConfigThatChangesTheParse(t *testing.T) {
 // Regions places a checkout's, from the attributes of the repository it is handed; the
 // checkout's own copy of the file is never read.
 func TestRegionsBetween(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"})
+	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n*.buzz diff=buzz\n", "a.go": "package gone\n"}).Root()
 	edited := strings.Replace(regionsGo, "return 2", "return 20", 1)
 	added := regionsGo + "\nfunc D() {\n}\n"
 	was, now := types.RegionOld, types.RegionNew
@@ -382,9 +370,7 @@ func TestRegionsBetween(t *testing.T) {
 }
 
 func TestDrivers(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{".gitattributes": "*.go diff=golang\n*.txt -diff\n*.md diff\n"})
+	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.txt -diff\n*.md diff\n"}).Root()
 
 	got, err := gitVCS{}.Drivers(t.Context(), dir, []string{"a.go", "sub/b.go", "c.txt", "d.md", "e.rs"})
 	require.NoError(t, err)
@@ -419,7 +405,6 @@ func replaceIn(t *testing.T, dir, name, from, to string) {
 // git's funcname matching sees `var i = 0;` at column 0 inside a raw string and names it a
 // declaration; placement treats Go strings and comments as text, as the pure placement does.
 func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
-	isolateGitConfig(t)
 	body := "package a\n\nfunc A() {\n\trun(`\nvar i = 0;\nfunc fake() {\n`)\n\tx()\n}\n\n/*\ntype T struct {\n*/\n\nvar after = 1\n"
 	var funcnames []string
 	for _, f := range gitFuncnames {
@@ -436,16 +421,14 @@ func TestPlacementSkipsGoStringsAndComments(t *testing.T) {
 // Regions name declarations in a test file, in a file under a build tag in a nested
 // module, and in a Go file whose raw string holds Buzz, by the Go declaration around it.
 func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{
+	dir := testkit.NewRepo(t, map[string]string{
 		".gitattributes":         "*.go diff=golang\n",
 		"go.mod":                 "module example.com/m\n",
 		"a_test.go":              "package a\n\nfunc TestA(t *testing.T) {\n\tcheck(1)\n}\n",
 		"libs/x/go.mod":          "module example.com/m/libs/x\n",
 		"libs/x/vm/jit_amd64.go": "//go:build amd64\n\npackage vm\n\nfunc compile() int {\n\treturn 1\n}\n",
 		"embed.go":               "package a\n\nfunc Script() string {\n\treturn `\nvar i = 0;\nfun main() > void {}\n`\n}\n",
-	})
+	}).Root()
 	replaceIn(t, dir, "a_test.go", "check(1)", "check(2)")
 	replaceIn(t, dir, "libs/x/vm/jit_amd64.go", "return 1", "return 2")
 	replaceIn(t, dir, "embed.go", "fun main() > void {}", "fun main() > void { i = 1; }")
@@ -466,7 +449,6 @@ func TestRegionsOfTestsTaggedFilesAndEmbeddedBuzz(t *testing.T) {
 // matching does, for every driver magus routes files to, so a region a merge reports is
 // the region git's hunk headers, a footprint and a job claim name.
 func TestPurePlacementMatchesGit(t *testing.T) {
-	isolateGitConfig(t)
 	fixtures := map[string]string{
 		"golang":     "package a\n\nimport \"fmt\"\n\ntype T struct {\n\tA int\n}\n\nfunc (t T) M() {\n\tfmt.Println(1)\n}\n\nfunc F(x int) int {\n\treturn x\n}\n",
 		"python":     "import os\n\nclass A:\n    def m(self):\n        return 1\n\nasync def f():\n    pass\n",
