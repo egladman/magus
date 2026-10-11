@@ -59,6 +59,25 @@ func TestParticiplesReportsATextOverTheRate(t *testing.T) {
 	}
 }
 
+// The rule cannot tell a participle from a gerund, so the finding quotes each
+// clause it counted, in text order, for the reader to check.
+func TestParticiplesNamesTheClausesItCounted(t *testing.T) {
+	text := padded(14, "Holding the lock, the worker reads the key, using the lock it holds for the whole run.")
+
+	var got []string
+
+	for _, f := range JudgeText(text, KindReference, WithOnly(RuleParticiples)) {
+		got = append(got, f.Message)
+	}
+
+	want := []string{"2 present participial clauses in 227 words, 8.8 per 1000 (the cap is 5): " +
+		"'Holding the lock', 'using the lock it holds for ...'. Give each -ing clause its own sentence with a " +
+		"subject, or cut the clause."}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("participles = %q, want %q", got, want)
+	}
+}
+
 func TestNominalizationsReportsATextOverTheRate(t *testing.T) {
 	nominal := "The implementation of the validation requires the configuration and the documentation. "
 

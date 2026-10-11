@@ -3,6 +3,7 @@ package proofread
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -44,7 +45,8 @@ var densityTexts = map[Rule]ruleText{
 			"clause naming an issue (\"addressing #2782\") and an open task item a template wrote are no " +
 			"longer counted. The rest turn on whether a tail claims a benefit or states a fact (\", " +
 			"renaming the types\"), which the rule cannot read. It stays off until a fresh labeling round " +
-			"measures it.",
+			"measures it. A finding quotes each clause it counted, so its reader can check them, and a " +
+			"platform's footer (Copilot's tips) is not the author's text and is not counted.",
 	},
 	RuleNominalizations: {
 		code:      "PRF4021",
@@ -85,29 +87,58 @@ var notParticiples = wordSet(
 )
 
 // participles reports a text whose participial clauses run over
-// [maxParticiplesPerK].
+// [maxParticiplesPerK], quoting each clause it counted in text order.
 func participles(in input) []Finding {
-	words, hits := 0, 0
+	words := 0
+
+	var clauses []string
 
 	for _, para := range densityParagraphs(in) {
 		words += countWords(para.text)
 
+		var at []int
+
 		for _, m := range participleTail.FindAllStringSubmatchIndex(para.text, -1) {
 			if participleClause(para.text, m[2], m[3]) && !citesReference(para.text[m[3]:]) {
-				hits++
+				at = append(at, m[2])
 			}
 		}
 
 		for _, s := range sentenceBounds(para.text) {
 			sentence := strings.TrimLeft(para.text[s[0]:s[1]], "*_( ")
 			if m := participleOpener.FindStringSubmatch(sentence); m != nil && openerClause(sentence, m[1]) {
-				hits++
+				at = append(at, s[1]-len(sentence))
 			}
+		}
+
+		slices.Sort(at)
+
+		for _, i := range at {
+			clauses = append(clauses, clauseText(para.text[i:]))
 		}
 	}
 
-	return densityFinding(words, hits, maxParticiplesPerK, "present participial clauses",
+	return densityFinding(words, len(clauses), clauses, maxParticiplesPerK, "present participial clauses",
 		"Give each -ing clause its own sentence with a subject, or cut the clause.")
+}
+
+// maxClauseWords is how much of a counted clause a finding quotes: enough to
+// find it in the text.
+const maxClauseWords = 6
+
+// clauseText is the clause text opens, up to the punctuation that closes it,
+// at most [maxClauseWords] words.
+func clauseText(text string) string {
+	if end := strings.IndexAny(text, ",.;:!?()\n"); end >= 0 {
+		text = text[:end]
+	}
+
+	words := strings.Fields(text)
+	if len(words) > maxClauseWords {
+		return strings.Join(words[:maxClauseWords], " ") + " ..."
+	}
+
+	return strings.Join(words, " ")
 }
 
 // issueRef is an issue or pull request a clause names.
@@ -198,7 +229,7 @@ func nominalizations(in input) []Finding {
 		}
 	}
 
-	return densityFinding(words, hits, maxNominalizationsPerK, "nominalizations",
+	return densityFinding(words, hits, nil, maxNominalizationsPerK, "nominalizations",
 		"Turn the nouns back into verbs where an actor does something: 'the validation of the key' "+
 			"becomes 'it validates the key'.")
 }
@@ -232,7 +263,9 @@ func countWords(text string) int {
 
 // densityFinding reports hits over words as one finding for the whole text
 // when the text holds at least [minDensityWords] and the rate is over limit.
-func densityFinding(words, hits int, limit float64, what, fix string) []Finding {
+// counted, when given, are the hits as the text reads them, quoted after the
+// rate so a reader can check each one.
+func densityFinding(words, hits int, counted []string, limit float64, what, fix string) []Finding {
 	if words < minDensityWords || words == 0 {
 		return nil
 	}
@@ -242,8 +275,19 @@ func densityFinding(words, hits int, limit float64, what, fix string) []Finding 
 		return nil
 	}
 
+	named := ""
+
+	if len(counted) > 0 {
+		quoted := make([]string, len(counted))
+		for i, c := range counted {
+			quoted[i] = "'" + c + "'"
+		}
+
+		named = strings.Join(quoted, ", ") + ". "
+	}
+
 	return []Finding{{
-		Message: fmt.Sprintf("%d %s in %d words, %.1f per 1000 (the cap is %.0f): %s", hits, what, words, rate,
-			limit, fix),
+		Message: fmt.Sprintf("%d %s in %d words, %.1f per 1000 (the cap is %.0f): %s%s", hits, what, words, rate,
+			limit, named, fix),
 	}}
 }
