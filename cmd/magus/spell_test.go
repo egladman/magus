@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
-	"github.com/egladman/magus/libs/testkit"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )

@@ -609,11 +609,8 @@ func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
 }
 
 func TestBuzzReachesMagus(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, src string) {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	dir, write := w.Root(), w.Write
 	write("plain.buzz", `import "std";`)
 	write("direct.buzz", `import "magus";`)
 	write("lib/deep.buzz", `import "magus/spell";`)

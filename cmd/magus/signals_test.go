@@ -23,8 +23,8 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/broker"
-	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 

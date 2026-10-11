@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,12 +68,8 @@ magus\project({
 // magusfile, and that the policy check stays quiet about a registry the failed
 // magusfiles never populated.
 func TestInspect_ReportsEveryFailingMagusfile(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		p := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("magusfile.buzz", `import "magus";
 
 magus\project({

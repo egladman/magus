@@ -25,6 +25,7 @@ import (
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -1006,12 +1007,8 @@ func TestCompatUntil(t *testing.T) {
 }
 
 func TestCollectRationale(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("a.go", "package a\n\n// compat(until: no store holds v1 descriptors): keep the branch.\nfunc F() {}\n")
 	write("b.go", "package b\n\nfunc G() {}\n")
 	write("gen/c.go", "package gen\n\n// compat(until: whatever): generated.\n")
@@ -1560,13 +1557,12 @@ func TestLocalAdvisorsMatchAdviseBuzz(t *testing.T) {
 // changeset naming them.
 func reviewFixture(t *testing.T, files map[string]string, roles map[string]string) (string, string, types.Diff) {
 	t.Helper()
-	root, cache := t.TempDir(), t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root, cache := w.Root(), t.TempDir()
 
 	var rev types.Diff
 	for path, body := range files {
-		abs := filepath.Join(root, filepath.FromSlash(path))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+		w.Write(path, body)
 
 		role := types.DiffRoleSource
 		if r, ok := roles[path]; ok {
