@@ -103,7 +103,8 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if denied || asked.timedOut {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered)
+	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered,
+		judgingBinaryNote(deps, at, asked.loadFailure, in.lease))
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 

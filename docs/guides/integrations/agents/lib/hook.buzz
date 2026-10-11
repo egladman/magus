@@ -216,7 +216,11 @@ export fun workspaceRootAt(dir: str) > str {
 // cwd, the directory the host says the call runs in, is walked first: a host runs a
 // subagent's hooks from the session's directory while the subagent works in its own
 // worktree, whose binary is the one that tree builds.
-export fun resolveBin(cwd: str = "") > str {
+//
+// A ./magus that exists but cannot be run still falls through to PATH, and the PATH
+// copy may predate the checkout's rules. A caller that passes file (and the session,
+// when the host reports one) has that said once per session on stderr.
+export fun resolveBin(cwd: str = "", session: str = "", file: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }
     var root = "";
@@ -228,6 +232,11 @@ export fun resolveBin(cwd: str = "") > str {
         // The root was found and the binary beside it cannot be run. Falling
         // through to PATH here is the same answer the walk's `break` gave: do not
         // keep climbing into a parent checkout.
+        final present = (fs\stat(candidate) catch null) != null;
+        if (present and file != "" and noticeOnce(session, family: "bin-not-executable", file: file)) {
+            io\stderr.write("{file}: {candidate} exists but is not executable, so this hook judges with the magus on PATH, "
+                + "which may predate this checkout's rules; run `chmod +x {candidate}`\n") catch void;
+        }
     }
     return proc\which("magus") catch "";
 }
@@ -304,6 +313,28 @@ test "a call from a nested project resolves the workspace root's binary" {
     std\assert(resolveBin(cwd: "{root}/console/src") == "{root}/magus", message: "the root's binary");
     std\assert(resolveBin(cwd: "{root}/console") == "{root}/magus", message: "from the project directory itself");
     fs\removeAll(root);
+}
+
+test "a ./magus that cannot run is said once per session, and only then" {
+    final root = fs\tempDir("hook-unrunnable-");
+    final session = fileSafe(root);
+    final bare = fs\tempDir("hook-no-binary-");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    fs\writeFile("{bare}/magus.yaml", content: "");
+    fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
+
+    resolveBin(cwd: root, session: session, file: "test.buzz");
+    std\assert(noticeOnce(session, family: "bin-not-executable", file: "test.buzz") == false, message: "the first call said it");
+
+    final quiet = "{session}-quiet";
+    resolveBin(cwd: bare, session: quiet, file: "test.buzz");
+    std\assert(noticeOnce(quiet, family: "bin-not-executable", file: "test.buzz"), message: "no ./magus at all is not this notice");
+
+    final named = "{session}-named";
+    resolveBin(cwd: root, session: named);
+    std\assert(noticeOnce(named, family: "bin-not-executable", file: "test.buzz"), message: "a caller that names no file stays silent");
+    fs\removeAll(root);
+    fs\removeAll(bare);
 }
 
 test "a worktree under another checkout never climbs into it" {

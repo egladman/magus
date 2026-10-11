@@ -100,9 +100,12 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
+		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value, env.Spawn.Description)); refused {
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
+		} else if v.Context != "" && verdict.Decision == "pass" {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: v.Context, Rule: v.RuleName()}
+			decided = decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
@@ -145,7 +148,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		denied := asked.unloaded && denyUnloaded(&asked, call, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied && !asked.timedOut {
-			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
+			note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered,
+				judgingBinaryNote(deps, at, asked.loadFailure, actingLease))
+			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and

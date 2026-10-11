@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -199,6 +200,95 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 			Context: "Only the built-in rules applied to this command. A workspace command rule is still failing, as told earlier in this session.",
 		}, repeat)
 	})
+}
+
+// The note names the binary that judged and its relation to this checkout's ./magus, so a
+// rule that judged nothing can be traced to the build that could not load the tree. The
+// failure's own text is the same with or without it.
+func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
+	const version = "v0.5.0-rc.3-48-gf01f3de8e"
+	staleUnknownRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared, `unknown built-in rule "architecture-unbriefed"`)
+	// RuleFailure.Error is pinned verbatim elsewhere; the note only adds a line after it.
+	staleMsg := ward.ExplainStaleBinary(staleUnknownRule, version, "")
+	require.True(t, ward.IsStaleBinary(staleMsg))
+
+	t.Run("a different file than ./magus", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		recordLoadedPolicy(t, cacheDir)
+		ownCheckout(t, ctx, true)
+		other := filepath.Join(t.TempDir(), "magus")
+		require.NoError(t, os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755))
+		deps := unloadedDepsFor(staleMsg)
+		deps.Binary, deps.BinaryVersion = other, version
+
+		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+
+		assert.Contains(t, v.Context, "Judged by "+other+" ("+version+"), which is not this checkout's ./magus.")
+		assert.Contains(t, v.Context, "the hook uses ./magus when the call runs inside this checkout")
+		assert.Contains(t, v.Context, "rebuild ./magus with `./magus run go-build .`")
+		assert.Contains(t, v.Context, "judged nothing: the magusfile failed to load: ")
+	})
+	t.Run("the same file as ./magus", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		recordLoadedPolicy(t, cacheDir)
+		root := ownCheckout(t, ctx, true)
+		deps := unloadedDepsFor(staleMsg)
+		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
+
+		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+
+		assert.Contains(t, v.Context, "Judged by "+deps.Binary+" ("+version+"), this checkout's ./magus. Fix: rebuild ./magus with `./magus run go-build .`.")
+	})
+	t.Run("no ./magus in the checkout", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		recordLoadedPolicy(t, cacheDir)
+		ownCheckout(t, ctx, false)
+		deps := unloadedDepsFor(staleMsg)
+		deps.Binary, deps.BinaryVersion = "/usr/local/bin/magus", version
+
+		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+
+		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+bootstrapCommand+"`.")
+	})
+	t.Run("a failure that is not the binary being old names no fix", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		recordLoadedPolicy(t, cacheDir)
+		root := ownCheckout(t, ctx, true)
+		deps := unloadedDepsFor(errors.New("magusfile: exec magusfile.buzz: unexpected '}'"))
+		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
+
+		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+
+		assert.Contains(t, v.Context, "Judged by "+deps.Binary+" ("+version+"), this checkout's ./magus.")
+		assert.NotContains(t, v.Context, "Fix:")
+	})
+	t.Run("the repeat stays one line", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		recordLoadedPolicy(t, cacheDir)
+		root := ownCheckout(t, ctx, true)
+		deps := unloadedDepsFor(staleMsg)
+		deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
+
+		Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+		repeat := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+
+		assert.NotContains(t, repeat.Context, "Judged by")
+		assert.Contains(t, repeat.Context, "is still failing, as told earlier in this session")
+	})
+}
+
+// A caller that does not know its binary path leaves the note out, as every pinned note
+// above shows; a lease is told to ask the main session rather than to build.
+func TestJudgingBinaryNoteForAWorkerAsksTheMainSession(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	root := ownCheckout(t, ctx, true)
+	at := location{workspace: root}
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date")
+
+	got := judgingBinaryNote(Dependencies{Binary: filepath.Join(root, "magus")}, at, stale, "lease-a")
+
+	assert.Equal(t, "Judged by "+filepath.Join(root, "magus")+", this checkout's ./magus. Fix: ask the main session to place a ./magus that loads this workspace.", got)
+	assert.Empty(t, judgingBinaryNote(Dependencies{}, at, stale, ""))
 }
 
 // No record means no rule was ever seen to protect: a workspace whose policy never loaded

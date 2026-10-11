@@ -1,6 +1,8 @@
 package guard
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -50,7 +52,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := denyBriefCommand(strict(testDependencies()), tt.brief)
+		v := denyBriefCommand(strict(testDependencies()), tt.brief, "")
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
@@ -142,6 +144,63 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
 		assert.Contains(t, deny, "["+string(denyRuleWorkerCheckOnly)+"]", tt.name)
 	}
+}
+
+// agentEnvelope is a spawn in a session of its own, since a repeated deny is shortened.
+func agentEnvelope(t *testing.T, description, prompt string) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{
+		"session_id": strings.ReplaceAll(t.Name(), "/", "-"), "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"description": description, "prompt": prompt, "name": "brisk-heron"},
+	})
+	require.NoError(t, err)
+	return string(raw)
+}
+
+// TestBriefGradingExplainsAPass: four identical briefs once told workers to also run lint,
+// and only the first was refused. Whatever the grader skips, the verdict now says why, so
+// two identical lines never differ without a reason on the page.
+func TestBriefGradingExplainsAPass(t *testing.T) {
+	const offCheck = "Also run `./magus run lint docs -s` when done."
+	ctx, root := fleetFixture(t, figuresLease())
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	// The brief grader finds the job store through the dependencies, not the pinned context.
+	strict := func(d Dependencies) Dependencies {
+		d.CacheDir = func(string) (string, error) { return cacheDir, nil }
+		return strict(d)
+	}
+
+	t.Run("a brief naming no job", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", offCheck), Host: "claude-code"})
+		assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(v))
+		assert.Contains(t, v.Context, "no row was held to a check")
+		assert.Contains(t, v.Context, "names no job")
+		assert.Contains(t, v.Context, `"Also run `+"`./magus run lint docs -s`"+` when done." went ungraded`)
+	})
+	t.Run("a brief naming a job the store does not hold live", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", "JOB ID: ghost/job\n"+offCheck), Host: "claude-code"})
+		assert.Contains(t, v.Context, "job ghost/job is not in the store")
+	})
+	t.Run("the same brief is refused once the row is named", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", "JOB ID: figures/flow\n"+offCheck), Host: "claude-code"})
+		assert.Equal(t, "deny", v.Decision)
+		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
+	})
+	t.Run("the spawn title names the row the brief does not", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", offCheck), Host: "claude-code"})
+		assert.Equal(t, "deny", v.Decision, v.Reason)
+		assert.Contains(t, v.Reason, "job figures/flow's worker to run `lint`")
+	})
+	t.Run("a forbidding line is passed, and says so", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Never run `./magus run lint docs`; the orchestrator does.\nFinish with `./magus run diagrams_generate docs`."), Host: "claude-code"})
+		assert.Equal(t, "advise", v.Decision)
+		assert.Contains(t, v.Context, "is not graded: the line forbids the run")
+	})
+	t.Run("the row's own check needs no words", func(t *testing.T) {
+		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker figures/flow", "Run `./magus run diagrams_generate docs` once."), Host: "claude-code"})
+		assert.Equal(t, "pass", v.Decision, v.Context)
+	})
 }
 
 // TestBriefNamesItsRow: the row is found by the lease a brief exports, the job it takes, or

@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
@@ -295,7 +298,10 @@ func sideName(seam functionSeam, side string) string {
 // could not, "" when none failed. A set of failures is told in full the first time it fires
 // in a session and as one line naming what applied on every repeat, so the reader never
 // takes a call for judged by a rule that was skipped.
-func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFailure, answered []string) string {
+//
+// judged is judgingBinaryNote's line, appended to the full telling only: the repeat stays
+// one line.
+func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFailure, answered []string, judged string) string {
 	if len(failures) == 0 {
 		return ""
 	}
@@ -311,8 +317,56 @@ func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFai
 		_, _ = h.Write([]byte(f.Side + "\x00" + f.Error + "\x00"))
 	}
 	full.WriteString(summary)
+	if judged != "" {
+		full.WriteString("\n\n" + judged)
+	}
 	kind := hint.MarkerKind(string(ruleFailedKind(seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
 	return gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(seam)+" rule is still failing, as told earlier in this session.")
+}
+
+// judgingBinaryNote names the magus that judged the call and how it relates to the
+// checkout's own ./magus, with the fix when the load failure is the binary being older than
+// the tree. "" when the judge's path is unknown, which a caller outside the CLI leaves unset.
+func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease string) string {
+	if deps.Binary == "" {
+		return ""
+	}
+	who := "Judged by " + deps.Binary
+	if deps.BinaryVersion != "" {
+		who += " (" + deps.BinaryVersion + ")"
+	}
+	root := at.workspace
+	if root == "" {
+		return who + "."
+	}
+	hasBinary := hasMagusBinary(root)
+	same := false
+	if hasBinary {
+		a, errA := os.Stat(deps.Binary)
+		b, errB := os.Stat(filepath.Join(root, "magus"))
+		same = errA == nil && errB == nil && os.SameFile(a, b)
+	}
+	var fix binaryFix
+	stale := ward.IsStaleBinary(loadFailure)
+	if stale {
+		fix = binaryRemedy(ownSourceRoot(root), hasBinary, lease)
+	}
+	switch {
+	case !hasBinary:
+		who += "; this checkout has no ./magus."
+	case same:
+		who += ", this checkout's ./magus."
+	default:
+		who += ", which is not this checkout's ./magus."
+		if stale {
+			return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + fix.say + "."
+		}
+		return who
+	}
+	if stale {
+		who += " Fix: " + fix.say + "."
+	}
+	return who
 }
 
 // ruleFailedKind names the notice that a seam's workspace rule judged nothing.

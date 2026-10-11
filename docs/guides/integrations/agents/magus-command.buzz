@@ -553,7 +553,7 @@ fun main(args: [str]) > void {
     }
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
-    final bin = hook\resolveBin(cwd: cwd);
+    final bin = hook\resolveBin(cwd: cwd, session: session, file: "magus-command.buzz");
 
     // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
     // availability notice, which a message hook would hand the model as context.
