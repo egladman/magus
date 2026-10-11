@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
@@ -136,8 +135,7 @@ func TestLoadFailureDenyNamesTheMainSessionForALeasedWorker(t *testing.T) {
 	ownCheckout(t, ctx, true)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleWorkerSay)
-	assert.Contains(t, stored, workerPlacementAt)
+	stored := servedDeny(t, cacheDir, v, denyRuleStaleBinary, staleWorkerSay, placementNext(denyRuleStaleBinary, "lease-a"))
 	assert.NotContains(t, stored, "go-build")
 }
 
@@ -249,13 +247,12 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 
-	// The spawn seam words no deny short, so the whole verdict shows, verdict first.
+	// Worded like the command and write seams: the verdict inline, the rest behind the ref.
 	v := Judge(ctx, unloadedDeps(), Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	want := verdictWithRule("deny", string(denyRuleStaleBinary))
-	want.Reason = staleBinaryDenial(unloadedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
-		causeStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace).full()
-	assert.Equal(t, want, v)
-	assert.True(t, strings.HasPrefix(v.Reason, staleElsewhereSay+"\n"), v.Reason)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
+	d := staleBinaryDenial(unloadedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
+		causeStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
+	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByBuiltin, spawns[0].DecidedBy)

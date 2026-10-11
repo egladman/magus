@@ -272,10 +272,10 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
 	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
 		// Replaces every pass-through and every "get one with" below: each names a build.
-		v.Why = binaryRemedy(true, o.hasBinary, o.lease).why + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
-		v.Deny = workerBuildVerdict(o.lease)
+		v.Why = onePerBase + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = workerBuildVerdict
 		v.Next, v.Lead = nil, ""
-		return v
+		return v.withRemedy(v.Deny, placementNext(denyRuleRawTool, o.lease))
 	case o.recovery:
 		return o.recoveryAdvisory
 	case o.hasBinary && (o.bootstrap || o.link):

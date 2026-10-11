@@ -83,6 +83,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
 	// their turn.
 	var held heldAdvice
+	// why is the rationale of the built-in deny standing, kept behind the deny's ref.
+	why := ""
 	if env.IsSpawn {
 		verdict = spawnBuiltIns(ctx, req, who, at)
 		if verdict.Decision == "deny" {
@@ -98,8 +100,8 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
 		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: denial{Say: v.Deny, Why: v.Why}.full(), Rule: v.RuleName()}
-			decided = decidedByBuiltin
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			why, decided = v.Why, decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
@@ -144,6 +146,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if !denied && !asked.timedOut {
 			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
 		}
+	}
+	// Worded as the command and write seams word theirs: the verdict, at most one next and
+	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
+	if verdict.Decision == "deny" && verdict.Rule != "" {
+		verdict.Reason, _, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
 		policyDigest: digest,
