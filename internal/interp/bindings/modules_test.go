@@ -1940,3 +1940,46 @@ func BenchmarkBindingsDeclareMagusTypes(b *testing.B) {
 		sess.Close()
 	}
 }
+
+// Through a magusfile, so the refusal is the one a script meets, on the line
+// proc\shell builds.
+func TestProcExecRefusesVCSFromAMagusfile(t *testing.T) {
+	dir := t.TempDir()
+	writeMagusfile(t, dir, `
+import "magus";
+import "proc";
+
+export fun compound(ctx: magus\Context, _a: [str]) > void !> any {
+    final c = proc\shell("cd . && git commit -m x");
+    proc\exec(c.bin, args: c.args, dir: "", opts: {});
+}
+
+export fun wrapped(ctx: magus\Context, _a: [str]) > void !> any {
+    proc\exec("env", args: ["GIT_DIR=elsewhere", "hg", "status"], dir: "", opts: {});
+}
+`)
+	err := runTargetIn(t, dir, "compound")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `: git runs only through vcs\cmd, which holds it to the lease rules: call vcs\cmd(["commit", "-m", "x"]) instead`)
+
+	err = runTargetIn(t, dir, "wrapped")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `proc\exec env: hg runs only through vcs\cmd, which holds it to the lease rules: call vcs\cmd(["status"]) instead`)
+}
+
+func TestVcsCmdRunsFromAMagusfile(t *testing.T) {
+	dir := testkit.NewRepo(t, nil).Root()
+	writeMagusfile(t, dir, `
+import "magus";
+import "fs";
+import "vcs";
+
+export fun inside(ctx: magus\Context, _a: [str]) > void !> any {
+    fs\writeFile("inside", content: vcs\cmd(["rev-parse", "--is-inside-work-tree"], opts: {"quiet": true}).stdout);
+}
+`)
+	require.NoError(t, runTargetIn(t, dir, "inside"))
+	got, err := os.ReadFile(filepath.Join(dir, "inside"))
+	require.NoError(t, err)
+	assert.Equal(t, "true", string(got))
+}
