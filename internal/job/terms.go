@@ -120,7 +120,7 @@ func NewTerms(row types.Job, facts TermsFacts) Terms {
 		DerivedDenyPaths:   facts.DerivedDenyPaths,
 		RegeneratedOutside: facts.RegeneratedOutside,
 		UnrunGates:         facts.UnrunGates,
-		Affinity:          facts.Affinity,
+		Affinity:           facts.Affinity,
 	}
 }
 
