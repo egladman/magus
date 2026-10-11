@@ -103,7 +103,35 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessSettingsContract, err)
 		}
 	}
+	limitsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessLimitsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessLimitsContract, err)
+		}
+	} else if limitsResp.Data != nil {
+		if err := decodeHarnessLimits(limitsResp.Data, &d); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessLimitsContract, err)
+		}
+	}
 	return d, "spell:" + id, true, nil
+}
+
+// decodeHarnessLimits reads the limits map through the descriptor's own JSON shape, like
+// settings.
+func decodeHarnessLimits(data any, d *agent.HarnessDescriptor) error {
+	if _, ok := data.(map[string]any); !ok {
+		return fmt.Errorf("want map, got %T", data)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	var limits agent.HarnessLimits
+	if err := json.Unmarshal(raw, &limits); err != nil {
+		return err
+	}
+	d.Limits = &limits
+	return nil
 }
 
 // decodeHarnessSettings reads the settings list through the descriptor's own JSON shape,

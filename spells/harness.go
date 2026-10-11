@@ -53,4 +53,10 @@ const (
 	// such as a plugin to enable. Optional. A value someone set differently is left alone
 	// and named, never overwritten.
 	HarnessSettingsContract = "harness_settings"
+
+	// HarnessLimitsContract returns {foreground_default_ms, foreground_max_ms}: how long the
+	// host waits on a shell command that names no timeout, and the longest timeout one may
+	// name, before it moves the command to the background. Optional; a host that never
+	// backgrounds a command omits it.
+	HarnessLimitsContract = "harness_limits"
 )

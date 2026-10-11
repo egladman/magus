@@ -115,3 +115,22 @@ func TestDecodeHarnessAgents(t *testing.T) {
 		assert.Empty(t, d.Agents)
 	})
 }
+
+// TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
+// command past its timeout, and that every other shipped harness declares no limits.
+func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
+	assert.Equal(t, &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000}, loadShippedHarness(t, "claude-code").Limits)
+	for _, id := range []string{"codex", "cursor", "opencode"} {
+		assert.Nil(t, loadShippedHarness(t, id).Limits, id)
+	}
+}
+
+func TestDecodeHarnessLimits(t *testing.T) {
+	var d agent.HarnessDescriptor
+	require.NoError(t, decodeHarnessLimits(map[string]any{"foreground_default_ms": int64(1000), "foreground_max_ms": 2000.0}, &d))
+	assert.Equal(t, &agent.HarnessLimits{ForegroundDefaultMs: 1000, ForegroundMaxMs: 2000}, d.Limits)
+
+	var refused agent.HarnessDescriptor
+	assert.Error(t, decodeHarnessLimits([]any{}, &refused), "anything but a map is refused")
+	assert.Nil(t, refused.Limits)
+}

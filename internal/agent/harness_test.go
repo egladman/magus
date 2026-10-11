@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
@@ -1357,4 +1358,17 @@ func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
 	ok := base
 	ok.Agents = []HarnessAgentFile{{Path: ".a/agents/a.md", Content: "x"}}
 	assert.NoError(t, validateHarnessDescriptor(ok))
+}
+
+// The shortest declared maximum bounds a check whichever wired host runs it.
+func TestForegroundMax(t *testing.T) {
+	limits := func(ms int64) HarnessDescriptor {
+		return HarnessDescriptor{Limits: &HarnessLimits{ForegroundMaxMs: ms}}
+	}
+	got, ok := ForegroundMax([]HarnessDescriptor{limits(600000), {}, limits(300000)})
+	require.True(t, ok)
+	assert.Equal(t, 5*time.Minute, got)
+
+	_, ok = ForegroundMax([]HarnessDescriptor{{}, limits(0)})
+	assert.False(t, ok, "no harness declares a maximum")
 }

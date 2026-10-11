@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/std"
@@ -73,6 +74,32 @@ type HarnessDescriptor struct {
 	Prompts        []HarnessPrompt    `json:"prompts,omitempty"`
 	Agents         []HarnessAgentFile `json:"agents,omitempty"`
 	Settings       []HarnessSetting   `json:"settings,omitempty"`
+	Limits         *HarnessLimits     `json:"limits,omitempty"`
+}
+
+// HarnessLimits are how long the host waits on a shell command in the foreground, in
+// milliseconds: ForegroundDefaultMs for one that names no timeout, ForegroundMaxMs at most.
+// Past it the host moves the command to the background. Nil when the harness declares none.
+type HarnessLimits struct {
+	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
+	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
+}
+
+// ForegroundMax is the shortest foreground maximum among harnesses, the longest a check
+// can run in the foreground whichever of them a worker runs under; false when none
+// declares one.
+func ForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) {
+	var shortest time.Duration
+	for _, h := range harnesses {
+		if h.Limits == nil || h.Limits.ForegroundMaxMs <= 0 {
+			continue
+		}
+		d := time.Duration(h.Limits.ForegroundMaxMs) * time.Millisecond
+		if shortest == 0 || d < shortest {
+			shortest = d
+		}
+	}
+	return shortest, shortest > 0
 }
 
 // HarnessDisplay is opaque metadata for host UIs. The core validates no
@@ -139,10 +166,12 @@ type HarnessSpellLoader func(ctx context.Context, id string) (HarnessDescriptor,
 
 var harnessSpellLoader HarnessSpellLoader
 
-// RegisterHarnessSpellLoader installs the spell-backed harness resolver. Called
-// once from bindings init.
-func RegisterHarnessSpellLoader(fn HarnessSpellLoader) {
-	harnessSpellLoader = fn
+// RegisterHarnessSpellLoader installs the spell-backed harness resolver and returns the
+// one it replaced, for a test that swaps in its own to put back. Called once from
+// bindings init.
+func RegisterHarnessSpellLoader(fn HarnessSpellLoader) (previous HarnessSpellLoader) {
+	previous, harnessSpellLoader = harnessSpellLoader, fn
+	return previous
 }
 
 type wiredHarnessesKey struct{}

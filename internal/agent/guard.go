@@ -193,7 +193,12 @@ var guardInputs = []string{"command", "path", "mcp"}
 // resolves no ./magus from a project directory and judges with whatever PATH holds, which
 // is the binary that cannot load the tree. What that binary then does is its own: it
 // denies each call it cannot show is a read, instead of passing it.
-const GuardTemplateVersion = 22
+//
+// 23: magus-command.buzz accepts --foreground-default-ms and --foreground-max-ms, which a
+// config written for 23 passes on the shell-command entry, and forwards the call's own
+// background request and timeout off the event. Under that config a 22 copy reports both
+// flags as unsupported, and a leased worker's backgrounded magus run goes unrefused.
+const GuardTemplateVersion = 23
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

@@ -1031,6 +1031,16 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdout '"permissionDecision":"deny"'
 stdout 'stays with the orchestrator, not a worker'
 
+# case: command/deny
+# The same worker asks its host to run a magus target in the background. The glue reads
+# run_in_background and timeout off the event, forwards them with the foreground limits
+# the entry declares, and the worker that would park is refused.
+stdin $WORK/background-run-worker.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --foreground-default-ms 120000 --foreground-max-ms 600000
+! stderr 'unsupported argument'
+stdout '"permissionDecision":"deny"'
+stdout 'in the background; run it in the foreground with a timeout that covers it'
+
 # hosts: cursor
 
 # case: command/deny
@@ -1112,6 +1122,8 @@ prefix_rule(
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
 -- push-command-worker.json --
 {"hook_event_name": "PreToolUse", "session_id": "s-worker", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "git push origin HEAD"}}
+-- background-run-worker.json --
+{"hook_event_name": "PreToolUse", "session_id": "s-worker", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus run lint .", "run_in_background": true, "timeout": 600000}}
 -- exec-push-worker.json --
 {"hook_event_name": "PreToolUse", "session_id": "s1", "permission_mode": "default", "tool_name": "Bash", "tool_input": {"command": "magus job exec harness/push-worker"}}
 -- exec-push-worker-s-worker.json --

@@ -89,8 +89,20 @@ not block every tool call.
 **--agent-name** *string*
 : Name of the agent host this invocation came from (attribution only); required with --transport
 
+**--call-background**
+: The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
+
+**--call-timeout-ms** *int*
+: The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default
+
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
+
+**--foreground-default-ms** *int*
+: The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down
+
+**--foreground-max-ms** *int*
+: The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down
 
 **--lease** *string*
 : The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE
