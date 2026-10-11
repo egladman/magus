@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -406,26 +405,11 @@ func TestMagusfileGlobs(t *testing.T) {
 // opening the cache. Inspect is the right entry point for read-only
 // commands (list, graph, describe) where cache overhead is unnecessary.
 func ExampleInspect() {
-	// Create a minimal workspace with one project for illustration.
-	root, err := os.MkdirTemp("", "magus-example-*")
-	if err != nil {
-		fmt.Println("setup error:", err)
-		return
-	}
-	defer os.RemoveAll(root)
-
 	// A directory is a project if it contains a magusfile.buzz.
-	projDir := filepath.Join(root, "myapp")
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		fmt.Println("setup error:", err)
-		return
-	}
-	if err := os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644); err != nil {
-		fmt.Println("setup error:", err)
-		return
-	}
+	w, cleanup := exampleWorkspaceOf(map[string]string{"myapp/magusfile.buzz": ""})
+	defer cleanup()
 
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), w.Root())
 	if err != nil {
 		fmt.Println("inspect error:", err)
 		return
@@ -478,13 +462,18 @@ func (exampleTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, 
 // exampleWorkspace returns a workspace laid out the way a monorepo is, and a function that
 // removes it.
 func exampleWorkspace() (*testkit.Workspace, func()) {
-	var dirs []string
-	ws := testkit.NewWorkspace(exampleTB{dirs: &dirs})
-	ws.WriteTree(map[string]string{
+	return exampleWorkspaceOf(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"web/magusfile.buzz": "",
 	})
+}
+
+// exampleWorkspaceOf is exampleWorkspace over files, keyed by workspace-relative path.
+func exampleWorkspaceOf(files map[string]string) (*testkit.Workspace, func()) {
+	var dirs []string
+	ws := testkit.NewWorkspace(exampleTB{dirs: &dirs})
+	ws.WriteTree(files)
 	return ws, func() {
 		for _, dir := range dirs {
 			_ = os.RemoveAll(dir)
@@ -579,23 +568,15 @@ func ExampleWorkspaceRegistry_withSpell() {
 // runtime backend registered.
 func newWorkspace(t *testing.T) types.WorkspaceRepository {
 	t.Helper()
-	root := t.TempDir()
-	for _, rel := range []string{
-		"magusfile.buzz",                    // root project "."
-		"api/magusfile.buzz",                // "api"
-		"web/studio/magusfile.buzz",         // "web/studio"
-		"extensions/drape/magusfile.buzz",   // "extensions/drape"
-		"extensions/lattice/magusfile.buzz", // "extensions/lattice"
-	} {
-		abs := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(abs, []byte(""), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	ws, err := Inspect(context.Background(), root)
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
+		"magusfile.buzz":                    "", // root project "."
+		"api/magusfile.buzz":                "", // "api"
+		"web/studio/magusfile.buzz":         "", // "web/studio"
+		"extensions/drape/magusfile.buzz":   "", // "extensions/drape"
+		"extensions/lattice/magusfile.buzz": "", // "extensions/lattice"
+	})
+	ws, err := Inspect(context.Background(), w.Root())
 	if err != nil {
 		t.Fatalf("Inspect: %v", err)
 	}
@@ -767,8 +748,9 @@ func TestMagus_proxies(t *testing.T) {
 // only the MAGUS_VCS_* env vars (read directly by package vcs) had any effect.
 func TestInspectWiresVCSOptionsFromConfig(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	cfg := config.Defaults()
 	cfg.VCS.Name = "git"
@@ -858,9 +840,10 @@ func TestRemoteCacheRejectsMalformedKeys(t *testing.T) {
 // TestOpenRefusesARequiredRemoteWriteWithNoBackend: cache.remote.write.enabled true in a
 // workspace whose magusfile wires no backend fails Open instead of running local-only.
 func TestOpenRefusesARequiredRemoteWriteWithNoBackend(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	testkit.Isolate(t)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	cfg := config.Defaults()
 	cfg.Cache.Dir = filepath.Join(t.TempDir(), ".magus")
 	required := true
@@ -904,10 +887,9 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 	require.NoError(t, err)
 
 	mkWS := func() string {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-			[]byte("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
-		return root
+		w := testkit.NewWorkspace(t)
+		w.Magusfile("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+		return w.Root()
 	}
 
 	mBuild, err := Open(ctx, mkWS(), WithProvider(tel))
@@ -963,13 +945,8 @@ func TestSharedProviderVisibleAcrossMagus(t *testing.T) {
 // reverse-closure, the same-project one via directory containment. All recovered
 // statically at Open, no runtime dispatch.
 func TestCrossFileInputs(t *testing.T) {
-	root := t.TempDir()
-
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	write := func(rel, content string) { w.Write(rel, content) }
 
 	// Workspace root marker.
 	write("magusfile.buzz", "")
@@ -985,7 +962,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `)
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), w.Root())
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1188,24 +1165,18 @@ func TestClose_LeavesInjectedProviderRunning(t *testing.T) {
 	assert.False(t, p.shutdownCalled, "Close must not shut down a shared/injected provider")
 }
 
-// mkTree creates dirs and marker files under root. A trailing "/" makes a directory,
+// mkTree creates dirs and marker files in w. A trailing "/" makes a directory,
 // otherwise an empty marker file.
-func mkTree(t *testing.T, root string, paths ...string) {
+func mkTree(t *testing.T, w *testkit.Workspace, paths ...string) {
 	t.Helper()
 	for _, p := range paths {
-		full := filepath.Join(root, filepath.FromSlash(p))
 		if p[len(p)-1] == '/' {
-			if err := os.MkdirAll(full, 0o755); err != nil {
+			if err := os.MkdirAll(w.Path(p), 0o755); err != nil {
 				t.Fatalf("mkdir %s: %v", p, err)
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatalf("mkdir for %s: %v", p, err)
-		}
-		if err := os.WriteFile(full, nil, 0o600); err != nil {
-			t.Fatalf("write %s: %v", p, err)
-		}
+		w.Write(p, "")
 	}
 }
 
@@ -1222,8 +1193,9 @@ func mustFindRoot(t *testing.T, dir string) string {
 // magus.yaml declares where a workspace begins.
 func TestFindRoot(t *testing.T) {
 	t.Run("a nested project does not become its own workspace", func(t *testing.T) {
-		root := t.TempDir()
-		mkTree(t, root, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
+		w := testkit.NewWorkspace(t)
+		root := w.Root()
+		mkTree(t, w, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
 		if got := mustFindRoot(t, filepath.Join(root, "console")); got != root {
 			t.Errorf("root = %q, want %q; halting at console's magusfile is the original bug", got, root)
 		}
@@ -1234,8 +1206,9 @@ func TestFindRoot(t *testing.T) {
 	// multi-module repo. A submodule then locked its own cache dir and stopped
 	// excluding the root run despite touching the same files.
 	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
-		root := t.TempDir()
-		mkTree(t, root, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
+		w := testkit.NewWorkspace(t)
+		root := w.Root()
+		mkTree(t, w, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
 		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
 			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
 		}
@@ -1244,8 +1217,9 @@ func TestFindRoot(t *testing.T) {
 	// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows
 	// them. The nearest declaration governs, the same way .git behaves.
 	t.Run("nearest magus.yaml wins so a nested worktree keeps its own", func(t *testing.T) {
-		outer := t.TempDir()
-		mkTree(t, outer, "magus.yaml", "magusfile.buzz",
+		w := testkit.NewWorkspace(t)
+		outer := w.Root()
+		mkTree(t, w, "magus.yaml", "magusfile.buzz",
 			".claude/worktrees/feature/magus.yaml",
 			".claude/worktrees/feature/magusfile.buzz",
 			".claude/worktrees/feature/console/magusfile.buzz")
@@ -1263,8 +1237,9 @@ func TestFindRoot(t *testing.T) {
 	})
 
 	t.Run("a standalone project with no magus.yaml resolves to its outermost marker", func(t *testing.T) {
-		root := t.TempDir()
-		mkTree(t, root, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
+		w := testkit.NewWorkspace(t)
+		root := w.Root()
+		mkTree(t, w, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
 		if got, want := mustFindRoot(t, filepath.Join(root, "solo", "nested")), filepath.Join(root, "solo"); got != want {
 			t.Errorf("root = %q, want %q", got, want)
 		}
@@ -1273,8 +1248,9 @@ func TestFindRoot(t *testing.T) {
 	// Contiguity bounds the fallback: without it, one stray magusfile in a home
 	// directory would adopt every project beneath it.
 	t.Run("a gap stops the fallback from reaching a stray ancestor", func(t *testing.T) {
-		root := t.TempDir()
-		mkTree(t, root, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
+		w := testkit.NewWorkspace(t)
+		root := w.Root()
+		mkTree(t, w, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
 		if got, want := mustFindRoot(t, filepath.Join(root, "gap", "proj")), filepath.Join(root, "gap", "proj"); got != want {
 			t.Errorf("root = %q, want %q; the marker-less gap must stop the walk", got, want)
 		}
@@ -1284,15 +1260,14 @@ func TestFindRoot(t *testing.T) {
 // floorWorkspace writes a minimal workspace whose magus.yaml declares constraint.
 func floorWorkspace(t *testing.T, constraint string) string {
 	t.Helper()
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	yaml := ""
 	if constraint != "" {
 		yaml = "required_version: \"" + constraint + "\"\n"
 	}
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(yaml), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
-	return root
+	w.Write("magus.yaml", yaml)
+	w.Magusfile("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n")
+	return w.Root()
 }
 
 // A load joins one error per failing file; each is its own diagnostic. A coded type error
@@ -1390,27 +1365,13 @@ func TestStatusLinePath(t *testing.T) {
 // A brand-new file is the thing a reviewer most wants to see, and a tree-against-index diff
 // misses it entirely. This is the regression test for that gap.
 func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
-	root := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-	}
-	run("init", "-q")
-	run("config", "user.email", "t@example.com")
-	run("config", "user.name", "t")
-
-	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("one\ntwo\n"), 0o644))
-	run("add", "tracked.txt")
-	run("commit", "-qm", "seed")
+	repo := testkit.NewRepo(t, map[string]string{"tracked.txt": "one\ntwo\n"})
 
 	// One modified tracked file and one brand-new untracked file.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("one\nCHANGED\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "fresh.txt"), []byte("hello\nworld\n"), 0o644))
+	repo.Write("tracked.txt", "one\nCHANGED\n")
+	repo.Write("fresh.txt", "hello\nworld\n")
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), repo.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1426,24 +1387,11 @@ func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
 }
 
 func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
-	root := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-	}
-	run("init", "-q")
-	run("config", "user.email", "t@example.com")
-	run("config", "user.name", "t")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("x\n"), 0o644))
-	run("add", "seed.txt")
-	run("commit", "-qm", "seed")
+	repo := testkit.NewRepo(t, map[string]string{"seed.txt": "x\n"})
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0x00, 0x01, 0x02, 0x00}, 0o644))
+	repo.Write("blob.bin", string([]byte{0x00, 0x01, 0x02, 0x00}))
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), repo.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1459,27 +1407,13 @@ func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
 // from the review while the rest appear normally. It cost one real file here and reported
 // nothing, which is what makes it worth a test rather than a comment.
 func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
-	root := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-	}
-	run("init", "-q")
-	run("config", "user.email", "t@example.com")
-	run("config", "user.name", "t")
-
 	// Seed a file with NO trailing newline, then change it: git renders "\ No newline at end
 	// of file" and the diff's own last line is unterminated.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "nonewline.txt"), []byte("one"), 0o644))
-	run("add", "nonewline.txt")
-	run("commit", "-qm", "seed")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "nonewline.txt"), []byte("two"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "brand-new.txt"), []byte("fresh\n"), 0o644))
+	repo := testkit.NewRepo(t, map[string]string{"nonewline.txt": "one"})
+	repo.Write("nonewline.txt", "two")
+	repo.Write("brand-new.txt", "fresh\n")
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), repo.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1499,22 +1433,9 @@ func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
 
 // A clean tree has nothing to review, and must not synthesize a patch out of ignored files.
 func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
-	root := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-	}
-	run("init", "-q")
-	run("config", "user.email", "t@example.com")
-	run("config", "user.name", "t")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("x\n"), 0o644))
-	run("add", "a.txt")
-	run("commit", "-qm", "seed")
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "x\n"})
 
-	m, err := Open(context.Background(), root)
+	m, err := Open(context.Background(), repo.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -1610,20 +1531,20 @@ func TestApplyEnvSandboxModeIsAFloor(t *testing.T) {
 // validate again: an unknown profile must be a config error, never a value that reaches
 // the limiter.
 func TestLoadConfigValidatesTheEnvironment(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: balanced\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "concurrency_profile: balanced\n")
 	t.Setenv("MAGUS_CONCURRENCY_PROFILE", "turbo")
 
-	_, err := loadConfig(root)
+	_, err := loadConfig(w.Root())
 	require.ErrorContains(t, err, `MAGUS_CONCURRENCY_PROFILE: unknown concurrency profile "turbo"`)
 }
 
 // yaml reaches the same door as env and flags, so a misspelled profile stops the load.
 func TestLoadConfigRefusesAnUnknownProfile(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("concurrency_profile: turbo\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "concurrency_profile: turbo\n")
 
-	_, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
+	_, err := config.LoadFile(w.Path("magus.yaml"), false)
 	require.ErrorContains(t, err, `unknown concurrency profile "turbo"`)
 }
 

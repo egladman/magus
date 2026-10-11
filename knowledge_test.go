@@ -883,6 +883,9 @@ func TestLoadKnowledgePackagesReadsEveryEcosystem(t *testing.T) {
 // rests on: each kind of input change moves the stamp of every class that reads it, and
 // of no other. A class that missed a move would be served stale from the store.
 func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
+	// The session class reads the per-repository state directory; a store other tests in
+	// this process wrote would move it under the assertions below.
+	testkit.Isolate(t)
 	ctx := context.Background()
 	repo := testkit.NewRepo(t, nil)
 	root := repo.Root()

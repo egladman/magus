@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/sessions"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // linkedWorktrees makes a git repository with a magusfile and one linked worktree per name,
@@ -23,30 +23,11 @@ import (
 // so they compare equal to the roots a workspace records.
 func linkedWorktrees(t *testing.T, names ...string) (primary string, worktrees []string) {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
-	}
-	primary, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", primary}, args...)...).CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	git("init", "-q")
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), nil, 0o644))
-	git("add", "-A")
-	git("commit", "-q", "-m", "init")
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
+	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": ""})
 	for _, name := range names {
-		tree := filepath.Join(base, name)
-		git("worktree", "add", "-q", tree)
-		worktrees = append(worktrees, tree)
+		worktrees = append(worktrees, repo.AddWorktree(name).Root())
 	}
-	return primary, worktrees
+	return repo.Root(), worktrees
 }
 
 // recordRun files, in the session store of the repository repoRoot belongs to, the fact
@@ -98,7 +79,7 @@ func fileFingerprints(t *testing.T, dir string) map[string]int64 {
 // by every checkout of the repository and records which one ran it, so every ref lookup reads
 // that checkout's output store, read-only, and says so.
 func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	_, trees := linkedWorktrees(t, "worker", "orchestrator")
 	worker, orchestrator := trees[0], trees[1]
 	ref := persistRun(t, orchestrator)
@@ -156,7 +137,7 @@ func TestOutputLookupsReadTheCheckoutThatRanTheRef(t *testing.T) {
 // output aged out) is named among the stores consulted, never as where to read it. An
 // unrecorded ref still names the command.
 func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	_, trees := linkedWorktrees(t, "worker", "orchestrator")
 	worker, orchestrator := trees[0], trees[1]
 	gone := filepath.Join(t.TempDir(), "removed-worktree")
@@ -209,7 +190,7 @@ func TestOutputMissNamesTheCheckoutThatRanTheRef(t *testing.T) {
 // A fact may record this checkout under a symlinked path; it is still this checkout, so it
 // is neither searched a second time nor named as where the ref lives.
 func TestRecordedCheckoutsLeaveOutThisCheckoutThroughASymlink(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	_, trees := linkedWorktrees(t, "worker", "orchestrator")
 	worker, orchestrator := trees[0], trees[1]
 	alias := filepath.Join(t.TempDir(), "worker-link")
