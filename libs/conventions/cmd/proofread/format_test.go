@@ -20,6 +20,7 @@ func TestSplitSource(t *testing.T) {
 		{"docs/a.md:0", "docs/a.md", 0},
 		{"change-description:0", "change-description", 0},
 		{"docs/a.md", "docs/a.md", 0},
+		{"review-reply", "review-reply", 0},
 		{"a:b", "a:b", 0},
 		{"", "", 0},
 	}
@@ -100,7 +101,7 @@ func TestWriteFindingsRejectsAnUnknownFormat(t *testing.T) {
 	var b bytes.Buffer
 
 	err := writeFindings(&b, "xml", nil)
-	if err == nil || err.Error() != `unknown -format "xml": want json, sarif or rdjson` {
+	if err == nil || err.Error() != `unknown -format "xml": want json, sarif, rdjson or text` {
 		t.Errorf("error = %v", err)
 	}
 
@@ -200,6 +201,77 @@ func TestSARIFFingerprintIsStableAndSeparatesRepeats(t *testing.T) {
 	twice := fingerprints(a, a)
 	if twice[0] != base || twice[1] == base {
 		t.Errorf("a repeated finding: fingerprints %v, want the first to be %s and the second to differ", twice, base)
+	}
+}
+
+func TestTextLineReadsPathLineColumnCodeRuleDecisionMessage(t *testing.T) {
+	cases := []struct {
+		name string
+		f    finding
+		want string
+	}{
+		{"a span", finding{Source: "a.md:3", Line: 3, Column: 4, Code: "PRF4001", Rule: "filler", Decision: "deny", Message: "Drop it."},
+			"a.md:3:4: PRF4001 filler [deny] Drop it."},
+		{"a line without a column", finding{Source: "a.md:3", Code: "PRF4001", Rule: "filler", Decision: "advise", Message: "Drop it."},
+			"a.md:3: PRF4001 filler [advise] Drop it."},
+		{"a whole text", finding{Source: "a.md", Node: "a.md", Code: "PRF2001", Rule: "budget", Decision: "deny", Message: "Cut it."},
+			"a.md: PRF2001 budget [deny] Cut it."},
+		{"no path", finding{Source: "", Node: "symbol-node", Code: "PRF6001", Rule: "comment-block", Decision: "deny", Message: "Split it."},
+			"symbol-node: PRF6001 comment-block [deny] Split it."},
+		{"a message on several lines", finding{Source: "a.md:1", Line: 1, Code: "PRF4001", Rule: "filler", Decision: "deny", Message: "Drop it:\n  state the fact."},
+			"a.md:1: PRF4001 filler [deny] Drop it: state the fact."},
+	}
+
+	for _, tc := range cases {
+		var b bytes.Buffer
+		if err := writeFindings(&b, "text", []finding{tc.f}); err != nil {
+			t.Fatal(err)
+		}
+
+		if b.String() != tc.want+"\n" {
+			t.Errorf("%s: got %q, want %q", tc.name, b.String(), tc.want+"\n")
+		}
+	}
+}
+
+func TestTextSummaryCountsByDecision(t *testing.T) {
+	deny, advise := finding{Decision: "deny"}, finding{Decision: "advise"}
+
+	cases := []struct {
+		in   []finding
+		want string
+	}{
+		{nil, ""},
+		{[]finding{deny}, "proofread: 1 finding (1 deny, 0 advise)\n"},
+		{[]finding{deny, advise, advise}, "proofread: 3 findings (1 deny, 2 advise)\n"},
+	}
+
+	for _, tc := range cases {
+		if got := textSummary(tc.in); got != tc.want {
+			t.Errorf("textSummary(%d findings) = %q, want %q", len(tc.in), got, tc.want)
+		}
+	}
+}
+
+func TestFingerprintsAreTheSARIFPartialFingerprints(t *testing.T) {
+	a := rule("filler")
+	a.Source, a.Match, a.Decision = "a.md:3", "simply", "deny"
+
+	var raw bytes.Buffer
+	if err := writeFindings(&raw, "sarif", []finding{a, a}); err != nil {
+		t.Fatal(err)
+	}
+
+	var log sarifLog
+	if err := json.Unmarshal(raw.Bytes(), &log); err != nil {
+		t.Fatal(err)
+	}
+
+	want := fingerprints([]finding{a, a})
+	for i, r := range log.Runs[0].Results {
+		if got := r.PartialFingerprints[fingerprintKey]; got != want[i] {
+			t.Errorf("result %d: SARIF fingerprint %s, fingerprints() %s", i, got, want[i])
+		}
 	}
 }
 

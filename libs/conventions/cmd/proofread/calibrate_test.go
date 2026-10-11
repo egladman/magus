@@ -138,8 +138,8 @@ func TestCalibrateRefusesFlagsItCannotUse(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 
 			code := run(append([]string{"calibrate"}, tc.args...), strings.NewReader(tc.stdin), &stdout, &stderr)
-			if code != 1 || strings.TrimSpace(stderr.String()) != tc.want {
-				t.Errorf("exit %d, stderr %q, want 1 and %q", code, stderr.String(), tc.want)
+			if code != 2 || strings.TrimSpace(stderr.String()) != tc.want {
+				t.Errorf("exit %d, stderr %q, want 2 and %q", code, stderr.String(), tc.want)
 			}
 		})
 	}

@@ -170,28 +170,32 @@ wins over `rules` and over an earlier glob. A glob matches the argument as
 given, slash-separated with any leading `./` dropped, so a caller passing
 workspace-relative paths writes workspace-relative globs; `**` matches any
 number of directories. An unknown rule, a decision other than the three, a glob
-matching no file argument, and an unknown key are errors that exit 1 and name
+matching no file argument, and an unknown key are errors that exit 2 and name
 it. `-only` takes comma-separated rule names and judges by those alone; an
-unknown name, or one the table leaves off for every file, exits 1.
+unknown name, or one the table leaves off for every file, exits 2.
 `-thread-length N` tells `long-thread` how many replies the author already
 posted in the thread. The flags follow the kind. `proofread rules` writes every
 rule as its reference page shows it, `{name, code, kinds, decisions, house,
 catches, why}`, and judges nothing; `proofread explain <rule or code>` prints one
 rule's catches, reason, default decisions and page as text. A first argument
-that names no subcommand prints the usage and exits 1.
+that names no subcommand prints the usage and exits 2.
 
 ### Findings
 
 The findings JSON is the contract: any command that writes the same array, a
 team's own style checker or a reviewer it drives, feeds the same consumers, and
 the same decisions table applies to it. proofread writes one JSON array on
-stdout and exits 0 whatever it found; a finding is not a failure, and the caller
-decides what one costs.
+stdout and, by default, exits 0 whatever it found; a finding is not a failure, and
+the caller decides what one costs. `-fail-on deny|advise|never` makes the exit code
+say it: 1 when a finding at or above that decision remains after suppression and
+the baseline, 0 otherwise, and 2 when proofread could not judge (a bad flag, a
+missing file, a malformed table), so a caller tells a finding from a failure. The
+default is `never`.
 
 | Field      | Holds                                                                                     |
 | ---------- | ----------------------------------------------------------------------------------------- |
 | `node`     | what was judged: the symbol's node, the file argument, or the kind read from stdin        |
-| `source`   | where: the symbol's index position, or `path:line` (line 0 for a budget with no one line) |
+| `source`   | where: the symbol's index position, `path:line`, or the path alone for a whole text       |
 | `kind`     | the kind judged, one of the seven above                                                   |
 | `rule`     | the rule's name                                                                           |
 | `code`     | the rule's `PRF` code, from its own domain in `libs/diagnostics`                          |
@@ -213,13 +217,35 @@ diagnostic result. The SARIF log lists every rule in the driver, gives a deny
 finding the level `error` and an advise finding `warning`, and carries a
 `proofread/v1` partial fingerprint hashed from the rule, the match and the path,
 so a finding that moves down a file is still the same finding. An rdjson
-diagnostic carries a suggestion for each replacement a rule offers. Any other
-format exits 1.
+diagnostic carries a suggestion for each replacement a rule offers. `text` writes
+one line per finding for a terminal or a hook's output,
+`path:line:col: CODE rule [decision] message`, leaving out the column when it is
+not known and the line for a finding about the whole text, and when there are
+findings it writes a count on stderr. Any other format exits 2.
 
 ```sh
 proofread reference -format sarif docs/*.md > proofread.sarif
 proofread reference -format rdjson docs/*.md | reviewdog -f=rdjson -reporter=github-pr-review
+proofread reference -format text -fail-on deny docs/*.md
 ```
+
+`proofread commit-message FILE` judges the message file a VCS hook passes. It drops
+the lines that start with `#` and the scissors line with everything after it, and a
+finding's line is its line in the file; with no argument it reads the message from
+stdin. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/)
+installs it as a git, Mercurial or Jujutsu check.
+
+`-record` keeps what happened to a file's findings, on this machine and nowhere
+else, under `$XDG_STATE_HOME/proofread/` (`~/.local/state/proofread/` when the
+variable is unset). Per file and rule it stores the findings' fingerprints, the
+hash of the rule, the match and the path that SARIF uses, and no text. On the next
+`-record` run of the same file a fingerprint that disappeared is `fixed`, one the
+file now suppresses is `suppressed`, and one still reported is `reported`.
+`proofread stats [-format json|text]` prints each rule's counts and its
+`not_useful_rate`, (suppressed + reported) / (suppressed + reported + fixed), and
+flags a rule at or over 10% `probation` and at or over 25% `ship-off`. A run
+judges again without the file's suppressions to tell `suppressed` from `fixed`, and
+a rule the run did not judge (off, `-only`, another kind) keeps its state.
 
 `-baseline FILE` adopts proofread on text that already has findings. The file
 holds a count per file and rule, `{"version":1,"counts":{"docs/a.md":{"filler":2}}}`.

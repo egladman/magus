@@ -241,9 +241,9 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 
 	assertArgs(t, []string{"review-reply", "-thread-length", "2"}, reply, "[]\n")
 	assertArgs(t, []string{"review-reply", "-thread-length", "3"}, reply,
-		rows(t, row("review-reply", "review-reply:0", "review-reply", proofread.RuleLongThread, proofread.DecisionAdvise, message, "")))
+		rows(t, row("review-reply", "review-reply", "review-reply", proofread.RuleLongThread, proofread.DecisionAdvise, message, "")))
 	assertArgs(t, []string{"review-reply", "-thread-length", "3", "-decisions", deny}, reply,
-		rows(t, row("review-reply", "review-reply:0", "review-reply", proofread.RuleLongThread, proofread.DecisionDeny, message, "")))
+		rows(t, row("review-reply", "review-reply", "review-reply", proofread.RuleLongThread, proofread.DecisionDeny, message, "")))
 	assertArgs(t, []string{"review-reply", "-thread-length", "3", "-decisions", off}, reply, "[]\n")
 }
 
@@ -351,8 +351,8 @@ func TestRunPrintsTheUsageForNoSubcommandOrAnUnknownOne(t *testing.T) {
 			var out, errOut bytes.Buffer
 
 			code := run(tc.args, strings.NewReader(""), &out, &errOut)
-			if code != 1 || out.String() != "" || !strings.HasPrefix(errOut.String(), tc.lead) {
-				t.Fatalf("run: got code %d stdout %q stderr %q, want code 1 and stderr starting %q", code, out.String(), errOut.String(), tc.lead)
+			if code != exitError || out.String() != "" || !strings.HasPrefix(errOut.String(), tc.lead) {
+				t.Fatalf("run: got code %d stdout %q stderr %q, want code 2 and stderr starting %q", code, out.String(), errOut.String(), tc.lead)
 			}
 
 			for _, s := range subcommands {
@@ -380,7 +380,7 @@ func TestEveryKindTheRulesJudgeIsASubcommand(t *testing.T) {
 	}
 }
 
-func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
+func TestRunExitsTwoOnAFlagItCannotUse(t *testing.T) {
 	dir := t.TempDir()
 	table := func(body string) string { return writeFile(t, t.TempDir(), "d.json", body) }
 	unknownRule := table(`{"rules":{"fillers":"deny"}}`)
@@ -395,6 +395,13 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		args       []string
 		wantStderr string
 	}{
+		{"an unknown bar", []string{"reference", "-fail-on", "error", page},
+			"proofread: unknown -fail-on \"error\": want deny, advise or never\n"},
+		{"record with no file", []string{"change-description", "-record"},
+			"proofread: -record needs a file to judge, since an outcome is kept per path\n"},
+		{"two message files", []string{"commit-message", page, page},
+			"proofread: commit-message takes one message file, or reads stdin\n"},
+		{"stats with an argument", []string{"stats", "filler"}, "proofread: stats takes no arguments\n"},
 		{"a path for symbols", []string{"doc-comment", "a.md"},
 			"proofread: a path needs the reference subcommand, since symbols are read from stdin\n"},
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
@@ -428,14 +435,14 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 			var out, errOut bytes.Buffer
 
 			code := run(tc.args, strings.NewReader("[]"), &out, &errOut)
-			if code != 1 || out.String() != "" || errOut.String() != tc.wantStderr {
-				t.Errorf("run: got code %d stdout %q stderr %q, want code 1 stderr %q", code, out.String(), errOut.String(), tc.wantStderr)
+			if code != exitError || out.String() != "" || errOut.String() != tc.wantStderr {
+				t.Errorf("run: got code %d stdout %q stderr %q, want code 2 stderr %q", code, out.String(), errOut.String(), tc.wantStderr)
 			}
 		})
 	}
 }
 
-func TestRunExitsOneOnInputThatIsNotAnArrayOfRecords(t *testing.T) {
+func TestRunExitsTwoOnInputThatIsNotAnArrayOfRecords(t *testing.T) {
 	cases := []struct {
 		name       string
 		in         string
@@ -449,7 +456,7 @@ func TestRunExitsOneOnInputThatIsNotAnArrayOfRecords(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			assertRun(t, tc.in, 1, "", tc.wantStderr)
+			assertRun(t, tc.in, exitError, "", tc.wantStderr)
 		})
 	}
 }
@@ -481,7 +488,7 @@ func TestRunRejectsAnUnknownFormat(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{"reference", "-format", "xml"}, strings.NewReader(""), &out, &errOut)
-	if code != 1 || out.String() != "" || errOut.String() != "proofread: unknown -format \"xml\": want json, sarif or rdjson\n" {
+	if code != exitError || out.String() != "" || errOut.String() != "proofread: unknown -format \"xml\": want json, sarif, rdjson or text\n" {
 		t.Errorf("run: got code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
 }
@@ -494,7 +501,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{"reference", "-baseline", baselinePath, page}, strings.NewReader(""), &out, &errOut)
-	if code != 1 || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with -prune to create it") {
+	if code != exitError || out.String() != "" || !strings.Contains(errOut.String(), "does not exist: run with -prune to create it") {
 		t.Fatalf("a missing baseline: code %d stdout %q stderr %q", code, out.String(), errOut.String())
 	}
 
@@ -512,7 +519,7 @@ func TestRunNeedsABaselineForPrune(t *testing.T) {
 	var out, errOut bytes.Buffer
 
 	code := run([]string{"reference", "-prune"}, strings.NewReader(""), &out, &errOut)
-	if code != 1 || errOut.String() != "proofread: -prune needs -baseline\n" {
+	if code != exitError || errOut.String() != "proofread: -prune needs -baseline\n" {
 		t.Errorf("run: got code %d stderr %q", code, errOut.String())
 	}
 }
@@ -528,6 +535,78 @@ func TestRunHonorsASuppressionAndReportsAnIdleOne(t *testing.T) {
 
 	assertArgs(t, []string{"reference", quiet}, "", "[]\n")
 	assertArgs(t, []string{"reference", idle}, "", want)
+}
+
+func TestRunWritesTextAndACountOnStderr(t *testing.T) {
+	dir := t.TempDir()
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
+
+	code, out, errOut := runArgs(t, []string{"reference", "-format", "text", bad}, "")
+	wantOut := bad + ":3:4: PRF4001 filler [deny] " + fillerSimply + "\n"
+
+	if code != exitOK || out != wantOut || errOut != "proofread: 1 finding (1 deny, 0 advise)\n" {
+		t.Errorf("a finding: code %d stdout %q stderr %q, want stdout %q", code, out, errOut, wantOut)
+	}
+
+	code, out, errOut = runArgs(t, []string{"reference", "-format", "text", clean}, "")
+	if code != exitOK || out != "" || errOut != "" {
+		t.Errorf("no findings: code %d stdout %q stderr %q, want nothing", code, out, errOut)
+	}
+}
+
+func TestRunFailsOnlyAtTheBar(t *testing.T) {
+	dir := t.TempDir()
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
+	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
+	advise := writeFile(t, dir, "advise.json", `{"rules":{"filler":"advise"}}`)
+
+	cases := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"never is the default", []string{"reference", bad}, exitOK},
+		{"never", []string{"reference", "-fail-on", "never", bad}, exitOK},
+		{"deny meets a deny", []string{"reference", "-fail-on", "deny", bad}, exitFindings},
+		{"advise meets a deny", []string{"reference", "-fail-on", "advise", bad}, exitFindings},
+		{"deny passes an advise", []string{"reference", "-fail-on", "deny", "-decisions", advise, bad}, exitOK},
+		{"advise meets an advise", []string{"reference", "-fail-on", "advise", "-decisions", advise, bad}, exitFindings},
+		{"a clean file", []string{"reference", "-fail-on", "advise", clean}, exitOK},
+		{"a suppressed finding", []string{"reference", "-fail-on", "advise", suppressed}, exitOK},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if code, _, _ := runArgs(t, tc.args, ""); code != tc.want {
+				t.Errorf("run %v: code %d, want %d", tc.args, code, tc.want)
+			}
+		})
+	}
+}
+
+func TestRunFailsOnlyOnFindingsPastTheBaseline(t *testing.T) {
+	dir := t.TempDir()
+	bad := writeFile(t, dir, "bad.md", "# A\n\nIt simply works.\n")
+	baselinePath := filepath.Join(dir, "baseline.json")
+
+	runArgs(t, []string{"reference", "-baseline", baselinePath, "-prune", bad}, "")
+
+	if code, _, _ := runArgs(t, []string{"reference", "-fail-on", "advise", "-baseline", baselinePath, bad}, ""); code != exitOK {
+		t.Errorf("a baselined finding: code %d, want %d", code, exitOK)
+	}
+}
+
+// runArgs runs proofread with args over stdin.
+func runArgs(t *testing.T, args []string, stdin string) (code int, stdout, stderr string) {
+	t.Helper()
+
+	var out, errOut bytes.Buffer
+
+	code = run(args, strings.NewReader(stdin), &out, &errOut)
+
+	return code, out.String(), errOut.String()
 }
 
 // runInto runs proofread with args and decodes its stdout into into.

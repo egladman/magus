@@ -26,7 +26,8 @@ const (
 )
 
 // writeFindings writes out to w in format: json, the array of findings
-// itself, sarif, a SARIF 2.1.0 log, or rdjson, reviewdog's diagnostic result.
+// itself, sarif, a SARIF 2.1.0 log, rdjson, reviewdog's diagnostic result, or
+// text, one line per finding.
 func writeFindings(w io.Writer, format string, out []finding) error {
 	var doc any
 
@@ -37,8 +38,10 @@ func writeFindings(w io.Writer, format string, out []finding) error {
 		doc = toSARIF(out)
 	case "rdjson":
 		doc = toRDJSON(out)
+	case "text":
+		return writeText(w, out)
 	default:
-		return fmt.Errorf("unknown -format %q: want json, sarif or rdjson", format)
+		return fmt.Errorf("unknown -format %q: want json, sarif, rdjson or text", format)
 	}
 
 	if err := json.NewEncoder(w).Encode(doc); err != nil {
@@ -46,6 +49,86 @@ func writeFindings(w io.Writer, format string, out []finding) error {
 	}
 
 	return nil
+}
+
+// writeText writes one line per finding, "path:line:column: CODE rule
+// [decision] message". The column is omitted when it is not known, and so is
+// the line for a finding with none, such as a budget. A finding whose source
+// names no path is placed by its node.
+func writeText(w io.Writer, out []finding) error {
+	for _, f := range out {
+		if _, err := fmt.Fprintln(w, textLine(f)); err != nil {
+			return fmt.Errorf("write findings: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func textLine(f finding) string {
+	where := findingPath(f)
+	if where == "" {
+		where = f.Node
+	}
+
+	line, column, _, _ := position(f)
+	if line > 0 {
+		where += ":" + strconv.Itoa(line)
+
+		if column > 0 {
+			where += ":" + strconv.Itoa(column)
+		}
+	}
+
+	return fmt.Sprintf("%s: %s %s [%s] %s", where, f.Code, f.Rule, f.Decision, strings.Join(strings.Fields(f.Message), " "))
+}
+
+// textSummary is the count line -format text writes on stderr, empty for no
+// findings: "proofread: 3 findings (2 deny, 1 advise)".
+func textSummary(out []finding) string {
+	if len(out) == 0 {
+		return ""
+	}
+
+	deny := 0
+
+	for _, f := range out {
+		if f.Decision == string(proofread.DecisionDeny) {
+			deny++
+		}
+	}
+
+	noun := "findings"
+	if len(out) == 1 {
+		noun = "finding"
+	}
+
+	return fmt.Sprintf("proofread: %d %s (%d deny, %d advise)\n", len(out), noun, deny, len(out)-deny)
+}
+
+// fingerprints returns each finding's stable hash, aligned with out. It
+// hashes the rule, the match and the path, with the occurrence number added to
+// the second and later findings that share all three, so no two findings of a
+// run share one and a finding that moves down a file keeps its own.
+func fingerprints(out []finding) []string {
+	seen := map[string]int{}
+	hashes := make([]string, len(out))
+
+	for i, f := range out {
+		key := f.Rule + "\x00" + f.Match + "\x00" + findingPath(f)
+		fingerprint := key
+
+		if n := seen[key]; n > 0 {
+			fingerprint += "\x00" + strconv.Itoa(n)
+		}
+
+		seen[key]++
+
+		sum := sha256.Sum256([]byte(fingerprint))
+		hashes[i] = hex.EncodeToString(sum[:16])
+	}
+
+	return hashes
 }
 
 // splitSource separates a finding's source, "path:line" or "path:line:column",
@@ -185,20 +268,10 @@ func toSARIF(out []finding) sarifLog {
 	}
 
 	results := make([]sarifResult, 0, len(out))
-	seen := map[string]int{}
+	hashes := fingerprints(out)
 
-	for _, f := range out {
+	for i, f := range out {
 		path := findingPath(f)
-		key := f.Rule + "\x00" + f.Match + "\x00" + path
-		fingerprint := key
-
-		if n := seen[key]; n > 0 {
-			fingerprint += "\x00" + strconv.Itoa(n)
-		}
-
-		seen[key]++
-
-		sum := sha256.Sum256([]byte(fingerprint))
 		physical := sarifPhysical{ArtifactLocation: sarifArtifact{URI: path}}
 
 		if line, column, endLine, endColumn := position(f); line > 0 {
@@ -208,7 +281,7 @@ func toSARIF(out []finding) sarifLog {
 		results = append(results, sarifResult{
 			RuleID: f.Rule, RuleIndex: index[f.Rule], Level: sarifLevel(f.Decision), Message: sarifText{Text: f.Message},
 			Locations:           []sarifLocation{{PhysicalLocation: physical}},
-			PartialFingerprints: map[string]string{fingerprintKey: hex.EncodeToString(sum[:16])},
+			PartialFingerprints: map[string]string{fingerprintKey: hashes[i]},
 		})
 	}
 

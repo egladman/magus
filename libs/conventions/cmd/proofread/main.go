@@ -13,7 +13,7 @@
 // line and the description after it, and review-reply a review comment or a
 // reply in a thread on stdin. A finding from text names its file, or the kind
 // it read from stdin, and its line as source, `path:line`, the way a symbol's
-// index position reads. rules writes every rule as the docs render it, and
+// index position reads; a finding about the whole text has the name alone. rules writes every rule as the docs render it, and
 // explain prints one rule, named by its name or its code.
 //
 // Each finding carries its rule's decision, advise or deny, its PRF code and
@@ -24,15 +24,34 @@
 // -thread-length N tells the reply rules how many replies the author already
 // posted in the thread. The flags follow the kind.
 //
+// commit-message reads the message from stdin, or from the file its argument
+// names, as a VCS hook passes it: lines starting with "#" and the scissors line
+// with everything after it are not part of the message, and a finding's line is
+// its line in the file.
+//
 // -format picks the output: json, the array of findings, sarif, a SARIF 2.1.0
-// log for code scanning, or rdjson, reviewdog's diagnostic result with a
-// suggestion for each finding that has replacements. -baseline names a JSON
+// log for code scanning, rdjson, reviewdog's diagnostic result with a
+// suggestion for each finding that has replacements, or text, one line
+// "path:line:col: CODE rule [decision] message" per finding on stdout and, when
+// there are findings, a count on stderr. -baseline names a JSON
 // file of finding counts per file and rule: a run writes only the findings
 // past those counts, and -prune rewrites the file to this run's counts and
 // writes none. A text silences a finding in place with a suppression that
 // gives its reason, "<!-- proofread off RULE: REASON -->" in Markdown or
 // "proofread:ignore RULE REASON" in a doc comment, and the suppression-unused
 // rule reports one that matched nothing.
+//
+// -fail-on deny|advise|never sets the bar for the exit code: 1 when a finding
+// at or above that decision remains after suppression and the baseline. The
+// default, never, keeps the exit code 0 for a caller that reads the JSON.
+// -record keeps, on this machine only, the fingerprints of this run's findings
+// under $XDG_STATE_HOME/proofread (~/.local/state/proofread when unset), so a
+// later run of the same file can count each as fixed, suppressed or reported;
+// stats prints those counts per rule with their not-useful rate.
+//
+// The exit code is 0 when judging succeeded and no finding reached the -fail-on
+// bar, 1 when one did, and 2 when the subcommand, the flags, the decisions or
+// the input cannot be used, so a caller can tell a finding from a failure.
 //
 // This repository's lint rules and its pull request guard and CI step run it.
 // The magus module never imports libs/conventions, so the rules stay this
@@ -112,13 +131,14 @@ var subcommands = []subcommand{
 	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
 	{"review-reply", proofread.KindReviewReply, "", "judge a review comment or a reply on stdin"},
 	{"message", proofread.KindMessage, "", "judge one message a program prints, on stdin"},
-	{"commit-message", proofread.KindCommitMessage, "", "judge a commit message on stdin, its subject on the first line"},
+	{"commit-message", proofread.KindCommitMessage, "[FILE]", "judge a commit message from FILE or stdin, its subject on the first line"},
 	{"cli-help", proofread.KindCLIHelp, "", "judge a command's or a flag's help text on stdin"},
 	{"issue", proofread.KindIssue, "", "judge an issue on stdin, its title on the first line"},
 	{"release-notes", proofread.KindReleaseNotes, "FILE...", "judge the notes a release ships with"},
 	{"changelog", proofread.KindChangelog, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
 	{"rules", "", "", "write every rule as the docs render it, as JSON"},
 	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
+	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
 }
 
@@ -136,21 +156,30 @@ func usage() string {
 	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
 	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
 	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
-	b.WriteString("  -format FORMAT     write findings as json (default), sarif or rdjson\n")
+	b.WriteString("  -format FORMAT     write findings as json (default), sarif, rdjson or text\n")
+	b.WriteString("  -fail-on DECISION  exit 1 when a finding at or above deny, advise or never remains (default never)\n")
+	b.WriteString("  -record            keep this run's findings on this machine, to count what later runs fix\n")
 	b.WriteString("  -baseline FILE     write only the findings past the counts FILE holds\n")
 	b.WriteString("  -prune             with -baseline, rewrite FILE to this run's counts and write no findings\n")
 
 	return b.String()
 }
 
-// run returns the process exit code: 0 once the output is written, 1 when
-// the subcommand, the flags, the decisions or the input cannot be used. A
-// finding is not a failure: the caller decides what one costs.
+// The process exit codes: 0 for a run with no finding at the -fail-on bar, 1
+// for one with a finding at it, 2 for a run that could not judge.
+const (
+	exitOK       = 0
+	exitFindings = 1
+	exitError    = 2
+)
+
+// run returns the process exit code. A finding fails the run only at the
+// -fail-on bar; the caller otherwise decides what one costs.
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage())
 
-		return 1
+		return exitError
 	}
 
 	name, rest := args[0], args[1:]
@@ -162,6 +191,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runExplain(rest, stdout, stderr)
 	case "calibrate":
 		return runCalibrate(rest, stdin, stdout, stderr)
+	case "stats":
+		return runStats(rest, stdout, stderr)
 	}
 
 	for _, s := range subcommands {
@@ -172,13 +203,30 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stderr, "proofread: unknown subcommand %q\n\n%s", name, usage())
 
-	return 1
+	return exitError
 }
 
 func failure(stderr io.Writer, err error) int {
 	fmt.Fprintf(stderr, "proofread: %v\n", err)
 
-	return 1
+	return exitError
+}
+
+// reachesBar reports whether a finding in out is at or above the failOn
+// decision: deny, advise or never.
+func reachesBar(failOn string, out []finding) bool {
+	for _, f := range out {
+		switch failOn {
+		case "deny":
+			if f.Decision == string(proofread.DecisionDeny) {
+				return true
+			}
+		case "advise":
+			return true
+		}
+	}
+
+	return false
 }
 
 func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -187,17 +235,27 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
-	format := fs.String("format", "json", "write findings as `json`, sarif or rdjson")
+	format := fs.String("format", "json", "write findings as `json`, sarif, rdjson or text")
+	failOn := fs.String("fail-on", "never", "exit 1 when a finding at or above this `decision` remains: deny, advise or never")
+	record := fs.Bool("record", false, "keep this run's findings on this machine to count what later runs fix")
 	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
 	prune := fs.Bool("prune", false, "with -baseline, rewrite the file to the counts this run found")
 	metrics := fs.Bool("metrics", false, "write each text's readability metrics instead of its findings")
 
 	if err := fs.Parse(args); err != nil {
-		return 1
+		return exitError
 	}
 
 	if *metrics {
 		return runMetrics(kind, fs.Args(), stdin, stdout, stderr)
+	}
+
+	if !slices.Contains([]string{"deny", "advise", "never"}, *failOn) {
+		return failure(stderr, fmt.Errorf("unknown -fail-on %q: want deny, advise or never", *failOn))
+	}
+
+	if *record && !fromFiles(kind, fs.Args()) {
+		return failure(stderr, errors.New("-record needs a file to judge, since an outcome is kept per path"))
 	}
 
 	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
@@ -217,6 +275,12 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		return failure(stderr, err)
 	}
 
+	if *record {
+		if err := recordRun(kind, fs.Args(), t, onlyRules, opts, out); err != nil {
+			return failure(stderr, err)
+		}
+	}
+
 	out, err = applyBaseline(*baselinePath, *prune, out)
 	if err != nil {
 		return failure(stderr, err)
@@ -226,7 +290,15 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		return failure(stderr, err)
 	}
 
-	return 0
+	if *format == "text" {
+		fmt.Fprint(stderr, textSummary(out))
+	}
+
+	if reachesBar(*failOn, out) {
+		return exitFindings
+	}
+
+	return exitOK
 }
 
 func runRules(args []string, stdout, stderr io.Writer) int {
@@ -335,7 +407,9 @@ func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts [
 		}
 
 		return judgeSymbols(stdin, append(opts, proofread.WithDecisions(t.rules)))
-	case readsFiles(kind):
+	case kind == proofread.KindCommitMessage && len(paths) > 1:
+		return nil, errors.New("commit-message takes one message file, or reads stdin")
+	case fromFiles(kind, paths):
 		return judgeFiles(paths, kind, t, opts)
 	case slices.Contains(stdinKinds, kind):
 		if len(paths) > 0 {
@@ -363,20 +437,40 @@ func judgeFiles(paths []string, kind proofread.Kind, t table, opts []proofread.O
 		}
 
 		fileOpts := append(slices.Clone(opts), proofread.WithDecisions(t.decisionsAt(p)))
-		out = append(out, textFindings(p, string(text), kind, fileOpts)...)
+		out = append(out, fileFindings(p, string(text), kind, fileOpts)...)
 	}
 
 	return out, nil
+}
+
+// fileFindings judges the text of the file p with opts already carrying the
+// decisions that apply to it.
+func fileFindings(p, text string, kind proofread.Kind, opts []proofread.Option) []finding {
+	if kind == proofread.KindCommitMessage {
+		return commitMessageFindings(p, text, opts)
+	}
+
+	return textFindings(p, text, kind, opts)
 }
 
 func textFindings(name, text string, kind proofread.Kind, opts []proofread.Option) []finding {
 	out := []finding{}
 
 	for _, f := range proofread.JudgeText(text, kind, opts...) {
-		out = append(out, toFinding(name, name+":"+strconv.Itoa(f.Line), kind, f))
+		out = append(out, toFinding(name, sourceAt(name, f.Line), kind, f))
 	}
 
 	return out
+}
+
+// sourceAt is "name:line", or name alone for a finding about the whole text,
+// which has no line.
+func sourceAt(name string, line int) string {
+	if line == 0 {
+		return name
+	}
+
+	return name + ":" + strconv.Itoa(line)
 }
 
 func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) finding {
@@ -490,7 +584,7 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 	var err error
 
 	if p == "-" {
-		if !readsFiles(kind) {
+		if !fromFiles(kind, args) {
 			return table{}, fmt.Errorf("-decisions -: name the table's file, since the %s itself is read from stdin", kind)
 		}
 

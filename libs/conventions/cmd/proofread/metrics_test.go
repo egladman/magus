@@ -75,8 +75,8 @@ func TestMetricsRefusesInputItCannotRead(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 
 			code := run(tc.args, strings.NewReader(""), &stdout, &stderr)
-			if code != 1 || strings.TrimSpace(stderr.String()) != tc.want {
-				t.Errorf("exit %d, stderr %q, want 1 and %q", code, stderr.String(), tc.want)
+			if code != 2 || strings.TrimSpace(stderr.String()) != tc.want {
+				t.Errorf("exit %d, stderr %q, want 2 and %q", code, stderr.String(), tc.want)
 			}
 		})
 	}
