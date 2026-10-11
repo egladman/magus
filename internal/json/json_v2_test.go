@@ -121,10 +121,11 @@ func TestNoDirectEncodingJSONImport(t *testing.T) {
 		// mcp-go puts every frame on the wire through encoding/json, so this test re-encodes
 		// with the codec the binary actually ships to prove structured content survives it.
 		"internal/handler/mcp/mcp_test.go": true,
-		// The proofread command lives in its own module and ships as its own binary; it
-		// cannot import this one without the magus module depending on repo policy. A key
-		// ending in "/" allows every file directly in that directory.
+		// proofread lives in its own module and ships as its own binary; it cannot import
+		// this one without the magus module depending on repo policy. A key ending in "/"
+		// allows every file directly in that directory.
 		"libs/conventions/cmd/proofread/": true,
+		"libs/conventions/proofread/":     true,
 	}
 	importers, err := encodingJSONImporters(root, allowed)
 	require.NoError(t, err)
