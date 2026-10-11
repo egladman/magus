@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
@@ -472,9 +473,9 @@ func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
 // --root names the checkout a script's vcs calls read. The process cwd here is the
 // magus checkout this test runs in, a different repository on a different ref.
 func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
-	repo := initGitRepo(t)
-	runGit(t, repo, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init")
-	runGit(t, repo, "switch", "-q", "-c", "split-target")
+	r := testkit.NewRepo(t, nil)
+	r.Git("switch", "-q", "-c", "split-target")
+	repo := r.Root()
 	script := filepath.Join(t.TempDir(), "ref.buzz")
 	require.NoError(t, os.WriteFile(script, []byte(
 		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))

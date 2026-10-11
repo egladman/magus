@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,11 +16,8 @@ import (
 // synthetic git-bisect-log output.
 func TestParseBisectCulprit(t *testing.T) {
 	t.Run("standard culprit line", func(t *testing.T) {
-		// Write synthetic bisect log to a temp git repo.
-		dir := t.TempDir()
-		if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
-			t.Skipf("git init failed: %v\n%s", err, out)
-		}
+		// Skips without git, as the parser's real caller needs it.
+		testkit.NewRepo(t, nil)
 
 		log := `git bisect start
 # good: [abc123] fix typo
@@ -37,10 +34,7 @@ git bisect bad def456
 	})
 
 	t.Run("no culprit", func(t *testing.T) {
-		dir := t.TempDir()
-		if out, err := exec.Command("git", "init", dir).CombinedOutput(); err != nil {
-			t.Skipf("git init failed: %v\n%s", err, out)
-		}
+		testkit.NewRepo(t, nil)
 
 		_, err := parseBisectLog([]byte("git bisect start\n# good: [abc123] blah\n"))
 		assert.Error(t, err)

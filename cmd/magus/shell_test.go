@@ -1576,14 +1576,9 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 `
 
 // committedDenyRule is a git repository whose committed root magusfile is denyRules.
-func committedDenyRule(t *testing.T) string {
+func committedDenyRule(t *testing.T) *testkit.Repo {
 	t.Helper()
-	root := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denyRules), 0o644))
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
-	return root
+	return testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyRules})
 }
 
 // A committed spawn rule still answers however the working tree leaves the root magusfile:
@@ -1606,7 +1601,7 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := committedDenyRule(t)
+			root := committedDenyRule(t).Root()
 			tc.mutate(t, root)
 
 			rule, err := magus.LoadApprovedSpawnRule(t.Context(), root)
@@ -1703,15 +1698,16 @@ func resetWorkspaceMemo(t *testing.T) {
 // branch checkout names its branch, a detached one names none, and a directory under no
 // version control is unknown.
 func TestCheckoutStateForGuard(t *testing.T) {
-	root := committedDenyRule(t)
-	runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+	repo := committedDenyRule(t)
+	root := repo.Root()
+	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 
 	got := checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
 	assert.NotEmpty(t, got.Branch)
 	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
 
-	runGit(t, root, "checkout", "-q", "--detach")
+	repo.Git("checkout", "-q", "--detach")
 	got = checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
 	assert.Empty(t, got.Branch)
@@ -1722,7 +1718,7 @@ func TestCheckoutStateForGuard(t *testing.T) {
 // The hook reads the root magusfile alone, so a working tree the full load would refuse,
 // here for a version floor this binary is below, still has its rules applied.
 func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	version = "v0.5.0"
 	globalCfg.RequiredVersion = ">= 99.0.0"
@@ -1743,7 +1739,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 // A root magusfile that does not load is a load failure, not a workspace with no rules,
 // so the committed rules still apply to a spawn and to a command.
 func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
@@ -1774,25 +1770,19 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 // committed magusfile imports in the same edit. Its own load never reads that file, and the
 // committed load still has to read it as committed, not as edited.
 func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
-	root := initGitRepo(t)
-	policy := filepath.Join(root, "policy")
-	require.NoError(t, os.MkdirAll(policy, 0o755))
-	write := func(name, body string) {
-		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
 	rule := func(ns, verdict string) string {
 		return "namespace " + ns + ";\n\nimport \"magus\";\n\nexport fun judge(req: CommandRequest) > GuardVerdict {\n    return " + verdict + ";\n}\n"
 	}
 	importing := func(name string) string {
 		return "import \"magus\";\nimport \"./policy/" + name + "\" as p;\nmagus\\guard.command(p\\judge);\n"
 	}
-	write("magus.yaml", "{}\n")
-	write("policy/a.buzz", rule("a", `magus\guard.deny("Not in this repository.")`))
-	write("policy/b.buzz", rule("b", `magus\guard.allow()`))
-	write("magusfile.buzz", importing("a"))
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"policy/a.buzz":  rule("a", `magus\guard.deny("Not in this repository.")`),
+		"policy/b.buzz":  rule("b", `magus\guard.allow()`),
+		"magusfile.buzz": importing("a"),
+	})
+	root, write := repo.Root(), repo.Write
 
 	write("magusfile.buzz", importing("b"))
 	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
@@ -1812,7 +1802,7 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 // The committed side is loaded only while a file the root load read differs from it:
 // an uncommitted edit anywhere else changes nothing either side registers.
 func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
@@ -1859,14 +1849,12 @@ func TestWithinBudgetReturnsOnTime(t *testing.T) {
 func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	testkit.Isolate(t)
 	resetWorkspaceMemo(t)
-	primary := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"),
-		[]byte("import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n"), 0o644))
-	runGit(t, primary, "add", "-A")
-	runGit(t, primary, "commit", "-q", "-m", "init")
-	worktree := filepath.Join(t.TempDir(), "worker")
-	runGit(t, primary, "worktree", "add", "-q", worktree)
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"magusfile.buzz": "import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n",
+	})
+	primary := repo.Root()
+	worktree := repo.AddWorktree("worker").Root()
 	t.Chdir(primary)
 
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+

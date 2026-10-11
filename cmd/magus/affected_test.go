@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -343,17 +344,15 @@ func TestUndeclaredOnlySeedsKeepsWhatContainmentAloneSelected(t *testing.T) {
 // this diagnostic exists for, and a filter that swallowed it would leave the code in
 // place doing nothing.
 func TestTrackedUndeclaredSeedsDropsWhatTheRunItselfWrote(t *testing.T) {
-	dir := initGitRepo(t)
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
 
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "LICENSE"), []byte("x"), 0o644))
-	runGit(t, dir, "add", "LICENSE")
-	runGit(t, dir, "commit", "-m", "seed")
+	repo.Commit("seed", map[string]string{"LICENSE": "x"})
 
 	// What the run leaves behind: its own cache directory and a linked binary, both
 	// untracked because nothing ignores them here.
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".magus", "locks", "h"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".magus", "locks", "h", "lock"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "admin"), []byte("elf"), 0o755))
+	repo.Write(".magus/locks/h/lock", "")
+	repo.Executable("admin", "elf")
 
 	ctx := context.Background()
 	got := trackedUndeclaredSeeds(ctx, dir, types.VCSOptions{}, map[string][]string{

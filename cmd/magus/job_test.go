@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -17,6 +16,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
@@ -435,8 +435,23 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("magus.yaml", "")
+	return seedJobStore(t, w.Root(), rows...)
+}
+
+// execRepoFixture is execFixture over a git repository holding the same magus.yaml.
+func execRepoFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cacheDir string) {
+	t.Helper()
+	testkit.Isolate(t)
+	global = globalFlags{}
+	repo = testkit.NewRepo(t, map[string]string{"magus.yaml": ""})
+	_, cacheDir = seedJobStore(t, repo.Root(), rows...)
+	return repo, cacheDir
+}
+
+func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string) {
+	t.Helper()
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
 	require.NoError(t, err)
 	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
@@ -452,20 +467,14 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
-	root, cacheDir := execFixture(t)
-	for name, body := range map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "%s", out)
+	repo, cacheDir := execRepoFixture(t)
+	root := repo.Root()
+	repo.WriteTree(map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n\nfunc A() {}\n", "notes.txt": "Intro\n"})
 	fork := func(id, deny string) error {
 		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "run.go,notes.txt", "--deny-paths", deny})
 	}
 
-	err = fork("refused", "notes.txt#Intro")
+	err := fork("refused", "notes.txt#Intro")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "MGS3031")
 	assert.Contains(t, err.Error(), `deny path "notes.txt" has no diff driver`)
@@ -508,20 +517,9 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
-	root, cacheDir := execFixture(t)
-	git := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-		return strings.TrimSpace(string(out))
-	}
-	git("init", "-q")
-	git("add", "-A")
-	git("commit", "-q", "-m", "seed")
-	head := git("rev-parse", "HEAD")
+	repo, cacheDir := execRepoFixture(t)
+	root := repo.Root()
+	head := repo.Head()
 	fork := func(id, checkpoint string) error {
 		return jobFork(t.Context(), root, []string{id, "--check", "test .", "--write-paths", "magus.yaml", "--checkpoint", checkpoint})
 	}
@@ -568,20 +566,14 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 	// The spell's harness_limits decode is the bindings' own test. Here the loader answers
 	// for the wired id directly, since another test in this package may have cleared the
 	// spell-backed one.
-	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "limit-host" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            id,
-			Display:       agent.HarnessDisplay{Name: "Limit host"},
-			Skills:        agent.HarnessSkills{Form: agent.FormShort},
-			Config:        agent.HarnessConfig{Path: "hooks.json"},
-			Limits:        &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
-		}, "spell:limit-host", true, nil
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        agent.HarnessSkills{Form: agent.FormShort},
+		Config:        agent.HarnessConfig{Path: "hooks.json"},
+		Limits:        &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
 	for _, tt := range []struct {
 		name, magusfile, want string
 	}{
@@ -1059,12 +1051,7 @@ func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := initGitRepo(t)
-	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	fork := func(check string) error {
@@ -1114,12 +1101,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := initGitRepo(t)
-	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 	elsewhere := filepath.Join(t.TempDir(), "elsewhere")
@@ -1182,12 +1164,7 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := initGitRepo(t)
-	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"} {
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"}).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}

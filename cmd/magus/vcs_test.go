@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -109,18 +110,17 @@ func TestSplitMaintained(t *testing.T) {
 // So: keep every path that exists; keep a path gone from disk but still tracked, since
 // that is how a deletion or rename gets recorded; drop only what is neither.
 func TestFilterStageable(t *testing.T) {
-	dir := initGitRepo(t)
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
 
 	// tracked.txt is committed, then deleted from disk without `git rm`, the "old half
 	// of a rename" case: gone from disk, still tracked.
-	trackedPath := filepath.Join(dir, "tracked.txt")
-	require.NoError(t, os.WriteFile(trackedPath, []byte("x"), 0o644))
-	runGit(t, dir, "add", "tracked.txt")
-	runGit(t, dir, "commit", "-m", "seed")
+	trackedPath := repo.Write("tracked.txt", "x")
+	repo.Commit("seed", nil)
 	require.NoError(t, os.Remove(trackedPath))
 
 	// present.txt exists on disk and was never committed: the ordinary new-file case.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
+	repo.Write("present.txt", "y")
 
 	// stale.txt is a declared output that never existed on disk and was never tracked,
 	// e.g. libs/diag/MAGUS.md after libs/diag was renamed to libs/diagnostics. This is
@@ -157,17 +157,16 @@ func TestFilterStageableNonGit(t *testing.T) {
 //
 // where every one of the first three paths was silently left unstaged.
 func TestStagePathsSurvivesStalePath(t *testing.T) {
-	dir := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
+	repo.Write("present.txt", "y")
 
 	staged, dropped, err := stagePaths(context.Background(), dir, resolveGitDriver(t, dir), []string{"present.txt", "stale.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"present.txt"}, staged)
 	assert.Equal(t, []string{"stale.txt"}, dropped, "the stale path is reported, not silently discarded")
 
-	out, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
-	require.NoError(t, err)
-	assert.Equal(t, "present.txt\n", string(out),
+	assert.Equal(t, "present.txt", repo.Git("diff", "--cached", "--name-only"),
 		"present.txt must be staged even though stale.txt was handed to the same call")
 }
 
@@ -257,8 +256,8 @@ func TestMergeDriverRelPath(t *testing.T) {
 	})
 }
 
-// initGitRepo creates a temp git repo with an identity, so a commit can be made in it.
-// Skip-on-missing-git follows TestParseBisectCulprit.
+// initGitRepo and runGit stay only for query_test.go, which another change moves onto
+// testkit.Repo; delete both with its last call.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
