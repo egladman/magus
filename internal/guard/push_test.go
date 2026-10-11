@@ -290,11 +290,15 @@ func TestUngatedPushAskStillAsksTheCommandRule(t *testing.T) {
 // directly.
 func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	lease := narrowLease()
-	v := judgePush(t, "", lease.ID, lease)
+	ctx, _ := fleetFixture(t, lease)
+	v := Judge(ctx, Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }},
+		Request{Input: "git push origin HEAD", Lease: lease.ID, RendersAsk: true})
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleLeaseVCS)), unworded(v))
-	assert.Contains(t, v.Reason, lease.ID)
-	assert.Contains(t, v.Reason, "Pushing, stashing")
-	assert.NotContains(t, strings.ToLower(v.Reason), "say so")
+	assert.NotContains(t, v.Reason, "\nsee: ", "the rule's page is in the stored verdict")
+	full := storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
+	assert.Contains(t, full, lease.ID)
+	assert.Contains(t, full, "Pushing, stashing")
+	assert.NotContains(t, strings.ToLower(full), "say so")
 
 	decision, reason := gradePushWithoutGate(gateAbsent, "abc1234", lease.ID)
 	assert.Equal(t, "deny", decision)

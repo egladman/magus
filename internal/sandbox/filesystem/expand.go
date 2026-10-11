@@ -22,7 +22,7 @@ func ModeRule(mode string) (Rule, error) {
 	case "rwx":
 		return Rule{Read: true, Write: true, Exec: true}, nil
 	}
-	return Rule{}, fmt.Errorf("sandbox: unknown mode %q (want ro, rw, rx or rwx)", mode)
+	return Rule{}, fmt.Errorf("unknown mode %q (want ro, rw, rx or rwx)", mode)
 }
 
 // ErrUnsetVariable is wrapped by ExpandUserRule when rawPath names a variable that
@@ -50,16 +50,16 @@ func ExpandUserRule(rawPath, mode, home string, lookupEnv func(string) (string, 
 		return v
 	})
 	if len(unset) > 0 {
-		return Rule{}, fmt.Errorf("sandbox: %q: %w: %s", rawPath, ErrUnsetVariable, strings.Join(unset, ", "))
+		return Rule{}, fmt.Errorf("%q: %s: %w", rawPath, strings.Join(unset, ", "), ErrUnsetVariable)
 	}
 	if expanded == "~" || strings.HasPrefix(expanded, "~/") {
 		if home == "" {
-			return Rule{}, fmt.Errorf("sandbox: %q: ~ needs a home directory and none is known", rawPath)
+			return Rule{}, fmt.Errorf("%q: ~ needs a home directory and none is known", rawPath)
 		}
 		expanded = filepath.Join(home, expanded[1:])
 	}
 	if !filepath.IsAbs(expanded) {
-		return Rule{}, fmt.Errorf("sandbox: %q: path must be absolute", rawPath)
+		return Rule{}, fmt.Errorf("%q: path must be absolute", rawPath)
 	}
 	rule.Path = ResolveRulePath(expanded)
 	return rule, nil

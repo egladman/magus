@@ -780,6 +780,18 @@ func WrapDiagnostic(c DiagnosticCode, cause error, format string, args ...any) *
 	return mgs.Wrapf(c, cause, format, args...)
 }
 
+// InlineDiagnostic renders err for splicing into another message: each MGS code in its chain
+// reads "msg (MGS####)" with no see: line, so the message it joins keeps the only link.
+func InlineDiagnostic(err error) string {
+	return diagnostics.Inline(err)
+}
+
+// DiagnosticRationale returns the reasoning set by WithWhy on the outermost MGS error in
+// err's chain that has one, or "" when none does. It is never part of err's text.
+func DiagnosticRationale(err error) string {
+	return diagnostics.Rationale(err)
+}
+
 // WithDiagnosticSink returns ctx carrying s, so a deep emission site can reach the
 // sink without threading it through every signature.
 func WithDiagnosticSink(ctx context.Context, s DiagnosticSink) context.Context {
@@ -814,4 +826,8 @@ type Diagnostic struct {
 	// URL anyway, but the tag is what a reader and a rename both see: the mirror name is
 	// part of this type's contract, not a side effect of a casing rule.
 	URL string `json:"url,omitempty" yaml:"url,omitempty" buzz:"url"`
+	// Why is the diagnostic's rationale ([DiagnosticRationale]), for a JSON or YAML reader
+	// that chooses what to show. Not mirrored into Buzz: a caught error's map carries no
+	// why, and this type mirrors that map.
+	Why string `json:"why,omitempty" yaml:"why,omitempty" buzz:"-"`
 }

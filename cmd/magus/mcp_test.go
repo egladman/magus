@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 )
@@ -59,11 +61,18 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 	t.Cleanup(func() { _ = diag.Close() })
 
 	stdout := os.Stdout
+	stderr := os.Stderr
+	os.Stderr = diag
+	t.Cleanup(func() { os.Stderr = stderr })
+	var notices strings.Builder
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(cache.NewPrettyHandler(&notices, slog.LevelInfo)))
+	t.Cleanup(func() { slog.SetDefault(prevLog) })
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	served := make(chan error, 1)
 	go func() {
-		served <- serveMCPStdio(context.Background(), m, inR, outW, diag)
+		served <- serveMCPStdio(context.Background(), m, inR, outW)
 		_ = outW.Close()
 	}()
 	wire := bufio.NewScanner(outR)
@@ -101,7 +110,8 @@ func TestServeMCPStdioKeepsTheWireToProtocolFrames(t *testing.T) {
 
 	logged, err := os.ReadFile(diag.Name())
 	require.NoError(t, err)
-	assert.Contains(t, string(logged), "magus: serving MCP over stdio for "+m.Root())
+	assert.Contains(t, notices.String(), "magus: serving MCP over stdio for "+m.Root())
+	assert.NotContains(t, string(logged), "serving MCP over stdio", "the notice is a record, not a write to stderr")
 	assert.Contains(t, string(logged), "stray\n")
 }
 
@@ -117,11 +127,15 @@ func TestServeMCPStdioWatchesTheGraphWhileItServes(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = diag.Close() })
 
+	stderr := os.Stderr
+	os.Stderr = diag
+	t.Cleanup(func() { os.Stderr = stderr })
+
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	served := make(chan error, 1)
 	go func() {
-		served <- serveMCPStdio(context.Background(), m, inR, outW, diag)
+		served <- serveMCPStdio(context.Background(), m, inR, outW)
 		_ = outW.Close()
 	}()
 	wire := bufio.NewScanner(outR)

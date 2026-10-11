@@ -36,7 +36,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "stubbed, each function documented inline, and a runnable test block.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -62,7 +62,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 		return fmt.Errorf("init spell: write %s: %w", path, err)
 	}
 	slog.InfoContext(ctx, "init spell: wrote spell", slog.String("path", path))
-	printInitSpellNextSteps(name, pkgDir, path)
+	printInitSpellNextSteps(ctx, name, pkgDir, path)
 	return nil
 }
 
@@ -157,13 +157,13 @@ test "build op forks the expected command" {
 
 // printInitSpellNextSteps prints actionable hints after scaffolding a spell.
 // Gated on the user-controlled hints preference, not terminal interactivity.
-func printInitSpellNextSteps(name, pkgDir, path string) {
+func printInitSpellNextSteps(ctx context.Context, name, pkgDir, path string) {
 	if !interactive.HintsEnabled() {
 		return
 	}
 	// A directory import (pkgDir) resolves to the spell.buzz inside it; the test
 	// harness takes the file path directly.
-	interactive.Emit(os.Stderr, fmt.Sprintf("spell scaffolded: %s", path))
-	interactive.Emit(os.Stderr, fmt.Sprintf("test it:  magus buzz -t --embedded %s", filepath.ToSlash(path)))
-	interactive.Emit(os.Stderr, "bind it:  "+hint.BindSpellExample(filepath.ToSlash(pkgDir), name))
+	interactive.Hint(ctx, fmt.Sprintf("spell scaffolded: %s", path))
+	interactive.Hint(ctx, fmt.Sprintf("test it:  magus buzz -t --embedded %s", filepath.ToSlash(path)))
+	interactive.Hint(ctx, "bind it:  "+hint.BindSpellExample(filepath.ToSlash(pkgDir), name))
 }

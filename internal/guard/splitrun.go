@@ -62,31 +62,31 @@ type lastRunFact struct {
 // Silent on every uncertainty: no cache dir, a line that is not a single magus
 // run/affected call (a chain is splitRunLineAdvice's shape, in Evaluate), or a target
 // string the target grammar rejects.
-func gradeSplitRun(facts hint.Gate, command string) (advice string, ok bool) {
+func gradeSplitRun(facts hint.Gate, command string) (advice, bool) {
 	if facts.CacheDir() == "" {
-		return "", false
+		return advice{}, false
 	}
 	cmds, parsed := ParseCommands(command)
 	if !parsed {
-		return "", false
+		return advice{}, false
 	}
 	verb, raw, projects, found := singleMagusRunInvocation(cmds)
 	if !found {
-		return "", false
+		return advice{}, false
 	}
 	id, idOK := targetIdentity(raw)
 	if !idOK {
-		return "", false
+		return advice{}, false
 	}
 	path := hint.MarkerPath(facts.CacheDir(), facts.Session(), factsLastRun)
 	prev, hadPrev := readLastRun(path)
 	writeLastRun(path, verb, id, raw, projects)
 	if !hadPrev || prev.age > splitRunWindow || prev.verb != verb || prev.id != id {
-		return "", false
+		return advice{}, false
 	}
 	if slices.Equal(sortedCopy(prev.projects), sortedCopy(projects)) {
 		// The same call again: nothing to combine.
-		return "", false
+		return advice{}, false
 	}
 	cmdA := renderMagusCmd(prev.verb, prev.raw, prev.projects)
 	cmdB := renderMagusCmd(verb, raw, projects)
@@ -117,7 +117,7 @@ func singleMagusRunInvocation(cmds []hint.Invocation) (verb, raw string, project
 // target: charms included, since `lint` and `lint:rw` are different targets and combining
 // them would silently drop the charm. False falls back to the general chained-run text,
 // which stays correct for a chain of genuinely different targets.
-func splitRunLineAdvice(cmds []hint.Invocation) (string, bool) {
+func splitRunLineAdvice(cmds []hint.Invocation) (advice, bool) {
 	type call struct {
 		verb, id, raw string
 		projects      []string
@@ -138,13 +138,13 @@ func splitRunLineAdvice(cmds []hint.Invocation) (string, bool) {
 		calls = append(calls, call{v, id, raw, p})
 	}
 	if len(calls) < 2 {
-		return "", false
+		return advice{}, false
 	}
 	first := calls[0]
 	merged := slices.Clone(first.projects)
 	for _, c := range calls[1:] {
 		if c.verb != first.verb || c.id != first.id {
-			return "", false
+			return advice{}, false
 		}
 		merged = mergeProjects(merged, c.projects)
 	}
@@ -157,12 +157,12 @@ func splitRunLineAdvice(cmds []hint.Invocation) (string, bool) {
 // splitRunAdvice names both original commands and the one call that already covers them.
 // It leads with the replacement, this file's convention for text that carries a command:
 // the reader chose to keep going and is owed the runnable answer first.
-func splitRunAdvice(cmdA, cmdB, combined string) string {
-	return fmt.Sprintf(
-		"`%s` and `%s` run the same target on separate projects. `%s` runs both in one invocation, "+
-			"with one workspace load and one scheduler, parallel where the graph allows and ordered "+
-			"when one project reads another's outputs.",
-		cmdA, cmdB, combined)
+func splitRunAdvice(cmdA, cmdB, combined string) advice {
+	return advice{
+		Say: fmt.Sprintf("magus workspace: `%s` runs both in one invocation, with one workspace load and one scheduler.", combined),
+		Why: fmt.Sprintf("`%s` and `%s` run the same target on separate projects. One invocation runs them in parallel "+
+			"where the graph allows and in order when one project reads another's outputs.", cmdA, cmdB),
+	}
 }
 
 // renderMagusCmd renders one magus run/affected invocation as the reader would type it,

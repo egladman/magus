@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -142,7 +143,8 @@ func TestAdviseRepeatGateFiresOnceItHasCost(t *testing.T) {
 	for i := range 3 {
 		writeRun(t, dir, fmt.Sprintf("inv%d", i), now.Add(-time.Duration(i*10)*time.Minute), 150*time.Second, "affected", "ci")
 	}
-	got, brief := adviseRepeatGate(dir, now)
+	full, brief := adviseRepeatGate(dir, now)
+	got := full.Say
 	assert.Contains(t, got, "3 times")
 	assert.Contains(t, got, "7m30s")
 	// The cost, then the command that SIZES the decision. It names --plan rather than a
@@ -203,9 +205,9 @@ func narrowLease() types.Job {
 	}
 }
 
-// TestDenyLeaseScopedGate pins the refusal and what it has to carry: the lease, the
-// command, and the row field that decided it, so a reader can repair the row instead
-// of routing around the guard.
+// TestDenyLeaseScopedGate pins the refusal and what it has to carry: the command and the
+// check to run instead in its verdict, and the lease and the row field that decided it in
+// its rationale, so a reader can repair the row instead of routing around the guard.
 func TestDenyLeaseScopedGate(t *testing.T) {
 	ctx, _ := fleetFixture(t, narrowLease())
 
@@ -216,10 +218,10 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 	} {
 		reason := denyLeaseScopedGate(ctx, Dependencies{}, "harness/lease-scoped-deny", command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "harness/lease-scoped-deny", "the denial must name the lease")
-		assert.Contains(t, reason, command, "the denial must name what it refused")
-		assert.Contains(t, reason, "validation", "the denial must name the field that decided it")
-		assert.Contains(t, reason, "./internal/ledger/", "the denial must hand back the check to run instead")
+		assert.Equal(t, "magus workspace: `"+command+"` is the orchestrator's gate; run your check: `magus run go::go-test . -- ./internal/ledger/`.", reason.Say,
+			"the verdict names what it refused and hands back the check to run instead")
+		assert.Contains(t, reason.Why, "harness/lease-scoped-deny", "the rationale must name the lease")
+		assert.Contains(t, reason.Why, "the check on lease", "the rationale must name the field that decided it")
 	}
 
 	// A bound row that declares NO check is refused too: an empty field says nobody wrote
@@ -231,9 +233,9 @@ func TestDenyLeaseScopedGate(t *testing.T) {
 		undeclared, _ := fleetFixture(t, lease)
 		reason := denyLeaseScopedGate(undeclared, Dependencies{}, lease.ID, "./magus affected ci")
 		require.NotEmpty(t, reason)
-		assert.Contains(t, reason, lease.ID, "the denial must name the lease")
-		assert.Contains(t, reason, "declares no check", "the denial must say why: nothing was recorded to run instead")
-		assert.Contains(t, reason, "record a check on this row", "the denial must name a next step")
+		assert.Contains(t, reason.Say, lease.ID, "the denial must name the lease")
+		assert.Contains(t, reason.Say, "declares no check", "the denial must say why: nothing was recorded to run instead")
+		assert.Contains(t, reason.Why, "record a check on this row", "the rationale must name who records one")
 	})
 }
 
@@ -342,15 +344,13 @@ func TestWorkerCheckOnly(t *testing.T) {
 			continue
 		}
 		require.NotEmpty(t, reason, tt.name)
-		assert.Contains(t, reason, "`magus run diagrams_generate docs`", "%s: the verdict names the check verbatim", tt.name)
-		assert.Contains(t, reason, "The orchestrator runs every other target serially", tt.name)
-		assert.Contains(t, reason, "\nnext:\n  ", tt.name)
-		assert.Contains(t, reason, "run diagrams_generate docs\n", "%s: the next is the check's command", tt.name)
-		assert.True(t, strings.HasSuffix(reason, "\nsee: "+ruleDocsBase+"worker-check-only/"), tt.name)
+		assert.NotContains(t, reason.Say, "\n", "%s: the verdict is one line", tt.name)
+		assert.Contains(t, reason.Say, "run diagrams_generate docs`.", "%s: the verdict ends in the check's command", tt.name)
+		assert.Contains(t, reason.Why, "The orchestrator runs every other target serially", tt.name)
 	}
 
 	assert.NotEmpty(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus run lint docs"), "the role-scoped entry reaches this rule")
-	assert.Contains(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci"), "gates once", "the gate keeps its own refusal")
+	assert.Contains(t, denyLeaseScopedGate(ctx, deps, row.ID, "./magus affected ci").Why, "gates once", "the gate keeps its own refusal")
 }
 
 // TestWorkerCheckOnlyStaysQuiet covers every caller with nothing to hold a run to.
@@ -653,6 +653,33 @@ func TestUndeclaredLeaseRepairsReadsGitsSubcommand(t *testing.T) {
 	}
 }
 
+// The readers with a spelling that writes are read past it: sed only while it prints line
+// ranges, find without an action that deletes or runs, and any reader whose output a
+// redirect sends into a file is a writer.
+func TestUndeclaredLeaseRepairsReadsPastWritingSpellings(t *testing.T) {
+	t.Parallel()
+	for command, want := range map[string]bool{
+		"sed -n 1,5p x":                 true,
+		"sed -n '12,40p;$p' x y":        true,
+		"sed -ne 3q x":                  true,
+		"sed -n -e 1,5p -e 9p x":        true,
+		"sed -i s/a/b/ x":               false,
+		"sed -n -i.bak 1p x":            false,
+		"sed --in-place 1p x":           false,
+		"sed -n '1w out' x":             false,
+		"sed 's/a/b/e' x":               false,
+		"sed -f script.sed x":           false,
+		"find . -name '*.go'":           true,
+		"find . -name '*.go' -delete":   false,
+		"find . -exec rm {} +":          false,
+		"cat x > y":                     false,
+		"magus ls jobs 2>/dev/null":     true,
+		"magus ls jobs > /tmp/jobs.txt": false,
+	} {
+		assert.Equal(t, want, undeclaredLeaseRepairs(command), "%q", command)
+	}
+}
+
 // A worker whose checkout was removed while it ran reads as bound to the job the sweep
 // ended, never as unbound: its work is refused with the reason and the one command that
 // binds it again, and that command still runs and rebinds over the tombstone.
@@ -688,17 +715,84 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Equal(t, refused, judge(write), "a write")
 	ref := verdictRef.FindString(reason)
 	require.NotEmpty(t, ref, "the first firing cites its stored verdict")
-	assert.Equal(t, "magus workspace: your binding to job held-job ended when its checkout was removed; run `magus job exec <job>` from a checkout that exists to bind again.\n"+
-		"A caller whose binding ended is refused rather than read as unbound, because an unbound caller is graded as the orchestrator, which no write path holds.\n"+
-		"Reading the tree, printing a schema or a usage line, and the job verbs themselves still run."+
-		verdictRefLine+"magus query output "+ref+"\n"+
-		"see: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/", reason)
+	assert.Equal(t, "magus workspace: your binding to job held-job ended when its row or its checkout was removed; `magus job exec <job>` binds you again."+
+		verdictRefLine+"magus query output "+ref, reason)
+	stored, err := trail.ReadBlob(at.cacheDir, ref)
+	require.NoError(t, err)
+	assert.Contains(t, string(stored), "A caller whose binding ended is refused rather than read as unbound", "the rationale is in the stored verdict")
+	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/lease-undeclared/"), "with the rule's page")
 	assert.Equal(t, refused, judge(bashCall(t, who.Session, who.Agent, "./build.sh")), "a command")
 	assert.Equal(t, outcome{"advise", string(advisoryLeaseTerminal), held.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")), "a reader")
 
 	assert.NotEqual(t, "deny", judge(bashCall(t, who.Session, who.Agent, "magus job exec "+next.ID)).Decision, "the remedy")
 	assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, at), "the exec rebinds over the tombstone")
 	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
+}
+
+// A caller that ends its own job is unbound from then on: a binding nothing released
+// graded it under a row it had finished with, so its next fork was refused as outside that
+// row's tree, and once the row was removed every shell line it ran was refused as acting
+// under an undeclared lease.
+func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	for _, tc := range []struct {
+		name, command string
+		ends          func(*testing.T, *job.Store, string)
+	}{
+		{"exit", "magus job exit held-job", func(t *testing.T, s *job.Store, id string) {
+			_, err := s.Update(t.Context(), id, func(cur *types.Job) { cur.State = types.StateExited })
+			require.NoError(t, err)
+		}},
+		{"rm", "magus job rm held-job --force", func(t *testing.T, s *job.Store, id string) {
+			_, err := s.Delete(t.Context(), id, true)
+			require.NoError(t, err)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
+			ctx, _ := fleetFixture(t, held)
+			at := hookLocation(ctx, Dependencies{})
+			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+			bindCaller(t, ctx, who, held.ID)
+			judge := func(command string) Verdict {
+				return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
+			}
+
+			require.NotEqual(t, "deny", judge(tc.command).Decision, "ending its own job")
+			tc.ends(t, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}), held.ID)
+
+			assert.Equal(t, job.Binding{}, boundJob(who, at), "the caller is unbound")
+			for _, command := range []string{"magus job fork next-job --parent other --read-only", "sed -n 1,5p x"} {
+				v := judge(command)
+				assert.NotEqual(t, "deny", v.Decision, "%q: %s", command, v.Reason)
+			}
+		})
+	}
+}
+
+// A binding whose row someone else removed is a tombstone, never an unbound caller, and
+// the caller can still read with sed while it is refused work.
+func TestABindingToARemovedRowIsATombstone(t *testing.T) {
+	t.Setenv("BAGGAGE", "")
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
+	ctx, _ := fleetFixture(t, held)
+	at := hookLocation(ctx, Dependencies{})
+	who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
+	bindCaller(t, ctx, who, held.ID)
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	_, err := store.Delete(t.Context(), held.ID, true)
+	require.NoError(t, err)
+	_, err = store.List()
+	require.NoError(t, err)
+
+	b := boundJob(who, at)
+	assert.Equal(t, []any{held.ID, true}, []any{b.Job, b.Gone}, "the sweep tombstoned the binding")
+	judge := func(command string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
+	}
+	assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("sed -i s/a/b/ x").Rule, "sed in place is work")
+	assert.Equal(t, string(denyRuleLeaseUndeclared), judge("./build.sh").Rule, "work")
 }
 
 // TestDenyLeaseScopedHarnessSeesPastGlobalFlags pins the two bypasses the harness rule had:
@@ -767,16 +861,22 @@ func TestDenyLeaseScopedRebind(t *testing.T) {
 		"magus job fork":                                             "declare a job",
 		"client op=clear":                                            "drop every job",
 		"client op=unread":                                           "cannot read",
-		"client op=put id=harness/other write_paths=**":              "write another job",
+		"client op=put id=harness/other write_paths=**":              "is outside lease harness/lease-scoped-deny's tree",
 		"client op=register id=harness/other":                        "write another job",
 		"client op=put id=harness/lease-scoped-deny write_paths=**":  "rewrite the job it holds",
 		"client op=put id=harness/lease-scoped-deny read_only=false": "rewrite the job it holds",
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, what, "the denial must say what the command would do")
-		assert.Contains(t, reason, me, "the denial must name the bound lease")
-		assert.Contains(t, reason, "Your orchestrator can", "the denial must name the actor")
+		assert.Contains(t, reason.Say, what, "the verdict must say what the command would do")
+		assert.NotContains(t, reason.Say, "\n", "the verdict is one line")
+		assert.Contains(t, reason.full(), me, "the denial must name the bound lease")
+		if command == "magus job fork" {
+			assert.Contains(t, reason.Say, "give the child an id", "a fork the guard cannot read is the caller's to fix")
+			continue
+		}
+		assert.Contains(t, reason.Say, "ask your orchestrator to", "the verdict must name the actor")
+		assert.Contains(t, reason.Why, "Report it as an unresolved risk and stop", "the rationale ends the turn")
 	}
 }
 
@@ -792,7 +892,7 @@ func TestDenyLeaseScopedRebindLetsAHolderEnterBeneathIt(t *testing.T) {
 		"client op=put id=harness/other enter=a.go",
 		"client op=put id=" + me + " enter=cmd/magus/a.go",
 	} {
-		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command), "enter a job not forked beneath", "%q", command)
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me, command).Say, "enter a job not forked beneath", "%q", command)
 	}
 
 	_, err := job.ParseMerge(map[string]any{"op": "fork", "id": child.ID, "enter": "cmd/magus/x/a.go", "write_paths": "**"})
@@ -925,7 +1025,7 @@ func TestDenyLeaseScopedRebindRefusesWhatIsNotAChild(t *testing.T) {
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, what, "%q", command)
+		assert.Contains(t, reason.full(), what, "%q", command)
 	}
 
 	_, err := bound.Update(t.Context(), me.ID+"/x", func(u *types.Job) {
@@ -945,12 +1045,16 @@ func TestDenyLeaseScopedRebindGradesTheChildWhereTheStoreCannot(t *testing.T) {
 
 	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
 		"magus job fork "+me.ID+"/scout --parent "+me.ID+" --read-only --model opus"))
+	assert.Empty(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID,
+		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \""+me.ID+"/probe\", \"parent\": \""+me.ID+"\", \"read_only\": true, \"check\": {\"target\": \"\", \"script\": \"probe.buzz\"}}\nEOF"),
+		"a script check grants nothing, and it is how a read-only scout passes job wait")
 	for _, command := range []string{
 		"magus job fork " + me.ID + "/wide --parent " + me.ID + " --write-paths cmd/magus/**",
 		"magus job fork " + me.ID + "/scout --parent " + me.ID + " --read-only --read-paths **",
 		"client op=put id=" + me.ID + "/scout parent=" + me.ID + " read_only=true state=pass",
+		"magus job fork --stdin <<'EOF'\n{\"schema_version\": 11, \"id\": \"" + me.ID + "/probe\", \"parent\": \"" + me.ID + "\", \"read_only\": true, \"check\": {\"target\": \"go-test\", \"project\": \".\"}}\nEOF",
 	} {
-		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command), "nothing would grade", "%q", command)
+		assert.Contains(t, denyLeaseScopedRebind(ctx, Dependencies{}, me.ID, command).Say, "nothing would grade", "%q", command)
 	}
 }
 
@@ -1043,7 +1147,7 @@ func TestDenyLeaseScopedRebindLetsAHolderFinishItsBootstrap(t *testing.T) {
 	} {
 		reason := denyLeaseScopedRebind(ctx, Dependencies{}, id, command)
 		require.NotEmpty(t, reason, "%q still moves a row", command)
-		assert.Contains(t, reason, id, "the denial must say who magus thinks is calling")
+		assert.Contains(t, reason.Say, id, "the verdict must say who magus thinks is calling")
 	}
 }
 

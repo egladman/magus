@@ -173,11 +173,12 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	store, err := openJobs(root)
 	require.NoError(t, err)
 	guardRow := types.Job{
-		ID:         "f2-guard",
-		State:      types.StateRunning,
-		Criteria:   "hold the boundary\nsecond line nobody reads here",
-		Validation: "magus run test internal/ledger",
-		WritePaths: []string{"internal/ledger"},
+		ID:           "f2-guard",
+		State:        types.StateRunning,
+		Criteria:     "hold the boundary\nsecond line nobody reads here",
+		Validation:   "magus run test internal/ledger",
+		WritePaths:   []string{"internal/ledger"},
+		CheckoutRoot: root,
 	}
 	_, err = store.Update(ctx, guardRow.ID, func(cur *types.Job) { *cur = guardRow })
 	require.NoError(t, err)
@@ -197,16 +198,15 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assert.Equal(t, sessionBrief{
 		Workspace: root,
 		// The checkout's own VCS, console, trail and transcript state is not what this test sets up.
-		Branch:        brief.Branch,
-		Revision:      brief.Revision,
-		Unpushed:      brief.Unpushed,
-		Tree:          brief.Tree,
-		Console:       brief.Console,
-		PromptCache:   brief.PromptCache,
-		Feedback:      brief.Feedback,
-		Recent:        brief.Recent,
-		LeasesOmitted: 0,
-		Rules:         brief.Rules, // asserted by name above
+		Branch:      brief.Branch,
+		Revision:    brief.Revision,
+		Unpushed:    brief.Unpushed,
+		Tree:        brief.Tree,
+		Console:     brief.Console,
+		PromptCache: brief.PromptCache,
+		Feedback:    brief.Feedback,
+		Recent:      brief.Recent,
+		Rules:       brief.Rules, // asserted by name above
 		// A lease's goal reads as one line here; the rest is `magus describe job`.
 		Leases: []briefLease{{
 			ID:         "f2-guard",
@@ -241,20 +241,67 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
-	landed := types.Job{ID: "landed", State: types.StatePass}
+	landed := types.Job{ID: "landed", State: types.StatePass, CheckoutRoot: root}
 	_, err = store.Update(ctx, landed.ID, func(cur *types.Job) { *cur = landed })
 	require.NoError(t, err)
-	running := types.Job{ID: "running", State: types.StateRunning}
+	running := types.Job{ID: "running", State: types.StateRunning, CheckoutRoot: root}
 	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.Len(t, brief.Leases, 1)
 	assert.Equal(t, "running", brief.Leases[0].ID)
+	assert.Zero(t, brief.OtherLeases)
 }
 
-// A dirty job store of exited holders is still "live" for the write guard, but the
-// brief must not dump every one into a compacted context window.
+// The job store is the repository's, shared by every worktree. A rehydrating session can
+// act only under the leases taken in its checkout or bound to it, so those are named and
+// every other live lease is one count line with the command that lists them.
+func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+	ctx := context.Background()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+
+	store, err := openJobs(root)
+	require.NoError(t, err)
+	// Existing checkouts: a running row whose checkout is gone is ended on read.
+	for _, row := range []types.Job{
+		{ID: "here", State: types.StateRunning, CheckoutRoot: root},
+		{ID: "bound", State: types.StateDeclared},
+		{ID: "elsewhere-1", State: types.StateRunning, CheckoutRoot: t.TempDir()},
+		{ID: "elsewhere-2", State: types.StateExited, CheckoutRoot: t.TempDir()},
+		{ID: "declared-unbound", State: types.StateDeclared},
+		{ID: "done-here", State: types.StatePass, CheckoutRoot: root},
+	} {
+		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
+		require.NoError(t, err)
+	}
+	// Bound after the rows are written: the store refuses a bound session's write to a
+	// row it did not create.
+	t.Setenv(trail.EnvBaggage, "magus.lease=bound")
+
+	brief := gatherSessionBrief(ctx, root, nil)
+	ids := make([]string, len(brief.Leases))
+	for i, l := range brief.Leases {
+		ids[i] = l.ID
+	}
+	assert.ElementsMatch(t, []string{"here", "bound"}, ids)
+	assert.Equal(t, 3, brief.OtherLeases)
+	text := brief.Text()
+	assert.Contains(t, text, "\n3 other leases: `"+hint.LsJobs.String()+"`\n")
+	assert.NotContains(t, text, "elsewhere")
+	assertBriefIsContextSafe(t, text)
+
+	// With nothing bound here, the leases section is that one line.
+	var only strings.Builder
+	sessionBrief{OtherLeases: 3}.writeLeases(&only)
+	assert.Equal(t, "3 other leases: `"+hint.LsJobs.String()+"`\n", only.String())
+}
+
+// A checkout every job was once exec'd in holds many exited rows that are still "live"
+// for the write guard, but the brief must not dump every one into a compacted context
+// window.
 func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	testkit.Isolate(t)
 	root := t.TempDir()
@@ -264,21 +311,20 @@ func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	store, err := openJobs(root)
 	require.NoError(t, err)
 	for i := 0; i < briefMaxLeases+5; i++ {
-		row := types.Job{ID: "exited-" + strconv.Itoa(i), State: types.StateExited}
+		row := types.Job{ID: "exited-" + strconv.Itoa(i), State: types.StateExited, CheckoutRoot: root}
 		_, err = store.Update(ctx, row.ID, func(cur *types.Job) { *cur = row })
 		require.NoError(t, err)
 	}
-	running := types.Job{ID: "running", State: types.StateRunning}
+	running := types.Job{ID: "running", State: types.StateRunning, CheckoutRoot: root}
 	_, err = store.Update(ctx, running.ID, func(cur *types.Job) { *cur = running })
 	require.NoError(t, err)
 
 	brief := gatherSessionBrief(ctx, root, nil)
 	require.Len(t, brief.Leases, briefMaxLeases)
 	assert.Equal(t, "running", brief.Leases[0].ID, "editing jobs are named before exited holders")
-	assert.Equal(t, 6, brief.LeasesOmitted)
+	assert.Equal(t, 6, brief.OtherLeases)
 	text := brief.Text()
-	assert.Contains(t, text, "and 6 more:")
-	assert.Contains(t, text, hint.LsJobs.String())
+	assert.Contains(t, text, "6 other leases: `"+hint.LsJobs.String()+"`")
 	assertBriefIsContextSafe(t, text)
 }
 

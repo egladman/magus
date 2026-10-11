@@ -127,7 +127,7 @@ const jjDiffEntryTemplate = `if(status == "renamed", "F" ++ source.path() ++ "\0
 func (v jjVCS) History(ctx context.Context, dir string, q types.HistoryQuery) ([]types.Commit, error) {
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
 	revs := "::@"
 	if q.FirstParent {
@@ -353,7 +353,7 @@ func (v jjVCS) RangeFiles(ctx context.Context, dir, base, head string, paths []s
 	}
 	root, err := v.Root(ctx, dir)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: locate repository root: %w", err)
+		return nil, fmt.Errorf("locate repository root: %w", err)
 	}
 	args := append([]string{"diff", "--name-only", "--from", "heads(::" + base + " & ::" + head + ")", "--to", head},
 		jjRootPaths(paths)...)
@@ -503,7 +503,7 @@ func (v jjVCS) KeepIncoming(ctx context.Context, root string, paths []string) er
 	cmd := vcsExec(ctx, "jj", argv...)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("jj restore: %w\n%s", err, out)
+		return fmt.Errorf("jj restore: %w", withOutput(err, string(out)))
 	}
 	return nil
 }
@@ -873,7 +873,7 @@ func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) erro
 		"-r", rev, "--sparse-patterns", "full", "--name", name, target)
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("jj workspace add %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("jj workspace add %q: %w", rev, withOutput(err, string(out)))
 	}
 
 	return copySubtree(target, prefix, dstDir)
@@ -903,7 +903,7 @@ func (v jjVCS) StartMerge(ctx context.Context, root, ref string, as types.Person
 		return err
 	}
 	if underway {
-		return fmt.Errorf("jj new @ %s: the working copy is already a merge; conclude or abandon it first", ref)
+		return fmt.Errorf("jj new @ %s: the working copy is already a merge, conclude or abandon it first", ref)
 	}
 	cmd := vcsExec(ctx, "jj", "new", "@", ref)
 	cmd.Dir = root
@@ -911,7 +911,7 @@ func (v jjVCS) StartMerge(ctx context.Context, root, ref string, as types.Person
 		cmd.Env = append(os.Environ(), "JJ_USER="+as.Name, "JJ_EMAIL="+as.Email)
 	}
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("jj new @ %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("jj new @ %s: %w", ref, withOutput(err, string(out)))
 	}
 	return nil
 }
@@ -950,7 +950,7 @@ func (v jjVCS) AbortMerge(ctx context.Context, root string) error {
 	cmd := vcsExec(ctx, "jj", "abandon", "@")
 	cmd.Dir = root
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("jj abandon @: %w\n%s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("jj abandon @: %w", withOutput(err, string(out)))
 	}
 	return nil
 }
@@ -1009,7 +1009,7 @@ func (v jjVCS) InstallMergeDriver(ctx context.Context, root string, _ types.Merg
 		cmd := vcsExec(ctx, "jj", "config", "set", "--repo", kv.key, kv.value)
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("jj config set --repo %s: %w\n%s", kv.key, err, strings.TrimSpace(string(out)))
+			return fmt.Errorf("jj config set --repo %s: %w", kv.key, withOutput(err, string(out)))
 		}
 	}
 	return nil
@@ -1101,7 +1101,7 @@ func (v jjVCS) RunMergeDriver(ctx context.Context, root string, paths []string) 
 		if strings.Contains(said, "unchanged or empty") || strings.Contains(said, "At most 2 sides are supported") {
 			continue
 		}
-		return fmt.Errorf("jj resolve --tool magus %s: %w\n%s", p, err, strings.TrimSpace(said))
+		return fmt.Errorf("jj resolve --tool magus %s: %w", p, withOutput(err, said))
 	}
 	return nil
 }

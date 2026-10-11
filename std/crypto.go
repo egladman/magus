@@ -307,7 +307,7 @@ func signingKey(alg, keyHex string) (ed25519.PrivateKey, error) {
 		return nil, err
 	}
 	if strings.TrimSpace(keyHex) == "" {
-		return nil, fmt.Errorf("crypto: key is empty; read it with magus\\secret.read(<ref>)")
+		return nil, fmt.Errorf("crypto: key is empty, read it with magus\\secret.read(<ref>)")
 	}
 	raw, err := hex.DecodeString(strings.TrimSpace(keyHex))
 	if err != nil {

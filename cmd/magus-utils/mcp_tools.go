@@ -40,7 +40,7 @@ func runMCPTools(args []string) error {
 		tools = append(tools, m.MCPTools...)
 	}
 	if len(tools) == 0 {
-		return fmt.Errorf("no module declares an MCP tool; refusing to write an empty registry")
+		return fmt.Errorf("no module declares an MCP tool, refusing to write an empty registry")
 	}
 
 	src, err := renderMCPTools(tools)

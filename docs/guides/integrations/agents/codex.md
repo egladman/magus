@@ -25,6 +25,7 @@ contract.
 | checkpoint      | `Stop`                                                          |
 | rehydration     | `SessionStart` (`compact`)                                      |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
+| quiet output    | `[shell_environment_policy.set]` in `~/.codex/config.toml`      |
 
 ## Skills
 
@@ -68,6 +69,24 @@ serving. [MCP](../mcp.md) covers dedicated connector tokens, the ChatGPT desktop
 app, and what to do when `mcp.address` changes. This is user-owned host setup;
 an agent that cannot reach MCP uses the CLI fallback and does not manually start
 Magus solely to obtain tools.
+
+## Quiet output
+
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. Codex sets the values in
+`shell_environment_policy.set` on every subprocess it spawns, so the same paste
+carries a second table:
+
+```toml
+[shell_environment_policy.set]
+MAGUS_LOG_SILENT = "true"
+```
+
+The harness merges only `.codex/hooks.json`, which has no place for an
+environment variable, and never writes `config.toml`, so this stays a paste. It
+is a table header rather than a dotted key because a dotted key pasted after
+`[mcp_servers.magus]` would land inside that table. If your config already
+defines `shell_environment_policy.set`, add the variable there instead.
 
 ## Guard hook
 

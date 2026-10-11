@@ -253,23 +253,23 @@ func TestRenderSizing(t *testing.T) {
 			{Target: "generate", Projects: []string{"docs"}, Argv: []string{"magus", "run", "generate", "docs", "--no-default-charms"}},
 		},
 	}
-	assert.Equal(t, "magus: ci gate sized mechanical against 01234567; override: --no-redundancy-check\n"+
+	assert.Equal(t, "ci gate sized mechanical against 01234567; override: --no-redundancy-check\n"+
 		"  run.go: mechanical (comment-only: only comments differ; lint and generators read comments)\n"+
-		"  gate: magus run lint . --no-default-charms && magus run generate docs --no-default-charms\n",
+		"  gate: magus run lint . --no-default-charms && magus run generate docs --no-default-charms",
 		renderSizing(types.TargetCI, rep))
 
 	rep = types.RiskReport{Base: "c1", Tier: types.RiskTrivial, Gate: []types.RiskGateStep{},
 		Evidence: []types.RiskEvidence{{Path: "notes.md", Class: "prose", Tier: types.RiskTrivial, Why: "prose"}}}
-	assert.Equal(t, "magus: ci gate sized trivial against c1; override: --no-redundancy-check\n"+
+	assert.Equal(t, "ci gate sized trivial against c1; override: --no-redundancy-check\n"+
 		"  notes.md: trivial (prose: prose)\n"+
-		"  gate: none\n", renderSizing(types.TargetCI, rep))
+		"  gate: none", renderSizing(types.TargetCI, rep))
 
 	rep = types.RiskReport{Base: "c1", Tier: types.RiskScoped,
 		Gate: []types.RiskGateStep{{Target: "test", Projects: []string{"."}, Op: "go::go-test", Packages: []string{"fx/a", "fx/b"},
 			Argv: []string{"magus", "run", "test", ".", "--no-default-charms"}}}}
-	assert.Equal(t, "magus: ci gate sized scoped against c1; override: --no-redundancy-check\n"+
+	assert.Equal(t, "ci gate sized scoped against c1; override: --no-redundancy-check\n"+
 		"  gate: magus run test . --no-default-charms\n"+
-		"  narrowed: go::go-test in . test runs 2 package(s): fx/a fx/b\n", renderSizing(types.TargetCI, rep))
+		"  narrowed: go::go-test in . test runs 2 package(s): fx/a fx/b", renderSizing(types.TargetCI, rep))
 }
 
 // TestGateSizeInert: sizing is off for an inert gate and a forced run, before anything

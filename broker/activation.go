@@ -63,7 +63,7 @@ func listenFDs(lookup func(string) (string, bool), pid int) (int, error) {
 		return 0, nil
 	}
 	if hasPID != hasFDs {
-		return 0, fmt.Errorf("broker: socket activation: %s and %s come together; only one is set", envListenPID, envListenFDs)
+		return 0, fmt.Errorf("broker: socket activation: %s and %s come together, only one is set", envListenPID, envListenFDs)
 	}
 	target, err := strconv.Atoi(pidVal)
 	if err != nil || target <= 0 {
@@ -77,7 +77,7 @@ func listenFDs(lookup func(string) (string, bool), pid int) (int, error) {
 		return 0, fmt.Errorf("broker: socket activation: %s=%q is not a positive count", envListenFDs, fdsVal)
 	}
 	if n != 1 {
-		return 0, fmt.Errorf("broker: socket activation: the supervisor passed %d sockets; the broker serves exactly one", n)
+		return 0, fmt.Errorf("broker: socket activation: the supervisor passed %d sockets, the broker serves exactly one", n)
 	}
 	if names, ok := lookup(envListenFDNames); ok && strings.Contains(names, ":") {
 		return 0, fmt.Errorf("broker: socket activation: %s=%q names more than the one socket passed", envListenFDNames, names)
@@ -107,7 +107,7 @@ func servesAddr(ln net.Listener, addr string) (net.Listener, error) {
 			return &adoptedListener{Listener: ln, addr: &net.UnixAddr{Name: ep.Addr, Net: "unix"}}, nil
 		}
 	}
-	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s; point the unit's ListenStream there", got, ep.Addr)
+	return nil, fmt.Errorf("broker: socket activation: the supervisor's socket is %s, but runs dial %s, point the unit's ListenStream there", got, ep.Addr)
 }
 
 // adoptedListener is a supervisor's socket reporting the path runs dial, which its

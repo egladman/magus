@@ -19,6 +19,9 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
+| `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
+| `errmsg`        | an error text joining clauses, spanning lines or sentences, misplacing `%w`, or naming the wrong origin     |
+| `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 
 Every path, word list, host name, ceiling and exemption lives in the root
 `.golangci.yml`, so the analyzers carry the mechanism and the config carries the
@@ -69,6 +72,24 @@ more of its fields: that fix compares fields the test never looked at, so it may
 need volatile fields normalized first. This tree turns it on: once a struct grows
 a field, a test that named every field asserts only some, and only
 `report-partial` still reports it.
+
+`errmsg` judges a plain Go error, which its callers extend with ": " as it
+wraps: `error-join` reports `"; "`, `" - "` or an em dash, `error-newline` a newline,
+`error-sentences` a period followed by more text outside quotes and
+abbreviations, and `error-wrap` a `%w` anywhere but an opening `"%w: "` or a closing `": %w"`. A
+`fmt.Errorf` built only to wrap inside a coded diagnostic is still judged; the
+diagnostic's own constructor is `diagmsg`'s. Capitalization and trailing
+punctuation are staticcheck's ST1005.
+
+The error that originates a failure names its origin once, and a wrap adds what
+its own call was doing. `error-origin` reports a leading `"name: "` naming another
+package of the module, read from every package clause under `module`;
+`operations` lists the names that are also commands (`run`). `error-stutter`
+reports a wrap opening with its own package's `"name: "` around a variable last
+assigned from a call into that package, which already named it.
+`error-notice` reports an error built into the message of a log record that
+carries one of `notice-attrs`: the record names who is speaking, the error rides
+as an attribute, and the display names a shared origin once.
 
 ## Not here
 

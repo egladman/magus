@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestGuardJudgesTheScriptALineRuns(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, tt.rule, v.Rule.Name, tt.command)
-		assert.Contains(t, v.Deny, "Judged from the content of", "the refusal says the script was read: %s", tt.command)
+		assert.Contains(t, v.Why, "Judged from the content of", "the refusal says the script was read: %s", tt.command)
 	}
 
 	// With no directory to resolve against, only an absolute path is read.
@@ -134,7 +135,7 @@ func TestGuardJudgesTheBuzzScriptALineRuns(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRuleInterpreterRewrite, v.Rule.Name, tt.command)
-		assert.Contains(t, v.Deny, "Use your editor tool on internal/x.go", tt.command)
+		assert.Contains(t, v.Deny, "a script rewrites internal/x.go, a file this tree carries; use your editor tool on it.", tt.command)
 	}
 }
 
@@ -200,7 +201,8 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, tt.rule, v.Rule.Name, tt.name)
-		assert.Contains(t, v.Deny, "Judged from what this write leaves in", tt.name)
+		assert.Contains(t, v.Why, "Judged from what this write leaves in", tt.name)
+		assert.True(t, strings.HasPrefix(v.Deny, "`"+tt.file+"`: "), "%s: the verdict names the script", tt.name)
 	}
 
 	// A .buzz file is as often a magusfile or spell that writes its outputs by name, so it
@@ -221,5 +223,5 @@ func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
 	assert.Equal(t, verdictWithRule("deny", string(denyRuleBusyWait)), unworded(v))
-	assert.Contains(t, v.Reason, "retry.sh")
+	assert.Contains(t, v.Reason, "`retry.sh`: ", "the verdict names the script it was judged from")
 }

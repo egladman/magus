@@ -5,12 +5,19 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/log/attr"
 )
+
+// cacheNotice reports the outcome of a `magus config cache <verb>` run.
+func cacheNotice(ctx context.Context, verb, msg string) {
+	slog.InfoContext(ctx, msg, attr.Notice(""), attr.Component("magus config cache "+verb))
+}
 
 func configCacheCmd(ctx context.Context, root string, args []string) error {
 	fs := flag.NewFlagSet("config cache", flag.ContinueOnError)
@@ -72,7 +79,7 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "Duration examples: 168h (7 days), 24h (1 day), 1h30m")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -90,7 +97,7 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 		if err := m.PruneRemoteCache(ctx, pf.OlderThan, pf.KeepLast, pf.DryRun); err != nil {
 			return fmt.Errorf("magus config cache prune --remote: %w", err)
 		}
-		fmt.Fprintln(os.Stderr, "magus config cache prune: remote prune complete")
+		cacheNotice(ctx, "prune", "remote prune complete")
 		return nil
 	}
 
@@ -114,9 +121,9 @@ func configCachePrune(ctx context.Context, root string, args []string) error {
 	}
 
 	if pf.DryRun {
-		fmt.Fprintf(os.Stderr, "magus config cache prune: would remove %d entries (%s)\n", n, fmtBytes(freed))
+		cacheNotice(ctx, "prune", fmt.Sprintf("would remove %d entries (%s)", n, fmtBytes(freed)))
 	} else {
-		fmt.Fprintf(os.Stderr, "magus config cache prune: removed %d entries (%s freed)\n", n, fmtBytes(freed))
+		cacheNotice(ctx, "prune", fmt.Sprintf("removed %d entries (%s freed)", n, fmtBytes(freed)))
 	}
 	return nil
 }
@@ -142,7 +149,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "uses, only those used since the last import are kept. The day's first bundle stands.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -161,17 +168,17 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 		for _, s := range saved {
 			switch {
 			case s.Present:
-				fmt.Fprintf(os.Stderr, "magus config cache export: %s is already stored; nothing to do\n", s.Key)
+				cacheNotice(ctx, "export", fmt.Sprintf("%s is already stored; nothing to do", s.Key))
 			case s.Key != "":
-				fmt.Fprintf(os.Stderr, "magus config cache export: stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s\n",
-					s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " "))
+				cacheNotice(ctx, "export", fmt.Sprintf("stored %s: %d files, %s, %s uploaded, %d unused entries left out; %s",
+					s.Key, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
 			}
 		}
 		if err != nil {
 			return fmt.Errorf("config cache export: %w", err)
 		}
 		if len(saved) == 0 {
-			fmt.Fprintln(os.Stderr, "magus config cache export: no spell this workspace resolves declares a cache; nothing to store")
+			cacheNotice(ctx, "export", "no spell this workspace resolves declares a cache; nothing to store")
 		}
 		return nil
 	}
@@ -194,7 +201,7 @@ func configCacheExport(ctx context.Context, root string, args []string) error {
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("config cache export: close %s: %w", ef.To, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus config cache export: wrote %s\n", ef.To)
+	cacheNotice(ctx, "export", "wrote "+ef.To)
 	return nil
 }
 
@@ -216,7 +223,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "verification is refused and named; finding none leaves builds cold and exits 0.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -236,23 +243,23 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 		for _, s := range restored {
 			switch {
 			case s.Inactive:
-				fmt.Fprintf(os.Stderr, "magus config cache import: the remote backend is not active here; %s builds start cold\n", s.Spell)
+				cacheNotice(ctx, "import", fmt.Sprintf("the remote backend is not active here; %s builds start cold", s.Spell))
 			case s.Key == "":
-				fmt.Fprintf(os.Stderr, "magus config cache import: no verified %s cache bundle in the remote tier for the last week (%d refused); builds start cold\n", s.Spell, len(s.Refused))
+				cacheNotice(ctx, "import", fmt.Sprintf("no verified %s cache bundle in the remote tier for the last week (%d refused); builds start cold", s.Spell, len(s.Refused)))
 			default:
 				match := "these lockfiles"
 				if !s.Exact {
 					match = "other lockfiles, same tools"
 				}
-				fmt.Fprintf(os.Stderr, "magus config cache import: restored %s (%s): %d files, %s, %s downloaded, %d already present; %s\n",
-					s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " "))
+				cacheNotice(ctx, "import", fmt.Sprintf("restored %s (%s): %d files, %s, %s downloaded, %d already present; %s",
+					s.Key, match, s.Files, fmtBytes(s.Bytes), fmtBytes(s.Transferred), s.Skipped, strings.Join(s.Dirs, " ")))
 			}
 		}
 		if err != nil {
 			return fmt.Errorf("config cache import: %w", err)
 		}
 		if len(restored) == 0 {
-			fmt.Fprintln(os.Stderr, "magus config cache import: no spell this workspace resolves declares a cache; nothing to restore")
+			cacheNotice(ctx, "import", "no spell this workspace resolves declares a cache; nothing to restore")
 		}
 		return nil
 	}
@@ -270,7 +277,7 @@ func configCacheImport(ctx context.Context, root string, args []string) error {
 	if err := m.ImportCache(ctx, r); err != nil {
 		return fmt.Errorf("config cache import: %w", err)
 	}
-	fmt.Fprintln(os.Stderr, "magus config cache import: restored cache")
+	cacheNotice(ctx, "import", "restored cache")
 	return nil
 }
 

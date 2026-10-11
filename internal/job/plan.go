@@ -47,6 +47,9 @@ func ForkMerge(ctx context.Context, store *Store, id string, merge func(*types.J
 	if err != nil {
 		return types.Job{}, err
 	}
+	if merge, err = store.declaredMerge(ctx, rows, id, merge); err != nil {
+		return types.Job{}, err
+	}
 	proof, err := refuseMerge(ctx, store, rows, id, merge, limits, read)
 	if err != nil {
 		return types.Job{}, err
@@ -159,18 +162,21 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 	for _, rec := range records {
 		switch {
 		case rec.State != "":
-			return nil, fmt.Errorf("job: the record for %s carries state %q, which is status: apply writes the spec and never moves a job; a holder moves its own with `%s` and `%s`",
+			return nil, fmt.Errorf("job: the record for %s carries state %q, which is status: apply writes the spec and never moves a job, a holder moves its own with `%s` and `%s`",
 				rec.ID, rec.State, hint.JobExec.With(rec.ID), hint.JobExit.With(rec.ID))
 		case rec.Enter != "":
-			return nil, fmt.Errorf("job: the record for %s enters %s, which declares nothing to apply; `%s` records an entry", rec.ID, rec.Enter, hint.JobFork.With("--stdin"))
+			return nil, fmt.Errorf("job: the record for %s enters %s, which declares nothing to apply, `%s` records an entry", rec.ID, rec.Enter, hint.JobFork.With("--stdin"))
 		}
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == rec.ID })
 		var prev types.Job
 		if i >= 0 {
 			prev = rows[i]
 			if prev.State.Terminal() {
-				return nil, fmt.Errorf("job: %s already ended %s, and apply changes a live job; fork a new one", rec.ID, prev.State)
+				return nil, fmt.Errorf("job: %s already ended %s, and apply changes a live job, fork a new one", rec.ID, prev.State)
 			}
+		}
+		if rec.Checkpoint, err = store.DeclaredCheckpoint(ctx, rows, rec.ID, rec.Checkpoint); err != nil {
+			return nil, err
 		}
 		merge := specMerge(rec, i < 0, checkpoint)
 		proof, err := refuseMerge(ctx, store, rows, rec.ID, merge, limits, read)
@@ -186,7 +192,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 		// An empty write set is no boundary at all (the guard scopes nothing by it), so
 		// dropping the last path would free the job rather than stop it.
 		if i >= 0 && len(prev.WritePaths) > 0 && len(next.WritePaths) == 0 && !next.ReadOnly {
-			return nil, fmt.Errorf("job: that drops every write path %s holds, which leaves it bounded by nothing;"+
+			return nil, fmt.Errorf("job: that drops every write path %s holds, which leaves it bounded by nothing,"+
 				" end the job with `%s` instead", rec.ID, hint.JobExit.With(rec.ID))
 		}
 		actor := store.Actor()
@@ -208,7 +214,7 @@ func Apply(ctx context.Context, store *Store, records []types.Declaration, limit
 	for k := range plan {
 		stored, err := writeMerge(ctx, store, plan[k].Next.ID, merges[k], limits, proofs[k])
 		if err != nil {
-			return plan[:k], fmt.Errorf("job: wrote %d of %d record(s), then %s: %w", k, len(plan), plan[k].Next.ID, err)
+			return plan[:k], fmt.Errorf("wrote %d of %d record(s), then %s: %w", k, len(plan), plan[k].Next.ID, err)
 		}
 		plan[k].Next = stored
 	}
@@ -265,11 +271,26 @@ func RefuseUngraded(row types.Job) error {
 	if row.ReadOnly || len(row.WritePaths) == 0 || row.Check != nil || strings.TrimSpace(row.Validation) != "" || len(row.Goals) > 0 {
 		return nil
 	}
-	return fmt.Errorf("job: %s writes %s and declares neither a check nor a goal, so `%s` has nothing to grade it by."+
-		` Add "check" (the target that proves it, as "<target> <project>") or "goals" to the record, such as`+
-		` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]}; `+"`%s`"+` prints every field.`+
-		` A job that writes nothing is "read_only"`,
+	return fmt.Errorf("job: %s writes %s and declares neither a check nor a goal, so `%s` has nothing to grade it by:"+
+		` add "check" (the target that proves it, as "<target> <project>") or "goals" to the record, such as`+
+		` {"id":"done","kind":"paths","expect":"changed","paths":["<glob>"]}, `+"`%s`"+` prints every field,`+
+		` and a job that writes nothing is "read_only"`,
 		row.ID, strings.Join(row.WritePaths, ", "), hint.JobWait.With(row.ID), hint.JobFork.With("--schema"))
+}
+
+// RefuseUnscoped refuses a forked job that is neither read-only nor handed a write path.
+// The guard scopes nothing by an empty write set, so its holder could write anywhere, and
+// `job wait` refuses a result that changed nothing on a row that is not read-only: a scout
+// forked this way can only end no_return.
+func RefuseUnscoped(row types.Job) error {
+	if row.ReadOnly || len(row.WritePaths) > 0 {
+		return nil
+	}
+	return fmt.Errorf("job: %s names no write paths and is not read-only, so nothing bounds what its holder writes:"+
+		" fork a job that only reads with --read-only and one that writes with --write-paths,"+
+		` and a read-only job passes only with a script check, {"check": {"script": "<probe>.buzz"}}, whose result cites`+
+		" the ref `%s` prints, or its holder ends it with `%s`",
+		row.ID, hint.Buzz.With("--record", "<probe>.buzz"), hint.JobExit.With(row.ID))
 }
 
 // RefuseForkLimits refuses a fork that would put the job deeper below its root, or leave
@@ -309,7 +330,7 @@ func RefuseForkLimits(rows []types.Job, id, parent string, limits config.Jobs) e
 		}
 	}
 	if live > limits.MaxLive {
-		return fmt.Errorf("job: forking %s would make %d live jobs under root job %s, and jobs.max_live in magus.yaml allows %d;"+
+		return fmt.Errorf("job: forking %s would make %d live jobs under root job %s, and jobs.max_live in magus.yaml allows %d,"+
 			" end one with `%s` first", id, live, root, limits.MaxLive, hint.JobExit.With("<job>"))
 	}
 	return nil
@@ -342,8 +363,8 @@ func RefuseAmbiguousSymbols(ctx context.Context, goals []types.Goal, read Symbol
 	if len(refused) == 0 {
 		return nil
 	}
-	return fmt.Errorf("job: %s; name one by the symbol id `%s` prints, or the goal grades whichever definition ranks first",
-		strings.Join(refused, "; "), hint.Refs.With("<name>"))
+	return fmt.Errorf("job: %s, name one by the symbol id `%s` prints, or the goal grades whichever definition ranks first",
+		strings.Join(refused, ", "), hint.Refs.With("<name>"))
 }
 
 // RenderGates writes a gate report one gate per line, each unmet one followed by why, and

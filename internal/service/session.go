@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/spells"
 )
 
@@ -61,7 +62,7 @@ func (s *Session) Acquire(ctx context.Context, key string, svc spells.Service) (
 			s.mu.Unlock()
 			return owned, true, nil
 		}
-		slog.WarnContext(ctx, "magus: the broker could not host a service; hosting it in-process for this run",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "the broker could not host a service; hosting it in-process for this run",
 			slog.String("key", key), slog.String("err", err.Error()))
 	}
 	h, err := s.reg.Acquire(ctx, key, svc)

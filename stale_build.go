@@ -32,7 +32,7 @@ func withOwnBuildEscape(err error, root string) error {
 	if escape == "" {
 		return err
 	}
-	return fmt.Errorf("%w\n\n%s", err, escape)
+	return fmt.Errorf("%w: %s", err, escape)
 }
 
 // ownBuildEscape is the escape for a binary at exe, built as info, that sits at the root of

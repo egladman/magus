@@ -125,7 +125,7 @@ func registerPathHint(w types.WorkspaceRepository) string {
 		known = append(known, p.Path)
 	}
 	slices.Sort(known)
-	return fmt.Sprintf("explicit configure paths are relative to the workspace root (known projects: %s); "+
+	return fmt.Sprintf("explicit configure paths are relative to the workspace root (known projects: %s), "+
 		"to configure the magusfile's own project, omit the path: configure({...})",
 		strings.Join(known, ", "))
 }
@@ -174,7 +174,7 @@ func (r *WorkspaceRegistry) SetLifecycleProvider(spellName string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.lifecycleProvider != "" && r.lifecycleProvider != spellName {
-		return fmt.Errorf("a workspace has one lifecycle provider, and %q is already wired; drop one of the two magus\\lifecycle.provider calls (wiring %q)",
+		return fmt.Errorf("a workspace has one lifecycle provider, and %q is already wired, drop one of the two magus\\lifecycle.provider calls (wiring %q)",
 			r.lifecycleProvider, spellName)
 	}
 	r.lifecycleProvider = spellName
@@ -334,8 +334,8 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 	for path, opts := range r.projectOpts {
 		p := w.Get(path)
 		if p == nil {
-			errs = append(errs, fmt.Errorf("magus: register: %q in workspace %q: %w; %s",
-				path, w.Root(), types.ErrUnknownProject, registerPathHint(w)))
+			errs = append(errs, fmt.Errorf("register: %q in workspace %q, %s: %w",
+				path, w.Root(), registerPathHint(w), types.ErrUnknownProject))
 			continue
 		}
 		for _, o := range opts {
@@ -354,7 +354,7 @@ func (r *WorkspaceRegistry) Apply(w types.WorkspaceRepository) error {
 		for _, name := range p.Spells {
 			l, ok := project.DefaultSpellRegistry().Lookup(name)
 			if !ok {
-				errs = append(errs, fmt.Errorf("magus: register: project %q: spell %q not registered",
+				errs = append(errs, fmt.Errorf("register: project %q: spell %q not registered",
 					p.Path, name))
 				projectOK = false
 				continue

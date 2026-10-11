@@ -24,6 +24,8 @@
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
+//   worker-bootstrap (deny): the bootstrap run by any caller but the main session, which
+//     places ./magus instead; foreign-binary lets the placement script through.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
 //     sources that have since moved, by the stamp go-build links into it.
 //   stale-write (deny): a magus verb that writes state other checkouts or magus versions
@@ -82,7 +84,8 @@ import "./hack/magusfile/commits" as conventional;
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk());
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk(),
+        worker: req.role == "worker" or req.parent != "" or req.agent != "");
     if (denial != "") {
         return magus\guard.deny(denial);
     }

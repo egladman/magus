@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/egladman/magus/internal/log/attr"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -610,7 +611,7 @@ func traceNeeds(tr *Tracer) func(context.Context, []vm.Value) (vm.Value, error) 
 			trace(a)
 		}
 		if named == 0 {
-			return vm.Null, errors.New("ctx.needs: names no target; pass a target function, a project import member, or a ctx.glob(...) that matches one")
+			return vm.Null, errors.New("ctx.needs: names no target, pass a target function, a project import member, or a ctx.glob(...) that matches one")
 		}
 		return vm.Null, nil
 	}
@@ -742,7 +743,7 @@ func checkUnknownKeys(ctx context.Context, m vm.Value, known []string, where str
 	}
 	ignored, err := hint.CheckKeys(m.MapKeys(), known, types.RemovedOptions, where)
 	for _, k := range ignored {
-		slog.WarnContext(ctx, "magusfile: ignoring an option this magus does not recognize",
+		slog.With(attr.Component("magusfile")).WarnContext(ctx, "ignoring an option this magus does not recognize",
 			slog.String("where", where), slog.String("option", k),
 			slog.String("advice", hint.IgnoredKeyAdvice()))
 	}
@@ -837,8 +838,8 @@ func (r *Tracer) traceProject(ctx context.Context, path string, opts vm.Value) e
 					}
 					if reason == "" {
 						return fmt.Errorf(
-							"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, e.g. \"signs a fresh artifact per invocation\". "+
-								"If you only want a fresh run, use `--no-cache` instead; if the target simply produces no files, it caches correctly with no policy at all", rawName)
+							"magus.project: targets[%q].skip_cache needs a reason string saying why REPLAYING this target would be wrong, such as \"signs a fresh artifact per invocation\", "+
+								"for a fresh run use `--no-cache` instead, and a target that simply produces no files caches correctly with no policy at all", rawName)
 					}
 					p.NoCache = append(p.NoCache, name)
 				}
@@ -1105,11 +1106,11 @@ func secretGrantStubArg(method string, args []vm.Value) error {
 	// Length first: indexing args[0] to build the view before checking it exists
 	// panics on a no-argument call instead of reporting the error below.
 	if len(args) == 0 {
-		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	fields, viewOK := args[0].MapView()
 	if !viewOK {
-		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, e.g. SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
+		return fmt.Errorf(`magus\secret.%s: expected an object with ref/host/header/prefix fields, such as SecretGrant{ ref = "...", host = "api.example.com", header = "Authorization", prefix = "Bearer " } declared in your magusfile`, method)
 	}
 	var bad error
 	field := func(name string) string {

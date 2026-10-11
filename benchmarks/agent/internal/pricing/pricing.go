@@ -122,7 +122,7 @@ func (t Table) Lookup(model string) (Rates, error) {
 	if r, ok := t.models[datedModelSuffix.ReplaceAllString(model, "")]; ok {
 		return r, nil
 	}
-	return Rates{}, fmt.Errorf("pricing: model %q is absent from the pricing table; add its published prices", model)
+	return Rates{}, fmt.Errorf("pricing: model %q is absent from the pricing table, add its published prices", model)
 }
 
 // parse reads rates.json. The underscore-prefixed members of that file are
@@ -153,7 +153,7 @@ func parse(raw []byte, file string) (Table, error) {
 	for model, entry := range doc.Models {
 		rates, err := entry.rates()
 		if err != nil {
-			return Table{}, fmt.Errorf("pricing: table %s: model %s: %w", file, model, err)
+			return Table{}, fmt.Errorf("table %s: model %s: %w", file, model, err)
 		}
 		t.models[model] = rates
 	}

@@ -22,6 +22,7 @@ window. One file carries all of it.
 | checkpoint     | the `session.idle` bus event                                                                  |
 | rehydration    | `experimental.session.compacting`                                                             |
 | MCP            | [MCP](../mcp.md)                                                                              |
+| quiet output   | not set: its config has no key for it; set `MAGUS_LOG_SILENT=true` yourself (see below)       |
 
 ## Skills
 
@@ -63,6 +64,20 @@ Configure MCP for OpenCode yourself. `magus describe harness opencode`
 prints a short secret-ref hint and a docs pointer; Magus does not write OpenCode
 MCP config. See [MCP](../mcp.md). An agent uses the CLI fallback when MCP is
 unavailable.
+
+## Quiet output
+
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. `opencode.json` documents no key for the environment of the commands the agent
+runs, so the harness sets nothing and `magus describe harness opencode` says so.
+Set it yourself in the environment you start OpenCode from:
+
+```sh
+MAGUS_LOG_SILENT=true opencode
+```
+
+The plugin API's `shell.env` hook could export it into every shell instead; the
+plugin below does not set it.
 
 ## Guard hook
 
@@ -116,7 +131,7 @@ other templates.
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 20
+// magus-guard-template: 21
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none

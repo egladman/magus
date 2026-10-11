@@ -1,6 +1,7 @@
 // Package proofread judges written text: the doc comment and name of one symbol a SCIP
-// index describes, a hand-written Markdown file, a skill, or a pull request's
-// title and description. It parses no programming language, so every
+// index describes, a hand-written Markdown file, a skill, a pull request's
+// title and description, or a message a program prints. It parses no
+// programming language, so every
 // indexer's symbols meet the same rules.
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
@@ -74,6 +75,17 @@ const (
 	// obviously, just, please; in other written text and in a reply the words
 	// that presume ("of course", "everyone knows").
 	RuleCondescension Rule = "condescension"
+	// RuleMessageLength reports a message over its rune cap.
+	RuleMessageLength Rule = "message-length"
+	// RuleMessageRationale reports a message that stacks reasons: more than
+	// one causal join such as " so ", " because ", "; " or ", which ".
+	RuleMessageRationale Rule = "message-rationale"
+	// RuleMessageCommands reports a message naming more than one backticked
+	// command.
+	RuleMessageCommands Rule = "message-commands"
+	// RuleMessageTag reports a message opening with a component tag such as
+	// "server: ", or carrying a bracketed marker such as "[AGENT]".
+	RuleMessageTag Rule = "message-tag"
 )
 
 // Kind names what a judged text is for, which decides the rules it meets.
@@ -105,6 +117,11 @@ const (
 	// KindReviewReply is a review comment, a review's body or a reply in a
 	// review thread: Markdown with no title line.
 	KindReviewReply Kind = "review-reply"
+	// KindMessage is one message a program prints to whoever runs it: a
+	// diagnostic, a guard verdict, a breadcrumb's reason. It is plain text, not
+	// Markdown, held to the message rules alone: a verdict, one next command,
+	// and a ref for the rationale.
+	KindMessage Kind = "message"
 )
 
 // Decision is what a finding costs the caller that reads it, in the words a
@@ -130,6 +147,7 @@ var (
 	// teammate is text written to the people working on the change, where a
 	// sentence about past work or a teammate is about someone the reader knows.
 	teammate = []Kind{KindChangeDescription, KindReviewReply}
+	message  = []Kind{KindMessage}
 )
 
 // check is one rule: the kinds it judges, its default decision on each, and
@@ -164,7 +182,14 @@ func (c check) defaultDecision(kind Kind) Decision {
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, toneChecks, slopChecks, []check{templateCheck})
+var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, []check{templateCheck})
+
+var messageChecks = []check{
+	{rule: RuleMessageLength, on: message, judge: messageLength},
+	{rule: RuleMessageRationale, on: message, judge: messageRationale},
+	{rule: RuleMessageCommands, on: message, judge: messageCommands},
+	{rule: RuleMessageTag, on: message, judge: messageTag},
+}
 
 // templateCheck has no judge: a template that does not render is reported
 // before any rule runs, and the entry gives the rule its decisions and its
@@ -207,6 +232,19 @@ func Rules() []Rule {
 	out := make([]Rule, len(checks))
 	for i, c := range checks {
 		out[i] = c.rule
+	}
+
+	return out
+}
+
+// KindRules returns the rules that judge kind, in [Rules] order.
+func KindRules(kind Kind) []Rule {
+	var out []Rule
+
+	for _, c := range checks {
+		if slices.Contains(c.on, kind) {
+			out = append(out, c.rule)
+		}
 	}
 
 	return out
@@ -294,6 +332,9 @@ type input struct {
 	// still in them, for a rule that asks whether a sentence cites something.
 	source []string
 	opts   options
+	// text is a [KindMessage]'s whole text and maxRunes its length cap.
+	text     string
+	maxRunes int
 }
 
 // Judge runs the doc rules over s. They judge nothing when Doc is empty, and

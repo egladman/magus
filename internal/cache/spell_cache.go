@@ -230,7 +230,7 @@ func digestFile(p string) (string, error) {
 // the bundle is stored under, bound into the signed index.
 func writeSpellCacheBundle(ctx context.Context, w io.Writer, s *signer, key SpellCacheKey, name string, roots []SpellCacheRoot, now time.Time) (SpellCacheStats, error) {
 	if s == nil {
-		return SpellCacheStats{}, errors.New("spell cache bundle: needs a signing key (MAGUS_CACHE_SIGNING_KEY); an unsigned bundle is refused on restore")
+		return SpellCacheStats{}, errors.New("spell cache bundle: needs a signing key (MAGUS_CACHE_SIGNING_KEY), an unsigned bundle is refused on restore")
 	}
 	files, stats, err := collectSpellCacheFiles(ctx, roots, now)
 	if err != nil {
@@ -311,7 +311,7 @@ type spellCacheWant struct {
 // fails at any point leaves the roots as they were.
 func readSpellCacheBundle(ctx context.Context, r io.Reader, v *verifier, want spellCacheWant, roots []SpellCacheRoot, limit int64, now time.Time) (SpellCacheStats, error) {
 	if v == nil {
-		return SpellCacheStats{}, errors.New("no trust set configured; refusing an unauthenticated spell cache bundle")
+		return SpellCacheStats{}, errors.New("no trust set configured, refusing an unauthenticated spell cache bundle")
 	}
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -463,7 +463,7 @@ func readLeadMember(tr *tar.Reader, name string, max int64) ([]byte, error) {
 		return nil, fmt.Errorf("tar: %w", err)
 	}
 	if hdr.Name != name || hdr.Typeflag != tar.TypeReg {
-		return nil, fmt.Errorf("expected %s, found %q; an unsigned or foreign archive", name, hdr.Name)
+		return nil, fmt.Errorf("expected %s, found %q, an unsigned or foreign archive", name, hdr.Name)
 	}
 	budget := max
 	return readCapped(tr, &budget)
@@ -561,7 +561,7 @@ func (c *Cache) saveSpellCache(ctx context.Context, key SpellCacheKey, roots []S
 		return res, err
 	}
 	if err := c.RemoteNamespace(spellCacheNamespace).Put(ctx, key.pointerKey(now), strings.NewReader(string(ptr))); err != nil {
-		return res, fmt.Errorf("cache: stored %s but not its pointer: %w", name, err)
+		return res, fmt.Errorf("stored %s but not its pointer: %w", name, err)
 	}
 	return res, nil
 }
@@ -588,7 +588,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		return SpellCacheResult{}, errors.New("cache: no remote backend configured")
 	}
 	if c.verifier == nil {
-		return SpellCacheResult{}, errors.New("cache: no trust set configured; a spell cache bundle is restored only once verified")
+		return SpellCacheResult{}, errors.New("cache: no trust set configured, a spell cache bundle is restored only once verified")
 	}
 	// A job the store gives no credentials, a fork's pull request say, builds cold
 	// rather than failing over a cache.

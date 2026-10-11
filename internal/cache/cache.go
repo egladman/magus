@@ -32,6 +32,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	runPkg "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/types"
 )
@@ -373,7 +374,7 @@ func (c *Cache) buildTiers() error {
 	c.tiers = []tier{c.local}
 	declared := c.remoteWrite != nil
 	if declared && *c.remoteWrite && !c.localWrite {
-		return errors.New("magus/cache: remote writes are on but local writes are off; " +
+		return errors.New("magus/cache: remote writes are on but local writes are off, " +
 			"the remote tier is written from the local one, so enable local writes or turn remote writes off")
 	}
 	if c.backend == nil {
@@ -381,10 +382,10 @@ func (c *Cache) buildTiers() error {
 			return nil
 		}
 		if c.remoteDown != nil {
-			return fmt.Errorf("magus/cache: remote writes are required but %w; "+
-				"fix the backend, or set cache.remote.write.enabled false to run local-only", c.remoteDown)
+			return fmt.Errorf("magus/cache: remote writes are required but the backend is down, "+
+				"fix it or set cache.remote.write.enabled false to run local-only: %w", c.remoteDown)
 		}
-		return errors.New("magus/cache: remote writes are required but no remote backend is wired; " +
+		return errors.New("magus/cache: remote writes are required but no remote backend is wired, " +
 			"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 	}
 	r := &remoteTier{c: c, backend: c.backend}
@@ -395,7 +396,7 @@ func (c *Cache) buildTiers() error {
 		r.off = "remote writes are off"
 	case c.verifier != nil && c.signer == nil:
 		if declared {
-			return errors.New("magus/cache: remote writes are required but there is no signing key (MAGUS_CACHE_SIGNING_KEY); " +
+			return errors.New("magus/cache: remote writes are required but there is no signing key (MAGUS_CACHE_SIGNING_KEY), " +
 				"a trust set is declared, so every reader would refuse an unsigned entry")
 		}
 		r.off = "no signing key"
@@ -438,7 +439,7 @@ func (c *Cache) initSigning() error {
 	// own invariant rather than relying on a caller to. A remote backend with no
 	// verifier imports unsigned artifacts, so refuse it unless explicitly opted in.
 	if c.backend != nil && c.verifier == nil && !c.insecureRemote {
-		return errors.New("magus/cache: remote backend configured without a trust set; " +
+		return errors.New("magus/cache: remote backend configured without a trust set, " +
 			"pass WithTrustedKeys, or WithInsecureRemote to accept unsigned artifacts")
 	}
 	return nil
@@ -665,7 +666,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
-	result.HintID = c.emitUnchangedFailureHint(hash)
+	result.HintID = c.emitUnchangedFailureHint(ctx, hash)
 	return c.runMiss(ctx, rc, s, hash, fn, start, netRec, result)
 }
 
@@ -805,25 +806,27 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 		result.Ref = ref
 		c.log.ErrorContext(ctx,
 			"cache.error",
-			slog.String("project", s.ProjectPath),
-			slog.String("label", s.Label),
-			slog.String("target", reproTarget(s)),
-			slog.Int64("duration", int64(result.Duration)),
-			// The concise cause: this record already carries project and target as their
-			// own attrs, and the pretty handler prints both in the heading directly above
-			// the cause line.
-			slog.String("error", types.CauseText(err)),
-			slog.String("ref", ref),
-			// The captured log's path on disk, carried so the pretty handler can make the
-			// ref a real hyperlink without resolving anything: a file:// link needs no
-			// server running, so it cannot be dead.
-			slog.String("log", lp),
+			withWhy(err,
+				slog.String("project", s.ProjectPath),
+				slog.String("label", s.Label),
+				slog.String("target", reproTarget(s)),
+				slog.Int64("duration", int64(result.Duration)),
+				// The concise cause: this record already carries project and target as their
+				// own attrs, and the pretty handler prints both in the heading directly above
+				// the cause line.
+				slog.String("error", types.CauseText(err)),
+				slog.String("ref", ref),
+				// The captured log's path on disk, carried so the pretty handler can make the
+				// ref a real hyperlink without resolving anything: a file:// link needs no
+				// server running, so it cannot be dead.
+				slog.String("log", lp),
+			)...,
 		)
 		if rc.onError != nil {
 			rc.onError(err)
 		}
 		rc.fireResults(rc.step, &result, err)
-		return result, err
+		return result, ReportedError{Err: err}
 	}
 
 	if runErr != nil {
@@ -930,21 +933,27 @@ const maxHintErrChars = 120
 // BEFORE the run, so it says the step runs again: under -s a passing re-run prints
 // nothing else, and a bare "which failed" before exit 0 reads as a failure replayed as a
 // pass. Empty when the key has no stored execution, when the newest one passed, when
-// hints are off, or when this key was already hinted.
+// hints are off, when the recorded failure only restates a dependency's, or when this
+// key was already hinted.
 //
 // The line names the failed ATTEMPT, not the step ref: the step ref resolves to the
 // key's newest attempt, so once the re-run passes it shows that pass instead.
 //
 // Once per key rather than per target, because the fact reported is about the KEY: a
 // re-run whose inputs moved hashes differently and deserves silence. The attempt id
-// differs per failure, so interactive.Emit's whole-message dedupe cannot do this.
-func (c *Cache) emitUnchangedFailureHint(hash string) string {
+// differs per failure, so interactive.Hint's whole-message dedupe cannot do this.
+func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) string {
 	// A record-only run carries the same pointer as run.target.result's next breadcrumbs.
 	if c.outputs == nil || !interactive.HintsEnabled() || c.recordsOnly {
 		return ""
 	}
 	d, err := c.outputs.newestDescriptor(hash)
 	if err != nil || !d.Failed || d.Attempt == "" {
+		return ""
+	}
+	// A failure that only restates a dependency's is that dependency's to report: its
+	// own key carries the same hint, and a cascade would print one line per composite.
+	if _, restated := causeSignature(d.ErrMsg, nil); restated {
 		return ""
 	}
 	if _, dup := c.failureHinted.LoadOrStore(hash, struct{}{}); dup {
@@ -954,7 +963,7 @@ func (c *Cache) emitUnchangedFailureHint(hash string) string {
 	if len(msg) > maxHintErrChars {
 		msg = msg[:maxHintErrChars] + "..."
 	}
-	interactive.Emit(os.Stderr, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
+	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
 		d.Attempt, msg, hint.QueryOutput.With(d.Attempt)))
 	return HintUnchangedFailure
 }
@@ -1132,13 +1141,35 @@ func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error
 	c.errs.Add(1)
 	c.log.ErrorContext(ctx,
 		"cache.error",
-		slog.String("project", s.ProjectPath),
-		slog.String("label", s.Label),
-		slog.String("target", reproTarget(s)),
-		slog.String("error", types.CauseText(err)),
-		slog.Bool("refused", true),
+		withWhy(err,
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.String("error", types.CauseText(err)),
+			slog.Bool("refused", true),
+		)...,
 	)
 	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+}
+
+// ReportedError is a step failure the cache already logged as a cache.error record, so a
+// caller printing errors at the top of a command does not print it a second time.
+type ReportedError struct{ Err error }
+
+func (e ReportedError) Error() string { return e.Err.Error() }
+func (e ReportedError) Unwrap() error { return e.Err }
+
+// withWhy returns attrs as log arguments, followed by err's rationale as [attr.Why] when
+// err carries one.
+func withWhy(err error, attrs ...slog.Attr) []any {
+	args := make([]any, 0, len(attrs)+1)
+	for _, a := range attrs {
+		args = append(args, a)
+	}
+	if why := types.DiagnosticRationale(err); why != "" {
+		args = append(args, attr.Why(why))
+	}
+	return args
 }
 
 // admit takes the in-process seats a step needs before it executes and puts it on the
@@ -1928,15 +1959,16 @@ func (c *Cache) captureRun(ctx context.Context, logPath, projectPath, target str
 	// sole output for an otherwise-silent passing run.
 	if c.silent {
 		for _, msg := range extractNotices(logPath) {
+			// Past the level gate, which -s raises to error: a notice is the one line a
+			// silent passing run prints, so it reaches the handler whatever the level.
+			r := slog.NewRecord(time.Now(), slog.LevelInfo, projectPath+": "+msg, 0)
+			r.AddAttrs(attr.Notice("notice"))
 			if c.recordsOnly {
-				// Past the level gate, which -s raises to error: the text line below
-				// prints whatever the level, and so must its record.
-				r := slog.NewRecord(time.Now(), slog.LevelInfo, "cache.notice", 0)
+				// The -o jsonl wire shape: readers match its "notice" attribute.
+				r = slog.NewRecord(time.Now(), slog.LevelInfo, "cache.notice", 0)
 				r.AddAttrs(slog.String("project", projectPath), slog.String("notice", msg))
-				_ = c.log.Handler().Handle(ctx, r)
-				continue
 			}
-			_, _ = fmt.Fprintf(os.Stderr, "notice: %s: %s\n", projectPath, msg)
+			_ = c.log.Handler().Handle(ctx, r)
 		}
 	}
 

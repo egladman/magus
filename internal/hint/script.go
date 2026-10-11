@@ -135,13 +135,13 @@ var AllEvents = []string{EventDiskLow, EventPrePR, EventSessionEnd, EventIndexSt
 func ValidateSituation(situation string) error {
 	i := slices.IndexFunc(situationFamilies, func(f string) bool { return strings.HasPrefix(situation, f) })
 	if i < 0 {
-		return fmt.Errorf("hint: situation %q names no family; want one of %s", situation, strings.Join(situationFamilies, " "))
+		return fmt.Errorf("hint: situation %q names no family, want one of %s", situation, strings.Join(situationFamilies, " "))
 	}
 	if situation == situationFamilies[i] {
 		return fmt.Errorf("hint: situation %q names no id", situation)
 	}
 	if situationFamilies[i] == SituationEvent && !slices.Contains(AllEvents, situation) {
-		return fmt.Errorf("hint: unknown event %q; want one of %s", situation, strings.Join(AllEvents, " "))
+		return fmt.Errorf("hint: unknown event %q, want one of %s", situation, strings.Join(AllEvents, " "))
 	}
 	return nil
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/rpcerr"
@@ -57,7 +58,7 @@ func newEntry(root string, now time.Time) *wsEntry {
 func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observability.Provider) (*magus.Magus, error) {
 	cfg, err := loadWorkspaceCfg(root)
 	if err != nil {
-		return nil, fmt.Errorf("server: load config %s: %w", root, err)
+		return nil, fmt.Errorf("load config %s: %w", root, err)
 	}
 	// Warm server workspaces record OTel metrics so the /dashboard can read live
 	// cache/pool/target numbers as OTLP. Every workspace shares the server's single
@@ -84,7 +85,7 @@ func openWorkspace(root string, lim *cache.Limiter, b *broker.Client, tel observ
 	// context.Background(): workspace goroutines must outlive individual RPC contexts.
 	m, err := magus.Open(context.Background(), root, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("server: open workspace %s: %w", root, err)
+		return nil, fmt.Errorf("open workspace %s: %w", root, err)
 	}
 	return m, nil
 }
@@ -185,7 +186,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 	for _, p := range raw {
 		abs, err := filepath.Abs(p)
 		if err != nil {
-			slog.Warn("server: skipping declared workspace (cannot resolve absolute path)",
+			slog.With(attr.Component("server")).Warn("skipping declared workspace (cannot resolve absolute path)",
 				"path", p, "err", err)
 			continue
 		}
@@ -193,7 +194,7 @@ func resolveDeclaredWorkspaces(cfgList []string, envVal string) []string {
 			continue
 		}
 		if st, err := os.Stat(abs); err != nil || !st.IsDir() {
-			slog.Warn("server: skipping declared workspace (not a directory)",
+			slog.With(attr.Component("server")).Warn("skipping declared workspace (not a directory)",
 				"path", abs)
 			continue
 		}
@@ -229,8 +230,8 @@ func (r *wsRegistry) acquire(root string) (*wsEntry, error) {
 	if r.declared != nil {
 		if _, ok := r.declared[root]; !ok {
 			r.mu.Unlock()
-			return nil, fmt.Errorf("%w: workspace %q is not in this server's declared list; add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server",
-				errWorkspaceUndeclared, root)
+			return nil, fmt.Errorf("workspace %q is not in this server's declared list, add it to server.workspaces (magus.yaml) or MAGUS_SERVER_WORKSPACES and restart the server: %w",
+				root, errWorkspaceUndeclared)
 		}
 	}
 	e, ok := r.entries[root]
@@ -320,7 +321,7 @@ func (r *wsRegistry) awaitSourceChange(e *wsEntry) bool {
 	w, err := watch.New(ctx, watch.WithRoot(e.root),
 		watch.WithIgnore(watch.RelativeIgnore(e.root, watch.BuiltinIgnore)))
 	if err != nil {
-		slog.WarnContext(ctx, "server: cannot watch a failed workspace; it stays failed until `magus server reload`",
+		slog.With(attr.Component("server")).WarnContext(ctx, "cannot watch a failed workspace; it stays failed until `magus server reload`",
 			slog.String("root", e.root), slog.String("error", err.Error()))
 		return false
 	}
@@ -426,7 +427,7 @@ func (r *wsRegistry) warm(ctx context.Context, roots []string) {
 		}
 		e, err := r.acquire(root)
 		if err != nil {
-			slog.WarnContext(ctx, "server: warm workspace failed (readiness probe may be delayed)",
+			slog.With(attr.Component("server")).WarnContext(ctx, "warm workspace failed (readiness probe may be delayed)",
 				"root", root, "err", err)
 			continue
 		}

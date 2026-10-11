@@ -3,12 +3,15 @@ package cache
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // recordingHandler collects the log records a wait emits, so a test can assert on what a
@@ -27,11 +30,40 @@ func (h *recordingHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (h *recordingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return recordingWith{h: h, attrs: attrs}
+}
 
 func (h *recordingHandler) WithGroup(string) slog.Handler { return h }
 
+// recordingWith records into h with attrs ahead of each record's own, so a line
+// logged through logattr.For carries its component.
+type recordingWith struct {
+	h     *recordingHandler
+	attrs []slog.Attr
+}
+
+func (w recordingWith) Enabled(context.Context, slog.Level) bool { return true }
+
+func (w recordingWith) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(w.attrs...)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(a)
+		return true
+	})
+	return w.h.Handle(ctx, nr)
+}
+
+func (w recordingWith) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return recordingWith{h: w.h, attrs: append(slices.Clip(w.attrs), attrs...)}
+}
+
+func (w recordingWith) WithGroup(string) slog.Handler { return w }
+
 // lines renders each record as "message key=value ..." for a plain contains assertion.
+// It leaves out the elapsed attribute, whose value is the scheduler's; [recordingHandler.waits]
+// reads it instead.
 func (h *recordingHandler) lines() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -39,10 +71,31 @@ func (h *recordingHandler) lines() []string {
 	for _, r := range h.records {
 		line := r.Message
 		r.Attrs(func(a slog.Attr) bool {
-			line += " " + a.Key + "=" + a.Value.String()
+			if a.Key != attr.ElapsedKey {
+				line += " " + a.Key + "=" + a.Value.String()
+			}
 			return true
 		})
 		out = append(out, line)
+	}
+	return out
+}
+
+// waits returns each record's elapsed attribute, and -1 for a record without one as a
+// duration.
+func (h *recordingHandler) waits() []time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]time.Duration, 0, len(h.records))
+	for _, r := range h.records {
+		d := time.Duration(-1)
+		r.Attrs(func(a slog.Attr) bool {
+			if a.Key == attr.ElapsedKey && a.Value.Kind() == slog.KindDuration {
+				d = a.Value.Duration()
+			}
+			return true
+		})
+		out = append(out, d)
 	}
 	return out
 }
@@ -100,10 +153,19 @@ func TestKeyedLockWaitBeatsAndNamesTheHolder(t *testing.T) {
 	<-done
 
 	assert.Equal(t, ". generate", blockedOn, "the mark names the holder, not just the key")
-	assert.Contains(t, logs.lines(),
-		"magus: . coverage-badge is waiting for a cache lock held by . generate")
-	assert.Contains(t, logs.lines(),
-		"magus: . coverage-badge is still waiting for a cache lock held by . generate (0s so far)")
+	lines := logs.lines()
+	require.NotEmpty(t, lines)
+	assert.Equal(t, ". coverage-badge is waiting for a cache lock held by . generate component=magus", lines[0],
+		"a person at a terminal hears about the queue the moment it forms")
+	assert.Contains(t, lines,
+		". coverage-badge is still waiting for a cache lock held by . generate (0s so far) component=magus")
+	// Every notice is stamped with how long the wait has run, the one fact an agent's
+	// display needs to hold the short ones back.
+	waits := logs.waits()
+	assert.Equal(t, time.Duration(0), waits[0], "the queueing notice is a wait of zero")
+	for i, d := range waits {
+		assert.GreaterOrEqual(t, d, time.Duration(0), "record %d carries no elapsed duration", i)
+	}
 }
 
 func TestKeyedLockUncontendedNeitherBeatsNorLogs(t *testing.T) {

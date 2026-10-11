@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -38,9 +39,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// Bare `magus affected` (no target) is a usage error, not a help request: a target
 	// is required. Print a clear one-liner plus usage and exit non-zero, never silently.
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
-		fmt.Fprintln(os.Stderr, "")
-		affectedUsage()
+		affectedMissingTargetUsage()
 		return errSilent{exitCode: 2}
 	}
 	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -81,7 +80,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	}
 	spellFilter, targetStr := parseTarget(rawTarget)
 	parsed, perr := types.ParseTarget(targetStr)
-	hintCanonicalSpelling(parsed)
+	hintCanonicalSpelling(ctx, parsed)
 	if perr != nil {
 		return perr
 	}
@@ -100,7 +99,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			fmt.Fprintln(os.Stderr, "Extra args after -- are forwarded to spells that honor them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -114,7 +113,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return fmt.Errorf("magus affected: --step and --stdin are mutually exclusive")
 	}
 	if af.Step && !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
+		slog.ErrorContext(ctx, "--step requires an interactive terminal", attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 	if af.Step {
@@ -271,7 +270,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	tier, mode := m.CacheDescription()
 	sink.EmitCache(ctx, tier, mode)
 	if len(targets) == 0 {
-		slog.InfoContext(ctx, "affected: no projects affected", slog.String("target", target))
+		slog.With(attr.Component("affected")).InfoContext(ctx, "no projects affected", slog.String("target", target))
 		return nil
 	}
 
@@ -290,7 +289,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// which is a verdict on the change rather than a deferral, so it exits 0.
 	sized := gate.size(ctx, af.Base, af.NoRedundancyCheck)
 	if sized != nil {
-		fmt.Fprint(os.Stderr, renderSizing(target, *sized))
+		slog.InfoContext(ctx, renderSizing(target, *sized), attr.Notice(""), attr.Component("magus"))
 		if sized.Tier == types.RiskTrivial {
 			return nil
 		}
@@ -392,6 +391,12 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		return emitProjectNames(m, targets)
 	}
 	return nil
+}
+
+func affectedMissingTargetUsage() {
+	fmt.Fprintln(os.Stderr, "magus affected: a target is required (e.g. `"+hint.Affected.With("ci")+"`)")
+	fmt.Fprintln(os.Stderr, "")
+	affectedUsage()
 }
 
 func affectedUsage() {
@@ -690,7 +695,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if target == "" {
-		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
+		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`), run `%s` to list available targets",
 			hint.Affected.With("ci", "--plan"), hint.DescribeTargets)
 	}
 	target = canonicalTarget(target) // expand short aliases at the CLI edge, mirroring `magus run`
@@ -712,7 +717,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Use --stdin for a one-shot plan of proposed repo-relative paths before editing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -799,13 +804,13 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// Advice, once, where a person reads it. Both facts are about runner spend and
 	// runner death, neither of which the shard table shows.
 	if n := plan.Sufficient; n > 0 && n < len(plan.Shards) {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: %d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
+		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+			"%d shard(s) planned, %d finish just as fast; the longest single project bounds the makespan, and the rest each pay a runner's setup for nothing (cap with `--max-shards=%d`)",
 			len(plan.Shards), n, n))
 	}
 	if len(plan.OverBudget) > 0 {
-		slog.WarnContext(ctx, fmt.Sprintf(
-			"magus: shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
+		slog.With(attr.Component("magus")).WarnContext(ctx, fmt.Sprintf(
+			"shard(s) %s are predicted to exceed one runner's memory; a runner that runs out vanishes and reports \"cancelled\" with no diagnostics (a higher `--max-shards` splits them, unless one project exceeds the budget alone)",
 			strings.Join(plan.OverBudget, ", ")))
 	}
 
@@ -906,15 +911,15 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 // types.AffectedResult.UndeclaredBySeed for every other consumer.
 //
 // The message names the SEED PROJECTS and nothing per-changeset, which is what makes
-// it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
+// it dedupe: interactive.Hint keys on the whole text, so a file list would differ on
 // every request and churn a long-lived server's hint set instead of teaching once. The
 // files are already on screen where this is emitted (--impact and --explain both mark
 // each one), and `magus describe file` explains any of them in full.
-func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
+func noteUndeclaredSeeds(ctx context.Context, undeclaredBySeed map[string][]string) {
 	if len(undeclaredBySeed) == 0 {
 		return
 	}
-	interactive.Emit(os.Stderr, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
+	interactive.Hint(ctx, "["+string(types.UndeclaredSeedingFile)+"] "+undeclaredSeedNotice(undeclaredBySeed, false))
 }
 
 // noteUndeclaredSeedCost reports MGS1028 on the run that PAYS for it: `magus affected
@@ -1074,7 +1079,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "project's targets. Read-only - it runs nothing.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -1100,7 +1105,7 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 			undeclared[p.Path] = p.UndeclaredFiles
 		}
 	}
-	noteUndeclaredSeeds(undeclared)
+	noteUndeclaredSeeds(ctx, undeclared)
 
 	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
 	// changed code). These read the heavier knowledge store (a prior symbol index and,
@@ -1360,7 +1365,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	if err != nil {
 		return err
 	}
-	noteUndeclaredSeeds(r.UndeclaredBySeed)
+	noteUndeclaredSeeds(ctx, r.UndeclaredBySeed)
 
 	g, err := ws.Graph()
 	if err != nil {
@@ -1566,7 +1571,7 @@ func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, onl
 	for _, name := range only {
 		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
 		if !known[clean] {
-			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, hint.Ls)
+			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace, run `%s` to list them", name, hint.Ls)
 		}
 		want[clean] = true
 	}

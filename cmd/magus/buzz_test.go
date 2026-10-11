@@ -37,9 +37,7 @@ func TestBuzzCmd_UnusedImportWarnsOnStderrAndExitsClean(t *testing.T) {
 	path := filepath.Join(dir, "unused.buzz")
 	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
 
-	prevQuiet, prevSilent := global.quiet, global.silent
-	global.quiet, global.silent = false, false
-	t.Cleanup(func() { global.quiet, global.silent = prevQuiet, prevSilent })
+	useTextLogger(t)
 
 	var runErr error
 	stderr := captureStderr(t, func() {
@@ -63,8 +61,7 @@ func TestBuzzCmd_SilentSuppressesUnusedImportWarning(t *testing.T) {
 	path := filepath.Join(dir, "unused.buzz")
 	require.NoError(t, os.WriteFile(path, []byte("import \"fs\";\nvar x = 1;\n"), 0o644))
 
-	prevSilent := global.silent
-	t.Cleanup(func() { global.silent = prevSilent })
+	useTextLogger(t)
 
 	var runErr error
 	stderr := captureStderr(t, func() {
@@ -492,6 +489,9 @@ func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
 // Strict mode refuses a raising call at the top level, and the refusal names the form
 // that runs one, which an -e snippet takes as well as a file does.
 func TestBuzzCmd_TopLevelRaiseNamesTheMainForm(t *testing.T) {
+	// -s sets the process-global silent flag, which later tests in the package read.
+	saved := global
+	t.Cleanup(func() { global = saved })
 	var runErr error
 	captureStdout(t, func() {
 		runErr = buzzCmd(t.Context(), "", []string{"-s", "-e", `import "vcs"; final r = vcs\root();`})

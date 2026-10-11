@@ -81,6 +81,8 @@ type focusGrade struct {
 	Decision string // "", "advise", or "deny"
 	Reason   string
 	Context  string
+	// Why is the advisory's rationale, stored behind the ref shapeAdvice cites.
+	Why string
 	// Brief is the one-line repeat, for the sessions that read widely on purpose.
 	// Measured over 1,499 sessions: 95% of advisory bytes were same-session repeats.
 	Brief string
@@ -147,18 +149,22 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 		}
 		owner := focus.Owner(rel)
 		if leaseID != "" {
-			return focusGrade{Decision: "deny", Rel: rel, Reason: fmt.Sprintf(
-				"magus workspace: read inside the focus lease %s was given (%s). "+leaseActorClause("widen this focus")+"\n"+
-					"%s belongs to project %s, which is outside that focus: %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.",
-				leaseID, strings.Join(focus.Seeds, ", "), rel, owner, strings.Join(focus.Projects, ", "))}
+			return focusGrade{Decision: "deny", Rel: rel, Reason: denial{
+				Say: fmt.Sprintf("magus workspace: %s belongs to project %s, outside the focus lease %s was given (%s); "+leaseActorClause("widen this focus"),
+					rel, owner, leaseID, strings.Join(focus.Seeds, ", ")),
+				Why: fmt.Sprintf("That focus is %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
+					leaseActorWhy,
+					strings.Join(focus.Projects, ", ")),
+			}.full()}
 		}
 		return focusGrade{
 			Decision: "advise",
 			Rel:      rel,
-			Context: fmt.Sprintf(
-				"magus workspace: stay inside %s and what it depends on, or run `%s` to see what owns this path before you read further.\n"+
-					"%s belongs to project %s, which is outside this session's focus: %s, plus the workspace-root files every project resolves through. A sibling project is not an input to this work, so how it is written is not evidence about how this one should be.",
-				strings.Join(focus.Seeds, ", "), hint.DescribeFile.With(rel), rel, owner, strings.Join(focus.Projects, ", ")),
+			Context: fmt.Sprintf("magus workspace: %s belongs to project %s, outside this session's focus (%s); `%s` shows what owns it.",
+				rel, owner, strings.Join(focus.Seeds, ", "), hint.DescribeFile.With(rel)),
+			Why: fmt.Sprintf("The focus is %s and what each depends on, plus the workspace-root files every project resolves through. "+
+				"A sibling project is not an input to this work, so how it is written is not evidence about how this one should be.",
+				strings.Join(focus.Projects, ", ")),
 			Brief: fmt.Sprintf("magus workspace: %s is outside %s's focus (it belongs to %s).",
 				rel, strings.Join(focus.Seeds, ", "), owner),
 		}

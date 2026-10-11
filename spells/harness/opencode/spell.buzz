@@ -50,11 +50,20 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
     return opencode_entries();
 }
 
+// opencode_env_hint is what the printed config says about MAGUS_LOG_SILENT. opencode.json
+// documents no key for the environment of the commands the agent runs. The plugin API's
+// shell.env hook can set one, but that is the plugin's code, not config this harness
+// prints, and the shipped plugin does not set it.
+fun opencode_env_hint() > str {
+    return "OpenCode's config documents no setting for the environment of the commands its agent runs, so this config sets none: set MAGUS_LOG_SILENT=true in the environment you start OpenCode from yourself, so magus prints its quiet output there.";
+}
+
 fun opencode_mcp() > {str: any} {
     // User owns OpenCode MCP client settings. Magus points at docs only.
     // Guard remains the TypeScript plugin.
     return {
-        "hint": "Configure Magus MCP in the project's opencode.json under mcp.magus as a local server: type local, command [\"./magus\", \"mcp\"]. Magus does not write OpenCode MCP config.",
+        "hint": "Configure Magus MCP in the project's opencode.json under mcp.magus as a local server: type local, command [\"./magus\", \"mcp\"]. Magus does not write OpenCode MCP config.\n"
+            + opencode_env_hint(),
         "docs": "docs/guides/integrations/mcp.md",
     };
 }
@@ -189,6 +198,15 @@ test "harness_mcp points OpenCode at docs only" {
     assert\isTrue(mcp["url"] == null, "no url: the Go side reads that as stdio");
     assert\isTrue("{mcp["docs"]}".indexOf("mcp.md") != null, "docs pointer");
     assert\isTrue("{mcp["hint"]}".indexOf("does not write") != null, "no Magus write");
+}
+
+test "the printed config says opencode.json has no place for MAGUS_LOG_SILENT" {
+    assert\isTrue("{opencode_mcp()["hint"]}".indexOf(opencode_env_hint()) != null, "describe prints it");
+    assert\isTrue(opencode_env_hint().indexOf("MAGUS_LOG_SILENT=true") != null, "names the variable and its value");
+    foreach (prompt in opencode_prompts()) {
+        final key = (prompt["key"] as? [str]) ?? [<str>];
+        assert\isTrue(key.len() == 0 or key[0] != "env", "opencode.json gains no env key");
+    }
 }
 
 test "harness_* contract wrappers return the same pure helpers" {

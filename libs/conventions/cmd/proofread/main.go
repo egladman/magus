@@ -94,6 +94,7 @@ var subcommands = []subcommand{
 	{"agent-instructions-template", proofread.KindAgentInstructionsTemplate, "FILE...", "judge template bodies that render into a short and a full form"},
 	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
 	{"review-reply", proofread.KindReviewReply, "", "judge a review comment or a reply on stdin"},
+	{"message", proofread.KindMessage, "", "judge one message a program prints, on stdin"},
 	{"rules", "", "", "write every rule as the docs render it, as JSON"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
 }
@@ -282,13 +283,13 @@ func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts [
 	switch {
 	case kind == proofread.KindDocComment:
 		if len(paths) > 0 {
-			return nil, errors.New("symbols are read from stdin; a path needs the reference subcommand")
+			return nil, errors.New("a path needs the reference subcommand, since symbols are read from stdin")
 		}
 
 		return judgeSymbols(stdin, append(opts, proofread.WithDecisions(t.rules)))
 	case readsFiles(kind):
 		return judgeFiles(paths, kind, t, opts)
-	case kind == proofread.KindChangeDescription || kind == proofread.KindReviewReply:
+	case kind == proofread.KindChangeDescription || kind == proofread.KindReviewReply || kind == proofread.KindMessage:
 		if len(paths) > 0 {
 			return nil, fmt.Errorf("a %s is read from stdin, not from a path", kind)
 		}

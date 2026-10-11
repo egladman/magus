@@ -19,11 +19,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/file/record"
+	"github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/types"
@@ -35,7 +37,10 @@ import (
 // through takeRunLocks, touch READY, wait for the budget until AWAIT_FILE exists, write
 // WRITE_HOLDING and WRITE_BYTES while holding, hold HOLD_MS, release, write WRITE_AFTER.
 // RESULT, when set, receives "acquired" or the acquisition's error. EXIT, when set, is
-// the status it records and exits with.
+// the status it records and exits with. FORK_UNTIL, when set, first starts a copy of
+// this stage with its executable, argv and stdout, which is what a fork of it looks like
+// until it execs, holding stdout until the file FORK_UNTIL names exists; the stage waits
+// for it before exiting.
 func TestHelperPipeStage(t *testing.T) {
 	if os.Getenv("PIPETEST_HELPER") != "1" {
 		t.Skip("subprocess helper; not run directly")
@@ -44,6 +49,26 @@ func TestHelperPipeStage(t *testing.T) {
 	ms := func(k string) time.Duration {
 		n, _ := strconv.Atoi(env(k))
 		return time.Duration(n) * time.Millisecond
+	}
+	// Checked before FORK_UNTIL, which the copy inherits.
+	if release := env("FORK_HOLDS_UNTIL"); release != "" {
+		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+			if _, err := os.Stat(release); err == nil {
+				break
+			}
+		}
+		os.Exit(0)
+	}
+	awaitFork := func() {}
+	if release := env("FORK_UNTIL"); release != "" {
+		fork := exec.Command(os.Args[0])
+		fork.Args = slices.Clone(os.Args)
+		fork.Env = append(os.Environ(), "PIPETEST_FORK_HOLDS_UNTIL="+release)
+		fork.Stdout = os.Stdout
+		if err := fork.Start(); err != nil {
+			t.Fatalf("start the fork: %v", err)
+		}
+		awaitFork = func() { _ = fork.Wait() }
 	}
 	l := newProjectLocker(env("CACHE_DIR"), testWorkspaceRoot, withStdio(&ProcessStdio{Stdin: os.Stdin, Stdout: os.Stdout}))
 	if env("GATE") != "" {
@@ -86,6 +111,7 @@ func TestHelperPipeStage(t *testing.T) {
 	time.Sleep(ms("HOLD_MS"))
 	release()
 	_, _ = os.Stdout.WriteString(env("WRITE_AFTER"))
+	awaitFork()
 	if e := env("EXIT"); e != "" {
 		code, _ := strconv.Atoi(e)
 		writeExitRecord(l.pipeDir(), exitRecord{PID: os.Getpid(), Command: "helper", Status: code, Ended: time.Now()})
@@ -1123,7 +1149,7 @@ func TestPipeSettleReportsARedUpstreamOnDisjointProjects(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var notices bytes.Buffer
-	wantPipeUpstreamFailed(t, s.pipeline.settle(ctx, r, l.pipeDir(), &notices), 4, up.Process.Pid)
+	wantPipeUpstreamFailed(t, s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}), 4, up.Process.Pid)
 }
 
 // TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes: this stage never read its stdin,
@@ -1144,9 +1170,70 @@ func TestPipeSettleDrainsSoAnUpstreamStillWritingFinishes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var notices bytes.Buffer
-	if err := s.pipeline.settle(ctx, r, l.pipeDir(), &notices); err != nil || notices.Len() != 0 {
+	if err := s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}); err != nil || notices.Len() != 0 {
 		t.Fatalf("settle = %v, notices %q; want a green pipeline", err, notices.String())
 	}
+}
+
+// TestPipeForkPendingExecIsNoStage is `magus affected generate | magus run consume`,
+// where generate's target runs a command. Until it execs, generate's fork runs magus with
+// generate's argv and holds generate's stdout, but it is no stage and leaves no exit
+// status: counting one reported an upstream of unknown status on a green pipeline.
+func TestPipeForkPendingExecIsNoStage(t *testing.T) {
+	cacheDir := t.TempDir()
+	r, w := shellPipe(t)
+	ready, forkRelease := readyFile(t), filepath.Join(t.TempDir(), "fork-release")
+	// Registered first, so it runs after the stage is killed, if the test stops early.
+	t.Cleanup(func() { _ = os.WriteFile(forkRelease, nil, 0o644) })
+	up := pipeStage(t, cacheDir, map[string]string{"FORK_UNTIL": forkRelease, "READY": ready, "EXIT": "0"})
+	upstreamOf(t, up, w)
+	waitForFile(t, ready, 5*time.Second)
+
+	s := provedStdio(r)
+	if got := s.pipeline.all(); len(got) != 1 || got[0].pid != up.Process.Pid {
+		t.Fatalf("proven stages = %+v, want only pid %d", got, up.Process.Pid)
+	}
+	if err := os.WriteFile(forkRelease, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var notices bytes.Buffer
+	if err := s.pipeline.settle(ctx, r, newProjectLocker(cacheDir, testWorkspaceRoot).pipeDir(), pipeNotices{out: &notices}); err != nil || notices.Len() != 0 {
+		t.Fatalf("settle = %v, notices %q; want a green pipeline", err, notices.String())
+	}
+}
+
+// TestPipeNoticesStatusUnknown: the notice is a line of prose, or under -o jsonl a
+// run.notice record whose attrs name the stage, never free text on a parsed stream.
+func TestPipeNoticesStatusUnknown(t *testing.T) {
+	u := upstreamStage{pid: 4242, argv: []string{"magus", "affected", "generate"}}
+	var prose bytes.Buffer
+	pipeNotices{out: &prose}.statusUnknown(u)
+	if want := "magus: pid 4242 (magus affected generate), upstream of this run in a pipe, ended without leaving its exit status, so whether it failed is unknown.\n"; prose.String() != want {
+		t.Errorf("prose = %q, want %q", prose.String(), want)
+	}
+
+	var records, beside bytes.Buffer
+	pipeNotices{out: &beside, records: report.NewLineEncoder(&records)}.statusUnknown(u)
+	if beside.Len() != 0 {
+		t.Errorf("a record notice also wrote prose: %q", beside.String())
+	}
+	type notice struct {
+		Type  string         `json:"type"`
+		Level string         `json:"level"`
+		Attrs map[string]any `json:"attrs"`
+	}
+	var rec notice
+	if err := json.Unmarshal(records.Bytes(), &rec); err != nil {
+		t.Fatalf("record %q: %v", records.String(), err)
+	}
+	want := notice{
+		Type:  report.TypeNotice,
+		Level: "warn",
+		Attrs: map[string]any{"upstream_pid": float64(4242), "upstream_command": "magus affected generate"},
+	}
+	require.Equal(t, want, rec)
 }
 
 // TestPipeSettleCountsAVanishedUpstreamAsUnknown: a stage killed before it could record its
@@ -1168,7 +1255,7 @@ func TestPipeSettleCountsAVanishedUpstreamAsUnknown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	var notices bytes.Buffer
-	if err := s.pipeline.settle(ctx, r, l.pipeDir(), &notices); err != nil {
+	if err := s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: &notices}); err != nil {
 		t.Fatalf("settle = %v, want nil for an upstream whose status is unknown", err)
 	}
 	if want := fmt.Sprintf("pid %d (", up.Process.Pid); !strings.Contains(notices.String(), want) || !strings.Contains(notices.String(), "unknown") {
@@ -1192,7 +1279,7 @@ func TestPipeSettleHonorsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	err = s.pipeline.settle(ctx, r, l.pipeDir(), io.Discard)
+	err = s.pipeline.settle(ctx, r, l.pipeDir(), pipeNotices{out: io.Discard})
 	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 5*time.Second {
 		t.Fatalf("settle = %v after %s, want the context's error", err, time.Since(start))
 	}
@@ -1204,7 +1291,7 @@ func TestPipeSettleWithoutProofIsNil(t *testing.T) {
 		t.Fatalf("SettlePipeline without ProveUpstream = %v", err)
 	}
 	s := provedStdio(r)
-	if err := s.pipeline.settle(context.Background(), r, t.TempDir(), io.Discard); err != nil {
+	if err := s.pipeline.settle(context.Background(), r, t.TempDir(), pipeNotices{out: io.Discard}); err != nil {
 		t.Fatalf("settle with no magus upstream = %v", err)
 	}
 }

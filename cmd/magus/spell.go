@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/opencontainers/go-digest"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/oci"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
@@ -86,7 +88,7 @@ func spellBuild(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "against a published pin.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -172,7 +174,7 @@ func describeSpellContent(content oci.Content) (spellBuildResult, error) {
 func shippedSpellDir(name string) (string, error) {
 	dir, ok := spell.ShippedDir(name)
 	if !ok {
-		return "", fmt.Errorf("magus ships no spell %q; `magus spell ls %s` lists them", name, shippedSpellsPath)
+		return "", fmt.Errorf("magus ships no spell %q, `magus spell ls %s` lists them", name, shippedSpellsPath)
 	}
 	return dir, nil
 }
@@ -206,7 +208,7 @@ func spellPush(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "case the password is read from STDIN.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -298,7 +300,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "replace the built-in; pull never writes magus.yaml.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -322,7 +324,7 @@ func spellPull(ctx context.Context, root string, args []string) error {
 		if err := emitPull(opts, res); err != nil {
 			return err
 		}
-		fmt.Fprint(os.Stderr, next)
+		slog.InfoContext(ctx, strings.TrimSuffix(next, "\n"), attr.Notice(""))
 		return nil
 	}
 	ref, err := pullReference(root, pos[0])
@@ -428,7 +430,7 @@ func pullReference(root, arg string) (oci.Reference, error) {
 func workspaceSpells(root string) (string, config.SpellsConfig, error) {
 	wsRoot := resolveRootOrEmpty(root)
 	if wsRoot == "" {
-		return "", config.SpellsConfig{}, fmt.Errorf("no workspace here to read magus.yaml from; pass --root")
+		return "", config.SpellsConfig{}, fmt.Errorf("no workspace here to read magus.yaml from, pass --root")
 	}
 	cfg, err := config.LoadWithRoot("", wsRoot)
 	if err != nil {
@@ -465,7 +467,7 @@ func spellLock(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "spells.registries password resolves through the environment secret provider.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -600,7 +602,7 @@ func spellLs(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "release publishes for it, computed from this binary with no network.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -749,7 +751,7 @@ func spellVCS(ctx context.Context, root, dir string) (types.VCSDriver, error) {
 		return nil, err
 	}
 	if res.VCS == nil {
-		return nil, fmt.Errorf("%s is under no VCS; commit the spell to a repository first", dir)
+		return nil, fmt.Errorf("%s is under no VCS, commit the spell to a repository first", dir)
 	}
 	return res.VCS, nil
 }

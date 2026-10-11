@@ -161,7 +161,7 @@ func jobsPath(loc Location) (string, error) {
 	if base == "" {
 		var err error
 		if base, err = config.UserStateDir(); err != nil {
-			return "", fmt.Errorf("job: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+			return "", fmt.Errorf("job: resolve state dir, set XDG_STATE_HOME to a writable absolute path: %w", err)
 		}
 	}
 	dir, err := vcs.StateDir(base, "jobs", loc.Root)
@@ -258,8 +258,8 @@ func readOnly(row types.Job) error {
 	if lacks == nil {
 		return nil
 	}
-	return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, so it will not write that row."+
-		" Update magus, or run the command with the magus that wrote it",
+	return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, so it will not write that row:"+
+		" update magus, or run the command with the magus that wrote it",
 		row.ID, quoteAll(lacks), types.JobSchemaVersion)
 }
 
@@ -403,7 +403,7 @@ func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, r
 	entry := next.Entries[len(next.Entries)-1]
 	switch {
 	case !exists:
-		return fmt.Errorf("%w %q: there is nothing to enter", ErrUnknownJob, id)
+		return fmt.Errorf("%q: there is nothing to enter: %w", id, ErrUnknownJob)
 	case len(changedFields(prev, next)) > 0:
 		return fmt.Errorf("job: an entry declares nothing, and this write also changes %s", strings.Join(changedFields(prev, next), ", "))
 	case actor.Lease == id:
@@ -414,15 +414,15 @@ func authorizeEntry(actor Actor, id string, prev, next types.Job, exists bool, r
 		return fmt.Errorf("job: %s is %s, so its paths are free to write and there is nothing to enter", id, prev.State)
 	}
 	if _, ok := matching(prev.WritePaths, entry.Path); !ok {
-		return fmt.Errorf("job: %s is outside the write paths of %s (%s); a path the job does not own is widened into it, never entered",
+		return fmt.Errorf("job: %s is outside the write paths of %s (%s), a path the job does not own is widened into it, never entered",
 			entry.Path, id, strings.Join(prev.WritePaths, ", "))
 	}
 	if open, ok := OpenEntry(prev, entry.Path); ok {
-		return fmt.Errorf("job: %s already has an entry for %s, recorded at %s and not yet written; write it before entering again",
+		return fmt.Errorf("job: %s already has an entry for %s, recorded at %s and not yet written, write it before entering again",
 			id, open.Path, time.Unix(open.At, 0).UTC().Format(time.RFC3339))
 	}
 	if len(prev.Entries) >= MaxJobEntries {
-		return fmt.Errorf("job: %s has taken its %d entries; resume its holder to make the change, or end its lease with `magus job exit %s`",
+		return fmt.Errorf("job: %s has taken its %d entries, resume its holder to make the change, or end its lease with `magus job exit %s`",
 			id, MaxJobEntries, id)
 	}
 	return nil
@@ -885,11 +885,11 @@ func (s *Store) decode(raw []byte, f *jobsFile) error {
 		return err
 	}
 	if lacks := f.Unmet(types.JobSchema.Features()); lacks != nil {
-		return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks; update magus",
+		return fmt.Errorf("job: %s requires %s, which this magus (schema %d) lacks, update magus",
 			s.path, quoteAll(lacks), types.JobSchemaVersion)
 	}
 	if err := foldStoredNames(f.Jobs); err != nil {
-		return fmt.Errorf("job: %s: %w", s.path, err)
+		return fmt.Errorf("%s: %w", s.path, err)
 	}
 	return nil
 }
@@ -938,8 +938,8 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 			return err
 		}
 		if dropped.State.Terminal() && !force {
-			return fmt.Errorf("job: %s is %s, and that row is the record of what happened."+
-				" Delete it anyway with --force, or leave it where a later reader can find it",
+			return fmt.Errorf("job: %s is %s, and that row is the record of what happened:"+
+				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
 		if err := s.archive(*f); err != nil {

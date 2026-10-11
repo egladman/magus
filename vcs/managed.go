@@ -71,7 +71,7 @@ func WriteJudge(ctx context.Context, root string) stamp.Judge {
 func sectionBanner(path, text string, m managedMarkers, body string, j stamp.Judge) (string, error) {
 	spans, err := managedSpans(text, m)
 	if err != nil {
-		return "", fmt.Errorf("vcs: %s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	if len(spans) == 1 {
 		head, rest, _ := strings.Cut(text[spans[0].start:spans[0].end], "\n")
@@ -177,7 +177,7 @@ func managedSpans(text string, m managedMarkers) ([]span, error) {
 		endAt := indexAtLine(text, m.end, afterBegin)
 		nextBegin := indexAtLine(text, m.begin, afterBegin)
 		if endAt < 0 || (nextBegin >= 0 && nextBegin < endAt) {
-			return nil, fmt.Errorf("line %d: %q has no %q before the next begin marker or the end of the file; delete the torn section by hand and rerun",
+			return nil, fmt.Errorf("line %d: %q has no %q before the next begin marker or the end of the file, delete the torn section by hand and rerun",
 				strings.Count(text[:start], "\n")+1, m.begin, m.end)
 		}
 		stop := nextLineStart(text, endAt)
@@ -230,7 +230,7 @@ func removeManagedSection(path string, m managedMarkers, j stamp.Judge) (bool, e
 	text := string(data)
 	spans, err := managedSpans(text, m)
 	if err != nil {
-		return false, fmt.Errorf("vcs: %s: %w", path, err)
+		return false, fmt.Errorf("%s: %w", path, err)
 	}
 	if len(spans) == 0 {
 		return false, nil
@@ -269,7 +269,7 @@ func managedSectionPresent(path string, m managedMarkers) (bool, error) {
 	}
 	spans, err := managedSpans(string(data), m)
 	if err != nil {
-		return false, fmt.Errorf("vcs: %s: %w", path, err)
+		return false, fmt.Errorf("%s: %w", path, err)
 	}
 	return len(spans) > 0, nil
 }
@@ -385,7 +385,7 @@ func renderManagedFile(path, current string, m managedMarkers, body string, kind
 	}
 	next, err := replaceManagedSection(text, banner+body+m.end+"\n", m)
 	if err != nil {
-		return "", fmt.Errorf("vcs: %s: %w", path, err)
+		return "", fmt.Errorf("%s: %w", path, err)
 	}
 	if crlf {
 		next = strings.ReplaceAll(next, "\n", "\r\n")
@@ -407,7 +407,7 @@ func ensureShShebang(path, text string) (string, error) {
 	}
 	line, _, _ := strings.Cut(text, "\n")
 	if !slices.Contains(shInterpreters, shebangInterpreter(line)) {
-		return "", fmt.Errorf("vcs: hook %s runs %q, not a POSIX shell, and magus appends sh to its hooks; call that script from a sh hook instead", path, line)
+		return "", fmt.Errorf("vcs: hook %s runs %q, not a POSIX shell, and magus appends sh to its hooks, call that script from a sh hook instead", path, line)
 	}
 	return text, nil
 }

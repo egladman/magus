@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -400,6 +401,39 @@ func TestRefuseUngradedHoldsAWritingJobToACheckOrAGoal(t *testing.T) {
 	_, err := ForkMerge(t.Context(), NewStore(tmpLoc(t, t.TempDir())), "w",
 		func(u *types.Job) { u.WritePaths = []string{"a.go"} }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "declares neither a check nor a goal", "the tool's fork and job.put hold a new row to it")
+}
+
+// A forked row is read-only or handed write paths: an empty write set bounds nothing, and
+// a check does not stand in for one.
+func TestRefuseUnscopedHoldsANewRowToABoundary(t *testing.T) {
+	t.Parallel()
+
+	check := types.LeaseCheck{Target: "test", Project: "."}
+	script := types.LeaseCheck{Script: "probes/callers.buzz"}
+	for name, tc := range map[string]struct {
+		row     types.Job
+		refused bool
+	}{
+		"no write paths and not read-only": {row: types.Job{ID: "s"}, refused: true},
+		"a check and no write paths":       {row: types.Job{ID: "s", Check: &check}, refused: true},
+		"a read-only job":                  {row: types.Job{ID: "s", ReadOnly: true}},
+		"a read-only job with a script":    {row: types.Job{ID: "s", ReadOnly: true, Check: &script}},
+		"a writing job":                    {row: types.Job{ID: "w", WritePaths: []string{"a.go"}, Check: &check}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			err := RefuseUnscoped(tc.row)
+			if !tc.refused {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "s names no write paths and is not read-only")
+			assert.Contains(t, err.Error(), `{"check": {"script": "<probe>.buzz"}}`, "the refusal names the check a scout passes by")
+			assert.Contains(t, err.Error(), "`"+hint.JobExit.With("s")+"`", "and how a scout without one ends")
+		})
+	}
 }
 
 // appliedRow seeds w as a job a worker took, holding write and checked by forkCheck, in a

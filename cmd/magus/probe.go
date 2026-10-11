@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
@@ -183,16 +185,16 @@ func evaluateProbes(ctx context.Context, statusOf statusFunc, mcp config.MCP, ki
 // exactly when the tools are unreachable even if the server itself answers.
 func runProbes(ctx context.Context, socket string, mcp config.MCP, kinds []probeKind, root string) error {
 	results := evaluateProbes(ctx, serverSnapshot(socket), mcp, kinds, root)
-	if renderProbeResults(os.Stdout, os.Stderr, results) {
+	if renderProbeResults(ctx, os.Stdout, results) {
 		return nil
 	}
 	return errSilent{exitCode: 1}
 }
 
-// renderProbeResults writes each result ("ok: <reason>" to stdout, the reason to stderr on
-// failure) and returns whether all passed. With more than one probe each line is prefixed
-// with its kind so a combined `--probe=liveness,mcp` shows which dimension failed.
-func renderProbeResults(stdout, stderr io.Writer, results []probeResult) (allOK bool) {
+// renderProbeResults writes each result ("ok: <reason>" to stdout, the reason as an error
+// record on failure) and returns whether all passed. With more than one probe each line is
+// prefixed with its kind so a combined `--probe=liveness,mcp` shows which dimension failed.
+func renderProbeResults(ctx context.Context, stdout io.Writer, results []probeResult) (allOK bool) {
 	allOK = true
 	for _, r := range results {
 		label := ""
@@ -202,7 +204,7 @@ func renderProbeResults(stdout, stderr io.Writer, results []probeResult) (allOK 
 		if r.ok {
 			fmt.Fprintln(stdout, "ok:", label+r.reason)
 		} else {
-			fmt.Fprintln(stderr, label+r.reason)
+			slog.ErrorContext(ctx, label+r.reason, attr.Notice(""))
 			allOK = false
 		}
 	}
@@ -236,7 +238,7 @@ type statusFunc func(ctx context.Context) (*types.StatusOutput, error)
 // errNotServer is a health probe that reached a per-process proc server. It answers a
 // socket and loads no workspace, so reporting its empty workspace list as "no
 // workspaces loaded" would be a misleading readiness verdict.
-var errNotServer = errors.New("a per-process pool answered, not the server; the probes ask `" + hint.ServerStart.String() + "`")
+var errNotServer = errors.New("a per-process pool answered, not the server, the probes ask `" + hint.ServerStart.String() + "`")
 
 // serverSnapshot asks the server for a live status snapshot: at socket when one is named,
 // otherwise at the server's own address (resolveServerAddr).

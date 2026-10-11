@@ -185,27 +185,43 @@ func init() {
 	}
 }
 
-func TestExecPending(t *testing.T) {
+func TestWriterExec(t *testing.T) {
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
+	r, w := blockingPipe(t)
+	writing := func(cmd *exec.Cmd) *exec.Cmd {
+		cmd.Stdout = w
+		return start(t, cmd)
+	}
 	twin := exec.Command(exe)
 	twin.Args = slices.Clone(os.Args)
 	twin.Env = append(os.Environ(), "PIPEPEER_FORK_TWIN=1")
-	start(t, twin)
+	writing(twin)
 	// The same executable with other arguments has exec'd a command of its own.
-	other := start(t, helper(t, exe))
-	sleeper := start(t, exec.Command("sleep", "5"))
-	time.Sleep(100 * time.Millisecond)
-	if !ExecPending(twin.Process.Pid) {
-		t.Errorf("ExecPending(child with its parent's executable and argv) = false")
-	}
-	if ExecPending(other.Process.Pid) {
-		t.Errorf("ExecPending(child with its parent's executable and its own argv) = true")
-	}
-	if ExecPending(sleeper.Process.Pid) {
-		t.Errorf("ExecPending(sleep) = true")
+	other := writing(helper(t, exe))
+	// Listed as a writer but no longer holding the pipe, like a launcher that re-ran this
+	// executable with its stdout on another pipe.
+	notWriting := start(t, helper(t, exe))
+	sleeper := writing(exec.Command("sleep", "5"))
+	p := readEnd(t, r)
+
+	for _, tc := range []struct {
+		name     string
+		pid      int
+		want     ExecState
+		wantArgv []string
+	}{
+		{"a fork with its parent's executable and argv", twin.Process.Pid, ExecPending, nil},
+		{"this executable with its own argv", other.Process.Pid, ExecSame, other.Args},
+		{"this executable without the pipe", notWriting.Process.Pid, ExecOther, nil},
+		{"another executable", sleeper.Process.Pid, ExecOther, nil},
+	} {
+		argv, state := p.WriterExec(tc.pid)
+		if state != tc.want || !slices.Equal(argv, tc.wantArgv) {
+			t.Errorf("WriterExec(%s) = %q, %d; want %q, %d", tc.name, argv, state, tc.wantArgv, tc.want)
+		}
 	}
 }
 

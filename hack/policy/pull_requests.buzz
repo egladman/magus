@@ -1815,6 +1815,15 @@ test "an unreadable description is judged from the whole line for credit and typ
     std\assert(judged(programs, line: long, files: {<str: str>}).reason.indexOf("the command runs") != null, message: "a long line");
 }
 
+test "an unreadable description that names the Claude Code harness is not credit" {
+    final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
+    final line = "gh pr create --title \"feat: add a Claude Code mod\" --body-file /elsewhere/pr.md";
+    final reason = judged(programs, line: line, files: {<str: str>}).reason;
+    std\assert(reason.indexOf("[attribution]") == null, message: reason);
+    final credited = "gh pr create --title \"feat: add a Claude Code mod\" --body \"$BODY by Claude\"";
+    std\assert(judged(programs, line: credited, files: {<str: str>}).reason.indexOf("[attribution]") != null, message: "credit beside the harness name");
+}
+
 test "other commands and a line that only mentions gh pr create stay silent" {
     foreach (argv in [
         ["rg", "gh pr create --title"],

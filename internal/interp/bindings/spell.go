@@ -7,6 +7,7 @@ import (
 	"io/fs"
 
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	run "github.com/egladman/magus/internal/proc/run"
 	"log/slog"
 	"maps"
@@ -139,7 +140,7 @@ func versionProber(ctx context.Context, probe spells.Command, dir string) (strin
 			tail = causeLine(res.Stdout)
 		}
 		if tail != "" {
-			return "", fmt.Errorf("version probe %s %v in %s: %w: %s", probe.Bin, probe.Args, dir, err, tail)
+			return "", fmt.Errorf("version probe %s %v in %s: %s: %w", probe.Bin, probe.Args, dir, tail, err)
 		}
 		return "", fmt.Errorf("version probe %s %v in %s: %w", probe.Bin, probe.Args, dir, err)
 	}
@@ -452,16 +453,16 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		return err
 	}
 	if !found {
-		slog.DebugContext(ctx, "spell: nothing to install (no manifest with a lockfile)", "dir", dir)
+		slog.With(attr.Component("spell")).DebugContext(ctx, "nothing to install (no manifest with a lockfile)", "dir", dir)
 		return nil
 	}
 	body := func(ctx context.Context) error {
 		switch from, found, err := spell.SeedInstall(ctx, choice, dir); {
 		case err != nil:
-			slog.WarnContext(ctx, "magus: could not seed the dependency tree from another checkout; installing without it",
+			slog.With(attr.Component("magus")).WarnContext(ctx, "could not seed the dependency tree from another checkout; installing without it",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("err", err.Error()))
 		case found:
-			slog.InfoContext(ctx, "magus: seeded the dependency tree from another checkout",
+			slog.With(attr.Component("magus")).InfoContext(ctx, "seeded the dependency tree from another checkout",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("from", from))
 		}
 		_, err := runCommand(ctx, spells.Op{Command: choice.Install.Command}, opts)
@@ -477,10 +478,10 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	ops, tools, ignoreDirs := spec.Ops, spec.Tools, spec.IgnoreDirs
 	op, ok := ops[req.Target]
 	if !ok {
-		slog.DebugContext(ctx, "spell: target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
+		slog.With(attr.Component("spell")).DebugContext(ctx, "target not provided by this spell (fan-out skip)", "target", req.Target, "dir", req.Dir)
 		return noResult()
 	}
-	slog.DebugContext(ctx, "spell: dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
+	slog.With(attr.Component("spell")).DebugContext(ctx, "dispatch command", "target", req.Target, "cmd", op.Bin, "dir", req.Dir)
 	// Ahead of every other setup step: a tool that cannot run makes the rest moot,
 	// and the point is to fail with what is actually wrong rather than let the op
 	// fork and report a build failure for a project with nothing wrong with it.
@@ -525,7 +526,7 @@ func dispatchOp(ctx context.Context, spec spells.Descriptor, req spells.InvokeRe
 	// a half-merged index where ingestion reads.
 	tmp, err := os.MkdirTemp(filepath.Dir(indexPath), "."+filepath.Base(indexPath)+"-envs-")
 	if err != nil {
-		return nil, fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return nil, fmt.Errorf("prepare symbol index dir: %w", err)
 	}
 	defer os.RemoveAll(tmp)
 	dests := make([]string, len(envs))
@@ -575,7 +576,7 @@ func runSymbolIndexer(ctx context.Context, spellName string, op spells.Op, opts 
 	// spec.SymbolIndexer in step with op.Kind, which only Decode guarantees.
 	switch _, err := os.Stat(dest); {
 	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s; it must write to the path magus passes in %s",
+		return fmt.Errorf("spell %q declares a symbol indexer, but %q exited 0 and wrote no index to %s, it must write to the path magus passes in %s",
 			spellName, op.Bin, dest, symbols.IndexEnvVar)
 	case err != nil:
 		return fmt.Errorf("spell %q symbol indexer: reading the index %q wrote: %w", spellName, op.Bin, err)
@@ -612,7 +613,7 @@ func formatEnv(env map[string]string) string {
 func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]string) (map[string]string, error) {
 	resolver := secret.ResolverFromContext(ctx)
 	if resolver == nil {
-		return nil, fmt.Errorf("spell: op %q declares secrets but no secret resolver is on this run", opName)
+		return nil, fmt.Errorf("op %q declares secrets but no secret resolver is on this run", opName)
 	}
 	env := make(map[string]string, len(base)+len(refs))
 	maps.Copy(env, base)
@@ -623,11 +624,11 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 	slices.Sort(names)
 	for _, name := range names {
 		if _, exists := env[name]; exists {
-			return nil, fmt.Errorf("spell: op %q secret env %q collides with env already set for this op", opName, name)
+			return nil, fmt.Errorf("op %q secret env %q collides with env already set for this op", opName, name)
 		}
 		v, err := resolver.Read(ctx, refs[name])
 		if err != nil {
-			return nil, fmt.Errorf("spell: op %q secret %q: %w", opName, name, err)
+			return nil, fmt.Errorf("op %q secret %q: %w", opName, name, err)
 		}
 		// Reveal where the credential crosses into a child process's environment, which
 		// is the boundary Command.secrets declared it for.
@@ -652,19 +653,19 @@ func resolveSecretEnv(ctx context.Context, opName string, refs, base map[string]
 func symbolIndexEnv(ctx context.Context, projectDir, op string) (string, error) {
 	c := cache.FromContext(ctx)
 	if c == nil {
-		return "", fmt.Errorf("spell: a symbol indexer must run as a magus target so its index lands in the cache")
+		return "", fmt.Errorf("a symbol indexer must run as a magus target so its index lands in the cache")
 	}
 	abs := projectDir
 	if !filepath.IsAbs(abs) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			return "", fmt.Errorf("spell: resolve symbol index dir: %w", err)
+			return "", fmt.Errorf("resolve symbol index dir: %w", err)
 		}
 		abs = filepath.Join(cwd, abs)
 	}
 	path := symbols.IndexPath(c.Dir(), abs, op)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("spell: prepare symbol index dir: %w", err)
+		return "", fmt.Errorf("prepare symbol index dir: %w", err)
 	}
 	return path, nil
 }
@@ -853,9 +854,9 @@ func unknownSpellMessage(name string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no spell %q to import as \"magus/spell/%s\"", name, name)
 	if s := suggestSpellName(name); s != "" {
-		fmt.Fprintf(&b, "; did you mean %q (import \"magus/spell/%s\")", s, s)
+		fmt.Fprintf(&b, ", did you mean %q (import \"magus/spell/%s\")", s, s)
 	}
-	fmt.Fprintf(&b, "\nbuilt-in spells: %s", strings.Join(builtinSpellHandles(), ", "))
+	fmt.Fprintf(&b, " (built-in spells: %s)", strings.Join(builtinSpellHandles(), ", "))
 	return b.String()
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -121,7 +123,7 @@ func configMCPConnectorCreate(args []string) error {
 		fmt.Fprintln(os.Stderr, "later; rotate by creating a new token. A running server accepts it immediately.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -136,12 +138,10 @@ func configMCPConnectorCreate(args []string) error {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
 	printMinted("magus config mcp connector create", secret, rec)
-	fmt.Fprintln(os.Stderr, "The token was printed above (stdout). Send it as a header:")
-	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
+	slog.Info("The token was printed above (stdout). Send it as a header:\n  Authorization: Bearer <token>", attr.Notice(""))
 	// The two scopes reach disjoint endpoints, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
-	fmt.Fprintln(os.Stderr, "This token reaches /mcp only. It is REJECTED by the console; mint a console")
-	fmt.Fprintln(os.Stderr, "credential with `"+hint.ConfigConsoleTokenCreate.String()+"`.")
+	slog.Info("This token reaches /mcp only. It is REJECTED by the console; mint a console\ncredential with `"+hint.ConfigConsoleTokenCreate.String()+"`.", attr.Notice(""))
 	return nil
 }
 
@@ -168,7 +168,7 @@ func tokenList(cmd string, args []string) error {
 		return err
 	}
 	if len(toks) == 0 {
-		fmt.Fprintln(os.Stderr, "no stored tokens; mint one with `"+hint.ConfigConsoleTokenCreate.String()+"` or `"+hint.ConfigMCPConnectorCreate.String()+"`")
+		slog.Info("no stored tokens; mint one with `"+hint.ConfigConsoleTokenCreate.String()+"` or `"+hint.ConfigMCPConnectorCreate.String()+"`", attr.Notice(""))
 		return nil
 	}
 	return tokenTable(toks)
@@ -200,7 +200,7 @@ func tokenRevoke(cmd string, args []string) error {
 	if err != nil {
 		return fmt.Errorf("magus %s: %w", cmd, err)
 	}
-	fmt.Fprintf(os.Stderr, "magus %s: removed %q (id %s, %s)\n", cmd, removed.Name, removed.ID, removed.Grant)
+	slog.Info(fmt.Sprintf("removed %q (id %s, %s)", removed.Name, removed.ID, removed.Grant), attr.Notice(""), attr.Component("magus "+cmd))
 	return nil
 }
 
@@ -287,17 +287,16 @@ func auditMint(action string, rec trail.MintRecord) {
 			return
 		}
 	}
-	fmt.Fprintln(os.Stderr, "note: no magus workspace here, so this mint is recorded in no activity trail")
+	slog.Info("no magus workspace here, so this mint is recorded in no activity trail", attr.Notice("note"))
 }
 
 // printMinted writes a freshly minted token: the secret alone on stdout, so `... > secret.txt`
 // or `$(...)` captures exactly it, and everything else on stderr.
 func printMinted(cmd string, secret string, rec auth.Token) {
 	fmt.Println(secret)
-	fmt.Fprintf(os.Stderr, "\n%s: created %q (id %s, grant %s)\n", cmd, rec.Name, rec.ID, rec.Grant)
-	fmt.Fprintf(os.Stderr, "Expires: %s\n", rec.Expires.Format(time.RFC3339))
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
+	slog.Info(fmt.Sprintf("created %q (id %s, grant %s)", rec.Name, rec.ID, rec.Grant),
+		attr.Notice(""), attr.Component(cmd), attr.Why("Expires: "+rec.Expires.Format(time.RFC3339)))
+	slog.Info("This secret is shown once and cannot be retrieved later. Store it now.", attr.Notice(""))
 }
 
 // tokenTable prints stored tokens: never a secret or a hash, only what identifies each. The

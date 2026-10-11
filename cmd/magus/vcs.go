@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -17,6 +18,8 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
@@ -248,7 +251,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: no VCS resolved for this workspace: %w", err)
 	}
 	if res.VCS == nil {
-		return errors.New("vcs resolve: version control is disabled for this workspace; resolve this merge by hand")
+		return errors.New("vcs resolve: version control is disabled for this workspace, resolve this merge by hand")
 	}
 
 	if rf.Against != "" {
@@ -344,7 +347,7 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		return nil, fmt.Errorf("vcs resolve: read tree status: %w", err)
 	}
 	if len(dirty) > 0 {
-		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted; commit or stash them first so backing the merge out cannot lose them", len(dirty))
+		return nil, fmt.Errorf("vcs resolve: --against needs a clean tree, and %d path(s) are uncommitted, commit or stash them first so backing the merge out cannot lose them", len(dirty))
 	}
 	// The person resolving, as the box knows them: the merge is theirs to conclude.
 	if err := res.VCS.StartMerge(ctx, root, ref, types.Person{}); err != nil {
@@ -358,7 +361,8 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 		if err := res.VCS.AbortMerge(ctx, root); err != nil {
 			// Reported, never swallowed: the tree is NOT as this dry run found it, and a
 			// caller told "nothing was touched" would go on to do something else in it.
-			fmt.Fprintf(os.Stderr, "vcs resolve: could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort): %v\n", err)
+			slog.ErrorContext(ctx, "could not back out the merge --dry-run started; the tree still has it in progress (git merge --abort)",
+				attr.Notice(""), attr.Component("vcs resolve"), attr.Error(err))
 		}
 	}, nil
 }
@@ -379,15 +383,15 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	if err := driver.RemoveConflicts(ctx, m.Root(), plan.Gone); err != nil {
-		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "the conflict markers were already cleared"))
+		return fmt.Errorf("vcs resolve, %s: %w", resolveTreeState(plan, "the conflict markers were already cleared"), err)
 	}
 	if staleDecls {
 		fmt.Println("vcs resolve: not regenerating - the magusfile is still mid-merge, and a " +
 			"generator it changes would produce bytes matching neither side. Resolve the " +
 			"magusfile, then `" + hint.Run.With("generate:rw") + "` to finish.")
 	} else if err := runRebuildTargets(ctx, root, rc, plan.Rebuild); err != nil {
-		return fmt.Errorf("vcs resolve: regenerate: %w\n%s", err, resolveTreeState(plan,
-			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"))
+		return fmt.Errorf("vcs resolve, %s: regenerate: %w", resolveTreeState(plan,
+			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"), err)
 	}
 	// The registration is derived from the declared outputs, so a conflict in the file
 	// holding it is settled by re-deriving. First point the file has no markers.
@@ -403,7 +407,7 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	// a file the rename had legitimately removed. filterStageable splits those out first.
 	staged, dropped, err := stagePaths(ctx, m.Root(), driver, settled)
 	if err != nil {
-		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "regeneration completed"))
+		return fmt.Errorf("vcs resolve, %s: %w", resolveTreeState(plan, "regeneration completed"), err)
 	}
 	fmt.Printf("\nrecorded %d path(s); review before continuing: %s\n", len(staged), driver.ReviewCommand())
 	// Named, never silent: a path magus settled and could not record is one the caller has
@@ -453,9 +457,9 @@ func committedMagusfiles(ctx context.Context, root string) map[string]string {
 
 // resolveTreeState describes how far the resolve got, for an error message.
 func resolveTreeState(plan settle.Plan, reached string) string {
-	return fmt.Sprintf("the working tree has been modified: %s. "+
-		"To start over, abort the merge (`git rebase --abort` or `git merge --abort`); "+
-		"to inspect it, `git status` now shows %d kept and %d removed path(s).",
+	return fmt.Sprintf("the working tree has been modified (%s), "+
+		"to start over abort the merge (`git rebase --abort` or `git merge --abort`), "+
+		"to inspect it `git status` now shows %d kept and %d removed path(s)",
 		reached, len(plan.Keep)+len(plan.Rederive), len(plan.Gone))
 }
 
@@ -514,7 +518,7 @@ func unresolvedError(plan settle.Plan) error {
 	if len(plan.Manual) == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.Manual))
+	return fmt.Errorf("%d conflict(s) still need you, resolve them, then `"+hint.VCSAdd.String()+"` and continue", len(plan.Manual))
 }
 
 // vcsResolveHook is `magus vcs resolve --hook <name>`, the settle hooks' half of the
@@ -539,11 +543,11 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 	// most commits are not merge-shaped and load nothing.
 	wsRoot, err := magus.FindRoot(root)
 	if err != nil {
-		return settleFailed(hook, vcs.HookOperation{}, settle.Outcome{}, err)
+		return settleFailed(ctx, hook, vcs.HookOperation{}, settle.Outcome{}, err)
 	}
 	op, ok, err := vcs.GitHookOperation(ctx, wsRoot, vcs.HookEvent{Hook: hook, Args: args, IndexFile: hookIndexFile()})
 	if err != nil {
-		return settleFailed(hook, op, settle.Outcome{}, err)
+		return settleFailed(ctx, hook, op, settle.Outcome{}, err)
 	}
 	if !ok || len(op.Changed) == 0 {
 		return nil
@@ -552,7 +556,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 		// The pre-merge-commit stop below leads to a `git commit` whose pre-commit hook
 		// lands here again with the very tree that was just settled.
 		if settled, err := vcs.HookTreeSettled(ctx, wsRoot, op); err != nil {
-			return settleFailed(hook, op, settle.Outcome{}, err)
+			return settleFailed(ctx, hook, op, settle.Outcome{}, err)
 		} else if settled {
 			return nil
 		}
@@ -560,17 +564,17 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 
 	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
 	if err != nil {
-		return settleFailed(hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
+		return settleFailed(ctx, hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
 	}
-	run := func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }
+	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
 	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
 	if err != nil {
-		return settleFailed(hook, op, out, err)
+		return settleFailed(ctx, hook, op, out, err)
 	}
 	if len(out.Ran) == 0 {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, out.Notice(hook, settle.FoldCommand(ctx, m)))
+	slog.InfoContext(ctx, out.Notice(hook, settle.FoldCommand(ctx, m)), attr.Notice(""))
 	if hook == vcs.HookPreMergeCommit && len(out.Staged) > 0 {
 		return errSilent{exitCode: 1}
 	}
@@ -630,17 +634,20 @@ func hookIndexFile() string {
 // settleFailed prints what did not happen and the command that does it, then fails
 // the hook. A commit git has not made yet is stopped by that failure; one it has made
 // carries stale output, and the line says so.
-func settleFailed(hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
+func settleFailed(ctx context.Context, hook string, op vcs.HookOperation, out settle.Outcome, err error) error {
 	regenerate := hint.VCSResolve.With("--hook", hook)
 	if len(out.Ran) > 0 {
 		regenerate = out.Command()
 	}
-	fmt.Fprintf(os.Stderr, "magus: could not regenerate after this %s: %v\n", cmp.Or(op.Kind, "operation"), err)
+	slog.ErrorContext(ctx, "could not regenerate after this "+cmp.Or(op.Kind, "operation"),
+		attr.Notice(""), attr.Component("magus"), attr.Error(err))
 	switch {
 	case op.CommitPending:
-		fmt.Fprintf(os.Stderr, "magus: the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)\n", regenerate)
+		slog.ErrorContext(ctx, fmt.Sprintf("the commit is stopped; regenerate with `%s`, stage the result, and commit again (`git commit --no-verify` commits without it, and the output stays stale)", regenerate),
+			attr.Notice(""), attr.Component("magus"))
 	case op.Kind != "":
-		fmt.Fprintf(os.Stderr, "magus: HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`\n", regenerate)
+		slog.ErrorContext(ctx, fmt.Sprintf("HEAD carries stale generated output; regenerate with `%s`, then `git commit --amend --no-edit`", regenerate),
+			attr.Notice(""), attr.Component("magus"))
 	}
 	return errSilent{exitCode: 1}
 }
@@ -937,7 +944,7 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 	// reports every path as "outside the workspace at " with nothing after "at", which
 	// blames the argument for a mistake it did not make.
 	if root == "" {
-		return nil, fmt.Errorf("vcs add: no workspace root resolved; cannot place %q", paths[0])
+		return nil, fmt.Errorf("vcs add: no workspace root resolved, cannot place %q", paths[0])
 	}
 	cwd, err := os.Getwd()
 	if err != nil {

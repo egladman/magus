@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // The end-of-run failure prompt: the failures a run pinned are already on
@@ -201,11 +203,11 @@ func promptFailures(ctx context.Context, root string, h *cache.PrettyHandler) er
 		switch action {
 		case actionRerun:
 			if err := rerunStepped(ctx, root, item); err != nil {
-				fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+				slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			}
 		case actionOutput:
 			if err := showOutput(ctx, root, item); err != nil {
-				fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+				slog.ErrorContext(ctx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 			}
 		}
 	}
@@ -230,6 +232,7 @@ func runFailurePrompt(ctx context.Context, h failureBand, selected *int) (failur
 		_ = in.Close()
 	}()
 
+	// The prompt draws on the terminal itself, as the band does.
 	if err := showHint(hint, os.Stderr); err != nil {
 		return actionNone, cache.Failure{}, err
 	}
@@ -397,6 +400,7 @@ func copyFailure(f cache.Failure) {
 	if raw, err := os.ReadFile(f.LogPath); err == nil {
 		text = string(raw) // the WHOLE log, not the tail the band happens to show
 	}
+	// An OSC 52 escape for the terminal, not text for a reader.
 	n, err := tty.Copy(os.Stderr, text)
 	msg := fmt.Sprintf("copied %d bytes of %s %s to the clipboard", n, f.Project, f.Target)
 	if err != nil || n == 0 {
@@ -459,7 +463,7 @@ func rerunStepped(ctx context.Context, root string, f cache.Failure) error {
 		args = append(args, f.Project)
 	}
 	args = append(args, "--step")
-	fmt.Fprintf(os.Stderr, "\n-> magus run %s --step\n", strings.Join(args[:len(args)-1], " "))
+	slog.InfoContext(ctx, fmt.Sprintf("\n-> magus run %s --step", strings.Join(args[:len(args)-1], " ")), attr.Notice(""))
 	return runTarget(ctx, root, runConfig{}, args)
 }
 
@@ -473,7 +477,7 @@ func rerunStepped(ctx context.Context, root string, f cache.Failure) error {
 // still on screen underneath it.
 func showOutput(ctx context.Context, root string, f cache.Failure) error {
 	if f.OutputRef == "" {
-		return fmt.Errorf("no captured output for %s (the run predates output capture, or none was recorded); rerun it to capture one", f.Target)
+		return fmt.Errorf("no captured output for %s (the run predates output capture, or none was recorded), rerun it to capture one", f.Target)
 	}
 	return queryOutputRef(ctx, root, f.OutputRef, outputRefOpts{})
 }

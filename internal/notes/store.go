@@ -329,14 +329,14 @@ func sharedDir(root, declared string) (string, error) {
 	}
 	clean := filepath.Clean(declared)
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("notes: %s %q escapes the workspace; a note outside the checkout is not shared with anyone, so use %s for that", ScopeShared.ConfigKey(), declared, ScopePrivate.ConfigKey())
+		return "", fmt.Errorf("notes: %s %q escapes the workspace, a note outside the checkout is not shared with anyone, so use %s for that", ScopeShared.ConfigKey(), declared, ScopePrivate.ConfigKey())
 	}
 	// The workspace root itself is not a notes store. Allowing it would make every
 	// markdown file in the repo a note (so README.md reports as a malformed one) and,
 	// worse, would make the agent guard treat every path under the root as protected,
 	// one config line turning a targeted rule into a workspace-wide deny.
 	if clean == "." {
-		return "", fmt.Errorf("notes: %s %q is the workspace root; name a directory inside it", ScopeShared.ConfigKey(), declared)
+		return "", fmt.Errorf("notes: %s %q is the workspace root, name a directory inside it", ScopeShared.ConfigKey(), declared)
 	}
 	dir := filepath.Join(root, clean)
 	// Lexical checks alone are not containment: `docs/team/notes` can be a symlink out of
@@ -349,7 +349,7 @@ func sharedDir(root, declared string) (string, error) {
 			realRoot = root
 		}
 		if rel, err := filepath.Rel(realRoot, real); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", fmt.Errorf("notes: %s %q resolves outside the workspace; use %s for a location that is not committed", ScopeShared.ConfigKey(), declared, ScopePrivate.ConfigKey())
+			return "", fmt.Errorf("notes: %s %q resolves outside the workspace, use %s for a location that is not committed", ScopeShared.ConfigKey(), declared, ScopePrivate.ConfigKey())
 		}
 	}
 	return dir, nil
@@ -413,7 +413,7 @@ func validateBody(n Note) error {
 		return errors.New("notes: a note needs a title")
 	}
 	if len(n.Anchors) == 0 {
-		return errors.New("notes: a note needs at least one anchor; an unanchored note is a diary entry, not workspace knowledge that anyone will find again")
+		return errors.New("notes: a note needs at least one anchor, an unanchored note is a diary entry, not workspace knowledge that anyone will find again")
 	}
 	for _, a := range n.Anchors {
 		switch a.Kind {
@@ -429,7 +429,7 @@ func validateBody(n Note) error {
 			return fmt.Errorf("notes: anchor target %q must be a single line", target)
 		}
 		if a.Kind == AnchorSymbol && strings.HasPrefix(target, scipLocalPrefix) {
-			return fmt.Errorf("notes: anchor target %q is a SCIP local symbol, which is scoped to one index and cannot be resolved later; anchor the enclosing function or the file instead", target)
+			return fmt.Errorf("notes: anchor target %q is a SCIP local symbol, which is scoped to one index and cannot be resolved later, anchor the enclosing function or the file instead", target)
 		}
 	}
 	return nil
@@ -590,7 +590,7 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 func issuesError(issues []Issue) error {
 	for _, issue := range issues {
 		if issue.Severity == "error" {
-			return fmt.Errorf("notes: store has invalid entries; run `magus notes verify` for repair steps (%s)", issue.Message)
+			return fmt.Errorf("notes: store has invalid entries, run `magus notes verify` for repair steps (%s)", issue.Message)
 		}
 	}
 	return nil
@@ -859,7 +859,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 		n.Name = name
 	}
 	if err := validateStored(n); err != nil {
-		return Note{}, true, fmt.Errorf("notes: %s: %w", filepath.Base(path), err)
+		return Note{}, true, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	return n, true, nil
 }
@@ -878,7 +878,7 @@ func marshalNote(path string, n Note) ([]byte, error) {
 	if err := setMagusNode(doc, notePayload{
 		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors, Source: n.Source,
 	}); err != nil {
-		return nil, fmt.Errorf("notes: render %s: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("render %s: %w", filepath.Base(path), err)
 	}
 	fm, err := yaml.Marshal(doc)
 	if err != nil {

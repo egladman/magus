@@ -1,20 +1,23 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/hostmodules"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
 // describeModules implements `magus describe modules` (list) and
 // `magus describe module <name>` (detail). Modules are static — the magus
 // standard library — so this needs no workspace.
-func describeModules(args []string) error {
+func describeModules(ctx context.Context, args []string) error {
 	rest, err := cmdParse("describe modules", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus describe module[s] [<name>] [flags]")
@@ -25,7 +28,7 @@ func describeModules(args []string) error {
 			fmt.Fprintln(os.Stderr, "with Buzz signatures.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -49,11 +52,11 @@ func describeModules(args []string) error {
 			names[i] = m.Name
 		}
 		slices.Sort(names)
-		msg := fmt.Sprintf("magus describe module: unknown module %q", name)
+		msg := fmt.Sprintf("unknown module %q", name)
 		if sug := hint.Nearest(name, names); sug != "" {
 			msg += fmt.Sprintf("; did you mean %q?", sug)
 		}
-		fmt.Fprintln(os.Stderr, msg)
+		slog.ErrorContext(ctx, msg, attr.Notice(""), attr.Component("magus describe module"))
 		return errSilent{exitCode: 2}
 	}
 

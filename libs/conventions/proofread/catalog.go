@@ -68,9 +68,9 @@ type ruleText struct {
 
 // ruleTexts numbers the rules by family: PRF1xxx the shape of a text, PRF2xxx
 // tone, PRF3xxx claims and hedges, PRF4xxx generated-writing tells, PRF5xxx
-// house style, PRF6xxx doc comments, PRF7xxx agent instructions and PRF8xxx
-// review replies. A code is never reused: a retired rule keeps its number
-// out of circulation.
+// house style, PRF6xxx doc comments, PRF7xxx agent instructions, PRF8xxx
+// review replies and PRF9xxx messages a program prints. A code is never
+// reused: a retired rule keeps its number out of circulation.
 var ruleTexts = map[Rule]ruleText{
 	RuleLeadContext: {
 		code:    "PRF1001",
@@ -362,5 +362,29 @@ var ruleTexts = map[Rule]ruleText{
 		catches: "a review reply that is its author's fourth or later in a thread",
 		why: "A long exchange in text reads as a stalemate to the people watching it, and a call settles " +
 			"it faster. It needs the thread length (-thread-length), and stays silent without it.",
+	},
+	RuleMessageLength: {
+		code:    "PRF9001",
+		catches: "a message longer than its rune cap, 160 unless the caller names one",
+		why: "A message is read in a terminal at the moment something went wrong: about two lines hold " +
+			"a verdict, one command and a ref, and the rationale belongs behind the ref.",
+	},
+	RuleMessageRationale: {
+		code:    "PRF9002",
+		catches: "a message that joins more than one reason (so, because, a semicolon, \", which\")",
+		why: "One reason names the cause; a second is an argument the reader did not ask for at the " +
+			"moment of the failure. The ref holds the rest.",
+	},
+	RuleMessageCommands: {
+		code:    "PRF9003",
+		catches: "a message naming more than one backticked command",
+		why: "A reader runs the first command a message names. A second competes with it, so a message " +
+			"names the one to run first.",
+	},
+	RuleMessageTag: {
+		code:    "PRF9004",
+		catches: "a message opening with a component tag (\"server: \") or carrying a marker such as \"[AGENT]\"",
+		why: "A tag names who spoke, which the reader already knows, and pushes the verdict off the " +
+			"start of the line.",
 	},
 }

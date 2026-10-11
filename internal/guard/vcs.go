@@ -140,7 +140,7 @@ func gitDeny(c hint.Invocation) (ShellVerdict, bool) {
 		// whichever advisory the first command earned, which is the ordering the
 		// two-pass split exists to prevent.
 		if slices.ContainsFunc(rest, isStageAllOperand) {
-			return ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}}, true
+			return ShellVerdict{Deny: denyStageAll, Why: denyStageAllWhy, Rule: denyRule{Name: denyRuleStageAll}}, true
 		}
 	}
 	return ShellVerdict{}, false
@@ -172,7 +172,7 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 		// the one advisory the push gate upgrades to an ask, so a push that slipped by here
 		// would publish without the person being asked.
 		if isPush(c) {
-			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+			return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 		}
 		if c.Name != "git" {
 			continue
@@ -181,21 +181,21 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 		sub, rest := g.sub, g.rest
 		switch sub {
 		case "push":
-			return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+			return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 		case "add":
 			// The stage-everything forms already denied in the first pass.
-			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 		case "commit":
-			return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+			return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 		case "checkout":
 			// A revert needs the `--` separator; without it the operand is a
 			// branch, which is not this rule's business.
 			if slices.Contains(rest, "--") {
-				return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+				return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 			}
 		case "restore":
 			// `git restore` targets worktree files by definition.
-			return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+			return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 		case "describe":
 			// --tags and --always are the build-stamp spelling (this repository's own
 			// go_build target uses both): the caller wants a version string to embed,
@@ -204,14 +204,14 @@ func gitGuard(cmds []hint.Invocation, grade func(ShellVerdict) (ShellVerdict, bo
 			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
 				continue
 			}
-			return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+			return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 		case "stash":
 			if len(rest) > 0 && rest[0] == "create" {
-				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+				return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		case "rev-parse":
 			if isTreeIdentityQuery(rest) {
-				return ShellVerdict{Context: checkpointGuardContext, Rule: denyRule{Name: advisoryCheckpointState}}, true
+				return ShellVerdict{Context: checkpointGuardContext, Why: checkpointGuardContextWhy, Rule: denyRule{Name: advisoryCheckpointState}}, true
 			}
 		}
 	}
@@ -317,8 +317,8 @@ func definesAlias(key string) bool {
 // the expansion out loses nothing.
 func denyInlineAlias(prog, key string) ShellVerdict {
 	return ShellVerdict{
-		Deny: "Spell out the " + prog + " command the alias stands for, and run that.\n" +
-			"`" + key + "` on this line can define what a " + prog + " word runs, so no " + prog + " rule can read which command it is: one that discards work or pushes would pass unjudged.",
+		Deny: "`" + key + "` defines an inline alias that hides which " + prog + " command runs; spell that command out.",
+		Why:  "`" + key + "` on this line can define what a " + prog + " word runs, so no " + prog + " rule can read which command it is: one that discards work or pushes would pass unjudged.",
 		Rule: denyRule{Name: denyRuleInlineAlias, Arg: key},
 	}
 }
@@ -524,7 +524,7 @@ func gitGuardFallback(command string, grade func(ShellVerdict) (ShellVerdict, bo
 	// unparsable line got a reminder instead of the deny, in the one place the file's own
 	// invariant says an over-eager deny is the safe direction.
 	if stageAllRe.MatchString(command) {
-		denies = append(denies, ShellVerdict{Deny: denyStageAll, Rule: denyRule{Name: denyRuleStageAll}})
+		denies = append(denies, ShellVerdict{Deny: denyStageAll, Why: denyStageAllWhy, Rule: denyRule{Name: denyRuleStageAll}})
 	}
 	for _, v := range denies {
 		if v, ok := grade(v); ok {
@@ -533,11 +533,11 @@ func gitGuardFallback(command string, grade func(ShellVerdict) (ShellVerdict, bo
 	}
 	switch {
 	case pushRe.MatchString(command):
-		return ShellVerdict{Context: pushGuardContext, Rule: denyRule{Name: advisoryPushGate}}, true
+		return ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}, true
 	case stageRe.MatchString(command):
-		return ShellVerdict{Context: vcsGuardContext, Kind: advisoryStageClassify}, true
+		return ShellVerdict{Context: vcsGuardContext, Why: vcsGuardContextWhy, Kind: advisoryStageClassify}, true
 	case scopedRevertRe.MatchString(command):
-		return ShellVerdict{Context: revertGuardContext, Rule: denyRule{Name: advisoryRevertClassify}}, true
+		return ShellVerdict{Context: revertGuardContext, Why: revertGuardContextWhy, Rule: denyRule{Name: advisoryRevertClassify}}, true
 	}
 	return ShellVerdict{}, false
 }
@@ -586,8 +586,8 @@ func mergeSideRef(args []string) string {
 
 // denyMergeSideCheckout explains why restoring a path from one side of a merge is refused.
 func denyMergeSideCheckout(ref string) string {
-	return "Restoring a path from " + ref + " overwrites it with ONE side, discarding the " +
-		"other side's changes and any merge already computed for that file.\n" +
+	return "restoring a path from " + ref + " discards the other side and the merge computed for it; for a generated file run `" + hint.VCSResolve.String() + "`.\n" +
+		"It overwrites the path with ONE side, discarding the other side's changes and any merge already computed for that file.\n" +
 		"It reads like \"undo my edit to this file\" and is not: during a merge the working-tree " +
 		"copy IS the merge, and this replaces it wholesale.\n" +
 		"Measured here: `git checkout MERGE_HEAD -- magusfile.buzz` during a conflict resolution " +
@@ -725,7 +725,8 @@ func jjRule(prog, sub string, rest []string) (ShellVerdict, bool) {
 	case "workspace":
 		if len(rest) > 0 && rest[0] == "forget" {
 			return ShellVerdict{
-				Deny: "Forget the workspace from a session that owns it, once `jj workspace list` and `jj log` show its working-copy commit is empty or published.\n" +
+				Deny: "jj workspace forget drops a working-copy commit magus cannot prove empty; forget it from a session that owns it.",
+				Why: "Do that once `jj workspace list` and `jj log` show its working-copy commit is empty or published.\n" +
 					"jj workspace forget drops that workspace's working-copy commit, which in a repo running several is routinely another session's, and magus cannot yet read a jj workspace's state to prove it holds nothing.",
 				Rule: denyRule{Name: denyRuleWorktreeRemove},
 			}, true

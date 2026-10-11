@@ -38,7 +38,7 @@ func MergeIndexes(dst string, srcs []string) error {
 		}
 		idx, err := DecodeIndex(data)
 		if err != nil {
-			return fmt.Errorf("symbols: merge %s: %w", src, err)
+			return fmt.Errorf("merge %s: %w", src, err)
 		}
 		if merged == nil {
 			merged = &scip.Index{Metadata: idx.GetMetadata()}

@@ -41,7 +41,7 @@ env HOST_NAME=testscript
 stdin deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout '"permissionDecisionReason":"Verify in place'
+stdout '"permissionDecisionReason":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/advise
@@ -157,7 +157,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/mcp-worker --criteria 'the transport test set, held so the rebind rule has a job to read'
+exec magus job fork harness/mcp-worker --read-only --criteria 'the transport test set, held so the rebind rule has a job to read'
 stdin $WORK/exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 
@@ -184,7 +184,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 stdin $WORK/mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -237,7 +237,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # A spawn carries a prompt and a subagent type rather than one string, so it takes the same
 # whole-event route the MCP cases above do. What it adds is the OTHER knob: the capability
 # an entry declares about itself. Only a wiring that also matches its host's skill tool may
-# pass --observes-skill-loads, so the rule that requires a skill before a spawn fires
+# pass --reports-skills, so the rule that requires a skill before a spawn fires
 # exactly where loads are reported.
 
 # Inside a fixture workspace, because the rule stands down without a cache dir to key its
@@ -258,7 +258,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_N
 # case: command/deny
 # A SUPPORTED flag: the glue matches it against the set it publishes and passes it on.
 stdin $WORK/spawn-call.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 stdout '"permissionDecision":"deny"'
 stdout 'magus-multi-agent'
 
@@ -271,7 +271,7 @@ stdin $WORK/deny-command.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --not-a-flag
 stderr 'magus-command.buzz: unsupported argument "--not-a-flag"'
 stderr 'judged WITHOUT it'
-stderr 'Supported: --observes-skill-loads'
+stderr 'Supported: --reports-skills'
 stdout '"permissionDecision":"deny"'
 stdout 'whole-tree git stash'
 
@@ -289,9 +289,68 @@ stdout '"permissionDecision":"deny"'
 # Forwarded twice it reached `magus shell` as a repeated flag; deduped, the verdict is the
 # one the single-flag case above already pins.
 stdin $WORK/deny-command.json
-exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --observes-skill-loads --observes-skill-loads
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name testscript --reports-skills --reports-skills
 ! stderr 'unsupported argument'
 stdout '"permissionDecision":"deny"'
+
+cd $WORK
+
+# --- magus-command.buzz: a message the person typed ---------------------------
+#
+# An event that names no tool and carries text at `prompt` (Claude Code's envelope key) is
+# the person's message, not a call. The glue hands it to `magus shell --message` and says
+# NOTHING: a message hook's stdout reaches the model, and a recorded topic is not news to it. What the record does
+# shows on the next call, which architecture-unbriefed holds until the agent loads the
+# architecture skill. The workspace sets that rule to deny, since it only advises by
+# default.
+
+cd arch-ws
+
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+! stdout .
+! stderr .
+
+# case: command/deny
+stdin $WORK/arch-bash.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+stdout '"permissionDecision":"deny"'
+stdout 'magus-architecture-review'
+
+# case: command/pass
+# Loading the skill clears it.
+stdin $WORK/arch-skill.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+! stdout .
+stdin $WORK/arch-bash.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+! stdout .
+
+# case: command/pass
+# A message that asks no structure question records nothing, so that session's next call runs.
+stdin $WORK/prompt-ordinary.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+! stdout .
+! stderr .
+stdin $WORK/arch-bash-s2.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
+! stdout .
+
+# case: path/deny
+# The path entry declares the capability too, and a write that creates a directory waits
+# on the same load whatever was asked.
+stdin $WORK/arch-new-dir.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME --reports-skills
+! stderr 'unsupported argument'
+stdout '"permissionDecision":"deny"'
+stdout 'creating the new directory'
+
+# case: path/advise
+# Unflagged, the rule stands down and the new-directory advisory speaks instead.
+stdin $WORK/arch-new-dir.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-path.buzz -- --agent-name $HOST_NAME
+stdout 'additionalContext'
+stdout 'NEW DIRECTORY'
 
 cd $WORK
 
@@ -371,7 +430,7 @@ cd $WORK
 stdin cursor-shell-deny.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout '"agent_message":"Verify in place'
+stdout '"agent_message":"whole-tree'
 stdout 'whole-tree git stash'
 
 # case: command/pass
@@ -447,7 +506,7 @@ mkdir $WORK/home
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
 cd notes-ws
-exec magus job fork harness/cursor-mcp-worker --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
+exec magus job fork harness/cursor-mcp-worker --read-only --criteria 'the cursor MCP transport cases, held so the rebind rule has a job to read'
 stdin $WORK/cursor-exec-mcp-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 
@@ -464,7 +523,7 @@ stdout '"permission":"allow"'
 stdin $WORK/cursor-mcp-call.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'leave your own job alone'
+stdout 'would drop every job'
 cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -626,6 +685,13 @@ env __MAGUS_BIN=$WORK/nonexistent-magus
 # record was skipped.
 stdin observe-read.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-observe.buzz -- --agent-name $HOST_NAME
+! stdout .
+! stderr .
+
+# A message is as silent: the guard's unavailable notice would reach the model as context
+# on every turn, and nothing about the message itself was ever going to be enforced.
+stdin $WORK/prompt-architecture.json
+exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME --reports-skills
 ! stdout .
 ! stderr .
 
@@ -944,26 +1010,26 @@ stdout '"additionalContext":"pushing'
 # takes the job through its own template first.
 env HOME=$WORK/home
 env XDG_STATE_HOME=$WORK/home/state
-exec magus job fork harness/push-worker --parent harness --criteria 'the push transport cases, held so the push gate has a worker to refuse'
+exec magus job fork harness/push-worker --parent harness --read-only --criteria 'the push transport cases, held so the push gate has a worker to refuse'
 stdin $WORK/exec-push-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-approval.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"behavior":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 
 # hosts: claude-code
 env HOST_NAME=testscript
 
 # case: command/deny
-# A leased worker runs as its own session, so this refusal is its first and explains itself
-# in full, whatever the orchestrator's session was told above.
+# A leased worker runs as its own session, so this refusal is its first and prints its
+# verdict rather than the repeat line, whatever the orchestrator's session was told above.
 stdin $WORK/exec-push-worker-s-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdin $WORK/push-command-worker.json
 exec magus buzz -s $__MAGUS_TEMPLATES/magus-command.buzz -- --agent-name $HOST_NAME
 stdout '"permissionDecision":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 
 # hosts: cursor
 
@@ -973,7 +1039,7 @@ exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdin $WORK/cursor-push.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"deny"'
-stdout 'is a worker under harness.* stay with the orchestrator'
+stdout 'stays with the orchestrator, not a worker'
 rm $WORK/home/state
 env HOME=/no-home
 env XDG_STATE_HOME=
@@ -993,6 +1059,26 @@ magus\project({
     "no_language": "fixture workspace: only the guard's view of an ungated push matters here",
 });
 magus\guard.builtins({"spawn-unbriefed": "deny"});
+-- arch-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.buzz"],
+    "no_language": "fixture workspace: only the guard's view of a message and the call after it matters here",
+});
+magus\guard.builtins({"architecture-unbriefed": "deny"});
+-- prompt-architecture.json --
+{"session_id": "arch-1", "hook_event_name": "UserPromptSubmit", "prompt": "does this respect our current architecture patterns?"}
+-- prompt-ordinary.json --
+{"session_id": "arch-2", "hook_event_name": "UserPromptSubmit", "prompt": "fix the flaky cache test"}
+-- arch-bash.json --
+{"session_id": "arch-1", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- arch-bash-s2.json --
+{"session_id": "arch-2", "tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+-- arch-new-dir.json --
+{"session_id": "arch-3", "tool_name": "Write", "tool_input": {"file_path": "newpkg/new.go", "content": "package newpkg\n"}}
+-- arch-skill.json --
+{"session_id": "arch-1", "tool_name": "Skill", "tool_input": {"skill": "magus-architecture-review"}}
 -- push-rules.rules --
 prefix_rule(
     pattern = ["git", "push"],

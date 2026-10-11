@@ -811,7 +811,7 @@ func TestOpenRemoteBackendThatDidNotStart(t *testing.T) {
 	require.NotNil(t, opt)
 
 	_, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt, cache.WithRemoteWrite(true))
-	assert.ErrorContains(t, err, "remote writes are required but remote github unavailable: cache: no remote backend registered in this binary")
+	assert.ErrorContains(t, err, "run local-only: remote github unavailable: cache: no remote backend registered in this binary")
 
 	c, err := cache.Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), opt)
 	require.NoError(t, err)
@@ -1250,7 +1250,7 @@ func TestWorkspaceLoadFailureLocatesEachJoinedFile(t *testing.T) {
 }
 
 func TestWorkspaceLoadFailureWithoutAPosition(t *testing.T) {
-	err := errors.New("server: load config /repo: magus.yaml: unknown key")
+	err := errors.New("load config /repo: magus.yaml: unknown key")
 	assert.Equal(t, &types.WorkspaceFailure{Message: err.Error()}, WorkspaceLoadFailure("/repo", err))
 }
 

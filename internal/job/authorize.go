@@ -126,19 +126,19 @@ type RefusedError struct {
 }
 
 func (e *RefusedError) Error() string {
-	msg := fmt.Sprintf("job: lease %s is bound to this session and row %s is what this targeted; %s",
+	msg := fmt.Sprintf("job: lease %s is bound to this session and row %s is what this targeted: %s",
 		e.Actor.Lease, e.Lease, e.Rule)
 	switch {
 	case e.Actor.Unstamped && e.Lease == "":
-		msg = "job: this call arrived with no lease stamped on it; " + e.Rule
+		msg = "job: this call arrived with no lease stamped on it: " + e.Rule
 	case e.Actor.Unstamped:
-		msg = fmt.Sprintf("job: this call arrived with no lease stamped on it and row %s is what it targeted; %s",
+		msg = fmt.Sprintf("job: this call arrived with no lease stamped on it and row %s is what it targeted: %s",
 			e.Lease, e.Rule)
 	}
 	if e.Remedy == "" {
 		return msg
 	}
-	return msg + ". " + e.Remedy
+	return msg + ", " + e.Remedy
 }
 
 // refuse builds the refusal for actor's attempt to WRITE lease id.
@@ -146,13 +146,13 @@ func refuse(actor Actor, id, rule string) error {
 	if actor.Unstamped {
 		return &RefusedError{
 			Lease: id, Actor: actor, Rule: rule,
-			Remedy: "Send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
+			Remedy: "send the lease you act under with the call (a baggage header carrying " + trail.BaggageLease +
 				"), or make the write from your own checkout, where magus reads it for you",
 		}
 	}
 	return &RefusedError{
 		Lease: id, Actor: actor, Rule: rule,
-		Remedy: "Your orchestrator writes what a worker may not; report it as an unresolved risk and stop",
+		Remedy: "ask your orchestrator to make this write",
 	}
 }
 

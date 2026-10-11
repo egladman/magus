@@ -347,8 +347,8 @@ func runCut(args []string) error {
 				"tell a rerun from a rebuild: %w", outPath, err)
 		}
 		if diff := artifactDiff(prev.Artifacts, artifacts); diff != "" {
-			return fmt.Errorf("%s already exists and names different artifacts; release manifests are "+
-				"immutable once committed, so this is a rebuild under a shipped tag rather than a rerun:\n%s",
+			return fmt.Errorf("%s already exists and names different artifacts, release manifests are "+
+				"immutable once committed, so this is a rebuild under a shipped tag rather than a rerun: %s",
 				outPath, diff)
 		}
 		// A fragment the manifest already carries is one an interrupted cut folded but
@@ -367,8 +367,8 @@ func runCut(args []string) error {
 	}
 
 	if len(frags) == 0 {
-		return fmt.Errorf("%s holds no changelog fragments, and %s does not exist. "+
-			"An earlier run consumed the fragments without leaving the manifest behind; recover them from that "+
+		return fmt.Errorf("%s holds no changelog fragments, and %s does not exist: "+
+			"an earlier run consumed the fragments without leaving the manifest behind, recover them from that "+
 			"run's checkout or from git history and cut again", unreleasedDir, outPath)
 	}
 	body := renderUnreleased(frags)
@@ -409,7 +409,7 @@ func removeFragments(frags []fragment) error {
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("delete folded fragments; rerun cut to finish: %w", err)
+		return fmt.Errorf("delete folded fragments, rerun cut to finish: %w", err)
 	}
 	return nil
 }
@@ -491,7 +491,7 @@ func runReleaseIndex(args []string) error {
 	// caller that genuinely wants the unsigned file asks for it with -no-sign.
 	keyHex := os.Getenv("MAGUS_SIGNING_KEY")
 	if keyHex == "" {
-		return fmt.Errorf("MAGUS_SIGNING_KEY is not set; pass -no-sign to write index.json without a signature")
+		return fmt.Errorf("MAGUS_SIGNING_KEY is not set, pass -no-sign to write index.json without a signature")
 	}
 	keyBytes, err := hex.DecodeString(keyHex)
 	if err != nil {
@@ -639,23 +639,23 @@ func artifactDiff(committed, scanned []ReleaseArtifact) string {
 	for name, a := range was {
 		b, ok := now[name]
 		if !ok {
-			diffs = append(diffs, fmt.Sprintf("  %s: in the manifest, absent from the build", name))
+			diffs = append(diffs, fmt.Sprintf("%s in the manifest but absent from the build", name))
 			continue
 		}
 		if a.SHA256 != b.SHA256 {
-			diffs = append(diffs, fmt.Sprintf("  %s: sha256 %s -> %s", name, a.SHA256, b.SHA256))
+			diffs = append(diffs, fmt.Sprintf("%s sha256 %s -> %s", name, a.SHA256, b.SHA256))
 		}
 		if a.Size != b.Size {
-			diffs = append(diffs, fmt.Sprintf("  %s: size %s -> %s", name, a.Size, b.Size))
+			diffs = append(diffs, fmt.Sprintf("%s size %s -> %s", name, a.Size, b.Size))
 		}
 	}
 	for name := range now {
 		if _, ok := was[name]; !ok {
-			diffs = append(diffs, fmt.Sprintf("  %s: built now, absent from the manifest", name))
+			diffs = append(diffs, fmt.Sprintf("%s built now but absent from the manifest", name))
 		}
 	}
 	slices.Sort(diffs)
-	return strings.Join(diffs, "\n")
+	return strings.Join(diffs, ", ")
 }
 
 // isReleaseAsset reports whether a filename looks like a release artifact.

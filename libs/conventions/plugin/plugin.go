@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"github.com/egladman/magus/libs/conventions/asciistrings"
+	"github.com/egladman/magus/libs/conventions/diagmsg"
+	"github.com/egladman/magus/libs/conventions/errmsg"
 	"github.com/egladman/magus/libs/conventions/fieldwise"
 	"github.com/egladman/magus/libs/conventions/filenames"
 	"github.com/egladman/magus/libs/conventions/globalrestore"
@@ -19,6 +21,7 @@ import (
 	"github.com/egladman/magus/libs/conventions/nameoutput"
 	"github.com/egladman/magus/libs/conventions/providerio"
 	"github.com/egladman/magus/libs/conventions/ruletext"
+	"github.com/egladman/magus/libs/conventions/stderrprint"
 	"github.com/egladman/magus/libs/conventions/stutter"
 	"github.com/egladman/magus/libs/conventions/testisolation"
 	"github.com/golangci/plugin-module-register/register"
@@ -27,6 +30,8 @@ import (
 
 func init() {
 	register.Plugin("asciistrings", plugin("asciistrings", asciistrings.New))
+	register.Plugin("diagmsg", plugin("diagmsg", diagmsg.New))
+	register.Plugin("errmsg", plugin("errmsg", errmsg.New))
 	register.Plugin("fieldwise", plugin("fieldwise", fieldwise.New))
 	register.Plugin("filenames", plugin("filenames", filenames.New))
 	register.Plugin("globalrestore", plugin("globalrestore", globalrestore.New))
@@ -36,6 +41,7 @@ func init() {
 	register.Plugin("nameoutput", plugin("nameoutput", nameoutput.New))
 	register.Plugin("providerio", plugin("providerio", providerio.New))
 	register.Plugin("ruletext", plugin("ruletext", ruletext.New))
+	register.Plugin("stderrprint", plugin("stderrprint", stderrprint.New))
 	register.Plugin("stutter", plugin("stutter", stutter.New))
 	register.Plugin("testisolation", plugin("testisolation", testisolation.New))
 }

@@ -416,7 +416,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 			reqLog = reqLog.With(slog.String("user_agent", o.UserAgent))
 		}
 
-		reqLog.InfoContext(ctx, "[AGENT] tool called")
+		reqLog.InfoContext(ctx, "toolcalled")
 		start := time.Now()
 
 		result, err := fn(ctx, req)
@@ -452,12 +452,12 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		case err != nil:
 			ev.Outcome = trail.OutcomeError
 			ev.Error = err.Error()
-			reqLog.ErrorContext(ctx, "[AGENT] tool error", slog.Duration("duration", dur), slog.String("error", err.Error()))
+			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), slog.String("error", err.Error()))
 		case result != nil && result.IsError:
 			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
-			reqLog.WarnContext(ctx, "[AGENT] tool failed", slog.Duration("duration", dur))
+			reqLog.WarnContext(ctx, "toolfailed", slog.Duration("duration", dur))
 		default:
-			reqLog.InfoContext(ctx, "[AGENT] tool done", slog.Duration("duration", dur))
+			reqLog.InfoContext(ctx, "tooldone", slog.Duration("duration", dur))
 		}
 		trail.Append(ctx, trailDir, ev)
 		if tel != nil {

@@ -190,7 +190,7 @@ func Read(path string, v any) error {
 			return fmt.Errorf("record: field %s missing from %s: %w", name, path, ErrNotFound)
 		}
 		if err := setField(rv.Field(i), strings.TrimSpace(val)); err != nil {
-			return fmt.Errorf("record: field %s: %w", name, err)
+			return fmt.Errorf("field %s: %w", name, err)
 		}
 	}
 	return nil
@@ -226,7 +226,7 @@ func marshal(v any) (map[string]string, error) {
 		}
 		s, empty, err := formatField(rv.Field(i))
 		if err != nil {
-			return nil, fmt.Errorf("record: field %s: %w", name, err)
+			return nil, fmt.Errorf("field %s: %w", name, err)
 		}
 		if empty && omitempty {
 			continue

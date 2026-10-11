@@ -99,12 +99,16 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
 		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: denial{Say: v.Deny, Why: v.Why}.full(), Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
-		held.speak(hint.NewGate(at.cacheDir, who.callerKey()), &verdict)
+		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
+		held.speak(gate, &verdict, whys)
+		if verdict.Decision == "advise" {
+			verdict.Context, _ = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
+		}
 		if verdict.Decision != "pass" {
 			decided = decidedByBuiltin
 		}
@@ -158,12 +162,14 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) Verdict {
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
-	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.factsKey()), req.ObservesSkillLoads, at.workspace); reason != "" {
+	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
-	if note := adviseSharedCheckoutSpawn(ctx, hint.NewGate(at.cacheDir, who.callerKey()), at); note != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: note, Rule: string(advisorySharedCheckout)}
+	gate := hint.NewGate(at.cacheDir, who.callerKey())
+	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
+		shown, _ := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}
 	}
 	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 }
@@ -499,6 +505,43 @@ func bindOnExec(ctx context.Context, at location, who hookAttribution, command s
 	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
 	if store.Bound(who.caller()) != id {
 		_ = store.Bind(who.caller(), id)
+	}
+}
+
+// releaseOnEnd unbinds the caller from each job command ends, through `magus job exit`,
+// `job wait` or `job rm`, that its record names. Like bindOnExec it runs only on a command
+// the guard lets through.
+//
+// Released before the command runs, as bindOnExec binds: the hook sees no result. A
+// command that then fails leaves the caller unbound, which the orchestrator it now reads
+// as can undo with one `magus job exec`.
+func releaseOnEnd(at location, who hookAttribution, command string) {
+	if who.caller().Identified() && at.workspace == "" {
+		return
+	}
+	cmds, ok := ParseCommands(command)
+	if !ok {
+		return
+	}
+	var store *job.Store
+	for _, c := range cmds {
+		if path.Base(c.Name) != "magus" || magusFlag(c.Args, "h") || magusFlag(c.Args, "help") {
+			continue
+		}
+		words := magusSubcommandWords(c.Args)
+		for _, verb := range []hint.Command{hint.JobExit, hint.JobWait, hint.JobRm} {
+			if !verb.MatchedBy(words) {
+				continue
+			}
+			operands, _ := verbArgv(c.Args, verb)
+			if len(operands) == 0 || !types.ValidJobID(operands[0]) {
+				continue
+			}
+			if store == nil {
+				store = job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			}
+			store.Release(who.caller(), operands[0])
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -11,6 +12,9 @@ import (
 
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/log/quiet"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -217,13 +221,173 @@ func TestPrettyHandlerGenericMessage(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	h := newTestHandler(&buf)
-	r := buildRecord("magus: something happened", slog.String("key", "val"))
+	r := buildRecord("something happened", slog.String(attr.ComponentKey, "magus"), slog.String("key", "val"))
 	require.NoError(t, h.Handle(context.Background(), r), "Handle")
 	out := buf.String()
-	assert.Contains(t, out, "[info] magus: something happened")
-	assert.Contains(t, out, "key=val")
+	assert.Equal(t, "[info] magus: something happened key=val\n", out,
+		"the component leads the message and stays out of the attr dump")
 	assert.NotContains(t, out, "time=", "generic pretty output must not carry a timestamp")
 	assert.NotContains(t, out, "level=", "generic pretty output must not carry a level= field")
+}
+
+// A notice reads as words addressed to a person: its label, never a level glyph, and a
+// next command in the layout a result's breadcrumbs use.
+func TestPrettyHandlerNotice(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		level slog.Level
+		attrs []slog.Attr
+		want  string
+	}{
+		{"label", slog.LevelInfo, []slog.Attr{attr.Hint()}, "hint: pass --force\n"},
+		{"component when unlabeled", slog.LevelWarn, []slog.Attr{attr.Notice(""), attr.Component("magus")}, "magus: pass --force\n"},
+		{"bare", slog.LevelInfo, []slog.Attr{attr.Notice("")}, "pass --force\n"},
+		{
+			"an error from elsewhere keeps its origin", slog.LevelError,
+			[]slog.Attr{attr.Notice(""), attr.Component("magus"), attr.Error(errors.New("broker: no socket"))},
+			"magus: pass --force: broker: no socket\n",
+		},
+		{
+			"an error from the label's own package names it once", slog.LevelError,
+			[]slog.Attr{attr.Notice(""), attr.Component("broker"), attr.Error(errors.New("broker: no socket"))},
+			"broker: pass --force: no socket\n",
+		},
+		{
+			"why and next", slog.LevelInfo,
+			[]slog.Attr{attr.Notice("console"), attr.Why("server is v0.4"), attr.Next("magus server restart")},
+			"console: pass --force\n  server is v0.4\nnext:\n  magus server restart\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var buf bytes.Buffer
+			rec := slog.NewRecord(time.Now(), tc.level, "pass --force", 0)
+			rec.AddAttrs(tc.attrs...)
+			require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+}
+
+func TestPrettyHandlerNextUnderALogRecord(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "symbol index not current", 0)
+	rec.AddAttrs(attr.Component("magus"), attr.Next("magus graph build"))
+	require.NoError(t, newTestHandler(&buf).Handle(context.Background(), rec))
+	assert.Equal(t, "[warn] magus: symbol index not current\nnext:\n  magus graph build\n", buf.String())
+}
+
+// TestPrettyHandlerWithAttrsKeepsAttrsAndState pins that a logger derived with
+// With renders its attrs, component as the leading tag, through the same handler
+// state as the original: a derived handler that dropped them would print the bare
+// message, and one that copied the state would split the run's counters.
+func TestPrettyHandlerWithAttrsKeepsAttrsAndState(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	log := slog.New(h).With(attr.Component("knowledge")).WithGroup("g").With("path", "a.scip")
+	log.WarnContext(t.Context(), "cannot decode symbol index", "error", "EOF")
+	assert.Equal(t, "[warn] knowledge: cannot decode symbol index path=a.scip error=EOF\n", buf.String())
+
+	slog.New(h).With("k", "v").InfoContext(t.Context(), "cache.miss", "label", "api", "duration", time.Second)
+	assert.Equal(t, 1, h.status.passed, "the derived handler counts into the original's status line")
+}
+
+// A record's why is its own line under the message, never part of the attr dump; the
+// text and JSON handlers keep it as an ordinary attribute.
+func TestPrettyHandlerPrintsWhyUnderTheMessage(t *testing.T) {
+	const why = "The conformance checks read the symbol index, so they did not run."
+	rec := slog.NewRecord(time.Now(), slog.LevelWarn, "symbol index not current", 0)
+	rec.AddAttrs(attr.Component("magus"), attr.Why(why), slog.String("key", "val"))
+
+	var plain bytes.Buffer
+	require.NoError(t, newTestHandler(&plain).Handle(context.Background(), rec))
+	assert.Equal(t, "[warn] magus: symbol index not current key=val\n       "+why+"\n", plain.String())
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
+	var term ttyBuf
+	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), rec))
+	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+
+	var text bytes.Buffer
+	require.NoError(t, slog.NewTextHandler(&text, nil).Handle(context.Background(), rec))
+	assert.Contains(t, text.String(), `why="`+why+`"`)
+}
+
+// failureWithReason is the cache.error record of a step that failed with a diagnostic
+// carrying a why.
+func failureWithReason() slog.Record {
+	r := slog.NewRecord(time.Now(), slog.LevelError, "cache.error", 0)
+	r.AddAttrs(
+		slog.String("project", "web"),
+		slog.String("target", "fmt"),
+		slog.Int64("duration", int64(time.Second)),
+		slog.String("error", "[MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)"),
+		attr.Why("A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."),
+		slog.String("ref", "outbadcafe"),
+	)
+	return r
+}
+
+// One failure at two verbosities: the default prints the reason dim under the cause; a
+// quiet display prints the verdict and the ref, and the reason only at -v.
+func TestPrettyHandlerFailureWhyByVerbosity(t *testing.T) {
+	render := func(quieted, verbose bool) string {
+		var buf bytes.Buffer
+		h := slog.Handler(newTestHandler(&buf))
+		if quieted {
+			h = quiet.Wrap(h, verbose)
+		}
+		require.NoError(t, h.Handle(context.Background(), failureWithReason()))
+		return buf.String()
+	}
+	const why = "A step that rewrites its own declared sources changes its cache key as it runs; declare them, or stop writing them."
+	cause := "  cause: [MGS4007] web:fmt modified its declared sources main.go; declare them with ctx.modifiesExistingFiles(...)\n"
+
+	assert.Contains(t, render(false, false), cause+"       "+why+"\n  output: outbadcafe\n")
+
+	quieted := render(true, false)
+	assert.Contains(t, quieted, cause+"  output: outbadcafe\n")
+	assert.NotContains(t, quieted, why)
+
+	assert.Contains(t, render(true, true), cause+"       "+why+"\n", "-v brings the reason back")
+
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("TERM", "xterm-256color")
+	var term ttyBuf
+	require.NoError(t, newTerminalHandler(&term).Handle(context.Background(), failureWithReason()))
+	assert.Contains(t, term.String(), "       "+tty.Colorize(why, colDim)+"\n", "the why is dim on a terminal")
+}
+
+// A wait note shows from the first beat by default; a quiet display shows it only past a
+// minute. The lock and upstream waits stamp every note with attr.Elapsed for this filter.
+func TestPrettyHandlerWaitByVerbosity(t *testing.T) {
+	wait := func(elapsed time.Duration) slog.Record {
+		r := slog.NewRecord(time.Now(), slog.LevelInfo,
+			fmt.Sprintf(". coverage-badge is still waiting for a cache lock held by . generate (%s so far)", elapsed), 0)
+		r.AddAttrs(attr.Component("magus"), attr.Elapsed(elapsed))
+		return r
+	}
+	render := func(quieted bool) string {
+		var buf bytes.Buffer
+		h := slog.Handler(newTestHandler(&buf))
+		if quieted {
+			h = quiet.Wrap(h, false)
+		}
+		require.NoError(t, h.Handle(context.Background(), wait(30*time.Second)))
+		require.NoError(t, h.Handle(context.Background(), wait(90*time.Second)))
+		return buf.String()
+	}
+	const (
+		short = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (30s so far)\n"
+		long  = "[info] magus: . coverage-badge is still waiting for a cache lock held by . generate (1m30s so far)\n"
+	)
+	assert.Equal(t, short+long, render(false), "the default shows both, with no elapsed= dump")
+	assert.Equal(t, long, render(true), "a quiet display shows only the wait past a minute")
 }
 
 // TestPrettyHandlerGenericLevels verifies the level-to-tag mapping for generic records.
@@ -862,6 +1026,47 @@ func TestBlockedCascadeReportsTheRootOnce(t *testing.T) {
 		"one failure block, one blocked-by line, one summary")
 }
 
+// One cause shared by many independent steps (every formatter step tripping MGS4007)
+// prints in full once; the rest are one footer line, and the summary still counts all.
+func TestRepeatedCodeFoldsIntoOneFooterLine(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	mutation := func(project, target string) string {
+		return "[MGS4007] " + project + ":" + target + " modified its declared sources a.go; declare them with ctx.modifiesExistingFiles(...)\n" +
+			"  see: https://example/MGS4007/"
+	}
+	steps := [][2]string{
+		{".", "format"}, {"docs", "render"}, {"web", "lint"}, {"api", "fmt"},
+		{"cli", "fmt"}, {"sdk", "fmt"}, {"ops", "fmt"}, {"web", "fmt"},
+	}
+	for _, s := range steps {
+		failEvent(t, h, s[0], s[1], mutation(s[0], s[1]))
+	}
+	failEvent(t, h, "api", "build", "go exited 1")
+	summaryEvent(t, h, len(steps)+1)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "[MGS4007]"), "the code's text prints once")
+	assert.Equal(t, 1, strings.Count(out, "see: https://example/MGS4007/"))
+	assert.Contains(t, out, "MGS4007 also hit 7 more steps: docs:render, web:lint, api:fmt, cli:fmt, sdk:fmt, ...\n")
+	assert.Contains(t, out, "go exited 1", "a failure with no code is never folded")
+	assert.Contains(t, out, "9 failed", "folding changes what prints, not what is counted")
+}
+
+func TestRepeatedCodeOnceNamesTheOneStep(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "format", "[MGS4007] .:format modified its declared sources a.go")
+	failEvent(t, h, "docs", "render", "[MGS4007] docs:render modified its declared sources b.md")
+	summaryEvent(t, h, 2)
+
+	assert.Contains(t, buf.String(), "MGS4007 also hit 1 more step: docs:render\n")
+}
+
 // TestBlockedCascadeLeavesTheRootPinned is why suppression has to happen before
 // the failure reaches the ring: the band holds five rows and this cascade is
 // seven failures, so suppressed restatements that still took a slot would evict
@@ -932,6 +1137,102 @@ func TestBlockedKeepsAnUnrelatedTargetWithTheSameMessage(t *testing.T) {
 
 	out := buf.String()
 	assert.Equal(t, 2, strings.Count(out, missing), "both targets failed on their own")
+	assert.NotContains(t, out, "blocked by")
+}
+
+// generateRoot is the root of the generate cascade below: a coded diagnostic, which
+// renders its docs URL on a second line.
+const generateRoot = "[MGS4007] .:types-generate modified its declared sources .claude/skills/magus-docs-lookup-full/SKILL.md, " +
+	".claude/skills/magus-docs-lookup/SKILL.md; declare them with ctx.modifiesExistingFiles(...)\n" +
+	"  see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"
+
+// generateCascade replays a lint run in which types-generate failed and every
+// generator composing it restated that failure, prefixed with the names of the steps
+// it came through and with no ctx.needs marker, so each composite repeated every
+// chain and every see: line.
+func generateCascade(t *testing.T, h *PrettyHandler) {
+	t.Helper()
+	via := func(names ...string) string { return strings.Join(names, ": ") + ": " + generateRoot }
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", via("types-generate"))
+	failEvent(t, h, ".", "termcast-generate:rw", via("job-generate", "types-generate"))
+	failEvent(t, h, ".", "langservice-generate:rw", via("job-generate", "types-generate"))
+	failEvent(t, h, ".", "bindings-generate:rw", strings.Join([]string{
+		via("types-generate"),
+		via("job-generate", "types-generate"),
+		via("langservice-generate", "job-generate", "types-generate"),
+	}, "\n"))
+	failEvent(t, h, ".", "generate:rw", strings.Join([]string{
+		via("bindings-generate", "types-generate"),
+		via("termcast-generate", "job-generate", "types-generate"),
+	}, "\n"))
+}
+
+func TestBlockedCascadeFoldsCompositeRestatements(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	generateCascade(t, h)
+	summaryEvent(t, h, 6)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "modified its declared sources"), "the cause prints once")
+	assert.Equal(t, 1, strings.Count(out, "see: https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"),
+		"a see: line belongs to the message above it, so it folds with it")
+	assert.Equal(t, 1, strings.Count(out, "[fail]"), "only the root prints a block")
+	assert.Contains(t, out, "blocked by workspace types-generate:rw: job-generate:rw, termcast-generate:rw, "+
+		"langservice-generate:rw, bindings-generate:rw, generate:rw\n")
+	assert.Contains(t, out, "6 failed", "a blocked step did fail")
+	assert.Equal(t, 6, h.status.failed)
+}
+
+// The same cascade as the binary reports it once both ctx.needs paths mark their hops.
+func TestBlockedCascadeFoldsMarkedRestatementsWithSeeLines(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", "ctx.needs: types-generate: "+generateRoot)
+	failEvent(t, h, ".", "termcast-generate:rw", "ctx.needs: job-generate: ctx.needs: types-generate: "+generateRoot)
+	summaryEvent(t, h, 3)
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, "see: "))
+	assert.Contains(t, out, "blocked by workspace types-generate:rw: job-generate:rw, termcast-generate:rw\n")
+}
+
+// A prefix counts as a hop only when it names a step this run already saw fail, so a
+// message that merely starts with a word and a colon stays the target's own.
+func TestBlockedKeepsAPrefixThatNamesNoFailedStep(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "job-generate:rw", "templates: "+generateRoot)
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	assert.NotContains(t, out, "blocked by")
+}
+
+// A composite that restates the root and also failed on its own keeps its block: the
+// own failure is news.
+func TestBlockedKeepsACompositeWithItsOwnFailureBesideTheRoot(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	h := newTestHandler(&buf)
+	failEvent(t, h, ".", "types-generate:rw", generateRoot)
+	failEvent(t, h, ".", "generate:rw", "types-generate: "+generateRoot+"\nmocks-generate: mockery exited 1")
+	summaryEvent(t, h, 2)
+
+	out := buf.String()
+	assert.Equal(t, 2, strings.Count(out, "[fail]"))
+	assert.Contains(t, out, "mockery exited 1")
 	assert.NotContains(t, out, "blocked by")
 }
 

@@ -290,7 +290,7 @@ export fun decideCommit(programs: [helpers\Program], baseBranch: str) > GuardVer
     if (baseBranch != "") {
         fix = baseFix(baseBranch);
     }
-    return magus\guard.deny("This commit message breaks the subject rules:\n  - " + problems.join("\n  - ") + "\n" + fix);
+    return magus\guard.deny("this commit message breaks a subject rule: {problems[0]}\n  - " + problems.join("\n  - ") + "\n" + fix);
 }
 
 fun ask(call: [str]) > GuardVerdict {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -35,7 +37,7 @@ import (
 func attentionRoot(root string) (string, error) {
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return "", fmt.Errorf("magus session: no magus workspace found from this directory, and the queue is per-repository; run it inside a workspace, or name one with --root <path>")
+		return "", fmt.Errorf("magus session: no magus workspace found from this directory, and the queue is per-repository, run it inside a workspace or name one with --root <path>")
 	}
 	return root, nil
 }
@@ -63,7 +65,7 @@ func attentionList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "prompt or a wrapper script.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -188,7 +190,7 @@ func attentionDispose(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "matched.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -204,7 +206,8 @@ func attentionDispose(root string, args []string) error {
 	// (rule agent-sign-off), but it fails OPEN where it is not wired, the same gap
 	// --ack closed this way first (diff.go).
 	if !isInteractiveTTY() {
-		fmt.Fprintln(os.Stderr, "magus: session dispose records that a person closed this request, so it needs an interactive terminal")
+		slog.ErrorContext(context.Background(), "session dispose records that a person closed this request, so it needs an interactive terminal",
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 
@@ -255,11 +258,11 @@ func disposeError(err error, ref, dir string) error {
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s; run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s, run `"+hint.SessionAttention.String()+"` to list the open ids", ref, dir)
 	case errors.As(err, &ambiguous):
-		return fmt.Errorf("magus session dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
+		return fmt.Errorf("magus session dispose, name one of them or add enough characters to tell them apart: %w", ambiguous)
 	case errors.As(err, &disposed):
-		return fmt.Errorf("magus session dispose: %w; a request closes once and stays closed, so run `"+hint.SessionAttention.String()+"` to see what is still open", disposed)
+		return fmt.Errorf("magus session dispose, a request closes once and stays closed so run `"+hint.SessionAttention.String()+"` to see what is still open: %w", disposed)
 	}
 	return err
 }
@@ -387,5 +390,5 @@ func noteAttentionOpenFailure(err error) {
 // an agent whose blocks never reach the queue has no other symptom.
 func noteMissingAttentionSource() {
 	slog.Warn("magus session notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
-		slog.String("next", "have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
+		attr.Why("have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }

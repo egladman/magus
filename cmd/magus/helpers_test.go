@@ -127,6 +127,8 @@ func TestReportedRunErr(t *testing.T) {
 	assert.False(t, reportedRunErr(errors.New("plain")))
 	assert.True(t, reportedRunErr(&types.SpellErrors{Project: "web"}))
 	assert.True(t, reportedRunErr(errors.Join(errors.New("other"), &types.SpellErrors{Project: "web"})))
+	assert.True(t, reportedRunErr(fmt.Errorf("run: %w", cache.ReportedError{Err: errors.New("step failed")})),
+		"a step failure the cache logged is not printed again")
 }
 
 func TestErrSilentIsAlreadyReported(t *testing.T) {
@@ -373,7 +375,7 @@ func TestFilterByNameAndNamesOf(t *testing.T) {
 // and the caller gets the already-printed sentinel so the message is not doubled.
 func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
 	var err error
-	out := captureStderr(t, func() {
+	out := noticesFrom(t, func() {
 		err = unknownEntity("spell", "gol", []string{"go", "typescript"})
 	})
 
@@ -381,7 +383,7 @@ func TestUnknownEntitySuggestsAndExitsTwo(t *testing.T) {
 	assert.Contains(t, out, `magus describe spell: unknown spell "gol"`)
 	assert.Contains(t, out, `did you mean "go"?`)
 
-	out = captureStderr(t, func() {
+	out = noticesFrom(t, func() {
 		err = unknownEntity("spell", "zzzzzzzz", []string{"go"})
 	})
 	assert.Equal(t, errSilent{exitCode: 2}, err)
@@ -625,11 +627,10 @@ func TestHintCanonicalSpellingTeachesCharmOnce(t *testing.T) {
 	target, err := types.ParseTarget("format:UPDATE")
 	require.NoError(t, err)
 
-	var buf bytes.Buffer
-	hintCanonicalSpellingTo(&buf, target)
-	hintCanonicalSpellingTo(&buf, target)
-
-	got := buf.String()
+	got := noticesFrom(t, func() {
+		hintCanonicalSpelling(t.Context(), target)
+		hintCanonicalSpelling(t.Context(), target)
+	})
 	assert.Equal(t, 1, strings.Count(got, "hint:"), "the charm must teach once, not once per call: %q", got)
 	assert.Contains(t, got, `charm "UPDATE" is canonically "update"`)
 }

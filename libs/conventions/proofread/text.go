@@ -14,8 +14,9 @@ import (
 // with its line in text.
 //
 // KindDocComment reads text as a doc comment, by the rules [Judge] applies to
-// one. KindAgentInstructionsTemplate renders text in both of its forms first,
-// and each finding's line is its line in the source.
+// one. KindMessage judges text as [JudgeMessage] does at its default cap.
+// KindAgentInstructionsTemplate renders text in both of its forms first, and
+// each finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 	return judgeText(text, kind, collect(opts))
 }
@@ -30,6 +31,8 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		})
 	case KindAgentInstructionsTemplate:
 		return judgeSkillSource(strings.Join(raw, "\n"), o)
+	case KindMessage:
+		return judgeMessage(text, 0, o)
 	}
 
 	lines := markdownProse(raw, kind != KindChangeDescription && kind != KindReviewReply)

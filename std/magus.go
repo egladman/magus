@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -1416,13 +1417,13 @@ func MagusVCSCheckpoint(ctx context.Context) (types.VCSCheckpoint, error) {
 // positional url was unreachable without also passing a cause.
 func MagusRaise(_ context.Context, code, message string, opts map[string]any) error {
 	if code == "" {
-		return errors.New(`magus\raise: needs a code, e.g. "ACME1001" - it is the stable identifier a caller branches on`)
+		return errors.New(`magus\raise: needs a code, e.g. "ACME1001", it is the stable identifier a caller branches on`)
 	}
 	if message == "" {
-		return fmt.Errorf(`magus\raise: %s needs a message; a code is an identifier, not a sentence`, code)
+		return fmt.Errorf(`magus\raise: %s needs a message, a code is an identifier, not a sentence`, code)
 	}
 	if strings.HasPrefix(strings.ToUpper(code), "MGS") {
-		return fmt.Errorf(`magus\raise: %q is in magus's own MGS namespace, which is a closed catalog; pick a prefix for this workspace instead`, code)
+		return fmt.Errorf(`magus\raise: %q is in magus's own MGS namespace, which is a closed catalog, pick a prefix for this workspace instead`, code)
 	}
 	// A per-call domain is how a caller-supplied url reaches the rendered error: Error's
 	// url field is captured at construction from the domain's function, never set later.
@@ -1606,7 +1607,7 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 	}
 	a, ok := ws.(types.InsightAnalyzer)
 	if !ok {
-		return nil, errors.New("insight: this workspace cannot analyze history")
+		return nil, errors.New("this workspace cannot analyze history")
 	}
 	return a, nil
 }
@@ -1634,16 +1635,16 @@ func insightOptions(opts map[string]any) (types.InsightOptions, error) {
 			case int:
 				out.Commits = n
 			default:
-				return types.InsightOptions{}, fmt.Errorf("insight: commits must be a number, got %T", v)
+				return types.InsightOptions{}, fmt.Errorf("commits must be a number, got %T", v)
 			}
 		case "since":
 			s, ok := v.(string)
 			if !ok {
-				return types.InsightOptions{}, fmt.Errorf("insight: since must be a string like \"90d\", got %T", v)
+				return types.InsightOptions{}, fmt.Errorf("since must be a string like \"90d\", got %T", v)
 			}
 			out.Since = s
 		default:
-			return types.InsightOptions{}, fmt.Errorf("insight: unknown option %q (want commits, since)", k)
+			return types.InsightOptions{}, fmt.Errorf("unknown option %q (want commits, since)", k)
 		}
 	}
 	return out, nil
@@ -1755,15 +1756,17 @@ func MagusListJob(ctx context.Context) (types.JobList, error) {
 	if err != nil {
 		return types.JobList{}, err
 	}
-	jobs, err := store.List()
+	staleAfter, err := store.StaleAfter()
 	if err != nil {
 		return types.JobList{}, err
 	}
-	// The same footprints and join `magus ls jobs` makes, the join from the snapshot
-	// `magus queue ls` keeps; it never fetches.
+	list, err := store.Report(ctx, time.Now().Unix(), staleAfter)
+	if err != nil {
+		return types.JobList{}, err
+	}
+	// The same join `magus ls jobs` makes, from the snapshot `magus queue ls` keeps; it
+	// never fetches.
 	root := types.WorkspaceFromContext(ctx).Root()
-	list := types.NewJobList(jobs)
-	list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
 	return queue.JoinInflight(ctx, root, list, job.Identity{Lease: store.Actor().Lease})
 }
 

@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/doctor"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -44,7 +46,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 			fmt.Fprintln(os.Stderr, "them all, and what each one looks at, without running any.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -328,7 +330,7 @@ func applyDoctorFixes(ctx context.Context, root string, rc runConfig, out types.
 		}
 		fmt.Printf("fixing %s: %s\n", c.Name, cmdline)
 		if err := dispatchSub(ctx, root, rc, c.Fix[0], c.Fix[1:]); err != nil {
-			fmt.Fprintf(os.Stderr, "magus doctor --fix: %s: %v\n", c.Name, err)
+			slog.ErrorContext(ctx, c.Name, attr.Notice(""), attr.Component("magus doctor --fix"), attr.Error(err))
 			failed++
 			continue
 		}

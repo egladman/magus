@@ -803,7 +803,7 @@ func TestUnregisteredDepErrorMessage(t *testing.T) {
 	}
 	msg := e.Error()
 	for _, want := range []string{
-		"magus: dependency not registered (2 unresolved)",
+		"dependency not registered (2 unresolved)",
 		"api -> internal/db-typo",
 		"(did you mean: internal/db)",
 		"svc-b -> shared/missing",

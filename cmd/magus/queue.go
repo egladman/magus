@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/client"
 	"github.com/egladman/magus/internal/queue/provider"
@@ -302,7 +304,7 @@ func queueDescribe(ctx context.Context, e *queueEnv, args []string) error {
 	caps, err := p.Describe(ctx, types.ListQuery{Base: f.Base, RemoteURL: remote, StatusContext: f.StatusContext, App: f.App, SetupSteps: f.StatusContext != ""})
 	var refused *types.SetupRefusedError
 	if errors.As(err, &refused) {
-		return fmt.Errorf("%w; then run: %s", err, renderRerun(e.root, fs, refused.App))
+		return fmt.Errorf("retry with %s: %w", renderRerun(e.root, fs, refused.App), err)
 	}
 	if err != nil {
 		return err
@@ -418,8 +420,8 @@ func queueLs(ctx context.Context, e *queueEnv, args []string) error {
 	if err := queue.WriteSnapshot(cl.Root, queue.Snapshot{Fetched: fetch, Changes: changes}); err != nil {
 		return fmt.Errorf("keep the snapshot: %w", err)
 	}
-	fmt.Fprintf(e.stderr, "queue: read %d queued and %d other open changes from %s in %dms\n",
-		len(changes.Changes), len(changes.Unqueued), orDash(fetch.Host), fetch.ElapsedMS)
+	slog.InfoContext(ctx, fmt.Sprintf("read %d queued and %d other open changes from %s in %dms",
+		len(changes.Changes), len(changes.Unqueued), orDash(fetch.Host), fetch.ElapsedMS), attr.Notice(""), attr.Component("queue"))
 	return nil
 }
 
@@ -712,7 +714,7 @@ func queueGate(ctx context.Context, e *queueEnv, args []string) error {
 	defer cleanup()
 	err = queue.GateCommit(ctx, drv, e.dir, scratch, head.ID, operands, env, e.stdout, e.stderr)
 	if why, code, ok := queue.HookFailed(err); ok {
-		fmt.Fprintf(e.stderr, "magus queue gate: the gate on %s %s\n", head.Short, why)
+		slog.ErrorContext(ctx, fmt.Sprintf("the gate on %s %s", head.Short, why), attr.Notice(""), attr.Component("magus queue gate"))
 		return magustypes.ExitError{Code: code}
 	}
 	return err

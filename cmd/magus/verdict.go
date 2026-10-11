@@ -102,11 +102,11 @@ func printVerdict(w io.Writer, ans types.KnowledgeAnswer, searchHint string) {
 // magus could search, and a suggestion is a guess about what the reader meant.
 // Neither answers the other, and printing only the guess would drop the one
 // statement the lookup can actually stand behind.
-func emitNearest(w io.Writer, id string) {
+func emitNearest(ctx context.Context, id string) {
 	if id == "" {
 		return
 	}
-	interactive.Emit(w, fmt.Sprintf("did you mean %q?", id))
+	interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", id))
 }
 
 // exitForVerdict maps a verdict to the process status, for the verbs that treat "nothing

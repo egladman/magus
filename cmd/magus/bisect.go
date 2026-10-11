@@ -5,12 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/ci/volatility"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -35,7 +37,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "failures on an affected project.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags:")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	}); err != nil {
 		return err
@@ -62,10 +64,10 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	rt := volatility.NewRuntime(&h, "", cfg, nil, false) // reads history only; never retries
 	if !rt.IsRegression(projectPath, bf.Target) {
 		stats := rt.Stats(projectPath, bf.Target)
-		fmt.Fprintf(os.Stderr, "bisect: need >=%d outcomes, volatility score < %.0f%%, and two consecutive affected failures\n",
-			cfg.MinSamples, cfg.Threshold*100)
-		fmt.Fprintf(os.Stderr, "bisect: outcomes recorded: %d, volatility score: %.1f%%\n",
-			len(stats.RecentOutcomes), rt.Score(projectPath, bf.Target)*100)
+		slog.InfoContext(ctx, fmt.Sprintf("need >=%d outcomes, volatility score < %.0f%%, and two consecutive affected failures",
+			cfg.MinSamples, cfg.Threshold*100), attr.Notice(""), attr.Component("bisect"))
+		slog.InfoContext(ctx, fmt.Sprintf("outcomes recorded: %d, volatility score: %.1f%%",
+			len(stats.RecentOutcomes), rt.Score(projectPath, bf.Target)*100), attr.Notice(""), attr.Component("bisect"))
 		return fmt.Errorf("bisect: no confirmed regression detected for %q/%q", projectPath, bf.Target)
 	}
 
@@ -100,14 +102,15 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 	if opts.Good == "" {
 		lastPass := rt.LastPassTime(projectPath, bf.Target)
 		if lastPass.IsZero() {
-			return errors.New("bisect: no passing run found in history; provide --good <sha>")
+			return errors.New("bisect: no passing run found in history, provide --good <sha>")
 		}
 		opts.GoodBefore = lastPass.Add(time.Minute)
-		fmt.Fprintf(os.Stderr, "bisect: deriving good commit from last recorded pass: %s\n",
-			lastPass.Format(time.RFC3339))
+		slog.InfoContext(ctx, "deriving good commit from last recorded pass: "+lastPass.Format(time.RFC3339),
+			attr.Notice(""), attr.Component("bisect"))
 	}
 
-	fmt.Fprintf(os.Stderr, "bisect: starting %s bisect between HEAD and good commit\n", res.Name)
+	slog.InfoContext(ctx, fmt.Sprintf("starting %s bisect between HEAD and good commit", res.Name),
+		attr.Notice(""), attr.Component("bisect"))
 
 	culprit, err := res.VCS.Bisect(ctx, wsRoot, opts)
 	if errors.Is(err, types.ErrVCSUnsupported) {

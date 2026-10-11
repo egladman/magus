@@ -54,6 +54,7 @@ import (
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/interp/transform"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
@@ -73,6 +74,7 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)
 	}
@@ -102,6 +104,7 @@ func runCLI() int {
 			return mapExitCode(shellCmd(withEnvRefusal(context.Background(), err), subArgs))
 		case "buzz":
 		default:
+			// No display yet: the logger is built after this check.
 			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
 			return 1
 		}
@@ -189,7 +192,7 @@ func runCLI() int {
 	// just told magus to stop is both unwanted and the way to get stuck there.
 	if res.rootCtx.Err() == nil {
 		if err := promptFailures(res.rootCtx, res.root, cache.StderrHandler()); err != nil {
-			fmt.Fprintf(os.Stderr, "magus: %v\n", err)
+			slog.ErrorContext(res.rootCtx, "", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		}
 	}
 	// Only a stage that succeeded settles: one that failed reports its own failure,
@@ -251,6 +254,9 @@ type dispatchProfile struct {
 	// loaded the machine is, and starting a broker for one would make every read command
 	// spawn a background process.
 	spawnsWork bool
+	// hostOnly marks a command whose stderr only a host's glue reads, never a person, so
+	// its display is quiet (see quietDisplay).
+	hostOnly bool
 }
 
 // isUsageOnlyInvocation reports whether a run/affected invocation only wants usage
@@ -466,7 +472,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// Never forwarded: this process's stdin and stdout ARE the protocol, and a server
 		// that adopted the call would serve its own. The preload opens the workspace the
 		// host launched it in and hosts the proc server the tools' runs share.
-		return dispatchProfile{needsConfig: true, needsWorkspace: true}
+		return dispatchProfile{needsConfig: true, needsWorkspace: true, hostOnly: true}
 	case "run", "affected":
 		// A help/usage-only invocation (`run -h`, `affected --help`, bare `affected`)
 		// must print its per-subcommand usage on the CALLER's stderr. run and affected are
@@ -679,6 +685,10 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 
 	peekedSub, peekedSubArgs := peekSub(args)
 	profile := resolveProfile(peekedSub, peekedSubArgs)
+	// Before the first applyDisplay below, so the workspace preload already logs under it.
+	if profile.hostOnly {
+		quietForced.Store(true)
+	}
 
 	if !profile.needsConfig {
 		// This branch skips the main flag parse entirely, so anything written BEFORE
@@ -687,6 +697,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// advertises global flags as working "before or after the subcommand", so
 		// bind the display flags here to make that true for these profiles too.
 		if err := applyPreSubDisplayFlags(args, peekedSubArgs, peekedSub); err != nil {
+			// The display flags are what failed to parse, so no display was installed.
 			fmt.Fprintln(os.Stderr, err)
 			return startupResult{cleanup: cleanup}, exitUsage
 		}
@@ -867,7 +878,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 	bindGlobalsAfterSubcommand(rest)
 	if err := errors.Join(finalizeConfig(), refuseInheritedSandboxWeakened(globalCfg.Sandbox.Mode)); err != nil {
 		stopFlags()
-		fmt.Fprintf(os.Stderr, "magus: invalid configuration from flags: %v\n", err)
+		slog.ErrorContext(rootCtx, "invalid configuration from flags", attr.Notice(""), attr.Component("magus"), attr.Error(err))
 		return startupResult{cleanup: cleanup}, 1
 	}
 	// globalCfg is the one the flags were bound into; cfg is the copy taken before any
@@ -915,7 +926,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		stopBroker := trace.phase("startup.broker")
 		pid := ensureBroker(rootCtx)
 		stopBroker()
-		announceBroker(os.Stderr, pid, global.output, global.quiet || global.silent)
+		noticeBroker(rootCtx, pid)
 	}
 
 	runsServer := sub == "server" && isServerRun(subArgs)
@@ -946,7 +957,7 @@ func startup(rootCtx context.Context, args []string) (startupResult, int) {
 		// Announced rather than silent: a run quietly narrower than requested is as hard
 		// to attribute as one that thrashes.
 		if clamped, was := cache.ClampConcurrency(concurrency); was {
-			slog.Warn("magus: concurrency capped to this machine",
+			slog.With(attr.Component("magus")).Warn("concurrency capped to this machine",
 				slog.Int("requested", concurrency), slog.Int("running_with", clamped),
 				slog.Int("cpus", cache.MachineCeiling()))
 			concurrency = clamped
@@ -1080,14 +1091,18 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "buzz":
 		return buzzCmd(ctx, root, subArgs)
 	default:
-		fmt.Fprintf(os.Stderr, "magus: unknown subcommand %q\n", sub)
+		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice(""), attr.Component("magus"))
 		if suggestion := hint.Nearest(sub, knownSubcommands); suggestion != "" {
-			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", suggestion))
+			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", suggestion))
 		}
-		fmt.Fprintln(os.Stderr, "")
-		usage()
+		unknownSubcommandUsage()
 		return errSilent{exitCode: 2}
 	}
+}
+
+func unknownSubcommandUsage() {
+	fmt.Fprintln(os.Stderr, "")
+	usage()
 }
 
 func usage() {
@@ -1493,6 +1508,15 @@ func startupTraceEnabled(args []string) bool {
 	return effectiveLevel(verbosity(extractVerbosityCount(args)), extractQuietFlag(args)) <= config.LevelTrace
 }
 
+// rationaleArgs returns err's rationale as an [attr.Why] log argument, or none when err
+// carries no rationale.
+func rationaleArgs(err error) []any {
+	if why := types.DiagnosticRationale(err); why != "" {
+		return []any{attr.Why(why)}
+	}
+	return nil
+}
+
 // mapExitCode maps a dispatch error to an exit code; errSilent means the caller already printed.
 func mapExitCode(err error) int {
 	if err == nil {
@@ -1508,7 +1532,7 @@ func mapExitCode(err error) int {
 	// A misuse of the command line exits 2, not 1: the work was never attempted.
 	var usage errUsage
 	if errors.As(err, &usage) {
-		slog.Error(err.Error())
+		slog.Error(err.Error(), rationaleArgs(err)...)
 		return exitUsage
 	}
 	// os.exit(code) from a magusfile: honor the requested code without an extra
@@ -1523,7 +1547,7 @@ func mapExitCode(err error) int {
 	if errors.As(err, &exitErr) {
 		return exitErr.Code
 	}
-	slog.Error(err.Error())
+	slog.Error(err.Error(), rationaleArgs(err)...)
 	// A failure that names its own status keeps it, the same question internal/proc's
 	// server asks of an adopted run. Two say 75 (EX_TEMPFAIL), so a caller can retry a
 	// busy machine and not a broken build: a contended no-wait workspace lock, and a

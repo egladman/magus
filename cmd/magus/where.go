@@ -4,15 +4,18 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -108,7 +111,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus where --filter type=glob,pattern='**/*.go'      # equivalent long form")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -123,7 +126,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if patternCount > 1 {
-		return fmt.Errorf("magus where: conflicting pattern flags; use only one of --filter, --glob, --regex, --literal")
+		return fmt.Errorf("magus where: conflicting pattern flags, use only one of --filter, --glob, --regex, --literal")
 	}
 
 	ws, err := inspectWorkspace(ctx, root)
@@ -132,7 +135,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 	all := ws.All()
 	if len(all) == 0 {
-		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project); run `%s` to bootstrap one", hint.Init)
+		return fmt.Errorf("magus where: no projects in workspace (a project is a directory with a magusfile.buzz declaring magus\\project), run `%s` to bootstrap one", hint.Init)
 	}
 
 	var matchFn func(string) bool
@@ -167,7 +170,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 			return ferr
 		}
 		if len(files) == 0 {
-			fmt.Fprintf(os.Stderr, "magus where: no projects or files match %v\n", filters)
+			slog.ErrorContext(ctx, fmt.Sprintf("no projects or files match %v", filters), attr.Notice("magus where"))
 			return errSilent{exitCode: 2}
 		}
 		if printAll {
@@ -184,10 +187,11 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 				Path: filepath.Join(ws.Root(), files[0].Path), Rel: files[0].Path, Kind: "file",
 			}})
 		}
-		fmt.Fprintln(os.Stderr, "magus where: ambiguous file match - candidates:")
+		var candidates strings.Builder
 		for _, f := range files {
-			fmt.Fprintf(os.Stderr, "  %s\n", f.Path)
+			fmt.Fprintf(&candidates, "\n  %s", f.Path)
 		}
+		slog.ErrorContext(ctx, "ambiguous file match - candidates:"+candidates.String(), attr.Notice("magus where"))
 		return errSilent{exitCode: 2}
 	}
 
@@ -209,9 +213,10 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	// Ambiguous: list candidates on stderr and exit non-zero.
-	fmt.Fprintln(os.Stderr, "magus where: ambiguous - candidates:")
+	var candidates strings.Builder
 	for _, s := range scored {
-		fmt.Fprintf(os.Stderr, "  %s\n", s.P.Path)
+		fmt.Fprintf(&candidates, "\n  %s", s.P.Path)
 	}
+	slog.ErrorContext(ctx, "ambiguous - candidates:"+candidates.String(), attr.Notice("magus where"))
 	return errSilent{exitCode: 2}
 }

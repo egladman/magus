@@ -103,7 +103,17 @@ func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) 
 	if p.Content != "" {
 		return planWholeFile(root, p.Path, p.Content)
 	}
-	path, err := harnessConfigPath(root, p.Path)
+	return planJSONKey(root, p.Path, p.Key, p.Value, func(got any) error {
+		return fmt.Errorf("%s holds %v, not %v, so the host never asks the person there, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
+			promptLocation(p), got, p.Value)
+	})
+}
+
+// planJSONKey reports what the JSON document at rel needs for key to hold value, with no
+// Changes when it already does. A key holding another value was someone's choice: the
+// error is conflict's, and no plan overwrites it.
+func planJSONKey(root, rel string, key []string, value any, conflict func(got any) error) (types.HarnessFile, error) {
+	path, err := harnessConfigPath(root, rel)
 	if err != nil {
 		return types.HarnessFile{}, err
 	}
@@ -118,43 +128,43 @@ func planHarnessPrompt(root string, p HarnessPrompt) (types.HarnessFile, error) 
 			return file, fmt.Errorf("parse %s: %w", path, err)
 		}
 	}
-	parent, found, err := promptParent(doc, p)
+	parent, found, err := keyParent(doc, rel, key)
 	if err != nil {
 		return file, err
 	}
-	last := p.Key[len(p.Key)-1]
+	last := key[len(key)-1]
 	if got, present := parent[last]; found && present {
-		if sameJSON(got, p.Value) {
+		if sameJSON(got, value) {
 			return file, nil
 		}
-		return file, fmt.Errorf("%s holds %v, not %v, so the host never asks the person there; magus leaves a value someone chose alone. Change or remove it, then describe the harness again",
-			promptLocation(p), got, p.Value)
+		return file, conflict(got)
 	}
 	fragment := map[string]any{}
 	current := fragment
-	for _, key := range p.Key[:len(p.Key)-1] {
+	for _, k := range key[:len(key)-1] {
 		next := map[string]any{}
-		current[key] = next
+		current[k] = next
 		current = next
 	}
-	current[last] = p.Value
+	current[last] = value
 	file.Fragment = fragment
-	file.Changes = []types.HarnessChange{{Op: types.HarnessSet, Key: strings.Join(p.Key, "."), Value: p.Value}}
+	file.Changes = []types.HarnessChange{{Op: types.HarnessSet, Key: strings.Join(key, "."), Value: value}}
 	return file, nil
 }
 
-// promptParent walks to the object holding a prompt's last key, and refuses a path through a
-// value that is not an object. found is false when an object on the way is absent.
-func promptParent(doc map[string]any, p HarnessPrompt) (parent map[string]any, found bool, err error) {
+// keyParent walks to the object holding key's last element in the document read from rel,
+// and refuses a path through a value that is not an object. found is false when an object
+// on the way is absent.
+func keyParent(doc map[string]any, rel string, key []string) (parent map[string]any, found bool, err error) {
 	current := doc
-	for i, key := range p.Key[:len(p.Key)-1] {
-		next, present := current[key]
+	for i, k := range key[:len(key)-1] {
+		next, present := current[k]
 		if !present || next == nil {
 			return nil, false, nil
 		}
 		obj, ok := next.(map[string]any)
 		if !ok {
-			return nil, false, fmt.Errorf("%s: %s is not an object", p.Path, strings.Join(p.Key[:i+1], "."))
+			return nil, false, fmt.Errorf("%s: %s is not an object", rel, strings.Join(key[:i+1], "."))
 		}
 		current = obj
 	}
@@ -206,4 +216,65 @@ func verifyHarnessPrompts(root string, d HarnessDescriptor, result *HarnessVerif
 		}
 	}
 	result.PromptStatus = HarnessVerified
+}
+
+// HarnessSetting is one plain value a harness keeps in a host's JSON config, read by the host
+// as configuration rather than run as a hook: a plugin to enable, a marketplace to know. Key
+// and Value set it inside a document the person also edits.
+type HarnessSetting struct {
+	Path  string   `json:"path"`
+	Key   []string `json:"key"`
+	Value any      `json:"value"`
+}
+
+func validateHarnessSetting(s HarnessSetting) error {
+	if s.Path == "" || filepath.IsAbs(s.Path) || !isSafeRelativePath(s.Path) {
+		return fmt.Errorf("path must be a workspace-relative path")
+	}
+	if len(s.Key) == 0 {
+		return fmt.Errorf("%s: key is required", s.Path)
+	}
+	for _, k := range s.Key {
+		if k == "" {
+			return fmt.Errorf("%s: key must contain non-empty object keys", s.Path)
+		}
+	}
+	if s.Value == nil {
+		return fmt.Errorf("%s: key needs a value", s.Path)
+	}
+	return nil
+}
+
+// settingLocation renders a setting for a message: the file, and the key inside it.
+func settingLocation(s HarnessSetting) string {
+	return s.Path + " " + strings.Join(s.Key, ".")
+}
+
+// planHarnessSetting reports what s's file needs, with no Changes when it is in place.
+func planHarnessSetting(root string, s HarnessSetting) (types.HarnessFile, error) {
+	return planJSONKey(root, s.Path, s.Key, s.Value, func(got any) error {
+		return fmt.Errorf("%s holds %v, not %v, and magus leaves a value someone chose alone: change or remove it, then describe the harness again",
+			settingLocation(s), got, s.Value)
+	})
+}
+
+// verifyHarnessSettings reports whether every setting a descriptor keeps is in place. A
+// descriptor with none leaves the status empty.
+func verifyHarnessSettings(root string, d HarnessDescriptor, result *HarnessVerification) {
+	if len(d.Settings) == 0 {
+		return
+	}
+	for _, s := range d.Settings {
+		file, err := planHarnessSetting(root, s)
+		switch {
+		case err != nil:
+			result.SettingStatus, result.SettingReason = HarnessUncovered, err.Error()
+			return
+		case len(file.Changes) > 0:
+			result.SettingStatus = HarnessUncovered
+			result.SettingReason = "missing " + settingLocation(s) + "; merge what `magus describe harness " + d.ID + "` prints"
+			return
+		}
+	}
+	result.SettingStatus = HarnessVerified
 }

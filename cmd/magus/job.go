@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/service/console"
@@ -104,34 +106,29 @@ func jobUsage() {
 	fmt.Fprintln(os.Stderr, "same store through an agent's channel.")
 }
 
-// consoleJobLine is where to WATCH a job while it runs, printed under every verb that names
-// one. Somebody who wants to know how a worker is doing has two ways to find out, and only
-// one of them leaves the worker alone.
-//
-// An empty id asks for the Jobs view itself, which is what a listing wants.
-//
-// With no server running there is no origin to build a link against, so the line says how to
-// start one instead. Printing the URL anyway would hand a person a page that never loads,
-// and a browser error page cannot tell them that nothing is listening rather than that the
-// console is broken.
-func consoleJobLine(id string) string {
+// pointAtConsole names where to WATCH a job (the Jobs view for an empty id), the one way
+// to see how a worker is doing that leaves it alone. With no server it names no link: a
+// page that never loads cannot say whether nothing is listening or the console is broken,
+// and the record carries no next command, so a quiet display has nothing to print.
+func pointAtConsole(ctx context.Context, id string) {
 	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
-		return ""
+		return
 	}
 	serving, serverVersion := probeConsoleServer()
 	if !serving {
-		return "console: nothing is serving it; `" + hint.ServerStart.String() + "` to watch this job without interrupting its holder"
+		slog.InfoContext(ctx, "nothing is serving it; `"+hint.ServerStart.String()+"` to watch this job without interrupting its holder",
+			attr.Notice("console"))
+		return
 	}
 	host := mcpAddrString()
 	link := console.JobLink(host, id)
 	if id == "" {
 		link = console.Link(console.LinkOpts{Host: host, App: console.JobApp})
 	}
-	line := "console: " + link + "\n  " + authHint(link)
+	slog.LogAttrs(ctx, slog.LevelInfo, link, attr.Notice("console"), attr.Next(console.OpenCommand(link)))
 	if skew := consoleSkew(serverVersion, version); skew != "" {
-		line += "\n  " + skew
+		slog.WarnContext(ctx, skew, attr.Notice("console"))
 	}
-	return line
 }
 
 // consoleSkew names a server running a different build from this binary, or "" when they
@@ -143,14 +140,6 @@ func consoleSkew(serverVersion, cliVersion string) string {
 	}
 	return fmt.Sprintf("that console is from server %s, this binary is %s; `%s && %s` serves this build",
 		serverVersion, cliVersion, hint.ServerStop, hint.ServerStart)
-}
-
-// printConsoleJobLine writes that line, and nothing at all when the console is off: a
-// suppressed console has no address, and a bare "console:" is worse than silence.
-func printConsoleJobLine(out io.Writer, id string) {
-	if line := consoleJobLine(id); line != "" {
-		fmt.Fprintln(out, line)
-	}
 }
 
 // probeConsoleServer reports whether the server is up, and its version. A per-process
@@ -235,7 +224,7 @@ func lsJobs(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, `  magus ls jobs -o template='{{range .jobs}}{{.id}}  {{.checkout_root}}{{"\n"}}{{end}}'`)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -248,15 +237,13 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	jobs, err := store.List()
+	// The store's report, not the bare rows: magus\job.list and JobService's ListJobs
+	// build the same one, so the three doors cannot disagree about a row.
+	ctx := context.Background()
+	list, err := store.Report(ctx, time.Now().Unix(), globalCfg.Jobs.StaleAfter)
 	if err != nil {
 		return err
 	}
-	// The list, not the bare rows: the overlaps are derived by the same constructor
-	// magus\job.list and the console's route use, so the three doors cannot
-	// disagree about whether two jobs claim one path.
-	list := types.NewJobList(jobs).Flag(time.Now().Unix(), globalCfg.Jobs.StaleAfter)
-	ctx := context.Background()
 	list, me, err := joinInflight(ctx, root, store, list)
 	if err != nil {
 		return err
@@ -269,9 +256,6 @@ func lsJobs(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if opts.Format != outputName {
-		list.Overlaps = job.MeasureOverlaps(ctx, root, list.Jobs, list.Overlaps)
-	}
 	switch opts.Format {
 	case outputName:
 		ids := make([]string, len(list.Jobs))
@@ -283,7 +267,7 @@ func lsJobs(root string, args []string) error {
 		printJobTree(os.Stdout, list)
 		fmt.Fprintln(os.Stdout)
 		printInflight(os.Stdout, list, all)
-		printConsoleJobLine(os.Stdout, "")
+		pointAtConsole(context.Background(), "")
 		return nil
 	default:
 		list.Changes = inflightScope(list.Changes, all)
@@ -675,7 +659,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus describe job refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -730,7 +714,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 			return err
 		}
 		printJobChange(os.Stdout, joined.Changes, row.ID)
-		printConsoleJobLine(os.Stdout, row.ID)
+		pointAtConsole(ctx, row.ID)
 		return nil
 	default:
 		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
@@ -884,10 +868,19 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Goals are data: the record's `goals` declares what done means (a check that")
 			fmt.Fprintln(os.Stderr, "passed; paths or symbols changed, present, absent or unreferenced), and")
 			fmt.Fprintln(os.Stderr, "`"+hint.JobWait.String()+"` grades them. `--schema` prints the record. A job that")
-			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal; a read-only one is exempt.")
+			fmt.Fprintln(os.Stderr, "writes is refused without a check or a goal, and one naming no write paths must")
+			fmt.Fprintln(os.Stderr, "be --read-only. A read-only job passes only by a script check, `\"check\":")
+			fmt.Fprintln(os.Stderr, "{\"script\": \"<probe>.buzz\"}` in a --stdin record, whose result cites the ref")
+			fmt.Fprintln(os.Stderr, "`"+hint.Buzz.With("--record", "<probe>.buzz")+"` prints; without one its holder ends it with")
+			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`, recorded "+string(types.StateNoReturn)+".")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A session holding a lease may only fork a CHILD of its own job, inside its own")
 			fmt.Fprintln(os.Stderr, "paths; widening a boundary is the forking session's.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "A writing job's fork lists the declared outputs a target regenerates from sources")
+			fmt.Fprintln(os.Stderr, "inside its write paths that sit outside them, each with its target: widen the")
+			fmt.Fprintln(os.Stderr, "paths, or regenerate them yourself after integration. It reads declarations only,")
+			fmt.Fprintln(os.Stderr, "so a coupling none records (a version constant a test pins) is not listed.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
 			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
@@ -901,7 +894,7 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job fork refactor/pricing --write-paths pricing/total.sh --check 'test .'")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -940,6 +933,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	var probe types.Job
 	row.Apply(&probe)
 	probe.ID = row.ID
+	if err := job.RefuseUnscoped(probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
 	if err := job.RefuseUngraded(probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
@@ -948,6 +944,9 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if err := job.RefuseForkLimits(plan, row.ID, row.Parent, globalCfg.Jobs); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if row.Checkpoint, err = store.DeclaredCheckpoint(ctx, plan, row.ID, row.Checkpoint); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	// The reader loads the graph only when a gate names a symbol.
@@ -996,10 +995,11 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
-		printConsoleJobLine(os.Stdout, stored.ID)
+		job.RenderRegenerated(os.Stdout, jobRegenerated(ctx, root, []types.Job{stored})[stored.ID])
+		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
-		return emitFormatted(opts, stored)
+		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: jobRegenerated(ctx, root, []types.Job{stored})[stored.ID]})
 	}
 }
 
@@ -1018,7 +1018,7 @@ func jobEnter(ctx context.Context, store *job.Store, id, rel string) error {
 		return emitNames([]string{stored.ID})
 	case outputText:
 		fmt.Println(job.EntryAdvice(stored, rel))
-		printConsoleJobLine(os.Stdout, stored.ID)
+		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		return emitFormatted(opts, stored)
@@ -1082,7 +1082,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exec refactor/pricing   # in the worktree you will edit")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1099,7 +1099,7 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		base, _ = checkoutBaseToken(ctx, root)
 	}
 	if strings.TrimSpace(base) == "" {
-		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s;"+
+		return fmt.Errorf("magus job exec: this checkout reports no revision, so there is no base to record for %s,"+
 			" pass the one you are on with --base", pos[0])
 	}
 	store, err := openJobs(root)
@@ -1171,7 +1171,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job exit scout-a scout-b scout-c")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1297,7 +1297,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job wait refactor/pricing")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -1321,8 +1321,8 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if actor := store.Actor(); !actor.Verifies(rows, pos[0]) {
-		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work."+
-			" Exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
+		return fmt.Errorf("magus job wait: this checkout holds the lease on %s, and a holder does not verify its own work,"+
+			" exit the job with what you changed and what you ran, and let whoever forked it wait on you", actor.Lease)
 	}
 
 	var result *types.JobResult
@@ -1358,7 +1358,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		err = emitNames([]string{status.Job})
 	case outputText:
 		printJobStatus(os.Stdout, status)
-		printConsoleJobLine(os.Stdout, status.Job)
+		pointAtConsole(ctx, status.Job)
 	default:
 		err = emitFormatted(opts, status)
 	}
@@ -1462,7 +1462,7 @@ func jobWatch(ctx context.Context, root string, args []string) error {
 	}
 
 	out := os.Stdout
-	printConsoleJobLine(out, id)
+	pointAtConsole(ctx, id)
 	fmt.Fprintf(out, "watching %s in %s; interrupt to stop\n", id, root)
 
 	// The job plan is re-read per batch rather than captured: a holder releases paths as it
@@ -1707,9 +1707,10 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
 	return job.TermsFacts{
-		Projects:         affected.Affected,
-		DerivedDenyPaths: derived,
-		Affinity:         leaseAffinity(ctx, m, affected.Seed),
+		Projects:           affected.Affected,
+		DerivedDenyPaths:   derived,
+		RegeneratedOutside: regeneratedIn(ctx, m, row),
+		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 	}
 }
 
@@ -2125,7 +2126,7 @@ func jobDelete(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job rm refactor/pricing-draft")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2176,7 +2177,8 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Every record is checked before any is written, with fork's rules for what it")
 			fmt.Fprintln(os.Stderr, "adds. It prints what changed per job; the global --dry-run prints it and writes")
-			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record.")
+			fmt.Fprintln(os.Stderr, "nothing. `"+hint.JobFork.With("--schema")+"` prints the record. A job whose write")
+			fmt.Fprintln(os.Stderr, "or deny paths changed also gets fork's list of outputs regenerated outside them.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Example:")
 			fmt.Fprintln(os.Stderr, "  magus job apply -f jobs.jsonl --dry-run")
@@ -2186,7 +2188,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`"+hint.JobExit.String()+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -2231,23 +2233,32 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	switch opts.Format {
-	case outputName:
+	if opts.Format == outputName {
 		ids := make([]string, len(applied))
 		for i, a := range applied {
 			ids[i] = a.Next.ID
 		}
 		return emitNames(ids)
-	case outputText:
-		printJobApply(os.Stdout, applied, globalCfg.DryRun)
-		return nil
-	default:
-		report := applyReport{DryRun: globalCfg.DryRun}
-		for _, a := range applied {
-			report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed})
-		}
-		return emitFormatted(opts, report)
 	}
+	var reshaped []types.Job
+	for _, a := range applied {
+		if a.Created || slices.Contains(a.Changed, "write_paths") || slices.Contains(a.Changed, "deny_paths") {
+			reshaped = append(reshaped, a.Next)
+		}
+	}
+	regenerated := jobRegenerated(ctx, root, reshaped)
+	if opts.Format == outputText {
+		printJobApply(os.Stdout, applied, regenerated, globalCfg.DryRun)
+		if len(applied) == 1 && !globalCfg.DryRun {
+			pointAtConsole(ctx, applied[0].Next.ID)
+		}
+		return nil
+	}
+	report := applyReport{DryRun: globalCfg.DryRun}
+	for _, a := range applied {
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: regenerated[a.Next.ID]})
+	}
+	return emitFormatted(opts, report)
 }
 
 // applyReport is `job apply`'s structured output: each row as written, or as it would be.
@@ -2260,9 +2271,12 @@ type applyEntry struct {
 	Job     types.Job `json:"job"     yaml:"job"`
 	Created bool      `json:"created" yaml:"created"`
 	Changed []string  `json:"changed" yaml:"changed"`
+	// RegeneratedOutside is computed for a row whose write or deny paths the apply set.
+	RegeneratedOutside []job.RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
 }
 
-func printJobApply(out io.Writer, applied []job.Applied, dryRun bool) {
+// printJobApply prints each row's change, then what regenerated holds for it.
+func printJobApply(out io.Writer, applied []job.Applied, regenerated map[string][]job.RegeneratedOutput, dryRun bool) {
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
@@ -2281,13 +2295,10 @@ func printJobApply(out io.Writer, applied []job.Applied, dryRun bool) {
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
 		}
+		job.RenderRegenerated(out, regenerated[a.Next.ID])
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
-		return
-	}
-	if len(applied) == 1 {
-		printConsoleJobLine(out, applied[0].Next.ID)
 	}
 }
 
@@ -2354,7 +2365,7 @@ func jobPrune(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "  magus job prune --dry-run")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {

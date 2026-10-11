@@ -63,7 +63,7 @@ func denyScriptContent(deps Dependencies, callDir, command string, d Dialect) Sh
 		if lang == scriptNone {
 			lang = detectScriptLang(file, body)
 		}
-		v := judgedFrom(judgeScript(deps, lang, body), "\nJudged from the content of "+run.path+", which this line runs: a script gets the verdict its lines would get typed inline.")
+		v := judgedFrom(judgeScript(deps, lang, body), run.path, "\nJudged from the content of "+run.path+", which this line runs: a script gets the verdict its lines would get typed inline.")
 		switch {
 		case v.Deny != "":
 			return v
@@ -106,7 +106,7 @@ func denyScriptWrite(deps Dependencies, file string, w writeFields) ShellVerdict
 	if v.Deny == "" && !v.demoted || judgeScript(deps, lang, before).advisoryName() == v.advisoryName() {
 		return ShellVerdict{}
 	}
-	return judgedFrom(v, "\nJudged from what this write leaves in "+file+": a script gets the verdict its lines would get typed inline.")
+	return judgedFrom(v, file, "\nJudged from what this write leaves in "+file+": a script gets the verdict its lines would get typed inline.")
 }
 
 // judgeScript is the inline verdict for a script's content, kept only when it is one of
@@ -120,7 +120,7 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 		}
 	case scriptInterpreter:
 		if scriptRewrites(body) && !allOutside(deps.scope, scriptPaths(body)) {
-			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Rule: denyRule{Name: denyRuleScriptedRewrite}})
+			return deps.grade(ShellVerdict{Deny: denyScriptedRewrite, Why: denyScriptedRewriteWhy, Rule: denyRule{Name: denyRuleScriptedRewrite}})
 		}
 	case scriptBuzz:
 		// The verdict an inline interpreter gets for replacing a file the tree carries: fs
@@ -135,12 +135,18 @@ func judgeScript(deps Dependencies, lang scriptLang, body string) ShellVerdict {
 	return ShellVerdict{}
 }
 
-// judgedFrom appends note, which names the script a verdict was judged from, to a deny or
-// a demoted deny; any other v comes back unchanged.
-func judgedFrom(v ShellVerdict, note string) ShellVerdict {
+// judgedFrom names script, the file a verdict was judged from, in a deny's verdict and
+// note, which says why, in its rationale; a demoted deny carries the note whole. Any other
+// v comes back unchanged.
+func judgedFrom(v ShellVerdict, script, note string) ShellVerdict {
 	switch {
 	case v.Deny != "":
-		v.Deny += note
+		d := verdictParts(v.Deny, v.Why)
+		v.Deny = "`" + script + "`: " + d.Say
+		v.Why = strings.TrimPrefix(note, "\n")
+		if d.Why != "" {
+			v.Why += "\n" + d.Why
+		}
 	case v.demoted:
 		v.Context += note
 	}

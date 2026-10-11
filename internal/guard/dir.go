@@ -29,7 +29,16 @@ var fixtureDirs = []string{"testdata", "fixtures", "__snapshots__"}
 // into an existing mechanism over adding one, but nothing LOADS it at the moment
 // the decision is made. Measured: a directory was added for a helper with two
 // callers that belonged in an existing one, with the skill installed and never read.
-func adviseNewSourceDir(path string) string {
+func adviseNewSourceDir(path string) advice {
+	if dir := newSourceDir(path); dir != "" {
+		return newSourceDirAdvice(dir)
+	}
+	return advice{}
+}
+
+// newSourceDir is the workspace-relative directory a write to path would create, or ""
+// when it creates none. architecture-unbriefed gates the same act this advises on.
+func newSourceDir(path string) string {
 	dir, ok := workspaceRelativeDir(path)
 	if !ok {
 		return ""
@@ -56,7 +65,7 @@ func adviseNewSourceDir(path string) string {
 	} else if !os.IsNotExist(err) {
 		return "" // unreadable: say nothing rather than guess
 	}
-	return newSourceDirAdvice(dir)
+	return dir
 }
 
 // workspaceRelativeDir returns the slash-separated directory of path relative to the
@@ -93,8 +102,11 @@ func workspaceRelativeDir(path string) (string, bool) {
 	return rel, true
 }
 
-func newSourceDirAdvice(dir string) string {
-	return "magus workspace: `" + dir + "` holds nothing yet, so this write creates a NEW DIRECTORY: whatever your language calls an importable unit (package, module, crate).\n" +
-		"Before it exists, check that it has to. Is there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\n" +
-		"Load the magus-architecture-review skill. It answers this from the workspace's own dependency and churn data rather than from taste."
+func newSourceDirAdvice(dir string) advice {
+	return advice{
+		Say: "magus workspace: this write creates a NEW DIRECTORY, `" + dir + "`; load the magus-architecture-review skill to check that it has to exist.",
+		Why: "`" + dir + "` holds nothing yet, so this write creates whatever your language calls an importable unit (package, module, crate).\n" +
+			"Is there an existing directory whose stated purpose already covers this, and would folding it there serve callers better than a new import? A boundary that exists for one helper with two callers is one nobody asked for, and it is far cheaper to not create than to remove later.\n" +
+			"The skill answers this from the workspace's own dependency and churn data rather than from taste.",
+	}
 }

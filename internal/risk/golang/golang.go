@@ -304,7 +304,7 @@ func GoList(ctx context.Context, dir string) ([]byte, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("go list in %s: %w: %s", dir, err, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("go list in %s: %s: %w", dir, strings.TrimSpace(stderr.String()), err)
 	}
 	return out, nil
 }

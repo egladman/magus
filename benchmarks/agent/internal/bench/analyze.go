@@ -644,7 +644,7 @@ func Analyze(records []RunRecord, seed int64) (*Analysis, error) {
 			seen[key] = map[int64]string{}
 		}
 		if other, dup := seen[key][run.Rep]; dup {
-			return nil, fmt.Errorf("%s/%s rep %d ran twice (%s and %s); keep one run directory", run.Arm, run.Task, run.Rep, other, run.RunID)
+			return nil, fmt.Errorf("%s/%s rep %d ran twice (%s and %s), keep one run directory", run.Arm, run.Task, run.Rep, other, run.RunID)
 		}
 		seen[key][run.Rep] = run.RunID
 	}

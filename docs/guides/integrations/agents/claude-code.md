@@ -28,6 +28,7 @@ event.
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
+| quiet output     | `env.MAGUS_LOG_SILENT` in `.claude/settings.json`: `true`     |
 
 ## Skills
 
@@ -89,7 +90,8 @@ magus agent harness verify --id claude-code
 ```
 
 The spell installs entries for commands, file edits, Magus MCP tool calls, reads
-(recorded and judged), and subagent spawns. Each is one `magus buzz` command that
+(recorded and judged), subagent spawns, and the person's messages (recorded, never
+answered). Each is one `magus buzz` command that
 runs a shipped script, which talks to `magus shell`: file edits run
 `magus-path.buzz`, reads also run `magus-observe.buzz`, and every other entry runs
 `magus-command.buzz`. The Bash entry, as `magus describe harness claude-code` prints it, in the place it lands in
@@ -104,7 +106,7 @@ runs a shipped script, which talks to `magus shell`: file edits run
         "hooks": [{
           "type": "command",
           "timeout": 10,
-          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code"
+          "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills"
         }]
       }
     ]
@@ -151,6 +153,20 @@ other consumer.
 `magus doctor`'s `guard-binary` check runs the interpreter a hook would run and
 fails when it is a different build from the doctor's own, or cannot print its
 version, naming both binaries.
+
+### Quiet output
+
+`MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
+without each reason or a wait note under a minute. The printed settings set it in
+Claude Code's own `env` object, which Claude Code sets on the session, so every Bash
+tool command inherits it:
+
+```json
+{ "env": { "MAGUS_LOG_SILENT": "true" } }
+```
+
+`magus describe harness claude-code` sets only the variable your `env` lacks, beside
+whatever else it holds. A value you already chose, `false` included, stays.
 
 ### When the hook itself cannot run
 
@@ -289,7 +305,7 @@ prints this entry alongside the entries above:
       {
         "matcher": "Agent|Task|SendMessage",
         "hooks": [
-          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --observes-skill-loads", "timeout": 10 }
+          { "type": "command", "command": "./magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --reports-skills", "timeout": 10 }
         ]
       }
     ],
@@ -333,12 +349,14 @@ hands a [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule as
 
 Same script as the MCP-call entry and for the same reason: a spawn's payload is a
 prompt, a `subagent_type`, and an optional `model`, not one string, so there is no
-`tool_input.command` to select and the event goes whole. The one thing written on
-this entry is the flag after `--`, which `magus buzz` forwards to the script as its
-own argv: `--observes-skill-loads` says that THIS config also matches the host's
-`Skill` tool, so a rule that requires a skill before a spawn has loads to read. A
-config without that matcher omits the flag and those rules stand down rather than
-denying every spawn forever. The script parses that tail against the flags it
+`tool_input.command` to select and the event goes whole. The one capability written
+on this entry, and on every other entry that judges, is the flag after `--`, which
+`magus buzz` forwards to the script as its own argv: `--reports-skills` says
+that THIS config also matches the host's `Skill` tool, so a rule that requires a
+skill before a spawn, a write or a command has loads to read. A load counts for the
+agent that made it: a subagent loads a skill itself, and its parent's load does not
+count for it. A config without that matcher omits the flag and those rules stand
+down rather than denying forever. The script parses that tail against the flags it
 supports; an argument it does not know is named on stderr, which Claude Code shows
 as a hook error, and the call is judged without it rather than blocked.
 `magus session hook` reads
@@ -469,6 +487,44 @@ rules live in, `CLAUDE.md` by default and `-- --rules <file>` when yours is
 somewhere else. Run `magus session --brief` yourself to see what a session
 is handed.
 
+## The magus mod
+
+The repository is a Claude Code plugin marketplace with one mod in it, `magus`,
+whose source is `claude-code-mod/` beside this page. Install it once per person:
+
+```text
+/plugin install magus --marketplace egladman/magus
+```
+
+It adds three things to a session:
+
+- A status line entry and a band above the prompt that name a magus problem with the
+  command that fixes it: no binary, a borrowed or stale `./magus`, a stopped server,
+  a server running another version, or an MCP endpoint that is not serving.
+- A pane, opened with `/magus`, of the job tree, recent runs, and the session's
+  subagents. It reads the server's Connect API over its unix socket, the same
+  services the console uses, so it needs `magus server start` and holds no token.
+- Prompt-cache warnings: a countdown before the cache expires, and a warning or a
+  held prompt when you submit after it has, priced from a rates table you can
+  replace through the mod's `ratesFile` setting.
+
+Every threshold is a setting in `/config`. The mod uses the early-access Claude
+Code plugin API, so a Claude Code update can change what it needs.
+
+A workspace can register the marketplace and turn the mod on for everyone who opens
+it, through an opt-in harness beside the one that wires the guard:
+
+```buzz
+import "spells/harness/claude-code-mod" as claudeMod;
+magus\harness.provider(claudeMod);
+```
+
+`magus describe harness claude-code-mod` then prints the two settings it keeps in
+`.claude/settings.json`, `extraKnownMarketplaces.magus` and
+`enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
+reads the marketplace only once the person trusts the folder, and each person still
+runs the install line above once.
+
 ## Coverage and limits
 
 No transport gap in the guard contract: all three kinds of input are wired, `deny`
@@ -497,12 +553,19 @@ too complex to verify". Split such a line, as that refusal says. A
 `{ <command>` ... `} </dev/null` group avoids the word but was refused far more
 often, even around `stat` or `git status`.
 
-That is not the same as using everything this host offers. `SessionStart` with
-matcher `startup`, `UserPromptSubmit`, `PostToolUse`, `PostToolUseFailure`,
-`PermissionRequest` and `PreCompact` are all available and all unused, on the test
-every wiring here has to pass: a hook must change a verdict or restore state the
-model cannot otherwise get. An advisory that fires every turn to restate guidance
-the skills already carry fails it.
+That is not the same as using everything this host offers. `PostToolUseFailure`,
+`PermissionRequest` and `PreCompact` are available and unused, on the test every
+wiring here has to pass: a hook must change a verdict or restore state the model
+cannot otherwise get. An advisory that fires every turn to restate guidance the
+skills already carry fails it.
+
+`UserPromptSubmit` passes that test without saying anything. The guard glue hands
+the message the person typed to `magus shell --message`, which records a topic marker when
+the message asks a structure question (architecture, boundaries, layering, imports,
+a new package, where something belongs, blast radius) and prints nothing, so the
+model's context gets no advisory and the message is never blocked. The marker
+changes a later verdict: `architecture-unbriefed` holds the agent's next call
+until it loads `magus-architecture-review`. The message text is not kept.
 
 `SubagentStart` is the one worth naming, because it looks like it should replace
 the [lease wiring](#lease-capture) above and does not. It fires when a subagent

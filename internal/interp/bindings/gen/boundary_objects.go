@@ -1530,6 +1530,7 @@ func ObjectCommand(v spells.Command) vm.Value {
 	out.MapSet("external", vm.StrValue(string(v.External)))
 	out.MapSet("sourcesEach", vm.BoolValue(v.SourcesEach))
 	out.MapSet("capture", vm.BoolValue(v.Capture))
+	out.MapSet("quiet", vm.BoolValue(v.Quiet))
 	mappedSecrets := vm.NewMap()
 	for keySecrets, itemSecrets := range v.Secrets {
 		mappedSecrets.MapSet(keySecrets, vm.StrValue(itemSecrets))

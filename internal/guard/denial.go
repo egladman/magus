@@ -11,13 +11,14 @@ import (
 	"github.com/egladman/magus/internal/trail"
 )
 
-// How a catalogued deny is worded the second time it fires in a session.
+// How a catalogued deny is worded.
 //
-// A refusal still explains itself every time, but not in full every time. The first
-// firing of a rule carries its whole reason; a repeat carries one line naming the rule and
-// what it catches. Both cite the ref holding the full text. The reader who declined the argument
-// once is not persuaded by reading it again, and a repeat nobody reads around is the
-// point: the ref is there for the reader who wants it, and its uptake is counted.
+// Inline, a deny prints the verdict, one sentence naming the actual problem, then at most
+// one next command and the ref holding the full verdict. The rationale and the rule's page
+// live only in that stored verdict: the reader who declined the argument once is not
+// persuaded by reading it again, and the ref is there for the reader who wants it, where
+// its uptake is counted. A repeat within a session swaps the verdict for one line naming
+// the rule and what it catches.
 //
 // "nothing ran" survives on both forms. Chained edits ahead of a denied command were
 // re-run on the assumption that they had happened, and a repeat is exactly where a reader
@@ -37,57 +38,100 @@ func denyMarker(rule string) hint.MarkerKind {
 	return hint.MarkerKind("deny-" + strings.ReplaceAll(rule, ":", "-"))
 }
 
+// denial is a refusal in the two parts a rule words it in.
+type denial struct {
+	// Say is the verdict printed inline: one sentence naming the problem, carrying at
+	// most one command.
+	Say string
+	// Why is the rationale, kept only in the stored full verdict.
+	Why string
+}
+
+// refused reports whether the rule refused at all.
+func (d denial) refused() bool { return d.Say != "" }
+
+// full is the whole refusal, for a caller with nowhere to store the rationale.
+func (d denial) full() string {
+	if d.Why == "" {
+		return d.Say
+	}
+	return d.Say + "\n" + d.Why
+}
+
+// verdictParts splits a reason into its verdict and its rationale. A rule that words its
+// refusal as one string puts the verdict on its first line and the rationale after it, so
+// that line is the verdict; a rule that sets why has already split it.
+func verdictParts(reason, why string) denial {
+	if why != "" {
+		return denial{Say: reason, Why: why}
+	}
+	say, rest, _ := strings.Cut(reason, "\n")
+	return denial{Say: say, Why: strings.TrimLeft(rest, "\n")}
+}
+
 // shapeDeny words a deny from rule for this session, returning the reason to show and the
 // grd ref the full verdict is stored under. Every firing stores and cites one, the first
 // included, so a reader can reopen any refusal it was shown, not only a repeated one.
 //
-// note is the nothing-ran line for the command, appended to the full form when the rule
-// that refused did not already carry it. An advisory rule, or one neither the catalog
-// lists nor a workspace named, keeps its reason untouched: it has no one-line summary to
-// repeat. A named workspace rule (workspace:<name>) has no generated page, so it cites
-// none, and its repeat summarizes it by its reason's first line.
+// reason and why are the rule's verdict and rationale (see verdictParts). note is the
+// nothing-ran line for the command, shown when the verdict did not already carry it. An
+// advisory rule, or one neither the catalog lists nor a workspace named, keeps its whole
+// reason inline: it has no page to cite and no one-line summary to repeat. A named
+// workspace rule (workspace:<name>) has no generated page either, so its whole reason is
+// the verdict, and its repeat summarizes it by the reason's first line.
 //
-// Every failure speaks in full. A repeat that cannot store the verdict it points at would
-// cite a ref that resolves to nothing, and a long reason beats a dead end.
+// Every failure speaks in full. A firing that cannot store the verdict it points at would
+// cite a ref that resolves to nothing, and a long reason beats a dead end. A preview, the
+// dry run of a call, stores nothing by design: it shows what the call would, less the ref.
 //
-// remedy is the rule's own next, already graded for the acting lease. It is served on
-// every firing, the first included, since the command is what a reader acts on; it is
-// returned as served, and nil for a rule with no page, whose reason stays untouched.
-func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, note string, remedy []hint.Next) (shown, ref string, served []hint.Next) {
+// remedy is the rule's own next, already graded for the acting lease. The stored verdict
+// carries all of it with each command's why, and the inline text its first command alone,
+// on every firing, since the command is what a reader acts on. It is returned as served,
+// and nil for a rule with no page.
+func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note string, remedy []hint.Next, preview bool) (shown, ref string, served []hint.Next) {
 	// The tier, not the compiled default: a recoverable rule a workspace sets to deny
 	// refuses with its page and remedy like any other deny.
 	doc, catalogued := Rule(rule)
 	if (!catalogued && !namedWorkspaceRule(rule)) || advisoryRule()[rule] {
-		return reason, "", nil
+		return denial{Say: reason, Why: why}.full(), "", nil
 	}
 	// A catalogued rule's Catches summarizes every denial it makes. A named workspace rule
 	// has no such line and its reasons differ call to call, so only the same reason
 	// repeating is a repeat: a different denial from the same rule speaks in full.
-	see, catches, marker := "", firstLine(reason), denyMarker(rule+"-"+reasonDigest(reason))
+	d, see, catches, marker := denial{Say: reason, Why: why}, "", firstLine(reason), denyMarker(rule+"-"+reasonDigest(reason))
 	if catalogued {
-		see, catches, marker = "\nsee: "+ruleDocsBase+rule+"/", doc.Catches, denyMarker(rule)
+		d, see, catches, marker = verdictParts(reason, why), "\nsee: "+ruleDocsBase+rule+"/", doc.Catches, denyMarker(rule)
 	}
-	block := strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n")
-	body := reason
-	if note != "" && !strings.Contains(body, note) {
-		body += note
+	// A rule that already carried the note shows it once, after the verdict.
+	if line := strings.TrimPrefix(note, "\n"); line != "" {
+		d.Say = strings.TrimSpace(strings.Replace(d.Say, line, "", 1))
+		d.Why = strings.TrimSpace(strings.Replace(d.Why, line, "", 1))
 	}
-	body += block
-	full := body + see
+	stored := d.Say + note
+	if d.Why != "" {
+		stored += "\n" + d.Why
+	}
+	stored += strings.TrimSuffix(hint.Render(remedy, func(n hint.Next) string { return n.Why }), "\n") + see
+	command := ""
+	if len(remedy) > 0 {
+		command = strings.TrimSuffix(hint.Render(remedy[:1], func(hint.Next) string { return "" }), "\n")
+	}
+	if preview {
+		return d.Say + note + command, "", remedy
+	}
 	first := !markers.MarkFired(marker)
-	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
+	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(stored))
 	if ref == "" {
 		hint.AppendServedNext(markers.CacheDir(), remedy)
-		return full, "", remedy
+		return stored, "", remedy
 	}
 	next := hint.NextForDenial(ref)
 	hint.AppendServedNext(markers.CacheDir(), append(slices.Clone(remedy), next))
-	if first {
-		return body + "\nfull verdict: " + next.Run + see, ref, remedy
+	lead := d.Say
+	if !first {
+		lead = "denied again [" + rule + "]: " + catches
 	}
-	// The remedy's why was spent on the first firing, so a repeat shows its command alone.
-	brief := strings.TrimSuffix(hint.Render(remedy, func(hint.Next) string { return "" }), "\n")
-	return "denied again [" + rule + "]: " + catches + note + brief + "\nfull verdict: " + next.Run + see, ref, remedy
+	return lead + note + command + "\nfull verdict: " + next.Run, ref, remedy
 }
 
 // namedWorkspaceRule reports whether rule is a workspace rule's own name rather than the
@@ -108,4 +152,58 @@ func reasonDigest(reason string) string {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
 	return strings.TrimSpace(line)
+}
+
+// advice is an advisory in the two parts shapeAdvice words it in.
+type advice struct {
+	// Say is printed inline: one sentence naming what to do and why, carrying at most
+	// one command.
+	Say string
+	// Why is the rationale, kept only behind the ref.
+	Why string
+}
+
+// full is the whole advisory, for a caller with nowhere to store the rationale.
+func (a advice) full() string { return denial(a).full() }
+
+// adviceVerdictID names the breadcrumb to an advisory's stored full text, so `magus
+// session hints` counts its reads apart from deny-verdict.
+const adviceVerdictID = "advice-verdict"
+
+// shapeAdvice words an advisory the way shapeDeny words a deny: inline, each advisory's
+// one-sentence verdict; behind a grd ref, the same verdicts with the rationale whys holds
+// for each and the rule's page. text is what Judge put on the verdict, one advisory or
+// several joined by a blank line, and whys is keyed on each one's verdict.
+//
+// An advisory with no rationale is printed as it is and stores nothing. That covers the
+// brief a held advisory repeats with, and an advisory whose text is the answer it exists
+// to deliver. A preview stores nothing, and a failed store prints everything.
+func shapeAdvice(ctx context.Context, markers hint.Gate, rule, text string, whys map[string]string, preview bool) (shown, ref string) {
+	parts := []string{text}
+	if whys[text] == "" {
+		parts = strings.Split(text, "\n\n")
+	}
+	stored := make([]string, len(parts))
+	rationale := false
+	for i, p := range parts {
+		stored[i] = p
+		if why := whys[p]; why != "" {
+			stored[i], rationale = p+"\n"+why, true
+		}
+	}
+	if !rationale || preview {
+		return text, ""
+	}
+	full := strings.Join(stored, "\n\n")
+	if _, ok := Rule(rule); ok {
+		full += "\nsee: " + ruleDocsBase + rule + "/"
+	}
+	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(full))
+	if ref == "" {
+		return full, ""
+	}
+	next := hint.NextForDenial(ref)
+	next.ID, next.Why = adviceVerdictID, "the ref holds this advisory's rationale, which the inline text leaves out."
+	hint.AppendServedNext(markers.CacheDir(), []hint.Next{next})
+	return text + "\nfull advice: " + next.Run, ref
 }

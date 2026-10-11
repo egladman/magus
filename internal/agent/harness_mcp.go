@@ -95,7 +95,7 @@ func validateHarnessMCP(m *HarnessMCP) error {
 		return nil
 	}
 	if m.Hint == "" && m.Docs == "" && len(m.Register) == 0 {
-		return fmt.Errorf("mcp: need hint, docs, and/or register argv (Magus does not write host MCP config)")
+		return fmt.Errorf("harness mcp: need hint, docs, and/or register argv (Magus does not write host MCP config)")
 	}
 	ref := m.tokenRefOrDefault()
 	if err := validateMCPTokenRefName(ref); err != nil {
@@ -105,23 +105,23 @@ func validateHarnessMCP(m *HarnessMCP) error {
 	// TokenRef or URL cannot smuggle a resolved secret past the scanner.
 	rendered := renderMCPSetupHint(m, m.urlOrDefault(), ref)
 	if looksLikeEmbeddedMCPSecret(rendered) || looksLikeEmbeddedMCPSecret(m.urlOrDefault()) {
-		return fmt.Errorf("mcp: setup guidance must not embed a resolved bearer token; name secret ref %q instead", ref)
+		return fmt.Errorf("harness mcp: setup guidance must not embed a resolved bearer token, name secret ref %q instead", ref)
 	}
 	return nil
 }
 
 func validateMCPTokenRefName(ref string) error {
 	if ref == "" {
-		return fmt.Errorf("mcp: token_ref is required")
+		return fmt.Errorf("harness mcp: token_ref is required")
 	}
 	if strings.HasPrefix(strings.ToLower(ref), "mgs_") {
-		return fmt.Errorf("mcp: token_ref %q looks like a resolved token; use an env/secret-provider name (e.g. %s)", ref, DefaultHarnessMCPTokenRef)
+		return fmt.Errorf("harness mcp: token_ref %q looks like a resolved token, use an env/secret-provider name such as %s", ref, DefaultHarnessMCPTokenRef)
 	}
 	for _, r := range ref {
 		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
 			continue
 		}
-		return fmt.Errorf("mcp: token_ref %q must be an identifier (letters, digits, underscore)", ref)
+		return fmt.Errorf("harness mcp: token_ref %q must be an identifier (letters, digits, underscore)", ref)
 	}
 	return nil
 }

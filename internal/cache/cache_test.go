@@ -773,6 +773,19 @@ func captureStderr(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+// captureLog points the process logger at the pretty display for the duration of fn and
+// returns what it rendered.
+func captureLog(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(NewPrettyHandler(&buf, slog.LevelInfo)))
+	defer slog.SetDefault(prev)
+
+	fn()
+	return buf.String()
+}
+
 // silentCache builds a Cache in silent mode with a log dir under t.TempDir.
 func silentCache(t *testing.T) *Cache {
 	t.Helper()
@@ -782,6 +795,8 @@ func silentCache(t *testing.T) *Cache {
 
 func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	c := silentCache(t)
+	var buf bytes.Buffer
+	c.log = slog.New(NewPrettyHandler(&buf, slog.LevelError))
 	lp := c.logPath("svc/api", "deadbeef")
 
 	out := captureStderr(t, func() {
@@ -794,7 +809,8 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", out)
+	assert.Empty(t, out, "a notice is a record, not a raw stderr line")
+	assert.Equal(t, "notice: svc/api: deployed api v1.2.3\n", buf.String())
 	// Successful-run log is retained (replayable).
 	_, statErr := os.Stat(lp)
 	require.NoError(t, statErr)
@@ -1008,14 +1024,14 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 		return boom
 	}
 
-	first := captureStderr(t, func() {
+	first := captureLog(t, func() {
 		_, err := c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
 	assert.NotContains(t, first, "inputs unchanged", "nothing was recorded yet to point at")
 
 	var second Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		var err error
 		second, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
@@ -1029,7 +1045,7 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.Equal(t, HintUnchangedFailure, second.HintID)
 
 	var thirdRes Result
-	third := captureStderr(t, func() {
+	third := captureLog(t, func() {
 		var err error
 		thirdRes, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
@@ -1037,6 +1053,43 @@ func TestRunHintsUnchangedFailureOnce(t *testing.T) {
 	assert.NotContains(t, third, "inputs unchanged", "once per key, not once per run")
 	assert.Empty(t, thirdRes.HintID, "no line printed, so no id to count")
 	assert.Equal(t, 3, calls)
+}
+
+// A step whose recorded failure only restates a dependency's gets no unchanged-inputs
+// line: the dependency's own key speaks for that failure, and a cascade of composites
+// would otherwise print one line per step for one cause.
+func TestRunHintsUnchangedFailureOnlyForItsOwnFailure(t *testing.T) {
+	const root = "[MGS4007] .:types-generate modified its declared sources a.md\n  see: https://example/MGS4007/"
+	for name, tc := range map[string]struct {
+		err  string
+		hint bool
+	}{
+		"its own coded failure":           {root, true},
+		"a restated dependency failure":   {"ctx.needs: types-generate: " + root, false},
+		"a restatement two hops down":     {"ctx.needs: job-generate: ctx.needs: types-generate: " + root, false},
+		"its own failure beside a needed": {"ctx.needs: types-generate: " + root + "\nmockery exited 1", true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			step, c := hintCache(t, "package main // "+name)
+			boom := errors.New(tc.err)
+			fn := func(context.Context) error { return boom }
+			_, err := c.Run(context.Background(), step, fn)
+			require.ErrorIs(t, err, boom)
+
+			var res Result
+			out := captureLog(t, func() {
+				res, err = c.Run(context.Background(), step, fn)
+				require.ErrorIs(t, err, boom)
+			})
+			if tc.hint {
+				assert.Contains(t, out, "inputs unchanged since")
+				assert.Equal(t, HintUnchangedFailure, res.HintID)
+				return
+			}
+			assert.NotContains(t, out, "inputs unchanged")
+			assert.Empty(t, res.HintID)
+		})
+	}
 }
 
 // TestRunEnvironmentalFailureRerunsToAPass pins that a failure never becomes the key's
@@ -1061,7 +1114,7 @@ func TestRunEnvironmentalFailureRerunsToAPass(t *testing.T) {
 	require.NotEmpty(t, failed.Ref)
 
 	var passed Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		passed, err = c.Run(context.Background(), step, fn)
 	})
 	require.NoError(t, err)
@@ -1128,7 +1181,7 @@ func TestRunNoHintWhenInputsChanged(t *testing.T) {
 
 	writeMain(t, step.WorkspaceRoot, "package main // hint moved inputs, edited")
 	var res Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		res, err = c.Run(context.Background(), step, fn)
 		require.ErrorIs(t, err, boom)
 	})
@@ -1148,7 +1201,7 @@ func TestRunNoHintAfterSuccess(t *testing.T) {
 
 	step.SkipReplay = true
 	var res Result
-	out := captureStderr(t, func() {
+	out := captureLog(t, func() {
 		res, err = c.Run(context.Background(), step, fn)
 		require.NoError(t, err)
 	})
@@ -1278,15 +1331,15 @@ func TestRunAllSeatsAJobserverOnlyForAMultiSlotStep(t *testing.T) {
 // wired or the wired one did not start.
 func TestBuildTiersRefusesARequiredWriteWithoutABackend(t *testing.T) {
 	_, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), WithRemoteWrite(true))
-	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired; "+
+	assert.EqualError(t, err, "magus/cache: remote writes are required but no remote backend is wired, "+
 		"wire one with magus\\cache.remote in the magusfile, or set cache.remote.write.enabled false")
 
 	startErr := errors.New("ACTIONS_RUNTIME_TOKEN is unset")
 	_, err = Open(t.Context(), filepath.Join(t.TempDir(), ".magus"),
 		WithRemoteUnavailable("github", startErr), WithRemoteWrite(true))
 	require.ErrorIs(t, err, startErr)
-	assert.EqualError(t, err, "magus/cache: remote writes are required but remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset; "+
-		"fix the backend, or set cache.remote.write.enabled false to run local-only")
+	assert.EqualError(t, err, "magus/cache: remote writes are required but the backend is down, "+
+		"fix it or set cache.remote.write.enabled false to run local-only: remote github unavailable: ACTIONS_RUNTIME_TOKEN is unset")
 }
 
 // Undeclared or declared false, a backend that did not start leaves the cache local-only,

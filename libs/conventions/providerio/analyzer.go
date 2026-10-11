@@ -108,7 +108,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 		}
 		for _, a := range opts.Allow {
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(a.File))); err != nil {
-				return fmt.Errorf("providerio: allow file %q: %w; the code it exempted moved, fix the setting", a.File, err)
+				return fmt.Errorf("providerio: allow file %q: the code it exempted moved, fix the setting: %w", a.File, err)
 			}
 		}
 		return nil

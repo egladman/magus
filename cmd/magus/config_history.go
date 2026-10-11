@@ -19,14 +19,18 @@ import (
 	"github.com/egladman/magus/internal/report"
 )
 
+func configHistoryUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: magus config history <subcommand>")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Subcommands:")
+	fmt.Fprintln(os.Stderr, "  import   merge runtime-history JSON files into the history (e.g. per-shard CI histories)")
+	fmt.Fprintln(os.Stderr, "  passed   record the commit a ref last completed a fully passing run at")
+	fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
+}
+
 func configHistoryCmd(ctx context.Context, _ string, cfg config.Config, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		fmt.Fprintln(os.Stderr, "Usage: magus config history <subcommand>")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  import   merge runtime-history JSON files into the history (e.g. per-shard CI histories)")
-		fmt.Fprintln(os.Stderr, "  passed   record the commit a ref last completed a fully passing run at")
-		fmt.Fprintln(os.Stderr, "  dedup    measure cross-shard redundant builds from per-shard JSONL report files")
+		configHistoryUsage()
 		return flag.ErrHelp
 	}
 
@@ -71,7 +75,7 @@ func runHistoryPassed(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "rather than being stepped over.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -129,7 +133,7 @@ func runHistoryImport(ctx context.Context, cfg config.Config, args []string) err
 		fmt.Fprintln(os.Stderr, "CI run produces combine into a single history. Inputs may be globs.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -202,7 +206,7 @@ func runHistoryDedup(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "miss in more than one shard - work a shared remote cache would eliminate.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err

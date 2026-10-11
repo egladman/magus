@@ -1,12 +1,16 @@
 package cache
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/secret"
 )
 
@@ -134,6 +139,16 @@ type PrettyHandler struct {
 	// printing every restatement in full, which is what happens today.
 	blockedAt map[causeKey]int
 	blocked   []blockedGroup
+	// failedSteps holds, per project, the target names this run has seen fail, with
+	// and without their charm suffix. A composite prefixes each member's failure with
+	// the member's name, and these are the names that make such a prefix a hop rather
+	// than part of a message. Per RUN, cleared by resetRun.
+	failedSteps map[string]map[string]bool
+	// repeated groups the steps that failed with a diagnostic code an earlier step
+	// already printed in full, so the code's text and link print once and the rest are
+	// counted in one footer line. repeatedAt indexes it by code; both are per RUN.
+	repeatedAt map[string]int
+	repeated   []codeRepeat
 	// rowFailure maps each band row to the index in the drawn failure list it
 	// shows, or -1 for a row that is not a failure (a project header). Written
 	// by band, read by HitFailure.
@@ -539,6 +554,20 @@ func (h *PrettyHandler) setLevel(level slog.Level) {
 	h.level = level
 }
 
+// NewPlainHandler returns a handler rendering records as the pretty display does, onto w
+// as plain lines: no color, no band, and never the terminal's shared handler, even when w
+// is standard error.
+func NewPlainHandler(w io.Writer, level slog.Level) *PrettyHandler {
+	return newPrettyHandler(w, level, notTerminal{})
+}
+
+// notTerminal answers every descriptor as a pipe.
+type notTerminal struct{}
+
+func (notTerminal) IsTerminal(uintptr) bool { return false }
+
+func (notTerminal) Size(uintptr) (int, int, error) { return 0, 0, errors.New("not a terminal") }
+
 // newPrettyHandler is the probe-injecting form. Tests use it to render
 // terminal output into a buffer without opening a pty.
 func newPrettyHandler(w io.Writer, level slog.Level, p tty.Probe) *PrettyHandler {
@@ -638,8 +667,44 @@ func (h *PrettyHandler) Enabled(_ context.Context, lvl slog.Level) bool {
 	defer h.mu.Unlock()
 	return lvl >= h.level
 }
-func (h *PrettyHandler) WithAttrs(_ []slog.Attr) slog.Handler { return h }
-func (h *PrettyHandler) WithGroup(_ string) slog.Handler      { return h }
+
+// WithAttrs returns a handler that renders through h, band and counters included,
+// with attrs ahead of each record's own.
+func (h *PrettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return h
+	}
+	return prettyWithAttrs{h: h, attrs: slices.Clone(attrs)}
+}
+
+// WithGroup returns h: the pretty form prints attrs flat, so a group changes nothing.
+func (h *PrettyHandler) WithGroup(_ string) slog.Handler { return h }
+
+// prettyWithAttrs is a [PrettyHandler] carrying attrs from [slog.Logger.With].
+type prettyWithAttrs struct {
+	h     *PrettyHandler
+	attrs []slog.Attr
+}
+
+func (p prettyWithAttrs) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return p.h.Enabled(ctx, lvl)
+}
+
+func (p prettyWithAttrs) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(p.attrs...)
+	r.Attrs(func(a slog.Attr) bool {
+		nr.AddAttrs(a)
+		return true
+	})
+	return p.h.Handle(ctx, nr)
+}
+
+func (p prettyWithAttrs) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return prettyWithAttrs{h: p.h, attrs: append(slices.Clip(p.attrs), attrs...)}
+}
+
+func (p prettyWithAttrs) WithGroup(_ string) slog.Handler { return p }
 
 // Handle renders one record. It deliberately does NOT skip on ctx.Err(): a handler must
 // not treat cancellation as permission to drop output. The check that used to live here
@@ -700,6 +765,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			target:  recordStr(r, "target"),
 			dur:     dur,
 			cause:   recordStr(r, "error"),
+			why:     recordStr(r, attr.WhyKey),
 			ref:     ref,
 			logPath: recordStr(r, "log"),
 			refused: recordBool(r, "refused"),
@@ -801,6 +867,7 @@ func (h *PrettyHandler) EndRun(ctx context.Context, footer string) error {
 	h.err = nil
 	colorize := h.WantsColor()
 	h.printBlocked(colorize)
+	h.printRepeated(colorize)
 	h.printf("%s", footer)
 	h.printRefLegend(colorize)
 	if !h.hasPinnedFailures() || !h.lease.Enabled() {
@@ -851,7 +918,8 @@ func Glyph(colorize bool, label string, color tty.SGR) string {
 
 // handleGeneric renders any non-cache slog record (the 76-odd general diagnostics
 // across the codebase) in the same compact style: a level glyph, the message, and any
-// attrs trailing dimmed. No timestamp or level= boilerplate. The "dir" attr that the
+// attrs trailing dimmed, or for an [attr.Notice] no glyph. No timestamp or level=
+// boilerplate. The "dir" attr that the
 // process-wide handler stamps on every context-aware record is suppressed above debug
 // level, since it is a correlation aid, not something a reader needs on each line.
 func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
@@ -864,18 +932,105 @@ func (h *PrettyHandler) handleGeneric(colorize bool, r slog.Record) {
 	case r.Level >= slog.LevelInfo:
 		label, color = "info", colDim
 	}
-	attrs := formatAttrs(r)
+	component := recordStr(r, attr.ComponentKey)
+	notice, isNotice := recordAttr(r, attr.NoticeKey)
+	var attrs string
+	if isNotice {
+		attrs = formatAttrs(r, attr.ErrorKey)
+	} else {
+		attrs = formatAttrs(r)
+	}
 	if colorize && attrs != "" {
 		attrs = tty.Colorize(attrs, colDim)
 	}
-	h.printf("%s %s%s\n", Glyph(colorize, label, color), r.Message, attrs)
+	if isNotice {
+		label := cmp.Or(notice.String(), component)
+		h.printNotice(colorize, color, label, noticeText(label, r.Message, recordStr(r, attr.ErrorKey)), attrs)
+		h.printWhy(colorize, "  ", recordStr(r, attr.WhyKey))
+		h.printNext(recordStr(r, attr.NextKey))
+		return
+	}
+	msg := r.Message
+	if component != "" {
+		msg = component + ": " + msg
+	}
+	h.printf("%s %s%s\n", Glyph(colorize, label, color), msg, attrs)
+	// Under the message, past the glyph and its space.
+	h.printWhy(colorize, strings.Repeat(" ", len(label)+3), recordStr(r, attr.WhyKey))
+	h.printNext(recordStr(r, attr.NextKey))
 }
 
-// formatAttrs renders a record's attrs as " key=value" pairs, skipping the noisy
-// "dir" correlation attr unless the record is at debug level or below.
-func formatAttrs(r slog.Record) string {
+// noticeText joins a notice's message and its [attr.Error]. An error that originated in
+// the label's own package opens with the label, which the line already prints.
+func noticeText(label, msg, err string) string {
+	if err == "" {
+		return msg
+	}
+	if label != "" {
+		err = strings.TrimPrefix(err, label+": ")
+	}
+	if msg == "" {
+		return err
+	}
+	return msg + ": " + err
+}
+
+// printNotice puts the label before the message, colored above info, with no glyph: a
+// line addressed to a person carries no log level.
+func (h *PrettyHandler) printNotice(colorize bool, color tty.SGR, label, msg, attrs string) {
+	if label == "" {
+		h.printf("%s%s\n", msg, attrs)
+		return
+	}
+	label += ":"
+	if colorize && color != colDim {
+		label = tty.Colorize(label, color)
+	}
+	h.printf("%s %s%s\n", label, msg, attrs)
+}
+
+// printNext lays out an [attr.Next] the way [hint.Render] lays out a result's
+// breadcrumbs, so a command reads the same under a result and under a notice.
+func (h *PrettyHandler) printNext(cmd string) {
+	if cmd == "" {
+		return
+	}
+	noWhy := func(hint.Next) string { return "" }
+	block := hint.Render([]hint.Next{{Run: cmd}}, noWhy)
+	h.printf("%s", strings.TrimPrefix(block, "\n"))
+}
+
+// causeIndent starts a line that continues a failure's cause.
+const causeIndent = "       "
+
+// printWhy prints a record's [attr.Why] dim under the line it explains, each of its lines
+// at indent. An empty why prints nothing.
+func (h *PrettyHandler) printWhy(colorize bool, indent, why string) {
+	if why == "" {
+		return
+	}
+	for line := range strings.SplitSeq(why, "\n") {
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s%s\n", indent, line)
+	}
+}
+
+// formatAttrs renders a record's attrs as " key=value" pairs, skipping the
+// component (handleGeneric prints it ahead of the message), the why (printed on its own
+// line under it), the elapsed time (a wait's message already states it), the keys in
+// skip, and the noisy "dir" correlation attr unless the record is at debug level or below.
+func formatAttrs(r slog.Record, skip ...string) string {
 	var b strings.Builder
 	r.Attrs(func(a slog.Attr) bool {
+		switch a.Key {
+		case attr.ComponentKey, attr.WhyKey, attr.ElapsedKey, attr.NextKey, attr.NoticeKey:
+			return true
+		}
+		if slices.Contains(skip, a.Key) {
+			return true
+		}
 		if a.Key == "dir" && r.Level > slog.LevelDebug {
 			return true
 		}
@@ -908,6 +1063,8 @@ type failureReport struct {
 	target  string
 	dur     time.Duration
 	cause   string
+	// why is the cause's rationale, printed dim under it.
+	why     string
 	ref     string
 	logPath string
 	// refused is a step that never started, so "(ran, 0s)" would be false.
@@ -943,7 +1100,7 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 	if target != "" {
 		heading += " " + target
 	}
-	if h.suppressBlocked(heading, project, target, cause) {
+	if h.suppressBlocked(heading, project, target, cause) || h.foldRepeatedCode(heading, project, target, cause) {
 		return
 	}
 	h.ensureLease()
@@ -988,9 +1145,10 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		h.printf("  cause: %s\n", causes[0])
 		// One line per independent failure; flattened, two read as one sentence.
 		for _, c := range causes[1:] {
-			h.printf("       %s\n", c)
+			h.printf("%s%s\n", causeIndent, c)
 		}
 	}
+	h.printWhy(colorize, causeIndent, f.why)
 	if ref != "" {
 		h.printf("  output: %s\n", ref)
 		// The inspect hint prints EVERYWHERE, CI included. It used to be
@@ -1038,10 +1196,11 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 // Counters are deliberately untouched: a blocked target did fail, and the
 // summary has to keep saying so. This changes what is printed, not what is counted.
 func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) bool {
+	defer h.noteFailedStep(project, target)
 	if cause == "" {
 		return false
 	}
-	sig, viaDeps := causeSignature(cause)
+	sig, viaDeps := causeSignature(cause, func(name string) bool { return h.failedSteps[project][name] })
 	key := causeKey{project: project, cause: sig}
 	i, known := h.blockedAt[key]
 	if !known {
@@ -1063,6 +1222,24 @@ func (h *PrettyHandler) suppressBlocked(heading, project, target, cause string) 
 	return true
 }
 
+// noteFailedStep records target as failed in project, under its repro name and its
+// bare name: the record carries "name:charm" while a composite prefixes "name".
+func (h *PrettyHandler) noteFailedStep(project, target string) {
+	if target == "" {
+		return
+	}
+	if h.failedSteps == nil {
+		h.failedSteps = make(map[string]map[string]bool)
+	}
+	names := h.failedSteps[project]
+	if names == nil {
+		names = make(map[string]bool)
+		h.failedSteps[project] = names
+	}
+	names[target] = true
+	names[bareTarget(target)] = true
+}
+
 // printBlocked names, once per root, the targets whose failure was suppressed as
 // a restatement of it. A run that blocked nothing prints nothing.
 func (h *PrettyHandler) printBlocked(colorize bool) {
@@ -1071,6 +1248,88 @@ func (h *PrettyHandler) printBlocked(colorize bool) {
 			continue
 		}
 		line := "blocked by " + g.root + ": " + strings.Join(g.blocked, ", ")
+		if colorize {
+			line = tty.Colorize(line, colDim)
+		}
+		h.printf("%s\n", line)
+	}
+}
+
+// codeRepeat is one diagnostic code and the steps that failed with it after the first.
+type codeRepeat struct {
+	code  string
+	steps []string
+}
+
+// repeatedListed caps how many step names the repeat footer spells out.
+const repeatedListed = 5
+
+// leadingCodePattern matches the "[CODE] " a coded diagnostic's rendering starts with.
+var leadingCodePattern = regexp.MustCompile(`^\[([A-Z]{2,}[0-9]{3,})\] `)
+
+// foldRepeatedCode files this failure under the diagnostic code its cause leads with
+// and says whether an earlier step already printed that code, in which case this one
+// is left to the footer printRepeated writes. Like suppressBlocked it changes what is
+// printed, never what is counted.
+func (h *PrettyHandler) foldRepeatedCode(heading, project, target, cause string) bool {
+	code := leadingCode(cause)
+	if code == "" {
+		return false
+	}
+	i, known := h.repeatedAt[code]
+	if !known {
+		if h.repeatedAt == nil {
+			h.repeatedAt = make(map[string]int)
+		}
+		h.repeatedAt[code] = len(h.repeated)
+		h.repeated = append(h.repeated, codeRepeat{code: code})
+		return false
+	}
+	name := heading
+	if project != "" && target != "" {
+		name = project + ":" + target
+	}
+	h.repeated[i].steps = append(h.repeated[i].steps, name)
+	return true
+}
+
+// leadingCode is the diagnostic code the first line of cause leads with, once its
+// dependency hops are stripped, or "" when it carries none.
+func leadingCode(cause string) string {
+	for _, line := range strings.Split(cause, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		_, msg := splitHopChain(line)
+		if msg == "" {
+			msg = line
+		}
+		if m := leadingCodePattern.FindStringSubmatch(msg); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	return ""
+}
+
+// printRepeated writes one line per diagnostic code that more than one step failed
+// with, naming the steps after the first. A run with no repeats prints nothing.
+func (h *PrettyHandler) printRepeated(colorize bool) {
+	for _, r := range h.repeated {
+		if len(r.steps) == 0 {
+			continue
+		}
+		noun := "steps"
+		if len(r.steps) == 1 {
+			noun = "step"
+		}
+		names := r.steps
+		more := ""
+		if len(names) > repeatedListed {
+			names, more = names[:repeatedListed], ", ..."
+		}
+		line := fmt.Sprintf("%s also hit %d more %s: %s%s", r.code, len(r.steps), noun, strings.Join(names, ", "), more)
 		if colorize {
 			line = tty.Colorize(line, colDim)
 		}
@@ -1087,16 +1346,24 @@ func (h *PrettyHandler) printBlocked(colorize bool) {
 // The second return says every line arrived through a dependency. A cause with
 // no hops is the target's own failure, and a target reporting its own failure is
 // never suppressed however familiar the message looks.
-func causeSignature(cause string) (sig string, viaDeps bool) {
+//
+// A hop is a ctx.needs marker, or a leading "name: " where failedStep says name is
+// a step already seen to fail: a composite prefixes each member's failure with the
+// member's name and nothing else. failedStep may be nil. A "see: <url>" line is the
+// docs link of the coded message above it, never a failure of its own.
+func causeSignature(cause string, failedStep func(string) bool) (sig string, viaDeps bool) {
 	var msgs []string
 	seen := make(map[string]bool)
 	viaDeps = true
 	for _, part := range strings.Split(cause, "\n") {
 		part = strings.TrimSpace(part)
-		if part == "" {
+		if part == "" || strings.HasPrefix(part, "see: ") {
 			continue
 		}
 		hops, msg := splitHopChain(part)
+		if len(hops) == 0 && failedStep != nil {
+			hops, msg = splitStepPrefixes(part, failedStep)
+		}
 		if len(hops) == 0 {
 			viaDeps = false
 		}
@@ -1113,6 +1380,21 @@ func causeSignature(cause string) (sig string, viaDeps bool) {
 		return cause, false
 	}
 	return strings.Join(msgs, "\n"), viaDeps
+}
+
+// splitStepPrefixes peels the leading "name: " segments of line that failedStep
+// recognizes, and returns them with the message beneath. It never peels the last
+// segment, so a message is always left.
+func splitStepPrefixes(line string, failedStep func(string) bool) (hops []string, message string) {
+	segs := strings.Split(line, ": ")
+	i := 0
+	for i < len(segs)-1 && failedStep(segs[i]) {
+		i++
+	}
+	if i == 0 {
+		return nil, ""
+	}
+	return segs[:i], strings.Join(segs[i:], ": ")
 }
 
 // failureCauseExcerptLogMarker is the label MGS3011's message puts before the captured
@@ -1263,15 +1545,26 @@ func (h *PrettyHandler) printRefLegend(colorize bool) {
 }
 
 func recordStr(r slog.Record, key string) string {
-	var v string
+	v, ok := recordAttr(r, key)
+	if !ok {
+		return ""
+	}
+	return v.String()
+}
+
+// recordAttr is the value of r's key attr, and whether r has one, for an attr whose
+// presence means something even when empty.
+func recordAttr(r slog.Record, key string) (slog.Value, bool) {
+	var v slog.Value
+	found := false
 	r.Attrs(func(a slog.Attr) bool {
 		if a.Key == key {
-			v = a.Value.String()
+			v, found = a.Value, true
 			return false
 		}
 		return true
 	})
-	return v
+	return v, found
 }
 
 // recordStrs extracts a []string attr (e.g. a command's args) from a record.
@@ -1737,6 +2030,9 @@ func (h *PrettyHandler) resetRun() {
 	h.mintedRef = false
 	h.blockedAt = nil
 	h.blocked = nil
+	h.failedSteps = nil
+	h.repeatedAt = nil
+	h.repeated = nil
 	// The preview belongs to a failure from the run that just ended. Left set,
 	// a rerun drew rows of the PREVIOUS run's log beside an empty tree: stale
 	// content pinned in a band whose whole promise is that it holds still.

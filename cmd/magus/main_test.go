@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
@@ -323,6 +325,24 @@ func TestExitCodeOf(t *testing.T) {
 	// that a reader sees it when the run stops rather than only at the end.
 	assert.Equal(t, 3, mapExitCode(types.ExitError{Code: 3}))
 	assert.Equal(t, 70, mapExitCode(types.ExitError{Code: 70, Err: errors.New("the gate wedged")}))
+}
+
+// The top-level error line carries the diagnostic's reason as its why, so the display
+// decides who reads it; a plain error carries none.
+func TestMapExitCodeLogsTheRationale(t *testing.T) {
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	const why = "No cache key could tell the tool's upgrades apart."
+	err := fmt.Errorf("go: %w", types.DiagnosticErrorf(types.ToolUnprobeable, "go:go reports no version in .").WithWhy(why))
+	assert.Equal(t, 1, mapExitCode(err))
+	assert.Contains(t, logged.String(), `why="`+why+`"`)
+
+	logged.Reset()
+	assert.Equal(t, 1, mapExitCode(errors.New("go exited 1")))
+	assert.NotContains(t, logged.String(), "why=")
 }
 
 // TestUsageNeedsNoWorkspace pins the rule that asking a command what it does must not do
@@ -1339,4 +1359,32 @@ func TestDispatchSubCoversKnownSubcommands(t *testing.T) {
 		t.Errorf("dispatchSub's routed cases (+ help, version) = %v\nknownSubcommands (from subcommands.go) = %v\n"+
 			"a case dispatchSub routes must have an entry in subcommands.go's subcommands, and vice versa", got, want)
 	}
+}
+
+// useTextLogger makes the logger a command builds from its flags a text handler on
+// whatever os.Stderr is then, so captureStderr sees its records. The pretty handler is
+// one per terminal and stays on the real stderr, past the swap.
+func useTextLogger(t *testing.T) {
+	t.Helper()
+	prevLog, prevFormat, prevLevel := slog.Default(), globalCfg.Log.Format, globalCfg.Log.Level
+	prevQuiet, prevSilent := global.quiet, global.silent
+	globalCfg.Log.Format, globalCfg.Log.Level = "text", "info"
+	global.quiet, global.silent = false, false
+	t.Cleanup(func() {
+		slog.SetDefault(prevLog)
+		globalCfg.Log.Format, globalCfg.Log.Level = prevFormat, prevLevel
+		global.quiet, global.silent = prevQuiet, prevSilent
+	})
+}
+
+// noticesFrom returns what the pretty display prints for the records fn logs through
+// the default logger, the way a notice reaches a person now that it is a record.
+func noticesFrom(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(cache.NewPrettyHandler(&buf, slog.LevelDebug)))
+	defer slog.SetDefault(prev)
+	fn()
+	return buf.String()
 }

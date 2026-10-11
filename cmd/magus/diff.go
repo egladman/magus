@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/prompt"
 	"github.com/egladman/magus/internal/review"
@@ -122,7 +124,8 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// usage error: the flags are fine and the caller is not a person.
 		// 2 rather than 1: the flags are fine and the caller is not who this is for, which
 		// the documented taxonomy separates from a 1 (the changeset could not be read).
-		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
+		slog.ErrorContext(ctx, "diff --ack records that a person read this, so it needs an interactive terminal",
+			attr.Notice(""), attr.Component("magus"))
 		return errSilent{exitCode: 2}
 	}
 	opts, err := outputOptionsOrDefault()
@@ -400,12 +403,12 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if len(paths) == 0 && !src.addressable() {
 		if strings.Contains(patch, "\x1b[") {
 			return fmt.Errorf("magus diff: %s is colorized, so its headers carry escape sequences "+
-				"and no longer begin a line. This is what a VCS emits when it thinks it is writing "+
-				"to a terminal, which is exactly the case when magus is its pager. Turn color off "+
+				"and no longer begin a line, which is what a VCS emits when it thinks it is writing "+
+				"to a terminal, exactly the case when magus is its pager, so turn color off "+
 				"for the diff it hands over: `hg --config color.mode=off`, `jj --config ui.color=never`, "+
 				"or `--color=never` on any of them", src.label)
 		}
-		return fmt.Errorf("magus diff: %s has content but no file headers magus can read; "+
+		return fmt.Errorf("magus diff: %s has content but no file headers magus can read, "+
 			"it expects a unified diff (`diff --git a/x b/x`, or a `--- a/x` / `+++ b/x` pair)", src.label)
 	}
 	// Resolved once: every receipt this command mints or reports on must agree about which
@@ -483,8 +486,8 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		return emitNames(paths)
 	}
-	hintSinceLastReview(os.Stderr, rev, src)
-	hintReviewPrompt(os.Stderr, rev, rf)
+	hintSinceLastReview(ctx, rev, src)
+	hintReviewPrompt(ctx, rev, rf)
 	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
 
@@ -503,7 +506,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 // Silent unless there is a genuine earlier pass to subtract: no receipts, receipts from a
 // working-tree review that names no revision, or an earlier pass at the revision already in front
 // of them all print nothing.
-func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
+func hintSinceLastReview(ctx context.Context, rev types.Diff, src diffInput) {
 	if !interactive.HintsEnabled() || src.kind != inputRevRange {
 		return
 	}
@@ -511,7 +514,7 @@ func hintSinceLastReview(w io.Writer, rev types.Diff, src diffInput) {
 	if covered == 0 || at.Revision == src.base {
 		return
 	}
-	interactive.Emit(w, fmt.Sprintf(
+	interactive.Hint(ctx, fmt.Sprintf(
 		"you last reviewed %d of these %d files at %s: `"+hint.Diff.With("--rev", "%s...%s")+"` shows only what changed since",
 		covered, len(rev.Files), short(at.Revision), at.Revision, src.head))
 }
@@ -538,11 +541,11 @@ const promptHintFiles = 10
 // magus hands a person text to carry somewhere itself refuses to go.
 //
 // stderr, so a piped or redirected report is unchanged, and only where hints are enabled at all.
-func hintReviewPrompt(w io.Writer, rev types.Diff, rf *gen.DiffFlags) {
+func hintReviewPrompt(ctx context.Context, rev types.Diff, rf *gen.DiffFlags) {
 	if rf.Prompt || !interactive.HintsEnabled() || len(rev.Files) < promptHintFiles {
 		return
 	}
-	interactive.Emit(w, fmt.Sprintf(
+	interactive.Hint(ctx, fmt.Sprintf(
 		"%d changed files: `"+hint.Diff.With("--prompt")+"` prints a review prompt to paste into your own model - the reading order, what rebuilds, and what could not be measured. It calls no model and sends nothing",
 		len(rev.Files)))
 }

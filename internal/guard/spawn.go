@@ -33,8 +33,8 @@ var multiAgentSkill = agent.MustSkill("magus-multi-agent")
 // Fires once per session by construction: the first spawn is denied, the model loads the
 // skill, the marker lands, and every later spawn passes. A session that never spawns never
 // sees it.
-func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace string) string {
-	return denyUntilSkillLoaded(markers, observesSkillLoads, workspace, multiAgentSkill,
+func denySpawnWithoutBrief(markers hint.Gate, reportsSkills bool, workspace string) string {
+	return denyUntilSkillLoaded(markers, reportsSkills, workspace, multiAgentSkill,
 		"spawning",
 		"It carries the lease, worktree, model-naming and git rules a spawn cannot be fixed for later.")
 }
@@ -51,17 +51,17 @@ func denySpawnWithoutBrief(markers hint.Gate, observesSkillLoads bool, workspace
 //
 // Fires once per session: the orchestrator handing out a wave is told at the first spawn,
 // not at each of six.
-func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at location) string {
+func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at location) advice {
 	if at.cacheDir == "" || at.workspace == "" {
-		return ""
+		return advice{}
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
-		return "" // an unreadable plan is the guard's standing fail-open
+		return advice{} // an unreadable plan is the guard's standing fail-open
 	}
 	held := job.HeldIn(rows, at.workspace)
 	if len(held) == 0 {
-		return ""
+		return advice{}
 	}
 	ids := make([]string, 0, len(held))
 	declared := map[string]bool{}
@@ -76,15 +76,18 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 		union = append(union, p)
 	}
 	slices.Sort(union)
-	return markers.OnceOrBrief(advisorySharedCheckout,
-		fmt.Sprintf("This checkout already holds %s, still live and writing %s."+
-			" Two workers in one checkout share every file in it, and the pair nobody survives is a magusfile,"+
-			" magus.yaml or spell source: half-saved, it stops the workspace loading for everybody here at once."+
-			"\n  Prove the write paths disjoint before you hand the work out: `%s`"+
-			"\n  Or skip the proof by giving the new worker its own worktree, which is the answer whenever the"+
-			" write paths touch workspace configuration.",
-			strings.Join(ids, ", "), strings.Join(union, " "),
-			hint.DescribeFile.With(append(union, "<the new write paths>")...)),
+	full := fmt.Sprintf("magus workspace: this checkout already holds %s, still live and writing %s; prove the write paths disjoint with `%s`, or give the new worker its own worktree.",
+		strings.Join(ids, ", "), strings.Join(union, " "), hint.DescribeFile.With(append(union, "<the new write paths>")...))
+	shown := markers.OnceOrBrief(advisorySharedCheckout, full,
 		fmt.Sprintf("this checkout still holds %s: prove the write paths disjoint with `%s`, or give the new worker its own worktree",
 			strings.Join(ids, ", "), hint.DescribeFile.With("<the union of the write paths>")))
+	if shown != full {
+		return advice{Say: shown}
+	}
+	return advice{
+		Say: full,
+		Why: "Two workers in one checkout share every file in it, and the pair nobody survives is a magusfile, magus.yaml or spell source: " +
+			"half-saved, it stops the workspace loading for everybody here at once. " +
+			"A worktree of its own skips the proof, and it is the answer whenever the write paths touch workspace configuration.",
+	}
 }

@@ -119,7 +119,7 @@ func TestOutputPipeRewrites(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), tc.command)
 		got := v.Deny + v.Context
 		assert.Contains(t, got, tc.want, tc.command)
-		assert.Contains(t, got, "magus answers this without the pipe", tc.command)
+		assert.Contains(t, got, "needs no pipe: ", tc.command)
 	}
 }
 

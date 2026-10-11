@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/vcs"
 )
 
@@ -73,7 +75,7 @@ func runConfigView(cfg config.Config, args []string) error {
 			fmt.Fprintln(os.Stderr, "Print the effective configuration (defaults + file + env).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -150,7 +152,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Run `"+hint.ConfigView.With("-o", "name")+"` to list all valid keys.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -178,7 +180,7 @@ func runConfigSet(ctx context.Context, args []string) error {
 	if err := config.Save(vcs.WriteJudge(ctx, judgeDir("")), cfgPath, key, value); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "wrote %s: %s = %s\n", cfgPath, key, value)
+	slog.InfoContext(ctx, fmt.Sprintf("wrote %s: %s = %s", cfgPath, key, value), attr.Notice(""))
 	return nil
 }
 

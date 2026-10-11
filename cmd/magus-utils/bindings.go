@@ -51,7 +51,7 @@ func runBindings(args []string) error {
 	}
 	out, err := emitBuzz(m)
 	if err != nil {
-		return fmt.Errorf("emit: %w", err)
+		return fmt.Errorf("render buzz declarations: %w", err)
 	}
 	if err := emit.File(*outPath, out); err != nil {
 		return fmt.Errorf("write %s: %w", *outPath, err)
@@ -200,7 +200,7 @@ func emitBuzz(m std.Module) ([]byte, error) {
 	out, err := format.Source(b.Bytes())
 	if err != nil {
 		// Return nil on failure: the unformatted buffer is known-bad Go.
-		return nil, fmt.Errorf("gofmt: %w\n--- source ---\n%s", err, b.String())
+		return nil, gofmtError(err, b.String())
 	}
 	return out, nil
 }
@@ -218,7 +218,7 @@ func resolveImplPackage(m std.Module) (importPath, pkgIdent string, err error) {
 			return nil
 		}
 		if path != importPath {
-			return fmt.Errorf("%s: Impl/Resolver package %q disagrees with %q used elsewhere in this module - a generated file can only import one Impl package", where, path, importPath)
+			return fmt.Errorf("%s: Impl/Resolver package %q disagrees with %q used elsewhere in this module, a generated file can only import one Impl package", where, path, importPath)
 		}
 		return nil
 	}
@@ -479,7 +479,7 @@ func checkObjectDecls(mods []std.Module) error {
 				problems = append(problems, fmt.Sprintf("%s\\%s: declares Object %q but its Impl returns a scalar",
 					mod.Name, meth.Name, got))
 			case got == "":
-				problems = append(problems, fmt.Sprintf("%s\\%s: Impl returns object %s; add Object: %q to its Ret",
+				problems = append(problems, fmt.Sprintf("%s\\%s: Impl returns object %s, add Object: %q to its Ret",
 					mod.Name, meth.Name, want, want))
 			default:
 				problems = append(problems, fmt.Sprintf("%s\\%s: declares Object %q but its Impl returns %s",
@@ -488,7 +488,7 @@ func checkObjectDecls(mods []std.Module) error {
 		}
 	}
 	if len(problems) > 0 {
-		return fmt.Errorf("object return declarations disagree with their Impls:\n  %s", strings.Join(problems, "\n  "))
+		return fmt.Errorf("object return declarations disagree with their Impls: %s", strings.Join(problems, ", "))
 	}
 	return nil
 }

@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// errInvalidJob opens every error a job record's validation returns.
+var errInvalidJob = errors.New("invalid job")
+
 // JobState is where one lease stands. The three terminal values are
 // the point of the set: a row that never reaches one is a row nobody closed.
 //
@@ -297,11 +300,11 @@ func ParseLeaseCheck(s string) (LeaseCheck, error) {
 	}
 	for _, w := range words {
 		if w == "--no-default-charms" {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s;"+
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries %s,"+
 				" declare the check as a record with `no_default_charms: true` instead", s, w)
 		}
 		if strings.HasPrefix(w, "-") {
-			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s;"+
+			return LeaseCheck{}, fmt.Errorf("a check is `<target> <project> [-- args]` and %q carries the flag %s,"+
 				" flags belong after `--`, where they reach the tool rather than magus", s, w)
 		}
 	}
@@ -889,7 +892,7 @@ func (r *Declaration) FoldLegacyNames() error {
 		switch {
 		case len(from) == 0:
 		case len(*into) > 0:
-			err = errors.Join(err, fmt.Errorf("job: a row declares %s or its renamed spelling, not both", name))
+			err = errors.Join(err, fmt.Errorf("%w: a row declares %s or its renamed spelling, not both", errInvalidJob, name))
 		default:
 			*into = from
 		}
@@ -901,7 +904,7 @@ func (r *Declaration) FoldLegacyNames() error {
 		switch {
 		case from == "":
 		case *into != "":
-			err = errors.Join(err, fmt.Errorf("job: a row declares %s or its renamed spelling, not both", name))
+			err = errors.Join(err, fmt.Errorf("%w: a row declares %s or its renamed spelling, not both", errInvalidJob, name))
 		default:
 			*into = from
 		}
@@ -915,18 +918,18 @@ func (r *Declaration) FoldLegacyNames() error {
 // Validate reports what is wrong with a declared row, or nil.
 func (r Declaration) Validate() error {
 	if !ValidJobID(strings.TrimSpace(r.ID)) {
-		return fmt.Errorf("job: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", r.ID, MaxJobIDLen)
+		return fmt.Errorf("%w: %q is not a lease id (letters, digits and -_./: only, at most %d characters)", errInvalidJob, r.ID, MaxJobIDLen)
 	}
 	if r.Enter != "" {
 		rest := r
 		rest.Schema, rest.ID, rest.Enter = Schema{}, "", ""
 		if !reflect.ValueOf(rest).IsZero() {
-			return errors.New("job: a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter")
+			return fmt.Errorf("%w: a record carrying enter enters a job and declares nothing, so it carries only schema_version, id and enter", errInvalidJob)
 		}
 		return nil
 	}
 	if r.State != "" && !ValidJobState(r.State) {
-		return fmt.Errorf("job: state must be one of %s", JobStateVocabulary())
+		return fmt.Errorf("%w: state must be one of %s", errInvalidJob, JobStateVocabulary())
 	}
 	if _, err := ParseJobTimeout(r.Timeout); err != nil {
 		return err
@@ -942,20 +945,20 @@ func (r Declaration) Validate() error {
 	}
 	for i, gate := range r.Goals {
 		if err := gate.Validate(); err != nil {
-			return fmt.Errorf("job: goals[%d]: %w", i, err)
+			return fmt.Errorf("%w: goals[%d]: %w", errInvalidJob, i, err)
 		}
 		if seen[gate.ID] {
-			return fmt.Errorf("job: goals carries duplicate id %q", gate.ID)
+			return fmt.Errorf("%w: goals carries duplicate id %q", errInvalidJob, gate.ID)
 		}
 		seen[gate.ID] = true
 	}
 	for _, gate := range r.Goals {
 		for _, dep := range gate.DependsOn {
 			if !seen[dep] {
-				return fmt.Errorf("job: goal %q depends_on unknown goal %q", gate.ID, dep)
+				return fmt.Errorf("%w: goal %q depends_on unknown goal %q", errInvalidJob, gate.ID, dep)
 			}
 			if dep == gate.ID {
-				return fmt.Errorf("job: goal %q cannot depend on itself", gate.ID)
+				return fmt.Errorf("%w: goal %q cannot depend on itself", errInvalidJob, gate.ID)
 			}
 		}
 	}
@@ -971,7 +974,7 @@ func (r Declaration) Validate() error {
 			return nil
 		}
 		if visiting[id] {
-			return fmt.Errorf("job: goal dependencies contain a cycle at %q", id)
+			return fmt.Errorf("%w: goal dependencies contain a cycle at %q", errInvalidJob, id)
 		}
 		if visited[id] {
 			return nil
@@ -1017,13 +1020,13 @@ func (g Goal) Validate() error {
 	// changed their mind, and grading the one the kind happens to read would silently
 	// ignore the other.
 	if g.Kind != GoalKindCheck && (g.Check.Target != "" || g.Check.Script != "") {
-		return fmt.Errorf("goal %q is a %s goal and also carries a check; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries a check, a goal examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GoalKindPaths && len(trimmedNonEmpty(g.Paths)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries paths; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries paths, a goal examines one subject", g.ID, g.Kind)
 	}
 	if g.Kind != GoalKindSymbol && len(trimmedNonEmpty(g.Symbols)) > 0 {
-		return fmt.Errorf("goal %q is a %s goal and also carries symbols; a goal examines one subject", g.ID, g.Kind)
+		return fmt.Errorf("goal %q is a %s goal and also carries symbols, a goal examines one subject", g.ID, g.Kind)
 	}
 	if len(trimmedNonEmpty(g.Subject())) == 0 {
 		return fmt.Errorf("goal %q is a %s goal and names nothing to examine, so nothing could ever satisfy it", g.ID, g.Kind)
@@ -1046,11 +1049,11 @@ func (c LeaseCheck) validScript() error {
 	case c.Script == "":
 		return nil
 	case c.Target != "":
-		return fmt.Errorf("check names target %q and script %q; a check names one", c.Target, c.Script)
+		return fmt.Errorf("check names target %q and script %q, a check names one", c.Target, c.Script)
 	case c.Project != "" && c.Project != ".":
-		return fmt.Errorf("check script %q names project %q; a recorded script run belongs to the workspace", c.Script, c.Project)
+		return fmt.Errorf("check script %q names project %q, a recorded script run belongs to the workspace", c.Script, c.Project)
 	case c.NoDefaultCharms:
-		return fmt.Errorf("check script %q sets no_default_charms; a script runs under no charms", c.Script)
+		return fmt.Errorf("check script %q sets no_default_charms, a script runs under no charms", c.Script)
 	default:
 		return nil
 	}
@@ -1065,7 +1068,7 @@ func ParseJobTimeout(s string) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(s)
 	if err != nil || d <= 0 {
-		return 0, fmt.Errorf("job: timeout %q is not a positive duration such as 30m or 2h", s)
+		return 0, fmt.Errorf("%w: timeout %q is not a positive duration such as 30m or 2h", errInvalidJob, s)
 	}
 	return d, nil
 }
@@ -1128,16 +1131,16 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 	line := strings.TrimSpace(r.Validation)
 	switch {
 	case r.Check != nil && line != "":
-		return LeaseCheck{}, false, errors.New("job: a row carries `check` or a rendered `validation` line, not both")
+		return LeaseCheck{}, false, fmt.Errorf("%w: a row carries `check` or a rendered `validation` line, not both", errInvalidJob)
 	case r.Check != nil && r.Check.Script != "":
 		if err := r.Check.validScript(); err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
 		}
 		return LeaseCheck{Script: r.Check.Script, Args: r.Check.Args}, true, nil
 	case r.Check != nil:
 		parsed, err := ParseLeaseCheck(r.Check.Target + " " + r.Check.Project)
 		if err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
 		}
 		parsed.Args = r.Check.Args
 		parsed.NoDefaultCharms = r.Check.NoDefaultCharms
@@ -1145,7 +1148,7 @@ func (r Declaration) check() (LeaseCheck, bool, error) {
 	case line != "":
 		parsed, err := ParseLeaseRunLine(line)
 		if err != nil {
-			return LeaseCheck{}, false, fmt.Errorf("job: %w", err)
+			return LeaseCheck{}, false, fmt.Errorf("%w: %w", errInvalidJob, err)
 		}
 		return parsed, true, nil
 	}

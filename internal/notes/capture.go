@@ -62,7 +62,7 @@ func (c Capture) Note(name string) (Note, error) {
 		return Note{}, errors.New("notes: a capture needs a title")
 	}
 	if len(c.Entries) == 0 {
-		return Note{}, errors.New("notes: nothing to capture; this conversation has no messages")
+		return Note{}, errors.New("notes: nothing to capture, this conversation has no messages")
 	}
 	if c.Source.Kind == "" {
 		return Note{}, errors.New("notes: a capture needs a source kind")

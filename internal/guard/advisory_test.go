@@ -30,8 +30,8 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 
 	stale := verdict(true, false)
 	assert.Equal(t, denyRuleSymbolSearch, stale.Rule.Name, "a stale index still knows the name, so the search is refused")
-	assert.Contains(t, stale.Deny, hint.GraphBuild.With("--silent")+"`, then `"+hint.Refs.With("HandleRequest", "--occurrences"))
-	assert.Contains(t, stale.Deny, "The symbol index is older than the sources it covers")
+	assert.Contains(t, stale.Deny, "the symbol index is older than the sources it covers; rebuild it: `"+hint.GraphBuild.With("--silent")+"`.")
+	assert.Contains(t, stale.Why, "Then `"+hint.Refs.With("HandleRequest", "--occurrences")+"` answers this exactly.")
 	require.Len(t, stale.Next, 2, "the rebuild, then refs")
 	assert.Equal(t, hint.GraphBuild.With("--silent"), stale.Next[0].Run)
 	assert.Contains(t, stale.Lead, "Classified:", "the lead replaces the deny, so it carries the classification")
@@ -84,11 +84,13 @@ func requireAdvisedOnce(t *testing.T, v ShellVerdict, rule denyRuleName) {
 	held := heldAdvice{v: v}
 	gate := hint.NewGate(t.TempDir(), "s1")
 	first := Verdict{Decision: "pass"}
-	held.speak(gate, &first)
+	whys := map[string]string{}
+	held.speak(gate, &first, whys)
 	assert.Equal(t, Verdict{Decision: "advise", Rule: string(rule), Context: v.Context}, first)
+	assert.Equal(t, v.Why, whys[v.Context], "the rationale is noted for the stored advice")
 
 	again := Verdict{Decision: "pass"}
-	held.speak(gate, &again)
+	held.speak(gate, &again, whys)
 	assert.Equal(t, "pass", again.Decision, "once per session")
 }
 

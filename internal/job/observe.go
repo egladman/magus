@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/config"
@@ -153,6 +154,28 @@ func MeasureOverlaps(ctx context.Context, root string, rows []types.Job, overlap
 	}
 	return OverlapFootprints(ctx, driver, rows, overlaps)
 }
+
+// Report is the job list every read door serves: the rows, swept as [Store.List] sweeps
+// them; the overlaps, blocked and read-only rows [types.NewJobList] derives; the rows
+// flagged overdue, orphaned or stale as of now (unix seconds) against staleAfter; and each
+// overlap's footprint measured at the store's checkout. `magus ls jobs`, magus\job.list and
+// JobService's ListJobs all build it here, so no two doors disagree about a row.
+//
+// It never joins the queue snapshot: in-flight changes are the queue's, and a door that
+// wants them joins them itself.
+func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration) (types.JobList, error) {
+	rows, err := s.List()
+	if err != nil {
+		return types.JobList{}, err
+	}
+	list := types.NewJobList(rows).Flag(now, staleAfter)
+	list.Overlaps = MeasureOverlaps(ctx, s.root, list.Jobs, list.Overlaps)
+	return list, nil
+}
+
+// StaleAfter is jobs.stale_after from the workspace's own magus.yaml: the window the sweep
+// ends untaken rows by, and the one a door with no config of its own flags stale rows by.
+func (s *Store) StaleAfter() (time.Duration, error) { return s.resolveStaleAfter() }
 
 // OverlapFootprints fills each overlap's Footprint: whether the two jobs' diffs, each
 // taken in the checkout that job was taken in (its CheckoutRoot) against its own

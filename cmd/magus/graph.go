@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/interactive"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/render"
@@ -71,14 +72,18 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 		// Absent from graphSubs on purpose: suggesting it would teach the name back.
 		return fmt.Errorf("magus graph verify has moved: run `magus doctor` and read its `agent skills` check, which grades the same installs and adds a --fix that reinstalls them")
 	default:
-		fmt.Fprintf(os.Stderr, "magus graph: unknown subcommand %q\n", sub)
+		slog.ErrorContext(ctx, fmt.Sprintf("unknown subcommand %q", sub), attr.Notice("magus graph"))
 		if sug := hint.Nearest(sub, graphSubs); sug != "" {
-			interactive.Emit(os.Stderr, fmt.Sprintf("did you mean %q?", sug))
+			interactive.Hint(ctx, fmt.Sprintf("did you mean %q?", sug))
 		}
-		fmt.Fprintln(os.Stderr, "")
-		graphUsage()
+		graphErrorUsage()
 		return errSilent{exitCode: 2}
 	}
+}
+
+func graphErrorUsage() {
+	fmt.Fprintln(os.Stderr, "")
+	graphUsage()
 }
 
 func graphUsage() {
@@ -124,7 +129,7 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 			fmt.Fprintln(os.Stderr, "switch, or when the server is not running).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -149,12 +154,11 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		}
 		defer func() { _ = m.Close() }()
 		n, rerr := m.ReindexSymbols(ctx)
-		fmt.Fprintf(os.Stderr, "reindexed %d symbol index(es)\n", n)
+		slog.InfoContext(ctx, fmt.Sprintf("reindexed %d symbol index(es)", n), attr.Notice(""))
 		if rerr != nil {
 			// A missing or failing indexer must not block the domain-graph rebuild.
 			// Surface the actionable hints and carry on.
-			interactive.Emit(os.Stderr, "some projects were not reindexed:")
-			fmt.Fprintf(os.Stderr, "  %s\n", rerr.Error())
+			interactive.Hint(ctx, "some projects were not reindexed", attr.Error(rerr))
 			refused = reindexRefusals(rerr)
 		}
 	}
@@ -168,13 +172,13 @@ func graphBuild(ctx context.Context, root string, args []string) (err error) {
 		return err
 	}
 	out := g.Output()
-	fmt.Fprintf(os.Stderr, "knowledge graph rebuilt: %d nodes, %d edges\n", out.NodeCount, out.EdgeCount)
+	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph rebuilt: %d nodes, %d edges", out.NodeCount, out.EdgeCount), attr.Notice(""))
 	// Not fatal: without the index the guard's graph-backed rules stay silent, which is
 	// the state they were in before the build.
 	if ws, err := inspectWorkspace(ctx, root); err == nil {
 		if m, ok := ws.(*magus.Magus); ok {
 			if err := m.WriteGuardIndex(ctx); err != nil {
-				interactive.Emit(os.Stderr, "guard index not written: "+err.Error())
+				interactive.Hint(ctx, "guard index not written: "+err.Error())
 			}
 		}
 	}
@@ -222,7 +226,29 @@ func acquireGraphBuild(ctx context.Context, root string) (*maintenance.GraphBuil
 	if proc.IsJob(ctx) {
 		me.By = "the server's sync-graph job"
 	}
-	return maintenance.AcquireGraphBuild(ctx, dir, me, os.Stderr, graphBuildPoll)
+	return maintenance.AcquireGraphBuild(ctx, dir, me,
+		noticeLines{ctx: ctx, level: slog.LevelInfo, label: "magus graph build", prefix: "magus graph build: "}, graphBuildPoll)
+}
+
+// noticeLines logs each line written to it as a notice. It stands in for os.Stderr where a
+// helper takes a writer but is also handed stdout or a buffer, so the helper keeps its
+// signature. A prefix names the label to move out of the text.
+type noticeLines struct {
+	ctx    context.Context
+	level  slog.Level
+	label  string
+	prefix string
+}
+
+func (w noticeLines) Write(p []byte) (int, error) {
+	for line := range strings.Lines(string(p)) {
+		msg := strings.TrimSuffix(line, "\n")
+		if w.prefix != "" {
+			msg = strings.TrimPrefix(msg, w.prefix)
+		}
+		slog.Log(w.ctx, w.level, msg, attr.Notice(w.label))
+	}
+	return len(p), nil
 }
 
 // loadBuiltGraph reports whether the build this one waited on left the graph current,
@@ -243,8 +269,8 @@ func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildH
 		left = append(left, "the symbol indexes (unreadable)")
 	}
 	if len(left) > 0 {
-		fmt.Fprintf(os.Stderr, "magus graph build: %s finished and left these without a current index: %s; building here\n",
-			by, strings.Join(left, ", "))
+		slog.InfoContext(ctx, fmt.Sprintf("%s finished and left these without a current index: %s; building here",
+			by, strings.Join(left, ", ")), attr.Notice("magus graph build"))
 		return false, nil
 	}
 	g, err := loadKnowledgeGraph(ctx, root, false, false, false)
@@ -252,7 +278,7 @@ func loadBuiltGraph(ctx context.Context, root string, by maintenance.GraphBuildH
 		return true, err
 	}
 	out := g.Output()
-	fmt.Fprintf(os.Stderr, "knowledge graph current, built by %s: %d nodes, %d edges\n", by, out.NodeCount, out.EdgeCount)
+	slog.InfoContext(ctx, fmt.Sprintf("knowledge graph current, built by %s: %d nodes, %d edges", by, out.NodeCount, out.EdgeCount), attr.Notice(""))
 	return true, nil
 }
 
@@ -282,11 +308,10 @@ func ingestSessions(ctx context.Context, root string) {
 	results := sessions.RunAdapters(ctx, resolveRootOrEmpty(root), adapters)
 	for _, r := range results {
 		if r.Err != nil {
-			interactive.Emit(os.Stderr, "session adapter "+r.Host+" did not finish:")
-			fmt.Fprintf(os.Stderr, "  %s\n", r.Err.Error())
+			interactive.Hint(ctx, "session adapter "+r.Host+" did not finish", attr.Error(r.Err))
 		}
 		if r.Output != "" {
-			fmt.Fprintf(os.Stderr, "%s\n", r.Output)
+			slog.InfoContext(ctx, r.Output, attr.Notice(""))
 		}
 	}
 }
@@ -307,7 +332,7 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "`"+hint.Affected.With("<target>", "--graph")+"`.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -358,7 +383,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "--select: the full graph has too many nodes for that layout to be legible.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -387,7 +412,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	// dot is a graph-layout format; on the whole graph (1000s of nodes) it is
 	// unreadable, so it requires a --select neighborhood to scope down.
 	if opts.Format == outputDot && ef.Select == "" {
-		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export; the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
+		return fmt.Errorf("-o %s requires --select \"<terms>\" to scope the export, the full graph is too large to lay out (use -o json or -o graphml for the whole graph)", opts.Format)
 	}
 
 	// The whole-graph export stays domain-only unless --symbols asks; a --select neighborhood
@@ -400,7 +425,7 @@ func graphExport(ctx context.Context, root string, args []string) error {
 	if ef.Select != "" {
 		out = g.Select(ef.Select, ef.Budget)
 		if out.NodeCount == 0 {
-			fmt.Fprintf(os.Stderr, "magus graph export: no nodes matched --select %q\n", ef.Select)
+			slog.WarnContext(ctx, fmt.Sprintf("no nodes matched --select %q", ef.Select), attr.Notice("magus graph export"))
 		}
 	}
 	if ef.Static {
@@ -514,7 +539,7 @@ func graphStats(ctx context.Context, root string, args []string) error {
 		sf = gen.BindGraphStats(fs)
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus graph stats [flags]\n\n%s\n\nFlags (global flags also accepted, see `magus -h`):\n", types.KnowledgeStatsDefinition)
-			fs.PrintDefaults()
+			printOwnDefaults(fs)
 		}
 	})
 	if err != nil {
@@ -625,7 +650,7 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		// Warn rather than silently drop a symbol-seeded selection, so an empty result
 		// is not mistaken for "no such symbol".
 		if includeSymbols {
-			interactive.Emit(os.Stderr, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
+			interactive.Hint(ctx, "note: symbol queries are domain-only under --global (cross-workspace symbols are a later phase)")
 		}
 		full, err := fullWorkspace(ctx, ws)
 		if err != nil {
@@ -638,7 +663,7 @@ func loadWorkspaceGraph(ctx context.Context, ws graphWorkspace, cfg config.Confi
 		// A refresh is the moment the expensive half (the SCIP shards, which are never
 		// committed) would otherwise be recomputed, and a branch switch reaches here
 		// through the VCS refresh hook's sync-graph job.
-		seedFromPublishedGraph(ws)
+		seedFromPublishedGraph(ctx, ws)
 	}
 	g, err := magus.BuildKnowledgeGraph(ctx, ws, ws.Root(), cfg, refresh, slog.Default())
 	if err != nil {
@@ -821,18 +846,18 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 
 	if useTargets {
 		if serve {
-			fmt.Fprintln(os.Stderr, "magus graph export --open: --targets and --serve cannot be used together.")
-			fmt.Fprintln(os.Stderr, "Target graphs are small; they always use the URL fragment.")
+			slog.ErrorContext(ctx, "--targets and --serve cannot be used together.", attr.Notice("magus graph export --open"),
+				attr.Why("Target graphs are small; they always use the URL fragment."))
 			return errSilent{exitCode: 2}
 		}
 		if globalScope {
-			fmt.Fprintln(os.Stderr, "magus graph export --open: --targets and --global cannot be used together.")
-			fmt.Fprintln(os.Stderr, "--targets scopes to this workspace's target graph; use a positional argument to scope to one project.")
+			slog.ErrorContext(ctx, "--targets and --global cannot be used together.", attr.Notice("magus graph export --open"),
+				attr.Why("--targets scopes to this workspace's target graph; use a positional argument to scope to one project."))
 			return errSilent{exitCode: 2}
 		}
 		if refresh {
-			fmt.Fprintln(os.Stderr, "magus graph export --open: --targets and --refresh cannot be used together.")
-			fmt.Fprintln(os.Stderr, "--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh.")
+			slog.ErrorContext(ctx, "--targets and --refresh cannot be used together.", attr.Notice("magus graph export --open"),
+				attr.Why("--targets reads the target graph directly from the magusfile; there is no knowledge store to refresh."))
 			return errSilent{exitCode: 2}
 		}
 		return graphOpenTargets(ctx, root, base, printOnly, pos)
@@ -880,9 +905,10 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 	openURL := strings.TrimRight(base, "/") + "/#data=" + encoded
 
 	if len(encoded) > fragmentWarnBytes {
-		fmt.Fprintf(os.Stderr, "magus graph export --open: this graph encodes to %d KB, near or past what Safari and older\n", len(encoded)/1024)
-		fmt.Fprintln(os.Stderr, "Firefox accept in a URL (Chrome is fine). If the page does not load, re-run with")
-		fmt.Fprintln(os.Stderr, "--serve to deliver it over a loopback server instead (no size limit). Continuing.")
+		slog.WarnContext(ctx, fmt.Sprintf("this graph encodes to %d KB, near or past what Safari and older\n"+
+			"Firefox accept in a URL (Chrome is fine). If the page does not load, re-run with\n"+
+			"--serve to deliver it over a loopback server instead (no size limit). Continuing.", len(encoded)/1024),
+			attr.Notice("magus graph export --open"))
 	}
 
 	if printOnly {
@@ -890,11 +916,12 @@ func openExplorer(ctx context.Context, root string, o explorerOptions, pos []str
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "opening the graph explorer for this workspace (%d nodes, %d edges).\n", out.NodeCount, out.EdgeCount)
-	fmt.Fprintln(os.Stderr, "your graph rides in the link fragment and is never uploaded - it does not leave your machine.")
+	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer for this workspace (%d nodes, %d edges).\n"+
+		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", out.NodeCount, out.EdgeCount),
+		attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open: could not open a browser (%v).\n", err)
-		fmt.Fprintln(os.Stderr, "Re-run with --print to get the URL, or open it yourself.")
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
+			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}
 	return nil
@@ -929,11 +956,8 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 				paths = append(paths, p.Path)
 			}
 			slices.Sort(paths)
-			fmt.Fprintf(os.Stderr, "magus graph export --open --targets: unknown project %q\n", scope)
-			fmt.Fprintln(os.Stderr, "valid projects:")
-			for _, p := range paths {
-				fmt.Fprintf(os.Stderr, "  %s\n", p)
-			}
+			slog.ErrorContext(ctx, fmt.Sprintf("unknown project %q", scope), attr.Notice("magus graph export --open --targets"),
+				attr.Why("valid projects:\n  "+strings.Join(paths, "\n  ")))
 			return errSilent{exitCode: 2}
 		}
 		out.Projects = filtered
@@ -954,11 +978,11 @@ func graphOpenTargets(ctx context.Context, root, base string, printOnly bool, ar
 		return nil
 	}
 
-	fmt.Fprintln(os.Stderr, "opening the graph explorer for this workspace's target graph.")
-	fmt.Fprintln(os.Stderr, "your graph rides in the link fragment and is never uploaded - it does not leave your machine.")
+	slog.InfoContext(ctx, "opening the graph explorer for this workspace's target graph.\n"+
+		"your graph rides in the link fragment and is never uploaded - it does not leave your machine.", attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open: could not open a browser (%v).\n", err)
-		fmt.Fprintln(os.Stderr, "Re-run with --print to get the URL, or open it yourself.")
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
+			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}
 	return nil
@@ -983,19 +1007,21 @@ func graphOpenServe(ctx context.Context, base string, raw []byte, nodes, edges i
 	// makes to the hosted page, and the explorer replays it when it fetches the blob.
 	openURL := strings.TrimRight(base, "/") + "/#src=" + url.QueryEscape(bs.SourceURL())
 
-	fmt.Fprintf(os.Stderr, "handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n", nodes, edges, bs.Addr())
-	fmt.Fprintf(os.Stderr, "it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.\n", origin)
+	slog.InfoContext(ctx, fmt.Sprintf("handing this workspace's graph (%d nodes, %d edges) to your browser over loopback (%s).\n"+
+		"it is served once, CORS-locked to %s, and never leaves your machine; the server stops as soon as the page has it.",
+		nodes, edges, bs.Addr(), origin), attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open: could not open a browser (%v). Open this yourself (the server is waiting):\n  %s\n", err, openURL)
+		slog.WarnContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
+			attr.Why("Open this yourself (the server is waiting):\n  "+openURL))
 	}
 
 	switch outcome := bs.WaitServed(ctx); outcome {
 	case httpx.ServeCompleted:
-		fmt.Fprintln(os.Stderr, "graph loaded; loopback server stopped.")
+		slog.InfoContext(ctx, "graph loaded; loopback server stopped.", attr.Notice(""))
 	case httpx.ServeTimedOut:
-		fmt.Fprintln(os.Stderr, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.")
+		slog.InfoContext(ctx, "the page never requested the graph; loopback server stopped. Re-run if your browser did not open.", attr.Notice(""))
 	case httpx.ServeCanceled:
-		fmt.Fprintln(os.Stderr, "\ncanceled; loopback server stopped.")
+		slog.InfoContext(ctx, "\ncanceled; loopback server stopped.", attr.Notice(""))
 	default:
 		// A new ServeOutcome added upstream must not be swallowed as success: name it.
 		return fmt.Errorf("graph export --open --serve: unexpected serve outcome %v", outcome)
@@ -1161,19 +1187,19 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		pctx, cancel := context.WithTimeout(ctx, probeLiveBridgeTimeout)
 		defer cancel()
 		if err := probeLiveBridge(pctx, hostPort); err != nil {
-			fmt.Fprintln(os.Stderr, "magus graph export --open --follow --print: the console is not reachable.")
-			fmt.Fprintf(os.Stderr, "start it: %s\n", hint.ServerStart)
+			slog.ErrorContext(ctx, "the console is not reachable.", attr.Notice("magus graph export --open --follow --print"),
+				attr.Why("start it: "+hint.ServerStart.String()))
 			return errSilent{exitCode: 1}
 		}
 	} else if err := ensureConsoleServer(ctx, hostPort, root); err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: %v\n", err)
-		fmt.Fprintf(os.Stderr, "start it yourself to see the server's own output: %s\n", hint.ServerStart)
+		slog.ErrorContext(ctx, "", attr.Notice("magus graph export --open --follow"), attr.Error(err),
+			attr.Why("start it yourself to see the server's own output: "+hint.ServerStart.String()))
 		return errSilent{exitCode: 1}
 	}
 
 	code, err := mintConsoleLinkCode()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open --follow: could not mint a sign-in code for the link: %v\n", err)
+		slog.ErrorContext(ctx, "could not mint a sign-in code for the link", attr.Notice("magus graph export --open --follow"), attr.Error(err))
 		return errSilent{exitCode: 1}
 	}
 
@@ -1188,11 +1214,11 @@ func graphOpenFollow(ctx context.Context, root string, printOnly, useTargets boo
 		return nil
 	}
 
-	fmt.Fprintf(os.Stderr, "opening the graph explorer in live mode (server at %s).\n", hostPort)
-	fmt.Fprintln(os.Stderr, "the explorer connects directly to your local server; your graph never leaves your machine.")
+	slog.InfoContext(ctx, fmt.Sprintf("opening the graph explorer in live mode (server at %s).\n"+
+		"the explorer connects directly to your local server; your graph never leaves your machine.", hostPort), attr.Notice(""))
 	if err := openBrowser(openURL); err != nil {
-		fmt.Fprintf(os.Stderr, "magus graph export --open: could not open a browser (%v).\n", err)
-		fmt.Fprintln(os.Stderr, "Re-run with --print to get the URL, or open it yourself.")
+		slog.ErrorContext(ctx, "could not open a browser", attr.Notice("magus graph export --open"), attr.Error(err),
+			attr.Why("Re-run with --print to get the URL, or open it yourself."))
 		return errSilent{exitCode: 1}
 	}
 	return nil

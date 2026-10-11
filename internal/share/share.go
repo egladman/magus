@@ -30,6 +30,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/rpcerr"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/trail"
@@ -99,7 +100,7 @@ func SelectLANIPv4() (netip.Addr, error) {
 	if a, ok := pickLANIPv4(ifaces); ok {
 		return a, nil
 	}
-	return netip.Addr{}, fmt.Errorf("share: no up, non-loopback, private-range IPv4 interface found; connect to a LAN or Wi-Fi network and try again")
+	return netip.Addr{}, fmt.Errorf("share: no up, non-loopback, private-range IPv4 interface found, connect to a LAN or Wi-Fi network and try again")
 }
 
 // Link is the public description of an active share link, returned to the console.
@@ -344,9 +345,9 @@ func (m *Manager) Start(minter types.Grant, consoleDir string, guarded map[strin
 	}()
 
 	if superseded {
-		m.log.InfoContext(ctx, "[SHARE] superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
+		m.log.With(attr.Component("share")).InfoContext(ctx, "superseded previous share", slog.String("addr", fmt.Sprintf("%s:%d", addr, port)))
 	}
-	m.log.InfoContext(ctx, "[SHARE] LAN share opened",
+	m.log.With(attr.Component("share")).InfoContext(ctx, "LAN share opened",
 		slog.String("addr", fmt.Sprintf("%s:%d", addr, port)),
 		slog.Time("expires", tok.Expires),
 	)

@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/tty"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -78,7 +79,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		fmt.Fprintln(os.Stderr, "  magus init spell <name>   scaffold a new spell at spells/<name>/spell.buzz")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
+		printOwnDefaults(fs)
 	}
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -94,7 +95,7 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	// real user's global config, so refuse rather than silently writing there: make
 	// the caller say which config --root's scoping should mean.
 	if root != "" && !inf.Global && !inf.Local {
-		return fmt.Errorf("init: --root requires --local or --global (--root does not scope the default config path; " +
+		return fmt.Errorf("init: --root requires --local or --global (--root does not scope the default config path, " +
 			"pass --local to write magus.yaml into --root, or --global to confirm the write to $XDG_CONFIG_HOME/magus/)")
 	}
 
@@ -167,10 +168,10 @@ func judgeDir(root string) string {
 
 func logConfigInit(ctx context.Context, cfgPath string, wrote bool) {
 	if wrote {
-		slog.InfoContext(ctx, "init: wrote a config holding no keys; every key keeps its built-in default", slog.String("path", cfgPath))
+		slog.With(attr.Component("init")).InfoContext(ctx, "wrote a config holding no keys; every key keeps its built-in default", slog.String("path", cfgPath))
 		return
 	}
-	slog.InfoContext(ctx, "init: config exists, left as it is", slog.String("path", cfgPath))
+	slog.With(attr.Component("init")).InfoContext(ctx, "config exists, left as it is", slog.String("path", cfgPath))
 }
 
 // xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
@@ -242,42 +243,41 @@ func printInitPlan(root string, global, local, force bool) error {
 // Gated on the user-controlled hints preference, not terminal interactivity.
 // cfgPath is where magus.yaml was written; scaffolded is true when a magusfile.buzz
 // was stubbed (false when --global was used); isLocal is true when --local was used.
-func printInitNextSteps(_ context.Context, cfgPath string, scaffolded, isLocal bool) {
+func printInitNextSteps(ctx context.Context, cfgPath string, scaffolded, isLocal bool) {
 	if !interactive.HintsEnabled() {
 		return
 	}
 
-	interactive.Emit(os.Stderr, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
+	interactive.Hint(ctx, fmt.Sprintf("config: %s (set a key with `%s`)", cfgPath, hint.ConfigSet.With("key=<key>,value=<value>")))
 
 	if scaffolded {
-		interactive.Emit(os.Stderr, "magusfile scaffolded: magusfile.buzz")
-		interactive.Emit(os.Stderr, "run your first target:  "+hint.Run.With("build"))
+		interactive.Hint(ctx, "magusfile scaffolded: magusfile.buzz")
+		interactive.Hint(ctx, "run your first target:  "+hint.Run.With("build"))
 	}
 
 	if isLocal {
-		interactive.Emit(os.Stderr, "tip: commit magus.yaml to share config with your team")
+		interactive.Hint(ctx, "tip: commit magus.yaml to share config with your team")
 	}
 
 	// Server rc snippet — clearly optional, copy/paste only.
-	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "optional: start the server automatically on login")
-	interactive.Emit(os.Stderr, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "  # start magus server on login (magus works fine without it)")
-	fmt.Fprintln(os.Stderr, "  if command -v magus >/dev/null 2>&1 && \\")
-	fmt.Fprintln(os.Stderr, "     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then")
-	fmt.Fprintln(os.Stderr, "    "+hint.ServerStart.String()+" &")
-	fmt.Fprintln(os.Stderr, "  fi")
-	fmt.Fprintln(os.Stderr, "")
-	interactive.Emit(os.Stderr, "stop with:  "+hint.ServerStop.String())
+	interactive.Hint(ctx, "")
+	interactive.Hint(ctx, "optional: start the server automatically on login")
+	interactive.Hint(ctx, "add to ~/.bashrc, ~/.zshrc, or ~/.profile:")
+	slog.InfoContext(ctx, "\n"+
+		"  # start magus server on login (magus works fine without it)\n"+
+		"  if command -v magus >/dev/null 2>&1 && \\\n"+
+		"     ! "+hint.Status.With("--probe=liveness")+" >/dev/null 2>&1; then\n"+
+		"    "+hint.ServerStart.String()+" &\n"+
+		"  fi\n", attr.Notice(""))
+	interactive.Hint(ctx, "stop with:  "+hint.ServerStop.String())
 
 	// Point users at the agent integration. A hint, not a step: connecting a client
 	// is per-user and per-machine (it writes the client's config, not the repo),
 	// so it does not belong in repo bootstrap; init just says where to look.
-	interactive.Emit(os.Stderr, "")
-	interactive.Emit(os.Stderr, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
-	interactive.Emit(os.Stderr, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
-	interactive.Emit(os.Stderr, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
+	interactive.Hint(ctx, "")
+	interactive.Hint(ctx, "let an agent use this workspace over the server (graph-aware skills + MCP tools):")
+	interactive.Hint(ctx, "  "+hint.AgentInstall.With("<skills-dir>")+"  # Agent Skills; it also prints the AGENTS.md block to paste")
+	interactive.Hint(ctx, "  "+hint.ConfigMCPConnectorCreate.With("--name", "<client>")+"  # mint a token, then configure the client")
 }
 
 // writeMagusfileStub writes a starter magusfile.buzz in dir when the directory has
@@ -291,7 +291,7 @@ func writeMagusfileStub(dir string) error {
 	if err := os.WriteFile(path, []byte(starterMagusfileBuzz), 0o644); err != nil {
 		return fmt.Errorf("init: write %s: %w", path, err)
 	}
-	slog.Info("init: wrote magusfile", slog.String("path", path))
+	slog.With(attr.Component("init")).Info("wrote magusfile", slog.String("path", path))
 	return nil
 }
 
@@ -313,30 +313,30 @@ func magusfilePresent(dir string) bool {
 func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		slog.WarnContext(ctx, "init: skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
+		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
 		return nil
 	}
 
 	globs, err := settle.DriverGlobs(ctx, m)
 	if err != nil {
-		slog.WarnContext(ctx, "init: skipping merge-driver setup; could not list the files output exclusions carve out", slog.String("error", err.Error()))
+		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; could not list the files output exclusions carve out", slog.String("error", err.Error()))
 		return nil
 	}
 	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {
-		slog.InfoContext(ctx, "init: no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
+		slog.With(attr.Component("init")).InfoContext(ctx, "no projects declare Outputs and vcs.auto_resolve is empty; re-run `"+hint.Init.String()+"` after adding either to wire the merge driver")
 		return nil
 	}
 
 	name, err := chooseInitVCS(ctx, root, m, vcsFlag)
 	if err != nil {
 		if errors.Is(err, tty.ErrAborted) {
-			slog.InfoContext(ctx, "init: merge-driver setup skipped")
+			slog.With(attr.Component("init")).InfoContext(ctx, "merge-driver setup skipped")
 			return nil
 		}
 		return err
 	}
 	if name == "" {
-		slog.WarnContext(ctx, "init: non-interactive shell; re-run with --vcs to wire the merge driver",
+		slog.With(attr.Component("init")).WarnContext(ctx, "non-interactive shell; re-run with --vcs to wire the merge driver",
 			slog.String("choices", strings.Join(vcs.InstallableVCSes(), "|")))
 		return nil
 	}
@@ -357,18 +357,18 @@ func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error 
 			return fmt.Errorf("init: install %s settle hooks: %w", name, err)
 		}
 		if len(installed) > 0 {
-			slog.InfoContext(ctx, "init: wrote the settle hooks; a merge now regenerates what it changed", slog.String("hooks", strings.Join(installed, ", ")))
+			slog.With(attr.Component("init")).InfoContext(ctx, "wrote the settle hooks; a merge now regenerates what it changed", slog.String("hooks", strings.Join(installed, ", ")))
 		}
 	}
 
 	n := slog.Int("globs", len(globs.Outputs)+len(globs.AutoResolve))
 	switch name {
 	case "git":
-		slog.InfoContext(ctx, "init: wired git merge driver (.gitattributes + .git/config)", n)
+		slog.With(attr.Component("init")).InfoContext(ctx, "wired git merge driver (.gitattributes + .git/config)", n)
 	case "hg":
-		slog.InfoContext(ctx, "init: wired hg merge driver (.hg/hgrc)", n)
+		slog.With(attr.Component("init")).InfoContext(ctx, "wired hg merge driver (.hg/hgrc)", n)
 	default:
-		slog.InfoContext(ctx, "init: wired merge driver", slog.String("vcs", name), n)
+		slog.With(attr.Component("init")).InfoContext(ctx, "wired merge driver", slog.String("vcs", name), n)
 	}
 	return nil
 }

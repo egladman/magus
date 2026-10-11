@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
@@ -130,7 +131,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	telCfg.LocalCollect = true
 	sharedTel, terr := otlp.New(ctx, telCfg)
 	if terr != nil {
-		slog.Warn("server: telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
+		slog.With(attr.Component("server")).Warn("telemetry init failed; dashboard metrics disabled", slog.String("error", terr.Error()))
 		sharedTel, _ = otlp.New(ctx, observability.Config{})
 	}
 	serverProvider = sharedTel
@@ -157,7 +158,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 				cwd := proc.CwdFromContext(hctx)
 				r, rerr := magus.FindRoot(cwd)
 				if rerr != nil {
-					return fmt.Errorf("proc: cannot locate workspace root from %s: %w", cwd, rerr)
+					return fmt.Errorf("locate workspace root from %s: %w", cwd, rerr)
 				}
 				root = r
 			}
@@ -180,7 +181,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 		CallerOwnsSignals: true,
 	})
 	if err != nil {
-		slog.Error("server: init failed", slog.String("error", err.Error()))
+		slog.With(attr.Component("server")).Error("init failed", slog.String("error", err.Error()))
 		return
 	}
 	addr = srv.Addr()
@@ -189,7 +190,7 @@ func startServer(ctx context.Context, cfg config.Config, rc runConfig) {
 	if err := srv.Start(); err != nil {
 		_ = os.Unsetenv(proc.SocketEnv)
 		_ = os.Unsetenv(proc.TokenEnv)
-		slog.Error("server: start failed", slog.String("error", err.Error()))
+		slog.With(attr.Component("server")).Error("start failed", slog.String("error", err.Error()))
 		return
 	}
 	procServer = srv // publish so serverStart's blocking loop unblocks on an RPC shutdown

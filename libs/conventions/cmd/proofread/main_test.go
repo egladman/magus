@@ -382,7 +382,7 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		wantStderr string
 	}{
 		{"a path for symbols", []string{"doc-comment", "a.md"},
-			"proofread: symbols are read from stdin; a path needs the reference subcommand\n"},
+			"proofread: a path needs the reference subcommand, since symbols are read from stdin\n"},
 		{"rules with an argument", []string{"rules", "filler"}, "proofread: rules takes no arguments\n"},
 		{"explain with no rule", []string{"explain"}, "proofread: explain takes one rule name or code\n"},
 		{"explain an unknown rule", []string{"explain", "fillers"}, "proofread: unknown rule or code \"fillers\"\n"},

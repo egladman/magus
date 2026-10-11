@@ -397,7 +397,7 @@ var ErrVCSUnsupported error = vcsUnsupported{}
 
 type vcsUnsupported struct{}
 
-func (vcsUnsupported) Error() string { return "vcs: operation not supported by this VCS" }
+func (vcsUnsupported) Error() string { return "operation not supported by this VCS" }
 func (vcsUnsupported) Unwrap() error { return errors.ErrUnsupported }
 
 // VCSCapability names one of the capability interfaces VCSDriver embeds.
@@ -450,7 +450,7 @@ type VCSUnsupportedError struct {
 }
 
 func (e *VCSUnsupportedError) Error() string {
-	return "vcs: " + e.VCS + " does not support " + string(e.Capability)
+	return e.VCS + " does not support " + string(e.Capability)
 }
 
 // Unwrap returns ErrVCSUnsupported, so a caller matching it or errors.ErrUnsupported
@@ -459,7 +459,7 @@ func (e *VCSUnsupportedError) Unwrap() error { return ErrVCSUnsupported }
 
 // ErrVCSUnknown is returned by the VCS resolver when an explicit VCS name
 // is given but no built-in or registered implementation matches it.
-var ErrVCSUnknown = errors.New("vcs: unknown VCS")
+var ErrVCSUnknown = errors.New("unknown VCS")
 
 // MergeDriverGlobs are the workspace-relative globs a merge driver registration routes
 // to magus.
@@ -1163,7 +1163,7 @@ type CheckoutTamperedError struct {
 }
 
 func (e *CheckoutTamperedError) Error() string {
-	return "vcs: " + e.File + " changed since the checkout at " + e.Checkout + " was made"
+	return e.File + " changed since the checkout at " + e.Checkout + " was made"
 }
 
 // RevisionFetcher is the capability to bring revisions from a configured remote into the
@@ -1182,7 +1182,7 @@ type RevisionFetcher interface {
 // ErrStaleLease is Pusher.Push finding the remote ref not at the commit the caller
 // expected: it moved, or was deleted, since the caller last looked. Retrying after
 // looking again can succeed.
-var ErrStaleLease = errors.New("vcs: the remote ref is not at the expected revision")
+var ErrStaleLease = errors.New("the remote ref is not at the expected revision")
 
 // PushRejectedError is the remote refusing a push for a reason of its own (a pre-receive
 // hook, branch protection). Retrying will not change it.
@@ -1193,7 +1193,7 @@ type PushRejectedError struct {
 }
 
 func (e *PushRejectedError) Error() string {
-	return "vcs: " + e.Ref + " rejected by the remote: " + e.Reason
+	return e.Ref + " rejected by the remote: " + e.Reason
 }
 
 // PushLease is one leased update of a remote ref, for Pusher.Push.

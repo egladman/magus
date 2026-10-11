@@ -1714,7 +1714,7 @@ func MissingDiffDrivers(ctx context.Context, root string) ([]string, error) {
 	text := strings.ReplaceAll(string(data), "\r\n", "\n")
 	spans, err := managedSpans(text, generatedMarkers)
 	if err != nil {
-		return nil, fmt.Errorf("vcs: %s: %w", path, err)
+		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	have := map[string]bool{}
 	for _, s := range spans {
@@ -2101,7 +2101,7 @@ func resolveGitRepoPaths(ctx context.Context, root string) (paths gitRepoPaths, 
 		if strings.Contains(stderr.String(), "not a git repository") {
 			return gitRepoPaths{}, false, nil
 		}
-		return gitRepoPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: %w: %s", root, err, strings.TrimSpace(stderr.String()))
+		return gitRepoPaths{}, false, fmt.Errorf("vcs: git rev-parse in %s: %w", root, withOutput(err, stderr.String()))
 	}
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
 	if len(lines) != 2 {
@@ -2201,7 +2201,7 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 	text := string(data)
 	spans, err := managedSpans(text, refreshMarkers)
 	if err != nil {
-		return GitRefreshHook{}, false, fmt.Errorf("vcs: %s: %w", path, err)
+		return GitRefreshHook{}, false, fmt.Errorf("%s: %w", path, err)
 	}
 	for _, s := range spans {
 		for line := range strings.Lines(text[s.start:s.end]) {
@@ -2212,7 +2212,7 @@ func ReadGitRefreshHook(ctx context.Context, root string) (hook GitRefreshHook, 
 			}
 			top, err := gitVCS{}.Root(ctx, root)
 			if err != nil {
-				return GitRefreshHook{}, false, fmt.Errorf("vcs: top level of %s: %w", root, err)
+				return GitRefreshHook{}, false, fmt.Errorf("top level of %s: %w", root, err)
 			}
 			return GitRefreshHook{Command: cmd, Top: top}, true, nil
 		}
@@ -2452,7 +2452,7 @@ func (v gitVCS) StartMerge(ctx context.Context, root, ref string, as types.Perso
 	// An operation already underway would pass the check below with ITS MERGE_HEAD, and a
 	// failed merge would read as one that began.
 	if head, _ := gitMergeHead(ctx, root); head != "" {
-		return fmt.Errorf("git merge %s: a merge of %s is already in progress; conclude or abort it first", ref, head)
+		return fmt.Errorf("git merge %s: a merge of %s is already in progress, conclude or abort it first", ref, head)
 	}
 	// The ref, not the id, so the message git prepares names the branch the user merged.
 	_, err = gitOutput(ctx, root, opts, "merge", "--no-commit", "--no-ff", ref)
@@ -2496,7 +2496,7 @@ func (v gitVCS) KeepIncoming(ctx context.Context, root string, paths []string) e
 			continue
 		}
 		if err := runGitBatched(ctx, root, []string{"checkout", "--ours"}, []string{p}); err != nil {
-			return fmt.Errorf("git checkout %q: the merge left content on neither side; resolve it by hand: %w", p, err)
+			return fmt.Errorf("git checkout %q: the merge left content on neither side, resolve it by hand: %w", p, err)
 		}
 	}
 	return nil
@@ -2844,7 +2844,7 @@ func revFileOutput(cmd *exec.Cmd, what string) (string, error) {
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s: %w: %s", what, err, strings.TrimSpace(errBuf.String()))
+		return "", fmt.Errorf("%s: %w", what, withOutput(err, errBuf.String()))
 	}
 	return out.String(), nil
 }
@@ -2994,10 +2994,7 @@ func (b *objectBatch) Close() error {
 		return err
 	}
 	if waitErr != nil {
-		if msg := strings.TrimSpace(b.stderr.String()); msg != "" {
-			return fmt.Errorf("git cat-file: %w: %s", waitErr, msg)
-		}
-		return fmt.Errorf("git cat-file: %w", waitErr)
+		return fmt.Errorf("git cat-file: %w", withOutput(waitErr, b.stderr.String()))
 	}
 	return nil
 }
@@ -3190,15 +3187,24 @@ var preserveIdentity = []string{
 	"GIT_COMMITTER_NAME=magus", "GIT_COMMITTER_EMAIL=magus@magus.invalid",
 }
 
-// gitStderr appends what git actually said to an exit-status error. cmd.Output captures
+// gitStderr folds what git actually said into an exit-status error. cmd.Output captures
 // stderr into ExitError and nothing reads it, so a failure surfaces as a bare `exit status
 // 128` that names neither the command's complaint nor a way to act on it.
 func gitStderr(err error) error {
 	var ee *exec.ExitError
 	if errors.As(err, &ee) && len(ee.Stderr) > 0 {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		return withOutput(err, string(ee.Stderr))
 	}
 	return err
+}
+
+// withOutput puts what a tool printed before the exit status it explains, so a wrapping
+// error can end in ": %w". Blank output returns err as it came.
+func withOutput(err error, out string) error {
+	if out = strings.TrimSpace(out); out == "" {
+		return err
+	}
+	return fmt.Errorf("%s: %w", out, err)
 }
 
 // PrunePreserved deletes the refs Preserve anchored whose commit predates before.
@@ -3348,7 +3354,7 @@ func (v gitVCS) MergeTrees(ctx context.Context, root string, m types.TreeMerge) 
 		// reports a new enough version and still has no merge-tree --write-tree.
 		return types.TreeMergeResult{}, errors.New("git merge-tree --write-tree is missing from a git that reports a supported version")
 	default:
-		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w: %s", m.Ours, m.Theirs, err, strings.TrimSpace(stderr.String()))
+		return types.TreeMergeResult{}, fmt.Errorf("git merge-tree %s %s: %w", m.Ours, m.Theirs, withOutput(err, stderr.String()))
 	}
 	return parseMergeTree(string(out))
 }
@@ -3501,7 +3507,7 @@ func (v gitVCS) GeneratedPaths(ctx context.Context, root, rev string, paths []st
 		local = filepath.Join(root, local)
 	}
 	if _, err := os.Stat(local); err == nil {
-		return nil, fmt.Errorf("vcs: %s overrides the revision's attributes; remove it", local)
+		return nil, fmt.Errorf("vcs: %s overrides the revision's attributes, remove it", local)
 	}
 	opts := gitOpts{Env: []string{"GIT_ATTR_NOSYSTEM=1"}, KeepLeadingSpace: true}
 	for _, chunk := range gitPathChunks(paths) {
@@ -3681,8 +3687,8 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 		return err
 	}
 	if remote != "" {
-		return fmt.Errorf("vcs: %s is a partial clone, which asks remote %q for any object it lacks; a merge in a checkout of it "+
-			"can ask for a blob the merge just wrote, which the remote never had: check out from a full clone", root, remote)
+		return fmt.Errorf("vcs: %s is a partial clone, which asks remote %q for any object it lacks, a merge in a checkout of it "+
+			"can ask for a blob the merge just wrote, which the remote never had, so check out from a full clone", root, remote)
 	}
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
@@ -3954,7 +3960,7 @@ func (v gitVCS) Push(ctx context.Context, root string, p types.PushLease) error 
 	if refused := pushRefusal(string(out), p.Ref); refused != nil {
 		return refused
 	}
-	return fmt.Errorf("git push %s %s: %w: %s", p.Remote, p.Ref, err, strings.TrimSpace(stderr.String()))
+	return fmt.Errorf("git push %s %s: %w", p.Remote, p.Ref, withOutput(err, stderr.String()))
 }
 
 // staleLease reports whether a refusal means the ref was not where the lease expected:

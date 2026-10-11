@@ -14,7 +14,17 @@ import (
 func TestPluginsRegister(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "cmd/app/main.go", "cmd/app/gen/gen.go")
 	for name, settings := range map[string]any{
-		"asciistrings":  map[string]any{"files": []any{"types/*.go"}},
+		"asciistrings": map[string]any{"files": []any{"types/*.go"}},
+		"diagmsg": map[string]any{
+			"max-runes": 160, "prefixes": []any{"magus workspace:"},
+			"calls":  []any{map[string]any{"func": "a.Errorf", "arg": 1, "format": true}},
+			"fields": []any{map[string]any{"type": "a.Verdict", "field": "Deny"}},
+			"allow":  []any{map[string]any{"file": "cmd/app/main.go", "rule": "message-length", "reason": "staged"}},
+		},
+		"errmsg": map[string]any{
+			"module": "example.com/m", "files": []any{"cmd/app/*.go"}, "rules": []any{"error-join"},
+			"allow": []any{map[string]any{"file": "cmd/app/main.go", "rule": "error-join", "reason": "staged"}},
+		},
 		"fieldwise":     map[string]any{"report-partial": true},
 		"filenames":     map[string]any{"module": "example.com/m", "skip-dirs": []any{"gen"}, "allow": []any{"runtime"}},
 		"globalrestore": map[string]any{"package": "a", "vars": []any{"global"}, "hint": "see docs"},
@@ -24,6 +34,11 @@ func TestPluginsRegister(t *testing.T) {
 		"nameoutput":    map[string]any{"package": "a", "case-ident": "outputName", "emitters": []any{"emitNames"}, "hint": "see docs"},
 		"providerio":    map[string]any{"module": "example.com/m", "dirs": []any{"cmd/app"}, "hint": "see docs"},
 		"ruletext":      map[string]any{"files": []any{"cmd/magus/shell.go"}, "prefix": "magus workspace:", "hint": "see docs"},
+		"stderrprint": map[string]any{
+			"module": "example.com/m", "usage-pattern": "(?i)usage$", "usage-fields": []any{"Usage"},
+			"callee-packages": []any{"example.com/m"}, "display": []any{"example.com/m/tty"},
+			"allow": []any{map[string]any{"file": "cmd/app/main.go", "reason": "the display"}},
+		},
 		"stutter":       map[string]any{"min-package-len": 3},
 		"testisolation": map[string]any{"package": "a", "calls": []any{"testkit.Main"}, "hint": "see docs"},
 	} {

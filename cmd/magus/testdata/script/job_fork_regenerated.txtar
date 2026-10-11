@@ -1,0 +1,90 @@
+# A writing job's fork names the declared outputs a target regenerates from sources inside
+# its write paths when those outputs sit outside them: a flag registry feeds a manpage in
+# another project and a lock file beside it. An output the paths hold (the rules page) is
+# not named, nor is one git ignores (coverage), nor anything for a read-only job. describe
+# job carries the same block for the holder, json gets a field, and apply prints it when
+# the paths change.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+env GIT_AUTHOR_NAME=Ana
+env GIT_AUTHOR_EMAIL=ana@example.com
+env GIT_COMMITTER_NAME=Ana
+env GIT_COMMITTER_EMAIL=ana@example.com
+exec git init -q -b main
+exec git add -A
+exec git commit -q -m 'registry and its generated pages'
+
+exec magus job fork flags/shell --write-paths 'cli/*.go,docs/rules/*.md' --check 'test .'
+cmp stdout $WORK/fork.out
+
+exec magus describe job flags/shell
+stdout '^regenerated outside the write paths, from sources inside them$'
+stdout '^  docs/manpage/\*\.md \(docs:content-generate\)$'
+! stdout 'docs/rules/\*\.md \('
+! stdout 'coverage'
+
+exec magus describe job flags/shell -o json
+stdout '"regenerated_outside"'
+stdout '"output": "cli/testdata/api\.lock"'
+stdout '"target": "\.:man-generate"'
+stdout '"source": "cli/registry\.go"'
+
+exec magus job fork flags/survey --read-only --criteria 'read the registry'
+! stdout 'regenerated outside'
+
+stdin $WORK/widen.json
+exec magus job apply -f -
+stdout '^  write_paths \+docs/manpage/\*\.md$'
+stdout '^  cli/testdata/api\.lock \(\.:man-generate\)$'
+! stdout 'docs:content-generate'
+
+-- fork.out --
+forked flags/shell, declared, with 2 write path(s). Its holder reads the terms with `magus describe job flags/shell` and takes it with `magus job exec flags/shell`
+regenerated outside the write paths, from sources inside them
+  docs/manpage/*.md (docs:content-generate)
+  cli/testdata/api.lock (.:man-generate)
+  the root regenerates these after integration: never hand-edit them; if this job must regenerate them itself, ask the root to widen the write paths
+-- widen.json --
+{"schema_version": 11, "id": "flags/shell", "write_paths": ["cli/*.go", "docs/rules/*.md", "docs/manpage/*.md"],
+ "check": {"target": "test", "project": "."}}
+-- .gitignore --
+.magus/
+coverage/
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+// man_generate writes the API lock from the flag registry.
+export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("cli/**/*.go");
+    ctx.writesFiles("cli/testdata/api.lock");
+    proc\exec("sh", ["-c", "cat cli/*.go > cli/testdata/api.lock"]);
+}
+
+// test writes coverage git never sees.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("cli/**/*.go");
+    ctx.writesFiles("coverage/*.out");
+    proc\exec("sh", ["-c", "mkdir -p coverage && touch coverage/cli.out"]);
+}
+-- cli/registry.go --
+package cli
+-- cli/testdata/api.lock --
+package cli
+-- docs/magusfile.buzz --
+import "magus";
+import "proc";
+import "project/.." as ws;
+
+// content_generate renders the manpage and the rules pages from the flag registry.
+export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles(ws\file("cli/registry.go"));
+    ctx.writesFiles("manpage/*.md", "rules/*.md");
+    proc\exec("sh", ["-c", "true"]);
+}
+-- docs/manpage/magus-shell.md --
+# magus shell
+-- docs/rules/guard.md --
+# guard

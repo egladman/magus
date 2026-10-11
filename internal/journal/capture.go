@@ -6,6 +6,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 
 	json "github.com/egladman/magus/internal/json"
@@ -209,8 +210,43 @@ func (h *FileHandler) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-func (h *FileHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
-func (h *FileHandler) WithGroup(string) slog.Handler      { return h }
+func (h *FileHandler) WithAttrs(attrs []slog.Attr) slog.Handler { return withAttrs(h, attrs) }
+func (h *FileHandler) WithGroup(string) slog.Handler            { return h }
+
+// withAttrs returns base carrying attrs ahead of each record's own. The derived
+// handler shares base's state by pointer, so its records land in the same file
+// or backlog.
+func withAttrs(base slog.Handler, attrs []slog.Attr) slog.Handler {
+	if len(attrs) == 0 {
+		return base
+	}
+	return attrsHandler{base: base, attrs: slices.Clone(attrs)}
+}
+
+type attrsHandler struct {
+	base  slog.Handler
+	attrs []slog.Attr
+}
+
+func (a attrsHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
+	return a.base.Enabled(ctx, lvl)
+}
+
+func (a attrsHandler) Handle(ctx context.Context, r slog.Record) error {
+	nr := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	nr.AddAttrs(a.attrs...)
+	r.Attrs(func(at slog.Attr) bool {
+		nr.AddAttrs(at)
+		return true
+	})
+	return a.base.Handle(ctx, nr)
+}
+
+func (a attrsHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return attrsHandler{base: a.base, attrs: append(slices.Clip(a.attrs), attrs...)}
+}
+
+func (a attrsHandler) WithGroup(string) slog.Handler { return a }
 
 // Flush writes any buffered events to the underlying writer.
 func (h *FileHandler) Flush() {

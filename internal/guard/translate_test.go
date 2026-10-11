@@ -113,6 +113,7 @@ func TestSearchTranslationShowsTheQuery(t *testing.T) {
 	assert.Contains(t, v.Deny, "MGS3022, MGS3023")
 	assert.Contains(t, v.Deny, "Its answer (")
 	assert.Contains(t, v.Deny, "\n  diagnostic:MGS3022\n")
+	assert.NotContains(t, v.Why, "Its answer", "the answer is what the search was for, so it is shown, never stored behind the ref")
 
 	advised := Evaluate(Dependencies{GraphIDs: diagnosticGraph}, `grep -n "MGS30[23]" docs/reference/codes/sandbox/README.md; git add types/diagnostic.go`)
 	requireAdvisedOnce(t, advised, denyRuleSearchTranslation)
@@ -159,7 +160,7 @@ func TestSearchTranslationDiagnosticsFollowTheGraph(t *testing.T) {
 	graph := graphOf(map[string][]string{types.KindDiagnostic: {"diagnostic:MGS9901", "diagnostic:MGS9902"}})
 	v := Evaluate(strict(Dependencies{GraphIDs: graph}), command)
 	assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: query}, v.Rule)
-	assert.Contains(t, v.Deny, "\n  diagnostic:MGS9902\n")
+	assert.Contains(t, v.Deny+"\n", "\n  diagnostic:MGS9902\n")
 
 	const registered = `grep -rn 'MGS30[23][0-9]' docs/`
 	require.Equal(t, denyRuleSearchTranslation, Evaluate(strict(Dependencies{GraphIDs: diagnosticGraph}), registered).Rule.Name)
@@ -230,7 +231,7 @@ func TestSearchTranslationHeadings(t *testing.T) {
 
 	// The answer is the section ids the query prints.
 	v, _ := translateSearches(deps, root, parseForTest(t, `grep -n '^#' docs/a.md`))
-	assert.Contains(t, v.Deny, "Its answer (2 results):\n  docsection:docs/a.md#alpha\n  docsection:docs/a.md#beta\n")
+	assert.Contains(t, v.Deny+"\n", "Its answer (2 results):\n  docsection:docs/a.md#alpha\n  docsection:docs/a.md#beta\n")
 
 	// A directory walk proves over every Markdown file grep would read.
 	full := Dependencies{GraphIDs: graphOf(map[string][]string{"docsection": {
@@ -341,7 +342,7 @@ func TestSearchTranslationDeclarations(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, tt.rule, v.Rule, tt.command)
-		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		assert.Contains(t, v.Deny+"\n", tt.answer, tt.command)
 	}
 }
 
@@ -367,7 +368,7 @@ func TestSearchPipelines(t *testing.T) {
 		v, ok := translateSearches(deps, root, parseForTest(t, command))
 		require.True(t, ok, command)
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: "explain file:internal/store/store.go"}, v.Rule, command)
-		assert.Contains(t, v.Deny, answer, command)
+		assert.Contains(t, v.Deny+"\n", answer, command)
 		assert.NotContains(t, v.Deny, "after `|", command)
 	}
 
@@ -441,7 +442,7 @@ func TestFindTranslation(t *testing.T) {
 			continue
 		}
 		assert.Equal(t, denyRule{Name: denyRuleSearchTranslation, Arg: tt.arg}, v.Rule, tt.command)
-		assert.Contains(t, v.Deny, tt.answer, tt.command)
+		assert.Contains(t, v.Deny+"\n", tt.answer, tt.command)
 	}
 }
 

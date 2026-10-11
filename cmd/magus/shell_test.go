@@ -840,7 +840,8 @@ func TestReadGuardInputRefusesAnOversizePayload(t *testing.T) {
 }
 
 // TestHookCmdAdvisesOncePerSession is the same rule through the command the host actually
-// runs: a held advisory prints its full text once per session and its brief after.
+// runs: a held advisory prints its verdict and the ref to its full text once per session,
+// and its brief after.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	t.Setenv(trail.EnvBaggage, "")
@@ -857,20 +858,33 @@ func TestHookCmdAdvisesOncePerSession(t *testing.T) {
 
 	first := run("session-1")
 	require.True(t, strings.HasPrefix(first, "advise [source-read]: "))
-	assert.Contains(t, first, "SCIP symbol indexes")
+	lines := strings.Split(strings.TrimSpace(first), "\n")
+	require.Len(t, lines, 2, "the advice and the ref: %q", first)
+	assert.Contains(t, lines[0], "magus refs", "the advice names the command to run")
+	assert.NotContains(t, first, "SCIP symbol indexes", "the rationale is behind the ref")
+	ref := regexp.MustCompile(`^full advice: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[1])
+	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[1])
+	stored, err := trail.ReadBlob(base, ref[1])
+	require.NoError(t, err)
+	assert.Contains(t, string(stored), "SCIP symbol indexes", "the ref holds the rationale")
+	assert.True(t, strings.HasSuffix(string(stored), "\nsee: https://eli.gladman.cc/magus/reference/rules/source-read/"), "with the rule's page, got %q", stored)
+	served := hint.ReadServedNext(base)
+	require.NotEmpty(t, served)
+	assert.Equal(t, "advice-verdict", served[len(served)-1].ID, "the ref line is counted as a hint")
 
 	repeat := run("session-1")
-	assert.NotContains(t, repeat, "SCIP symbol indexes", "the repeat drops the full text")
+	assert.NotContains(t, repeat, "full advice:", "the brief has no rationale to store")
 	assert.Contains(t, repeat, "magus refs", "the repeat still names the command, which is what converts")
-	assert.Less(t, len(repeat), len(first)/4, "a repeat nobody has to read around")
+	assert.Less(t, len(repeat), len(first), "a repeat nobody has to read around")
 
-	assert.Contains(t, run("session-2"), "SCIP symbol indexes", "a fresh session is owed the fact once")
+	assert.Contains(t, run("session-2"), "full advice:", "a fresh session is owed the fact once")
 }
 
-// TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal explains itself
+// TestHookCmdShortensARepeatedDenial pins both forms of a deny. A refusal names its problem
 // every time, since a second `git stash` blocked with no reason is a dead end, but only the
-// first firing in a session spends the full text: the repeat is one line, the ref that
-// holds the full verdict, and the rule's page, and the ref must resolve to that verdict.
+// first firing in a session spends the verdict sentence: the repeat is one line naming the
+// rule and the ref that holds the full verdict. The rationale and the rule's page live only
+// behind that ref, and the ref must resolve to that verdict.
 func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
@@ -888,24 +902,24 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 	const see = "\nsee: https://eli.gladman.cc/magus/reference/rules/whole-tree/"
 
 	first := run("git stash", "session-1")
-	assert.Contains(t, first, see)
+	assert.Len(t, strings.Split(strings.TrimSpace(first), "\n"), 2, "the verdict and the ref: %q", first)
+	assert.NotContains(t, first, see, "the rule's page is in the stored verdict")
 	assert.NotContains(t, first, "denied again")
 
 	repeat := run("echo hi && git stash", "session-1")
 	lines := strings.Split(strings.TrimSpace(repeat), "\n")
-	require.GreaterOrEqual(t, len(lines), 4, "repeat: %q", repeat)
+	require.Len(t, lines, 3, "repeat: %q", repeat)
 	doc, ok := guard.Rule("whole-tree")
 	require.True(t, ok)
 	assert.Equal(t, "deny [whole-tree]: denied again [whole-tree]: "+doc.Catches, lines[0])
 	assert.Equal(t, "nothing ran (2 commands)", lines[1], "the repeat still says how much of the line was refused")
 	ref := regexp.MustCompile(`^full verdict: \S*magus query output (grd[0-9a-f]{16})$`).FindStringSubmatch(lines[2])
 	require.Len(t, ref, 2, "line %q must cite a grd ref", lines[2])
-	assert.Equal(t, strings.TrimPrefix(see, "\n"), lines[3])
 
 	stored, err := trail.ReadBlob(base, ref[1])
 	require.NoError(t, err)
-	assert.True(t, strings.HasSuffix(string(stored), "\nnothing ran (2 commands)"+see),
-		"the stored verdict is the full form of THIS command, got %q", stored)
+	assert.Contains(t, string(stored), "\nnothing ran (2 commands)\n", "the stored verdict is the full form of THIS command, got %q", stored)
+	assert.True(t, strings.HasSuffix(string(stored), see), "with the rule's page, got %q", stored)
 	assert.NotContains(t, string(stored), "denied again")
 
 	served := hint.ReadServedNext(base)
@@ -1014,7 +1028,7 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 		[]string{"--path", "--lease", lease.ID, "-o", "json"})
 	require.Error(t, err)
 	assert.Contains(t, out.String(), "magus cache dir")
-	assert.Contains(t, out.String(), "magus is the only writer of it")
+	assert.Contains(t, out.String(), "which only magus writes")
 	assert.NotContains(t, out.String(), "registered the base it landed on",
 		"the write-path rules must not answer for this path")
 }
@@ -1503,7 +1517,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 			var out bytes.Buffer
 			err := shellStdin(ctx, strings.NewReader(rewire), &out, append(tc.args, "-o", "json"))
 			require.Error(t, err, "a bound worker is refused the harness")
-			assert.Contains(t, out.String(), "leave the host harness alone")
+			assert.Contains(t, out.String(), "would rewrite the skills that steer lease lease-a's calls")
 			assert.Contains(t, out.String(), tc.want)
 		})
 	}
@@ -1555,7 +1569,7 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"briefless","tool_name":"Task",` +
 		`"tool_input":{"subagent_type":"Explore","prompt":"read the cache package"}}`
 
-	// Without --observes-skill-loads the rule stands down, which is what keeps it from
+	// Without --reports-skills the rule stands down, which is what keeps it from
 	// denying forever on a harness that reports no skill loads. Asserted first, because it
 	// is the behaviour three of the four shipped harnesses get.
 	var unobserved bytes.Buffer
@@ -1566,14 +1580,14 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 
 	var advised bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &advised,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "--reports-skills", "-o", "name"}))
 	assert.Equal(t, "advise\n", advised.String())
 
 	loadSkillForTest(t, ctx, dir, "briefless")
 
 	var allowed bytes.Buffer
 	require.NoError(t, shellStdin(ctx, strings.NewReader(envelope), &allowed,
-		[]string{"--agent-name", "claude-code", "--observes-skill-loads", "-o", "name"}))
+		[]string{"--agent-name", "claude-code", "--reports-skills", "-o", "name"}))
 	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
 }
 

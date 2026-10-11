@@ -78,7 +78,7 @@ func TestDriftVerdict(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			drift := driftVerdict(newFocusFixture(), tc.write, tc.touched)
 			assert.Equal(t, tc.project, drift.project)
-			assert.Equal(t, tc.fires, drift.advice != "", "advice: %q", drift.advice)
+			assert.Equal(t, tc.fires, drift.advice.Say != "", "advice: %q", drift.advice.Say)
 		})
 	}
 }
@@ -86,7 +86,7 @@ func TestDriftVerdict(t *testing.T) {
 // The text has to carry both halves of the split it is proposing, or the reader
 // cannot tell which two units it means, and one runnable command that checks it.
 func TestScopeDriftAdviceNamesBothSides(t *testing.T) {
-	advice := driftVerdict(newFocusFixture(), "/ws/libs/ui/button.ts", []string{"app"}).advice
+	advice := driftVerdict(newFocusFixture(), "/ws/libs/ui/button.ts", []string{"app"}).advice.full()
 
 	assert.Contains(t, advice, "libs/ui")
 	assert.Contains(t, advice, "app")

@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // workspaceScheme is the RETIRED URI prefix a project reference may carry.
@@ -32,10 +34,10 @@ const workspaceScheme = "workspace://"
 func resolveAmbiguous(input, anchor string) (string, error) {
 	in := filepath.ToSlash(input)
 	if in == "" {
-		return "", fmt.Errorf("magus: empty project path")
+		return "", fmt.Errorf("empty project path")
 	}
 	if path.IsAbs(in) || hasDriveLetter(in) {
-		return "", fmt.Errorf("magus: project path %q must be repo-relative, not absolute", input)
+		return "", fmt.Errorf("project path %q must be repo-relative, not absolute", input)
 	}
 	// Dot-relative inputs resolve against the anchor; bare inputs are
 	// workspace-relative. The escape check applies to both: a bare input like
@@ -45,7 +47,7 @@ func resolveAmbiguous(input, anchor string) (string, error) {
 		cleaned = path.Clean(path.Join(anchor, in))
 	}
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("magus: project path %q escapes workspace root from %q", input, anchor)
+		return "", fmt.Errorf("project path %q escapes workspace root from %q", input, anchor)
 	}
 	return cleaned, nil
 }
@@ -103,7 +105,7 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 		if suggest == "" {
 			suggest = "."
 		}
-		slog.WarnContext(ctx, "magus: workspace:// is deprecated; a bare workspace-relative path means the same thing",
+		slog.With(attr.Component("magus")).WarnContext(ctx, "workspace:// is deprecated; a bare workspace-relative path means the same thing",
 			"ref", input, "use", suggest)
 		if rest == "" {
 			return ".", nil
@@ -131,17 +133,17 @@ func ResolveImport(input, anchor string) (string, error) {
 	// so this function does not resolve differently per GOOS.
 	in := strings.ReplaceAll(input, `\`, "/")
 	if in == "" {
-		return "", fmt.Errorf("magus: empty import path")
+		return "", fmt.Errorf("empty import path")
 	}
 	if path.IsAbs(in) || hasDriveLetter(in) {
-		return "", fmt.Errorf("magus: import path %q must be relative to the importing magusfile, not absolute", input)
+		return "", fmt.Errorf("import path %q must be relative to the importing magusfile, not absolute", input)
 	}
 	cleaned := path.Clean(path.Join(anchor, in))
 	// Anchor first, then test: the input is measured from the importing magusfile's
 	// directory, and what it must not escape is the WORKSPACE root, which is what a
 	// remaining "../" after cleaning means.
 	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("magus: import path %q escapes workspace root from %q", input, anchor)
+		return "", fmt.Errorf("import path %q escapes workspace root from %q", input, anchor)
 	}
 	return cleaned, nil
 }

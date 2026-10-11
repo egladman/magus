@@ -144,7 +144,7 @@ func WithPipe(ctx context.Context, p PipeIO) context.Context {
 // errNoRecordUpstream is what reading from a script no record stage feeds raises: a
 // script written to filter a run's records has nothing to filter, and reading nothing
 // would pass for "no failures".
-var errNoRecordUpstream = errors.New("no magus stage writing records feeds this script's stdin; " +
+var errNoRecordUpstream = errors.New("no magus stage writing records feeds this script's stdin, " +
 	"pipe a run into it, like `magus run test . | magus buzz <script>`")
 
 func pipeIn(ctx context.Context, member string) (*report.Reader, error) {
@@ -179,7 +179,7 @@ func PipeNext(ctx context.Context) (types.PipeRecord, error) {
 		return types.PipeRecord{}, fmt.Errorf("pipe.next: %w", err)
 	}
 	if !ok {
-		return types.PipeRecord{}, errors.New("pipe.next: the upstream stage ended and every record is read; ask pipe.more first")
+		return types.PipeRecord{}, errors.New("pipe.next: the upstream stage ended and every record is read, ask pipe.more first")
 	}
 	return parsePipeRecord(line)
 }
@@ -209,7 +209,7 @@ func PipeAll(ctx context.Context) ([]types.PipeRecord, error) {
 func PipeEmit(ctx context.Context, record map[string]any) error {
 	p, _ := ctx.Value(pipeIOKey{}).(PipeIO)
 	if p.Out == nil {
-		return errors.New("pipe.emit: this script is not a pipe stage; run it with `magus buzz <script>`")
+		return errors.New("pipe.emit: this script is not a pipe stage, run it with `magus buzz <script>`")
 	}
 	line, err := encodePipeLine(record)
 	if err != nil {
@@ -231,7 +231,7 @@ type pipeWorkspace interface {
 func resolvePipeWorkspace(ctx context.Context, member string) (pipeWorkspace, error) {
 	ws, ok := types.WorkspaceFromContext(ctx).(pipeWorkspace)
 	if !ok {
-		return nil, fmt.Errorf("pipe.%s reads the workspace's outputs and cache, and no workspace is attached; run the script inside one", member)
+		return nil, fmt.Errorf("pipe.%s reads the workspace's outputs and cache, and no workspace is attached, run the script inside one", member)
 	}
 	return ws, nil
 }
@@ -241,7 +241,7 @@ func PipeOutputs(ctx context.Context, record map[string]any) ([]types.TargetArti
 	project, _ := record["project"].(string)
 	target, _ := record["target"].(string)
 	if target == "" {
-		return nil, errors.New("pipe.outputs: the record names no target; pass a run.target.result")
+		return nil, errors.New("pipe.outputs: the record names no target, pass a run.target.result")
 	}
 	ws, err := resolvePipeWorkspace(ctx, "outputs")
 	if err != nil {
@@ -274,7 +274,7 @@ func parseArtifact(member string, artifact map[string]any) (types.TargetArtifact
 	a.Glob, _ = artifact["glob"].(string)
 	a.ProjectPath, _ = artifact["project"].(string)
 	if a.Path == "" {
-		return a, fmt.Errorf("pipe.%s: the artifact names no path; take one from pipe.outputs", member)
+		return a, fmt.Errorf("pipe.%s: the artifact names no path, take one from pipe.outputs", member)
 	}
 	return a, nil
 }
@@ -440,7 +440,7 @@ func PipeValue(_ context.Context, record map[string]any) (any, error) {
 	typ, _ := record["type"].(string)
 	body, _ := record["body"].(string)
 	if typ != report.TypeTargetValue || body == "" {
-		return nil, fmt.Errorf("pipe.value: a %s record carries no value; pass a %s record", typ, report.TypeTargetValue)
+		return nil, fmt.Errorf("pipe.value: a %s record carries no value, pass a %s record", typ, report.TypeTargetValue)
 	}
 	var v report.TargetValue
 	if err := json.Unmarshal([]byte(body), &v); err != nil {

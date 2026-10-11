@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -142,8 +143,8 @@ func parseTraceparent(v string) Spawn {
 		traceparentNoteOnce.Do(func() {
 			// The value itself is not logged: it failed the shape that makes it safe to carry
 			// unredacted, so it is the one string here that could be anything at all.
-			slog.WarnContext(context.Background(),
-				"magus: ignoring "+EnvTraceparent+" and recording no trace for this process: a W3C traceparent is 00-<32 hex trace id>-<16 hex span id>-<2 hex flags>, lowercase, with neither id all zeros",
+			slog.With(attr.Component("magus")).WarnContext(context.Background(),
+				"ignoring "+EnvTraceparent+" and recording no trace for this process: a W3C traceparent is 00-<32 hex trace id>-<16 hex span id>-<2 hex flags>, lowercase, with neither id all zeros",
 				slog.Int("length", len(v)))
 		})
 		return Spawn{}
@@ -187,8 +188,8 @@ func parseBaggage(v string) (lease, spawner string) {
 	}
 	if len(v) > maxBaggageLen {
 		baggageNoteOnce.Do(func() {
-			slog.WarnContext(context.Background(),
-				"magus: ignoring "+EnvBaggage+" and recording no lease for this process: a W3C baggage list is a bounded set of comma-separated key=value members",
+			slog.With(attr.Component("magus")).WarnContext(context.Background(),
+				"ignoring "+EnvBaggage+" and recording no lease for this process: a W3C baggage list is a bounded set of comma-separated key=value members",
 				slog.Int("length", len(v)),
 				slog.Int("max_length", maxBaggageLen))
 		})
@@ -225,8 +226,8 @@ func validLease(id string) string {
 	}
 	if !types.ValidJobID(id) {
 		baggageNoteOnce.Do(func() {
-			slog.WarnContext(context.Background(),
-				"magus: ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
+			slog.With(attr.Component("magus")).WarnContext(context.Background(),
+				"ignoring the lease in "+EnvBaggage+" and recording no lease for this process: a lease id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
 				slog.Int("max_length", types.MaxJobIDLen))
 		})

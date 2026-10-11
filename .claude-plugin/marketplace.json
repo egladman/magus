@@ -1,0 +1,12 @@
+{
+  "name": "magus",
+  "description": "Claude Code mods for magus workspaces",
+  "owner": { "name": "egladman" },
+  "plugins": [
+    {
+      "name": "magus",
+      "source": "./docs/guides/integrations/agents/claude-code-mod",
+      "description": "Health of the binary, guard and server; a pane of jobs, runs and agents; prompt-cache expiry and cost warnings"
+    }
+  ]
+}

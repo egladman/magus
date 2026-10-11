@@ -290,8 +290,9 @@ fun goModEdit(target: Target) > Command {
 // Captures Go's structured module view for the spell's higher-level Buzz helper.
 // This is deliberately a separate read-only op: `-json` and `-print` are distinct
 // Go modes, while go-mod-edit remains the one command that applies derived edits.
+// Quiet: the JSON exists to be parsed, and streamed it buried a failing step's cause.
 fun goModJSON(target: Target) > Command {
-    return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true};
+    return Command{bin = "go", args = ["mod", "edit", "-json"], capture = true, quiet = true};
 }
 // -trimpath: see go-test above; keeps vet's cache key worktree-independent too.
 fun goVet(target: Target) > Command { return Command{bin = "go", args = ["vet", "-trimpath", "./..."], envKeys = GO_PLATFORM_ENV}; }
