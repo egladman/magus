@@ -102,10 +102,16 @@ fun claude_shell_command() > str {
     ]);
 }
 
+// How long Claude Code waits on each hook this wiring writes before it stops waiting and
+// runs the call. Rendered onto every hook entry and returned by harness_limits, so the guard
+// reports a check the host gave up on against this number and not a guess.
+final HOOK_TIMEOUT_S = 10;
+
 fun claude_limits() > {str: any} {
     return {
         "foreground_default_ms": FOREGROUND_DEFAULT_MS,
         "foreground_max_ms": FOREGROUND_MAX_MS,
+        "hook_timeout_ms": HOOK_TIMEOUT_S * 1000,
     };
 }
 
@@ -160,7 +166,7 @@ fun claude_command_hook(cmd: str) > {str: any} {
     return {
         "type": "command",
         "command": cmd,
-        "timeout": 10,
+        "timeout": HOOK_TIMEOUT_S,
     };
 }
 
@@ -649,4 +655,5 @@ test "harness_* contract wrappers return the same pure helpers" {
     assert\equal(harness_entries(noTarget, cb).len(), claude_entries().len(), "entries length");
     assert\equal("{harness_mcp(noTarget, cb)["docs"]}", "docs/guides/integrations/mcp.md", "mcp docs");
     assert\equal("{harness_limits(noTarget, cb)["foreground_max_ms"]}", "{FOREGROUND_MAX_MS}", "foreground limits");
+    assert\equal("{harness_limits(noTarget, cb)["hook_timeout_ms"]}", "10000", "the hook timeout every entry carries, in ms");
 }

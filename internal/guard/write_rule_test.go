@@ -43,6 +43,15 @@ func writeFixture(t *testing.T) (ctx context.Context, root, cacheDir string) {
 	return WithLocation(t.Context(), cacheDir, root, root), root, cacheDir
 }
 
+// committedPolicyFixture is writeFixture as a git repository whose root magusfile is
+// committed, so nothing in its policy is pending.
+func committedPolicyFixture(t *testing.T) (*testkit.Repo, context.Context) {
+	t.Helper()
+	testkit.Isolate(t)
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": "import \"magus\";\n"})
+	return repo, WithLocation(t.Context(), t.TempDir(), repo.Root(), repo.Root())
+}
+
 // The rule is handed the text the host says the write carries, read by shape, and the
 // workspace the path lands in.
 func TestWriteRuleSeesTheWrittenText(t *testing.T) {
@@ -135,10 +144,11 @@ func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }
 
-// A write to a file the guard loads goes through, advised, when the working tree's side of
-// its judgment runs out of time after the approved rule answered: denying it would leave a
-// looping rule with no way to be fixed. Any other write is still denied, and so is a policy
-// write whose approved side did not answer, since an agent can slow that side on purpose.
+// A write to a file the guard loads goes through, advised, when its judgment runs out of
+// time while the approved policy stands, its rule having answered or no policy change
+// pending: denying it would leave a looping committed rule with no way to be fixed. Any
+// other write is still denied, and so is a policy write whose approved side did not answer
+// while a change is pending, since an agent can slow that side on purpose.
 func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 	approved := func(context.Context) (workspace.WriteRule, error) { return (&writeRuleProbe{}).rule(), nil }
 	lapsedLoad := Dependencies{
@@ -188,20 +198,45 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 	})
 
 	t.Run("a policy source whose approved side did not answer", func(t *testing.T) {
-		ctx, root, _ := writeFixture(t)
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		defer cancel()
 		slowed := func(ctx context.Context) (workspace.WriteRule, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		}
-		for name, deps := range map[string]Dependencies{
+		unanswered := map[string]Dependencies{
 			"slowed":      {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad, ApprovedWriteRule: slowed},
 			"none to ask": {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad},
+		}
+		judge := func(ctx context.Context, deps Dependencies, root string) Verdict {
+			ctx, cancel := context.WithTimeout(ctx, time.Second)
+			defer cancel()
+			return Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+		}
+
+		repo, ctx := committedPolicyFixture(t)
+		for name, deps := range unanswered {
+			v := judge(ctx, deps, repo.Root())
+			assert.Equal(t, "advise", v.Decision, "%s: no policy change is pending, so the committed rule stands", name)
+			assert.Contains(t, v.Context, spared, name)
+		}
+
+		_, outside, _ := writeFixture(t)
+		for name, deps := range unanswered {
+			v := judge(WithLocation(t.Context(), t.TempDir(), outside, outside), deps, outside)
+			assert.Equal(t, "advise", v.Decision, "%s: in no repository the working tree is the whole policy", name)
+		}
+
+		for pending, file := range map[string][2]string{
+			"the root magusfile edited":   {"magusfile.buzz", "import \"magus\";\n// edited\n"},
+			"a new Buzz source":           {"hack/policy/new.buzz", "import \"magus\";\n"},
+			"the workspace config edited": {"magus.yaml", "{\"version\": 1}\n"},
 		} {
-			v := Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
-			assert.Equal(t, "deny", v.Decision, name)
-			assert.Contains(t, v.Reason, "magus ran out of time judging this file write", name)
+			repo, ctx := committedPolicyFixture(t)
+			repo.Write(file[0], file[1])
+			for name, deps := range unanswered {
+				v := judge(ctx, deps, repo.Root())
+				assert.Equal(t, "deny", v.Decision, "%s, %s", pending, name)
+				assert.Contains(t, v.Reason, "magus ran out of time judging this file write", "%s, %s", pending, name)
+			}
 		}
 	})
 

@@ -68,7 +68,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [graph-pipe](graph-pipe.md)                             | a read-only graph verb piped into a text filter, when magus projects the record itself             |
 | [graph-stale](graph-stale.md)                           | a graph read, or a graph-backed deny, while the graph describes another tree                       |
 | [grep-reader](grep-reader.md)                           | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body   |
-| [guard-unfinished](guard-unfinished.md)                 | earlier guard checks that never finished, so the host ran their calls with no rule applied         |
+| [guard-unfinished](guard-unfinished.md)                 | earlier guard checks that never finished, so no rule judged their calls                            |
 | [hook-wiring](hook-wiring.md)                           | a write to the host wiring that decides whether these rules run at all                             |
 | [installed-skill](installed-skill.md)                   | a write to an installed skill copy, which re-installing discards                                   |
 | [instruction-write](instruction-write.md)               | a write to a cross-host instruction file, which every session loads whole                          |

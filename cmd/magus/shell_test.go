@@ -1761,6 +1761,64 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	assert.Equal(t, types.GuardDeny, got.Decision)
 }
 
+// The hook timeout the guard reports an abandoned check against is the one the host's
+// harness declares, read through the hook's own dependencies, and nothing for a host the
+// workspace wires no harness for. The shipped spells' own declarations are the bindings'
+// test.
+func TestHostHookTimeoutIsTheHarnessDeclaration(t *testing.T) {
+	testkit.Isolate(t)
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        agent.HarnessSkills{Form: agent.FormShort},
+		Config:        agent.HarnessConfig{Path: "hooks.json"},
+		Limits:        agent.HarnessLimits{HookTimeoutMs: 30000},
+	})
+	root := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":                   "{}\n",
+		"magusfile.buzz":               "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n",
+		"spells/limit-host/spell.buzz": limitHostSpell,
+	}).Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	deps := guardDependencies(t.Context(), "")
+	require.NotNil(t, deps.HostHookTimeout)
+	got, ok := deps.HostHookTimeout(t.Context(), "limit-host")
+	assert.Equal(t, []any{30 * time.Second, true}, []any{got, ok})
+	_, ok = deps.HostHookTimeout(t.Context(), "codex")
+	assert.False(t, ok, "a host the workspace wires no harness for")
+}
+
+// A write to the root magusfile whose judgment ran out of time, its rules loaded through the
+// hook's own dependencies, goes through while no policy change is pending, so a slow
+// committed rule can be fixed, and is refused once a change is pending.
+func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
+	testkit.Isolate(t)
+	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
+	root := repo.Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	judge := func() guard.Verdict {
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		defer cancel()
+		ctx = guard.WithLocation(ctx, t.TempDir(), root, root)
+		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{
+			Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "lapsed-policy-write",
+		})
+	}
+
+	v := judge()
+	assert.Equal(t, "advise", v.Decision, v.Reason)
+	assert.Contains(t, v.Context, "lets it through, because the guard loads this file itself")
+
+	repo.Write("magusfile.buzz", allow+"// pending\n")
+	v = judge()
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
+}
+
 // The committed side is loaded only while a file the root load read differs from it:
 // an uncommitted edit anywhere else changes nothing either side registers.
 func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
@@ -1878,4 +1936,54 @@ func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
 	_, err = loadGuardRules(t.Context(), repo.Root())
 	require.NoError(t, err)
 	assert.Equal(t, stored, chunks(), "the next load compiles nothing")
+}
+
+// The approved side's half of the cold cache: it has none. The approved resolve neither
+// reads nor writes the chunk cache, so it costs the same on every hook, cold or warm, and a
+// cache can neither starve it nor speed it up. A resolve that starts past its deadline reads
+// nothing from version control and answers no rule, which the guard takes for a lapse
+// rather than for "none" (askWorkspaceRules).
+func TestApprovedResolveLeavesTheChunkCacheAlone(t *testing.T) {
+	global = globalFlags{}
+	testkit.Isolate(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	const rule = "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.%s;\n}\n"
+	const magusfile = "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n"
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":      "{}\n",
+		"magusfile.buzz":  magusfile,
+		"lib/policy.buzz": fmt.Sprintf(rule, `deny("no")`),
+	})
+	repo.Write("magusfile.buzz", magusfile+"// pending\n")
+	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "allow()"))
+	chunks := func() []string {
+		var out []string
+		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				out = append(out, p)
+			}
+			return nil
+		})
+		return out
+	}
+	rules, err := loadGuardRules(t.Context(), repo.Root())
+	require.NoError(t, err)
+	worktree := chunks()
+
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+	late, err := rules.ApprovedCommandRule(expired)
+	require.NoError(t, err)
+	assert.Nil(t, late, "past its deadline the resolve reads no approved state")
+	assert.Equal(t, worktree, chunks(), "and compiles nothing")
+
+	approved, err := rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, approved)
+	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardDeny, got.Decision, "the committed rule answers")
+	assert.Equal(t, worktree, chunks(), "compiling the committed sources stores nothing")
 }

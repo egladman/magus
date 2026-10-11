@@ -81,6 +81,10 @@ type Dependencies struct {
 	WriteRule workspace.WriteRule
 	// ApprovedWriteRule is ApprovedSpawnRule for the write rule, resolved per write.
 	ApprovedWriteRule func(ctx context.Context) (workspace.WriteRule, error)
+	// HostHookTimeout is how long host waits on a hook before it stops waiting, as host's
+	// harness declares it; false when it declares none or cannot be loaded. It can load a
+	// harness spell, so it is asked only about a judgment that ran long.
+	HostHookTimeout func(ctx context.Context, host string) (time.Duration, bool)
 	// CheckoutState reads the checkout holding dir for a command rule judging a push or a
 	// commit, nil when its version control cannot report it.
 	CheckoutState func(ctx context.Context, dir string) *types.CheckoutState
@@ -618,25 +622,33 @@ func hostUnnamed() Verdict {
 // nothing here saw it.
 //
 // Judging is bounded by the hook's budget (seven seconds) from Judge's start, or by the
-// earlier deadline ctx carries; a dry run is bounded only by ctx. Each workspace rule phase
-// spends a share of what remains, and one that runs out denies a call that changes state and
-// lets one that reads through with a note naming the phase.
+// earlier deadline ctx carries. A dry run grades for a person at a terminal (a fork, a
+// verb's own edit), not for a host that kills its hook, so its bound is two minutes, and a
+// call it denies for running out says it was not graded. Each workspace rule phase spends a
+// share of what remains, and one that runs out denies a call that changes state and lets
+// one that reads through with a note naming the phase.
 //
 // A judgment mark BeginJudgment left on ctx is ended here; without one, Judge marks the
 // judgment itself once it has resolved the session.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	started := begunJudgment(ctx)
-	defer func() { started.end(time.Now()) }()
+	hostTimeout := hookTimeout(sync.OnceValues(func() (time.Duration, bool) {
+		if deps.HostHookTimeout == nil || req.Host == "" {
+			return 0, false
+		}
+		return deps.HostHookTimeout(context.WithoutCancel(ctx), req.Host)
+	}))
+	defer func() { started.end(time.Now(), hostTimeout) }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
 		return hostUnnamed()
 	}
-	// A dry run grades for a person at a terminal (a fork, a verb's own edit), not for a
-	// host that kills its hook, so its rules run to completion.
-	if !req.DryRun {
-		var cancel context.CancelFunc
+	var cancel context.CancelFunc
+	if req.DryRun {
+		ctx, cancel = withDryRunDeadline(ctx)
+	} else {
 		ctx, cancel = WithHookDeadline(ctx)
-		defer cancel()
 	}
+	defer cancel()
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
 	input := req.Input
@@ -1269,7 +1281,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	}
 	// Graded by nothing: the notice is fixed, since it is how a session learns its own
 	// checks were skipped.
-	if n := started.abandoned(time.Now()); n > 0 {
+	if n := started.abandoned(time.Now(), hostTimeout); n > 0 {
 		verdict = applyRuleFailureNote(verdict, unfinishedNote(n), advisoryUnfinished)
 	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a

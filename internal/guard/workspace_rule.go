@@ -66,6 +66,12 @@ type rulesAnswer struct {
 	// lapse is the first phase that ran out of its share of the hook's deadline, nil when
 	// every phase answered in time. denyLapse decides what it costs the call.
 	lapse *ruleLapse
+	// approvedRuleless is true when the approved side resolved in time to no rule: nothing
+	// pending differs from what the working tree loaded, the approved sources register
+	// none, or there is no approval authority.
+	approvedRuleless bool
+	// dryRun is whether the judgment grades a call ahead of time, which words a lapse.
+	dryRun bool
 	// unloaded is true when the working tree failed to load and the approved side yielded
 	// no rule either, so no policy was read at all. A side that loaded and then raised is
 	// not unloaded: that stays fail-open.
@@ -102,7 +108,7 @@ const resolveShares = 2
 // the agent is not bricked by a typo in the magusfile. No side loading at all is reported
 // as unloaded, for denyUnloaded to judge.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
-	out := rulesAnswer{loadFailure: deps.LoadFailure}
+	out := rulesAnswer{loadFailure: deps.LoadFailure, dryRun: isDryRun(ctx)}
 	log := judgmentPhases(ctx)
 	lapsed := func(l ruleLapse) {
 		out.failures = append(out.failures, trail.RuleFailure{Side: l.side, Error: l.failure()})
@@ -172,6 +178,7 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 			cancel()
 			log.record(timedPhase(phaseApprovedResolve, time.Since(start), budget, expired && (err != nil || rule == nil)))
 		}
+		out.approvedRuleless = err == nil && rule == nil && !expired
 		if err == nil && rule != nil {
 			approvedLoaded = true
 			ask(decidedByApproved, phaseApprovedRule, rule)
@@ -233,7 +240,7 @@ func denyLapse(asked *rulesAnswer, call judgedCall) bool {
 	if asked.lapse == nil || !call.changes || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse)}
+	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse, asked.dryRun)}
 	asked.by = asked.lapse.side
 	return true
 }

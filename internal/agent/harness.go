@@ -78,14 +78,16 @@ type HarnessDescriptor struct {
 	Limits         HarnessLimits      `json:"limits,omitzero"`
 }
 
-// HarnessLimits are how long the host waits on a shell command in the foreground, in
-// milliseconds: ForegroundDefaultMs for one that names no timeout, ForegroundMaxMs at most.
-// Past it the host moves the command to the background. Nil when the harness declares
-// none. ForegroundDefaultMs is the harness_limits contract's own key and is not read
-// here: the wiring passes the same number to magus shell as --foreground-default-ms.
+// HarnessLimits are how long the host waits, in milliseconds: on a shell command in the
+// foreground, ForegroundDefaultMs for one that names no timeout and ForegroundMaxMs at most,
+// past which the host moves the command to the background; and on one hook, HookTimeoutMs,
+// past which it stops waiting for a verdict. Zero when the harness declares none.
+// ForegroundDefaultMs is the harness_limits contract's own key and is not read here: the
+// wiring passes the same number to magus shell as --foreground-default-ms.
 type HarnessLimits struct {
 	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
 	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
+	HookTimeoutMs       int64 `json:"hook_timeout_ms,omitempty"`
 }
 
 // ShortestForegroundMax is the shortest foreground maximum among harnesses, the longest a

@@ -274,7 +274,11 @@ var denyRuleDocs = []types.RuleDoc{
 		Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
 			"A commit is the one exception: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
 			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
+			"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
+			"vcs\\cmd may also commit in a repository standing wholly outside the job's checkout, such as a script's scratch repository, unless its environment sets GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR or GIT_INDEX_FILE. " +
+			"A scratch repository inside the checkout, under .magus/ say, is refused like a submodule there: it holds the job's files under another git directory. " +
+			"Version control a Buzz script runs through proc\\exec or proc\\shell is not judged by this rule. " +
 			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite),
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
@@ -423,9 +427,11 @@ var advisoryDocs = []types.RuleDoc{
 			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
 			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
 	{Name: string(advisoryUnfinished),
-		Catches: "earlier guard checks that never finished, so the host ran their calls with no rule applied",
-		Why: "The host kills a hook that has not answered in ten seconds and runs the call unjudged, with no trail row and no word to the agent. " +
-			"Each check leaves a mark when it starts, before the workspace's rules load, and removes it when it answers inside that time; the next check in the session reports and clears every mark older than fifteen seconds. " +
+		Catches: "earlier guard checks that never finished, so no rule judged their calls",
+		Why: "A host stops waiting on a hook that has not answered within its hook timeout, with no trail row and no word to the agent. " +
+			"Each check leaves a mark when it starts, before the workspace's rules load, and removes it when it answers while the host still waits. " +
+			"The host stopped waiting when the hook process it started is gone, or past the hook timeout the host's harness declares in harness_limits; a host whose harness declares none is not taken to have given up on a slow check. " +
+			"The next check in the session reports and clears every mark whose process ended without removing it, and every one still running past the declared timeout. " +
 			"It stands alone only when the rules passed the call; on any other verdict the note is appended to that verdict. " +
 			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing."},
 }

@@ -8,13 +8,9 @@ import (
 	"github.com/egladman/magus/internal/trail"
 )
 
-// hostHookTimeout is how long the shipped host wiring waits on a hook before it kills the
-// hook and runs the call unjudged, with no trail row and no word to the agent.
-const hostHookTimeout = 10 * time.Second
-
 // hookBudget bounds one hook judgment, from the moment magus starts judging to its verdict.
-// It answers well inside hostHookTimeout: the rest is process start and exit, which a
-// loaded machine stretches too.
+// It answers well inside the ten seconds a shipped wiring waits on a hook: the rest is
+// process start and exit, which a loaded machine stretches too.
 const hookBudget = 7 * time.Second
 
 // judgeReserve is held back from every phase for wording the verdict and writing the trail
@@ -34,6 +30,24 @@ const (
 // host's ten. A deadline ctx already carries that falls earlier stands.
 func WithHookDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, hookBudget)
+}
+
+// dryRunBudget bounds a dry-run judgment. No host waits on it, but a fork or a verb's own
+// edit must not hang on a rule that loops.
+const dryRunBudget = 2 * time.Minute
+
+type dryRunKey struct{}
+
+// withDryRunDeadline bounds ctx to dryRunBudget and marks it a dry run, so a lapse is worded
+// as a call not graded rather than one the host would have cut off.
+func withDryRunDeadline(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithTimeout(ctx, dryRunBudget)
+	return context.WithValue(ctx, dryRunKey{}, true), cancel
+}
+
+func isDryRun(ctx context.Context) bool {
+	dry, _ := ctx.Value(dryRunKey{}).(bool)
+	return dry
 }
 
 // phaseShares is how a judgment divides its deadline: each phase still to run holds its
@@ -165,8 +179,12 @@ func roundBudget(d time.Duration) time.Duration {
 }
 
 // lapseReason is the deny for a call that changes state when a phase of its judgment ran out
-// of time.
-func lapseReason(call judgedCall, l ruleLapse) string {
+// of time. dryRun words it for a person grading the call ahead of time: not graded.
+func lapseReason(call judgedCall, l ruleLapse, dryRun bool) string {
+	if dryRun {
+		return "magus did not finish grading " + call.what + ": " + l.what() + ", so it is not graded. " +
+			"A dry run is bounded at " + dryRunBudget.String() + " and a hook at " + hookBudget.String() + ", so a hook would deny the call as well."
+	}
 	return "magus ran out of time judging " + call.what + ": " + l.what() + ". " +
 		"A call that changes state is denied rather than let through unjudged; retry it. " +
 		"The guard answers within " + hookBudget.String() + ", inside the host's hook timeout, " +

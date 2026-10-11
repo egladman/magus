@@ -1,6 +1,6 @@
 ### Fixed
 
-- **A slow guard rule can be fixed.** When the working tree's rule runs out of the hook
-  deadline on a write to the root magusfile or a source it imports, the write is advised
-  instead of denied, once the committed rule has answered. Every other write that runs
-  out of time is still denied.
+- **A slow guard rule can be fixed.** A write to the root magusfile or a source it
+  imports that runs out of the hook deadline is advised instead of denied while no
+  policy change is pending or once the committed rule answered. Every other write that
+  runs out of time is still denied.

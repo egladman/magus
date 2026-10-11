@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -105,16 +106,36 @@ func TestLapsedRuleLoadDeniesAWriteAndAdvisesARead(t *testing.T) {
 }
 
 // A dry run grades for a person at a terminal, a fork or a verb's own edit, so its rules
-// run without the hook's budget: a cold first load there must not read as a lapse.
+// run under a bound of their own, well past the hook's budget: a cold first load there must
+// not read as a lapse, and a rule that loops must not hang the fork.
 func TestDryRunJudgesWithoutTheHookBudget(t *testing.T) {
 	ctx, _ := spawnFixture(t)
-	var bounded []bool
+	var left []time.Duration
 	rule := func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
-		_, ok := ctx.Deadline()
-		bounded = append(bounded, ok)
+		deadline, ok := ctx.Deadline()
+		require.True(t, ok)
+		left = append(left, time.Until(deadline))
 		return types.GuardVerdict{}, nil
 	}
 	Judge(ctx, Dependencies{CommandRule: rule}, Request{Input: "ls", DryRun: true})
 	Judge(ctx, Dependencies{CommandRule: rule}, Request{Input: "ls"})
-	assert.Equal(t, []bool{false, true}, bounded)
+	require.Len(t, left, 2)
+	assert.Greater(t, left[0], time.Minute, "a dry run")
+	assert.Less(t, left[1], hookBudget, "a hook")
+}
+
+// A dry run whose rule runs past its bound denies a call that changes state, saying it was
+// not graded rather than that a host would have cut it off.
+func TestDryRunLapseIsNotGraded(t *testing.T) {
+	ctx, root, _ := writeFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+	defer cancel()
+	loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		<-ctx.Done()
+		return types.GuardVerdict{}, ctx.Err()
+	}
+	v := Judge(ctx, Dependencies{WriteRule: loops}, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, DryRun: true})
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "magus did not finish grading this file write: ")
+	assert.Contains(t, v.Reason, "so it is not graded. A dry run is bounded at 2m0s")
 }

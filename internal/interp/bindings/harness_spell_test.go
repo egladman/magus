@@ -114,9 +114,11 @@ func TestDecodeHarnessJSONRefusesAMapForAListField(t *testing.T) {
 }
 
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
-// command past its timeout, and that every other shipped harness declares no limits.
+// command past its timeout, and whose wiring sets the hook timeout the guard reports
+// against, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000}, loadShippedHarness(t, "claude-code").Limits)
+	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000},
+		loadShippedHarness(t, "claude-code").Limits)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
 		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
 	}

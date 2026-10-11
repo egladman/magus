@@ -12,24 +12,34 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/sys/pid"
 )
 
 // unfinishedDir holds one file per hook judgment in progress, in a directory per session.
 const unfinishedDir = "guard-unfinished"
 
-// unfinishedAfter is how long ago a judgment must have started before a later one counts it
-// as never finished: past the host's kill line, so a file that old belongs to a hook that
-// was killed or abandoned, not to one still running beside this one.
-const unfinishedAfter = hostHookTimeout + 5*time.Second
+// unfinishedGrace is how long past the host's hook timeout a judgment whose process still
+// runs must have started before a later one counts it as never finished, so one still
+// running beside this one is left alone.
+const unfinishedGrace = 5 * time.Second
 
 // advisoryUnfinished names the notice that earlier guard checks in a session never
-// finished, so their calls ran with no rule applied.
+// finished, so no rule judged their calls.
 const advisoryUnfinished hint.MarkerKind = "guard-unfinished"
+
+// hookTimeout is the host's hook timeout as its harness declares it, false when it declares
+// none. Answering loads the workspace and the harness spell, so it is asked only about a
+// judgment older than hookBudget: a host that gives up sooner than the guard's own budget
+// is one the guard cannot answer in time anyway.
+type hookTimeout func() (time.Duration, bool)
 
 // judgmentMark is the file one judgment keeps while it runs. Zero marks nothing.
 type judgmentMark struct {
 	dir, path string
 	started   time.Time
+	// parent is the process that started this one when the mark was made: the hook glue
+	// the host waits on, or the host itself.
+	parent int
 }
 
 type judgmentMarkKey struct{}
@@ -50,7 +60,7 @@ func beginJudgment(cacheDir, sessionKey string, now time.Time) judgmentMark {
 	if os.WriteFile(path, nil, 0o644) != nil {
 		return judgmentMark{}
 	}
-	return judgmentMark{dir: dir, path: path, started: now}
+	return judgmentMark{dir: dir, path: path, started: now, parent: os.Getppid()}
 }
 
 // BeginJudgment marks the hook judgment req is about to get, before the caller loads the
@@ -87,21 +97,28 @@ func begunJudgment(ctx context.Context) judgmentMark {
 	return m
 }
 
-// end removes this judgment's own file, unless the judgment ran past the host's kill line.
-// The host has then already run the call unjudged, and this process is one it stopped
-// waiting for (a hook glue that was killed leaves its `magus shell` child running), so the
-// file stays for a later judgment to report.
-func (m judgmentMark) end(now time.Time) {
-	if m.path == "" || now.Sub(m.started) >= hostHookTimeout {
+// end removes this judgment's own file unless its host stopped waiting for it, which keeps
+// the file for a later judgment to report. That is known two ways: the process that started
+// this one is gone, as when a host kills its hook glue and leaves the `magus shell` child
+// running, reparented; or the judgment ran past the hook timeout the host's harness
+// declares. A host that declares none is not assumed to have given up.
+func (m judgmentMark) end(now time.Time, timeout hookTimeout) {
+	if m.path == "" || os.Getppid() != m.parent {
 		return
+	}
+	if elapsed := now.Sub(m.started); elapsed >= hookBudget {
+		if d, ok := timeout(); ok && elapsed >= d {
+			return
+		}
 	}
 	_ = os.Remove(m.path)
 }
 
-// abandoned claims and counts the session's earlier judgments that never finished. Each is
-// claimed by removing its file, so two judgments ending at once never count one twice, and
-// each is reported once.
-func (m judgmentMark) abandoned(now time.Time) int {
+// abandoned claims and counts the session's earlier judgments that never finished: each one
+// whose process ended without removing its file, and each one still running past the
+// declared hook timeout. Each is claimed by removing its file, so two judgments ending at
+// once never count one twice, and each is reported once.
+func (m judgmentMark) abandoned(now time.Time, timeout hookTimeout) int {
 	if m.path == "" {
 		return 0
 	}
@@ -114,10 +131,19 @@ func (m judgmentMark) abandoned(now time.Time) int {
 		if filepath.Join(m.dir, e.Name()) == m.path {
 			continue
 		}
-		stamp, _, _ := strings.Cut(e.Name(), "-")
+		stamp, owner, _ := strings.Cut(e.Name(), "-")
 		started, err := strconv.ParseInt(stamp, 10, 64)
-		if err != nil || now.Sub(time.Unix(0, started)) < unfinishedAfter {
+		if err != nil {
 			continue
+		}
+		if ownerPID, err := strconv.Atoi(owner); err == nil && pid.Alive(ownerPID) {
+			age := now.Sub(time.Unix(0, started))
+			if age < hookBudget+unfinishedGrace {
+				continue
+			}
+			if d, ok := timeout(); !ok || age < d+unfinishedGrace {
+				continue
+			}
 		}
 		if os.Remove(filepath.Join(m.dir, e.Name())) == nil {
 			n++
@@ -128,9 +154,9 @@ func (m judgmentMark) abandoned(now time.Time) int {
 
 // unfinishedNote tells a session how many of its earlier guard checks its host gave up on.
 func unfinishedNote(n int) string {
-	lead := "1 earlier guard check in this session never finished and was"
+	lead := "1 earlier guard check in this session never finished"
 	if n > 1 {
-		lead = strconv.Itoa(n) + " earlier guard checks in this session never finished and were"
+		lead = strconv.Itoa(n) + " earlier guard checks in this session never finished"
 	}
-	return lead + " allowed: the host stopped waiting for a verdict and ran the call with no rule applied."
+	return lead + ": the host stopped waiting for a verdict, so no rule judged the call."
 }

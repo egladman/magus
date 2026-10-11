@@ -3,11 +3,17 @@ package guard
 import (
 	"context"
 	"path/filepath"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	remotespell "github.com/egladman/magus/internal/spell/remote"
 	"github.com/egladman/magus/internal/workspace"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // workspaceWriteRule is the Verdict.Rule a magus\guard.write answer carries.
@@ -74,11 +80,13 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 		}
 	}
 	asked := askWorkspaceRules(ctx, seamWrite, deps, resolve, bind(deps.WriteRule))
-	// The guard loads a policy source itself, so refusing its write when the working tree's
-	// rule ran out of time would leave a slow or looping rule with no way to be fixed. Only
-	// once the approved rule has answered: an agent can slow the approved resolve (a flood
-	// of untracked files does it), and that must not open the policy to an unjudged edit.
-	spared := asked.lapse != nil && asked.approvedAnswered() && isGuardSource(deps, at, path)
+	// The guard loads a policy source itself, so refusing its write when the judgment ran out
+	// of time would leave a slow or looping committed rule with no way to be fixed. Only while
+	// the approved policy stands: its side answered, or no policy change is pending. An agent
+	// can slow the approved resolve (a flood of untracked files does it), and with a change
+	// of its own pending that must not open the policy to an unjudged edit.
+	spared := asked.lapse != nil && isGuardSource(deps, at, path) &&
+		(asked.approvedAnswered() || asked.approvedRuleless || !policyPending(ctx, deps, at))
 	denied := !spared && asked.denyShort(func() judgedCall {
 		return judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
 	}, at)
@@ -103,9 +111,64 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 
-// lapseSparedNote is the advice for a write to a file the guard loads when the working tree's
-// side of its judgment ran out of time after the approved rule answered, which every other
-// write is denied for.
+// pendingCheckBound bounds the one status policyPending runs. A lapsed load has spent the
+// hook's budget already, so it runs past it, inside the margin the host still waits.
+const pendingCheckBound = time.Second
+
+// policyPending reports whether a policy source may differ from its approved content, as
+// version control reports it changed or untracked: a file the policy load read, the root
+// magusfile sources, or the config that shapes a load. The files read are this call's
+// load's, else the last recorded one's; a file the load reads can change only through one it
+// already read, so that set bounds the answer. With no record of it, any changed Buzz
+// source or untracked directory in the workspace counts.
+//
+// True whenever it cannot tell. No version control is no approval authority: the working
+// tree is the whole policy, and nothing in it is pending.
+func policyPending(ctx context.Context, deps Dependencies, at location) bool {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), pendingCheckBound)
+	defer cancel()
+	res, err := vcs.Resolve(ctx, at.workspace, "", deps.VCS)
+	switch {
+	case err != nil:
+		return true
+	case res.VCS == nil:
+		return false
+	}
+	var files []string
+	if deps.Policy != nil {
+		files = deps.Policy().Files
+	}
+	if files == nil && at.cacheDir != "" {
+		if m, ok := readPolicyMarker(filepath.Join(at.cacheDir, policyMarkerFile)); ok {
+			files = m.Files
+		}
+	}
+	var scope []string
+	if files != nil {
+		scope = append([]string{"magusfile.buzz", "magusfiles"}, policyShapingFiles...)
+		for _, f := range files {
+			if rel, err := filepath.Rel(at.workspace, resolveFrom(at.workspace, f)); err == nil && filepath.IsLocal(rel) {
+				scope = append(scope, filepath.ToSlash(rel))
+			}
+		}
+	}
+	dirty, err := res.VCS.DirtyFiles(ctx, at.workspace, scope)
+	if err != nil {
+		// A workspace in no repository has no approved state, as approvalAuthority reads it.
+		_, rootErr := res.VCS.Root(ctx, at.workspace)
+		return rootErr == nil || ctx.Err() != nil
+	}
+	return slices.ContainsFunc(dirty, func(p string) bool {
+		return scope != nil || strings.HasSuffix(p, "/") || strings.HasSuffix(p, ".buzz") || slices.Contains(policyShapingFiles, filepath.Base(p))
+	})
+}
+
+// policyShapingFiles are the files besides Buzz sources whose edit changes what a policy load
+// registers: the workspace config and the remote spell lock.
+var policyShapingFiles = []string{config.Filename, remotespell.LockFile}
+
+// lapseSparedNote is the advice for a write to a file the guard loads when its judgment ran
+// out of time while the approved policy stood, which every other write is denied for.
 func lapseSparedNote(l ruleLapse) string {
 	return "magus ran out of time judging this write (" + l.what() + ") and lets it through, because the guard loads this file itself: " +
 		"refusing it would leave a slow or looping rule with no way to be fixed. Check the rule answers quickly before relying on it."

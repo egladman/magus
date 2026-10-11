@@ -103,11 +103,20 @@ is left, so one that answers early leaves its time to the ones after it. A phase
 runs out denies a command that changes state, since letting it through would run it
 unjudged, and lets a read through with a note naming the phase and its budget. A check
 with no host waiting on it, such as `magus job fork` grading a check before the worker
-exists, has no such deadline: its phases run to completion.
+exists, gets two minutes instead, and one that runs out is denied as not graded.
 
-A hook the host kills before it answers leaves a mark, made before the rules load, and the
+A write to a file the guard loads, such as the root magusfile, goes through with a note
+when its judgment runs out of time and no policy change is pending, or the committed rule
+answered: refusing it would leave a slow committed rule with no way to be fixed. With an
+uncommitted policy change and no answer from the committed rule, it is denied like any
+other write.
+
+A hook the host stops waiting for leaves a mark, made before the rules load, and the
 session's next judgment reports how many of its checks never finished
-([`guard-unfinished`](rules/guard-unfinished.md)). A workspace cannot set that notice.
+([`guard-unfinished`](rules/guard-unfinished.md)). The host stopped waiting when the hook
+process it started is gone, or when the judgment ran past the hook timeout the host's
+harness declares in `harness_limits`. A host whose harness declares none is not taken to
+have given up on a slow judgment. A workspace cannot set that notice.
 
 When a file the root magusfile's load read differs from the checked-out commit, the rule
 runs from both the working tree and the committed sources, files it imports included,

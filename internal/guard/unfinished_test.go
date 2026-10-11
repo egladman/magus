@@ -3,7 +3,9 @@ package guard
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,52 +13,103 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A judgment past the host's timeout is counted once, by whichever later judgment ends
-// first; one still inside it is left alone, since it may be running beside this one.
-func TestAbandonedCountsEachUnfinishedJudgmentOnce(t *testing.T) {
-	cacheDir, now := t.TempDir(), time.Now()
-	beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Minute))
-	beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Minute-time.Millisecond))
-	running := beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Second))
-	beginJudgment(cacheDir, "claude-code/s2", now.Add(-time.Minute))
+// unknownTimeout is a host whose harness declares no hook timeout.
+func unknownTimeout() (time.Duration, bool) { return 0, false }
 
-	assert.Equal(t, 2, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now))
-	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now))
-	assert.Equal(t, 0, running.abandoned(now))
+// declaredTimeout is a host whose harness declares d.
+func declaredTimeout(d time.Duration) hookTimeout {
+	return func() (time.Duration, bool) { return d, true }
+}
+
+// deadPID is the pid of a process that has exited: this test binary, run to no test.
+func deadPID(t *testing.T) int {
+	t.Helper()
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	require.NoError(t, cmd.Run())
+	return cmd.Process.Pid
+}
+
+// markOwnedBy is beginJudgment for a judgment run by the process owner.
+func markOwnedBy(t *testing.T, cacheDir, key string, started time.Time, owner int) judgmentMark {
+	t.Helper()
+	m := beginJudgment(cacheDir, key, started)
+	path := filepath.Join(m.dir, strconv.FormatInt(started.UnixNano(), 10)+"-"+strconv.Itoa(owner))
+	require.NoError(t, os.Rename(m.path, path))
+	m.path = path
+	return m
+}
+
+// A judgment whose process ended without ending it is counted once, by whichever later
+// judgment ends first. One whose process still runs is counted only past the hook timeout
+// its host declares, since it may be running beside this one; with none declared it is
+// left alone.
+func TestAbandonedCountsEachUnfinishedJudgmentOnce(t *testing.T) {
+	cacheDir, now, dead := t.TempDir(), time.Now(), deadPID(t)
+	markOwnedBy(t, cacheDir, "claude-code/s1", now.Add(-time.Second), dead)
+	markOwnedBy(t, cacheDir, "claude-code/s1", now.Add(-time.Second-time.Millisecond), dead)
+	running := beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Second))
+	hung := beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Minute))
+	markOwnedBy(t, cacheDir, "claude-code/s2", now.Add(-time.Minute), dead)
+
+	assert.Equal(t, 2, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, unknownTimeout))
+	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, unknownTimeout),
+		"a judgment still running is not taken to be abandoned by a host that declares no hook timeout")
+	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, declaredTimeout(2*time.Minute)))
+	assert.Equal(t, 1, running.abandoned(now, declaredTimeout(10*time.Second)), "past the declared timeout")
+	assert.NoFileExists(t, hung.path)
+	assert.FileExists(t, running.path)
 }
 
 func TestBeginJudgmentMarksNothingWithoutASessionKey(t *testing.T) {
 	assert.Equal(t, judgmentMark{}, beginJudgment(t.TempDir(), "", time.Now()))
 	assert.Equal(t, judgmentMark{}, beginJudgment("", "claude-code/s1", time.Now()))
-	assert.Equal(t, 0, judgmentMark{}.abandoned(time.Now()))
+	assert.Equal(t, 0, judgmentMark{}.abandoned(time.Now(), unknownTimeout))
 }
 
-// A judgment that answers inside the host's timeout removes its mark. One that ran past it
-// keeps the mark: its host has already run the call unjudged, and an orphaned `magus shell`
-// finishing late must not erase the record of that.
+// A judgment that answers while its host still waits removes its mark. One its host stopped
+// waiting for keeps it: the host has run the call without its verdict, and the `magus shell`
+// finishing late must not erase the record of that. The host stopped waiting when the
+// process that started this one is gone, however soon, or past the hook timeout its harness
+// declares; a host that declares none is not taken to have given up on a slow judgment.
 func TestEndKeepsTheMarkOfAJudgmentItsHostAbandoned(t *testing.T) {
 	cacheDir, now := t.TempDir(), time.Now()
-	answered := beginJudgment(cacheDir, "claude-code/s1", now)
-	answered.end(now.Add(time.Second))
-	assert.NoFileExists(t, answered.path)
+	for name, c := range map[string]struct {
+		ran     time.Duration
+		timeout hookTimeout
+		kept    bool
+	}{
+		"answered in time":                 {time.Second, declaredTimeout(10 * time.Second), false},
+		"past the declared timeout":        {10 * time.Second, declaredTimeout(10 * time.Second), true},
+		"inside a longer declared timeout": {15 * time.Second, declaredTimeout(time.Minute), false},
+		"slow, with no timeout declared":   {15 * time.Second, unknownTimeout, false},
+	} {
+		m := beginJudgment(cacheDir, "claude-code/s1", now.Add(-c.ran))
+		m.end(now, c.timeout)
+		assert.Equal(t, c.kept, fileExists(m.path), name)
+	}
 
-	orphan := beginJudgment(cacheDir, "claude-code/s1", now.Add(-hostHookTimeout))
-	orphan.end(now)
-	assert.FileExists(t, orphan.path)
-	assert.Equal(t, 1, beginJudgment(cacheDir, "claude-code/s1", now.Add(unfinishedAfter)).abandoned(now.Add(unfinishedAfter)))
+	orphan := beginJudgment(cacheDir, "claude-code/s1", now.Add(-5*time.Second))
+	orphan.parent = os.Getppid() + 1
+	orphan.end(now, declaredTimeout(10*time.Second))
+	assert.FileExists(t, orphan.path, "the glue the host waited on is gone, so the host stopped waiting")
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func TestUnfinishedNoteCountsTheSkippedChecks(t *testing.T) {
-	assert.Equal(t, "1 earlier guard check in this session never finished and was allowed: "+
-		"the host stopped waiting for a verdict and ran the call with no rule applied.", unfinishedNote(1))
-	assert.Contains(t, unfinishedNote(3), "3 earlier guard checks in this session never finished and were allowed")
+	assert.Equal(t, "1 earlier guard check in this session never finished: "+
+		"the host stopped waiting for a verdict, so no rule judged the call.", unfinishedNote(1))
+	assert.Contains(t, unfinishedNote(3), "3 earlier guard checks in this session never finished:")
 }
 
 // The next judgment that finishes in a session tells it about the checks its host gave up
 // on, once, under the notice of its own.
 func TestJudgeReportsChecksThatNeverFinished(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
-	beginJudgment(cacheDir, FactsKey("claude-code", "s1"), time.Now().Add(-time.Minute))
+	markOwnedBy(t, cacheDir, FactsKey("claude-code", "s1"), time.Now().Add(-time.Minute), deadPID(t))
 
 	first := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 	assert.Equal(t, verdictWithRule("advise", string(advisoryUnfinished)), unworded(first))
