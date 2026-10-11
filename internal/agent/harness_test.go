@@ -721,7 +721,7 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 func writeStubGuardScript(w *testkit.Workspace, name, output string) {
 	w.Write("stub-"+name, output)
 	const stub = "#!/bin/sh\ncat >/dev/null\nfor a in \"$@\"; do [ -f \"stub-$a\" ] && exec cat \"stub-$a\"; done\n"
-	w.Executable("magus", stub)
+	w.WriteExecutable("magus", stub)
 }
 
 // writeTestHarness registers the "test-host" fixture as a fake harness spell. root

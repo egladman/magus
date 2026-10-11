@@ -85,7 +85,7 @@ const probeCommand = "./magus buzz -s magus-command.buzz"
 // writeFakeMagusBinary satisfies checkProbeEnvironment's presence check with a
 // binary that answers nothing at all.
 func writeFakeMagusBinary(w *testkit.Workspace) {
-	w.Executable("magus", "#!/bin/sh\nexit 0\n")
+	w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 }
 
 // TestVerifyHarnessProbeCatchesABrokenWiredCommand is defect 2's pinning test: a
@@ -131,7 +131,7 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	w.Executable("magus", "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n")
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n")
 	writeProbeableHarness(t, root, "chatty", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "chatty")
@@ -180,7 +180,7 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 func TestVerifyHarnessProbeOutlastingItsDeadlineIsUnprobed(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	root := w.Root()
-	w.Executable("magus", "#!/bin/sh\nexec sleep 5\n")
+	w.WriteExecutable("magus", "#!/bin/sh\nexec sleep 5\n")
 	writeProbeableHarness(t, root, "slow", probeCommand)
 
 	ctx := ContextWithProbeTimeout(context.Background(), 50*time.Millisecond)

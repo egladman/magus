@@ -43,14 +43,14 @@ func writeDoctorHarness(t *testing.T, w *testkit.Workspace) {
 	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every
 	// caller of guardedHarnessConfig() references this exact script name.
-	w.Executable("magus-command-stand-in.sh", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
+	w.WriteExecutable("magus-command-stand-in.sh", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 	// The probe also checks for AN executable magus before running anything (see
 	// checkProbeEnvironment), purely as a presence gate: it never actually
 	// invokes this file for a "sh magus-command-stand-in.sh" entry, which resolves
 	// against root on its own. Written only if a caller (a guard probe stub) has not
 	// already planted a specific one here.
 	if _, err := os.Stat(w.Path("magus")); os.IsNotExist(err) {
-		w.Executable("magus", "#!/bin/sh\nexit 0\n")
+		w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 	}
 }
 

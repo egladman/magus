@@ -39,7 +39,7 @@ func TestInstallShorthandIsIdempotent(t *testing.T) {
 func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
 	w := testkit.NewWorkspace(t)
 	dir := w.Root()
-	occupied := w.Executable(shorthandFileName(), "not magus")
+	occupied := w.WriteExecutable(shorthandFileName(), "not magus")
 
 	assert.ErrorContains(t, installShorthandCmd([]string{"--dir", dir}), "already exists")
 	content, err := os.ReadFile(occupied)

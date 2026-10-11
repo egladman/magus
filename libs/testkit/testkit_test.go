@@ -47,13 +47,13 @@ func TestNewWorkspaceRootIsResolved(t *testing.T) {
 // TestExecutableFileGetsMode0755 checks the mode rather than running the file, which on
 // macOS meets the first-exec stall its doc describes. Rewriting a plain file covers the
 // case where WriteFile keeps the old mode.
-func TestExecutableFileGetsMode0755(t *testing.T) {
+func TestWriteExecutableFileGetsMode0755(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("windows has no executable bit")
 	}
 	w := NewWorkspace(t)
 	w.Write("bin/magus", "old")
-	abs := w.Executable("bin/magus", "#!/bin/sh\necho stand-in\n")
+	abs := w.WriteExecutable("bin/magus", "#!/bin/sh\necho stand-in\n")
 
 	assert.Equal(t, w.Path("bin/magus"), abs)
 	info, err := os.Stat(abs)

@@ -346,7 +346,7 @@ func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
 func indexerOnPath(t *testing.T) {
 	t.Helper()
 	bin := testkit.NewWorkspace(t)
-	bin.Executable(indexerBin, "#!/bin/sh\n")
+	bin.WriteExecutable(indexerBin, "#!/bin/sh\n")
 	t.Setenv("PATH", bin.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
@@ -716,9 +716,9 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 // not leave that index out as uninstalled.
 func TestInstalledIndexesUsesTheRunsPATH(t *testing.T) {
 	server, bin := testkit.NewWorkspace(t), testkit.NewWorkspace(t)
-	server.Executable("zzz-scip-go", "#!/bin/sh\n")
-	bin.Executable("zzz-scip-go", "#!/bin/sh\n")
-	bin.Executable("zzz-scip-buzz", "#!/bin/sh\n")
+	server.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	bin.WriteExecutable("zzz-scip-buzz", "#!/bin/sh\n")
 	t.Setenv("PATH", server.Root())
 	ctx := environ.With(t.Context())
 	environ.From(ctx).Set("PATH", bin.Root())
@@ -851,7 +851,7 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 	)
 	binDir := testkit.NewWorkspace(t)
 	for _, bin := range []string{"scip-go", "govulncheck"} {
-		binDir.Executable(bin, "\x7fELF binary")
+		binDir.WriteExecutable(bin, "\x7fELF binary")
 	}
 	t.Setenv("PATH", binDir.Root())
 
@@ -911,7 +911,7 @@ func TestProbeObservationsWarnsOnlyForAnInstalledToolThatFails(t *testing.T) {
 	assert.Equal(t, "UNPROBED", got["."]["buzz:scip-buzz"])
 	assert.Empty(t, buf.String(), "a tool that is not installed")
 
-	binDir.Executable("scip-buzz", "\x7fELF binary")
+	binDir.WriteExecutable("scip-buzz", "\x7fELF binary")
 	m.probeObservations(t.Context(), []*types.Project{p}, driven)
 	assert.Contains(t, buf.String(), "observation probe failed", "an installed tool that cannot answer")
 }
@@ -1043,7 +1043,7 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 // keeps every index, so its review still fails naming what to install.
 func TestInstalledIndexesDropsAMissingSecondIndexer(t *testing.T) {
 	bin := testkit.NewWorkspace(t)
-	bin.Executable("zzz-scip-go", "#!/bin/sh\n")
+	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
 	t.Setenv("PATH", bin.Root())
 	root, docs := &types.Project{Path: "."}, &types.Project{Path: "docs"}
 	idxs := []projectIndex{

@@ -297,7 +297,7 @@ func gitArgvRecorder(t *testing.T) (logPath string) {
 	require.NoError(t, err)
 	shim := testkit.NewWorkspace(t)
 	logPath = shim.Path("argv.log")
-	shim.Executable("git", fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real))
+	shim.WriteExecutable("git", fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real))
 	t.Setenv("PATH", shim.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return logPath
 }

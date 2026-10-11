@@ -19,7 +19,7 @@ func sourceCheckout(t *testing.T, module string) (root, exe string) {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
-	return w.Root(), w.Executable("magus", "binary")
+	return w.Root(), w.WriteExecutable("magus", "binary")
 }
 
 func builtFrom(module, pkg string) *debug.BuildInfo {

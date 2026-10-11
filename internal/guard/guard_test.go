@@ -430,7 +430,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 	t.Run("host-capture/a task capture outside the workspace names its own ref", func(t *testing.T) {
 		wsRoot := testkit.NewWorkspace(t)
-		wsRoot.Executable("magus", "#!/bin/sh\n")
+		wsRoot.WriteExecutable("magus", "#!/bin/sh\n")
 		ws := wsRoot.Root()
 		hostTemp, err := os.MkdirTemp("/private/tmp", "capture-test-")
 		require.NoError(t, err)
@@ -580,7 +580,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		w.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
 		if withBinary {
-			w.Executable("magus", "binary")
+			w.WriteExecutable("magus", "binary")
 		}
 		return w.Root()
 	}

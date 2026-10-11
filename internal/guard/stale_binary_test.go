@@ -382,7 +382,7 @@ func clearVolatile(e trail.Event) trail.Event {
 func TestUnloadCause(t *testing.T) {
 	bare := testkit.NewWorkspace(t).Root()
 	binary := testkit.NewWorkspace(t)
-	binary.Executable("magus", "#!/bin/sh\n")
+	binary.WriteExecutable("magus", "#!/bin/sh\n")
 	withBinary := binary.Root()
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "older")
 	typo := errors.New("magusfile.buzz:3:1: expected expression")

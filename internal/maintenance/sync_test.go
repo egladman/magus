@@ -131,7 +131,7 @@ func TestHookBinary(t *testing.T) {
 	assert.Equal(t, "./magus", bin)
 	assert.False(t, ok, "no ./magus in the checkout yet")
 
-	checkout.Executable("magus", "#!/bin/sh\n")
+	checkout.WriteExecutable("magus", "#!/bin/sh\n")
 	_, ok = HookBinary(top, "./magus job run sync-graph")
 	assert.True(t, ok)
 

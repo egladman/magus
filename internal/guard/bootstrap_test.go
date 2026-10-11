@@ -29,7 +29,7 @@ func checkoutFixture(t *testing.T, module string, withBinary bool) string {
 	w := testkit.NewWorkspace(t)
 	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
 	if withBinary {
-		w.Executable("magus", "binary")
+		w.WriteExecutable("magus", "binary")
 	}
 	return w.Root()
 }

@@ -19,7 +19,7 @@ import (
 // A fixed 3s of its own failed a stand-in shell script on a loaded machine, a hang that was
 // only the machine; and it ignored the one override tests use.
 func TestInterpreterSkewWaitsTheHookBudget(t *testing.T) {
-	slow := testkit.NewWorkspace(t).Executable("magus", "#!/bin/sh\nsleep 1\necho 'magus v0.5.0 (abc1234) built 2026-01-01'\n")
+	slow := testkit.NewWorkspace(t).WriteExecutable("magus", "#!/bin/sh\nsleep 1\necho 'magus v0.5.0 (abc1234) built 2026-01-01'\n")
 
 	_, skewed := interpreterSkew(t.Context(), slow, "v0.5.0")
 	assert.False(t, skewed, "an answer inside the hook budget is the same build")
@@ -84,7 +84,7 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterIsAnotherBuild(t *testing.T)
 // A binary that cannot say which build it is cannot run the glue either.
 func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T) {
 	w := testkit.NewWorkspace(t)
-	bin := w.Executable("magus", "#!/bin/sh\nexit 3\n")
+	bin := w.WriteExecutable("magus", "#!/bin/sh\nexit 3\n")
 	withoutPathMagus(t)
 	r := &runner{ws: rootStubWorkspace{root: w.Root()}, opts: options{serverInfo: &ServerInfo{ClientVersion: "v0.5.0"}}}
 
@@ -100,13 +100,13 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T
 func onPath(t *testing.T) {
 	t.Helper()
 	dir := testkit.NewWorkspace(t)
-	dir.Executable("magus", "#!/bin/sh\nexit 0\n")
+	dir.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 	t.Setenv("PATH", dir.Root())
 }
 
 // fakeMagus writes an executable magus into w that prints version as `magus version` does.
 func fakeMagus(w *testkit.Workspace, version string) string {
-	return w.Executable("magus", "#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n")
+	return w.WriteExecutable("magus", "#!/bin/sh\necho 'magus "+version+" (abc1234) built 2026-01-01'\n")
 }
 
 // A call from console/ or docs/, each with a magusfile.buzz and no binary, runs the root's

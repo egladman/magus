@@ -218,7 +218,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
 		recordLoadedPolicy(t, cacheDir)
 		ownCheckout(t, ctx, true)
-		other := testkit.NewWorkspace(t).Executable("magus", "#!/bin/sh\n")
+		other := testkit.NewWorkspace(t).WriteExecutable("magus", "#!/bin/sh\n")
 		deps := unloadedDepsFor(staleMsg)
 		deps.Binary, deps.BinaryVersion = other, version
 

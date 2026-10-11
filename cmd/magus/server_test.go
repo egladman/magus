@@ -246,7 +246,7 @@ func TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
 // a name that also exists on PATH must not be picked up in place of the path given.
 func TestDetachedCmdIgnoresPATH(t *testing.T) {
 	decoyWS := testkit.NewWorkspace(t)
-	decoyWS.Executable("magus", "#!/bin/sh\n")
+	decoyWS.WriteExecutable("magus", "#!/bin/sh\n")
 	decoy := decoyWS.Root()
 	t.Setenv("PATH", decoy)
 

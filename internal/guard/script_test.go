@@ -32,7 +32,7 @@ func scriptDir(t *testing.T) string {
 	t.Helper()
 	w := testkit.NewWorkspace(t)
 	for name, body := range scriptFixtures {
-		w.Executable(name, body)
+		w.WriteExecutable(name, body)
 	}
 	return w.Root()
 }

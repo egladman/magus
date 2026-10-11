@@ -76,7 +76,7 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 	}
 	w := testkit.NewWorkspace(t)
 	write := func(version string) {
-		w.Executable("git", "#!/bin/sh\necho 'git version "+version+"'\n")
+		w.WriteExecutable("git", "#!/bin/sh\necho 'git version "+version+"'\n")
 	}
 	t.Setenv("PATH", w.Root())
 	toolProbes.Delete("git")

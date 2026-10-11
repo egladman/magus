@@ -41,7 +41,7 @@ func TestNewRepoSetsTheFixtureConfig(t *testing.T) {
 // hooks (husky, pre-commit). None of it may reach the fixture.
 func TestRepoGitIgnoresTheCallersGitEnvironment(t *testing.T) {
 	home := NewWorkspace(t)
-	hook := home.Executable("hooks/pre-commit", "#!/bin/sh\nexit 1\n")
+	hook := home.WriteExecutable("hooks/pre-commit", "#!/bin/sh\nexit 1\n")
 	home.Write("gitconfig", "[core]\n\thooksPath = "+filepath.Dir(hook)+"\n")
 	t.Setenv("GIT_CONFIG_GLOBAL", home.Path("gitconfig"))
 	t.Setenv("GIT_DIR", home.Path("not-a-repo"))

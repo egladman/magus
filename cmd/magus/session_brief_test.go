@@ -161,7 +161,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// harness_probe.go) instead of trusting its mere presence in the config, so
 	// the brief's guard-wiring section needs something real behind it: a stand-in
 	// for magus running the command glue, answering as a working guard would.
-	w.Executable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

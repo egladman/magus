@@ -352,7 +352,7 @@ func TestTrackedUndeclaredSeedsDropsWhatTheRunItselfWrote(t *testing.T) {
 	// What the run leaves behind: its own cache directory and a linked binary, both
 	// untracked because nothing ignores them here.
 	repo.Write(".magus/locks/h/lock", "")
-	repo.Executable("admin", "elf")
+	repo.WriteExecutable("admin", "elf")
 
 	ctx := context.Background()
 	got := trackedUndeclaredSeeds(ctx, dir, types.VCSOptions{}, map[string][]string{

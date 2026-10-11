@@ -29,7 +29,7 @@ import (
 func probeFixture(t *testing.T, bin string, content []byte) string {
 	t.Helper()
 	binDir := testkit.NewWorkspace(t)
-	binDir.Executable(bin, string(content))
+	binDir.WriteExecutable(bin, string(content))
 	t.Setenv("PATH", binDir.Root())
 	dir := filepath.Join(t.TempDir(), "web")
 	require.NoError(t, os.MkdirAll(dir, 0o755))

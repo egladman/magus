@@ -100,7 +100,7 @@ func (w *Workspace) Write(rel, body string) string {
 	return w.write(rel, body, 0o644)
 }
 
-// Executable is Write with the file made executable (0o755), for a stand-in script
+// WriteExecutable is Write with the file made executable (0o755), for a stand-in script
 // such as a fake ./magus.
 //
 // On macOS the first exec of a freshly written script can stall 10 to 20 seconds
@@ -108,7 +108,7 @@ func (w *Workspace) Write(rel, body string) string {
 // milliseconds. Give the first run a timeout that allows for the stall. Do not
 // pre-warm the script by running it during setup: the stall moves into setup rather
 // than going away, and the extra run is one more the stand-in records.
-func (w *Workspace) Executable(rel, body string) string {
+func (w *Workspace) WriteExecutable(rel, body string) string {
 	w.tb.Helper()
 	return w.write(rel, body, 0o755)
 }

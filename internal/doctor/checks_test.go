@@ -317,7 +317,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe does not return a deny -> fail with observed output", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.Executable("magus", "#!/bin/sh\nexit 0\n")
+		w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
@@ -328,7 +328,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, no descriptor anywhere -> advice", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.Executable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeStub)
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckAdvice, c.Status)
@@ -338,7 +338,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.Executable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeStub)
 		writeCheckpointHarness(t, w, guardedHarnessConfig())
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
@@ -348,7 +348,7 @@ func TestCheckGuardWiring(t *testing.T) {
 
 	t.Run("probe passes, descriptor exposes a missing adapter -> fail", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		w.Executable("magus", denyingProbeStub)
+		w.WriteExecutable("magus", denyingProbeStub)
 		writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
 		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
@@ -1345,7 +1345,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		now := time.Now()
 		touchAt(t, w.Write("main.go", "package main\n"), now)
-		bin := w.Executable("magus", "#!/bin/sh\n")
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now.Add(-time.Hour))
 
 		got := (&runner{ws: rootStubWorkspace{root: w.Root()}}).checkGuardBinary()
@@ -1360,7 +1360,7 @@ func TestCheckGuardBinary(t *testing.T) {
 		w := testkit.NewWorkspace(t)
 		now := time.Now()
 		touchAt(t, w.Write("main.go", "package main\n"), now.Add(-time.Hour))
-		bin := w.Executable("magus", "#!/bin/sh\n")
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now)
 
 		got := (&runner{ws: rootStubWorkspace{root: w.Root()}}).checkGuardBinary()
@@ -1372,7 +1372,7 @@ func TestCheckGuardBinary(t *testing.T) {
 	// judging me?" has no other way to be asked.
 	t.Run("falls back to PATH", func(t *testing.T) {
 		bin := testkit.NewWorkspace(t)
-		fake := bin.Executable("magus", "#!/bin/sh\n")
+		fake := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
 		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
@@ -1409,7 +1409,7 @@ func TestCheckGuardBinary(t *testing.T) {
 func TestResolveGuardBinaryForWiring(t *testing.T) {
 	t.Run("prefers ./magus", func(t *testing.T) {
 		w := testkit.NewWorkspace(t)
-		bin := w.Executable("magus", "#!/bin/sh\n")
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 
 		got, ok := resolveGuardBinaryForWiring(w.Root())
 		require.True(t, ok)
@@ -1418,7 +1418,7 @@ func TestResolveGuardBinaryForWiring(t *testing.T) {
 
 	t.Run("falls back to PATH", func(t *testing.T) {
 		bin := testkit.NewWorkspace(t)
-		fake := bin.Executable("magus", "#!/bin/sh\n")
+		fake := bin.WriteExecutable("magus", "#!/bin/sh\n")
 		t.Setenv("PATH", bin.Root())
 
 		got, ok := resolveGuardBinaryForWiring(t.TempDir())
