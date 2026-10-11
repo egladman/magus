@@ -501,7 +501,7 @@ fun main(args: [str]) > void {
         unnamed(eventName);
         return;
     }
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"));
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"), session: readSession(event), file: "cursor-hook.buzz");
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;

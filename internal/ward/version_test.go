@@ -299,7 +299,7 @@ func TestStaleBuildAdvice(t *testing.T) {
 	t.Parallel()
 	const selfUpdate = "Fix it:\n  - released binary: magus self update"
 	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
-	const bootstrap = "\n  - if that cannot load the tree either: mv magus magus.old, then GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	const bootstrap = "\n  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 	for name, tc := range map[string]struct {
 		build StaleBuild
 		want  string

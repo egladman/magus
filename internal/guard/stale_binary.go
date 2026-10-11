@@ -298,8 +298,8 @@ func scoutRecord(args []string) bool {
 	return false
 }
 
-// recoveryLine reports the line that gets a binary able to load this tree: the rebuild, or
-// the move-aside and bootstrap it falls back to. Each stands alone on its line. A leased
+// recoveryLine reports the line that gets a binary able to load this tree: the rebuild, the
+// relink, or the bootstrap it falls back to. Each stands alone on its line. A leased
 // worker's only one is the placement of its base's binary: a worker building a second is
 // the thing the deny exists to prevent.
 func recoveryLine(command string, d Dialect, lease string) bool {
@@ -322,8 +322,6 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
 			return r.verb == "run" && targetName(r.target) == "go-build" && len(r.projects) <= 1 && (len(r.projects) == 0 || r.projects[0] == ".")
 		}
-	case prog == "mv" && len(call.Assigns) == 0:
-		return len(words) == 3 && words[1] == "magus" && words[2] == "magus.old"
 	}
 	return false
 }
@@ -406,8 +404,8 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 	case own && hasBinary:
 		return binaryFix{
 			say: "rebuild ./magus with " + ownRebuild,
-			why: "If the rebuild cannot load the tree either, move the binary aside and bootstrap, one command at a time: " +
-				"`mv magus magus.old`, then `" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+			why: "If the rebuild cannot load the tree either, bootstrap over it, alone on its line: " +
+				"`" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
 		}
 	case own:
 		return binaryFix{say: "bootstrap ./magus with `" + bootstrapCommand + "`"}

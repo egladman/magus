@@ -310,8 +310,9 @@ export fun decideStateWrite(programs: [helpers\Program], bin: fun () > HookBinar
 // deadlockEscape is the way out for a binary that cannot load the tree and so cannot
 // rebuild itself.
 final deadlockEscape = "The host declarations moved, so the next load may fail with MGS1021, and a "
-    + "binary that cannot load the tree cannot rebuild itself. The escape, one command at a time: "
-    + "`mv magus magus.old`, then `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`, which runs "
+    + "binary that cannot load the tree cannot rebuild itself. The escape, alone on its line, allowed while "
+    + "./magus cannot load the tree: "
+    + "`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`, which runs "
     + "the real go-build target past a magus cache that cannot key it (if that fails with `undefined:` in a "
     + "gen/ package, the merge kept one side's generated code: restore those gen/ directories from "
     + "the side that produced them, or three-way merge them with `git merge-file`, then run it again).";
@@ -354,7 +355,8 @@ test "a ./magus whose sources moved is advised once per moved set, naming them" 
     std\assert(decideStale(stale(["internal/guard/shell.go", "internal/guard/guard.go"]), once: once).decision == "advise", message: "a new set speaks again");
 
     final decls = decideStale(stale(["internal/spell/gen/decls/magus.buzz"]), once: helpers\counter());
-    std\assert(decls.reason.indexOf("mv magus magus.old") != null, message: "host declarations name the escape");
+    std\assert(decls.reason.indexOf("go run -trimpath ./cmd/magus run go-build --no-cache .") != null, message: "host declarations name the escape");
+    std\assert(decls.reason.indexOf("magus.old") == null, message: "without moving the binary aside");
     std\assert(decls.reason.indexOf("git merge-file") != null, message: "and the gen/ repair");
 
     final many = decideStale(stale(["a", "b", "c", "d", "e", "f", "g"]), once: helpers\counter());

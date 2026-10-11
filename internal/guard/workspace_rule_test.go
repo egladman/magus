@@ -110,8 +110,8 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"  approved: the rule could not be resolved: approved magusfile: "+errStaleLoad.Error()+"\n"+
 		"Edits, spawns, pushes and commands that change state wait until a magus loads the tree. "+
 		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.\n"+
-		"If the rebuild cannot load the tree either, move the binary aside and bootstrap, one command at a time: `mv magus magus.old`, "+
-		"then `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
+		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
+		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: "+ruleDocsBase+"stale-binary/", stored)
 	d := staleBinaryDenial(unloadedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
@@ -175,7 +175,6 @@ func TestLoadFailurePassesOtherCommandsWithTheNote(t *testing.T) {
 	for _, line := range []string{
 		"ls -la",
 		"./magus run go-build .",
-		"mv magus magus.old",
 		"./magus init --dry-run",
 		"git status",
 		"gh pr view 412",

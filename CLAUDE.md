@@ -23,7 +23,8 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 - Never keep running a renamed `./magus`. The hooks find the binary by that name,
   so a rename hands every session in the checkout to the PATH binary, and the guard
   recognizes magus by basename, so the renamed one escapes every magus rule.
-  Moving it aside is only a step in relinking.
+  Do not move it aside to rebuild: the bootstrap above is allowed over a `./magus`
+  that cannot load the tree.
 - The gate is `magus affected ci`. It fails on stale generated output rather than
   rewriting it, so run `magus affected generate:rw` first.
 

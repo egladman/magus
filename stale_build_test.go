@@ -32,7 +32,7 @@ func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 	root, exe := sourceCheckout(t, "example.com/tool")
 	assert.Equal(t, "This binary was built from this checkout's own sources and predates them, so it cannot "+
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one "+
-		"command at a time: `mv magus magus.old`, then `go build -o magus ./cmd/tool`, then rebuild it the "+
+		"command at a time: `go build -o magus ./cmd/tool`, then rebuild it the "+
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
 		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
@@ -46,7 +46,8 @@ func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, builtFrom(ownModule, "cmd/magus"), root)
 
-	assert.Contains(t, escape, "`mv magus magus.old`, then `go build -o magus ./cmd/magus`")
+	assert.Contains(t, escape, "command at a time: `go build -o magus ./cmd/magus`, then rebuild")
+	assert.NotContains(t, escape, "magus.old")
 	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
 		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
 		"`go run ./cmd/magus-utils jobschema -out internal/job/gen`, then `go generate ./internal/langservice`, then "+

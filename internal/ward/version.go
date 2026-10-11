@@ -148,7 +148,7 @@ func (b StaleBuild) Advice() string {
 	case b.SourceTree:
 		lines = append(lines, "  - built from this checkout: ./magus run go-build .")
 		if dev {
-			lines = append(lines, "  - if that cannot load the tree either: mv magus magus.old, then "+BootstrapCommand)
+			lines = append(lines, "  - if that cannot load the tree either: "+BootstrapCommand)
 		}
 	case dev:
 		lines = append(lines, "  - built from source, in the checkout it came from: "+BootstrapCommand)

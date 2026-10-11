@@ -153,7 +153,8 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, "move the binary aside and bootstrap, one command at a time: `mv magus magus.old`", line)
+		assert.Contains(t, stored, "bootstrap over it, alone on its line: `"+bootstrapCommand+"`", line)
+		assert.NotContains(t, stored, "magus.old", line)
 	}
 
 	spawn := Judge(ctx, deps, Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
@@ -163,7 +164,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 	assert.Contains(t, shortDeny(t, cacheDir, edit, denyRuleStaleBinary, staleOwnSay), "\nthis file write changes state")
 
 	for _, line := range []string{
-		"ls", "git status", "git diff --stat", "./magus describe job x", "./magus affected --explain test", "./magus run go-build .", "mv magus magus.old",
+		"ls", "git status", "git diff --stat", "./magus describe job x", "./magus affected --explain test", "./magus run go-build .",
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 	} {
 		v := judgeUnloaded(ctx, deps, line)
@@ -525,9 +526,8 @@ func TestRecoveryLine(t *testing.T) {
 		{"./magus run test .", "", false},
 		{"./magus run go-build docs", "", false},
 		{"./magus run go-build . && ls", "", false},
-		{"mv magus magus.old", "", true},
+		{"mv magus magus.old", "", false},
 		{"mv magus other", "", false},
-		{"mv magus magus.old && rm -rf .", "", false},
 		{"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .", "", true},
 		{"go run -trimpath ./cmd/magus run go-build --no-cache .", "", false},
 		{"GOEXPERIMENT=jsonv2 go build -trimpath -o magus ./cmd/magus", "", true},
