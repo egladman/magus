@@ -1,13 +1,13 @@
 ---
 title: "contrast"
-description: "A rule that denies on `change-description` and advises on `reference`, `guide`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `agent-reply` by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\")."
-tags: [proofread, rules, contrast, deny]
+description: "A deny rule by default: it refuses a claim made by denying its opposite first (\"not just X, it is Y\")."
+tags: [proofread, rules, contrast, advise]
 aliases: [reference/prose/contrast]
 ---
 
 # contrast
 
-A rule that denies on `change-description` and advises on `reference`, `guide`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, and `agent-reply` by default: it reports a claim made by denying its opposite first ("not just X, it is Y").
+A deny rule by default: it refuses a claim made by denying its opposite first ("not just X, it is Y").
 
 ## What it catches
 
@@ -28,15 +28,15 @@ The code is `PRF4010`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | advise  |
-| `guide`              | advise  |
-| `change-description` | deny    |
-| `agent-instructions` | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
-| `release-notes`      | advise  |
-| `changelog`          | advise  |
-| `agent-reply`        | advise  |
+| `reference`          | off     |
+| `guide`              | off     |
+| `change-description` | off     |
+| `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "contrast", "code": "PRF4010", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
+{"rule": "contrast", "code": "PRF4010", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

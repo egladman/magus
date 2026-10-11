@@ -201,8 +201,19 @@ type check struct {
 	judge func(in input) []Finding
 }
 
-// defaultDecision is what c decides on kind when no decisions table names it.
+// defaultDecision is what c decides on kind when no decisions table names it:
+// its declared decision, capped at its [evidenceCeiling].
 func (c check) defaultDecision(kind Kind) Decision {
+	d := c.declaredDecision(kind)
+	if ceiling, ok := evidenceCeiling[c.rule]; ok && strictness(d) > strictness(ceiling) {
+		return ceiling
+	}
+
+	return d
+}
+
+// declaredDecision is what c's check declares for kind, before any ceiling.
+func (c check) declaredDecision(kind Kind) Decision {
 	switch {
 	case c.house || !slices.Contains(c.on, kind):
 		return DecisionOff

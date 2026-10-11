@@ -1,13 +1,13 @@
 ---
 title: "intent"
-description: "An advisory by default: it explains, and blocks nothing, on a motive given to a tool or a person (\"guessed\", \"pretends\")."
+description: "A deny rule by default: it refuses a motive given to a tool or a person (\"guessed\", \"pretends\")."
 tags: [proofread, rules, intent, advise]
 aliases: [reference/prose/intent]
 ---
 
 # intent
 
-An advisory by default: it explains, and blocks nothing, on a motive given to a tool or a person ("guessed", "pretends").
+A deny rule by default: it refuses a motive given to a tool or a person ("guessed", "pretends").
 
 ## What it catches
 
@@ -28,11 +28,11 @@ The code is `PRF2004`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
-| `review-reply`       | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
-| `agent-reply`        | advise  |
+| `change-description` | off     |
+| `review-reply`       | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 

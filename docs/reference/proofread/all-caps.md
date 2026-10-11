@@ -1,13 +1,13 @@
 ---
 title: "all-caps"
-description: "An advisory by default: it explains, and blocks nothing, on words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")."
+description: "A deny rule by default: it refuses words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")."
 tags: [proofread, rules, all-caps, advise]
 aliases: [reference/prose/all-caps]
 ---
 
 # all-caps
 
-An advisory by default: it explains, and blocks nothing, on words in capitals for emphasis in a review reply ("DO NOT", "NEVER").
+A deny rule by default: it refuses words in capitals for emphasis in a review reply ("DO NOT", "NEVER").
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8013`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 

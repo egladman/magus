@@ -1,7 +1,7 @@
 ---
 title: "chatbot"
 description: "A deny rule by default: it refuses text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer."
-tags: [proofread, rules, chatbot, deny]
+tags: [proofread, rules, chatbot, advise]
 aliases: [reference/prose/chatbot]
 ---
 
@@ -28,15 +28,15 @@ The code is `PRF4004`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-instructions` | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `review-reply`       | deny    |
+| `reference`          | off     |
+| `guide`              | off     |
+| `change-description` | off     |
+| `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `review-reply`       | off     |
 
 ## Changing it
 
@@ -46,7 +46,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"chatbot": "advise"},
+  "rules": {"chatbot": "deny"},
   "paths": {"blog/**": {"chatbot": "off"}}
 }
 ```
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "chatbot", "code": "PRF4004", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
+{"rule": "chatbot", "code": "PRF4004", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

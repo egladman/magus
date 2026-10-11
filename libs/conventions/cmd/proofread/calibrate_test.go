@@ -115,17 +115,17 @@ func TestCalibrateGatesPassAndFail(t *testing.T) {
 		code        int
 		row         string
 	}{
-		"deny at 0 of 35 passes": {35, 0, 0, "hedge  evidence   deny     deny      35       0      100.0%     90.1%  " +
+		"deny at 0 of 35 passes": {35, 0, 0, "wordy  economy    deny     deny      35       0      100.0%     90.1%  " +
 			"100.0%              pass  -\n"},
-		"deny at 0 of 10 needs 25": {10, 0, 1, "hedge  evidence   deny     off       10       0      100.0%     72.2%  " +
+		"deny at 0 of 10 needs 25": {10, 0, 1, "wordy  economy    deny     off       10       0      100.0%     72.2%  " +
 			"100.0%              fail  +25\n"},
-		"deny at 1 of 10 cannot reach it": {9, 1, 1, "hedge  evidence   deny     off       10       1      90.0%      " +
+		"deny at 1 of 10 cannot reach it": {9, 1, 1, "wordy  economy    deny     off       10       1      90.0%      " +
 			"59.6%  100.0%              fail  unreachable\n"},
 	}
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			dir := writeCases(t, "hedge", "reference", "Runner %d may help.", "It probably holds for %d.",
+			dir := writeCases(t, "wordy", "reference", "Run it in order to replay %d.", "Read it prior to step %d.",
 				"The value may be empty.", tc.hits, tc.wrong)
 
 			var stdout, stderr bytes.Buffer

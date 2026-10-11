@@ -1,7 +1,7 @@
 ---
 title: "condescension"
 description: "A deny rule by default: it refuses a word that tells the reader how hard a step should feel or what they should already know."
-tags: [proofread, rules, condescension, deny]
+tags: [proofread, rules, condescension, advise]
 aliases: [reference/prose/condescension]
 ---
 
@@ -28,17 +28,17 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-instructions` | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `review-reply`       | deny    |
-| `cli-help`           | deny    |
-| `agent-reply`        | deny    |
+| `reference`          | off     |
+| `guide`              | off     |
+| `change-description` | off     |
+| `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `review-reply`       | off     |
+| `cli-help`           | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 
@@ -48,7 +48,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"condescension": "advise"},
+  "rules": {"condescension": "deny"},
   "paths": {"blog/**": {"condescension": "off"}}
 }
 ```
@@ -61,7 +61,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "condescension", "code": "PRF2006", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
+{"rule": "condescension", "code": "PRF2006", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

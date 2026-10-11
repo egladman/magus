@@ -1,13 +1,13 @@
 ---
 title: "blame"
-description: "A rule that denies on `change-description`, `review-reply`, `commit-message`, and `issue` and advises on `agent-reply` by default: it reports a person or past work as the subject of a fault, and contempt for code or a decision."
-tags: [proofread, rules, blame, deny]
+description: "A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision."
+tags: [proofread, rules, blame, advise]
 aliases: [reference/prose/blame]
 ---
 
 # blame
 
-A rule that denies on `change-description`, `review-reply`, `commit-message`, and `issue` and advises on `agent-reply` by default: it reports a person or past work as the subject of a fault, and contempt for code or a decision.
+A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision.
 
 ## What it catches
 
@@ -28,11 +28,11 @@ The code is `PRF2001`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | deny    |
-| `review-reply`       | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `agent-reply`        | advise  |
+| `change-description` | off     |
+| `review-reply`       | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 
@@ -42,7 +42,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"blame": "advise"},
+  "rules": {"blame": "deny"},
   "paths": {"blog/**": {"blame": "off"}}
 }
 ```
@@ -55,7 +55,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "blame", "code": "PRF2001", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/blame/"}
+{"rule": "blame", "code": "PRF2001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/blame/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

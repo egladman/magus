@@ -1,13 +1,13 @@
 ---
 title: "subject-mood"
-description: "A deny rule by default: it refuses a commit subject opening in the past tense, the third person or a gerund (\"added\", \"fixes\", \"making\")."
-tags: [proofread, rules, subject-mood, deny]
+description: "An advisory by default: it explains, and blocks nothing, on a commit subject opening in the past tense, the third person or a gerund (\"added\", \"fixes\", \"making\")."
+tags: [proofread, rules, subject-mood, advise]
 aliases: [reference/prose/subject-mood]
 ---
 
 # subject-mood
 
-A deny rule by default: it refuses a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making").
+An advisory by default: it explains, and blocks nothing, on a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making").
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF1010`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `commit-message` | deny    |
+| `commit-message` | advise  |
 
 ## Changing it
 
@@ -38,7 +38,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"subject-mood": "advise"},
+  "rules": {"subject-mood": "deny"},
   "paths": {"blog/**": {"subject-mood": "off"}}
 }
 ```
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "subject-mood", "code": "PRF1010", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/subject-mood/"}
+{"rule": "subject-mood", "code": "PRF1010", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/subject-mood/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

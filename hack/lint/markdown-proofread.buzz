@@ -577,14 +577,14 @@ test "proofread runs once over every hand-written file and reports at the file's
     final got = check(support\fixture({
         "blog/p.md": "# A post\n\n" + post,
         "docs/page.md": "# A page\n\n" + post,
-        "docs/note.md": "# A note\n\nThe cache is simply a map.\n",
+        "docs/note.md": "# A note\n\nRun it in order to replay.\n",
     }));
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["docs/note.md:3 [filler]", "docs/page.md:3 [tense]", "docs/page.md:3 [hedge]"],
-        message: "the table exempts blog/ from tense and hedge");
+    assert\equal(where, want: ["docs/note.md:3 [wordy]", "docs/page.md:3 [tense]"],
+        message: "the table exempts blog/ from tense");
 }
 
 test "a judge that does not run is an error, not a pass" {
@@ -615,13 +615,13 @@ test "a fragment is judged as a changelog" {
     final got = check(support\fixture({
         "changes/unreleased/a.md": "### Bug fixes\n\n- **The key is stable.**\n",
         "changes/unreleased/b.md": "### Fixed\n\n- **`Resolve`.**\n",
-        "changes/unreleased/c.md": "### Fixed\n\n- **The key is simply stable.**\n",
+        "changes/unreleased/c.md": "### Fixed\n\n- **Run it in order to replay.**\n",
     }));
     final where = mut [<str>];
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
     }
-    assert\equal(where, want: ["changes/unreleased/a.md:1 [changelog-group]", "changes/unreleased/c.md:3 [filler]"],
+    assert\equal(where, want: ["changes/unreleased/a.md:1 [changelog-group]", "changes/unreleased/c.md:3 [wordy]"],
         message: "a group deny and a word deny; an advised entry is not reported");
 }
 
@@ -632,8 +632,8 @@ test "a guide is held to the guide rules and a concept page is not" {
     foreach (f in got) {
         where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[")!));
     }
-    assert\equal(where, want: ["docs/guides/a.md:3 [second-person]", "docs/guides/a.md:6 [step-verb]",
-        "docs/guides/a.md:3 [condescension]"], message: "guide findings only on the guide");
+    assert\equal(where, want: ["docs/guides/a.md:3 [second-person]", "docs/guides/a.md:6 [step-verb]"],
+        message: "guide findings only on the guide");
 }
 
 test "a skill's short form is held to the terse rules and its full-only text is not" {

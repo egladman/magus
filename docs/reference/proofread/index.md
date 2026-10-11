@@ -33,7 +33,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [reply-voice](reply-voice.md)               | PRF1002 | structure   | deny           | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
 | [second-person](second-person.md)           | PRF1003 | conventions | deny           | we, us, our or ours in a guide, which speaks to the reader as you                                     |
 | [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                |
-| [subject-mood](subject-mood.md)             | PRF1010 | conventions | deny           | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
+| [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
 | [subject-length](subject-length.md)         | PRF1011 | structure   | deny           | a commit subject over 100 bytes                                                                       |
 | [subject-period](subject-period.md)         | PRF1012 | conventions | deny           | a commit subject ending in a period                                                                   |
 | [body-separator](body-separator.md)         | PRF1013 | structure   | deny           | a commit body that starts on the line after the subject                                               |
@@ -46,38 +46,38 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Tone
 
-| Rule                              | Code    | Dimension | Default        | Catches                                                                                     |
-| --------------------------------- | ------- | --------- | -------------- | ------------------------------------------------------------------------------------------- |
-| [blame](blame.md)                 | PRF2001 | stance    | varies by kind | a person or past work as the subject of a fault, and contempt for code or a decision        |
-| [verdict](verdict.md)             | PRF2002 | stance    | advise         | a judgment word standing in for the behavior it judges ("was broken", "a mess")             |
-| [absolute](absolute.md)           | PRF2003 | evidence  | advise         | never, nobody or nothing as a claim about the past ("has never fired", "nobody checked")    |
-| [intent](intent.md)               | PRF2004 | stance    | advise         | a motive given to a tool or a person ("guessed", "pretends")                                |
-| [credit](credit.md)               | PRF2005 | stance    | advise         | a change description that removes or replaces something and says nothing of what it was for |
-| [condescension](condescension.md) | PRF2006 | stance    | deny           | a word that tells the reader how hard a step should feel or what they should already know   |
+| Rule                              | Code    | Dimension | Default | Catches                                                                                     |
+| --------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------- |
+| [blame](blame.md)                 | PRF2001 | stance    | off     | a person or past work as the subject of a fault, and contempt for code or a decision        |
+| [verdict](verdict.md)             | PRF2002 | stance    | off     | a judgment word standing in for the behavior it judges ("was broken", "a mess")             |
+| [absolute](absolute.md)           | PRF2003 | evidence  | advise  | never, nobody or nothing as a claim about the past ("has never fired", "nobody checked")    |
+| [intent](intent.md)               | PRF2004 | stance    | off     | a motive given to a tool or a person ("guessed", "pretends")                                |
+| [credit](credit.md)               | PRF2005 | stance    | advise  | a change description that removes or replaces something and says nothing of what it was for |
+| [condescension](condescension.md) | PRF2006 | stance    | off     | a word that tells the reader how hard a step should feel or what they should already know   |
 
 ## Claims and hedges
 
-| Rule              | Code    | Dimension | Default        | Catches                                                                                |
-| ----------------- | ------- | --------- | -------------- | -------------------------------------------------------------------------------------- |
-| [claim](claim.md) | PRF3001 | evidence  | advise         | a measurement, a comparison or a completion with no evidence in its sentence or bullet |
-| [hedge](hedge.md) | PRF3002 | evidence  | varies by kind | a softener qualifying a claim ("might fix", "could potentially")                       |
+| Rule              | Code    | Dimension | Default | Catches                                                                                |
+| ----------------- | ------- | --------- | ------- | -------------------------------------------------------------------------------------- |
+| [claim](claim.md) | PRF3001 | evidence  | advise  | a measurement, a comparison or a completion with no evidence in its sentence or bullet |
+| [hedge](hedge.md) | PRF3002 | evidence  | off     | a softener qualifying a claim ("might fix", "could potentially")                       |
 
 ## Generated-writing tells
 
 | Rule                                  | Code    | Dimension | Default        | Catches                                                                                                 |
 | ------------------------------------- | ------- | --------- | -------------- | ------------------------------------------------------------------------------------------------------- |
-| [filler](filler.md)                   | PRF4001 | economy   | varies by kind | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                                |
+| [filler](filler.md)                   | PRF4001 | economy   | advise         | throat-clearing ("Note that") and filler adverbs ("simply", "basically")                                |
 | [wordy](wordy.md)                     | PRF4002 | economy   | varies by kind | a phrase with a shorter equivalent ("in order to")                                                      |
 | [signpost](signpost.md)               | PRF4003 | structure | varies by kind | an announcement standing where the point should be ("Here's the thing", "Let's dive in")                |
-| [chatbot](chatbot.md)                 | PRF4004 | stance    | deny           | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer                 |
+| [chatbot](chatbot.md)                 | PRF4004 | stance    | off            | text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer                 |
 | [leak](leak.md)                       | PRF4005 | evidence  | varies by kind | residue of a tool or a template: a citation marker or an unfilled placeholder                           |
 | [buzzword](buzzword.md)               | PRF4006 | economy   | deny           | a word chosen to sound significant rather than to say what is so ("delve", "tapestry")                  |
 | [buzzword-weak](buzzword-weak.md)     | PRF4007 | economy   | advise         | a buzzword that also has an ordinary sense ("crucial", "landscape")                                     |
 | [vague](vague.md)                     | PRF4008 | evidence  | deny           | weight or consensus asserted with nothing named ("experts argue", "the stakes are high")                |
 | [closer](closer.md)                   | PRF4009 | structure | deny           | a sentence that opens by announcing it restates the text above ("In conclusion,")                       |
-| [contrast](contrast.md)               | PRF4010 | economy   | varies by kind | a claim made by denying its opposite first ("not just X, it is Y")                                      |
+| [contrast](contrast.md)               | PRF4010 | economy   | off            | a claim made by denying its opposite first ("not just X, it is Y")                                      |
 | [ing-tail](ing-tail.md)               | PRF4011 | economy   | advise         | a participle clause added to claim significance (", highlighting the importance of")                    |
-| [staccato](staccato.md)               | PRF4012 | structure | varies by kind | three or more consecutive sentences of six words or fewer in one paragraph                              |
+| [staccato](staccato.md)               | PRF4012 | structure | off            | three or more consecutive sentences of six words or fewer in one paragraph                              |
 | [heading-case](heading-case.md)       | PRF4013 | structure | advise         | a heading whose every word after the first is capitalized                                               |
 | [participles](participles.md)         | PRF4020 | economy   | advise         | a text that hangs present participial clauses on its sentences at a generated-writing rate              |
 | [nominalizations](nominalizations.md) | PRF4021 | economy   | advise         | a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate |
@@ -116,15 +116,15 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 | Rule                                          | Code    | Dimension | Default | Catches                                                                                          |
 | --------------------------------------------- | ------- | --------- | ------- | ------------------------------------------------------------------------------------------------ |
-| [reply-opener](reply-opener.md)               | PRF8001 | stance    | deny    | a sentence of a review reply that opens by contradicting ("No,", "As I said")                    |
-| [judgment-as-fact](judgment-as-fact.md)       | PRF8002 | stance    | advise  | a recommendation in a review reply stated as a fact, with no reason given                        |
+| [reply-opener](reply-opener.md)               | PRF8001 | stance    | off     | a sentence of a review reply that opens by contradicting ("No,", "As I said")                    |
+| [judgment-as-fact](judgment-as-fact.md)       | PRF8002 | stance    | off     | a recommendation in a review reply stated as a fact, with no reason given                        |
 | [stacked-hedge](stacked-hedge.md)             | PRF8003 | stance    | advise  | two softeners in one sentence of a review reply, or an apology before its point                  |
 | [long-thread](long-thread.md)                 | PRF8004 | stance    | advise  | a review reply that is its author's fourth or later in a thread                                  |
 | [nonspecific](nonspecific.md)                 | PRF8010 | evidence  | advise  | a review reply that judges or asks for a change and names no code, path, line, example or reason |
 | [why-opener](why-opener.md)                   | PRF8011 | stance    | advise  | a review reply sentence that opens "Why did you" or "Why would you"                              |
-| [bare-imperative](bare-imperative.md)         | PRF8012 | stance    | advise  | a short command in a review reply that gives no reason anywhere ("Fix this.")                    |
-| [all-caps](all-caps.md)                       | PRF8013 | stance    | advise  | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                             |
-| [repeated-marks](repeated-marks.md)           | PRF8014 | stance    | advise  | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                      |
+| [bare-imperative](bare-imperative.md)         | PRF8012 | stance    | off     | a short command in a review reply that gives no reason anywhere ("Fix this.")                    |
+| [all-caps](all-caps.md)                       | PRF8013 | stance    | off     | words in capitals for emphasis in a review reply ("DO NOT", "NEVER")                             |
+| [repeated-marks](repeated-marks.md)           | PRF8014 | stance    | off     | a run of question or exclamation marks in a review reply ("??", "!!", "?!")                      |
 | [bold-label](bold-label.md)                   | PRF8020 | structure | advise  | list items or paragraphs of an agent reply that open with a bold label                           |
 | [closing-offer](closing-offer.md)             | PRF8021 | stance    | advise  | an agent reply whose last paragraph offers more work or asks leave to go on                      |
 | [request-recap](request-recap.md)             | PRF8022 | economy   | advise  | an agent reply that opens by restating what the person asked                                     |

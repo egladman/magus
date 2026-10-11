@@ -1,13 +1,13 @@
 ---
 title: "staccato"
-description: "A rule that denies on `change-description`, `issue`, and `release-notes` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph."
-tags: [proofread, rules, staccato, deny]
+description: "A deny rule by default: it refuses three or more consecutive sentences of six words or fewer in one paragraph."
+tags: [proofread, rules, staccato, advise]
 aliases: [reference/prose/staccato]
 ---
 
 # staccato
 
-A rule that denies on `change-description`, `issue`, and `release-notes` and advises on `reference` by default: it reports three or more consecutive sentences of six words or fewer in one paragraph.
+A deny rule by default: it refuses three or more consecutive sentences of six words or fewer in one paragraph.
 
 ## What it catches
 
@@ -28,10 +28,10 @@ The code is `PRF4012`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | advise  |
-| `change-description` | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
+| `reference`          | off     |
+| `change-description` | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
 
 ## Changing it
 
@@ -54,7 +54,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "staccato", "code": "PRF4012", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/staccato/"}
+{"rule": "staccato", "code": "PRF4012", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/staccato/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

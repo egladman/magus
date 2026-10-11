@@ -1,7 +1,7 @@
 ---
 title: "reply-opener"
 description: "A deny rule by default: it refuses a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\")."
-tags: [proofread, rules, reply-opener, deny]
+tags: [proofread, rules, reply-opener, advise]
 aliases: [reference/prose/reply-opener]
 ---
 
@@ -28,7 +28,7 @@ The code is `PRF8001`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | deny    |
+| `review-reply` | off     |
 
 ## Changing it
 
@@ -38,7 +38,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"reply-opener": "advise"},
+  "rules": {"reply-opener": "deny"},
   "paths": {"blog/**": {"reply-opener": "off"}}
 }
 ```
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "reply-opener", "code": "PRF8001", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
+{"rule": "reply-opener", "code": "PRF8001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

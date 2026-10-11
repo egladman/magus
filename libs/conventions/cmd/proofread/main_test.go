@@ -129,7 +129,7 @@ func houseTable(t *testing.T, rules ...proofread.Rule) string {
 func TestRunWritesAFindingForAJudgedDoc(t *testing.T) {
 	in := `[{"node":"n1","source":"a.go","language":"go","name":"Resolve","kind":"function","owner":"","doc":"Resolve simply returns the path."}]`
 
-	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing("")), "")
+	assertRun(t, in, 0, rows(t, row("n1", "a.go", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing("")), "")
 }
 
 func TestRunWritesAnEmptyArrayWhenNothingIsFound(t *testing.T) {
@@ -147,9 +147,9 @@ func TestRunKeepsInputOrderThenFindingOrder(t *testing.T) {
 		`{"node":"b","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."},` +
 		`{"node":"a","name":"Open","kind":"function","doc":"Open simply opens."}]`
 	want := rows(t,
-		row("b", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing(""),
+		row("b", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing(""),
 		row("b", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent"),
-		row("a", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing(""),
+		row("a", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing(""),
 	)
 
 	assertArgs(t, []string{"doc-comment", "-decisions", houseTable(t, proofread.RuleTerms)}, in, want)
@@ -186,7 +186,7 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 	want := rows(t,
 		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionDeny,
 			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**").at(1, 3, 13),
-		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(3, 4, 10).replacing(""),
+		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").at(3, 4, 10).replacing(""),
 	)
 
 	assertArgs(t, []string{"reference", b, a}, "", want)
@@ -222,11 +222,10 @@ func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 }
 
 func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
-	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleReplyOpener, proofread.DecisionDeny,
-		"Drop 'No,' and open with the fact and its evidence, as in 'This needs a lock: the map is "+
-			"written from two goroutines.'", "No,").at(1, 1, 4))
+	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleBuzzword, proofread.DecisionDeny,
+		"Replace 'delve' with what is actually so.", "delve").at(1, 8, 13))
 
-	assertArgs(t, []string{"review-reply"}, "No, the map is shared by the two workers.", want)
+	assertArgs(t, []string{"review-reply"}, "Let me delve into the race.", want)
 }
 
 // A reply that is its author's fourth in the thread draws one finding, which
@@ -250,7 +249,7 @@ func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {
 func TestRunSelectsRulesByOnlyAndDecisions(t *testing.T) {
 	const doc = `[{"node":"n","name":"Run","kind":"function","doc":"Run simply hands work to a sub-agent."}]`
 
-	filler := row("n", "", "doc-comment", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").replacing("")
+	filler := row("n", "", "doc-comment", proofread.RuleFiller, proofread.DecisionAdvise, fillerSimply, "simply").replacing("")
 	terms := row("n", "", "doc-comment", proofread.RuleTerms, proofread.DecisionDeny, termsMessage, "sub-agent").replacing("subagent")
 	decisions := houseTable(t, proofread.RuleTerms, proofread.RuleCommentBlock)
 
@@ -311,7 +310,7 @@ func TestRunExplainsARuleByNameOrCode(t *testing.T) {
 		for _, line := range []string{
 			want,
 			"\nDefault decisions:\n",
-			"  doc-comment                  deny\n",
+			"  doc-comment                  advise\n",
 			"\nPage: https://eli.gladman.cc/magus/reference/proofread/filler/\n",
 		} {
 			if !strings.Contains(out.String(), line) {
@@ -479,7 +478,7 @@ func TestRunWritesSARIFAndRDJSONForTheFormatFlag(t *testing.T) {
 	runInto(t, []string{"reference", "-format", "rdjson", path}, &result)
 
 	if d := result.Diagnostics; len(d) != 1 || d[0].Code.Value != "PRF4001" || d[0].Location.Path != path ||
-		d[0].Severity != "ERROR" {
+		d[0].Severity != "WARNING" {
 		t.Errorf("rdjson diagnostics = %+v", d)
 	}
 }
@@ -510,7 +509,7 @@ func TestRunHoldsAFileToItsBaseline(t *testing.T) {
 
 	writeFile(t, dir, "a.md", "# A\n\nIt simply works.\n\nIt basically works.\n")
 
-	want := rows(t, row(page, page+":5", "reference", proofread.RuleFiller, proofread.DecisionDeny,
+	want := rows(t, row(page, page+":5", "reference", proofread.RuleFiller, proofread.DecisionAdvise,
 		"Drop 'basically': state the fact.", "basically").at(5, 4, 13).replacing(""))
 	assertArgs(t, []string{"reference", "-baseline", baselinePath, page}, "", want)
 }
@@ -543,9 +542,9 @@ func TestRunWritesTextAndACountOnStderr(t *testing.T) {
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
 
 	code, out, errOut := runArgs(t, []string{"reference", "-format", "text", bad}, "")
-	wantOut := bad + ":3:4: PRF4001 filler [deny] " + fillerSimply + "\n"
+	wantOut := bad + ":3:4: PRF4001 filler [advise] " + fillerSimply + "\n"
 
-	if code != exitOK || out != wantOut || errOut != "proofread: 1 finding (1 deny, 0 advise)\n" {
+	if code != exitOK || out != wantOut || errOut != "proofread: 1 finding (0 deny, 1 advise)\n" {
 		t.Errorf("a finding: code %d stdout %q stderr %q, want stdout %q", code, out, errOut, wantOut)
 	}
 
@@ -561,16 +560,17 @@ func TestRunFailsOnlyAtTheBar(t *testing.T) {
 	clean := writeFile(t, dir, "ok.md", "# A\n\nIt works.\n")
 	suppressed := writeFile(t, dir, "quiet.md", "# A\n\n<!-- proofread off filler: quoting the user -->\nIt simply works.\n")
 	advise := writeFile(t, dir, "advise.json", `{"rules":{"filler":"advise"}}`)
+	deny := writeFile(t, dir, "deny.json", `{"rules":{"filler":"deny"}}`)
 
 	cases := []struct {
 		name string
 		args []string
 		want int
 	}{
-		{"never is the default", []string{"reference", bad}, exitOK},
-		{"never", []string{"reference", "-fail-on", "never", bad}, exitOK},
-		{"deny meets a deny", []string{"reference", "-fail-on", "deny", bad}, exitFindings},
-		{"advise meets a deny", []string{"reference", "-fail-on", "advise", bad}, exitFindings},
+		{"never is the default", []string{"reference", "-decisions", deny, bad}, exitOK},
+		{"never", []string{"reference", "-fail-on", "never", "-decisions", deny, bad}, exitOK},
+		{"deny meets a deny", []string{"reference", "-fail-on", "deny", "-decisions", deny, bad}, exitFindings},
+		{"advise meets a deny", []string{"reference", "-fail-on", "advise", "-decisions", deny, bad}, exitFindings},
 		{"deny passes an advise", []string{"reference", "-fail-on", "deny", "-decisions", advise, bad}, exitOK},
 		{"advise meets an advise", []string{"reference", "-fail-on", "advise", "-decisions", advise, bad}, exitFindings},
 		{"a clean file", []string{"reference", "-fail-on", "advise", clean}, exitOK},

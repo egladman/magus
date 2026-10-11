@@ -1,13 +1,13 @@
 ---
 title: "repeated-marks"
-description: "An advisory by default: it explains, and blocks nothing, on a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")."
+description: "A deny rule by default: it refuses a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")."
 tags: [proofread, rules, repeated-marks, advise]
 aliases: [reference/prose/repeated-marks]
 ---
 
 # repeated-marks
 
-An advisory by default: it explains, and blocks nothing, on a run of question or exclamation marks in a review reply ("??", "!!", "?!").
+A deny rule by default: it refuses a run of question or exclamation marks in a review reply ("??", "!!", "?!").
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8014`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 

@@ -279,11 +279,12 @@ test "the baseline names only texts the registry still holds, and nothing outsid
 }
 
 test "the registry's help text is judged by the built proofread" {
-    final got = checkAgainst(support\fixture({"internal/cli/registry.go": "var x = 1\n\tDoc: \"Simply pass the flag\",\n\tShort: \"Pass the flag\",\n"}),
+    final long = "Pass the flag to replay the build from the cache when the key matches. ".repeat(5);
+    final got = checkAgainst(support\fixture({"internal/cli/registry.go": "var x = 1\n\tDoc: \"{long}\",\n\tShort: \"Pass the flag\",\n"}),
         baseline: [<str>]);
     assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
     assert\equal(got[0].line, want: 2, message: "the line of the text");
-    assert\equal(got[0].message.indexOf("[filler]") != null, want: true, message: got[0].message);
+    assert\equal(got[0].message.indexOf("[help-length]") != null, want: true, message: got[0].message);
 }
 
 test "a registry holding no help text is an error, not a pass" {

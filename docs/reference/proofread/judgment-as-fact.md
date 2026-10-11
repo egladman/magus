@@ -1,13 +1,13 @@
 ---
 title: "judgment-as-fact"
-description: "An advisory by default: it explains, and blocks nothing, on a recommendation in a review reply stated as a fact, with no reason given."
+description: "A deny rule by default: it refuses a recommendation in a review reply stated as a fact, with no reason given."
 tags: [proofread, rules, judgment-as-fact, advise]
 aliases: [reference/prose/judgment-as-fact]
 ---
 
 # judgment-as-fact
 
-An advisory by default: it explains, and blocks nothing, on a recommendation in a review reply stated as a fact, with no reason given.
+A deny rule by default: it refuses a recommendation in a review reply stated as a fact, with no reason given.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8002`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 

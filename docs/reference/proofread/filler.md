@@ -1,13 +1,13 @@
 ---
 title: "filler"
-description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
-tags: [proofread, rules, filler, deny]
+description: "An advisory by default: it explains, and blocks nothing, on throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
+tags: [proofread, rules, filler, advise]
 aliases: [reference/prose/filler]
 ---
 
 # filler
 
-A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports throat-clearing ("Note that") and filler adverbs ("simply", "basically").
+An advisory by default: it explains, and blocks nothing, on throat-clearing ("Note that") and filler adverbs ("simply", "basically").
 
 ## What it catches
 
@@ -28,17 +28,17 @@ The code is `PRF4001`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `doc-comment`        | deny    |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-instructions` | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `cli-help`           | deny    |
-| `review-reply`       | deny    |
+| `doc-comment`        | advise  |
+| `reference`          | advise  |
+| `guide`              | advise  |
+| `change-description` | advise  |
+| `agent-instructions` | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `release-notes`      | advise  |
+| `changelog`          | advise  |
+| `cli-help`           | advise  |
+| `review-reply`       | advise  |
 | `agent-reply`        | advise  |
 
 ## Changing it
@@ -49,7 +49,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"filler": "advise"},
+  "rules": {"filler": "deny"},
   "paths": {"blog/**": {"filler": "off"}}
 }
 ```
@@ -62,7 +62,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "filler", "code": "PRF4001", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
+{"rule": "filler", "code": "PRF4001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

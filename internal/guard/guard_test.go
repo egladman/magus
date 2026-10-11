@@ -504,9 +504,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 		v = run(`gh pr comment 412 --body "Good catch: the map is written from two goroutines, so it takes a lock now."`)
 		assert.NotEqual(t, "deny", v.Decision, "a reply is judged as a reply: "+v.Reason+v.Context)
-		v = run(`gh pr comment 412 --body "No, as I said, the map is shared."`)
+		v = run(`gh pr comment 412 --body "Let me delve into why the map is shared."`)
 		assert.Equal(t, verdictWithRule("deny", workspaceShellPrefix+"pull-request-text"), unworded(v), v.Reason)
-		assert.Contains(t, v.Reason, "[reply-opener]")
+		assert.Contains(t, v.Reason, "[buzzword]")
 
 		// The same sources with no gen/ dir: a judge never built denies, and never compiles.
 		unbuilt := t.TempDir()

@@ -1,13 +1,13 @@
 ---
 title: "verdict"
-description: "An advisory by default: it explains, and blocks nothing, on a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\")."
+description: "A deny rule by default: it refuses a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\")."
 tags: [proofread, rules, verdict, advise]
 aliases: [reference/prose/verdict]
 ---
 
 # verdict
 
-An advisory by default: it explains, and blocks nothing, on a judgment word standing in for the behavior it judges ("was broken", "a mess").
+A deny rule by default: it refuses a judgment word standing in for the behavior it judges ("was broken", "a mess").
 
 ## What it catches
 
@@ -28,10 +28,10 @@ The code is `PRF2002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
-| `review-reply`       | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
+| `change-description` | off     |
+| `review-reply`       | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
 
 ## Changing it
 

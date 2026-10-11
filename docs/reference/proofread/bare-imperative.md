@@ -1,13 +1,13 @@
 ---
 title: "bare-imperative"
-description: "An advisory by default: it explains, and blocks nothing, on a short command in a review reply that gives no reason anywhere (\"Fix this.\")."
+description: "A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere (\"Fix this.\")."
 tags: [proofread, rules, bare-imperative, advise]
 aliases: [reference/prose/bare-imperative]
 ---
 
 # bare-imperative
 
-An advisory by default: it explains, and blocks nothing, on a short command in a review reply that gives no reason anywhere ("Fix this.").
+A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere ("Fix this.").
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8012`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 

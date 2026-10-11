@@ -1,13 +1,13 @@
 ---
 title: "hedge"
-description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a softener qualifying a claim (\"might fix\", \"could potentially\")."
-tags: [proofread, rules, hedge, deny]
+description: "A deny rule by default: it refuses a softener qualifying a claim (\"might fix\", \"could potentially\")."
+tags: [proofread, rules, hedge, advise]
 aliases: [reference/prose/hedge]
 ---
 
 # hedge
 
-A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a softener qualifying a claim ("might fix", "could potentially").
+A deny rule by default: it refuses a softener qualifying a claim ("might fix", "could potentially").
 
 ## What it catches
 
@@ -28,15 +28,15 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | deny    |
-| `guide`              | deny    |
-| `change-description` | deny    |
-| `agent-instructions` | deny    |
-| `commit-message`     | deny    |
-| `issue`              | deny    |
-| `release-notes`      | deny    |
-| `changelog`          | deny    |
-| `agent-reply`        | advise  |
+| `reference`          | off     |
+| `guide`              | off     |
+| `change-description` | off     |
+| `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 
@@ -46,7 +46,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"hedge": "advise"},
+  "rules": {"hedge": "deny"},
   "paths": {"blog/**": {"hedge": "off"}}
 }
 ```
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "hedge", "code": "PRF3002", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
+{"rule": "hedge", "code": "PRF3002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/hedge/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
