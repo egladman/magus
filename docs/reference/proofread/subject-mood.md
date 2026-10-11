@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A subject completes "if applied, this commit will ...", so it opens with the verb in the imperative. The rule reads a closed list of about 30 verbs in their past, third-person and gerund forms, not a tagger, so a plural noun that is also a verb ("changes to the key") is reported; the list is the one hack/policy/commits.buzz already denied. Over the 1729 commit messages on main it found nothing, so it denies at no cost.
+A subject completes "if applied, this commit will ...", so it opens with the verb in the imperative. The rule reads a closed list of about 30 verbs in their past, third-person and gerund forms, not a tagger, so a plural noun that is also a verb ("changes to the key") was reported; the list is the one hack/policy/commits.buzz already denied. Over the 1729 commit messages on main it found nothing. Measured 2026-10-11 over the adjudicated labeling round: 83.7% precision (36 of 43) before, 100% (36 of 36, lower bound 0.90) after, so it denies: a third-person form before a preposition or "made" heads a noun phrase ("Changes from the composer", "Fixes for the panel") and is left alone.
 
 ## Default decision
 

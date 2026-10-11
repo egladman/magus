@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-"Simply run" and "of course" tell a reader who is stuck that they should not be. Measured over the guides before the rule, none of 16 lowercase "just" minimized a step, so "just" counts only before a verb the reader carries out, and an "easy" that warns ("easy to get wrong") is left alone.
+"Simply run" and "of course" tell a reader who is stuck that they should not be. Measured over the guides before the rule, none of 16 lowercase "just" minimized a step, so "just" counts only before a verb the reader carries out, and an "easy" that warns ("easy to get wrong") is left alone. Measured 2026-10-11 over the adjudicated labeling round: 44.7% precision (21 of 47) before, 91.3% (21 of 23) after. "Clearly" before a verb says how ("Clearly marks the flag"), so it counts only before a comma, "not" or a subject; quoted words, an "obviously" about the writer's own doing and "Of course," assenting in a reply are left alone. It stays off until 30 labeled firings show it.
 
 ## Default decision
 

@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request opening with "Please", read as less polite than one that gives its reason or asks. A command of five words or fewer counts, unless the reply gives a reason anywhere or the command names code. Measured 2026-10-10 over the AIDev review comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. It advises: between teammates who share the context, a short command can be read as intended.
+Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request opening with "Please", read as less polite than one that gives its reason or asks. A command of five words or fewer counts, unless the reply gives a reason anywhere or the command names code or its target ("change this to appsettings"). Measured 2026-10-10 over the AIDev review comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. It advises: between teammates who share the context, a short command can be read as intended. Measured 2026-10-11 over the adjudicated labeling round: 37.2% precision (16 of 43) before, 100% (16 of 16) after. Most firings followed a sentence stating the problem ("Duplicate documentation. Remove it."), so only a reply made of bare commands is judged. It stays off until 30 labeled firings show it.
 
 ## Default decision
 

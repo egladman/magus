@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A run of fragments reads as a drumbeat. At a cap of 4 words the rule found nothing and missed a real run; at 6 it found that run and docs/scope.md alone. It denies in a change description and advises on a page; a guide's steps and agent instructions are short by rule, so it does not judge them.
+A run of fragments reads as a drumbeat. At a cap of 4 words the rule found nothing and missed a real run; at 6 it found that run and docs/scope.md alone. It denies in a change description and advises on a page; a guide's steps and agent instructions are short by rule, so it does not judge them. Measured 2026-10-11 over the adjudicated labeling round: 28.2% precision (11 of 39) before, 73.3% (11 of 15) after. Left alone now: quoted words, a title, a paragraph laid out as an HTML list, initials and abbreviations, and a run broken by a link, a label ending in a colon, or a line with no word (a path, an emoji, a log line). It stays off: terse template answers ("Low. Only adding a registration.") still fire.
 
 ## Default decision
 

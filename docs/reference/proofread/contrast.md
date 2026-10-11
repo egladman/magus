@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Negative parallelism argues with a position nobody took. It denies in a change description, where 200 merged pull requests used it 0 times, and advises elsewhere, where the docs use it deliberately 15 times.
+Negative parallelism argues with a position nobody took. It denies in a change description, where 200 merged pull requests used it 0 times, and advises elsewhere, where the docs use it deliberately 15 times. Measured 2026-10-11 over the adjudicated labeling round: 61.2% precision (30 of 49) before, 100% (30 of 30, lower bound 0.89) after, so it ships advise everywhere. Left alone now: quoted words, a conditional ("if it is not provided, it is derived"), a correction in parentheses, "not only" before anything but an article, a contrast answering a position the paragraph reports ("You proposed ..."), and "no X, no Y, just" listing what happened.
 
 ## Default decision
 

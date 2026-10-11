@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A contradiction first reads as winning an argument whatever follows it. It measured no false positive, so it denies.
+A contradiction first reads as winning an argument whatever follows it. Measured 2026-10-11 over the adjudicated labeling round: 44.2% precision (19 of 43) before, 95.0% (19 of 20) after. "Wrong" counts only as an exclamation, not before a noun ("Wrong indentation"), and a "No," answering the question the reply quotes, or conceding ("good catch"), is left alone. It stays off until 30 labeled firings show it.
 
 ## Default decision
 

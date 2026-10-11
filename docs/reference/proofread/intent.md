@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A tool has a mechanism, and a person given a motive in writing reads it as an accusation. It advises: "lies" also says where a file lies.
+A tool has a mechanism, and a person given a motive in writing reads it as an accusation. It advises: "lies" also says where a file lies. Measured 2026-10-11 over the adjudicated labeling round: 30.2% precision (13 of 43) before, 81.2% (13 of 16) after. "don't care" is no longer read (every labeled one stated a preference), and quoted words, the writer in the first person, a name ("--pretend", "new-lies.md"), "guessed" before a noun, "lies" closing a "where" clause and an imperative "Pretend" are left alone. It stays off until 30 labeled firings show it.
 
 ## Default decision
 

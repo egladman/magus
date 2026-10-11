@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-"This should be a map" leaves the author to guess why; the reason, or a label saying it is the writer's call, invites an answer. It advises: a modal also states requirements.
+"This should be a map" leaves the author to guess why; the reason, or a label saying it is the writer's call, invites an answer. It advises: a modal also states requirements. Measured 2026-10-11 over the adjudicated labeling round: 23.8% precision (10 of 42) before, 55.6% (10 of 18) after. A reply of more than one sentence gives its facts beside the recommendation, so only a one-sentence reply is judged; a purpose ("to match the guidelines"), an authority ("per the spec"), "would need", and a modal quoted or in parentheses are left alone. It stays off: a reason joined by "and" still fires.
 
 ## Default decision
 

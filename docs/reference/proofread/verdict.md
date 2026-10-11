@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A verdict tells the reader what to think in place of what happened. It advises because "broken" and "wrong" also name a broken test or the wrong checkout; it moves to deny only after every firing on real text was right.
+A verdict tells the reader what to think in place of what happened. It advises because "broken" and "wrong" also name a broken test or the wrong checkout; it moves to deny only after every firing on real text was right. Measured 2026-10-11 over the adjudicated labeling round: 20.9% precision (9 of 43) before, 100% (9 of 9) after. Most firings named the behavior beside the word, so a verdict with a reason or cause in its sentence, or a later sentence in its paragraph, is left alone, as are quoted words, a broken test or link, a denied or supposed state ("nothing was broken", "may be broken"), and the verb senses ("broken into lines", "mess with"). It stays off until 30 labeled firings show it.
 
 ## Default decision
 

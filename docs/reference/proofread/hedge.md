@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A hedge lets a claim stand with no evidence. A writer who is unsure scopes the claim instead: a sentence under a "Not verified" heading, or one opening with "Not measured" or "Untested", states a limit and is exempt.
+A hedge lets a claim stand with no evidence. A writer who is unsure scopes the claim instead: a sentence under a "Not verified" heading, or one opening with "Not measured" or "Untested", states a limit and is exempt. Measured 2026-10-11 over the adjudicated labeling round: 63.8% precision (30 of 47) before, 93.8% (30 of 32, lower bound 0.80) after, so it ships advise. "tries to" counts only with the change as its subject (code that tries names a mechanism), and words quoted or reported ("the plan argues") are left alone.
 
 ## Default decision
 

@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Capitals read as shouting. An acronym is left alone: the rule reports a run of capital words only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 written by bots, which capitalize ALL and ANY in technical prose too, so the rule does not tell the two apart and only advises.
+Capitals read as shouting. An acronym is left alone: the rule reports a run of capital words only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 written by bots, which capitalize ALL and ANY in technical prose too, so the rule does not tell the two apart and only advises. Measured 2026-10-11 over the adjudicated labeling round: 65.9% precision (27 of 41) before, 90.0% (27 of 30, lower bound 0.74) after, so it ships advise. AND or OR joining a condition is an operator, and capitals in single quotes, "ALL CAPS" and one capital word opening a name ("IT Admin") are left alone.
 
 ## Default decision
 
