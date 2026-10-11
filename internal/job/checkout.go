@@ -342,6 +342,20 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
 }
 
+// proofPeers is [heldHere] plus the editing rows no checkout has taken yet. A job is bound
+// only by `job exec`, so two jobs forked back to back are both unbound, and proving the
+// second "alone" would be a claim about a plan nobody has started.
+func proofPeers(rows []types.Job, root, forking string) []types.Job {
+	abs, err := filepath.Abs(root)
+	if root == "" || err != nil {
+		return nil
+	}
+	return slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool {
+		return row.ID == forking || !Editing(row) || len(row.WritePaths) == 0 ||
+			row.CheckoutRoot != "" && row.CheckoutRoot != abs
+	})
+}
+
 // RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
 // load, while another live job with write paths is already working in this checkout.
 //
@@ -495,7 +509,7 @@ func (s *Store) WriteProof(rows []types.Job, id string, candidate types.Job) typ
 	if s == nil {
 		return types.WriteProofAlone
 	}
-	held := heldHere(rows, s.root, id)
+	held := proofPeers(rows, s.root, id)
 	if len(held) == 0 {
 		return types.WriteProofAlone
 	}

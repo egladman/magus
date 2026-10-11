@@ -128,6 +128,31 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 		"an overlap is recorded, never refused: widening a write path is the orchestrator's call")
 }
 
+// A job is bound to a checkout only by exec, so two jobs forked back to back are both
+// unbound. The second still has a peer, and a glob against a file inside it is the pair
+// the proof once called alone.
+func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRoot(t)
+	s := NewStore(tmpLoc(t, root))
+	fork := func(name string, paths ...string) types.Job {
+		t.Helper()
+		row, err := ForkMerge(ctx, s, name, func(u *types.Job) {
+			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
+		}, config.Jobs{}, nil)
+		require.NoError(t, err)
+		return row
+	}
+
+	assert.Equal(t, types.WriteProofAlone, fork("wave/glob", "internal/guard/*.go").WriteProof)
+	assert.Equal(t, types.WriteProofOverlapping, fork("wave/file", "internal/guard/guard.go").WriteProof,
+		"a file the earlier glob matches")
+	assert.Equal(t, types.WriteProofDisjoint, fork("wave/other", "internal/guard/README.md", "docs/x.md").WriteProof,
+		"unbound rows count, and a file the glob does not match is disjoint from it")
+}
+
 // TestForkRefusesADirectoryWritePath pins MGS3018 on both doors that fork by merge: a
 // directory claims every file under it, so no existing one is declarable, project roots
 // included. Only a directory the job creates passes.

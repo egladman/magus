@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // errInvalidJob opens every error a job record's validation returns.
@@ -465,7 +467,8 @@ const JobSchemaVersion = 11
 const JobResultSchemaVersion = 2
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
-// live jobs bound to the SAME CHECKOUT at the moment it was declared.
+// live jobs bound to the SAME CHECKOUT, or not bound to any yet, at the moment it was
+// declared.
 //
 // Recorded rather than enforced, with one exception (write paths covering a workspace-load
 // file, which is refused outright). Two workers overlapping is a call only the
@@ -475,11 +478,11 @@ const JobResultSchemaVersion = 2
 type JobWriteProof string
 
 const (
-	// WriteProofAlone is a fork made in a checkout no other live job with write paths was
-	// bound to. There was nothing to be disjoint FROM, which is not the same claim as
-	// disjoint and is why it is its own value.
+	// WriteProofAlone is a fork made when no other live job with write paths was bound to
+	// the checkout or still waiting to be taken in it. There was nothing to be disjoint
+	// FROM, which is not the same claim as disjoint and is why it is its own value.
 	WriteProofAlone JobWriteProof = "alone"
-	// WriteProofDisjoint is a job whose write paths intersect no other bound job's here.
+	// WriteProofDisjoint is a job whose write paths intersect no other such job's here.
 	WriteProofDisjoint JobWriteProof = "disjoint"
 	// WriteProofOverlapping is one whose write paths intersect another's. The fork stands;
 	// the row says so.
@@ -1735,12 +1738,69 @@ func pathsShareGround(a, b string) bool {
 	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
 		return false
 	}
+	if lit, glob := literalAgainstGlob(a, b); lit != "" {
+		return globReaches(glob, lit)
+	}
 	a, b = LiteralPrefix(a), LiteralPrefix(b)
 	if a == "" || b == "" {
 		// A pattern with no literal prefix ("**/*.go") claims the whole tree.
 		return true
 	}
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+// literalAgainstGlob returns the cleaned literal and the cleaned glob when exactly one of
+// a and b holds a glob metacharacter, and "" for lit for any other pair: two literals and
+// two globs keep the prefix rule, since deciding whether two globs share a path is a
+// solver and a missed collision costs more than a pair read and dismissed.
+func literalAgainstGlob(a, b string) (lit, glob string) {
+	a, _ = SplitClaim(a)
+	b, _ = SplitClaim(b)
+	a, b = path.Clean(a), path.Clean(b)
+	switch aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b); {
+	case aMeta && !bMeta && b != ".":
+		return b, a
+	case bMeta && !aMeta && a != ".":
+		return a, b
+	}
+	return "", ""
+}
+
+// globReaches reports whether glob can match lit, an ancestor of lit, or a path beneath
+// lit, segment by segment, so "internal/guard/*_test.go" reaches "internal/guard" and not
+// "internal/guard/guard.go". A `**` segment can absorb anything below it and so answers
+// true, as does a pattern split on "/" would cut apart: the answer errs toward overlapping.
+func globReaches(glob, lit string) bool {
+	if bracedSlash(glob) {
+		return true
+	}
+	litSegs := strings.Split(lit, "/")
+	for i, seg := range strings.Split(glob, "/") {
+		if strings.Contains(seg, "**") || i >= len(litSegs) {
+			return true
+		}
+		if ok, err := doublestar.Match(seg, litSegs[i]); err == nil && !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// bracedSlash reports whether a "/" sits inside a {...} alternation, or the braces do not
+// balance.
+func bracedSlash(glob string) bool {
+	depth, slash := 0, false
+	for _, r := range glob {
+		switch {
+		case r == '{':
+			depth++
+		case r == '}':
+			depth--
+		case r == '/' && depth > 0:
+			slash = true
+		}
+	}
+	return slash || depth != 0
 }
 
 // LiteralPrefix is the part of a declared path that names actual directories: the

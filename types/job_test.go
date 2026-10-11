@@ -181,6 +181,35 @@ func TestPathsIntersectReadsTheClaimGrammar(t *testing.T) {
 	assert.Equal(t, "pkg/run.go", LiteralPrefix("pkg/run.go#A"), "a declaration is not a path segment")
 }
 
+func TestPathsIntersectMatchesALiteralAgainstAGlobPrecisely(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"internal/guard/guard.go", "internal/guard/*_test.go", false},
+		{"internal/guard/guard_test.go", "internal/guard/*_test.go", true},
+		{"internal/guard/guard.go#A", "internal/guard/*.go", true},
+		{"internal/guard", "internal/guard/*_test.go", true},
+		{"internal", "internal/guard/*_test.go", true},
+		{"internal/guard/sub/x.go", "internal/guard/*.go", false},
+		{"internal/guard/sub/x.go", "internal/guard/**/*.go", true},
+		{"a/b/c", "a/b/*/d.go", true},
+		{"docs/x.md", "internal/**/*.go", false},
+		{"docs/x.md", "**/*.go", true},
+		{"pkg/run.go", "*.go", false},
+		{"internal/a/x.go", "internal/{a,b}/x.go", true},
+		{"internal/c/x.go", "internal/{a,b}/x.go", false},
+		{"internal/c/x.go", "internal/{a/b,c}/x.go", true},
+		{"internal/guard/guard.go", "internal/guard/*.go", true},
+		{"internal/guard/*.go", "internal/*/*_test.go", true},
+	} {
+		assert.Equal(t, tc.want, PathsIntersect(tc.a, tc.b), "%q and %q", tc.a, tc.b)
+		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
+	}
+}
+
 // A finished lease is not competing for anything. The skill has a worker RELEASE its
 // paths when it stops editing, so reporting a pass, a fail, or a no-return as a
 // collision would make the report loudest exactly as the plan winds down.
