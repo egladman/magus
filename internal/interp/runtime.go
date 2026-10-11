@@ -407,6 +407,23 @@ func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
 	return read
 }
 
+type approvedReaderCtxKey struct{}
+
+// WithApprovedSourceReader is WithSourceReader for a reader that returns only what the
+// approval authority holds. A guard-rules load under it keeps its compiled chunks in a
+// store of their own, keyed by the bytes read returned, which no load of working-tree bytes
+// writes; see approvedBytecodeStore.
+func WithApprovedSourceReader(ctx context.Context, read func(path string) ([]byte, error)) context.Context {
+	return context.WithValue(WithSourceReader(ctx, read), approvedReaderCtxKey{}, true)
+}
+
+// approvedSources reports a load whose every source comes from an approved reader: one an
+// overlay entry cannot override.
+func approvedSources(ctx context.Context) bool {
+	approved, _ := ctx.Value(approvedReaderCtxKey{}).(bool)
+	return approved && ctx.Value(overlayCtxKey{}) == nil
+}
+
 // SourceFile is one file a magusfile load read, named by the ContentID of the bytes it
 // read, which costs no process to record.
 type SourceFile struct {
@@ -526,6 +543,22 @@ const staleStampAge = 24 * time.Hour
 //
 // Nil when the cache or the key is unavailable, and the load compiles every time.
 func guardBytecodeStore(root string) buzz.BytecodeStore {
+	return sealedBytecodeStoreUnder("buzz-bytecode", root)
+}
+
+// approvedBytecodeStore is guardBytecodeStore for a load of approved sources, under
+// buzz-bytecode-approved. A chunk's key is a digest of the source bytes the approved reader
+// returned, and every import it was compiled against is checked by digest through that
+// reader before it runs, so an entry is found only for content the approval authority holds
+// now. Working-tree loads never write here, and the seal covers the directory, so a chunk
+// compiled from working-tree bytes and moved in does not verify.
+func approvedBytecodeStore(root string) buzz.BytecodeStore {
+	return sealedBytecodeStoreUnder("buzz-bytecode-approved", root)
+}
+
+// sealedBytecodeStoreUnder is the sealed store for the workspace at root under the user
+// cache's magus/<name>/<compiler stamp>, nil when it is unavailable.
+func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
 	if root == "" {
 		return nil
 	}
@@ -545,7 +578,7 @@ func guardBytecodeStore(root string) buzz.BytecodeStore {
 	if err != nil {
 		return nil
 	}
-	stamps := filepath.Join(base, "magus", "buzz-bytecode")
+	stamps := filepath.Join(base, "magus", name)
 	dir := filepath.Join(stamps, stamp)
 	now := time.Now()
 	if err := os.Chtimes(dir, now, now); errors.Is(err, fs.ErrNotExist) {
@@ -1143,13 +1176,17 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		buzzSess.SetEntryFilter(guardRulesFilterID, guardRulesFilter)
 		// A hook loads these rules in a fresh process, and compiling them is the
 		// part of that load the source bytes do not have to repeat. Ordinary
-		// magusfile loads are left alone, and so is a load of approved sources:
-		// it exists to trust nothing but the bytes its reader returns.
-		if sourceReaderFrom(ctx) == nil {
+		// magusfile loads are left alone. A load of approved sources trusts nothing
+		// but the bytes its reader returns, so it gets a store only working-tree
+		// loads never write, and any other reader gets none.
+		switch {
+		case sourceReaderFrom(ctx) == nil:
 			store = guardBytecodeStore(src.Dir)
-			if store != nil {
-				buzzSess.SetBytecodeStore(store)
-			}
+		case approvedSources(ctx):
+			store = approvedBytecodeStore(src.Dir)
+		}
+		if store != nil {
+			buzzSess.SetBytecodeStore(store)
 		}
 	}
 

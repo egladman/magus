@@ -386,35 +386,78 @@ func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
 	}
 }
 
-// A load of approved sources trusts only the bytes its reader returns. A chunk
-// stored under the approved source's key, whoever wrote it, is not one of them.
-func TestGuardLoadOfApprovedSourcesIgnoresTheStore(t *testing.T) {
+// A load of approved sources trusts only the bytes its reader returns. A chunk a
+// working-tree load stored, under the approved source's key or moved into the approved
+// store over the approved chunk, is not one of them.
+func TestGuardLoadOfApprovedSourcesIgnoresWorkingTreeChunks(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(cache, "workspace"))
 	magusfile := filepath.Join(root, "magusfile.buzz")
 	const approved = "export final approved = 1;\n"
-	write := func(src string) string {
+	read := func(string) ([]byte, error) { return []byte(approved), nil }
+	load := func(ctx context.Context, src string) ([]string, string) {
 		t.Helper()
 		before := storedChunks(t, cache)
 		require.NoError(t, os.WriteFile(magusfile, []byte(src), 0o644))
-		guardLoad(t, t.Context(), root)
+		exports := guardLoad(t, ctx, root)
 		for path := range storedChunks(t, cache) {
 			if !before[path] {
-				return path
+				return exports, path
 			}
 		}
 		t.Fatalf("no chunk stored for %q", src)
-		return ""
+		return nil, ""
 	}
-	approvedChunk := write(approved)
-	planted, err := os.ReadFile(write("export final planted = 1;\n"))
+	_, worktreeChunk := load(t.Context(), approved)
+	_, plantedChunk := load(t.Context(), "export final planted = 1;\n")
+	planted, err := os.ReadFile(plantedChunk)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(approvedChunk, planted, 0o600))
+	require.NoError(t, os.WriteFile(worktreeChunk, planted, 0o600))
 
-	read := func(string) ([]byte, error) { return []byte(approved), nil }
-	assert.Equal(t, []string{"approved"}, guardLoad(t, WithSourceReader(t.Context(), read), root))
+	exports, approvedChunk := load(WithApprovedSourceReader(t.Context(), read), "export final planted = 1;\n")
+	assert.Equal(t, []string{"approved"}, exports)
+	assert.NotEqual(t, filepath.Dir(worktreeChunk), filepath.Dir(approvedChunk), "the approved load keeps its own store")
+
+	require.NoError(t, os.WriteFile(approvedChunk, planted, 0o600))
+	assert.Equal(t, []string{"approved"}, guardLoad(t, WithApprovedSourceReader(t.Context(), read), root))
+}
+
+// A load of approved sources compiles once per content: the next load of the same bytes
+// runs the stored chunk, whatever the working tree holds. A reader of any other kind keeps
+// nothing.
+func TestGuardLoadOfApprovedSourcesCompilesOnce(t *testing.T) {
+	w, cache := testkit.NewWorkspace(t), t.TempDir()
+	root := w.Root()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	w.Magusfile("export final edited = 1;\n")
+	read := func(string) ([]byte, error) { return []byte("export final approved = 1;\n"), nil }
+	compiles := func(ctx context.Context) ([]string, bool) {
+		profile := buzz.NewProfile()
+		exports := guardLoad(t, buzz.WithProfile(ctx, profile), root)
+		return exports, profile.Report() != ""
+	}
+
+	exports, compiled := compiles(WithSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, true}, []any{exports, compiled})
+	assert.Empty(t, storedChunks(t, cache), "a reader that is not the approved one keeps nothing")
+
+	exports, compiled = compiles(WithApprovedSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, true}, []any{exports, compiled})
+	stored := storedChunks(t, cache)
+	require.Len(t, stored, 1)
+	for path := range stored {
+		rel, err := filepath.Rel(filepath.Join(cache, "magus", "buzz-bytecode-approved"), path)
+		require.NoError(t, err)
+		assert.True(t, filepath.IsLocal(rel), "the chunk is kept apart from working-tree chunks: %s", path)
+	}
+
+	exports, compiled = compiles(WithApprovedSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, false}, []any{exports, compiled}, "the second load compiles nothing")
+	assert.Equal(t, stored, storedChunks(t, cache))
 }
 
 // A new build's directory replaces the ones no build has used for a day.

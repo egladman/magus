@@ -3,14 +3,21 @@ package guard
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -426,4 +433,137 @@ func TestCommandRuleAdviceStandsDownOnAServedCommand(t *testing.T) {
 	v, _ = gradeWorkspaceCommand(ctx, Dependencies{CommandRule: probe.rule()},
 		Verdict{Decision: "pass"}, commandRuleInput{command: "gh pr checks 1", preauth: "next"}, hookAttribution{}, hookLocation(ctx, Dependencies{}))
 	assert.Equal(t, "deny", v.Decision, "its deny still holds")
+}
+
+// slowCompiles is a telemetry provider for one load that counts its Buzz compile phases and
+// sleeps slow on the first one past free: a load that compiles more than free phases stands
+// in for a cold compile of the approved policy.
+type slowCompiles struct {
+	observability.Provider
+	free   int32
+	slow   time.Duration
+	phases atomic.Int32
+}
+
+func (*slowCompiles) Enabled() bool { return true }
+
+func (p *slowCompiles) RecordBuzzCompile(context.Context, float64, string, string) {
+	if p.phases.Add(1) == p.free+1 {
+		time.Sleep(p.slow)
+	}
+}
+
+func (*slowCompiles) RecordBuzzImport(context.Context, float64, string, string)      {}
+func (*slowCompiles) RecordBuzzExec(context.Context, float64, string, string)        {}
+func (*slowCompiles) RecordBuzzJITRun(context.Context)                               {}
+func (*slowCompiles) RecordBuzzHostCall(context.Context, observability.BuzzHostCall) {}
+func (*slowCompiles) RecordBuzzVMFault(context.Context, string)                      {}
+
+// A cold compile of the approved policy that runs past its share of the hook's deadline
+// costs that one hook: the compile it paid for is kept, so the next hook compiles nothing
+// and the approved rule answers.
+func TestColdApprovedCompileLapsesOnlyOnce(t *testing.T) {
+	testkit.Isolate(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"magusfile.buzz": "import \"magus\";\n\nmagus\\guard.command(fun (req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"committed\");\n});\n",
+	})
+	repo.Magusfile("import \"magus\";\n")
+	rules, err := magus.LoadGuardRules(t.Context(), repo.Root(), types.VCSOptions{})
+	require.NoError(t, err)
+	require.Nil(t, rules.CommandRule(), "the working tree drops the rule, so the approved one is pending")
+
+	const share = time.Second
+	resolve := func(ctx context.Context) (ruleCall, error) {
+		rule, err := rules.ApprovedCommandRule(ctx)
+		if rule == nil {
+			return nil, err
+		}
+		return func(ctx context.Context) (types.GuardVerdict, error) {
+			return rule(ctx, types.CommandRequest{Command: "touch notes.txt"}, hint.NewGate(t.TempDir(), "s"))
+		}, err
+	}
+	hook := func(provider *slowCompiles) rulesAnswer {
+		// The resolve holds two shares of the deadline to the approved rule's one.
+		ctx, cancel := context.WithTimeout(observability.WithProvider(t.Context(), provider), judgeReserve+share*3/2)
+		defer cancel()
+		return askWorkspaceRules(ctx, seamCommand, Dependencies{}, resolve, nil)
+	}
+
+	// What a load costs with the policy's compile kept, against one that compiles it. The
+	// rest is what the module it imports declares, compiled on every load.
+	cold, warm := &slowCompiles{}, &slowCompiles{}
+	require.Nil(t, hook(cold).lapse)
+	require.Nil(t, hook(warm).lapse)
+	free := warm.phases.Load()
+	require.Less(t, free, cold.phases.Load(), "the second load does not compile the policy")
+
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	first := hook(&slowCompiles{free: free, slow: 2 * share})
+	require.NotNil(t, first.lapse, "the cold compile runs past the hook's deadline")
+	assert.Equal(t, rulesAnswer{
+		answer:   types.GuardVerdict{Decision: types.GuardDeny, Reason: "committed"},
+		by:       decidedByApproved,
+		answered: []string{decidedByApproved},
+	}, hook(&slowCompiles{free: free, slow: 2 * share}), "the next hook answers")
+}
+
+// The approved side runs what the committed revision holds however the working tree edits
+// the policy: an edit is not found under the approved chunks' keys, and the chunks a
+// working-tree load compiled, moved over the approved ones under the same names, do not
+// verify there.
+func TestApprovedCommandRuleIgnoresAWorkingTreeEditOfItsSources(t *testing.T) {
+	testkit.Isolate(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	const rule = "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.%s;\n}\n"
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":      "{}\n",
+		"magusfile.buzz":  "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n",
+		"lib/policy.buzz": fmt.Sprintf(rule, `deny("committed")`),
+	})
+	root := repo.Root()
+	worktreeStore := filepath.Join(cache, "magus", "buzz-bytecode")
+	approvedStore := filepath.Join(cache, "magus", "buzz-bytecode-approved")
+	decide := func(rule workspace.CommandRule) types.GuardDecision {
+		t.Helper()
+		require.NotNil(t, rule)
+		got, err := rule(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+		require.NoError(t, err)
+		return got.Decision
+	}
+	judge := func(edit string) []types.GuardDecision {
+		t.Helper()
+		repo.Write("lib/policy.buzz", fmt.Sprintf(rule, edit))
+		rules, err := magus.LoadGuardRules(t.Context(), root, types.VCSOptions{})
+		require.NoError(t, err)
+		approved, err := rules.ApprovedCommandRule(t.Context())
+		require.NoError(t, err)
+		return []types.GuardDecision{decide(rules.CommandRule()), decide(approved)}
+	}
+
+	assert.Equal(t, []types.GuardDecision{types.GuardAllow, types.GuardDeny}, judge("allow()"))
+
+	moved := 0
+	require.NoError(t, filepath.WalkDir(worktreeStore, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		rel, err := filepath.Rel(worktreeStore, path)
+		require.NoError(t, err)
+		dst := filepath.Join(approvedStore, rel)
+		if _, err := os.Stat(dst); err == nil {
+			moved++
+		}
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(dst), 0o700))
+		return os.WriteFile(dst, data, 0o600)
+	}))
+	require.Positive(t, moved, "the unedited magusfile's working-tree chunk has the approved chunk's name")
+
+	assert.Equal(t, []types.GuardDecision{types.GuardAdvise, types.GuardDeny}, judge(`advise("edited again")`))
 }

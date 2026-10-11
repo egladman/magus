@@ -1938,12 +1938,12 @@ func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
 	assert.Equal(t, stored, chunks(), "the next load compiles nothing")
 }
 
-// The approved side's half of the cold cache: it has none. The approved resolve neither
-// reads nor writes the chunk cache, so it costs the same on every hook, cold or warm, and a
-// cache can neither starve it nor speed it up. A resolve that starts past its deadline reads
-// nothing from version control and answers no rule, which the guard takes for a lapse
-// rather than for "none" (askWorkspaceRules).
-func TestApprovedResolveLeavesTheChunkCacheAlone(t *testing.T) {
+// The approved side keeps its compile in its own sealed store, keyed by committed content,
+// and never reads or writes the working tree's chunk cache: a pending edit cannot seed what
+// the approved rule runs. A resolve that starts past its deadline reads nothing from
+// version control and answers no rule, which the guard takes for a lapse rather than for
+// "none" (askWorkspaceRules).
+func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
 	global = globalFlags{}
 	testkit.Isolate(t)
 	cache := t.TempDir()
