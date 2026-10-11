@@ -87,7 +87,7 @@ func File(ctx context.Context, m *magus.Magus, f Files, path string) error {
 		// Failing here would turn a settled file back into conflict markers over a
 		// bookkeeping write, so the merge proceeds and the person gets the command.
 		slog.With(attr.Component("merge-driver")).WarnContext(ctx, "kept the current version of a generated file but could not record its regeneration; regenerate before committing",
-			slog.String("path", path), slog.String("regenerate", regenerate), slog.String("error", err.Error()))
+			slog.String("path", path), slog.String("regenerate", regenerate), attr.Error(err))
 	case !recorded:
 		// No git dir, so no settle hook; hg, Sapling and jj regenerate by hand.
 		slog.With(attr.Component("merge-driver")).InfoContext(ctx, "kept the current version of a generated file; regenerate before committing",

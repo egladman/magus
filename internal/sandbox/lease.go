@@ -56,7 +56,7 @@ func NarrowToLease(ctx context.Context, policy *Policy, loc job.Location, leaseI
 	if err != nil {
 		slog.WarnContext(ctx, types.FormatDiagnostic(types.AllowlistUnresolved,
 			"job store unreadable; sandbox running with the workspace write grant"),
-			"lease", leaseID, "err", err.Error())
+			"lease", leaseID, attr.Error(err))
 		return policy
 	}
 	row, ok := workerLease(rows, leaseID)

@@ -460,7 +460,7 @@ func runInstall(ctx context.Context, op spells.Op, opts commandOpts) error {
 		switch from, found, err := spell.SeedInstall(ctx, choice, dir); {
 		case err != nil:
 			slog.With(attr.Component("magus")).WarnContext(ctx, "could not seed the dependency tree from another checkout; installing without it",
-				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("err", err.Error()))
+				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), attr.Error(err))
 		case found:
 			slog.With(attr.Component("magus")).InfoContext(ctx, "seeded the dependency tree from another checkout",
 				slog.String("dir", filepath.Join(dir, choice.Install.Dir)), slog.String("from", from))
@@ -699,7 +699,7 @@ func loadLocalSpell(ctx context.Context, path string) (spells.Descriptor, bool) 
 	if !filepath.IsAbs(path) {
 		cwd, err := std.EffectiveCwd(ctx)
 		if err != nil {
-			slog.ErrorContext(ctx, "load local spell: getwd", "err", err)
+			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not resolve a relative local spell path", "path", path, attr.Error(err))
 			return spells.Descriptor{}, false
 		}
 		path = filepath.Join(cwd, path)
@@ -740,7 +740,7 @@ func loadLocalBuzzSpell(ctx context.Context, path string) (spells.Descriptor, bo
 		// resolution falls through to a normal module import. Only a genuinely
 		// malformed spell is worth logging.
 		if !errors.Is(err, spell.ErrNotASpell) {
-			slog.ErrorContext(ctx, "load local spell: buzz", "path", path, "err", err)
+			slog.With(attr.Component("spell")).ErrorContext(ctx, "could not load a local Buzz spell", "path", path, attr.Error(err))
 		}
 		return spells.Descriptor{}, false
 	}

@@ -254,7 +254,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			)
 			if werr != nil {
 				bridgeLog.WarnContext(ctx, "file watcher unavailable; /api/v1/events will emit heartbeats only",
-					slog.String("error", werr.Error()))
+					attr.Error(werr))
 			} else {
 				// ONE consumer of the watcher, two audiences: the SSE stream's graph
 				// invalidation and the activity feed's attributed file changes. Two read
@@ -613,7 +613,7 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 		unmount, err := s.socket.Mount(f.socketMux)
 		if err != nil {
 			// Not fatal: loopback still serves all of it, to a bearer token.
-			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
+			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", attr.Error(err))
 		} else {
 			defer unmount()
 		}
@@ -625,7 +625,7 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 			slog.String("addr", bound.String()))
 	}
 	if err := httpServer.Serve(ctx); err != nil {
-		log.WarnContext(ctx, "shutdown error", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "shutdown error", attr.Error(err))
 		return err
 	}
 	return nil

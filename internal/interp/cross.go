@@ -92,7 +92,7 @@ func crossAncestors(ctx context.Context) []string {
 func (c *CrossDispatch) Dispatch(ctx context.Context, dep *types.Project, target string) error {
 	ref := types.TargetRef{Project: dep.Path, Target: target}
 	if slices.Contains(crossAncestors(ctx), ref.Ref()) {
-		return types.DiagnosticErrorf(types.TargetDependencyCycle, "cross-project cycle: %s", ref.Ref())
+		return types.DiagnosticErrorf(types.TargetDependencyCycle, "a cross-project cycle returns to %s", ref.Ref())
 	}
 	return c.runs.Once(ctx, ref, func() error { return c.runRemote(ctx, dep, ref) })
 }
