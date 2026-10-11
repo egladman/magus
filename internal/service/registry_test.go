@@ -22,7 +22,7 @@ type fakeRunner struct {
 	adopt    bool // answer as if the service was already up
 }
 
-type fakeHandle struct{ id int }
+type numberedHandle struct{ id int }
 
 func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) {
 	f.mu.Lock()
@@ -34,7 +34,7 @@ func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) 
 		return Adopted, nil
 	}
 	f.started++
-	return fakeHandle{id: f.started}, nil
+	return numberedHandle{id: f.started}, nil
 }
 
 func (f *fakeRunner) Stop(context.Context, Handle) {
@@ -240,7 +240,7 @@ func (s *slowRunner) Start(context.Context, spells.Service) (Handle, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.started++
-	return fakeHandle{id: s.started}, nil
+	return numberedHandle{id: s.started}, nil
 }
 
 func (s *slowRunner) Stop(context.Context, Handle) {

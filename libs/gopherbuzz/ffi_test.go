@@ -36,12 +36,12 @@ func TestParseCDeclsCharPtr(t *testing.T) {
 	assert.Equal(t, CCharPtr, sigs[0].Params[0].Type, "getenv sig wrong: %+v", sigs[0])
 }
 
-// fakeFFI is a test FFIProvider: it binds every signature to a Go closure,
+// echoingFFI is a test FFIProvider: it binds every signature to a Go closure,
 // proving an embedder can supply FFI on a platform the purego backend doesn't
 // cover. It ignores the library and returns canned values per type.
-type fakeFFI struct{ opened string }
+type echoingFFI struct{ opened string }
 
-func (f *fakeFFI) OpenLibrary(libname string, sigs []CFuncSig) (vmpackage.Value, error) {
+func (f *echoingFFI) OpenLibrary(libname string, sigs []CFuncSig) (vmpackage.Value, error) {
 	f.opened = libname
 	m := vmpackage.NewMap()
 	for _, sig := range sigs {
@@ -63,8 +63,8 @@ func TestFFIProviderInjection(t *testing.T) {
 	// default backend other tests rely on.
 	prev := GetFFIProvider()
 	defer func() { SetFFIProvider(prev) }()
-	fake := &fakeFFI{}
-	SetFFIProvider(fake)
+	recorded := &echoingFFI{}
+	SetFFIProvider(recorded)
 
 	sess := newSession(context.Background())
 	src := `
@@ -72,7 +72,7 @@ final lib = zdef("mylib", "int dbl(int x);");
 final r = lib.dbl(21);
 `
 	require.NoError(t, sess.Exec(context.Background(), src), "exec")
-	assert.Equal(t, "mylib", fake.opened, "provider saw lib %q, want mylib", fake.opened)
+	assert.Equal(t, "mylib", recorded.opened, "provider saw lib %q, want mylib", recorded.opened)
 	got := sess.GetGlobal("r")
 	require.True(t, got.IsInt(), "r = %s, want 42", got.String())
 	assert.Equal(t, int64(42), got.AsInt(), "r = %s, want 42", got.String())

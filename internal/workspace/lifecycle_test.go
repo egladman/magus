@@ -15,9 +15,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// stubLifecycleRunner installs fn as the runner for one test. The runner is package state
+// installLifecycleRunner installs fn as the runner for one test. The runner is package state
 // the bindings layer sets at init, which this package's tests never link.
-func stubLifecycleRunner(t *testing.T, fn LifecycleRunner) *int {
+func installLifecycleRunner(t *testing.T, fn LifecycleRunner) *int {
 	t.Helper()
 	calls := 0
 	prev := lifecycleRunner
@@ -41,7 +41,7 @@ func answering(got []spells.Lifecycle, err error) LifecycleRunner {
 }
 
 func TestAskLifecyclesUnwiredAsksNothing(t *testing.T) {
-	calls := stubLifecycleRunner(t, answering(goAndNode, nil))
+	calls := installLifecycleRunner(t, answering(goAndNode, nil))
 	a, err := AskLifecycles(t.Context(), ProviderCache{Dir: t.TempDir()}, t.TempDir(), "", []string{"go"}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.LifecycleStatus{State: types.LifecycleUnwired}, a.Status)
@@ -52,7 +52,7 @@ func TestAskLifecyclesUnwiredAsksNothing(t *testing.T) {
 // state cached, and the fetch time of the live call rather than the read.
 func TestAskLifecyclesStoresWhatDoctorReads(t *testing.T) {
 	root, cacheDir := t.TempDir(), t.TempDir()
-	stubLifecycleRunner(t, answering(goAndNode, nil))
+	installLifecycleRunner(t, answering(goAndNode, nil))
 	keys := []string{"nodejs", "go"}
 
 	installed := []InstalledTool{{Project: ".", Bin: "go", Lifecycle: "go", Version: "v1.26.6"}}
@@ -91,7 +91,7 @@ func TestLifecycleCacheMissesWhenAWorkspaceSpellChanges(t *testing.T) {
 	src := filepath.Join(root, "spells", "endoflife-date", "spell.buzz")
 	require.NoError(t, os.MkdirAll(filepath.Dir(src), 0o755))
 	require.NoError(t, os.WriteFile(src, []byte("// v1\n"), 0o644))
-	stubLifecycleRunner(t, answering(goAndNode, nil))
+	installLifecycleRunner(t, answering(goAndNode, nil))
 
 	_, err := AskLifecycles(t.Context(), ProviderCache{Dir: cacheDir}, root, "endoflife-date", []string{"go"}, nil)
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestAskLifecyclesReplaysWhenTheProviderIsNotAsked(t *testing.T) {
 			cache := ProviderCache{Dir: cacheDir}
 			keys := []string{"go"}
 
-			stubLifecycleRunner(t, answering(nil, tc.err))
+			installLifecycleRunner(t, answering(nil, tc.err))
 			none, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
 			require.NoError(t, err, "not asking is not a failure")
 			// Nothing stored, so no records and nothing to date.
@@ -127,11 +127,11 @@ func TestAskLifecyclesReplaysWhenTheProviderIsNotAsked(t *testing.T) {
 				Status: types.LifecycleStatus{Provider: "endoflife-date", State: tc.state, Detail: tc.err.Error()},
 			}, none)
 
-			stubLifecycleRunner(t, answering(goAndNode[:1], nil))
+			installLifecycleRunner(t, answering(goAndNode[:1], nil))
 			live, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
 			require.NoError(t, err)
 
-			stubLifecycleRunner(t, answering(nil, tc.err))
+			installLifecycleRunner(t, answering(nil, tc.err))
 			replayed, err := AskLifecycles(t.Context(), cache, root, "endoflife-date", keys, nil)
 			require.NoError(t, err)
 			assert.Equal(t, LifecycleAnswer{
@@ -151,14 +151,14 @@ func TestAskLifecyclesReplaysWhenTheProviderIsNotAsked(t *testing.T) {
 
 func TestAskLifecyclesReturnsAMalformedAnswer(t *testing.T) {
 	bad := errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is "", want RFC 3339`)
-	stubLifecycleRunner(t, answering(nil, bad))
+	installLifecycleRunner(t, answering(nil, bad))
 	_, err := AskLifecycles(t.Context(), ProviderCache{Dir: t.TempDir()}, t.TempDir(), "endoflife-date", []string{"go"}, nil)
 	require.ErrorIs(t, err, bad)
 }
 
 func TestAskLifecyclesNeverWritesAnImmutableCache(t *testing.T) {
 	root, cacheDir := t.TempDir(), t.TempDir()
-	stubLifecycleRunner(t, answering(goAndNode, nil))
+	installLifecycleRunner(t, answering(goAndNode, nil))
 	_, err := AskLifecycles(t.Context(), ProviderCache{Dir: cacheDir, Immutable: true}, root, "endoflife-date", []string{"go"}, nil)
 	require.NoError(t, err)
 	_, statErr := os.Stat(lifecycleCachePath(cacheDir, "endoflife-date"))
@@ -167,7 +167,7 @@ func TestAskLifecyclesNeverWritesAnImmutableCache(t *testing.T) {
 
 // With no product to ask about there is nothing to fetch; the provider is not called.
 func TestAskLifecyclesWithNoKeysAsksNothing(t *testing.T) {
-	calls := stubLifecycleRunner(t, answering(goAndNode, nil))
+	calls := installLifecycleRunner(t, answering(goAndNode, nil))
 	a, err := AskLifecycles(t.Context(), ProviderCache{}, t.TempDir(), "endoflife-date", nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive}, a.Status)

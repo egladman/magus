@@ -139,16 +139,16 @@ func assertIDWidth(t *testing.T, maxShards, wantWidth int) {
 	}
 }
 
-// stubForecaster is a ci.Forecaster that always returns a fixed
+// fixedPartitionForecaster is a ci.Forecaster that always returns a fixed
 // partition. Used to verify Build delegates correctly when the
 // forecaster option is set.
-type stubForecaster struct {
+type fixedPartitionForecaster struct {
 	calls    int
 	maxSeen  int
 	override [][]*types.Project
 }
 
-func (s *stubForecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
+func (s *fixedPartitionForecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
 	s.calls++
 	s.maxSeen = maxShards
 	return s.override
@@ -158,7 +158,7 @@ func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b", "c", "d")
 	// Forecaster groups everything into one shard regardless of count.
-	f := &stubForecaster{override: [][]*types.Project{projects}}
+	f := &fixedPartitionForecaster{override: [][]*types.Project{projects}}
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)
@@ -171,7 +171,7 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b")
 	// Misbehaving forecaster: returns empty for non-empty input.
-	f := &stubForecaster{override: nil}
+	f := &fixedPartitionForecaster{override: nil}
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)

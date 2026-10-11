@@ -9,27 +9,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeWorkspace implements just the types.WorkspaceRepository methods the impact
+// affectedWorkspace implements just the types.WorkspaceRepository methods the impact
 // engine touches (Affected, AffectedFromPaths, Get, ListTargets). Embedding the
 // interface leaves every other method nil; the engine never calls them.
-type fakeWorkspace struct {
+type affectedWorkspace struct {
 	types.WorkspaceRepository
 	affected *types.AffectedResult
 	projects map[string]*types.Project
 	targets  []types.TargetEntry
 }
 
-func (f *fakeWorkspace) Affected(context.Context, string) (*types.AffectedResult, error) {
+func (f *affectedWorkspace) Affected(context.Context, string) (*types.AffectedResult, error) {
 	return f.affected, nil
 }
 
-func (f *fakeWorkspace) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
+func (f *affectedWorkspace) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
 	return f.affected, nil
 }
 
-func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path] }
+func (f *affectedWorkspace) Get(path string) *types.Project { return f.projects[path] }
 
-func (f *fakeWorkspace) ListTargets(context.Context) ([]types.TargetEntry, error) {
+func (f *affectedWorkspace) ListTargets(context.Context) ([]types.TargetEntry, error) {
 	return f.targets, nil
 }
 
@@ -128,7 +128,7 @@ func TestCompute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ws := &fakeWorkspace{affected: tt.affected, projects: tt.projects, targets: tt.targets}
+			ws := &affectedWorkspace{affected: tt.affected, projects: tt.projects, targets: tt.targets}
 			got, err := Compute(context.Background(), ws, "origin/main")
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
@@ -137,7 +137,7 @@ func TestCompute(t *testing.T) {
 }
 
 func TestComputeFromPaths(t *testing.T) {
-	ws := &fakeWorkspace{
+	ws := &affectedWorkspace{
 		affected: &types.AffectedResult{
 			Base:        "paths",
 			Changed:     []string{"api/main.go"},
@@ -158,15 +158,15 @@ func TestComputeFromPaths(t *testing.T) {
 	}, got)
 }
 
-// fakeSymbolStore is a canned SymbolStore for exercising Enrich without a real graph.
-type fakeSymbolStore struct {
+// cannedSymbolStore is a canned SymbolStore for exercising Enrich without a real graph.
+type cannedSymbolStore struct {
 	hasSymbols bool
 	facts      map[string]FileFacts
 }
 
-func (f *fakeSymbolStore) HasSymbols() bool { return f.hasSymbols }
+func (f *cannedSymbolStore) HasSymbols() bool { return f.hasSymbols }
 
-func (f *fakeSymbolStore) FileFacts(relPath string) FileFacts { return f.facts[relPath] }
+func (f *cannedSymbolStore) FileFacts(relPath string) FileFacts { return f.facts[relPath] }
 
 func TestEnrich(t *testing.T) {
 	tests := []struct {
@@ -178,7 +178,7 @@ func TestEnrich(t *testing.T) {
 		{
 			name:  "no symbol index: single note, no overlay fields",
 			res:   &types.ImpactResult{Base: "origin/main", ChangedFiles: []string{"a.go"}},
-			store: &fakeSymbolStore{hasSymbols: false},
+			store: &cannedSymbolStore{hasSymbols: false},
 			want: &types.ImpactResult{
 				Base:         "origin/main",
 				ChangedFiles: []string{"a.go"},
@@ -190,7 +190,7 @@ func TestEnrich(t *testing.T) {
 		{
 			name: "callers and coverage: symbols sorted by descending refs",
 			res:  &types.ImpactResult{Base: "origin/main", ChangedFiles: []string{"a.go", "b.go"}},
-			store: &fakeSymbolStore{
+			store: &cannedSymbolStore{
 				hasSymbols: true,
 				facts: map[string]FileFacts{
 					"a.go": {
@@ -218,7 +218,7 @@ func TestEnrich(t *testing.T) {
 		{
 			name: "symbols but no coverage: coverage note only",
 			res:  &types.ImpactResult{Base: "origin/main", ChangedFiles: []string{"a.go"}},
-			store: &fakeSymbolStore{
+			store: &cannedSymbolStore{
 				hasSymbols: true,
 				facts: map[string]FileFacts{
 					"a.go": {Symbols: []SymbolFacts{{ID: "symbol:a.Foo", Label: "Foo", RefCount: 1, FileCount: 1}}},
@@ -236,7 +236,7 @@ func TestEnrich(t *testing.T) {
 		{
 			name:  "index loaded but no changed file defines a symbol: two notes",
 			res:   &types.ImpactResult{Base: "origin/main", ChangedFiles: []string{"README.md"}},
-			store: &fakeSymbolStore{hasSymbols: true, facts: map[string]FileFacts{}},
+			store: &cannedSymbolStore{hasSymbols: true, facts: map[string]FileFacts{}},
 			want: &types.ImpactResult{
 				Base:         "origin/main",
 				ChangedFiles: []string{"README.md"},
@@ -261,7 +261,7 @@ func TestEnrichNilInputs(t *testing.T) {
 	res := &types.ImpactResult{ChangedFiles: []string{"a.go"}}
 	Enrich(res, nil)
 	require.Equal(t, &types.ImpactResult{ChangedFiles: []string{"a.go"}}, res)
-	Enrich(nil, &fakeSymbolStore{hasSymbols: true})
+	Enrich(nil, &cannedSymbolStore{hasSymbols: true})
 }
 
 func TestTouchedLinesPlaceADeletionAfterIt(t *testing.T) {
@@ -431,18 +431,18 @@ func TestTouchedByHunkNamesTheHunksThatChangedEachSpan(t *testing.T) {
 	require.Equal(t, Touched(spans, all), union, "the hunks together touch what the whole file's lines do")
 }
 
-// callGraphStub is a CallGraph read from maps.
-type callGraphStub struct {
+// mapCallGraph is a CallGraph read from maps.
+type mapCallGraph struct {
 	callers  map[string][]string
 	boundary map[string]string
 }
 
-func (s callGraphStub) Callers(id string) []string { return s.callers[id] }
-func (s callGraphStub) Boundary(id string) string  { return s.boundary[id] }
-func (s callGraphStub) Qualified(id string) string { return "Q." + id }
+func (s mapCallGraph) Callers(id string) []string { return s.callers[id] }
+func (s mapCallGraph) Boundary(id string) string  { return s.boundary[id] }
+func (s mapCallGraph) Qualified(id string) string { return "Q." + id }
 
 func TestPublicThrough(t *testing.T) {
-	g := callGraphStub{
+	g := mapCallGraph{
 		callers: map[string][]string{
 			"leaf":   {"mid", "direct"},
 			"mid":    {"top"},
@@ -462,7 +462,7 @@ func TestPublicThrough(t *testing.T) {
 }
 
 func TestPublicThroughStopsAtItsDepth(t *testing.T) {
-	g := callGraphStub{
+	g := mapCallGraph{
 		callers:  map[string][]string{"a": {"b"}, "b": {"c"}, "c": {"d"}, "d": {"e"}, "e": {"f"}},
 		boundary: map[string]string{"f": types.DiffBoundaryPackage},
 	}

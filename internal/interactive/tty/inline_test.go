@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeTerm is a writer with a synthetic descriptor, so the repainter treats it
+// descriptorBuffer is a writer with a synthetic descriptor, so the repainter treats it
 // as a terminal without a pty.
-type fakeTerm struct{ bytes.Buffer }
+type descriptorBuffer struct{ bytes.Buffer }
 
-func (*fakeTerm) Fd() uintptr { return 1 }
+func (*descriptorBuffer) Fd() uintptr { return 1 }
 
 // sizedProbe reports a fixed terminal size.
 type sizedProbe struct{ w, h int }
@@ -32,7 +32,7 @@ func (notATerm) Size(uintptr) (int, int, error) { return 0, 0, nil }
 
 func TestInlineViewErasesOnlyItsOwnLines(t *testing.T) {
 	t.Parallel()
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
 
 	require.True(t, p.Paint("alpha\nbravo\ncharlie\n"))
@@ -56,7 +56,7 @@ func TestInlineViewTracksAShrinkingFrame(t *testing.T) {
 	t.Parallel()
 	// The count has to follow the frame, or a view that got shorter leaves its
 	// old tail on screen and every erase after it is off by one.
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
 	require.True(t, p.Paint("one\ntwo\nthree\nfour\n"))
 	require.Equal(t, 4, len(p.painted))
@@ -71,7 +71,7 @@ func TestInlineViewClipsToWidth(t *testing.T) {
 	t.Parallel()
 	// A line that wrapped would occupy two rows while the accounting counted
 	// one, and the view would slowly eat the transcript above it.
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 20, h: 24}}
 	require.True(t, p.Paint(strings.Repeat("x", 100)+"\n"))
 
@@ -87,7 +87,7 @@ func TestInlineViewRefusesAFrameTallerThanTheTerminal(t *testing.T) {
 	// Erasing in place walks the cursor UPWARD, so a block as tall as the
 	// terminal has nowhere to walk back to. The caller falls back rather than
 	// corrupting the screen.
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 10}}
 	assert.False(t, p.Paint(strings.Repeat("line\n", 10)))
 	assert.False(t, p.Paint(strings.Repeat("line\n", 12)))
@@ -98,7 +98,7 @@ func TestInlineViewWritesPlainlyOffATerminal(t *testing.T) {
 	t.Parallel()
 	// Piped or redirected: print the frame and never try to erase, which would
 	// put escape sequences in a file nobody can interpret them in.
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: notATerm{}}
 	require.True(t, p.Paint("alpha\nbravo\n"))
 	require.True(t, p.Paint("charlie\n"))
@@ -112,7 +112,7 @@ func TestInlineViewFinishLeavesTheFrameOnScreen(t *testing.T) {
 	// The frame is the answer the reader asked for. Erasing it on the way out
 	// would be exactly the takeover this avoids; only the cursor moves off it,
 	// so a shell prompt does not land on the last line.
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
 	require.True(t, p.Paint("pool 2/8 running\n"))
 	buf.Reset()
@@ -147,7 +147,7 @@ func stripCSI(s string) string {
 // second for as long as it is open, and most ticks change nothing.
 func TestInlineViewWritesNothingForAnUnchangedFrame(t *testing.T) {
 	t.Parallel()
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
 	frame := "server running\npool 2/8\nuptime 3h\n"
 	require.True(t, p.Paint(frame))
@@ -161,7 +161,7 @@ func TestInlineViewWritesNothingForAnUnchangedFrame(t *testing.T) {
 // jumps to each changed line rather than walking the block.
 func TestInlineViewRewritesOnlyWhatChanged(t *testing.T) {
 	t.Parallel()
-	var buf fakeTerm
+	var buf descriptorBuffer
 	p := &InlineView{w: &buf, probe: sizedProbe{w: 80, h: 24}}
 	require.True(t, p.Paint("spinner |\nstatic one\nstatic two\nstatic three\n"))
 	buf.Reset()

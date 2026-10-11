@@ -8,22 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// stubRepo satisfies types.DepGraphRepository with no-op implementations.
-type stubRepo struct{}
+// emptyRepo satisfies types.DepGraphRepository with no-op implementations.
+type emptyRepo struct{}
 
-func (stubRepo) TopoSort() []string                             { return nil }
-func (stubRepo) ReverseClosure([]string) []string               { return nil }
-func (stubRepo) NearCycles(context.Context, int) []NearCycle    { return nil }
-func (stubRepo) BlastRadius() map[string]int                    { return nil }
-func (stubRepo) NCCD() float64                                  { return 0 }
-func (stubRepo) PathsFromSeeds([]string, string) []AffectedPath { return nil }
-func (stubRepo) Successors(string) []string                     { return nil }
-func (stubRepo) Predecessors(string) []string                   { return nil }
-func (stubRepo) Nodes() []string                                { return nil }
+func (emptyRepo) TopoSort() []string                             { return nil }
+func (emptyRepo) ReverseClosure([]string) []string               { return nil }
+func (emptyRepo) NearCycles(context.Context, int) []NearCycle    { return nil }
+func (emptyRepo) BlastRadius() map[string]int                    { return nil }
+func (emptyRepo) NCCD() float64                                  { return 0 }
+func (emptyRepo) PathsFromSeeds([]string, string) []AffectedPath { return nil }
+func (emptyRepo) Successors(string) []string                     { return nil }
+func (emptyRepo) Predecessors(string) []string                   { return nil }
+func (emptyRepo) Nodes() []string                                { return nil }
 
-// fakeRepo returns canned values so a delegation test can assert each Graph
+// cannedRepo returns canned values so a delegation test can assert each Graph
 // wrapper hands back exactly what the underlying DepGraphRepository produced.
-type fakeRepo struct {
+type cannedRepo struct {
 	topo        []string
 	reverse     []string
 	nearCycles  []NearCycle
@@ -42,36 +42,36 @@ type fakeRepo struct {
 	gotPredecessArg  string
 }
 
-func (f *fakeRepo) TopoSort() []string { return f.topo }
-func (f *fakeRepo) ReverseClosure(seeds []string) []string {
+func (f *cannedRepo) TopoSort() []string { return f.topo }
+func (f *cannedRepo) ReverseClosure(seeds []string) []string {
 	f.gotReverseSeeds = seeds
 	return f.reverse
 }
-func (f *fakeRepo) NearCycles(_ context.Context, maxDepth int) []NearCycle {
+func (f *cannedRepo) NearCycles(_ context.Context, maxDepth int) []NearCycle {
 	f.gotNearCyclesMax = maxDepth
 	return f.nearCycles
 }
-func (f *fakeRepo) BlastRadius() map[string]int { return f.blastRadius }
-func (f *fakeRepo) NCCD() float64               { return f.nccd }
-func (f *fakeRepo) PathsFromSeeds(seeds []string, target string) []AffectedPath {
+func (f *cannedRepo) BlastRadius() map[string]int { return f.blastRadius }
+func (f *cannedRepo) NCCD() float64               { return f.nccd }
+func (f *cannedRepo) PathsFromSeeds(seeds []string, target string) []AffectedPath {
 	f.gotPathsSeeds = seeds
 	f.gotPathsTarget = target
 	return f.paths
 }
-func (f *fakeRepo) Successors(path string) []string {
+func (f *cannedRepo) Successors(path string) []string {
 	f.gotSuccessorArg = path
 	return f.successors
 }
-func (f *fakeRepo) Predecessors(path string) []string {
+func (f *cannedRepo) Predecessors(path string) []string {
 	f.gotPredecessArg = path
 	return f.predecess
 }
-func (f *fakeRepo) Nodes() []string { return f.nodes }
+func (f *cannedRepo) Nodes() []string { return f.nodes }
 
 // TestGraphDelegatesToRepository verifies every Graph wrapper forwards its
 // arguments to the DepGraphRepository and returns the repo's result verbatim.
 func TestGraphDelegatesToRepository(t *testing.T) {
-	f := &fakeRepo{
+	f := &cannedRepo{
 		topo:        []string{"a", "b"},
 		reverse:     []string{"b", "c"},
 		nearCycles:  []NearCycle{{From: "a", To: "b", BackPath: []string{"b", "a"}}},
@@ -96,7 +96,7 @@ func TestGraphDelegatesToRepository(t *testing.T) {
 	assert.Equal(t, 1.75, g.NCCD())
 
 	assert.Equal(t, f.paths, g.PathsFromSeeds([]string{"a"}, "b"))
-	assert.Equal(t, []string{"a"}, f.gotPathsSeeds, "PathsFromSeeds must forward seeds") //nolint:fieldwise // fakeRepo holds canned answers and a call record for every Graph method, each asserted on its own line here, so a whole comparison would restate the fixture
+	assert.Equal(t, []string{"a"}, f.gotPathsSeeds, "PathsFromSeeds must forward seeds") //nolint:fieldwise // cannedRepo holds canned answers and a call record for every Graph method, each asserted on its own line here, so a whole comparison would restate the fixture
 	assert.Equal(t, "b", f.gotPathsTarget, "PathsFromSeeds must forward target")
 
 	assert.Equal(t, []string{"s1"}, g.Successors("x"))
@@ -113,7 +113,7 @@ func TestNewGraph_ProjectLookup(t *testing.T) {
 		"api/":     {Path: "api/"},
 		"gateway/": {Path: "gateway/"},
 	}
-	g := NewGraph(stubRepo{}, projects)
+	g := NewGraph(emptyRepo{}, projects)
 
 	p := g.Project("api/")
 	require.NotNil(t, p)

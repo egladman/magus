@@ -137,12 +137,12 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare"), nil))
 }
 
-type fakeSymbolGraph struct {
+type cannedSymbolGraph struct {
 	nodes []types.KnowledgeMatch
 	defs  map[string]string
 }
 
-func (g fakeSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
+func (g cannedSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	for _, n := range g.nodes {
 		if n.ID == ref || n.Label == ref {
 			return types.KnowledgeRefsOutput{Symbol: n.ID, Label: n.Label, Defs: []types.KnowledgeRefSite{{File: g.defs[n.ID]}}}, true
@@ -151,7 +151,7 @@ func (g fakeSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	return types.KnowledgeRefsOutput{}, false
 }
 
-func (g fakeSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
+func (g cannedSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 	var out []types.KnowledgeMatch
 	for _, n := range g.nodes {
 		if strings.Contains(n.Label, input) {
@@ -164,7 +164,7 @@ func (g fakeSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 func TestGraphSymbolsListsEveryDefinitionOfABareName(t *testing.T) {
 	t.Parallel()
 
-	g := fakeSymbolGraph{
+	g := cannedSymbolGraph{
 		nodes: []types.KnowledgeMatch{
 			{ID: "symbol:config/Validate().", Kind: types.KindSymbol, Label: "Validate"},
 			{ID: "symbol:types/Declaration#Validate().", Kind: types.KindSymbol, Label: "Validate"},

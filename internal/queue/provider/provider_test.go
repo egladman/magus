@@ -477,10 +477,10 @@ func TestTheBridgeRefusesAValueItDoesNotPass(t *testing.T) {
 	require.EqualError(t, err, `field "n" is int, which the bridge does not pass`)
 }
 
-// fakeGitHub answers the GitHub provider's reads from answers, keyed by method, path and
+// cannedGitHub answers the GitHub provider's reads from answers, keyed by method, path and
 // query, and fails the test on any read it has no answer for. It returns the remote URL
 // of acme/widgets on it.
-func fakeGitHub(t *testing.T, answers map[string]answer) string {
+func cannedGitHub(t *testing.T, answers map[string]answer) string {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := r.Method + " " + r.URL.Path
@@ -503,8 +503,8 @@ func fakeGitHub(t *testing.T, answers map[string]answer) string {
 	return "https://" + strings.TrimPrefix(srv.URL, "http://") + "/acme/widgets"
 }
 
-// fakeWeb is the web host the GitHub provider derives from fakeGitHub's API root.
-func fakeWeb() string {
+// cannedWeb is the web host the GitHub provider derives from cannedGitHub's API root.
+func cannedWeb() string {
 	return "https://" + strings.TrimPrefix(os.Getenv("GITHUB_API_URL"), "http://")
 }
 
@@ -530,7 +530,7 @@ func repoAnswers(ownerType string) map[string]answer {
 
 func githubDescribe(t *testing.T, answers map[string]answer, app string, steps bool) (types.Capabilities, error) {
 	t.Helper()
-	remote := fakeGitHub(t, answers)
+	remote := cannedGitHub(t, answers)
 	p, err := Open(context.Background(), "github")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = p.Close() })
@@ -583,7 +583,7 @@ func TestDescribeGitHubRefusesAPrivateAppWhoseIDItCannotRead(t *testing.T) {
 			_, err := githubDescribe(t, tc.answers, "q", true)
 			var refused *types.SetupRefusedError
 			require.ErrorAs(t, err, &refused)
-			assert.Equal(t, tc.want(fakeWeb()), refused)
+			assert.Equal(t, tc.want(cannedWeb()), refused)
 		})
 	}
 }
@@ -596,7 +596,7 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 	_, err := githubDescribe(t, answers, "q", true)
 	var refused *types.SetupRefusedError
 	require.ErrorAs(t, err, &refused)
-	web := fakeWeb()
+	web := cannedWeb()
 	assert.Equal(t, &types.SetupRefusedError{
 		Reason: "github: no GitHub App is named q, since GitHub has no user q[bot]; an app's slug ends the address of its settings page, and the apps are listed",
 		URL:    web + "/settings/apps", App: "<slug>",
@@ -604,7 +604,7 @@ func TestDescribeGitHubRefusesAnAppItCannotFindOrNone(t *testing.T) {
 
 	_, err = githubDescribe(t, repoAnswers("User"), "", true)
 	require.ErrorAs(t, err, &refused)
-	web = fakeWeb()
+	web = cannedWeb()
 	assert.Equal(t, &types.SetupRefusedError{
 		Reason: "github: the merge queue writes only as its own GitHub App, and none is named; register one",
 		URL: web + "/settings/apps/new?name=acme-magus-queue&url=" + strings.ToLower(url.QueryEscape(web+"/acme/widgets")) +
@@ -620,7 +620,7 @@ func TestDescribeGitHubPinsAGivenIDAndChecksIt(t *testing.T) {
 	answers["GET /repos/acme/widgets/pulls?state=all&base=main&sort=updated&direction=desc&per_page=20"] = answer{200, `[]`}
 	got, err := githubDescribe(t, answers, "q:2034567", true)
 	require.NoError(t, err)
-	web := fakeWeb()
+	web := cannedWeb()
 	assert.Equal(t, &types.Setup{
 		StatusContext: "merge-queue",
 		Credential:    types.Integration{ID: "2034567"},

@@ -261,9 +261,9 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 	}, b.Snapshot())
 }
 
-// fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
-// request so the gate's calls can be observed.
-type fakeAdmitter struct {
+// budgetAdmitter is a MachineAdmitter whose answers come from a budget a test writes. It
+// records every request so the gate's calls can be observed.
+type budgetAdmitter struct {
 	mu       sync.Mutex
 	budget   *MachineBudget
 	requests int
@@ -271,7 +271,7 @@ type fakeAdmitter struct {
 	released []string
 }
 
-func (f *fakeAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests++
@@ -281,23 +281,23 @@ func (f *fakeAdmitter) Request(_ context.Context, c types.MachineClaim) (types.M
 	return f.budget.Request(c), nil
 }
 
-func (f *fakeAdmitter) Release(_ context.Context, id string) {
+func (f *budgetAdmitter) Release(_ context.Context, id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.released = append(f.released, id)
 	f.budget.Release(id)
 }
 
-func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
+func testGate(t *testing.T, b *MachineBudget) (*machineGate, *budgetAdmitter) {
 	t.Helper()
-	adm := &fakeAdmitter{budget: b}
+	adm := &budgetAdmitter{budget: b}
 	g := &machineGate{admit: adm, log: newLogger("", 0)}
 	return g, adm
 }
 
 func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 	budget, now := testBudget(t, 1000, 2)
-	adm := &fakeAdmitter{budget: budget}
+	adm := &budgetAdmitter{budget: budget}
 	release, err := AdmitMachine(t.Context(), adm, types.MachineClaim{
 		Project: ".", Target: "session-brief", MemoryMB: 512,
 	}, false)
@@ -454,7 +454,7 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
 		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
-		WithMachineAdmission(&fakeAdmitter{budget: b}))
+		WithMachineAdmission(&budgetAdmitter{budget: b}))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
@@ -521,7 +521,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
-	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&fakeAdmitter{budget: b}))
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
 	require.NoError(t, err)
 
 	sink := &eventSink{}
@@ -551,7 +551,7 @@ func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
 
 // cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the
 // same cache under an admitter whose budget another checkout's claim has filled.
-func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
+func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
 	cdir := t.TempDir()
@@ -565,7 +565,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
-	adm := &fakeAdmitter{budget: b}
+	adm := &budgetAdmitter{budget: b}
 	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm))
 	require.NoError(t, err)
 	return c, adm

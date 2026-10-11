@@ -15,9 +15,9 @@ import (
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 )
 
-// fakeRecorder captures the binding-layer sandbox metric calls. It satisfies
+// capturingRecorder captures the binding-layer sandbox metric calls. It satisfies
 // MetricsRecorder, which the live observability.Provider also satisfies structurally.
-type fakeRecorder struct {
+type capturingRecorder struct {
 	checks   []checkCall
 	dropped  []droppedCall
 	launches []string
@@ -29,20 +29,20 @@ type droppedCall struct {
 	n       int64
 }
 
-func (r *fakeRecorder) RecordSandboxCheck(_ context.Context, access, decision, project string) {
+func (r *capturingRecorder) RecordSandboxCheck(_ context.Context, access, decision, project string) {
 	r.checks = append(r.checks, checkCall{access, decision, project})
 }
 
-func (r *fakeRecorder) RecordSandboxEnvDropped(_ context.Context, project string, n int64) {
+func (r *capturingRecorder) RecordSandboxEnvDropped(_ context.Context, project string, n int64) {
 	r.dropped = append(r.dropped, droppedCall{project, n})
 }
 
-func (r *fakeRecorder) RecordSandboxApply(_ context.Context, _ float64, outcome, scope string) {
+func (r *capturingRecorder) RecordSandboxApply(_ context.Context, _ float64, outcome, scope string) {
 	r.launches = append(r.launches, scope+"/"+outcome)
 }
 
 func TestRecordLaunch(t *testing.T) {
-	rec := &fakeRecorder{}
+	rec := &capturingRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 	RecordLaunch(ctx, 0.01, "applied")
 	RecordLaunch(ctx, 0, "unsupported")
@@ -53,7 +53,7 @@ func TestRecordLaunch(t *testing.T) {
 func TestChecksRecordAllowAndDeny(t *testing.T) {
 	dir := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
-	rec := &fakeRecorder{}
+	rec := &capturingRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(dir, "f")))
@@ -73,7 +73,7 @@ func TestChecksWithoutARecorderStillCheck(t *testing.T) {
 }
 
 func TestRecordEnvDropped(t *testing.T) {
-	rec := &fakeRecorder{}
+	rec := &capturingRecorder{}
 	ctx := WithMetrics(context.Background(), rec)
 
 	RecordEnvDropped(ctx, &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"}}, "go")

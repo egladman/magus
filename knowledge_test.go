@@ -757,13 +757,13 @@ func TestPublishedShardsRefuseToWrite(t *testing.T) {
 	assert.Contains(t, err.Error(), "graph push")
 }
 
-// stubShards answers from a fixed map, for the chain's ordering properties.
-type stubShards struct {
+// fixedShards answers from a fixed map, for the chain's ordering properties.
+type fixedShards struct {
 	blobs map[string]string
 	puts  map[string]string
 }
 
-func (s stubShards) GetShard(_ context.Context, key string) (io.ReadCloser, error) {
+func (s fixedShards) GetShard(_ context.Context, key string) (io.ReadCloser, error) {
 	b, ok := s.blobs[key]
 	if !ok {
 		return nil, knowledge.ErrShardMiss
@@ -771,7 +771,7 @@ func (s stubShards) GetShard(_ context.Context, key string) (io.ReadCloser, erro
 	return io.NopCloser(strings.NewReader(b)), nil
 }
 
-func (s stubShards) PutShard(_ context.Context, key string, r io.Reader) error {
+func (s fixedShards) PutShard(_ context.Context, key string, r io.Reader) error {
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -781,8 +781,8 @@ func (s stubShards) PutShard(_ context.Context, key string, r io.Reader) error {
 }
 
 func TestShardChainReadsInOrderAndWritesToTheFirst(t *testing.T) {
-	first := stubShards{blobs: map[string]string{"shared": "from-cache"}, puts: map[string]string{}}
-	second := stubShards{blobs: map[string]string{"shared": "from-registry", "only-published": "published"}, puts: map[string]string{}}
+	first := fixedShards{blobs: map[string]string{"shared": "from-cache"}, puts: map[string]string{}}
+	second := fixedShards{blobs: map[string]string{"shared": "from-registry", "only-published": "published"}, puts: map[string]string{}}
 	chain := shardChain{first, second}
 
 	assert.Equal(t, "from-cache", readShard(t, chain, "shared"), "the first backing wins a key both hold")

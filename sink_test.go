@@ -109,24 +109,24 @@ func TestEveryFormatRendersEverySinkEvent(t *testing.T) {
 	}
 }
 
-// fakeEncoder stands in for a format that does not exist yet.
-type fakeEncoder struct {
+// recordingEncoder is the encoder of a format that does not exist yet.
+type recordingEncoder struct {
 	got    []any
 	closed bool
 }
 
-func (f *fakeEncoder) encode(_ context.Context, e any) { f.got = append(f.got, e) }
-func (f *fakeEncoder) close() error                    { f.closed = true; return nil }
+func (f *recordingEncoder) encode(_ context.Context, e any) { f.got = append(f.got, e) }
+func (f *recordingEncoder) close() error                    { f.closed = true; return nil }
 
 // Adding a format is adding an encoder to the registry: nothing else learns its name,
 // and every event a sink carries reaches it.
 func TestAFormatIsOneEncoder(t *testing.T) {
-	const fake Format = "fake"
-	enc := &fakeEncoder{}
-	encoders[fake] = func(sinkEnv) encoder { return enc }
-	t.Cleanup(func() { delete(encoders, fake) })
+	const unreleased Format = "unreleased"
+	enc := &recordingEncoder{}
+	encoders[unreleased] = func(sinkEnv) encoder { return enc }
+	t.Cleanup(func() { delete(encoders, unreleased) })
 
-	s, err := NewSink(fake, io.Discard, io.Discard)
+	s, err := NewSink(unreleased, io.Discard, io.Discard)
 	require.NoError(t, err)
 	ctx := t.Context()
 	s.EmitScope(ctx, "api", "magusfile", []string{"api"})

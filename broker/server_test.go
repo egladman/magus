@@ -341,7 +341,7 @@ func TestAConnectionWithoutStateDoesNotPinTheBroker(t *testing.T) {
 	}
 }
 
-type fakeHost struct {
+type refCountingHost struct {
 	mu       sync.Mutex
 	refs     map[string]int
 	last     ServiceSpec
@@ -350,7 +350,7 @@ type fakeHost struct {
 	adopt    bool // answer as if the service was already running
 }
 
-func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) (bool, error) {
+func (h *refCountingHost) Acquire(_ context.Context, key string, spec ServiceSpec) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.last = spec
@@ -364,20 +364,20 @@ func (h *fakeHost) Acquire(_ context.Context, key string, spec ServiceSpec) (boo
 	return !h.adopt, nil
 }
 
-func (h *fakeHost) Release(key string) {
+func (h *refCountingHost) Release(key string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.refs[key]--
 }
 
-func (h *fakeHost) StopAll() int {
+func (h *refCountingHost) StopAll() int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.stopped = true
 	return len(h.refs)
 }
 
-func (h *fakeHost) Snapshot() []types.StatusService {
+func (h *refCountingHost) Snapshot() []types.StatusService {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	var out []types.StatusService
@@ -387,7 +387,7 @@ func (h *fakeHost) Snapshot() []types.StatusService {
 	return out
 }
 
-func (h *fakeHost) count(key string) int {
+func (h *refCountingHost) count(key string) int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.refs[key]
@@ -397,7 +397,7 @@ func (h *fakeHost) count(key string) int {
 // run killed mid-build never released its reference, so the service never idled out.
 func TestServiceReferencesRideTheConnection(t *testing.T) {
 	addr := testAddr(t)
-	host := &fakeHost{}
+	host := &refCountingHost{}
 	serve(t, addr, WithServices(host))
 	c := dial(t, addr)
 	svc := ServiceSpec{Command: []string{"postgres"}}
@@ -434,7 +434,7 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 	assert.Equal(t, CodeNoServices, be.Code, "a broker hosting nothing says so by code, and the run hosts the service itself")
 
 	failing := testAddr(t)
-	serve(t, failing, WithServices(&fakeHost{startErr: errors.New("readiness failed")}))
+	serve(t, failing, WithServices(&refCountingHost{startErr: errors.New("readiness failed")}))
 	fc := dial(t, failing)
 	_, err = fc.AcquireService(t.Context(), "pg", pg)
 	require.ErrorAs(t, err, &be)
@@ -449,7 +449,7 @@ func TestServiceErrorsCarryTheirCode(t *testing.T) {
 // command and idle window the run resolved, and nothing lost in between.
 func TestAServiceSpecCrossesTheWireWhole(t *testing.T) {
 	addr := testAddr(t)
-	host := &fakeHost{}
+	host := &refCountingHost{}
 	serve(t, addr, WithServices(host))
 	want := ServiceSpec{
 		Command:   []string{"postgres", "-D", "/data"},
@@ -476,7 +476,7 @@ func TestAStartServiceReportsWhetherTheBrokerOwnsIt(t *testing.T) {
 	}
 	for _, adopt := range []bool{false, true} {
 		addr := testAddr(t)
-		host := &fakeHost{adopt: adopt}
+		host := &refCountingHost{adopt: adopt}
 		serve(t, addr, WithServices(host))
 		owned, err := dial(t, addr).AcquireService(t.Context(), "machine", want)
 		require.NoError(t, err)
@@ -570,7 +570,7 @@ func awaitServe(t *testing.T, done <-chan error, why string) {
 func TestDrainSeatsNothingNewAndStopsWhenTheLastHolderLeaves(t *testing.T) {
 	addr := testAddr(t)
 	drain := make(chan struct{})
-	host := &fakeHost{}
+	host := &refCountingHost{}
 	_, done := serve(t, addr, WithCapacity(4000, 4), WithServices(host), WithDrain(drain, time.Hour))
 	holder := dial(t, addr)
 	v, err := holder.Request(t.Context(), types.MachineClaim{Project: ".", Target: "test", Slots: 1})
