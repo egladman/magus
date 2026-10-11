@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
@@ -23,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -535,6 +537,85 @@ func TestJobForkResolvesItsCheckpoint(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "a refused fork writes no row")
 	assert.Equal(t, []string{"real", head}, []string{rows[0].ID, rows[0].Checkpoint})
+}
+
+// limitHostSpell is a harness whose host waits ten minutes at most on a foreground call.
+const limitHostSpell = `import "magus/spell";
+
+export fun mgs_getName() > str { return "limit-host"; }
+
+export fun harness_config(target: Target, cb: fun(any)) > {str: any} {
+    return {"path": "hooks.json"};
+}
+
+export fun harness_skills(target: Target, cb: fun(any)) > {str: any} {
+    return {"paths": [], "form": "short"};
+}
+
+export fun harness_entries(target: Target, cb: fun(any)) > [any] {
+    return [];
+}
+
+export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
+    return {"foreground_default_ms": 120000, "foreground_max_ms": 600000};
+}
+`
+
+// A fork notes a check whose last real run took longer than a wired host lets a foreground
+// call wait, naming both numbers, and says nothing when no wired host declares a limit.
+func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	// The spell's harness_limits decode is the bindings' own test. Here the loader answers
+	// for the wired id directly, since another test in this package may have cleared the
+	// spell-backed one.
+	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
+		if id != "limit-host" {
+			return agent.HarnessDescriptor{}, "", false, nil
+		}
+		return agent.HarnessDescriptor{
+			SchemaVersion: 2,
+			ID:            id,
+			Display:       agent.HarnessDisplay{Name: "Limit host"},
+			Skills:        agent.HarnessSkills{Form: agent.FormShort},
+			Config:        agent.HarnessConfig{Path: "hooks.json"},
+			Limits:        &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
+		}, "spell:limit-host", true, nil
+	})
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
+	for _, tt := range []struct {
+		name, magusfile, want string
+	}{
+		{"a wired host with a limit", "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n",
+			"the check `" + hint.Run.With("test", ".") + "` last ran 14m0s here, past the 10m0s a foreground call may wait"},
+		{"no wired host", "import \"magus\";\n", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			resetWorkspaceMemo(t)
+			root, _ := execFixture(t)
+			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tt.magusfile), 0o644))
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
+			// The store is keyed on the workspace root as loaded, symlinks resolved.
+			resolved, err := filepath.EvalSymlinks(root)
+			require.NoError(t, err)
+			dir, err := sessions.Dir(resolved)
+			require.NoError(t, err)
+			w, err := sessions.Open(dir, "invmv00001", sessions.InvocationStart{Command: "run"})
+			require.NoError(t, err)
+			require.NoError(t, w.Append(sessions.KindTargetResult, sessions.TargetResult{
+				Target: "test", Project: ".", Outcome: sessions.OutcomePass, DurationMs: (14 * time.Minute).Milliseconds(),
+			}))
+
+			out := captureStdout(t, func() {
+				require.NoError(t, jobFork(t.Context(), root, []string{"long", "--check", "test .", "--write-paths", "magus.yaml"}))
+			})
+			if tt.want == "" {
+				assert.NotContains(t, out, "foreground call may wait")
+				return
+			}
+			assert.Contains(t, out, tt.want)
+		})
+	}
 }
 
 // The store the CLI opens resolves a ref the worker recorded in its own checkout, so an

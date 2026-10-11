@@ -944,6 +944,8 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "inside its write paths that sit outside them, each with its target: widen the")
 			fmt.Fprintln(os.Stderr, "paths, or regenerate them yourself after integration. It reads declarations only,")
 			fmt.Fprintln(os.Stderr, "so a coupling none records (a version constant a test pins) is not listed.")
+			fmt.Fprintln(os.Stderr, "It also notes a check whose last real run took longer than a wired agent host")
+			fmt.Fprintln(os.Stderr, "lets a foreground call wait, which its holder cannot wait on.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "A --stdin record carrying only id and `enter` ENTERS a live job instead: it")
 			fmt.Fprintln(os.Stderr, "acknowledges one write into that path by somebody other than its holder, and the")
@@ -1066,11 +1068,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
 		job.RenderRegenerated(os.Stdout, notes.Regenerated)
 		job.RenderUnrunGates(os.Stdout, notes.Unrun)
+		job.RenderForegroundOverrun(os.Stdout, notes.Overrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
-		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.Regenerated, UnrunGates: notes.Unrun})
+		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.Regenerated, UnrunGates: notes.Unrun, ForegroundOverrun: notes.Overrun})
 	}
 }
 
