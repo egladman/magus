@@ -360,7 +360,11 @@ import (
 //
 // 119: magus-multi-agent tells a worker to run its check in the foreground with a timeout
 // that covers it and never end its turn while a run is pending.
-const SkillVersion = 119
+//
+// 120: magus-sdk teaches testing code that uses the SDK (role fakes, testkit workspaces and
+// isolation, a one-method Run interface, spelltest) and corrects WithRegisteredSpell to
+// WithSpell and the nested-module tag statement.
+const SkillVersion = 120
 
 const skillLicense = "GPL-3.0-or-later"
 
