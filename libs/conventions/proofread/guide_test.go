@@ -17,6 +17,12 @@ func TestSecondPersonReportsTheProjectVoiceInAGuide(t *testing.T) {
 		// tense reports these, so the guide does not report them again.
 		{"we as the actor of a change", KindGuide, "We added a flag.", nil},
 		{"we'll", KindGuide, "Next we'll add a target.", nil},
+		{"a heading", KindGuide, "## Verify our claims\n\nRun the check.", nil},
+		{"a link's text", KindGuide, "Read [our tools](blog/tools.md) first.", nil},
+		{"the reader beside the project", KindGuide, "You keep the wiring, and we do not force it.", nil},
+		{"the writer in the first person", KindGuide, "I think we got lazy.", nil},
+		{"the reader's", KindGuide, "The reader's checkout is not ours.", nil},
+		{"we in a sentence after one with you", KindGuide, "You run it. We keep the cache.", []string{"1:We"}},
 	})
 }
 

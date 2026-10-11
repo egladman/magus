@@ -134,7 +134,12 @@ var coreTexts = map[Rule]ruleText{
 		dimension: DimensionConventions,
 		catches:   "we, us, our or ours in a guide, which speaks to the reader as you",
 		why: "A guide is followed step by step by the person reading it; \"we\" blurs who acts. A \"we\" " +
-			"the tense rule already reports is left to it, so one word gives one finding.",
+			"the tense rule already reports is left to it, so one word gives one finding. Measured " +
+			"2026-10-11 over the adjudicated labeling round 2: 18.9% precision (7 of 37) before, 25.0% (7 of " +
+			"28) after. A heading, a link's text, and a sentence that names the reader beside the project " +
+			"(\"you keep the wiring, and we do not force it\") or speaks as \"I\" are left alone. The rest " +
+			"came from READMEs, essays and design pages judged as guides, where \"we\" names the authors; " +
+			"no guide in this repository fired. It stays off until a fresh labeling round measures it.",
 	},
 	RuleStepVerb: {
 		code:      "PRF1004",

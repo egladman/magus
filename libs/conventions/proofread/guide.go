@@ -18,19 +18,31 @@ import (
 // capitals is a country or a locale, not the pronoun.
 var projectVoice = regexp.MustCompile(`\b(?:[Ww]e|[Uu]s|[Oo]urs?|[Ll]et's)\b`)
 
+// readerApart is the reader named beside the project, or the writer in the
+// first person singular: either way "we" cannot be read as the reader. "you
+// keep the wiring, and we do not force it"; "I think we got lazy".
+var readerApart = regexp.MustCompile(`\b(?:[Yy]ou|[Yy]our|[Tt]he reader(?:'s)?|I|I'm|I've|I'd)\b`)
+
 // secondPerson reports the project's voice in a guide. A "we" that tense
-// reports, as the actor of a change or in "we'll", is left to it.
+// reports, as the actor of a change or in "we'll", is left to it, and so is
+// one in a heading or a link's text, which titles a page, or in a sentence
+// that keeps the reader apart from the project.
 func secondPerson(in input) []Finding {
 	var out []Finding
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
+		if para.head.heading {
+			continue
+		}
+
 		var taken [][]int
 		if in.reports(tenseCheck) {
 			taken = append(future.FindAllStringIndex(para.text, -1), changeActor.FindAllStringIndex(para.text, -1)...)
 		}
 
 		for _, at := range projectVoice.FindAllStringIndex(para.text, -1) {
-			if within(at[0], taken) {
+			if within(at[0], taken) || inLinkText(para.text, at[0]) ||
+				readerApart.MatchString(sentenceHolding(para.text, at[0])) {
 				continue
 			}
 
@@ -44,6 +56,14 @@ func secondPerson(in input) []Finding {
 	}
 
 	return out
+}
+
+// inLinkText reports whether offset at of text, prose whose link targets are
+// dropped, sits in a link's text: between a "[" and the "]" that closes it.
+func inLinkText(text string, at int) bool {
+	open := strings.LastIndex(text[:at], "[")
+
+	return open >= 0 && !strings.Contains(text[open:at], "]") && strings.Contains(text[at:], "]")
 }
 
 // imperatives are verbs a step opens with, mined from the steps the guides
