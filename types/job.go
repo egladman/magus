@@ -797,6 +797,13 @@ type Job struct {
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
 	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
+	// RootEvidence names the goals whose passing run came from the waiter's checkout
+	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
+	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
+	// failed where the work was written and passed once re-run here is two facts. Each
+	// Gates entry is one goal and the ref taken for it; Checkout and At say where and
+	// when.
+	RootEvidence *JobIntegration `json:"root_evidence,omitempty" yaml:"root_evidence,omitempty"`
 }
 
 // JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
@@ -1866,6 +1873,14 @@ func (u Job) Clone() Job {
 			integration.Gates[i].Violations = slices.Clone(integration.Gates[i].Violations)
 		}
 		c.Integration = &integration
+	}
+	if u.RootEvidence != nil {
+		taken := *u.RootEvidence
+		taken.Gates = slices.Clone(u.RootEvidence.Gates)
+		for i := range taken.Gates {
+			taken.Gates[i].Violations = slices.Clone(taken.Gates[i].Violations)
+		}
+		c.RootEvidence = &taken
 	}
 	return c
 }

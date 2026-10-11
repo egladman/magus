@@ -2982,6 +2982,11 @@ func ObjectJob(v types.Job) vm.Value {
 		optIntegration = ObjectJobIntegration((*v.Integration))
 	}
 	out.MapSet("integration", optIntegration)
+	optRootEvidence := vm.Null
+	if v.RootEvidence != nil {
+		optRootEvidence = ObjectJobIntegration((*v.RootEvidence))
+	}
+	out.MapSet("rootEvidence", optRootEvidence)
 	return out
 }
 
