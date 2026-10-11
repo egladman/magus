@@ -1,5 +1,21 @@
 Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 The project's voice in a guide, where the reader is the one acting.
+
+Retired 2026-10-11, was: fp. Each text came from a page that is not a guide,
+judged as one, and the rule judges guides alone. Source page, then the text:
+  libs/gopherbuzz/docs/ffi.md: separates a C ABI we can keep memory-safe from one that can crash the host.
+  benchmarks/large-monorepo/README.md: We never fork upstream and we patch nothing in its tree.
+  docs/doctrine.md: we operate; [Scope names them](scope.md#where-the-claim-is-strained).
+  blog/2026-08-04-how-i-use-ai-tooling.md: our own registry's limits at the time.
+  blog/2026-09-01-the-best-code-is-still-no-code.md: Neither one lands on the person who added it, which is most of why we keep adding.
+  docs/decisions/0006-the-person-drives-review.md: Agents write code far faster than we can review it, and we are now the bottleneck.
+  docs/scope.md: we control, and it commits a project with no revenue to keeping an aggregator
+  testdata/hosts/SOURCES.md: these means either magus drifted or our transcription is stale, and the `url` is where to settle it.
+  docs/concepts/terminal.md: That is not a bug we
+  CONTRIBUTING.md: against, in our own tree.
+  blog/2026-08-18-i-think-our-tools-are-the-problem.md: The complaint underneath all of them is that our developer tools have slipped.
+  console/README.md: `ui.css`: the base layer plus the per-component sheets we render.
+  docs/concepts/cache.md: signed trust model on top; this page is the substrate it references, so we describe
 -- hit/guide --
 A codec per host would cost us upkeep.
 We keep our cache; the cost is ours.
@@ -14,25 +30,12 @@ We document this order; we don't enforce it.
 rejected, what a constraint is, what bit us and is not visible in the code that
 We document this order, and we don't enforce it.
 -- fp/guide --
-separates a C ABI we can keep memory-safe from one that can crash the host.
-We never fork upstream and we patch nothing in its tree.
 Agents write code faster than we can review it, and review has become the bottleneck that does not scale.
 We never fork upstream, and we patch nothing in its tree.
-we operate; [Scope names them](scope.md#where-the-claim-is-strained).
 we render (Button, Tabs, Card). The bundler inlines them into
-our own registry's limits at the time.
 A failure against one of these is ours.
-Neither one lands on the person who added it, which is most of why we keep adding.
-Agents write code far faster than we can review it, and we are now the bottleneck.
-we control, and it commits a project with no revenue to keeping an aggregator
 It almost never lands on the person who wrote it, and that is most of why we
-these means either magus drifted or our transcription is stale, and the `url` is where to settle it.
-That is not a bug we
-against, in our own tree.
-The complaint underneath all of them is that our developer tools have slipped.
 Nowhere in the codebase do we hardcode one coding agent, or
-`ui.css`: the base layer plus the per-component sheets we render.
-signed trust model on top; this page is the substrate it references, so we describe
 evidence we have: a language with close to no training data produces better
 Because it is ours and not upstream's, it is ours to keep whole.
 -- pass/guide --
