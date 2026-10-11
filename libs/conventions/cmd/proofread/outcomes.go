@@ -69,18 +69,11 @@ var (
 )
 
 // outcomesPath is the one file proofread records to: outcomes.json under
-// $XDG_STATE_HOME/proofread, or ~/.local/state/proofread when the variable is
-// unset or not absolute.
+// $XDG_STATE_HOME/proofread (see [userStateDir]).
 func outcomesPath() (string, error) {
-	dir := os.Getenv("XDG_STATE_HOME")
-
-	if dir == "" || !filepath.IsAbs(dir) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("find the state directory: %w", err)
-		}
-
-		dir = filepath.Join(home, ".local", "state")
+	dir, err := userStateDir()
+	if err != nil {
+		return "", fmt.Errorf("find the state directory: %w", err)
 	}
 
 	return filepath.Join(dir, "proofread", "outcomes.json"), nil

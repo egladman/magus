@@ -285,7 +285,7 @@ review replies, commit messages and issues. `proofread voice build -kind KIND
 [FILE...]` measures the author's own texts, one per file, NUL-separated on stdin,
 or as JSON lines with `-field` (and `-kind-field` for a kind per line), and
 writes the file to `-o`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
-(`~/.config/proofread/voice.json` when unset). It refuses that default inside a
+(under the OS config directory when unset, as magus resolves its own). It refuses that default inside a
 git work tree. The file holds aggregates alone, per kind: the texts and words
 counted, the first-person and future-tense rates, and the p10, p50 and p90 of
 each feature: words, words per sentence, the longest paragraph's words, colons,

@@ -30,7 +30,7 @@
 // one text of -kind, stdin holds texts separated by NUL bytes, and -field reads
 // JSON lines instead, each text in that field and its kind in -kind-field. It
 // writes to -o, by default $XDG_CONFIG_HOME/proofread/voice.json
-// (~/.config/proofread/voice.json when unset), and refuses a default path
+// (under the OS config directory when unset), and refuses a default path
 // inside a git work tree.
 //
 // commit-message reads the message from stdin, or from the file its argument

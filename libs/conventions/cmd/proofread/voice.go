@@ -168,19 +168,15 @@ func jsonLineTexts(name string, r io.Reader, kind proofread.Kind, field, kindFie
 	return nil
 }
 
-// defaultVoicePath is $XDG_CONFIG_HOME/proofread/voice.json, or
-// ~/.config/proofread/voice.json when that is unset or relative.
+// defaultVoicePath is $XDG_CONFIG_HOME/proofread/voice.json (see
+// [userConfigDir]).
 func defaultVoicePath() (string, error) {
-	if dir := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(dir) {
-		return filepath.Join(dir, "proofread", "voice.json"), nil
-	}
-
-	home, err := os.UserHomeDir()
+	dir, err := userConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("find the voice file's directory: %w", err)
 	}
 
-	return filepath.Join(home, ".config", "proofread", "voice.json"), nil
+	return filepath.Join(dir, "proofread", "voice.json"), nil
 }
 
 // workTree returns the root of the git work tree holding dir, or "" when none

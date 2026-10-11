@@ -171,10 +171,10 @@ chose and no path. It never leaves your machine, and you never commit it.
    names its own kind.
 3. Read the summary on stderr. A kind under 30 texts keeps its counts, and
    `voice-drift` does not judge it.
-4. Judge a draft with the file:
+4. Judge a draft with the file, at the path the summary's `wrote` line names:
 
    ```sh
-   proofread review-reply -voice ~/.config/proofread/voice.json -format text < draft.md
+   proofread review-reply -voice <voice file> -format text < draft.md
    ```
 
    A `voice-drift` finding names each feature that drifted, whether the draft runs
@@ -182,7 +182,8 @@ chose and no path. It never leaves your machine, and you never commit it.
    way you would have written it.
 
 `proofread voice build` writes to `$XDG_CONFIG_HOME/proofread/voice.json`
-(`~/.config/proofread/voice.json` when the variable is unset), readable by you alone.
+(the OS config directory when the variable is unset: `~/.config` on Linux,
+`~/Library/Application Support` on macOS), readable by you alone.
 It refuses that default path when it falls inside a git work tree, such as a config
 directory kept in a dotfiles repository, since a commit there would publish the file.
 Name another path with `-o`.
