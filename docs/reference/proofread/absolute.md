@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-An absolute over every run since a change reads as a verdict on whoever made it; saying when and how often states the same fact. It advises because this repository's docs use "never" 788 times and every sampled use states a contract ("never returns nil").
+An absolute over every run since a change reads as a verdict on whoever made it; saying when and how often states the same fact. It advises because this repository's docs use "never" 788 times and every sampled use states a contract ("never returns nil"). Measured 2026-10-11 over the adjudicated labeling round 2: 18.2% precision (8 of 44) before, 66.7% (8 of 12) after. Nearly every firing told what code or data did or lacks, so a verb said of code ("never used", "never existed"), a supposed or contrasted case ("if it never fired", "created but never used"), a "when" condition after it, a parenthetical note, the writer in the first person, quoted words and a "nothing" with no object ("the flag nothing cleared") are left alone. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 

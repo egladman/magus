@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-The tail asserts significance with no subject to own it. It advises: a participle clause is also ordinary grammar.
+The tail asserts significance with no subject to own it. It advises: a participle clause is also ordinary grammar. Measured 2026-10-11 over the adjudicated labeling round 2: 41.9% precision (18 of 43) before, 85.7% (18 of 21) after. "reflecting" is no longer read (it named what a change mirrors), and a tail with no object (a noun in a list), a presenting verb before the bare content it names ("showcasing custom validators"), an item in a list of actions and quoted words are left alone. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 

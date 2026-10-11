@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A maintainer cannot start on a defect they cannot see. A title with a defect word ("crash", "fails", "regression") that is followed by no "expected", "actual", "observed", "steps to reproduce" or "instead of" sends the first reply to asking for them. It advises: the title is read for the defect and the body for the cue, and either can be phrased another way. Neither of this repository's two issues has a defect title, so it measured no firing.
+A maintainer cannot start on a defect they cannot see. A title with a defect word ("crash", "fails", "regression") that is followed by no "expected", "actual", "observed", "steps to reproduce" or "instead of" sends the first reply to asking for them. It advises: the title is read for the defect and the body for the cue, and either can be phrased another way. Neither of this repository's two issues has a defect title, so it measured no firing. Measured 2026-10-11 over the adjudicated labeling round 2, on pull requests read as issues: 26.2% precision (11 of 42) before, 84.6% (11 of 13) after. A title whose type or opening verb names other work ("test:", "Add a regression test"), whose defect word names a topic ("crash detection") or sits in code is no report, and a body that says what should happen, what happened in the past tense, numbered steps or a quote of the original report shows the defect. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 

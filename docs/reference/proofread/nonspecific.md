@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific and inconsiderate, and over half of their respondents had received it in the past year; Bosu et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 written by bots. It advises: an inline comment already sits on its line, which the rule cannot see.
+Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific and inconsiderate, and over half of their respondents had received it in the past year; Bosu et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 written by bots. It advises: an inline comment already sits on its line, which the rule cannot see. Measured 2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of 43) before, 27.3% (3 of 11) after. Most firings named what they judged in a noun phrase ("the indentation", "this logic") or by the noun the judgment modifies ("redundant docstrings"), so only a verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the line they judge. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 

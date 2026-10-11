@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Keep a Changelog heads each release "[version] - date", so a reader and a tool find a release by its number and see when it shipped; "[Unreleased]" carries no date because nothing has shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it.
+Keep a Changelog heads each release "[version] - date", so a reader and a tool find a release by its number and see when it shipped; "[Unreleased]" carries no date because nothing has shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it. Measured 2026-10-11 over the adjudicated labeling round 2: 27.3% precision (3 of 11) before, 100% (3 of 3) after. Every false positive was a tag-named version ("## [v0.4.3] - 2026-09-06"), which follows the shape, so a "v" inside the brackets is accepted. It stays off until a fresh labeling round measures it.
 
 ## Default decision
 
