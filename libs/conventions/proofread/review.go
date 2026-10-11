@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	// RuleNonspecific reports a review reply that judges code or asks for a
-	// change and names nothing to act on: no code, path, line, identifier,
-	// example or reason.
+	// RuleNonspecific reports a top-level review comment that judges code or
+	// asks for a change and names nothing to act on: no code, path, line,
+	// identifier, example or reason. A reply [WithAnchored] marks sits on its
+	// line, and is not judged.
 	RuleNonspecific Rule = "nonspecific"
 	// RuleWhyOpener reports a review reply sentence that opens by asking the
 	// author why they did something ("Why did you").
@@ -39,17 +40,21 @@ var reviewTexts = map[Rule]ruleText{
 	RuleNonspecific: {
 		code:      "PRF8010",
 		dimension: DimensionEvidence,
-		catches:   "a review reply that judges or asks for a change and names no code, path, line, example or reason",
+		catches: "a top-level review comment that judges or asks for a change and names no code, path, line, " +
+			"example or reason",
 		why: "Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific " +
 			"and inconsiderate, and over half of their respondents had received it in the past year; Bosu " +
 			"et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over " +
 			"the AIDev review comments: 2.92 percent of 39639 written by people and 0.15 percent of 42076 " +
-			"written by bots. It advises: an inline comment already sits on its line, which the rule " +
-			"cannot see. Measured 2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of " +
-			"43) before, 27.3% (3 of 11) after. Most firings named what they judged in a noun phrase (\"the " +
-			"indentation\", \"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), " +
-			"so only a verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline " +
-			"on the line they judge. It stays off until a fresh labeling round measures it.",
+			"written by bots. It judges top-level comments only: an inline comment, or a reply in its " +
+			"thread, sits on the line it judges, which is its referent, and the caller says so with " +
+			"-anchored. The anchor gives the place, not the reason, so an anchored bare verdict still " +
+			"lacks the suggestion Gunawardena et al. count, and the rule leaves it alone. Measured " +
+			"2026-10-11 over the adjudicated labeling round 2: 7.0% precision (3 of 43) before, 27.3% (3 " +
+			"of 11) after. Most firings named what they judged in a noun phrase (\"the indentation\", " +
+			"\"this logic\") or by the noun the judgment modifies (\"redundant docstrings\"), so only a " +
+			"verdict on a bare this, it or that, or on nothing, is reported. The rest sat inline on the " +
+			"line they judge. It advises, and stays off until a fresh labeling round measures it.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -147,8 +152,7 @@ var (
 // namesReferent reports whether text, one sentence, names the thing its
 // judgment at at is about: a noun phrase anywhere in it, the noun the
 // judgment modifies, or a clause after it ("strange that we keep two IDs").
-// An inline comment sits on its line, which the rule cannot see, so only a
-// verdict on a bare this, it or that, or on nothing, is reported.
+// Only a verdict on a bare this, it or that, or on nothing, is reported.
 func namesReferent(text string, at []int) bool {
 	rest := strings.TrimLeft(text[at[1]:], " ")
 	if next := leadingWord(rest); next != "" && !predicateTail[strings.ToLower(next)] {
@@ -179,10 +183,14 @@ func leadingWord(rest string) string {
 	return rest[:end]
 }
 
-// nonspecific reports the first judgment in a reply that names nothing to act
-// on. A judgment with a reason beside it in its sentence, or one that names
-// what it judges, is left alone.
+// nonspecific reports the first judgment in a top-level reply that names
+// nothing to act on. A judgment with a reason beside it in its sentence, or
+// one that names what it judges, is left alone.
 func nonspecific(in input) []Finding {
+	if in.opts.anchored {
+		return nil
+	}
+
 	for _, ln := range in.source {
 		if specific.MatchString(ln) {
 			return nil

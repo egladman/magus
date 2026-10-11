@@ -257,6 +257,21 @@ func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
 	assertArgs(t, []string{"review-reply"}, "Let me delve into the race.", want)
 }
 
+// An inline comment's line is its referent, so with -anchored nonspecific
+// leaves the reply alone.
+func TestRunTakesAnchored(t *testing.T) {
+	const reply = "This is confusing."
+
+	advise := writeFile(t, t.TempDir(), "d.json", `{"rules":{"nonspecific":"advise"}}`)
+	message := "Name what 'confusing' refers to and what to change: a line, an identifier in backticks, an " +
+		"example or the reason, as in 'This reads the map without the lock: `cache.get` races with `cache.put`.'"
+
+	assertArgs(t, []string{"review-reply", "-decisions", advise}, reply,
+		rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleNonspecific, proofread.DecisionAdvise,
+			message, "confusing").at(1, 9, 18)))
+	assertArgs(t, []string{"review-reply", "-anchored", "-decisions", advise}, reply, "[]\n")
+}
+
 // A reply that is its author's fourth in the thread draws one finding, which
 // advises unless a table says otherwise.
 func TestRunTakesTheThreadLengthAndTheDecisions(t *testing.T) {

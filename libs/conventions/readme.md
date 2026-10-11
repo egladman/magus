@@ -183,7 +183,9 @@ matching no file argument, and an unknown key are errors that exit 2 and name
 it. `-only` takes comma-separated rule names and judges by those alone; an
 unknown name, or one the table leaves off for every file, exits 2.
 `-thread-length N` tells `long-thread` how many replies the author already
-posted in the thread. The flags follow the kind. `proofread rules` writes every
+posted in the thread, and `-anchored` that the reply sits on a line of the
+diff, an inline comment or a reply in its thread: that line is what it refers
+to, so `nonspecific` judges only top-level comments. The flags follow the kind. `proofread rules` writes every
 rule as its reference page shows it, `{name, code, kinds, decisions, house,
 catches, why}`, and judges nothing; `proofread explain <rule or code>` prints one
 rule's catches, reason, default decisions and page as text. A first argument

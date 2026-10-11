@@ -38,6 +38,34 @@ func TestReviewRulesAdviseOnAReplyOnly(t *testing.T) {
 	}
 }
 
+// An inline comment's line is its referent, so an anchored reply is not
+// judged; the other reply rules still are.
+func TestNonspecificJudgesNoAnchoredReply(t *testing.T) {
+	const reply = "This is confusing. Do NOT merge."
+
+	only := WithOnly(RuleNonspecific, RuleAllCaps)
+
+	var got []Rule
+
+	for _, f := range JudgeText(reply, KindReviewReply, only, WithAnchored()) {
+		got = append(got, f.Rule)
+	}
+
+	if want := []Rule{RuleAllCaps}; !reflect.DeepEqual(got, want) {
+		t.Errorf("anchored findings = %q, want %q", got, want)
+	}
+
+	got = nil
+
+	for _, f := range JudgeText(reply, KindReviewReply, only) {
+		got = append(got, f.Rule)
+	}
+
+	if want := []Rule{RuleNonspecific, RuleAllCaps}; !reflect.DeepEqual(got, want) {
+		t.Errorf("top-level findings = %q, want %q", got, want)
+	}
+}
+
 func TestNonspecificReportsAJudgmentNamingNothingToActOn(t *testing.T) {
 	runTextCases(t, RuleNonspecific, []textCase{
 		{"a verdict", KindReviewReply, "This is confusing.", []string{"1:confusing"}},
