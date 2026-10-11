@@ -22,15 +22,25 @@ func isVCSBinary(name string) bool {
 	return slices.Contains(vcsBinaries, strings.TrimSuffix(filepath.Base(name), ".exe"))
 }
 
-// procVCSRefusal is why proc\exec may not start cmd with args in dir, nil when it may.
-// Version control runs through vcs\cmd alone, because that is where the lease-vcs gate
-// grades it; a VCS binary run by proc\exec, by name, by path, behind a wrapper or inside
-// a shell line, would commit or rewrite a job's tree around every lease rule.
+// procVCSRefusal is RefuseVCS for proc\exec starting cmd with args in dir.
 func procVCSRefusal(cmd string, args []string, dir string) error {
-	for _, c := range argvCommands(append([]string{cmd}, args...)) {
+	return RefuseVCS(`proc\exec`, append([]string{cmd}, args...), dir)
+}
+
+// RefuseVCS is why the Buzz member named label (`proc\exec`, `os.execute`) may not
+// start argv in dir, nil when it may. Version control runs through vcs\cmd alone,
+// because that is where the lease-vcs gate grades it; a VCS binary started any other
+// way, by name, by path, behind a wrapper or inside a shell line, would commit or
+// rewrite a job's tree around every lease rule. The error names the vcs\cmd call to
+// make, with dir as its opts.dir when dir is not empty.
+func RefuseVCS(label string, argv []string, dir string) error {
+	if len(argv) == 0 {
+		return nil
+	}
+	for _, c := range argvCommands(argv) {
 		if isVCSBinary(c.Name) {
-			return fmt.Errorf(`proc\exec %s: %s runs only through vcs\cmd, which holds it to the lease rules: call %s instead`,
-				cmd, c.Name, vcsCmdCall(c.Args, dir))
+			return fmt.Errorf(`%s %s: %s runs only through vcs\cmd, which holds it to the lease rules: call %s instead`,
+				label, argv[0], c.Name, vcsCmdCall(c.Args, dir))
 		}
 	}
 	return nil
