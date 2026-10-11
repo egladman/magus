@@ -111,13 +111,21 @@ proofread calibrate round freeze -dir "$C/labels/round5" \
 
 `freeze` refuses a tree whose rule files are not committed, rule files that changed since
 the sample, and source files whose sha256 differs from the sample's. It writes
-`freeze.json`: the rule commit, the proofread version, the seed, the rules, the gates,
-the guideline's sha256 and every source's sha256. It copies the guideline beside the
+`freeze.json`: the rule commit, the sha256 of the running `proofread` binary
+(`proofread_sha256`), the proofread version, the seed, the rules, the gates, the
+guideline's sha256 and every source's sha256. It copies the guideline beside the
 candidates.
+
+The rule commit and `proofread_sha256` identify the sampler. The version is build info
+and informative only: magus caches build outputs by input across checkouts, so a cache
+hit restores a binary another checkout built, and its stamp names that checkout. A
+freeze from before `proofread_sha256` existed lacks it and still loads.
 
 The default gates are the method's: advise needs a Wilson 95% lower bound of 0.70 over
 30 or more firings, labels agree at no more than n/10 disagreements or alpha 0.80, and
-the worst source with 10 or more firings must also reach 0.70. Override one with
+the worst source with 10 or more firings must also reach 0.70. A rule with any
+disagreement that either labeler left without a note fails the agreement gate, whatever
+its rate. Override one with
 `-gates`, for example `-gates z=2.24` on a rule's second attempt.
 
 ## 4. Label
@@ -135,6 +143,18 @@ the worst source with 10 or more firings must also reach 0.70. Override one with
    id, and a note with a cause tag on every `WRONG`.
 3. Pick labelers who never tuned the rules being judged. Two labelers from one model
    family make correlated mistakes; agreement then measures the family, not the rule.
+4. When both sheets are done, list the ids where they differ, and have each labeler add
+   a note to their own row for every one of them, before adjudication. Labelers work
+   alone, so this is the first time either sees a disagreement:
+
+   ```sh
+   jq -nr --slurpfile a labels-a.jsonl --slurpfile b labels-b.jsonl '
+     ($b | map({(.id): (.label | ascii_upcase)}) | add) as $other |
+     $a[] | select((.label | ascii_upcase) != $other[.id]) | .id'
+   ```
+
+   `score` fails the agreement gate of every rule that has a disagreement where either
+   sheet's note is empty.
 
 ## 5. Adjudicate
 
@@ -154,7 +174,9 @@ rule commit, and a guideline that changed since the freeze. It also refuses an
 unlabeled candidate and a disagreement with no adjudicated row. It writes `scores.json`
 and prints a table: per rule and per source, the firings, the correct count, precision,
 the Wilson lower bound, disagreements, those missing a note, Krippendorff's alpha and
-each gate. A rule that passes advise lists 10 agreed-correct ids to audit by hand before
+each gate. `scores.json` lists the ids of the disagreements missing a note as
+`unnoted_ids`, so you can send them back to the labelers; any such id fails the rule's
+agreement gate until both sheets carry a note. A rule that passes advise lists 10 agreed-correct ids to audit by hand before
 you promote it.
 
 ## 7. Apply the result
@@ -165,7 +187,22 @@ you promote it.
    lower bound in its comment. A rule whose evidence supports its declared default leaves
    the table.
 3. Deny needs two frozen rounds on different sources, pooled to 60 firings with at most
-   one wrong. One round never promotes a rule to deny.
+   one wrong. One round never promotes a rule to deny. Pool two scored rounds:
+
+   ```sh
+   proofread calibrate round pool -dir "$C/labels/round5" -dir "$C/labels/round6"
+   ```
+
+   `pool` scores each round the way `score` does, so it refuses a round that is not
+   frozen or whose rule files or guideline changed since the freeze. It also refuses two
+   rounds that share a source name or a source sha256, and two freezes with different
+   deny gates or Wilson z. Per rule it prints, as JSON, the pooled firings, wrong count,
+   precision, Wilson lower bound and `deny_gate`, true when the pooled firings reach the
+   gate's 60 and wrong stays within 1. A rule that fired in only one round gets a null
+   `deny_gate`. Each round's agreement gate and unnoted count ride along per rule; a
+   rule whose agreement gate failed in either round needs a look before you promote it.
+   Pass `-out FILE` to write the JSON there and print a table instead. `pool` never
+   writes into a round directory, and refuses an `-out` inside one.
 
 ## 8. Record the round
 
@@ -223,5 +260,8 @@ says `unrecorded` where the round kept no such fact.
    you whether you hold the same data.
 
 Rounds 1 to 4 were drawn by one-off scripts before `round sample` existed, so only their
-scores reproduce. Re-scoring round 4 with `-replay` gives its recorded counts, rates and
-gates; its spot-check ids differ, because the original drew them with another generator.
+scores reproduce. Re-scoring round 4 with `-replay` gives its recorded counts and rates. Its
+agreement gate now also needs a note on every disagreement, and three of its rules have
+one disagreement without one, so `round4.json` records those gates as failing, and
+`participles` no longer passes advise. Round 4's freeze records no sources, so it cannot
+be pooled.
