@@ -603,7 +603,7 @@ export fun branchDiff(workspace: str) > fun (base: str) > Facts {
     };
 }
 
-// Judged is one finding of a judge, in the findings JSON libs/conventions/readme.md
+// Judged is one finding of a judge, in the findings JSON libs/conventions/README.md
 // describes: line counts from the first line of the text judged, 0 when the finding has
 // none, and decision is "deny" or "advise".
 export object Judged {

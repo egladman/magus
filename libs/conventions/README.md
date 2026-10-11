@@ -108,8 +108,10 @@ string loops).
 
 ## proofread
 
-`proofread` is not an analyzer, and golangci-lint never loads it. It judges text by
-what the text is for, its kind:
+`proofread` is not an analyzer, and golangci-lint never loads it. To add a rule or a
+kind, or to see how a rule earns its default through calibration, read
+[`proofread/README.md`](proofread/README.md). It judges text by what the text is for,
+its kind:
 
 | Kind                          | Text                                                                                  |
 | ----------------------------- | ------------------------------------------------------------------------------------- |

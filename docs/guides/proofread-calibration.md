@@ -17,8 +17,11 @@ tags:
 A proofread rule ships advise or deny only when fresh labeled firings support it. A
 labeling round is how you get them: you draw firings the rule was never tuned on, fix the
 rule's commit before anyone labels, have two labelers judge each firing alone, settle
-their disagreements, and score the result. This guide runs one round end to end with
-`proofread calibrate round`.
+their disagreements, and score the result. This is calibration, not training: the rules
+stay hand-written, and a round only measures how often one is right. This guide runs one
+round end to end with `proofread calibrate round`. How to add a rule or a kind, and how
+a fix round avoids fooling itself, is in
+[the proofread README](https://github.com/egladman/magus/blob/main/libs/conventions/proofread/README.md).
 
 You need the `proofread` binary from this repository
 (`magus run proofread-build libs/conventions` writes it to

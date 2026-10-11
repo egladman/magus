@@ -19,9 +19,11 @@ package proofread
 // correct firings over all labeled, then the lower bound. nonspecific,
 // second-person and participles were redesigned after round 4 and measured
 // over frozen round 5 (testdata/rounds/round5.json); second-person fired on no
-// guide there, so it keeps its round-2 precision and lower bound.
+// guide there, so it keeps its round-2 precision and lower bound. participles
+// passed advise in round 7 at z 2.24 and stays capped until a person
+// spot-checks the labels that record lists.
 var evidenceCeiling = map[Rule]Decision{
-	RuleNonspecific:      DecisionOff, // round 5: 13/40, 0.20
+	RuleNonspecific:      DecisionOff, // round 7: 17/40, 0.27 at z 2.24
 	RuleAbsolute:         DecisionOff, // 6/40, 0.07
 	RuleSecondPerson:     DecisionOff, // round 2: 0.19, 0.10; no fresh firing in round 5
 	RuleIssueRepro:       DecisionOff, // 26/40, 0.50
@@ -29,7 +31,7 @@ var evidenceCeiling = map[Rule]Decision{
 	RuleIngTail:          DecisionOff, // 3/17, 0.06
 	RuleClaim:            DecisionOff, // 22/40, 0.40
 	RuleOptionList:       DecisionOff, // 0/1
-	RuleParticiples:      DecisionOff, // round 6: 33/40, 0.68
+	RuleParticiples:      DecisionOff, // round 7: 38/40, 0.81 at z 2.24; passed advise, spot-check pending
 
 	RuleVerdict:        DecisionOff,    // 16/40, 0.26
 	RuleJudgmentAsFact: DecisionOff,    // 15/40, 0.24

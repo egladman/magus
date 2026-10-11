@@ -94,7 +94,7 @@ linters:
     # linter of its own so the //nolint:testlayout an import cycle earns cannot
     # silence it, and hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses
     # any directive or exclusion that would. testlayout reports a test file outside
-    # its package and a _unix file name. The reasoning is in libs/testlayout/readme.md.
+    # its package and a _unix file name. The reasoning is in libs/testlayout/README.md.
     #
     # These only exist in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the lines below are present - it exits with

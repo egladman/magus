@@ -353,7 +353,7 @@ export fun renderProofreadRule(r: ProofreadRule) > str {
         + "## See also\n\n"
         + "- [All proofread rules](index.md) - every rule, grouped by what it checks\n"
         + "- [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests\n"
-        + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/readme.md#findings) - the fields every finding carries\n";
+        + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries\n";
 }
 
 // proofreadFamilies is the heading of each PRF family, keyed by the digit after the prefix.
