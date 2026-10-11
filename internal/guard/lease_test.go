@@ -646,11 +646,46 @@ func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
 	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
 	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch))
 	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", scratch}, commit...), wt))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, wt))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, scratch))
 
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main))
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch))
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main))
+}
+
+// TestVCSCmdRefusalExemptsNothingButAnOutsideCommit pins the scratch-repository exemption
+// to a commit standing outside the job's checkout. Pointed at another repository with
+// --git-dir, git takes the job's checkout as the work tree, so a clean or checkout there
+// wipes the job's files; a submodule or nested repository inside the checkout is the
+// job's files under another git directory.
+func TestVCSCmdRefusalExemptsNothingButAnOutsideCommit(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil)
+	scratchGit := "--git-dir=" + filepath.Join(scratch.Root(), ".git")
+
+	nested := filepath.Join(wt, "nested")
+	r.git(wt, "init", "-q", nested)
+	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
+	sub := filepath.Join(wt, "sub")
+
+	for name, c := range map[string]struct {
+		args []string
+		dir  string
+	}{
+		"clean through --git-dir":    {[]string{scratchGit, "clean", "-fdx"}, wt},
+		"checkout through --git-dir": {[]string{scratchGit, "checkout", "--", "."}, wt},
+		"commit through --git-dir":   {[]string{scratchGit, "commit", "-m", "done"}, wt},
+		"clean in a submodule":       {[]string{"clean", "-fdx"}, sub},
+		"commit in a submodule":      {[]string{"commit", "-m", "done"}, sub},
+		"commit in a nested repo":    {[]string{"-C", nested, "commit", "-m", "done"}, wt},
+		"checkout in a nested repo":  {[]string{"checkout", "--", "."}, nested},
+		"clean in a scratch repo":    {[]string{"clean", "-fdx"}, scratch.Root()},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir), name)
+	}
+
+	fresh := testkit.NewRepo(t, nil).Root()
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh))
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git

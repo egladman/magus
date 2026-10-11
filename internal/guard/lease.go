@@ -1395,7 +1395,7 @@ func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
 func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string) error {
 	inv := hint.Invocation{Name: backend, Args: args}
 	site, unlocated := argvSite(inv, dir)
-	if unlocated == "" && inOtherRepository(backend, site, row.CheckoutRoot) {
+	if unlocated == "" && backend == "git" && recordsCommit(inv) && inOtherRepository(site, row.CheckoutRoot) {
 		return nil
 	}
 	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
@@ -1405,22 +1405,23 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
 }
 
-// inOtherRepository reports whether a git call at site acts in a repository other than
-// the one checkout belongs to, such as a script's scratch repository: it cannot touch the
-// job's tree. False when either side cannot be read, so the refusal decides.
-func inOtherRepository(backend string, site vcsSite, checkout string) bool {
-	if backend != "git" || checkout == "" {
+// inOtherRepository reports whether a git call at site stands wholly outside checkout, in a
+// repository of its own, such as a script's scratch repository. A site inside checkout
+// never does, whatever repository it names: a submodule or nested repository there holds
+// the job's files. With a git directory named, git takes the current directory as the
+// work tree, so that directory must be the git directory's own checkout. False when either
+// side cannot be read, so the refusal decides.
+func inOtherRepository(site vcsSite, checkout string) bool {
+	if checkout == "" || within(site.dir, checkout) {
 		return false
 	}
-	dir := site.dir
 	if site.gitDir != "" {
 		root, ok := gitDirCheckout(site.gitDir)
-		if !ok {
+		if !ok || !samePath(site.dir, root) {
 			return false
 		}
-		dir = root
 	}
-	_, common, ok := gitCheckout(dir)
+	_, common, ok := gitCheckout(site.dir)
 	if !ok {
 		return false
 	}
