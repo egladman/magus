@@ -10,3 +10,7 @@
   `ctx.writesFiles`, unless it composes that sibling with `ctx.needs`. A cached `lint` had
   been writing a stale `gen/**` back over a regenerated one, so the drift check of
   `generate` failed again on every run.
+- **A cached drift gate no longer passes over stale committed outputs.** A target that
+  declares outputs and branches on `rw`, run without `rw`, replays a hit only while every
+  output still reads as the entry recorded it; otherwise the check runs. A tree that still
+  matches keeps replaying, so the generator is still skipped.

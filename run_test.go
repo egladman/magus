@@ -803,6 +803,42 @@ export fun plain() > void {}
 	assert.NotContains(t, lines, "magus:"+stamp)
 }
 
+// TestDriftGateStampsItsOutputsOnlyWithoutWrite: a target that declares outputs and
+// branches on rw is a drift gate when run without rw, so its hit is stamped on its
+// outputs (cache.Step.StampOutputs). Under rw it writes them, and a build that never
+// reads rw keeps restoring its outputs on a hit.
+func TestDriftGateStampsItsOutputsOnlyWithoutWrite(t *testing.T) {
+	root := t.TempDir()
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+    if (ctx.hasCharm("rw")) { return; }
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("dist/**");
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    if (ctx.hasCharm("rw")) { return; }
+}
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	keyed := func(target string, charms ...string) cache.Step {
+		step := m.buildStep(p, target)
+		applyRunKeying(&step, p, nil, nil, charms)
+		return step
+	}
+	assert.True(t, keyed("generate").StampOutputs, "the check form compares its outputs")
+	assert.False(t, keyed("generate", types.CharmReadWrite).StampOutputs, "the rw form writes them")
+	assert.False(t, keyed("build").StampOutputs, "a build that never reads rw restores its outputs")
+	assert.False(t, keyed("lint").StampOutputs, "a target declaring no outputs has none to stamp")
+}
+
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
 // magus.inputs/outputs call with a non-literal (computed) argument is a hard load
 // error, because a computed footprint is invisible to the static cache read.

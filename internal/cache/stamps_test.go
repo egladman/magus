@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,6 +45,64 @@ func TestStampsGateTheReplay(t *testing.T) {
 	require.NoError(t, os.WriteFile(stamp, []byte("lock v0"), 0o644))
 	assert.False(t, run().Hit, "a stamp another tool rewrote no longer vouches for the entry")
 	assert.Equal(t, 3, calls)
+}
+
+// TestStampedOutputsGateTheReplay pins the cached drift gate: proto's generate runs
+// without rw as a check, and a hit used to restore fresh outputs over stale committed
+// ones and pass without comparing anything. With StampOutputs a hit replays only while
+// the tree's outputs read as the entry recorded them, so a tree that still matches
+// keeps skipping the generator.
+func TestStampedOutputsGateTheReplay(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	gen := filepath.Join(root, "test", "pkg", "gen")
+	out := filepath.Join(gen, "api.pb.go")
+
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/gen/**")
+	step.OutputsDeclared = true
+	step.StampOutputs = true
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		require.NoError(t, os.MkdirAll(gen, 0o755))
+		return os.WriteFile(out, []byte("generated v2"), 0o644)
+	}
+	run := func() Result {
+		t.Helper()
+		r, err := c.Run(context.Background(), step, fn)
+		require.NoError(t, err)
+		return r
+	}
+	cached := func() bool {
+		t.Helper()
+		hit, err := c.IsCached(context.Background(), step)
+		require.NoError(t, err)
+		return hit
+	}
+
+	assert.False(t, run().Hit)
+	assert.True(t, run().Hit, "outputs as the entry recorded them: the generator is skipped")
+	assert.True(t, cached(), "the probe answers as the lookup does")
+
+	require.NoError(t, os.WriteFile(out, []byte("stale"), 0o644))
+	assert.False(t, cached())
+	assert.False(t, run().Hit, "a stale committed output must reach the check, not be papered over")
+	assert.Equal(t, 2, calls)
+
+	orphan := filepath.Join(gen, "orphan.pb.go")
+	require.NoError(t, os.WriteFile(orphan, []byte("left behind"), 0o644))
+	assert.False(t, run().Hit, "a file the outputs match that the entry never recorded is drift too")
+	require.NoError(t, os.Remove(orphan))
+	assert.False(t, run().Hit, "the last entry recorded the orphan, so its removal moves the tree")
+	require.NoError(t, os.Remove(out))
+	assert.False(t, run().Hit, "a deleted output must regenerate through the check")
+	assert.Equal(t, 5, calls)
+
+	step.StampOutputs = false
+	require.NoError(t, os.WriteFile(out, []byte("stale"), 0o644))
+	assert.True(t, run().Hit, "an unstamped step restores its outputs, as a build's hit always has")
+	assert.Equal(t, 5, calls)
 }
 
 // A stamp the tool never writes can never vouch for a tree, so the entry never replays.

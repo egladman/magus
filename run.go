@@ -501,6 +501,35 @@ func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.
 	return types.CompactGlobs(out)
 }
 
+// outputCheckTargets finds, per project path, the targets that declare outputs and whose
+// body branches on the rw charm: run without rw, such a target is a drift gate that
+// compares its outputs instead of writing them. A source that cannot be read
+// contributes nothing, as in applyTargetDepsAndFootprint.
+func outputCheckTargets(projects []*types.Project) map[string]map[string]bool {
+	out := map[string]map[string]bool{}
+	for _, p := range projects {
+		srcs, err := interp.FindAll(p.Dir)
+		if err != nil {
+			continue
+		}
+		for _, src := range srcs {
+			if src.Engine != "buzz" {
+				continue
+			}
+			for _, n := range describe.Extract(concatSource(src)) {
+				if len(p.TargetOutputs[n.Name]) == 0 || !slices.Contains(n.Charms, types.CharmReadWrite) {
+					continue
+				}
+				if out[p.Path] == nil {
+					out[p.Path] = map[string]bool{}
+				}
+				out[p.Path][n.Name] = true
+			}
+		}
+	}
+	return out
+}
+
 // buildStep assembles the cache.Step for running target on p.
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
@@ -564,6 +593,7 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
 		// which a check-only target never produces; see OutputsDeclared.
 		step.OutputsDeclared = true
+		step.StampOutputs = m.outputChecks[p.Path][target]
 	} else if len(step.Outputs) > 0 {
 		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
 	}
@@ -904,6 +934,11 @@ func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observatio
 	ck := slices.Clone(charms)
 	slices.Sort(ck)
 	step.Charms = slices.Compact(ck)
+	// Under rw the gate writes its outputs rather than comparing them, so a hit restoring
+	// them over stale ones is the answer that run would give.
+	if slices.Contains(step.Charms, types.CharmReadWrite) {
+		step.StampOutputs = false
+	}
 }
 
 // outputWatchDirs are the base directories the race detector watches for one target: the

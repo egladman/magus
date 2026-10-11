@@ -645,6 +645,20 @@ on every run. So a glob another target declares is never recorded or restored by
 a target that inherits it, unless that target composes the declaring one with
 `ctx.needs`, whose writes land inside its own run. Nothing about the key changes.
 
+A drift gate's hit has the opposite problem. A target that declares outputs and
+branches on the `rw` charm compares those outputs when run without `rw`: it
+regenerates and fails if the bytes moved. Its key covers the generator's inputs,
+not the committed outputs, so a hit after someone committed a stale output would
+restore the fresh copy and pass without comparing anything. So for that form,
+and only that form, the entry's recorded output digests vouch for the tree: a hit
+replays only while every file the outputs match reads as the entry recorded it.
+A changed, missing or unrecorded file is a miss, and the gate runs its check. A
+tree that still matches replays as before, so a gate in front of a costly or
+rate-limited generator (proto's remote buf plugins) still skips it. The `rw`
+form, and every target that never reads `rw`, restores its outputs on a hit
+unconditionally. The check reads the working tree, so a remote entry vouches as
+well as a local one.
+
 ## One owner per generated file
 
 A generated file has exactly one owning target: the one that declares it. Two

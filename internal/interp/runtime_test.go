@@ -5,6 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	goast "go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"maps"
 	"os"
@@ -566,4 +569,182 @@ func BenchmarkMagusfileFacts(b *testing.B) {
 			loadMagusfileFacts(store, code)
 		}
 	})
+}
+
+// TestBinaryAnswersCoverEveryForkingMember holds binaryAnswers to std: every magus member
+// whose Go implementation reaches runMagus (a nested magus) must fall under an entry, or
+// a target calling it keys on nothing that moves when the binary does and replays the old
+// binary's answer. A new forking member fails here rather than escaping the key.
+//
+// The bindings are read structurally: each std.Magus* call sits inside the closure
+// registered under a string literal, in a file whose namespace bindingPrefix names.
+func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
+	forks := stdForkingFuncs(t, filepath.Join("..", "..", "std"))
+	require.Contains(t, forks, "MagusDescribeRule", "the fork walk must see runMagusJSON")
+	require.Contains(t, forks, "MagusCmd", "the fork walk must see runMagusSub")
+
+	bindingPrefix := map[string][]string{
+		filepath.Join("bindings", "gen", "magus.go"): nil,
+		filepath.Join("bindings", "describe.go"):     {"describe"},
+		filepath.Join("bindings", "job.go"):          {"job"},
+		filepath.Join("bindings", "magus_trail.go"):  {"trail"},
+		filepath.Join("bindings", "magus_vcs.go"):    {"vcs"},
+	}
+	covered := func(path []string) bool {
+		return slices.ContainsFunc(binaryAnswers, func(entry []string) bool {
+			return len(entry) <= len(path) && slices.Equal(entry, path[:len(entry)])
+		})
+	}
+	seen := 0
+	for _, file := range bindingFiles(t, "bindings") {
+		prefix, known := bindingPrefix[file]
+		for member, fn := range stdBindings(t, file) {
+			if !known {
+				t.Errorf("%s binds std.%s as %q but names no magus namespace here; add it to bindingPrefix", file, fn, member)
+				continue
+			}
+			seen++
+			path := append(slices.Clone(prefix), member)
+			if forks[fn] {
+				assert.True(t, covered(path), "magus\\%s forks a nested magus (std.%s) but binaryAnswers does not cover it",
+					strings.Join(path, "."), fn)
+			}
+		}
+	}
+	require.Positive(t, seen, "no std.Magus bindings found")
+}
+
+// stdForkingFuncs returns the top-level functions of the Go package in dir that reach
+// runMagus through calls within the package.
+func stdForkingFuncs(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	calls := map[string][]string{}
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	require.NoError(t, err)
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
+		require.NoError(t, err)
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*goast.FuncDecl)
+			if !ok || fd.Recv != nil || fd.Body == nil {
+				continue
+			}
+			goast.Inspect(fd.Body, func(n goast.Node) bool {
+				call, ok := n.(*goast.CallExpr)
+				if !ok {
+					return true
+				}
+				fun := call.Fun
+				switch x := fun.(type) {
+				case *goast.IndexExpr:
+					fun = x.X
+				case *goast.IndexListExpr:
+					fun = x.X
+				}
+				if id, ok := fun.(*goast.Ident); ok {
+					calls[fd.Name.Name] = append(calls[fd.Name.Name], id.Name)
+				}
+				return true
+			})
+		}
+	}
+	forks := map[string]bool{"runMagus": true}
+	for changed := true; changed; {
+		changed = false
+		for fn, callees := range calls {
+			if !forks[fn] && slices.ContainsFunc(callees, func(c string) bool { return forks[c] }) {
+				forks[fn], changed = true, true
+			}
+		}
+	}
+	return forks
+}
+
+// bindingFiles lists the non-test Go files under dir, relative to the package.
+func bindingFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			out = append(out, path)
+		}
+		return err
+	})
+	require.NoError(t, err)
+	return out
+}
+
+// stdBindings maps each member a binding file registers to the std.Magus* function its
+// closure calls: the string literal opening the innermost enclosing registration,
+// MapSet("cmd", ...) or bind("rule", ...), names the member.
+func stdBindings(t *testing.T, file string) map[string]string {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
+	require.NoError(t, err)
+	out := map[string]string{}
+	var stack []*goast.CallExpr
+	var walk func(n goast.Node) bool
+	walk = func(n goast.Node) bool {
+		call, ok := n.(*goast.CallExpr)
+		if !ok {
+			return true
+		}
+		if sel, isSel := call.Fun.(*goast.SelectorExpr); isSel {
+			if pkg, isIdent := sel.X.(*goast.Ident); isIdent && pkg.Name == "std" && strings.HasPrefix(sel.Sel.Name, "Magus") {
+				for i := len(stack) - 1; i >= 0; i-- {
+					if !isRegistration(stack[i]) || len(stack[i].Args) == 0 {
+						continue
+					}
+					if lit, isLit := stack[i].Args[0].(*goast.BasicLit); isLit && lit.Kind == token.STRING {
+						name, err := strconv.Unquote(lit.Value)
+						require.NoError(t, err)
+						out[name] = sel.Sel.Name
+						break
+					}
+				}
+			}
+		}
+		stack = append(stack, call)
+		for _, arg := range append([]goast.Expr{call.Fun}, call.Args...) {
+			goast.Inspect(arg, walk)
+		}
+		stack = stack[:len(stack)-1]
+		return false
+	}
+	goast.Inspect(f, walk)
+	return out
+}
+
+func isRegistration(call *goast.CallExpr) bool {
+	switch fun := call.Fun.(type) {
+	case *goast.SelectorExpr:
+		return fun.Sel.Name == "MapSet"
+	case *goast.Ident:
+		return fun.Name == "bind"
+	}
+	return false
+}
+
+func TestNestedMagusTargetsFollowsHelpersAndImports(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`namespace lib;
+import "magus";
+export fun page() > str { return magus\describe.graphMarkdown(["."]); }
+export fun plain() > void {}
+`), 0o644))
+	src := `import "magus";
+import "./lib" as lib;
+export fun direct(ctx: magus\Context, args: [str]) > void { final r = magus\describe.rule(); }
+export fun viaHelper(ctx: magus\Context, args: [str]) > void { helper(); }
+fun helper() > void { magus\cmd("doctor", []); }
+export fun viaImport(ctx: magus\Context, args: [str]) > void { final p = lib\page(); }
+export fun recursive(ctx: magus\Context, args: [str]) > void { loop(); }
+fun loop() > void { loop(); }
+export fun plain(ctx: magus\Context, args: [str]) > void { lib\plain(); magus\log.info("x"); }
+`
+	got := NestedMagusTargets(src, []string{dir}, os.ReadFile)
+	assert.Equal(t, map[string]bool{"direct": true, "via-helper": true, "via-import": true}, got)
 }

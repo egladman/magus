@@ -88,9 +88,7 @@ func (t *localTier) lookup(ctx context.Context, s *Step, hash string) (*entry, e
 	if err != nil {
 		return nil, err
 	}
-	if moved := t.c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, m.Stamps); len(moved) > 0 {
-		slog.DebugContext(ctx, "cache.stamp", slog.String("project", s.ProjectPath),
-			slog.String("target", s.Target), slog.Any("moved", moved))
+	if t.c.treeMoved(ctx, s, m) {
 		return nil, errTierMiss
 	}
 	return &entry{manifest: m, root: t.c.dir}, nil
@@ -194,6 +192,12 @@ func (t *remoteTier) lookup(ctx context.Context, s *Step, hash string) (*entry, 
 		release()
 		t.fail(ctx, "import", s, hash, counted.N, false, err)
 		return nil, err
+	}
+	// A stamped output is checked against the working tree, not against the machine
+	// that stored the entry, so the remote copy vouches as well as a local one.
+	if t.c.treeMoved(ctx, s, m) {
+		release()
+		return nil, errTierMiss
 	}
 	return &entry{
 		manifest: m, root: root, remote: t.name(), bytes: counted.N,

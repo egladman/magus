@@ -157,6 +157,10 @@ type Magus struct {
 	// (interp.NestedMagusTargets), by project path then target. buildStep keys them on
 	// the build. Written once by the load, read by every run after.
 	nestedMagus map[string]map[string]bool
+	// outputChecks are the targets that declare outputs and branch on the rw charm, by
+	// project path then target: without rw such a target compares its outputs, so its
+	// hit is stamped on them (cache.Step.StampOutputs). Written once by the load.
+	outputChecks map[string]map[string]bool
 
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
@@ -430,6 +434,7 @@ func (m *Magus) load(ctx context.Context) error {
 	if err := m.applyTargetDepsAndFootprint(ctx); err != nil {
 		return err
 	}
+	m.outputChecks = outputCheckTargets(m.ws.All())
 	m.autobindMagusfileSpell()
 	return m.spellShadows()
 }

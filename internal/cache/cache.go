@@ -226,10 +226,18 @@ type Step struct {
 	// filed after it. Instead the entry records each stamp's digest as the run left it,
 	// and a hit replays only while every stamp still reads the same. A stamped entry
 	// describes one local tree, so it is never fetched from or pushed to a remote.
-	Stamps     []string
-	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Slots      int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	Stamps []string
+	// StampOutputs makes Outputs stamps too: a hit replays only while every file they
+	// match reads as the entry recorded it, and a moved, missing or extra one is a miss.
+	// It is for a target that COMPARES its outputs (a drift gate run without rw), whose
+	// hit would otherwise restore fresh outputs over stale committed ones and pass
+	// without looking. A tree that still matches replays, so a gate keyed on a costly
+	// generator still skips it. Unhashed, and unlike Stamps it leaves the remote tier
+	// on: the entry records every output's digest, so any tier's copy can be checked.
+	StampOutputs bool
+	NoCache      bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay   bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Slots        int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -536,7 +544,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && len(c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+	return hash, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
