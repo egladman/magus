@@ -14,20 +14,22 @@ package proofread
 // labeled, then the lower bound. repeated-marks (34/34, 0.90) supports its
 // declared advise and is not capped.
 //
-// The second group was measured over labeling round 2 (707 firings, two
-// labelers, adjudicated) on rules no fix round had tuned: each fell short on
-// precision, not only on the number of firings, and its entry gives its
-// precision and lower bound over every labeled case it has.
+// The second group was tuned after labeling round 2 and measured over frozen
+// round 4 (178 fresh firings, two labelers, adjudicated): each entry gives its
+// correct firings over all labeled, then the lower bound. nonspecific and
+// second-person were left out of round 4 for a redesign and keep their round-2
+// precision and lower bound. participles' 36/40 is not evidence: in 10 of its
+// correct firings a platform footer's clause carries the rate over the cap.
 var evidenceCeiling = map[Rule]Decision{
-	RuleNonspecific:      DecisionOff, // 0.07, 0.02
-	RuleAbsolute:         DecisionOff, // 0.18, 0.10
-	RuleSecondPerson:     DecisionOff, // 0.19, 0.10
-	RuleIssueRepro:       DecisionOff, // 0.26, 0.15
-	RuleChangelogHeading: DecisionOff, // 0.27, 0.10
-	RuleIngTail:          DecisionOff, // 0.42, 0.28
-	RuleClaim:            DecisionOff, // 0.51, 0.37
-	RuleOptionList:       DecisionOff, // 0.71, 0.56
-	RuleParticiples:      DecisionOff, // 0.81, 0.67
+	RuleNonspecific:      DecisionOff, // round 2: 0.07, 0.02
+	RuleAbsolute:         DecisionOff, // 6/40, 0.07
+	RuleSecondPerson:     DecisionOff, // round 2: 0.19, 0.10
+	RuleIssueRepro:       DecisionOff, // 26/40, 0.50
+	RuleChangelogHeading: DecisionOff, // no fresh firing
+	RuleIngTail:          DecisionOff, // 3/17, 0.06
+	RuleClaim:            DecisionOff, // 22/40, 0.40
+	RuleOptionList:       DecisionOff, // 0/1
+	RuleParticiples:      DecisionOff, // 36/40, 0.77; see above
 
 	RuleVerdict:        DecisionOff,    // 16/40, 0.26
 	RuleJudgmentAsFact: DecisionOff,    // 15/40, 0.24
