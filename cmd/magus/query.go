@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -417,6 +418,13 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		interactive.Hint(ctx, "reproduce this invocation here with `"+hint.X.With(ref)+"`")
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
+	if err == nil && desc.Failed && desc.ErrMsg != "" {
+		// A failure's reason often lives only in the descriptor (a drift check prints
+		// nothing), and only json showed it. It follows the bytes on stderr, neutralized
+		// as an imported record's is, so stdout stays exactly what the run wrote.
+		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(desc.ErrMsg, "\n")), false)
+		fmt.Fprintf(os.Stderr, "error: %s\n", msg)
+	}
 	return err
 }
 
@@ -602,7 +610,12 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 			continue // the captured bytes belong to `query output <ref>`, not here
 		}
 		detail := e.Text
-		if e.Status != "" {
+		if e.Kind == journal.KindResult {
+			// A result is the line a reader acts on: which target, and the ref that reads
+			// its output, so a failure never needs a second lookup to find its log.
+			first, _, _ := strings.Cut(e.Text, "\n")
+			detail = strings.Join(slices.DeleteFunc([]string{e.Status, e.Project, e.Target, e.Ref, first}, func(s string) bool { return s == "" }), " ")
+		} else if e.Status != "" {
 			detail = strings.TrimSpace(e.Status + " " + detail)
 		}
 		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), e.Kind, detail)

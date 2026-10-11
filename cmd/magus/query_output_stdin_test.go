@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -27,12 +28,19 @@ import (
 // newPrintingWorkspace runs a target whose output is printed, and returns its ref.
 func newPrintingWorkspace(t *testing.T, output string) (*magus.Magus, string) {
 	t.Helper()
+	return newRunningWorkspace(t, output, nil)
+}
+
+// newRunningWorkspace is newPrintingWorkspace for a target that ends in runErr after printing
+// output; a non-nil runErr is a failed run, whose output is stored all the same.
+func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magus, string) {
+	t.Helper()
 	spellName := "zzz-output-import-" + strings.ToLower(t.Name())
 	s := spells.NewSpell(spellName, spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprint(stdout, output)
-			return nil, nil
+			return nil, runErr
 		}))
 	project.DefaultSpellRegistry().RegisterSpell(s)
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
@@ -46,7 +54,11 @@ func newPrintingWorkspace(t *testing.T, output string) (*magus.Magus, string) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	ctx := context.Background()
-	require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: "build"}}))
+	if runErr == nil {
+		require.NoError(t, m.Run(ctx, []types.Target{{Path: ".", Name: "build"}}))
+	} else {
+		require.Error(t, m.Run(ctx, []types.Target{{Path: ".", Name: "build"}}))
+	}
 	key, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
 	require.NoError(t, err)
 	return m, cache.PortableRef(key)
@@ -96,6 +108,43 @@ func TestOutputImportRoundTripPrintsTheSameBytes(t *testing.T) {
 	assert.Equal(t, local, stdout.String())
 	assert.Contains(t, stderr.String(), ref+" from stdin: not run here, not stored, never a cache hit")
 	assert.Contains(t, stderr.String(), "(this machine: "+runtime.GOOS+"/"+runtime.GOARCH+")")
+}
+
+// A drift check fails with an empty log and puts the reason, which files and the command
+// that fixes them, in the descriptor alone; the text form used to print nothing of it.
+func TestQueryOutputTextPrintsAFailedRunsErrorToStderr(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	m, ref := newRunningWorkspace(t, "", errors.New("generated files differ: run `magus run generate:rw`\x1b[31m"))
+	ctx := withMagus(context.Background(), m)
+
+	var stdout string
+	stderr := captureStderr(t, func() {
+		stdout = captureStdout(t, func() {
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+		})
+	})
+
+	assert.Empty(t, stdout, "stdout stays the bytes the run wrote, and this run wrote none")
+	assert.Contains(t, stderr, "error: ")
+	assert.Contains(t, stderr, "generated files differ: run `magus run generate:rw`")
+	assert.NotContains(t, stderr, "\x1b", "a recorded error is neutralized before it reaches the terminal")
+}
+
+func TestQueryOutputTextPrintsNoErrorForAPassingRun(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	m, ref := newPrintingWorkspace(t, "fine\n")
+	ctx := withMagus(context.Background(), m)
+
+	stderr := captureStderr(t, func() {
+		out := captureStdout(t, func() {
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+		})
+		assert.Equal(t, "fine\n", out)
+	})
+
+	assert.NotContains(t, stderr, "error:")
 }
 
 func TestOutputImportWritesNothing(t *testing.T) {
