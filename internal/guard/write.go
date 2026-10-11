@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -480,14 +481,21 @@ func gradeAgainstOwnLease(me types.Job, owners []types.Job, rel string, enter fu
 		if g, entered := enter(owner); entered {
 			return g
 		}
+		who := fmt.Sprintf("%s is owned by lease %s (%s)", rel, owner.ID, criteriaLine(owner))
+		say := fmt.Sprintf("%s is owned by lease %s (%s right now)", rel, owner.ID, owner.State)
+		if decl, ok := claimedOnly(owner, rel); ok {
+			who = fmt.Sprintf("%s is outside the paths lease %s was given (%s), and lease %s (%s) claims %s in it",
+				rel, me.ID, cmp.Or(strings.Join(me.WritePaths, ", "), "none"), owner.ID, criteriaLine(owner), decl)
+			say = fmt.Sprintf("%s is outside the paths lease %s was given (%s), and lease %s claims %s in it (%s right now)",
+				rel, me.ID, cmp.Or(strings.Join(me.WritePaths, ", "), "none"), owner.ID, decl, owner.State)
+		}
 		return writeGrade{Decision: "deny", Reason: denial{
-			Say: fmt.Sprintf("magus workspace: %s is owned by lease %s (%s right now); "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it"),
-				rel, owner.ID, owner.State),
-			Why: fmt.Sprintf("Edit inside your own write paths. %s is owned by lease %s (%s), which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
+			Say: fmt.Sprintf("magus workspace: %s; "+leaseActorClause("re-partition the plan, or release the path once lease "+owner.ID+" has finished with it"), say),
+			Why: fmt.Sprintf("Edit inside your own write paths. %s, which is %s right now, and you are lease %s. Two agents editing one path is the collision the job store exists to make visible; this guard is where the declaration gets read.\n"+
 				"Lease %s was last updated %s ago. If nobody holds it any more, `%s` releases its paths; magus never ends a row on its own.\n"+
 				"For one small change once its holder is done, enter the path instead: the client tool script `%s` records it on the job and lets one write through. A job takes %d.\n"+
 				leaseActorWhy,
-				rel, owner.ID, criteriaLine(owner), owner.State, me.ID,
+				who, owner.State, me.ID,
 				owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID),
 				enterCall(owner.ID, rel), job.MaxJobEntries),
 		}.full()}

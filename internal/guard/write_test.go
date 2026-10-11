@@ -467,7 +467,8 @@ func TestGradeLeasedEditAgainstAnotherJobsDeclarationClaim(t *testing.T) {
 	for _, fields := range []writeFields{edit("c()", "c2()"), edit("a()", "a2()")} {
 		got := gradeLeasedEdit(ctx, Dependencies{}, "stray", run, fields)
 		require.Equal(t, "deny", got.Decision)
-		assert.Contains(t, got.Reason, "run.go is owned by lease own-a")
+		assert.Contains(t, got.Reason, "run.go is outside the paths lease stray was given (none), and lease own-a claims A in it")
+		assert.NotContains(t, got.Reason, "is owned by lease")
 	}
 }
 

@@ -87,6 +87,25 @@ func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string,
 	}.full()}
 }
 
+// claimedOnly names the declaration owner claims in rel when that is all it holds of the
+// file: no entry of its write paths covers rel whole.
+func claimedOnly(owner types.Job, rel string) (string, bool) {
+	var whole []string
+	for _, entry := range owner.WritePaths {
+		if _, decl := types.SplitClaim(entry); decl == "" {
+			whole = append(whole, entry)
+		}
+	}
+	if _, covered, _ := declarationCovering(whole, rel); covered {
+		return "", false
+	}
+	claims := claimsOn(owner.WritePaths, rel)
+	if len(claims) == 0 {
+		return "", false
+	}
+	return claims[0], true
+}
+
 // claimsOn are the declarations write paths claim in the file rel, whole-file entries left
 // out: a lease covering rel whole claims no declaration of it in particular.
 func claimsOn(writePaths []string, rel string) []string {
