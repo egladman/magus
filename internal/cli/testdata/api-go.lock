@@ -189,7 +189,7 @@ github.com/egladman/magus.Magus.OutputDescriptorByRef method(ptr) func(ctx conte
 github.com/egladman/magus.Magus.OutputKeyInputs method(ptr) func(ctx context.Context, ref string) ([]string, error)
 github.com/egladman/magus.Magus.OutputRecordByRef method(ptr) func(ctx context.Context, ref string) (github.com/egladman/magus/types.StoredOutput, error)
 github.com/egladman/magus.Magus.Ownership method(ptr) func(ctx context.Context, opts github.com/egladman/magus/types.InsightOptions) (github.com/egladman/magus/types.OwnershipOutput, error)
-github.com/egladman/magus.Magus.PayloadByRef method(ptr) func(ref string) ([]byte, error)
+github.com/egladman/magus.Magus.PayloadByRef method(ptr) func(ctx context.Context, ref string) ([]byte, error)
 github.com/egladman/magus.Magus.PipeWaits method(ptr) func() []github.com/egladman/magus/types.StatusPipeWait
 github.com/egladman/magus.Magus.Plan method(ptr) func(ctx context.Context, target string, opts PlanOptions) (github.com/egladman/magus/types.ShardPlan, error)
 github.com/egladman/magus.Magus.ProjectTargets method(ptr) func(ctx context.Context, project string) []string
@@ -393,20 +393,37 @@ github.com/egladman/magus.WorkspaceRegistry.ShellRules method(ptr) func() []gith
 github.com/egladman/magus.WorkspaceRegistry.SpawnRule method(ptr) func() github.com/egladman/magus/internal/workspace.SpawnRule
 github.com/egladman/magus.WorkspaceRegistry.WriteRule method(ptr) func() github.com/egladman/magus/internal/workspace.WriteRule
 github.com/egladman/magus.WorkspaceRegistryFromContext func(ctx context.Context) *WorkspaceRegistry
+github.com/egladman/magus/libs/testkit.CaptureStderr func(tb testing.TB, fn func()) string
+github.com/egladman/magus/libs/testkit.CaptureStdout func(tb testing.TB, fn func()) string
 github.com/egladman/magus/libs/testkit.Environ func(root string, keep ...string) ([]string, error)
 github.com/egladman/magus/libs/testkit.Isolate func(tb testing.TB) string
 github.com/egladman/magus/libs/testkit.Isolated func(m *testing.M, keep ...string) IsolatedM
 github.com/egladman/magus/libs/testkit.IsolatedM type struct
 github.com/egladman/magus/libs/testkit.IsolatedM.Run method func() int
 github.com/egladman/magus/libs/testkit.Main func(m *testing.M, keep ...string)
+github.com/egladman/magus/libs/testkit.NewRepo func(tb testing.TB, files map[string]string) *Repo
 github.com/egladman/magus/libs/testkit.NewWorkspace func(tb testing.TB) *Workspace
 github.com/egladman/magus/libs/testkit.Projects func(paths ...string) []*github.com/egladman/magus/types.Project
+github.com/egladman/magus/libs/testkit.Repo type struct
+github.com/egladman/magus/libs/testkit.Repo.AddWorktree method(ptr) func(branch string) *Repo
+github.com/egladman/magus/libs/testkit.Repo.Commit method(ptr) func(message string, files map[string]string) string
+github.com/egladman/magus/libs/testkit.Repo.Executable method func(rel string, body string) string
+github.com/egladman/magus/libs/testkit.Repo.Git method(ptr) func(args ...string) string
+github.com/egladman/magus/libs/testkit.Repo.Head method(ptr) func() string
+github.com/egladman/magus/libs/testkit.Repo.Magusfile method func(body string) string
+github.com/egladman/magus/libs/testkit.Repo.Path method func(rel ...string) string
+github.com/egladman/magus/libs/testkit.Repo.Root method func() string
+github.com/egladman/magus/libs/testkit.Repo.Workspace embedded *Workspace
+github.com/egladman/magus/libs/testkit.Repo.Write method func(rel string, body string) string
+github.com/egladman/magus/libs/testkit.Repo.WriteTree method func(files map[string]string)
 github.com/egladman/magus/libs/testkit.Workspace type struct
+github.com/egladman/magus/libs/testkit.Workspace.Executable method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Magusfile method(ptr) func(body string) string
 github.com/egladman/magus/libs/testkit.Workspace.Path method(ptr) func(rel ...string) string
 github.com/egladman/magus/libs/testkit.Workspace.Root method(ptr) func() string
 github.com/egladman/magus/libs/testkit.Workspace.Write method(ptr) func(rel string, body string) string
 github.com/egladman/magus/libs/testkit.Workspace.WriteTree method(ptr) func(files map[string]string)
+github.com/egladman/magus/libs/testkit/fakespell.Register func(tb testing.TB, name string, opts ...github.com/egladman/magus/spells.Option) string
 github.com/egladman/magus/types.ActiveDispatch type struct
 github.com/egladman/magus/types.ActiveDispatch.Has method(ptr) func(dir string) bool
 github.com/egladman/magus/types.ActiveDispatch.Mark method(ptr) func(dir string)
@@ -1842,6 +1859,7 @@ github.com/egladman/magus/types.Job.RegisteredBy field Origin "json:\"registered
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
 github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
+github.com/egladman/magus/types.Job.RootEvidence field *JobIntegration "json:\"root_evidence,omitempty\" yaml:\"root_evidence,omitempty\""
 github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
 github.com/egladman/magus/types.Job.StaleAt method func(now int64, after time.Duration) bool
 github.com/egladman/magus/types.Job.State field JobState "json:\"state,omitempty\" yaml:\"state,omitempty\""

@@ -24,19 +24,20 @@ do. magus's compatibility rule is short:
 The rest of this page is what that sentence commits to, what it deliberately does
 not cover, and the mechanisms that make it checkable rather than aspirational.
 
-## The three contracts
+## The four contracts
 
-"Compatibility" is not one promise, because magus has three compatibility gates
-with three different consumers and three different ways to break. Keeping them
+"Compatibility" is not one promise, because magus has four compatibility gates
+with four different consumers and four different ways to break. Keeping them
 separate is what makes each one answerable.
 
-| Contract                   | The consumer                            | How it breaks                             | The mechanism                                        |
-| -------------------------- | --------------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts | additive-only keys, plus a declared version floor    |
-| the CLI                    | your shell scripts and CI configuration | a removed flag, a changed output format   | a drift-gated `api.lock` snapshot of the whole CLI   |
-| the daemon wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field    | reserved field numbers, and `buf breaking` in `lint` |
+| Contract                   | The consumer                            | How it breaks                                  | The mechanism                                             |
+| -------------------------- | --------------------------------------- | ---------------------------------------------- | --------------------------------------------------------- |
+| magusfile and `magus.yaml` | your repository                         | a key or function magus no longer accepts      | additive-only keys, plus a declared version floor         |
+| the CLI                    | your shell scripts and CI configuration | a removed flag, a changed output format        | a drift-gated `api.lock` snapshot of the whole CLI        |
+| the daemon wire API        | the console, MCP clients, editors       | a removed or repurposed protobuf field         | reserved field numbers, and `buf breaking` in `lint`      |
+| the Go SDK                 | Go programs that import magus           | a removed export, a changed signature or field | a drift-gated `api-go.lock` of every exported declaration |
 
-The promise is the same for all three. The mechanisms differ because the ways
+The promise is the same for all four. The mechanisms differ because the ways
 they break differ.
 
 ## What the promise covers
