@@ -1345,7 +1345,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
-	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return vcsMutation(c) != "" }) {
+	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" }) {
 		return ""
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
@@ -1357,7 +1357,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	for _, c := range cmds {
-		if op := vcsMutation(c); op != "" && !recordsCommit(c) {
+		if op := workerVCSOp(c); op != "" && !recordsCommit(c) {
 			return workerVCSDenial("`"+command+"`", op, me, role, "")
 		}
 	}
@@ -1529,7 +1529,7 @@ func workerVCSDenial(what, op string, row types.Job, role, why string) string {
 		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
 	} else {
 		why = "The orchestrator lands the work from there. " +
-			"Pushing, stashing, reverting, resetting, cleaning, rebasing, merging, cherry-picking, discarding the tree and removing a worktree stay with the orchestrator."
+			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator."
 	}
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
 		"A worker may commit, with any backend, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
@@ -1552,7 +1552,7 @@ type vcsSite struct {
 // refuses a commit, since a commit that cannot be placed cannot be shown to be in the
 // worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
-	op = vcsMutation(inv)
+	op = workerVCSOp(inv)
 	switch {
 	case op == "":
 		return "", false, ""

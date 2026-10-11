@@ -270,9 +270,10 @@ var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleLeaseRebind), Catches: "a leased worker rewriting who it is or what its own job row says"},
 	{Name: string(denyRuleLeaseUndeclared), Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned"},
 	{Name: string(denyRuleLeaseVCS),
-		Catches: "a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout",
+		Catches: "a worker lease mutating version control, or committing outside its own branch and checkout",
 		Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
-			"A commit is the one exception: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+			"A worker may run only what reads the repository or touches its own index and branch: status, diff, log and the other reads, add, restore of named paths, switch or checkout without a force, branch creation, a fetch into remote-tracking refs; any other verb, an alias from config included, is refused. " +
+			"A commit is the one exception beyond those: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
 			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
 			"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +

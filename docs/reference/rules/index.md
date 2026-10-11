@@ -30,7 +30,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                      |
 | [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                     |
 | [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
-| [lease-vcs](lease-vcs.md)                         | a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout     |
+| [lease-vcs](lease-vcs.md)                         | a worker lease mutating version control, or committing outside its own branch and checkout           |
 | [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns           |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                        |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                             |

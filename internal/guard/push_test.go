@@ -297,7 +297,7 @@ func TestUngatedPushDeniesALeasedWorker(t *testing.T) {
 	assert.NotContains(t, v.Reason, "\nsee: ", "the rule's page is in the stored verdict")
 	full := storedVerdict(t, hookLocation(ctx, Dependencies{}).cacheDir, v.Reason)
 	assert.Contains(t, full, lease.ID)
-	assert.Contains(t, full, "Pushing, stashing")
+	assert.Contains(t, full, "every other version-control verb stays with the orchestrator")
 	assert.NotContains(t, strings.ToLower(full), "say so")
 
 	decision, reason := gradePushWithoutGate(gateAbsent, "abc1234", lease.ID)
