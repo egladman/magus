@@ -948,6 +948,39 @@ func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
 	}
 }
 
+// A registration the job store refuses (another checkout holds the job) is not tried again
+// until the row changes: each try reads the checkout's base, a VCS process, for nothing.
+func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
+	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+	ctx, _ := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	reads := 0
+	deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
+
+	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+	assert.Equal(t, 1, reads, "the refused row is not tried again")
+
+	changed := row
+	changed.CheckoutRoot = ""
+	assert.NotEqual(t, agentBaseRefusedKind(row, at.workspace), agentBaseRefusedKind(changed, at.workspace), "a changed row is tried again")
+}
+
+// A checkout's current revision is read once per judgment, however many rules compare
+// against it; a named revision is read each time.
+func TestRevisionIsReadOncePerJudgment(t *testing.T) {
+	reads := 0
+	deps := Dependencies{
+		Revision:  func(context.Context, string, string) string { reads++; return "9c0ffee" },
+		revisions: &revisionMemo{current: map[string]string{}},
+	}
+	for range 3 {
+		assert.Equal(t, "9c0ffee", deps.revision(t.Context(), "/w", ""))
+	}
+	deps.revision(t.Context(), "/w", "HEAD~1")
+	assert.Equal(t, 2, reads)
+}
+
 // The command and path glue forward one field of the event, not the envelope, so the
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.

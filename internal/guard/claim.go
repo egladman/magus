@@ -76,7 +76,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 }
 
 func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {
-	return writeGrade{Decision: "deny", Rule: string(denyRuleClaimedDeclaration), Reason: denial{
+	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
 		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause("re-partition the plan, or release "+rel+"#"+claim+" once lease "+owner.ID+" has finished with it"),
 			declaration, rel, owner.ID),
 		Why: fmt.Sprintf("You claim %s in %s. Lease %s (%s) claims it as %s#%s and is %s right now, and you are lease %s. Two agents editing one declaration is the collision a claim exists to prevent; this guard is where it gets read.\n"+
@@ -87,9 +87,9 @@ func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string,
 	}.full()}
 }
 
-// claimedOnly names the declaration owner claims in rel when that is all it holds of the
+// soleClaim names the declaration owner claims in rel when that is all it holds of the
 // file: no entry of its write paths covers rel whole.
-func claimedOnly(owner types.Job, rel string) (string, bool) {
+func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
 	var whole []string
 	for _, entry := range owner.WritePaths {
 		if _, decl := types.SplitClaim(entry); decl == "" {

@@ -101,7 +101,13 @@ own hook timeout. Loading the rules, resolving the committed rule, calling it, a
 calling the working tree's rule share that deadline: each phase gets its share of what
 is left, so one that answers early leaves its time to the ones after it. A phase that
 runs out denies a command that changes state, since letting it through would run it
-unjudged, and lets a read through with a note naming the phase and its budget.
+unjudged, and lets a read through with a note naming the phase and its budget. A check
+with no host waiting on it, such as `magus job fork` grading a check before the worker
+exists, has no such deadline: its phases run to completion.
+
+A hook the host kills before it answers leaves a mark, made before the rules load, and the
+session's next judgment reports how many of its checks never finished
+([`guard-unfinished`](rules/guard-unfinished.md)). A workspace cannot set that notice.
 
 When a file the root magusfile's load read differs from the checked-out commit, the rule
 runs from both the working tree and the committed sources, files it imports included,

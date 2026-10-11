@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
@@ -150,7 +151,7 @@ func TestStaleBinaryDeniesEveryWriteSeam(t *testing.T) {
 
 	for _, line := range []string{"git push origin HEAD:topic", "./magus agent harness install", "./magus config set --global key=log.format,value=json", "touch notes.txt"} {
 		stored := shortDeny(t, cacheDir, judgeUnloaded(ctx, deps, line), denyRuleStaleBinary, staleOwnSay)
-		assert.Contains(t, stored, "bootstrap over it, alone on its line: `"+bootstrapCommand+"`", line)
+		assert.Contains(t, stored, "bootstrap over it, alone on its line: `"+ward.BootstrapCommand+"`", line)
 		assert.NotContains(t, stored, "magus.old", line)
 	}
 
@@ -347,7 +348,7 @@ func TestHookRowsRecordEachPhase(t *testing.T) {
 	probe := &commandRuleProbe{}
 	deps := Dependencies{
 		CommandRule: probe.rule(),
-		LoadRules:   trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500},
+		RuleLoad:    trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500},
 	}
 
 	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})

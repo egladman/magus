@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -63,7 +64,7 @@ type rulesAnswer struct {
 	// failures are the sides that judged nothing, and why.
 	failures []trail.RuleFailure
 	// lapse is the first phase that ran out of its share of the hook's deadline, nil when
-	// every phase answered in time. applyLapse decides what it costs the call.
+	// every phase answered in time. denyLapse decides what it costs the call.
 	lapse *ruleLapse
 	// unloaded is true when the working tree failed to load and the approved side yielded
 	// no rule either, so no policy was read at all. A side that loaded and then raised is
@@ -79,6 +80,10 @@ type rulesAnswer struct {
 	next []hint.Next
 }
 
+// resolveShares is the approved resolve's weight against a rule call's one. Resolving runs a
+// VCS status and loads the committed magusfile a second time; a rule call is one function.
+const resolveShares = 2
+
 // askWorkspaceRules runs the approved rule and the working-tree rule and keeps the
 // stricter answer. An uncommitted edit that tightens applies at once; one that loosens has
 // no effect until it is approved.
@@ -90,55 +95,57 @@ type rulesAnswer struct {
 // cannot spend the time it needs.
 //
 // Each phase (resolving the approved rule, calling it, calling the working tree's) gets its
-// share of what remains of ctx's deadline. One that runs out, or a rule load deps reports
-// lapsed, is the answer's lapse, for applyLapse to judge. Any other failure contributes
-// nothing and is reported, following magus\guard.shell's standing on a broken workspace
-// rule: the built-ins still apply and the agent is not bricked by a typo in the magusfile.
-// No side loading at all is reported as unloaded, for denyUnloaded to judge.
+// share of what remains of ctx's deadline, and runs to completion when ctx has none. One
+// that runs out, or a rule load deps reports lapsed, is the answer's lapse, for denyLapse
+// to judge. Any other failure contributes nothing and is reported, following
+// magus\guard.shell's standing on a broken workspace rule: the built-ins still apply and
+// the agent is not bricked by a typo in the magusfile. No side loading at all is reported
+// as unloaded, for denyUnloaded to judge.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
 	out := rulesAnswer{loadFailure: deps.LoadFailure}
-	clock := clockFrom(ctx)
-	lapsed := func(side, what, failure string) {
-		out.failures = append(out.failures, trail.RuleFailure{Side: side, Error: failure})
+	log := judgmentPhases(ctx)
+	lapsed := func(l ruleLapse) {
+		out.failures = append(out.failures, trail.RuleFailure{Side: l.side, Error: l.failure()})
 		if out.lapse == nil {
-			out.lapse = &ruleLapse{side: side, what: what}
+			out.lapse = &l
 		}
 	}
 	switch {
-	case deps.LoadRules.Lapsed:
-		budget := time.Duration(deps.LoadRules.BudgetMs) * time.Millisecond
-		lapsed(decidedByWorktree, lapseClause("loading this workspace's guard rules", "finish", budget), lapseClause("the magusfile", "load", budget))
+	case deps.RuleLoad.Lapsed:
+		lapsed(ruleLapse{
+			side: decidedByWorktree, budget: time.Duration(deps.RuleLoad.BudgetMs) * time.Millisecond,
+			said: lapseWording{"loading this workspace's guard rules", "finish"}, failed: lapseWording{"the magusfile", "load"},
+		})
 	case deps.LoadFailure != nil:
 		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
 	}
-	// left counts the shares of the phases still to run.
-	left := 0
+	shares := phaseShares{}
 	if resolveApproved != nil {
-		left += resolveShares + 1
+		shares[phaseApprovedResolve] = resolveShares
+		shares[phaseApprovedRule] = 1
 	}
 	if worktree != nil {
-		left++
+		shares[phaseWorktreeRule] = 1
 	}
 	ask := func(by, phase string, rule ruleCall) {
-		budget := phaseBudget(ctx, 1, left)
-		left--
+		budget, bounded := shares.take(ctx, phase)
 		if out.answer.Decision == types.GuardDeny {
 			return
 		}
-		subject := "the " + sideName(seam, by)
-		if budget <= 0 {
-			lapsed(by, lapseClause(subject, "answer", budget), lapseClause("the rule", "answer", budget))
+		lapse := ruleLapse{side: by, budget: budget, said: lapseWording{"the " + sideName(seam, by), "answer"}, failed: lapseWording{"the rule", "answer"}}
+		if bounded && budget == 0 {
+			lapsed(lapse)
 			return
 		}
-		callCtx, cancel := context.WithTimeout(ctx, budget)
+		callCtx, cancel := phaseContext(ctx, budget, bounded)
 		start := time.Now()
 		got, err := rule(callCtx)
 		expired := err != nil && errors.Is(callCtx.Err(), context.DeadlineExceeded)
 		cancel()
-		clock.record(phase, time.Since(start), budget, expired)
+		log.record(timedPhase(phase, time.Since(start), budget, expired))
 		switch {
 		case expired:
-			lapsed(by, lapseClause(subject, "answer", budget), lapseClause("the rule", "answer", budget))
+			lapsed(lapse)
 			return
 		case err != nil:
 			out.failures = append(out.failures, trail.RuleFailure{Side: by, Error: "the rule failed: " + err.Error()})
@@ -153,30 +160,32 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	}
 	approvedLoaded := false
 	if resolveApproved != nil {
-		budget := phaseBudget(ctx, resolveShares, left)
-		left -= resolveShares
+		budget, bounded := shares.take(ctx, phaseApprovedResolve)
 		var rule ruleCall
 		var err error
-		expired := budget <= 0
+		expired := bounded && budget == 0
 		if !expired {
-			resolveCtx, cancel := context.WithTimeout(ctx, budget)
+			resolveCtx, cancel := phaseContext(ctx, budget, bounded)
 			start := time.Now()
 			rule, err = resolveApproved(resolveCtx)
 			expired = errors.Is(resolveCtx.Err(), context.DeadlineExceeded)
 			cancel()
-			clock.record(phaseApprovedResolve, time.Since(start), budget, expired && (err != nil || rule == nil))
+			log.record(timedPhase(phaseApprovedResolve, time.Since(start), budget, expired && (err != nil || rule == nil)))
 		}
 		if err == nil && rule != nil {
 			approvedLoaded = true
 			ask(decidedByApproved, phaseApprovedRule, rule)
 		} else {
-			left--
+			delete(shares, phaseApprovedRule)
 			switch {
 			case expired:
 				// "No rule" read under an expired deadline may be a read that failed, since
 				// the approved state reports an absent file and a failed read alike.
-				subject := "resolving the " + sideName(seam, decidedByApproved)
-				lapsed(decidedByApproved, lapseClause(subject, "finish", budget), lapseClause("resolving the rule", "finish", budget))
+				lapsed(ruleLapse{
+					side: decidedByApproved, budget: budget,
+					said:   lapseWording{"resolving the " + sideName(seam, decidedByApproved), "finish"},
+					failed: lapseWording{"resolving the rule", "finish"},
+				})
 			case err != nil:
 				out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
 			}
@@ -189,20 +198,48 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 	return out
 }
 
-// applyLapse turns asked into a deny when a phase of the judgment ran out of time and the
+// phaseContext bounds ctx to budget for a bounded phase and leaves it as it is otherwise.
+func phaseContext(ctx context.Context, budget time.Duration, bounded bool) (context.Context, context.CancelFunc) {
+	if !bounded {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, budget)
+}
+
+// approvedAnswered reports whether the approved side's rule ran and answered, which also
+// means none of its phases ran out of time.
+func (a rulesAnswer) approvedAnswered() bool {
+	return slices.Contains(a.answered, decidedByApproved)
+}
+
+// denyShort turns a into a deny when its judgment fell short of what call needs: a phase
+// ran out of time (denyLapse) or no side of the policy loaded (denyUnloaded). call is
+// built only then, so the pass path pays nothing for it. Reports whether it denied; either
+// deny names the failures itself.
+func (a *rulesAnswer) denyShort(call func() judgedCall, at location) bool {
+	switch {
+	case a.lapse != nil:
+		return denyLapse(a, call())
+	case a.unloaded:
+		return denyUnloaded(a, call(), at)
+	}
+	return false
+}
+
+// denyLapse turns asked into a deny when a phase of the judgment ran out of time and the
 // call changes state, and reports whether it denied. A call that only reads stands on what
 // did answer, with the failure note naming the phase that ran out.
-func applyLapse(asked *rulesAnswer, call unloadedCall) bool {
+func denyLapse(asked *rulesAnswer, call judgedCall) bool {
 	if asked.lapse == nil || !call.changes || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseDenial(call, *asked.lapse)}
+	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseReason(call, *asked.lapse)}
 	asked.by = asked.lapse.side
 	return true
 }
 
-// unloadedCall is one call whose policy did not load, as the three seams describe it.
-type unloadedCall struct {
+// judgedCall is one call whose policy did not load, as the three seams describe it.
+type judgedCall struct {
 	seam functionSeam
 	// verb names, in backticks, the call the last loaded policy held back: a push, a merge,
 	// a magus verb that writes shared state. "" for one the rule's absence may pass.
@@ -229,7 +266,7 @@ type unloadedCall struct {
 //
 // Otherwise a gated verb is denied when the last policy that did load registered seam's
 // rule. No record means no rule was ever seen to protect, and the call passes.
-func denyUnloaded(asked *rulesAnswer, call unloadedCall, at location) bool {
+func denyUnloaded(asked *rulesAnswer, call judgedCall, at location) bool {
 	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
@@ -266,7 +303,7 @@ func failureLines(failures []trail.RuleFailure) []string {
 
 // unloadedDenial is the deny for a gated verb while the policy that registered seam's rule
 // does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
-func unloadedDenial(call unloadedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
+func unloadedDenial(call judgedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	var why strings.Builder
 	why.WriteString("This workspace registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
@@ -343,19 +380,20 @@ func sideName(seam functionSeam, side string) string {
 	}
 }
 
-// ruleFailures is what ruleFailureNote tells: the rules of one seam that could not judge a
+// ruleFailureReport is what ruleFailureNote tells: the rules of one seam that could not judge a
 // call, and the ones that did.
-type ruleFailures struct {
+type ruleFailureReport struct {
 	gate     hint.Gate
 	seam     functionSeam
 	failures []trail.RuleFailure
 	answered []string
-	// lapsed is a failure set holding a phase that ran out of time, told in full on every
-	// call: which phase ran out, and of how much, is news each time.
-	lapsed bool
-	// judged builds the line naming the magus that judged the call. It is read only when a
+	// toldInFull tells the failure set in full on every call rather than once a session: a
+	// set holding a phase that ran out of time, since which phase ran out, and of how much,
+	// is news each time.
+	toldInFull bool
+	// judging builds the line naming the magus that judged the call. It is read only when a
 	// rule failed, since it stats the checkout.
-	judged func() string
+	judging func() string
 }
 
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
@@ -364,7 +402,7 @@ type ruleFailures struct {
 // applied on every repeat, so the reader never
 // takes a call for judged by a rule that was skipped. The judging binary's line is part of
 // the full telling only: the repeat stays one line.
-func ruleFailureNote(r ruleFailures) string {
+func ruleFailureNote(r ruleFailureReport) string {
 	if len(r.failures) == 0 {
 		return ""
 	}
@@ -380,12 +418,12 @@ func ruleFailureNote(r ruleFailures) string {
 		_, _ = h.Write([]byte(f.Side + "\x00" + f.Error + "\x00"))
 	}
 	full.WriteString(summary)
-	if r.judged != nil {
-		if judged := r.judged(); judged != "" {
+	if r.judging != nil {
+		if judged := r.judging(); judged != "" {
 			full.WriteString("\n\n" + judged)
 		}
 	}
-	if r.lapsed {
+	if r.toldInFull {
 		return full.String()
 	}
 	kind := hint.MarkerKind(string(ruleFailedKind(r.seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))

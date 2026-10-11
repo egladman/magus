@@ -135,13 +135,16 @@ func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
 }
 
-// A write to a file the guard loads goes through, advised, when its judgment runs out of
-// time: denying it would leave a looping rule with no way to be fixed. Any other write is
-// still denied.
+// A write to a file the guard loads goes through, advised, when the working tree's side of
+// its judgment runs out of time after the approved rule answered: denying it would leave a
+// looping rule with no way to be fixed. Any other write is still denied, and so is a policy
+// write whose approved side did not answer, since an agent can slow that side on purpose.
 func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
+	approved := func(context.Context) (workspace.WriteRule, error) { return (&writeRuleProbe{}).rule(), nil }
 	lapsedLoad := Dependencies{
-		LoadFailure: errors.New("magusfile: context deadline exceeded"),
-		LoadRules:   trail.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
+		LoadFailure:       errors.New("magusfile: context deadline exceeded"),
+		RuleLoad:          trail.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
+		ApprovedWriteRule: approved,
 	}
 	const spared = "lets it through, because the guard loads this file itself"
 
@@ -170,7 +173,8 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 			return types.GuardVerdict{}, ctx.Err()
 		}
 		deps := Dependencies{
-			WriteRule: loops,
+			WriteRule:         loops,
+			ApprovedWriteRule: approved,
 			Policy: func() PolicyState {
 				return PolicyState{Digest: "d1", WriteRule: true, Files: []string{"hack/policy/guard.buzz"}}
 			},
@@ -181,6 +185,24 @@ func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
 
 		other := Judge(ctx, deps, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"})
 		assert.Equal(t, "deny", other.Decision, "any other write is still denied")
+	})
+
+	t.Run("a policy source whose approved side did not answer", func(t *testing.T) {
+		ctx, root, _ := writeFixture(t)
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		slowed := func(ctx context.Context) (workspace.WriteRule, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+		for name, deps := range map[string]Dependencies{
+			"slowed":      {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad, ApprovedWriteRule: slowed},
+			"none to ask": {LoadFailure: lapsedLoad.LoadFailure, RuleLoad: lapsedLoad.RuleLoad},
+		} {
+			v := Judge(ctx, deps, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+			assert.Equal(t, "deny", v.Decision, name)
+			assert.Contains(t, v.Reason, "magus ran out of time judging this file write", name)
+		}
 	})
 
 	t.Run("any other file", func(t *testing.T) {

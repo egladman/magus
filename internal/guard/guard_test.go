@@ -933,8 +933,8 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 			return false
 		}
 		for i, e := range as.Lhs {
-			lit, ok := as.Rhs[i].(*ast.BasicLit)
-			if verdictField(e, "Decision") && ok && lit.Kind == token.STRING && lit.Value != `"pass"` {
+			id, ok := as.Rhs[i].(*ast.Ident)
+			if verdictField(e, "Decision") && ok && strings.HasPrefix(id.Name, "decision") && id.Name != "decisionPass" {
 				return true
 			}
 		}

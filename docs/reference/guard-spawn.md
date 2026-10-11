@@ -119,8 +119,11 @@ the working tree's rule each get their share of what is left. A phase that runs 
 denies a spawn, which would otherwise start unjudged, and lets a continuation through
 with a note naming the phase. A file write runs out the same way and is denied, except
 a write to a file the guard loads itself (the root magusfile and the sources it
-imports): that write is advised instead, so a slow or looping rule can still be fixed. Registering twice, from a project's magusfile, or with a
-non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+imports) once the committed rule has answered: that write is advised instead, so a slow
+or looping working-tree rule can still be fixed. When the committed side is what ran out,
+the write is denied like any other, since an agent can slow that side on purpose.
+Registering twice, from a project's magusfile, or with a non-function stops the
+workspace load with [MGS1045](codes/magusfile/MGS1045.md).
 
 ## Tighten live, loosen on approval
 

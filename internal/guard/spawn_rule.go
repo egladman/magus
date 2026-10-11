@@ -140,23 +140,16 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
 		actingLease, _ := resolveActingLease(who, at, req.Lease)
-		call := unloadedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
+		call := judgedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
 		}
-		// Either deny names the failures itself.
-		var denied bool
-		switch {
-		case asked.lapse != nil:
-			denied = applyLapse(&asked, call)
-		case asked.unloaded:
-			denied = denyUnloaded(&asked, call, at)
-		}
+		denied := asked.denyShort(func() judgedCall { return call }, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied {
-			note := ruleFailureNote(ruleFailures{
-				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, lapsed: asked.lapse != nil,
-				judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+			note := ruleFailureNote(ruleFailureReport{
+				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
+				judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
 			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}
@@ -567,12 +560,12 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 	}
 }
 
-// releaseEndedBinding is b with a binding to a job that ended in a verdict (pass, fail or
-// no_return) released, and the caller's record dropped when write is set. A wait ends a
-// job from its orchestrator's session, so releaseOnEnd never sees the holder's call; the
-// holder's own next call releases it instead. An exited row still holds: a rejected wait
-// sends the holder back to the same paths.
-func releaseEndedBinding(ctx context.Context, at location, who hookAttribution, b job.Binding, write bool) job.Binding {
+// bindingUnlessEnded is b, or no binding when b names a job that ended in a verdict (pass,
+// fail or no_return), for the caller to release. A wait ends a job from its orchestrator's
+// session, so releaseOnEnd never sees the holder's call; the holder's own next call
+// releases it instead. An exited row still holds: a rejected wait sends the holder back to
+// the same paths.
+func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Binding {
 	if b.Job == "" || b.Gone {
 		return b
 	}
@@ -584,20 +577,21 @@ func releaseEndedBinding(ctx context.Context, at location, who hookAttribution, 
 	if i < 0 || !rows[i].State.Terminal() {
 		return b
 	}
-	if write {
-		job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Release(who.caller(), b.Job)
-	}
 	return job.Binding{}
 }
 
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
 // job it was spawned for, as `magus job exec` would, when that job has reported none or
-// its recorded base is stale (see [baseStale]). Reports whether it wrote, so the caller
-// re-reads the rows it graded against.
+// its recorded base is superseded (see [baseSuperseded]). Reports whether it wrote, so the
+// caller re-reads the rows it graded against.
 //
 // Done by the child's own call, not at spawn: the host picks the child's checkout, and
 // only the child's hooks run in it. Without it an attributed worker's first write is
 // refused for a missing exec the worker was never going to run.
+//
+// A registration the job store refuses (another checkout holds the job) is not tried again
+// until the row changes: every call would otherwise read the checkout's base again only to
+// be refused the same way.
 func registerAgentBase(ctx context.Context, deps Dependencies, at location, agentJob string) bool {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
@@ -607,28 +601,47 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if row.ID != agentJob {
 			continue
 		}
-		if !row.State.Live() || row.Registered != 0 && !baseStale(ctx, deps, at, row) {
+		if !row.State.Live() || (row.Registered != 0 && !baseSuperseded(ctx, deps, at, row)) {
+			return false
+		}
+		refusals := hint.NewGate(at.cacheDir, agentBaseRefusals)
+		refused := agentBaseRefusedKind(row, at.workspace)
+		if refusals.AlreadyFired(refused) {
 			return false
 		}
 		base := deps.checkoutBase(ctx, at.workspace)
 		if base == "" {
 			return false
 		}
-		_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base)
-		return err == nil
+		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base); err != nil {
+			refusals.MarkFired(refused)
+			return false
+		}
+		return true
 	}
 	return false
 }
 
-// baseStale reports a registered row whose recorded base diverged from its checkpoint and
-// whose checkout has since moved to another revision: an isolated worker registers on its
-// first call, at whatever its worktree was created on, and only then switches to the
+// agentBaseRefusals keys the registrations the job store refused, for every caller alike.
+const agentBaseRefusals = "guard/agent-base"
+
+// agentBaseRefusedKind names one refused registration: row as it stood, every field of it,
+// from the checkout at workspace.
+func agentBaseRefusedKind(row types.Job, workspace string) hint.MarkerKind {
+	body, _ := json.Marshal(row)
+	sum := sha256.Sum256(append(body, "\x00"+workspace...))
+	return hint.MarkerKind("agent-base-refused-" + hex.EncodeToString(sum[:8]))
+}
+
+// baseSuperseded reports a registered row whose recorded base diverged from its checkpoint
+// and whose checkout has since moved to another revision: an isolated worker registers on
+// its first call, at whatever its worktree was created on, and only then switches to the
 // branch it was handed.
 //
 // Only a diverged row is refreshed. Revisions are compared exactly, so re-registering a
 // worker that committed on its checkpoint would read its own commit as a divergence.
 // Revisions only, through the cheap seam: the dirty digest moves on every edit.
-func baseStale(ctx context.Context, deps Dependencies, at location, row types.Job) bool {
+func baseSuperseded(ctx context.Context, deps Dependencies, at location, row types.Job) bool {
 	if row.BaseVerdict != types.BaseDiverged {
 		return false
 	}

@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -201,22 +202,17 @@ func writePolicyMarker(path string, m policyMarker) {
 	_ = file.ReplaceFile(path, body, 0o600)
 }
 
-// guardLoads reports whether path is a file the guard's own policy load reads: the
+// isGuardSource reports whether path is a file the guard's own policy load reads: the
 // workspace's root magusfile, or a source the policy loaded on this call or, when this
-// call's load did not finish, the last one recorded. A relative path, and a relative
-// source, are the workspace's.
-func guardLoads(deps Dependencies, at location, path string) bool {
+// call's load did not finish, the last one recorded. A relative path is the calling
+// directory's, since the write it names lands there; a relative source is the workspace's.
+// Paths compare with symlinks resolved, so /var and /private/var name one file.
+func isGuardSource(deps Dependencies, at location, path string) bool {
 	if at.workspace == "" || path == "" {
 		return false
 	}
-	abs := func(p string) string {
-		if filepath.IsAbs(p) {
-			return filepath.Clean(p)
-		}
-		return filepath.Join(at.workspace, p)
-	}
-	target := abs(path)
-	if target == filepath.Join(at.workspace, "magusfile.buzz") {
+	target := resolveFrom(cmp.Or(at.dir, at.workspace), path)
+	if samePath(target, filepath.Join(at.workspace, "magusfile.buzz")) {
 		return true
 	}
 	var files []string
@@ -228,5 +224,5 @@ func guardLoads(deps Dependencies, at location, path string) bool {
 			files = m.Files
 		}
 	}
-	return slices.ContainsFunc(files, func(f string) bool { return abs(f) == target })
+	return slices.ContainsFunc(files, func(f string) bool { return samePath(resolveFrom(at.workspace, f), target) })
 }

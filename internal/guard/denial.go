@@ -131,10 +131,13 @@ type advice struct {
 	Say string
 	// Why is the rationale, kept only behind the ref.
 	Why string
+	// Key is the marker the advice is held under when that is narrower than its rule's
+	// kind, such as one per target; empty for the rule's kind itself.
+	Key hint.MarkerKind
 }
 
 // full is the whole advisory, for a caller with nowhere to store the rationale.
-func (a advice) full() string { return denial(a).full() }
+func (a advice) full() string { return denial{Say: a.Say, Why: a.Why}.full() }
 
 // adviceVerdictID names the breadcrumb to an advisory's stored full text, so `magus
 // session hints` counts its reads apart from deny-verdict.

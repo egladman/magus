@@ -329,8 +329,8 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 // commandCall describes a shell line to denyUnloaded. A line is a change unless it proves
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
-func commandCall(ctx context.Context, in commandRuleInput, at location) unloadedCall {
-	call := unloadedCall{seam: seamCommand, what: "this command", lease: in.lease}
+func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
+	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
 		return call
@@ -349,7 +349,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) unloaded
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it
 // cannot load the tree's guard policy: the cause and the likeliest fix inline, the call,
 // the failures and the fallbacks behind the ref.
-func staleBinaryDenial(call unloadedCall, cause string, failures []string, own bool, root string) denial {
+func staleBinaryDenial(call judgedCall, cause string, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
@@ -405,10 +405,10 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 		return binaryFix{
 			say: "rebuild ./magus with " + ownRebuild,
 			why: "If the rebuild cannot load the tree either, bootstrap over it, alone on its line: " +
-				"`" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+				"`" + ward.BootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
 		}
 	case own:
-		return binaryFix{say: "bootstrap ./magus with `" + bootstrapCommand + "`"}
+		return binaryFix{say: "bootstrap ./magus with `" + ward.BootstrapCommand + "`"}
 	}
 	return binaryFix{
 		say: "install a magus that loads this workspace with `magus self update`",

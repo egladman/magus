@@ -329,7 +329,7 @@ func TestHookCmd_RecordsEachPhase(t *testing.T) {
 	require.Len(t, phases, 2)
 	assert.Equal(t, "load_rules", phases[0].Name)
 	assert.Positive(t, phases[0].BudgetMs)
-	assert.Less(t, phases[0].BudgetMs, guard.HookBudget.Milliseconds())
+	assert.Less(t, phases[0].BudgetMs, (10 * time.Second).Milliseconds(), "inside the host's kill line")
 	assert.False(t, phases[0].Lapsed)
 	assert.Equal(t, "judge", phases[1].Name)
 }
@@ -1840,4 +1840,42 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	require.NoError(t, err)
 	_, err = trail.ReadBlob(primaryCache, ref)
 	assert.ErrorIs(t, err, os.ErrNotExist, "the hook process's checkout is not where the call ran")
+}
+
+// A guard-rule load that runs past the hook's deadline still stores every chunk it
+// compiled, so the hook after it loads warm: a cold cache costs one hook its time, never
+// every hook after it.
+func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
+	global = globalFlags{}
+	testkit.Isolate(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":      "{}\n",
+		"magusfile.buzz":  "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n",
+		"lib/policy.buzz": "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"no\");\n}\n",
+	})
+	chunks := func() []string {
+		var out []string
+		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				out = append(out, p)
+			}
+			return nil
+		})
+		return out
+	}
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+
+	rules, err := loadGuardRules(expired, repo.Root())
+	require.NoError(t, err)
+	require.NotNil(t, rules.CommandRule())
+	stored := chunks()
+	require.Len(t, stored, 3, "the magusfile, its import, and the magusfile's facts")
+
+	_, err = loadGuardRules(t.Context(), repo.Root())
+	require.NoError(t, err)
+	assert.Equal(t, stored, chunks(), "the next load compiles nothing")
 }

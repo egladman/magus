@@ -48,17 +48,17 @@ type briefInput struct {
 	title string
 }
 
-// producerLookup finds, once and on demand, whether a target regenerates a row's write
+// lazyProducers finds, once and on demand, whether a target regenerates a row's write
 // paths. The lookup loads the workspace, so a caller that never needs it pays nothing.
-type producerLookup func() func(target, project string) bool
+type lazyProducers func() func(target, project string) bool
 
 // noProducers is the lookup for a row whose write paths nothing regenerates.
-var noProducers producerLookup = func() func(target, project string) bool {
+func noProducers() func(target, project string) bool {
 	return func(string, string) bool { return false }
 }
 
-// targetDefiner reports whether the workspace defines a target of that name.
-type targetDefiner func(target string) bool
+// definesTarget reports whether the workspace defines a target of that name.
+type definesTarget func(target string) bool
 
 // judgeBriefCommand refuses a brief that teaches a denied command, naming the command and
 // the rule. Otherwise it passes, and the verdict may carry Context saying why a magus run
@@ -138,21 +138,21 @@ func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
 		entries, _ := ws.ListTargets(ctx)
 		return entries
 	})
-	defines := targetDefiner(func(target string) bool {
+	defines := definesTarget(func(target string) bool {
 		return slices.ContainsFunc(targets(), func(e types.TargetEntry) bool { return targetName(e.Name) == targetName(target) })
 	})
 	var notes []string
 	for _, row := range graded {
-		produces := producerLookup(sync.OnceValue(func() func(target, project string) bool {
+		produces := lazyProducers(sync.OnceValue(func() func(target, project string) bool {
 			return leaseProducers(ctx, deps, at.workspace, row.WritePaths)
 		}))
-		if off, found := briefOffCheck(brief.text, row, produces, defines); found {
+		if off, found := briefOffCheck(runs, row, produces, defines); found {
 			return ShellVerdict{
 				Deny: briefOffCheckDeny(row, off.line, off.run.target),
 				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
 			}
 		}
-		notes = append(notes, briefPassNotes(brief.text, row, produces, defines)...)
+		notes = append(notes, briefPassNotes(runs, row, produces, defines)...)
 	}
 	return briefPassVerdict(notes)
 }
@@ -190,7 +190,7 @@ func briefUngraded(why string, runs []briefRun) ShellVerdict {
 	var notes []string
 	for _, r := range runs {
 		if !r.negated {
-			notes = append(notes, briefRunLabel(r)+" is not graded: no row was held to a check: "+why)
+			notes = append(notes, briefRunLabel(r)+" is not graded: no row was held to a check; "+why)
 		}
 	}
 	return briefPassVerdict(notes)
@@ -200,14 +200,14 @@ func briefRunLabel(r briefRun) string {
 	return strconv.Quote(elideCommand(strings.TrimSpace(r.line)))
 }
 
-// briefPassNotes explains each run of brief that row's grader passed for a reason a reader
+// briefPassNotes explains each of a brief's runs that row's grader passed for a reason a reader
 // could take for an oversight: the line forbids it, the workspace defines no such target,
 // or the target regenerates the row's write paths. A run of the row's own check needs no
 // words.
-func briefPassNotes(brief string, row types.Job, produces producerLookup, defines targetDefiner) []string {
+func briefPassNotes(runs []briefRun, row types.Job, produces lazyProducers, defines definesTarget) []string {
 	checks := rowChecks(row)
 	var notes []string
-	for _, r := range briefRuns(brief) {
+	for _, r := range runs {
 		line := briefRunLabel(r)
 		if r.negated {
 			notes = append(notes, line+" is not graded: the line forbids the run")
@@ -281,16 +281,16 @@ func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 	return types.Job{}, false
 }
 
-// briefOffCheck finds the first run a brief tells row's worker to make that the row does not
-// allow, as the run and the line that presents it.
+// briefOffCheck finds the first of a brief's runs that row does not allow its worker, as the
+// run and the line that presents it.
 //
 // Running text is read more loosely than a code span. Its word after `run` is a target only
 // when the workspace defines one by that name ("magus run takes one target" names none),
 // and a run of the check's target passes whatever follows it, since no parser can tell a
 // project from the next word of the sentence.
-func briefOffCheck(brief string, row types.Job, produces producerLookup, defines targetDefiner) (briefRun, bool) {
+func briefOffCheck(runs []briefRun, row types.Job, produces lazyProducers, defines definesTarget) (briefRun, bool) {
 	checks := rowChecks(row)
-	for _, r := range briefRuns(brief) {
+	for _, r := range runs {
 		if r.negated || strings.ContainsAny(r.run.target, "<>$") || (r.prose && !defines(r.run.target)) {
 			continue
 		}

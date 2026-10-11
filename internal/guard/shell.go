@@ -642,7 +642,7 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		},
 	})
 	v := Judge(ctx, deps, Request{Input: string(envelope), DryRun: dryRun})
-	if v.Decision == "deny" || v.Lease != "" {
+	if v.Decision == decisionDeny || v.Lease != "" {
 		return v
 	}
 	at := hookLocation(hookContextAt(ctx, deps, root), deps)
@@ -658,7 +658,7 @@ func JudgeEdit(ctx context.Context, deps Dependencies, root, rel string, before,
 		return v
 	}
 	slices.Sort(held)
-	v.Decision, v.Context, v.Rule = "deny", "", ""
+	v.Decision, v.Context, v.Rule = decisionDeny, "", ""
 	v.Reason = denial{
 		Say: fmt.Sprintf("magus workspace: lease %s holds write paths in this checkout, and this process names no lease; name yours: `%s=<id> magus ...`.",
 			strings.Join(held, ", "), envHookLease),

@@ -278,9 +278,9 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	}
 	gate := "`" + hint.Affected.With(string(types.TargetCI)) + "` runs the gate, and CI runs the identical command on the identical tree, so a red push pays twice for one answer."
 	if lease != "" {
-		return "deny", head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
+		return decisionDeny, head + "This session is bound to job " + lease + ", and workers do not publish: report the commit to the orchestrator that holds the branch.\n" + gate
 	}
-	return "ask", head + "Approving publishes it as it stands. " + gate
+	return decisionAsk, head + "Approving publishes it as it stands. " + gate
 }
 
 // pushCoverage is what the gate record says about the revision the push on command

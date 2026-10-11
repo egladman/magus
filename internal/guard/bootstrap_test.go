@@ -7,11 +7,21 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// The bootstrap the rules exempt is one environment prefix and a go command, which is what
+// bootstrapParts splits it into; a ward.BootstrapCommand of another shape exempts nothing.
+func TestBootstrapCommandIsOnePrefixAndAGoCommand(t *testing.T) {
+	env, goArgv, ok := bootstrapParts()
+	require.True(t, ok, ward.BootstrapCommand)
+	assert.Equal(t, "GOEXPERIMENT=jsonv2", env)
+	assert.Equal(t, "go", goArgv[0])
+}
 
 // checkoutFixture writes a go.mod declaring module, and a magus binary when withBinary.
 func checkoutFixture(t *testing.T, module string, withBinary bool) string {
@@ -62,26 +72,26 @@ func TestRankOwnBuild(t *testing.T) {
 		// says is a fragment the verdict text must carry.
 		says string
 	}{
-		{name: "bootstrap", cwd: fresh, command: bootstrapCommand, advise: true, says: "Go's build cache stays on"},
+		{name: "bootstrap", cwd: fresh, command: ward.BootstrapCommand, advise: true, says: "Go's build cache stays on"},
 		{name: "bare package operand", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath cmd/magus run go-build --no-cache .", advise: true},
 		{name: "trailing slash", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus/ run go-build --no-cache .", advise: true},
 		{name: "subcommand -C inside the workspace", cwd: filepath.Dir(fresh), command: "GOEXPERIMENT=jsonv2 go run -C " + filepath.Base(fresh) + " -trimpath ./cmd/magus run go-build --no-cache .", advise: true, says: fresh},
 
-		{name: "binary exists", cwd: built, command: bootstrapCommand, deny: true, says: "already has a magus binary"},
+		{name: "binary exists", cwd: built, command: ward.BootstrapCommand, deny: true, says: "already has a magus binary"},
 		{name: "a bare link with a binary", cwd: built, command: "go build -o magus ./cmd/magus", deny: true, says: "already has a magus binary"},
-		{name: "a bare link is served the bootstrap", cwd: fresh, command: "go build -o magus ./cmd/magus", deny: true, says: bootstrapCommand},
-		{name: "a trimmed link is served the bootstrap", cwd: fresh, command: "go build -trimpath -o magus ./cmd/magus", deny: true, says: bootstrapCommand},
-		{name: "without the prefix", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
-		{name: "another experiment", cwd: fresh, command: "GOEXPERIMENT=none go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
-		{name: "a second prefix", cwd: fresh, command: "CGO_ENABLED=0 " + bootstrapCommand, deny: true, says: bootstrapCommand},
-		{name: "wrapped", cwd: fresh, command: "env " + bootstrapCommand, deny: true, says: bootstrapCommand},
-		{name: "without --no-cache", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .", deny: true, says: bootstrapCommand},
-		{name: "without -trimpath", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .", deny: true, says: bootstrapCommand},
+		{name: "a bare link is served the bootstrap", cwd: fresh, command: "go build -o magus ./cmd/magus", deny: true, says: ward.BootstrapCommand},
+		{name: "a trimmed link is served the bootstrap", cwd: fresh, command: "go build -trimpath -o magus ./cmd/magus", deny: true, says: ward.BootstrapCommand},
+		{name: "without the prefix", cwd: fresh, command: "go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: ward.BootstrapCommand},
+		{name: "another experiment", cwd: fresh, command: "GOEXPERIMENT=none go run -trimpath ./cmd/magus run go-build --no-cache .", deny: true, says: ward.BootstrapCommand},
+		{name: "a second prefix", cwd: fresh, command: "CGO_ENABLED=0 " + ward.BootstrapCommand, deny: true, says: ward.BootstrapCommand},
+		{name: "wrapped", cwd: fresh, command: "env " + ward.BootstrapCommand, deny: true, says: ward.BootstrapCommand},
+		{name: "without --no-cache", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .", deny: true, says: ward.BootstrapCommand},
+		{name: "without -trimpath", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run ./cmd/magus run go-build --no-cache .", deny: true, says: ward.BootstrapCommand},
 		{name: "another target", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run test --no-cache .", deny: true},
 		{name: "another package", cwd: fresh, command: "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus-docs run go-build --no-cache .", deny: true},
-		{name: "go generate", cwd: fresh, command: "go generate ./...", deny: true, says: bootstrapCommand},
-		{name: "chained", cwd: fresh, command: bootstrapCommand + " && go vet ./...", deny: true, says: "alone on its line"},
-		{name: "foreign module", cwd: foreign, command: bootstrapCommand, deny: true},
+		{name: "go generate", cwd: fresh, command: "go generate ./...", deny: true, says: ward.BootstrapCommand},
+		{name: "chained", cwd: fresh, command: ward.BootstrapCommand + " && go vet ./...", deny: true, says: "alone on its line"},
+		{name: "foreign module", cwd: foreign, command: ward.BootstrapCommand, deny: true},
 
 		// A -C outside the workspace passes the pure rule, which has no way to know what is
 		// there; a checkout of magus there is this repository's policy to judge.
@@ -115,13 +125,13 @@ func TestRankOwnBuild(t *testing.T) {
 func TestRankOwnBuildNamesWhatToDropBesideTheBootstrap(t *testing.T) {
 	fresh := checkoutFixture(t, ownModule, false)
 	for command, drop := range map[string]string{
-		bootstrapCommand + " | tail -5; ls -la magus": "drop `| tail -5` and `; ls -la magus`.",
-		"cd x && " + bootstrapCommand:                 "drop `cd x &&`.",
+		ward.BootstrapCommand + " | tail -5; ls -la magus": "drop `| tail -5` and `; ls -la magus`.",
+		"cd x && " + ward.BootstrapCommand:                 "drop `cd x &&`.",
 	} {
 		v := judgeOwnBuild(fresh, command)
 		assert.Equal(t, "magus workspace: the bootstrap runs only alone on its line; "+drop, v.Deny, command)
 		require.Len(t, v.Next, 1, command)
-		assert.Equal(t, bootstrapCommand, v.Next[0].Run, command)
+		assert.Equal(t, ward.BootstrapCommand, v.Next[0].Run, command)
 	}
 }
 
@@ -135,8 +145,8 @@ func TestRankOwnBuildServesTheBootstrap(t *testing.T) {
 		require.Len(t, v.Next, 1, command)
 		assert.Equal(t, hint.Next{
 			ID:   hint.DenyRemedyPrefix + string(denyRuleRawTool),
-			Run:  bootstrapCommand,
-			Argv: bootstrapArgv,
+			Run:  ward.BootstrapCommand,
+			Argv: bootstrapArgv(),
 			Why:  bootstrapWhy,
 		}, v.Next[0], command)
 		assert.Equal(t, Evaluate(strict(testDependencies()), command), judgeOwnBuild(built, command), command)
@@ -149,7 +159,7 @@ func TestJudgeAllowsTheBootstrapBuildAtTheEnvelopeCwd(t *testing.T) {
 	testkit.Isolate(t)
 	fresh := checkoutFixture(t, ownModule, false)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: fresh})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + fresh + `","tool_input":{"command":"` + bootstrapCommand + `"}}`
+	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + fresh + `","tool_input":{"command":"` + ward.BootstrapCommand + `"}}`
 
 	v := Judge(ctx, strict(testDependencies()), Request{Input: envelope})
 
@@ -251,7 +261,7 @@ func TestRankOwnBuildDeniesRecoveryWhenTheWorkspaceLoads(t *testing.T) {
 			v = judgeOwnBuildWith(loadingAs(loadErr, &loads), fresh, command)
 			assert.Contains(t, v.Deny, "has no magus binary yet", name+" without a binary: "+command)
 			require.Len(t, v.Next, 1, name+" without a binary: "+command)
-			assert.Equal(t, bootstrapCommand, v.Next[0].Run, name+" without a binary: "+command)
+			assert.Equal(t, ward.BootstrapCommand, v.Next[0].Run, name+" without a binary: "+command)
 		}
 	}
 }
@@ -277,7 +287,7 @@ func TestRankOwnBuildAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testin
 	loads := 0
 	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, `unknown built-in rule "architecture-unbriefed"`)
 
-	v := judgeOwnBuildWith(loadingAs(stale, &loads), built, bootstrapCommand)
+	v := judgeOwnBuildWith(loadingAs(stale, &loads), built, ward.BootstrapCommand)
 
 	assert.Empty(t, v.Deny)
 	assert.Equal(t, denyRuleRawTool, v.Rule.Name)
@@ -294,8 +304,8 @@ func TestRankOwnBuildDeniesEverythingButTheBootstrapWhileTheBinaryCannotLoadTheT
 	for _, command := range []string{
 		"go run -trimpath ./cmd/magus run go-build --no-cache .",
 		"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build .",
-		"CGO_ENABLED=0 " + bootstrapCommand,
-		bootstrapCommand + " && go vet ./...",
+		"CGO_ENABLED=0 " + ward.BootstrapCommand,
+		ward.BootstrapCommand + " && go vet ./...",
 		"go test ./...",
 	} {
 		loads := 0
@@ -314,7 +324,7 @@ func TestRankOwnBuildDeniesTheBootstrapWhenTheBinaryLoadsTheTree(t *testing.T) {
 		"other code":   types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"),
 	} {
 		loads := 0
-		v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, bootstrapCommand)
+		v := judgeOwnBuildWith(loadingAs(loadErr, &loads), built, ward.BootstrapCommand)
 		assert.Contains(t, v.Deny, "already has a magus binary", name)
 	}
 }
@@ -323,7 +333,7 @@ func TestJudgeAllowsTheBootstrapWhileTheBinaryCannotLoadTheTree(t *testing.T) {
 	testkit.Isolate(t)
 	built := checkoutFixture(t, ownModule, true)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: built})
-	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"` + bootstrapCommand + `"}}`
+	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + built + `","tool_input":{"command":"` + ward.BootstrapCommand + `"}}`
 	loads := 0
 
 	v := Judge(ctx, loadingAs(types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "out of date"), &loads), Request{Input: envelope})

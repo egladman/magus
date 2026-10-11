@@ -116,7 +116,7 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 		"If the rebuild cannot load the tree either, bootstrap over it, alone on its line: "+
 		"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
 		"see: "+ruleDocsBase+"stale-binary/", stored)
-	d := staleBinaryDenial(unloadedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root)
+	d := staleBinaryDenial(judgedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 }
 
@@ -159,7 +159,7 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
 	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
 		"`git push` waits for this workspace's guard policy to load; rebuild ./magus with `./magus run go-build .`.")
-	d := unloadedDenial(unloadedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
+	d := unloadedDenial(judgedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"policy-unloaded/", stored)
 	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
 
@@ -249,7 +249,7 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 
 		v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 
-		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+bootstrapCommand+"`.")
+		assert.Contains(t, v.Context, "Judged by /usr/local/bin/magus ("+version+"); this checkout has no ./magus. Fix: bootstrap ./magus with `"+ward.BootstrapCommand+"`.")
 	})
 	t.Run("a failure that is not the binary being old names no fix", func(t *testing.T) {
 		ctx, cacheDir := spawnFixture(t)
@@ -341,7 +341,7 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	// Worded like the command and write seams: the verdict inline, the rest behind the ref.
 	v := Judge(ctx, unloadedDeps(), Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
 	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
-	d := staleBinaryDenial(unloadedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
+	d := staleBinaryDenial(judgedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
 		causeStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace)
 	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
@@ -413,9 +413,9 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 // The judging binary's line stats the checkout, so a call no rule failed on never builds it.
 func TestRuleFailureNoteBuildsTheJudgingLineOnlyForAFailure(t *testing.T) {
 	called := false
-	r := ruleFailures{
+	r := ruleFailureReport{
 		gate: hint.NewGate(t.TempDir(), "s1"), seam: seamCommand,
-		judged: func() string { called = true; return "Judged by x." },
+		judging: func() string { called = true; return "Judged by x." },
 	}
 	assert.Empty(t, ruleFailureNote(r))
 	assert.False(t, called)

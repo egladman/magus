@@ -433,7 +433,7 @@ func verbFlagTakesValue(verb, name string) bool {
 // copy in each worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
-func (r targetRun) allowed(checks []types.LeaseCheck, produces producerLookup) bool {
+func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
 	projects := r.projects
 	if len(projects) == 0 {
 		projects = []string{"."}
@@ -1878,7 +1878,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(location.workspace, rel) {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == "deny" {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == decisionDeny {
 			return g.Reason
 		}
 	}

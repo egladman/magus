@@ -89,21 +89,21 @@ func gradeHookWiringWrite(actingLease string, agentAttributed bool, writePath st
 	say := fmt.Sprintf("magus workspace: %s is %s, the guard's own installation; "+leaseActorClause("rewire a host"), writePath, what)
 	switch {
 	case actingLease != "":
-		return writeGrade{Decision: "deny", Reason: denial{
+		return writeGrade{Decision: decisionDeny, Reason: denial{
 			Say: say,
 			Why: fmt.Sprintf("An edit here decides whether every rule you are being graded by runs at all from the host's next session on. Lease %s is bound to this checkout, and no write paths anybody hands out include that switch.\n"+
 				leaseActorWhy,
 				actingLease),
 		}.full()}
 	case agentAttributed:
-		return writeGrade{Decision: "deny", Reason: denial{
+		return writeGrade{Decision: decisionDeny, Reason: denial{
 			Say: say,
 			Why: "An edit here decides whether every rule you are being graded by runs at all from the host's next session on. The host attributes this call to an agent, and no scope anybody hands out includes that switch, leased or not.\n" +
 				"Have a person make this edit instead. If you need the wiring itself, `magus agent harness verify` reports a descriptor's current state without writing anything: magus prints host config for a person to merge, it does not author it.\n" +
 				leaseActorWhy,
 		}.full()}
 	default:
-		return writeGrade{Decision: "advise", Kind: advisoryHookWiring,
+		return writeGrade{Decision: decisionAdvise, Kind: advisoryHookWiring,
 			Context: fmt.Sprintf("magus workspace: %s is %s; keep the guard armed and re-read it afterwards with `"+hint.Doctor.String()+"`.", writePath, what),
 			Why: "The edit takes effect at the host's next session start, and a wiring that stopped working is silent: a disarmed guard and a clean session produce the same output. " +
 				"`" + hint.Doctor.String() + "` grades the wiring and the binary it resolves. This is an advisory because the host attributes this call to no agent: a person's own session, or the orchestrator relaying for one."}

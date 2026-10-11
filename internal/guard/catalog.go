@@ -422,6 +422,12 @@ var advisoryDocs = []types.RuleDoc{
 			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
 			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
 			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
+	{Name: string(advisoryUnfinished),
+		Catches: "earlier guard checks that never finished, so the host ran their calls with no rule applied",
+		Why: "The host kills a hook that has not answered in ten seconds and runs the call unjudged, with no trail row and no word to the agent. " +
+			"Each check leaves a mark when it starts, before the workspace's rules load, and removes it when it answers inside that time; the next check in the session reports and clears every mark older than fifteen seconds. " +
+			"It stands alone only when the rules passed the call; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing."},
 }
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
@@ -440,7 +446,7 @@ func Rules() []types.RuleDoc {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
-			if a.Decision == "deny" {
+			if a.Decision == string(builtin.Deny) {
 				return -1
 			}
 			return 1

@@ -86,15 +86,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 		}
 	}
 	asked := askWorkspaceRules(ctx, seamCommand, deps, resolve, bind(deps.CommandRule))
-	// Parsed again only when a phase ran out or nothing loaded, so the pass path pays
-	// nothing. Either deny names the failures itself.
-	var denied bool
-	switch {
-	case asked.lapse != nil:
-		denied = applyLapse(&asked, commandCall(ctx, in, at))
-	case asked.unloaded:
-		denied = denyUnloaded(&asked, commandCall(ctx, in, at), at)
-	}
+	denied := asked.denyShort(func() judgedCall { return commandCall(ctx, in, at) }, at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
@@ -109,9 +101,9 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if denied {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(ruleFailures{
-		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, lapsed: asked.lapse != nil,
-		judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
+	note := ruleFailureNote(ruleFailureReport{
+		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
+		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
 	})
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }

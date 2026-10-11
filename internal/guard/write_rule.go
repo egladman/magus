@@ -74,19 +74,14 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 		}
 	}
 	asked := askWorkspaceRules(ctx, seamWrite, deps, resolve, bind(deps.WriteRule))
-	// Either deny names the failures itself.
-	call := unloadedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
-	var denied, spared bool
-	switch {
-	case asked.lapse != nil && guardLoads(deps, at, path):
-		// The guard loads this file itself, so refusing the write when a rule ran out of
-		// time would leave a slow or looping rule with no way to be fixed.
-		spared = true
-	case asked.lapse != nil:
-		denied = applyLapse(&asked, call)
-	case asked.unloaded:
-		denied = denyUnloaded(&asked, call, at)
-	}
+	// The guard loads a policy source itself, so refusing its write when the working tree's
+	// rule ran out of time would leave a slow or looping rule with no way to be fixed. Only
+	// once the approved rule has answered: an agent can slow the approved resolve (a flood
+	// of untracked files does it), and that must not open the policy to an unjudged edit.
+	spared := asked.lapse != nil && asked.approvedAnswered() && isGuardSource(deps, at, path)
+	denied := !spared && asked.denyShort(func() judgedCall {
+		return judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
+	}, at)
 	decided := ""
 	if verdict.Decision != decisionPass {
 		decided = decidedByBuiltin
@@ -98,20 +93,21 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	if denied {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(ruleFailures{
-		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, lapsed: asked.lapse != nil,
-		judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
+	note := ruleFailureNote(ruleFailureReport{
+		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
+		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
 	})
 	if spared {
-		note = policyEditLapse(*asked.lapse) + "\n\n" + note
+		note = lapseSparedNote(*asked.lapse) + "\n\n" + note
 	}
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 
-// policyEditLapse is the advice for a write to a file the guard loads when a phase of its
-// judgment ran out of time, which every other write is denied for.
-func policyEditLapse(l ruleLapse) string {
-	return "magus ran out of time judging this write (" + l.what + ") and lets it through, because the guard loads this file itself: " +
+// lapseSparedNote is the advice for a write to a file the guard loads when the working tree's
+// side of its judgment ran out of time after the approved rule answered, which every other
+// write is denied for.
+func lapseSparedNote(l ruleLapse) string {
+	return "magus ran out of time judging this write (" + l.what() + ") and lets it through, because the guard loads this file itself: " +
 		"refusing it would leave a slow or looping rule with no way to be fixed. Check the rule answers quickly before relying on it."
 }
 

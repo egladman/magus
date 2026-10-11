@@ -179,3 +179,20 @@ func TestPolicyRecordedRule(t *testing.T) {
 	recordPolicy(t.Context(), Dependencies{}, location{cacheDir: base}, true)
 	assert.True(t, recordedRule(base, seamCommand))
 }
+
+// A policy source is recognized through a symlinked spelling of the workspace, and a
+// relative write path is the calling directory's, not the workspace root's.
+func TestIsGuardSourceResolvesSymlinksAndTheCallDirectory(t *testing.T) {
+	root := t.TempDir()
+	real, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(root, link))
+	at := location{workspace: link, dir: filepath.Join(link, "hack")}
+	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Files: []string{"hack/policy/guard.buzz"}} }}
+
+	assert.True(t, isGuardSource(deps, at, filepath.Join(real, "magusfile.buzz")), "the root magusfile")
+	assert.True(t, isGuardSource(deps, at, filepath.Join(real, "hack", "policy", "guard.buzz")), "a source the load read")
+	assert.True(t, isGuardSource(deps, at, filepath.Join("policy", "guard.buzz")), "relative to the call's directory")
+	assert.False(t, isGuardSource(deps, at, filepath.Join("hack", "policy", "guard.buzz")), "not relative to the workspace root")
+}

@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 87)
+	assert.Len(t, got, 88)
 	assert.Equal(t, map[string]Decision{
 		"read-navigation": Advise,
 		"brief-command":   Advise,
@@ -92,6 +92,7 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 		"workspace-command-failed": "a command rule",
 		"workspace-spawn-failed":   "a spawn rule",
 		"workspace-write-failed":   "a write rule",
+		"guard-unfinished":         "a guard check",
 	} {
 		for _, d := range []Decision{Off, Advise, Deny} {
 			t.Run(name+"/"+string(d), func(t *testing.T) {

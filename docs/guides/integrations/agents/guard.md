@@ -483,7 +483,8 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
 - A worker's magus run whose timeout is shorter than the target's last real run allows
   for ([check-timeout](../../../reference/rules/check-timeout.md)). It names a timeout
   of half again that run, capped at the host's foreground maximum, or says the check
-  cannot finish in the foreground and to ask for a narrower one. The host's foreground
+  cannot finish in the foreground and to ask for a narrower one, as it does when the
+  call already waits the maximum. The host's foreground
   default and maximum come from the wiring (`--foreground-default-ms`,
   `--foreground-max-ms`), which the harness spell declares; without them it is silent.
   Once per target per session.

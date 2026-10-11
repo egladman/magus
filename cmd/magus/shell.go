@@ -204,11 +204,7 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	if window != "" {
 		entry = types.EntryPointCLI
 	}
-	// The hook ignores --root and loads no workspace up front: the one it judges in is
-	// wherever the host runs it.
-	deps := guardDependencies(ctx, "")
-	stopJudge := traceFromContext(ctx).phase("guard.judge")
-	verdict := guard.Judge(trail.ContextWithEntryPoint(ctx, entry), deps, guard.Request{
+	req := guard.Request{
 		Input:      input,
 		IsPath:     sf.Path,
 		Observe:    sf.Observe,
@@ -232,11 +228,19 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 		RewritesInput: sf.RewritesInput,
 		// The call's own word on how the host runs it, and the host's foreground limits
 		// as the wiring declares them; a flag left out leaves the rules that read it silent.
-		Background:        sf.CallBackground,
-		Timeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
-		ForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
-		ForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
-	})
+		CallBackground:        sf.CallBackground,
+		CallTimeout:           time.Duration(sf.CallTimeoutMs) * time.Millisecond,
+		HostForegroundDefault: time.Duration(sf.ForegroundDefaultMs) * time.Millisecond,
+		HostForegroundMax:     time.Duration(sf.ForegroundMaxMs) * time.Millisecond,
+	}
+	// Marked before the rules load, so a hook its host kills while loading them is still
+	// reported to the session's next judgment.
+	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
+	// The hook ignores --root and loads no workspace up front: the one it judges in is
+	// wherever the host runs it.
+	deps := guardDependencies(ctx, "")
+	stopJudge := traceFromContext(ctx).phase("guard.judge")
+	verdict := guard.Judge(trail.ContextWithEntryPoint(ctx, entry), deps, req)
 	stopJudge()
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter
@@ -290,11 +294,8 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 // workspace whenever the command ran with --root from inside another checkout.
 func guardDependencies(ctx context.Context, rootOverride string) guard.Dependencies {
 	stop := traceFromContext(ctx).phase("guard.load_rules")
-	var rules *magus.GuardRules
-	var loadErr error
-	loaded := guard.TimeRuleLoad(ctx, func() error {
-		rules, loadErr = loadGuardRules(ctx, rootOverride)
-		return loadErr
+	rules, loaded, loadErr := guard.TimeRuleLoad(ctx, func() (*magus.GuardRules, error) {
+		return loadGuardRules(ctx, rootOverride)
 	})
 	stop()
 	shellRules, shellDialect := workspaceShellRules(rules)
@@ -307,16 +308,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 			return magus.Inspect(ctx, root,
 				magus.WithLoadedConfig(globalCfg), magus.WithVersion(version))
 		},
-		CacheDir: func(root string) (string, error) {
-			if root != "" {
-				return magus.ResolveCacheDir(root)
-			}
-			found, err := magus.FindRoot(rootOverride)
-			if err != nil {
-				return "", err
-			}
-			return magus.ResolveCacheDir(found, magus.WithLoadedConfig(globalCfg))
-		},
+		CacheDir:         guardCacheDir(rootOverride),
 		NotesShared:      globalCfg.Knowledge.Notes.Shared,
 		ShellRules:       shellRules,
 		ShellDialect:     shellDialect,
@@ -335,7 +327,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
 		BinaryVersion: version,
-		LoadRules:     loaded,
+		RuleLoad:      loaded,
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	deps.Binary, _ = runningBinaryPath()
@@ -374,6 +366,21 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
 	return deps
+}
+
+// guardCacheDir resolves a workspace's cache directory for the guard: root's own, read from
+// its magus.yaml, or for "" the workspace found from rootOverride, whose config is loaded.
+func guardCacheDir(rootOverride string) func(root string) (string, error) {
+	return func(root string) (string, error) {
+		if root != "" {
+			return magus.ResolveCacheDir(root)
+		}
+		found, err := magus.FindRoot(rootOverride)
+		if err != nil {
+			return "", err
+		}
+		return magus.ResolveCacheDir(found, magus.WithLoadedConfig(globalCfg))
+	}
 }
 
 // setGuardBuiltins sets deps' compiled-rule settings from magus.GuardBuiltins, traced.
