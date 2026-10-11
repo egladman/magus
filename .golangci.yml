@@ -273,6 +273,10 @@ linters:
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Deny}
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
             - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
+            - {type: github.com/egladman/magus/internal/guard.denial, field: Say}
+            - {type: github.com/egladman/magus/internal/guard.Verdict, field: Reason}
+            - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Why}
+            - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Hedge}
           prefixes: ["magus workspace:"]
           # A log record names what logged it with a component attribute
           # (internal/logattr), never a tag in its text. The allow list below
