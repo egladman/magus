@@ -35,7 +35,11 @@ var changelogTexts = map[Rule]ruleText{
 		catches:   "a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\"",
 		why: "Keep a Changelog heads each release \"[version] - date\", so a reader and a tool find a release " +
 			"by its number and see when it shipped; \"[Unreleased]\" carries no date because nothing has " +
-			"shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it.",
+			"shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it. " +
+			"Measured 2026-10-11 over the adjudicated labeling round 2: 27.3% precision (3 of 11) before, " +
+			"100% (3 of 3) after. Every false positive was a tag-named version (\"## [v0.4.3] - " +
+			"2026-09-06\"), which follows the shape, so a \"v\" inside the brackets is accepted. It stays " +
+			"off until a fresh labeling round measures it.",
 	},
 	RuleChangelogGroup: {
 		code:      "PRF1031",
@@ -65,8 +69,11 @@ func headingLevel(ln proseLine) int {
 	return len(t) - len(strings.TrimLeft(t, "#"))
 }
 
+// versionHeading is a Keep a Changelog release heading. A "v" before the
+// version is the tag's own name ("[v0.4.3]"), which the format leaves to the
+// project.
 var versionHeading = regexp.MustCompile(
-	`^\[(?:Unreleased|(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*))\](?: - \d{4}-\d{2}-\d{2})?(?: \[YANKED\])?$`)
+	`^\[(?:Unreleased|(v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*))\](?: - \d{4}-\d{2}-\d{2})?(?: \[YANKED\])?$`)
 
 func changelogHeading(in input) []Finding {
 	var out []Finding

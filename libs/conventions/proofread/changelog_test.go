@@ -46,6 +46,8 @@ func TestChangelogHeadingWantsAVersionAndADate(t *testing.T) {
 		{"unreleased", "## [Unreleased]\n\n### Fixed\n\n- **A thing works.**\n", nil},
 		{"a linked version", "## [0.4.3](https://github.com/egladman/magus/releases/tag/v0.4.3) - 2026-09-06\n", nil},
 		{"a yanked release", "## [0.2.0] - 2026-01-01 [YANKED]\n", nil},
+		{"a tag-named version", "## [v0.5.0-rc.2] - 2026-10-05\n", nil},
+		{"a tag-named version with no date", "## [v0.5.0]\n", []Finding{bad("[v0.5.0]", 1)}},
 		{"no brackets", "## v0.5.0 - 2026-10-05\n", []Finding{bad("v0.5.0 - 2026-10-05", 1)}},
 		{"no date", "## [0.5.0]\n", []Finding{bad("[0.5.0]", 1)}},
 		{"a date in parentheses", "## [0.5.0] (2026-10-05)\n", []Finding{bad("[0.5.0] (2026-10-05)", 1)}},
