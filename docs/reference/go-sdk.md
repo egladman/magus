@@ -297,8 +297,14 @@ two tests that register the same name in parallel race, and a spell left
 registered leaks into every later test. `fakespell.Register(tb, name, opts ...spells.Option)` in
 `libs/testkit/fakespell` registers a spell for the duration of `tb` and
 returns its name. It takes the options of the `spells` package itself, such as
-`spells.WithTargets` and `spells.WithInvoker`. Give each test its own name,
-and keep tests that register spells out of `t.Parallel`.
+`spells.WithTargets` and `spells.WithInvoker`. The suffix it adds keeps two
+registrations of one name apart, but the registry stays shared: a parallel
+test that lists or looks up spells sees another test's fake, so keep those
+tests out of `t.Parallel`.
+
+`testkit` and `fakespell` take a `testkit.TB`, the part of `testing.TB` they
+call. `*testing.T` and `*testing.B` satisfy it, and so can a small type of your
+own where no test is running, such as an `Example`.
 
 ## What this SDK does not give you
 

@@ -13,7 +13,7 @@
 // magus's own domain types and a separate module would make magus and testkit require
 // each other.
 //
-// Every constructor takes a testing.TB and fails the test on error rather than
+// Every constructor takes a TB and fails the test on error rather than
 // returning one. A fixture that cannot be built is not a condition a test handles; it
 // is the test being unable to start, and threading an error through every call site
 // buys nothing but noise. Environ is the exception: a generator outside any test calls
@@ -23,10 +23,22 @@ package testkit
 import (
 	"os"
 	"path/filepath"
-	"testing"
 
 	"github.com/egladman/magus/types"
 )
+
+// TB is the part of testing.TB that testkit and fakespell call. *testing.T and
+// *testing.B satisfy it, and so can a small type in a program with no test running (an
+// Example), which cannot implement testing.TB because that interface has a private
+// method.
+type TB interface {
+	Helper()
+	TempDir() string
+	Fatalf(format string, args ...any)
+	Skip(args ...any)
+	Cleanup(func())
+	Setenv(key, value string)
+}
 
 // Projects builds one project per path, in the order given.
 //
@@ -46,7 +58,7 @@ func Projects(paths ...string) []*types.Project {
 // The root is a per-test temporary directory, removed when the test ends, so a test
 // never has to clean up and two tests never share a tree.
 type Workspace struct {
-	tb   testing.TB
+	tb   TB
 	root string
 }
 
@@ -56,12 +68,12 @@ type Workspace struct {
 // /var, a symlink to /private/var, and whatever magus reports about the workspace (the
 // working directory, git's toplevel, a recorded checkout) carries the resolved form, so
 // an unresolved root never compares equal to it.
-func NewWorkspace(tb testing.TB) *Workspace {
+func NewWorkspace(tb TB) *Workspace {
 	tb.Helper()
 	return &Workspace{tb: tb, root: resolvedTempDir(tb)}
 }
 
-func resolvedTempDir(tb testing.TB) string {
+func resolvedTempDir(tb TB) string {
 	tb.Helper()
 	dir, err := filepath.EvalSymlinks(tb.TempDir())
 	if err != nil {

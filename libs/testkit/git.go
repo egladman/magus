@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"testing"
 
 	"github.com/egladman/magus/internal/sandbox/env"
 )
@@ -24,7 +23,14 @@ import (
 //
 // commit.gpgsign: a user's global signing setting would otherwise prompt for, or fail
 // without, a key when the code under test commits with the user's environment.
+//
+// core.excludesFile and core.attributesFile: git reads $XDG_CONFIG_HOME/git/ignore and
+// attributes by default, which GIT_CONFIG_GLOBAL does not switch off, so a user's global
+// ignore would drop fixture files from `add -A` and a global attribute would change
+// what a diff or checkout does.
 var repoConfig = [][2]string{
+	{"core.excludesFile", os.DevNull},
+	{"core.attributesFile", os.DevNull},
 	{"maintenance.auto", "false"},
 	{"gc.auto", "0"},
 	{"user.name", "magus test"},
@@ -41,7 +47,7 @@ type Repo struct {
 // NewRepo makes a git repository in a fresh Workspace, writes files into it (keyed by
 // workspace-relative path) and commits them, so HEAD exists even when files is empty.
 // It skips the test when git is not on PATH.
-func NewRepo(tb testing.TB, files map[string]string) *Repo {
+func NewRepo(tb TB, files map[string]string) *Repo {
 	tb.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		tb.Skip("testkit: git not on PATH")

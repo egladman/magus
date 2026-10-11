@@ -406,7 +406,7 @@ func TestMagusfileGlobs(t *testing.T) {
 // commands (list, graph, describe) where cache overhead is unnecessary.
 func ExampleInspect() {
 	// A directory is a project if it contains a magusfile.buzz.
-	w, cleanup := exampleWorkspaceOf(map[string]string{"myapp/magusfile.buzz": ""})
+	w, cleanup := newExampleWorkspace(map[string]string{"myapp/magusfile.buzz": ""})
 	defer cleanup()
 
 	ws, err := Inspect(context.Background(), w.Root())
@@ -439,12 +439,15 @@ func TestExpandAffectedFallbackDistinguishable(t *testing.T) {
 }
 
 // exampleTB lets an example build a testkit workspace: an Example has no *testing.T, and
-// testkit takes a testing.TB. It supplies the three methods testkit calls and panics on
-// any other, so a new use fails loudly.
+// testkit takes a testkit.TB. It supplies the three methods a workspace calls and
+// panics on the rest, so a new use fails loudly.
 type exampleTB struct {
-	testing.TB
 	dirs *[]string
 }
+
+func (exampleTB) Skip(...any)        { panic("exampleTB: Skip") }
+func (exampleTB) Cleanup(func())     { panic("exampleTB: Cleanup") }
+func (exampleTB) Setenv(_, _ string) { panic("exampleTB: Setenv") }
 
 func (exampleTB) Helper() {}
 
@@ -462,15 +465,15 @@ func (exampleTB) Fatalf(format string, args ...any) { panic(fmt.Sprintf(format, 
 // exampleWorkspace returns a workspace laid out the way a monorepo is, and a function that
 // removes it.
 func exampleWorkspace() (*testkit.Workspace, func()) {
-	return exampleWorkspaceOf(map[string]string{
+	return newExampleWorkspace(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "",
 		"web/magusfile.buzz": "",
 	})
 }
 
-// exampleWorkspaceOf is exampleWorkspace over files, keyed by workspace-relative path.
-func exampleWorkspaceOf(files map[string]string) (*testkit.Workspace, func()) {
+// newExampleWorkspace is exampleWorkspace over files, keyed by workspace-relative path.
+func newExampleWorkspace(files map[string]string) (*testkit.Workspace, func()) {
 	var dirs []string
 	ws := testkit.NewWorkspace(exampleTB{dirs: &dirs})
 	ws.WriteTree(files)

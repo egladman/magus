@@ -3906,6 +3906,9 @@ func TestGitIgnoreSources(t *testing.T) {
 	realRepo, err := filepath.EvalSymlinks(repo)
 	require.NoError(t, err)
 	ctx := t.Context()
+	// The fixture pins core.excludesFile to the null device; this test is about git's
+	// default.
+	gitRun(t, repo, "config", "--unset", "core.excludesFile")
 
 	got, err := gitVCS{}.IgnoreSources(ctx, repo)
 	require.NoError(t, err)

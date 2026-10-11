@@ -54,6 +54,19 @@ func TestRepoGitIgnoresTheCallersGitEnvironment(t *testing.T) {
 	assert.NotContains(t, r.Git("config", "--list", "--show-origin"), "hooksPath")
 }
 
+// TestNewRepoIgnoresAGlobalIgnoreFile: GIT_CONFIG_GLOBAL does not switch off the default
+// $XDG_CONFIG_HOME/git/ignore, and a pattern there would otherwise drop fixture files.
+func TestNewRepoIgnoresAGlobalIgnoreFile(t *testing.T) {
+	home := NewWorkspace(t)
+	home.Write(".config/git/ignore", "*.txt\n")
+	t.Setenv("HOME", home.Root())
+	t.Setenv("XDG_CONFIG_HOME", home.Path(".config"))
+
+	r := NewRepo(t, map[string]string{"a.txt": "a"})
+
+	assert.Equal(t, "a.txt", r.Git("ls-files"))
+}
+
 func TestRepoCommitReturnsTheNewHead(t *testing.T) {
 	r := NewRepo(t, map[string]string{"a.txt": "a"})
 	first := r.Head()
@@ -68,7 +81,7 @@ func TestRepoCommitReturnsTheNewHead(t *testing.T) {
 	assert.Equal(t, "c", r.Git("show", "HEAD:c.txt"))
 }
 
-func TestRepoAddWorktree(t *testing.T) {
+func TestAddWorktreeBranchesAtHeadInItsOwnDirectory(t *testing.T) {
 	r := NewRepo(t, map[string]string{"a.txt": "a"})
 	base := r.Head()
 
