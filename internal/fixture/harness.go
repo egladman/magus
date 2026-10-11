@@ -9,7 +9,8 @@ import (
 
 // WireHarness makes d resolve as a harness spell named d.ID until the test ends, then
 // puts back the loader it replaced. Any other id misses, so a test that wires one
-// harness never sees another by accident.
+// harness never sees another by accident. The loader is process-wide, so a test that
+// calls it must not run in parallel with another that does.
 func WireHarness(tb testing.TB, d agent.HarnessDescriptor) {
 	tb.Helper()
 	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {

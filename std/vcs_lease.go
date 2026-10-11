@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/proc"
@@ -20,15 +21,27 @@ type VCSLeaseGate func(ctx context.Context, row types.Job, backend string, args 
 
 // vcsLeaseGate is lease-vcs as internal/guard decides it, nil until the guard registers it.
 // It is registered rather than called because the guard imports this package.
-var vcsLeaseGate VCSLeaseGate
+var (
+	vcsLeaseGateMu sync.RWMutex
+	vcsLeaseGate   VCSLeaseGate
+)
 
 // RegisterVCSLeaseGate installs the gate vcs.cmd asks before it runs a version-control
 // command while a lease is acting. internal/guard calls it from init, so every binary that
-// links the guard has it; a later call replaces the gate. Not safe to call while vcs.cmd
-// may run. It returns the gate it replaced, for a test that swaps in its own to put back.
+// links the guard has it; a later call replaces the gate. Safe to call while vcs.cmd runs:
+// that call sees the old gate or the new one. It returns the gate it replaced, for a test
+// that swaps in its own to put back.
 func RegisterVCSLeaseGate(gate VCSLeaseGate) (previous VCSLeaseGate) {
+	vcsLeaseGateMu.Lock()
+	defer vcsLeaseGateMu.Unlock()
 	previous, vcsLeaseGate = vcsLeaseGate, gate
 	return previous
+}
+
+func currentVCSLeaseGate() VCSLeaseGate {
+	vcsLeaseGateMu.RLock()
+	defer vcsLeaseGateMu.RUnlock()
+	return vcsLeaseGate
 }
 
 // vcsLeaseRefusal is why vcs.cmd may not run backend with args in dir under the acting
@@ -49,7 +62,8 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 	if lease == "" {
 		return nil
 	}
-	if vcsLeaseGate == nil {
+	gate := currentVCSLeaseGate()
+	if gate == nil {
 		return fmt.Errorf("vcs\\cmd: lease %s is acting and this binary registers no lease-vcs gate, so `%s %s` is refused rather than run unguarded",
 			lease, backend, strings.Join(args, " "))
 	}
@@ -64,7 +78,7 @@ func vcsLeaseRefusal(ctx context.Context, backend string, args []string, dir str
 		}
 		dir = wd
 	}
-	return vcsLeaseGate(ctx, row, backend, args, dir)
+	return gate(ctx, row, backend, args, dir)
 }
 
 // liveRow is lease's live row in the store at loc, false when the store holds none or

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
@@ -74,24 +75,26 @@ type HarnessDescriptor struct {
 	Prompts        []HarnessPrompt    `json:"prompts,omitempty"`
 	Agents         []HarnessAgentFile `json:"agents,omitempty"`
 	Settings       []HarnessSetting   `json:"settings,omitempty"`
-	Limits         *HarnessLimits     `json:"limits,omitempty"`
+	Limits         HarnessLimits      `json:"limits,omitzero"`
 }
 
 // HarnessLimits are how long the host waits on a shell command in the foreground, in
 // milliseconds: ForegroundDefaultMs for one that names no timeout, ForegroundMaxMs at most.
-// Past it the host moves the command to the background. Nil when the harness declares none.
+// Past it the host moves the command to the background. The zero value is a harness that
+// declares none. ForegroundDefaultMs is the harness_limits contract's own key and is not
+// read here: the wiring passes the same number to magus shell as --foreground-default-ms.
 type HarnessLimits struct {
 	ForegroundDefaultMs int64 `json:"foreground_default_ms,omitempty"`
 	ForegroundMaxMs     int64 `json:"foreground_max_ms,omitempty"`
 }
 
-// ForegroundMax is the shortest foreground maximum among harnesses, the longest a check
-// can run in the foreground whichever of them a worker runs under; false when none
+// ShortestForegroundMax is the shortest foreground maximum among harnesses, the longest a
+// check can run in the foreground whichever of them a worker runs under; false when none
 // declares one.
-func ForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) {
+func ShortestForegroundMax(harnesses []HarnessDescriptor) (time.Duration, bool) {
 	var shortest time.Duration
 	for _, h := range harnesses {
-		if h.Limits == nil || h.Limits.ForegroundMaxMs <= 0 {
+		if h.Limits.ForegroundMaxMs <= 0 {
 			continue
 		}
 		d := time.Duration(h.Limits.ForegroundMaxMs) * time.Millisecond
@@ -164,14 +167,26 @@ type HarnessVerification struct {
 // LoadHarness has no other source to fall back to.
 type HarnessSpellLoader func(ctx context.Context, id string) (HarnessDescriptor, string, bool, error)
 
-var harnessSpellLoader HarnessSpellLoader
+var (
+	harnessSpellLoaderMu sync.RWMutex
+	harnessSpellLoader   HarnessSpellLoader
+)
 
 // RegisterHarnessSpellLoader installs the spell-backed harness resolver and returns the
-// one it replaced, for a test that swaps in its own to put back. Called once from
-// bindings init.
+// one it replaced, for a test that swaps in its own to put back. The bindings layer calls
+// it from init; a later call replaces the loader, and a LoadHarness already running sees
+// the old one or the new one.
 func RegisterHarnessSpellLoader(fn HarnessSpellLoader) (previous HarnessSpellLoader) {
+	harnessSpellLoaderMu.Lock()
+	defer harnessSpellLoaderMu.Unlock()
 	previous, harnessSpellLoader = harnessSpellLoader, fn
 	return previous
+}
+
+func currentHarnessSpellLoader() HarnessSpellLoader {
+	harnessSpellLoaderMu.RLock()
+	defer harnessSpellLoaderMu.RUnlock()
+	return harnessSpellLoader
 }
 
 type wiredHarnessesKey struct{}
@@ -214,8 +229,8 @@ func LoadHarness(ctx context.Context, root, id string) (descriptor HarnessDescri
 	if wired, set := wiredHarnessesFromContext(ctx); set {
 		trySpell = slices.Contains(wired, id)
 	}
-	if trySpell && harnessSpellLoader != nil {
-		d, src, ok, loadErr := harnessSpellLoader(ctx, id)
+	if loader := currentHarnessSpellLoader(); trySpell && loader != nil {
+		d, src, ok, loadErr := loader(ctx, id)
 		if loadErr != nil {
 			err = loadErr
 			return

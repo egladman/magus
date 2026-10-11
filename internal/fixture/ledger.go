@@ -12,7 +12,8 @@ import (
 // Ledger isolates the environment, creates a workspace root and a cache dir, and seeds
 // the job store with leases. The ledger lives in the per-repository state directory and
 // the guard resolves it with no seam a test can reach, so the isolation is what keeps a
-// test off the developer's own ledger.
+// test off the developer's own ledger. It returns the workspace root, then the cache dir
+// the store lives under.
 func Ledger(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 	tb.Helper()
 	testkit.Isolate(tb)
@@ -29,7 +30,9 @@ func Ledger(tb testing.TB, leases ...types.Job) (root, cacheDir string) {
 // disjoint write paths, one of them declaring a denied subtree inside its own.
 //
 // Both are registered, because an unregistered lease is denied before any boundary is
-// consulted.
+// consulted. The order is fixed, and callers index it: [0] is lease-a, running and owning
+// internal/ledger/**; [1] is lease-b, declared and owning cmd/magus/** minus its denied
+// subtree.
 func FleetLeases() []types.Job {
 	return []types.Job{
 		{
