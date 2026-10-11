@@ -135,7 +135,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 				return bind(rule), err
 			}
 		}
-		asked := askWorkspaceRules(ctx, seamSpawn, deps.LoadFailure, resolve, bind(deps.SpawnRule))
+		asked := askWorkspaceRules(ctx, seamSpawn, deps, resolve, bind(deps.SpawnRule))
 		failures = asked.failures
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
@@ -144,12 +144,18 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
 		}
-		// The unloaded deny names the failures itself.
-		denied := asked.unloaded && denyUnloaded(&asked, call, at)
+		// Either deny names the failures itself.
+		var denied bool
+		switch {
+		case asked.lapse != nil:
+			denied = applyLapse(&asked, call)
+		case asked.unloaded:
+			denied = denyUnloaded(&asked, call, at)
+		}
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
-		if !denied && !asked.timedOut {
+		if !denied {
 			note := ruleFailureNote(ruleFailures{
-				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered,
+				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, lapsed: asked.lapse != nil,
 				judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
 			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)

@@ -89,6 +89,10 @@ type Dependencies struct {
 	// be read, not because no rule is registered, and the failure is reported beside the
 	// verdict.
 	LoadFailure error
+	// LoadRules is how loading the working tree's rules went against the hook's deadline,
+	// as TimeRuleLoad reports it; zero when the caller did not time it. A lapsed load is
+	// judged as a phase that ran out of time, not as a broken magusfile.
+	LoadRules trail.Phase
 	// Policy describes the effective workspace rules for the lineage the trail keeps,
 	// nil when the caller cannot say. See RecordPolicy.
 	Policy func() PolicyState
@@ -578,10 +582,18 @@ func hostUnnamed() Verdict {
 // An EMPTY input passes: a wrapper that hands the hook nothing must not have every tool
 // call blocked. The caller owns the opposite case, a payload that failed to READ, because
 // nothing here saw it.
+//
+// Judging is bounded by HookBudget from Judge's start, or by the earlier deadline ctx
+// carries. Each workspace rule phase spends a share of what remains, and one that runs out
+// denies a call that changes state and lets one that reads through with a note naming the
+// phase.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
 		return hostUnnamed()
 	}
+	ctx, cancel := WithHookDeadline(ctx)
+	defer cancel()
+	ctx = withJudgeClock(ctx, deps.LoadRules)
 	input := req.Input
 	hasInput := input != ""
 	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
@@ -690,6 +702,10 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
 	skills := hint.NewGate(stateAt.cacheDir, who.skillsKey())
+	var started judgmentMark
+	if hasInput && !req.Observe && !req.DryRun {
+		started = beginJudgment(stateAt.cacheDir, who.factsKey(), time.Now())
+	}
 	binding := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
 	deps.lease = actingLease
@@ -1166,6 +1182,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 	}
+	if n := started.finish(time.Now()); n > 0 {
+		verdict = applyRuleFailureNote(verdict, unfinishedNote(n), unfinishedKind(tool))
+	}
 	// Worded after every arm has spoken, so whichever rule refused is the one held to a
 	// full explanation per session. An ask is never shortened: it waits on a person.
 	verdictRef := ""
@@ -1207,20 +1226,25 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
 	if !req.DryRun {
-		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judge(env.Cwd))
+		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judge(callDir))
 	}
 	return verdict
 }
 
-// judgeSource is the magus that judged a hook call, and the directory the host said the
-// call ran in, as the trail records them.
+// judgeSource is the magus that judged a hook call and the directory it judged the call in,
+// as the trail records them.
 type judgeSource struct {
 	binary, version, cwd string
 }
 
-// judge is the judging binary with the host's reported directory.
-func (d Dependencies) judge(cwd string) judgeSource {
-	return judgeSource{binary: d.Binary, version: d.BinaryVersion, cwd: cwd}
+// judge is the judging binary with the directory the call was judged in: dir when the call
+// named one, else the hook process's own, which a glue that forwards a bare command runs
+// in the call's directory.
+func (d Dependencies) judge(dir string) judgeSource {
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	return judgeSource{binary: d.Binary, version: d.BinaryVersion, cwd: dir}
 }
 
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
@@ -1974,6 +1998,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Binary:          by.binary,
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
+		Phases:          clockFrom(ctx).trail(),
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -2027,6 +2052,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Binary:        deps.Binary,
 		BinaryVersion: deps.BinaryVersion,
 		Cwd:           req.Cwd,
+		Phases:        clockFrom(ctx).trail(),
 	})
 }
 

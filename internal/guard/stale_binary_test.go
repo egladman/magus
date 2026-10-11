@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"os"
@@ -304,6 +305,7 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           cwd,
+		Phases:        []trail.Phase{{Name: phaseJudge}},
 	}, clearVolatile(commands[0]))
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
@@ -315,15 +317,68 @@ func TestHookRowsRecordTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           "/Users/dev/repo", // the spawn envelope's reported directory
+		Phases:        []trail.Phase{{Name: phaseJudge}},
 	}, clearVolatile(spawns[0]))
 }
 
+// A glue that forwards only the command or the path sends no cwd, and runs magus in the
+// call's directory instead, so the row records the directory the judge ran in.
+func TestBareHookRowsRecordTheDirectoryTheJudgeRanIn(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := Dependencies{Binary: "/work/tree/magus"}
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
+	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "notes.txt", IsPath: true})
+
+	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	require.Len(t, commands, 2)
+	byTool := map[string]string{}
+	for _, e := range commands {
+		byTool[e.Action] = e.Cwd
+	}
+	assert.Equal(t, map[string]string{
+		"shell.command": cmp.Or(hookLocation(ctx, deps).dir, wd),
+		"file.write":    wd,
+	}, byTool)
+}
+
+// The rule load the caller timed leads the row's phases, and every row ends with the whole
+// judgment, so a slow verdict shows where its time went.
+func TestHookRowsRecordEachPhase(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	probe := &commandRuleProbe{}
+	deps := Dependencies{
+		CommandRule: probe.rule(),
+		LoadRules:   trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500},
+	}
+
+	Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"})
+
+	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+	require.Len(t, commands, 1)
+	phases := commands[0].Phases
+	require.Len(t, phases, 3)
+	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: 812, BudgetMs: 6500}, phases[0])
+	assert.Equal(t, phaseWorktreeRule, phases[1].Name)
+	assert.Positive(t, phases[1].BudgetMs)
+	assert.False(t, phases[1].Lapsed)
+	assert.Equal(t, phaseJudge, phases[2].Name)
+}
+
 // clearVolatile zeroes what the clock, the OS account and the content-addressed blobs decide,
-// so a recorded event compares whole and a field added to it cannot be dropped unseen.
+// so a recorded event compares whole and a field added to it cannot be dropped unseen. A
+// phase keeps its name and whether it lapsed.
 func clearVolatile(e trail.Event) trail.Event {
 	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
+	phases := make([]trail.Phase, len(e.Phases))
+	for i, p := range e.Phases {
+		phases[i] = trail.Phase{Name: p.Name, Lapsed: p.Lapsed}
+	}
+	e.Phases = phases
 	return e
 }
 

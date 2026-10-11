@@ -1245,22 +1245,27 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 `))
 	require.NotNil(t, m.SpawnRule())
 
-	prev := approvedResolveTimeout
-	approvedResolveTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { approvedResolveTimeout = prev })
 	slow := func(ctx context.Context) (workspace.SpawnRule, error) {
 		<-ctx.Done()
 		return m.ApprovedSpawnRule(ctx)
 	}
 
 	ctx, cacheDir := spawnFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
+	defer cancel()
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: slow},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: approvedRuleTimedOut(seamSpawn), Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, verdictWithRule("deny", workspaceSpawnRule), unworded(v))
+	assert.Regexp(t, `magus ran out of time judging a subagent spawn: resolving the approved magus\\guard\.spawn rule did not finish within \d+ms`, v.Reason)
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
-	assert.Equal(t, []trail.RuleFailure{{Side: decidedByApproved, Error: "resolving the rule took longer than 50ms"}},
-		readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
+	failures := readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures
+	require.Len(t, failures, 1)
+	assert.Equal(t, decidedByApproved, failures[0].Side)
+	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
+	require.NotEmpty(t, spawns[0].Phases)
+	assert.Equal(t, phaseApprovedResolve, spawns[0].Phases[0].Name)
+	assert.True(t, spawns[0].Phases[0].Lapsed)
 }

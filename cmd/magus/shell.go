@@ -119,6 +119,9 @@ func withEnvRefusal(ctx context.Context, err error) context.Context {
 // reason in its host reply and must not leak a second, non-protocol message into the
 // host's hook stream.
 func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.Writer, args []string) error {
+	// Started here rather than in Judge, so loading the rules spends the same budget.
+	ctx, cancel := guard.WithHookDeadline(ctx)
+	defer cancel()
 	fset := flag.NewFlagSet("magus shell", flag.ContinueOnError)
 	// --observe is observation, not policy. A wrapper sets it for a tool that only
 	// LOOKS: no rule judges a read, so running the write rules over one would only
@@ -281,7 +284,12 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 // workspace whenever the command ran with --root from inside another checkout.
 func guardDependencies(ctx context.Context, rootOverride string) guard.Dependencies {
 	stop := traceFromContext(ctx).phase("guard.load_rules")
-	rules, loadErr := loadGuardRules(ctx, rootOverride)
+	var rules *magus.GuardRules
+	var loadErr error
+	loaded := guard.TimeRuleLoad(ctx, func() error {
+		rules, loadErr = loadGuardRules(ctx, rootOverride)
+		return loadErr
+	})
 	stop()
 	shellRules, shellDialect := workspaceShellRules(rules)
 	index := newGuardLookups(rootOverride)
@@ -321,6 +329,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 			Enabled: globalCfg.VCS.Enabled, Name: globalCfg.VCS.Name, BaseRef: globalCfg.VCS.BaseRef,
 		},
 		BinaryVersion: version,
+		LoadRules:     loaded,
 	}
 	// An unresolvable path leaves the trail row without one; the version still records.
 	deps.Binary, _ = runningBinaryPath()

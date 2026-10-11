@@ -138,6 +138,9 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
+	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")
+	assert.NotEmpty(t, e.Phases)
+	e.Cwd, e.Phases = "", nil
 	assert.Equal(t, trail.Event{
 		Kind:         trail.KindAgentCommand,
 		Action:       "shell.command",

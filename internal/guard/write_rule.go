@@ -73,9 +73,16 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 			return bind(rule), err
 		}
 	}
-	asked := askWorkspaceRules(ctx, seamWrite, deps.LoadFailure, resolve, bind(deps.WriteRule))
-	// The unloaded deny names the failures itself.
-	denied := asked.unloaded && denyUnloaded(&asked, unloadedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}, at)
+	asked := askWorkspaceRules(ctx, seamWrite, deps, resolve, bind(deps.WriteRule))
+	// Either deny names the failures itself.
+	call := unloadedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
+	var denied bool
+	switch {
+	case asked.lapse != nil:
+		denied = applyLapse(&asked, call)
+	case asked.unloaded:
+		denied = denyUnloaded(&asked, call, at)
+	}
 	decided := ""
 	if verdict.Decision != decisionPass {
 		decided = decidedByBuiltin
@@ -84,11 +91,11 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	if asked.by == "" {
 		decided = ""
 	}
-	if denied || asked.timedOut {
+	if denied {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
 	note := ruleFailureNote(ruleFailures{
-		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered,
+		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, lapsed: asked.lapse != nil,
 		judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
 	})
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}

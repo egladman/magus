@@ -25,17 +25,6 @@ const (
 	decisionDeny   = string(types.GuardDeny)
 )
 
-// ruleTimeout bounds one workspace rule call. The shipped host wiring kills a hook at ten
-// seconds and reads that as a failed hook, so a rule that loops is cut off well inside it
-// and fails open like any other broken rule.
-const ruleTimeout = 3 * time.Second
-
-// approvedResolveTimeout bounds resolving the approved rule: a VCS status, a read per
-// source and a second load. An agent can slow the status (untracked files, say), so running
-// out denies the call rather than dropping the side that would have judged it. With both
-// rule calls it stays inside the host's ten seconds.
-var approvedResolveTimeout = 3 * time.Second
-
 // The sides a verdict can be decided by, recorded on the trail so a deny links to the
 // policy that produced it.
 const (
@@ -73,9 +62,9 @@ type rulesAnswer struct {
 	answered []string
 	// failures are the sides that judged nothing, and why.
 	failures []trail.RuleFailure
-	// timedOut is true when the answer is the deny for an approved side that did not
-	// resolve in time; that deny already says so, so no failure note is added to it.
-	timedOut bool
+	// lapse is the first phase that ran out of its share of the hook's deadline, nil when
+	// every phase answered in time. applyLapse decides what it costs the call.
+	lapse *ruleLapse
 	// unloaded is true when the working tree failed to load and the approved side yielded
 	// no rule either, so no policy was read at all. A side that loaded and then raised is
 	// not unloaded: that stays fail-open.
@@ -100,24 +89,58 @@ type rulesAnswer struct {
 // deleted its twin, or failed to load. It is asked first, so a working-tree rule that loops
 // cannot spend the time it needs.
 //
-// A rule that fails contributes nothing and is reported, following magus\guard.shell's
-// standing on a broken workspace rule: the built-ins still apply and the agent is not
-// bricked by a typo in the magusfile. The one exception is an approved rule that could not
-// be resolved in time, which denies: the time is the part an agent can spend. No side
-// loading at all is reported as unloaded, for denyUnloaded to judge.
-func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
-	out := rulesAnswer{loadFailure: loadFailure}
-	if loadFailure != nil {
-		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadFailure.Error()})
+// Each phase (resolving the approved rule, calling it, calling the working tree's) gets its
+// share of what remains of ctx's deadline. One that runs out, or a rule load deps reports
+// lapsed, is the answer's lapse, for applyLapse to judge. Any other failure contributes
+// nothing and is reported, following magus\guard.shell's standing on a broken workspace
+// rule: the built-ins still apply and the agent is not bricked by a typo in the magusfile.
+// No side loading at all is reported as unloaded, for denyUnloaded to judge.
+func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
+	out := rulesAnswer{loadFailure: deps.LoadFailure}
+	clock := clockFrom(ctx)
+	lapsed := func(side, what, failure string) {
+		out.failures = append(out.failures, trail.RuleFailure{Side: side, Error: failure})
+		if out.lapse == nil {
+			out.lapse = &ruleLapse{side: side, what: what}
+		}
 	}
-	ask := func(by string, rule ruleCall) {
-		if rule == nil || out.answer.Decision == types.GuardDeny {
+	switch {
+	case deps.LoadRules.Lapsed:
+		budget := time.Duration(deps.LoadRules.BudgetMs) * time.Millisecond
+		lapsed(decidedByWorktree, lapseClause("loading this workspace's guard rules", "finish", budget), lapseClause("the magusfile", "load", budget))
+	case deps.LoadFailure != nil:
+		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
+	}
+	// left counts the shares of the phases still to run.
+	left := 0
+	if resolveApproved != nil {
+		left += resolveShares + 1
+	}
+	if worktree != nil {
+		left++
+	}
+	ask := func(by, phase string, rule ruleCall) {
+		budget := phaseBudget(ctx, 1, left)
+		left--
+		if out.answer.Decision == types.GuardDeny {
 			return
 		}
-		callCtx, cancel := context.WithTimeout(ctx, ruleTimeout)
+		subject := "the " + sideName(seam, by)
+		if budget <= 0 {
+			lapsed(by, lapseClause(subject, "answer", budget), lapseClause("the rule", "answer", budget))
+			return
+		}
+		callCtx, cancel := context.WithTimeout(ctx, budget)
+		start := time.Now()
 		got, err := rule(callCtx)
+		expired := err != nil && errors.Is(callCtx.Err(), context.DeadlineExceeded)
 		cancel()
-		if err != nil {
+		clock.record(phase, time.Since(start), budget, expired)
+		switch {
+		case expired:
+			lapsed(by, lapseClause(subject, "answer", budget), lapseClause("the rule", "answer", budget))
+			return
+		case err != nil:
 			out.failures = append(out.failures, trail.RuleFailure{Side: by, Error: "the rule failed: " + err.Error()})
 			return
 		}
@@ -130,28 +153,52 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 	}
 	approvedLoaded := false
 	if resolveApproved != nil {
-		resolveCtx, cancel := context.WithTimeout(ctx, approvedResolveTimeout)
-		rule, err := resolveApproved(resolveCtx)
-		expired := errors.Is(resolveCtx.Err(), context.DeadlineExceeded)
-		cancel()
-		switch {
-		case err == nil && rule != nil:
+		budget := phaseBudget(ctx, resolveShares, left)
+		left -= resolveShares
+		var rule ruleCall
+		var err error
+		expired := budget <= 0
+		if !expired {
+			resolveCtx, cancel := context.WithTimeout(ctx, budget)
+			start := time.Now()
+			rule, err = resolveApproved(resolveCtx)
+			expired = errors.Is(resolveCtx.Err(), context.DeadlineExceeded)
+			cancel()
+			clock.record(phaseApprovedResolve, time.Since(start), budget, expired && (err != nil || rule == nil))
+		}
+		if err == nil && rule != nil {
 			approvedLoaded = true
-			ask(decidedByApproved, rule)
-		case expired:
-			// "No rule" read under an expired deadline may be a read that failed, since the
-			// approved state reports an absent file and a failed read alike.
-			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "resolving the rule took longer than " + approvedResolveTimeout.String()})
-			out.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: approvedRuleTimedOut(seam)}
-			out.by = decidedByApproved
-			out.timedOut = true
-		case err != nil:
-			out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
+			ask(decidedByApproved, phaseApprovedRule, rule)
+		} else {
+			left--
+			switch {
+			case expired:
+				// "No rule" read under an expired deadline may be a read that failed, since
+				// the approved state reports an absent file and a failed read alike.
+				subject := "resolving the " + sideName(seam, decidedByApproved)
+				lapsed(decidedByApproved, lapseClause(subject, "finish", budget), lapseClause("resolving the rule", "finish", budget))
+			case err != nil:
+				out.failures = append(out.failures, trail.RuleFailure{Side: decidedByApproved, Error: "the rule could not be resolved: " + err.Error()})
+			}
 		}
 	}
-	ask(decidedByWorktree, worktree)
-	out.unloaded = loadFailure != nil && !approvedLoaded && worktree == nil
+	if worktree != nil {
+		ask(decidedByWorktree, phaseWorktreeRule, worktree)
+	}
+	out.unloaded = deps.LoadFailure != nil && !approvedLoaded && worktree == nil
 	return out
+}
+
+// applyLapse turns asked into a deny when a phase of the judgment ran out of time and the
+// call changes state, and reports whether it denied. A call that only reads stands on what
+// did answer, with the failure note naming the phase that ran out.
+func applyLapse(asked *rulesAnswer, call unloadedCall) bool {
+	if asked.lapse == nil || !call.changes || asked.answer.Decision == types.GuardDeny {
+		return false
+	}
+	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: lapseDenial(call, *asked.lapse)}
+	asked.by = asked.lapse.side
+	return true
 }
 
 // unloadedCall is one call whose policy did not load, as the three seams describe it.
@@ -286,13 +333,6 @@ func applyRuleFailureNote(verdict Verdict, note string, kind hint.MarkerKind) Ve
 	return verdict
 }
 
-// approvedRuleTimedOut is the deny reason when the approved rule did not resolve in time.
-func approvedRuleTimedOut(seam functionSeam) string {
-	return "magus could not resolve the approved " + seam.member() + " rule in time, so this " + string(seam) +
-		" is denied rather than judged without it. Resolving it runs a VCS status and reloads the committed " +
-		"magusfile; retry once `git status` answers quickly in this checkout."
-}
-
 // sideName words one side of a seam for a reader.
 func sideName(seam functionSeam, side string) string {
 	switch side {
@@ -310,6 +350,9 @@ type ruleFailures struct {
 	seam     functionSeam
 	failures []trail.RuleFailure
 	answered []string
+	// lapsed is a failure set holding a phase that ran out of time, told in full on every
+	// call: which phase ran out, and of how much, is news each time.
+	lapsed bool
 	// judged builds the line naming the magus that judged the call. It is read only when a
 	// rule failed, since it stats the checkout.
 	judged func() string
@@ -317,7 +360,8 @@ type ruleFailures struct {
 
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
 // could not, "" when none failed. A set of failures is told in full the first time it fires
-// in a session and as one line naming what applied on every repeat, so the reader never
+// in a session (every time when a phase ran out of time) and as one line naming what
+// applied on every repeat, so the reader never
 // takes a call for judged by a rule that was skipped. The judging binary's line is part of
 // the full telling only: the repeat stays one line.
 func ruleFailureNote(r ruleFailures) string {
@@ -340,6 +384,9 @@ func ruleFailureNote(r ruleFailures) string {
 		if judged := r.judged(); judged != "" {
 			full.WriteString("\n\n" + judged)
 		}
+	}
+	if r.lapsed {
+		return full.String()
 	}
 	kind := hint.MarkerKind(string(ruleFailedKind(r.seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
 	return r.gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(r.seam)+" rule is still failing, as told earlier in this session.")

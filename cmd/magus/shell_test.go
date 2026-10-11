@@ -353,16 +353,43 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 		Binary:        got.Binary,
 		BinaryVersion: got.BinaryVersion,
 		Cwd:           got.Cwd,
+		Phases:        got.Phases,
 	}
 }
 
+// A hook row times the rule load against the hook's deadline, which starts before it, and
+// ends with the whole judgment.
+func TestHookCmd_RecordsEachPhase(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	dir := t.TempDir()
+	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
+	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	phases := events[0].Phases
+	require.Len(t, phases, 2)
+	assert.Equal(t, "load_rules", phases[0].Name)
+	assert.Positive(t, phases[0].BudgetMs)
+	assert.Less(t, phases[0].BudgetMs, guard.HookBudget.Milliseconds())
+	assert.False(t, phases[0].Lapsed)
+	assert.Equal(t, "judge", phases[1].Name)
+}
+
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
-// version, and clears them from got so the rest of the row can be compared whole.
+// version, and the phases it timed, and clears them from got so the rest of the row can be
+// compared whole.
 func assertJudgedBy(t *testing.T, got *trail.Event) {
 	t.Helper()
 	assert.NotEmpty(t, got.Binary, "a hook row names the magus that judged it")
 	assert.Equal(t, version, got.BinaryVersion)
-	got.Binary, got.BinaryVersion = "", ""
+	names := make([]string, len(got.Phases))
+	for i, p := range got.Phases {
+		names[i] = p.Name
+	}
+	assert.Equal(t, []string{"load_rules", "judge"}, names)
+	got.Binary, got.BinaryVersion, got.Phases = "", "", nil
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
@@ -450,6 +477,9 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assertJudgedBy(t, &got)
+	// A bare command names no directory, so the row records the one the judge ran in.
+	wd, err := os.Getwd()
+	require.NoError(t, err)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
@@ -457,6 +487,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		Action:    "shell.command",
 		Outcome:   trail.OutcomeOK,
 		Preview:   "guard: pass",
+		Cwd:       wd,
 	}, got)
 
 	body, err := trail.ReadBlob(dir, requestRef)

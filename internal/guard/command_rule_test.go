@@ -254,13 +254,22 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.NotEmpty(t, commands)
-	body, err := trail.ReadBlob(cacheDir, commands[0].ResponseRef)
+	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}},
+		readCommandBlob(t, cacheDir, commands[0]).RuleFailures)
+}
+
+// commandBlob is the part of an agent_command response blob these tests read.
+type commandBlob struct {
+	RuleFailures []trail.RuleFailure `json:"rule_failures"`
+}
+
+func readCommandBlob(t *testing.T, cacheDir string, e trail.Event) commandBlob {
+	t.Helper()
+	body, err := trail.ReadBlob(cacheDir, e.ResponseRef)
 	require.NoError(t, err)
-	var got struct {
-		RuleFailures []trail.RuleFailure `json:"rule_failures"`
-	}
+	var got commandBlob
 	require.NoError(t, json.Unmarshal(body, &got))
-	assert.Equal(t, []trail.RuleFailure{{Side: decidedByWorktree, Error: "the rule failed: magus\\guard.command: the rule raised: boom"}}, got.RuleFailures)
+	return got
 }
 
 // The approved rule and the working-tree rule both run and the stricter answer stands, so
@@ -313,21 +322,48 @@ func TestBrokenWorkingTreeStillRunsTheApprovedCommandRule(t *testing.T) {
 	assert.Contains(t, v.Reason, "no watching")
 }
 
-// Resolving the approved side is time an agent can spend, so running out denies rather
-// than judging without it, as it does for a spawn.
-func TestApprovedCommandRuleTimeoutDenies(t *testing.T) {
-	prev := approvedResolveTimeout
-	approvedResolveTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { approvedResolveTimeout = prev })
-
-	ctx, _ := spawnFixture(t)
-	deps := Dependencies{ApprovedCommandRule: func(ctx context.Context) (workspace.CommandRule, error) {
+// Resolving the approved side is time an agent can spend, so running out of it denies a
+// command that changes state rather than judging it without that side, and lets one that
+// only reads through with a note naming the phase and its budget.
+func TestApprovedCommandRuleTimeoutDeniesAChangeAndAdvisesARead(t *testing.T) {
+	slow := Dependencies{ApprovedCommandRule: func(ctx context.Context) (workspace.CommandRule, error) {
 		<-ctx.Done()
 		return nil, nil
 	}}
-	v := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code"})
+	judge := func(t *testing.T, command string) (Verdict, []trail.RuleFailure) {
+		ctx, cacheDir := spawnFixture(t)
+		ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
+		defer cancel()
+		v := Judge(ctx, slow, Request{Input: command, Host: "claude-code", Session: "s1"})
+		commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
+		require.Len(t, commands, 1)
+		return v, readCommandBlob(t, cacheDir, commands[0]).RuleFailures
+	}
+
+	v, failures := judge(t, "touch notes.txt")
+	assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v))
+	assert.Regexp(t, `magus ran out of time judging this command: resolving the approved magus\\guard\.command rule did not finish within \d+ms`, v.Reason)
+	require.Len(t, failures, 1)
+	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
+
+	v, _ = judge(t, "ls")
+	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(v))
+	assert.Regexp(t, `The approved magus\\guard\.command rule judged nothing: resolving the rule did not finish within \d+ms`, v.Context)
+}
+
+// A rule that runs past its share of the deadline is named with the budget it had.
+func TestSlowWorkingTreeCommandRuleIsNamedWithItsBudget(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
+	defer cancel()
+	deps := Dependencies{CommandRule: func(ctx context.Context, _ types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		<-ctx.Done()
+		return types.GuardVerdict{}, ctx.Err()
+	}}
+
+	v := Judge(ctx, deps, Request{Input: "touch notes.txt", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, "deny", v.Decision)
-	assert.Contains(t, v.Reason, approvedRuleTimedOut(seamCommand))
+	assert.Regexp(t, `the working tree's magus\\guard\.command rule did not answer within \d+ms`, v.Reason)
 }
 
 // The checkout's state costs processes, so it is read only for a line that pushes or
