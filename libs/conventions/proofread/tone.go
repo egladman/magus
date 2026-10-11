@@ -57,12 +57,12 @@ var (
 // one it means advises: of these, only blame and reply-opener measured no
 // false positive over the last 200 merged pull requests.
 var toneChecks = []check{
-	{rule: RuleBlame, on: teammate, judge: blame},
-	{rule: RuleVerdict, on: teammate, advise: teammate, judge: verdict},
-	{rule: RuleAbsolute, on: teammate, advise: teammate, judge: absolute},
-	{rule: RuleIntent, on: teammate, advise: teammate, judge: intent},
+	{rule: RuleBlame, on: toneKinds, judge: blame},
+	{rule: RuleVerdict, on: toneKinds, advise: toneKinds, judge: verdict},
+	{rule: RuleAbsolute, on: toneKinds, advise: toneKinds, judge: absolute},
+	{rule: RuleIntent, on: toneKinds, advise: toneKinds, judge: intent},
 	{rule: RuleCredit, on: pullRequestOnly, advise: pullRequestOnly, judge: creditEarlier},
-	{rule: RuleClaim, on: teammate, advise: teammate, judge: claim},
+	{rule: RuleClaim, on: toneKinds, advise: toneKinds, judge: claim},
 	{rule: RuleReplyOpener, on: replyOnly, judge: replyOpening},
 	{rule: RuleJudgmentAsFact, on: replyOnly, advise: replyOnly, judge: judgmentAsFact},
 	{rule: RuleStackedHedge, on: replyOnly, advise: replyOnly, judge: stackedHedge},
@@ -317,7 +317,7 @@ func claim(in input) []Finding {
 	var out []Finding
 
 	for i, para := range masked {
-		if para.head.heading || limits[i] || (in.kind == KindChangeDescription && para.head.line == 1) {
+		if para.head.heading || limits[i] || (titled(in.kind) && para.head.line == 1) {
 			continue
 		}
 

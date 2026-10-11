@@ -47,6 +47,9 @@ import "./libs/conventions/proofread" as proofread;
 
 final descriptionKind = "change-description";
 final replyKind = "review-reply";
+final commitKind = "commit-message";
+final issueKind = "issue";
+final releaseKind = "release-notes";
 
 // example is the shape a denial teaches, since an agent sees only the denial text.
 final example = "    fix(cache): sort the key's inputs before hashing\n"
@@ -68,6 +71,16 @@ final replyLine = "Rewrite the reply: acknowledge the point it answers, state wh
     + "evidence, label a judgment call and give its reason, and ask where you do not know. For "
     + "example: \"I'd move the retry into the client: the upstream drops about 1% of calls. "
     + "Open to keeping it here if you see a cleaner seam.\"";
+final commitLine = "Rewrite the subject as one line in the imperative ('add', not 'added'), at most 100 "
+    + "bytes, with no trailing period, no selling word and no credit to a tool; detail belongs in the "
+    + "pull request description. For example: sort the key's inputs before hashing";
+final issueLine = "Rewrite the issue: a title that names the problem, then what happened against what you "
+    + "expected and the steps to reproduce it, each as a sentence about the situation, not a person. "
+    + "For example:\n    The cache misses after a rename\n    After a file rename, `magus run build` "
+    + "rebuilt every project instead of hitting the cache. Expected: a hit.";
+final releaseLine = "Rewrite the notes for the person upgrading: one entry per change under Added, Changed, "
+    + "Deprecated, Removed, Fixed or Security, each saying what changed for them. For example:\n"
+    + "    ### Fixed\n    - **Warm builds hit the cache again.** The key sorts its inputs before hashing.";
 
 // The budget's constants, each a norm this repository or its sources already set.
 // wordsPerChange is the 60-word changelog fragment cap (changelogEntryWordCap in
@@ -156,6 +169,21 @@ final COMMANDS = [
             "--reviewer"] },
     TextCommand{ program = "glab", command = ["mr", "note"], kind = replyKind,
         body = ["--message", "-m"], values = ["-R", "--repo"] },
+    // An issue is a title and a body written to the people who pick it up; a release's notes
+    // are what a user reads to decide whether to upgrade.
+    TextCommand{ program = "gh", command = ["issue", "create"], kind = issueKind,
+        title = ["--title", "-t"], body = ["--body", "-b"], bodyFile = ["--body-file", "-F"],
+        values = ["-R", "--repo", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project",
+            "-T", "--template"] },
+    TextCommand{ program = "gh", command = ["release", "create"], kind = releaseKind,
+        title = ["--title", "-t"], body = ["--notes", "-n"], bodyFile = ["--notes-file", "-F"],
+        values = ["-R", "--repo", "--target", "--discussion-category", "--notes-start-tag"] },
+    TextCommand{ program = "glab", command = ["issue", "create"], kind = issueKind,
+        title = ["--title", "-t"], body = ["--description", "-d"],
+        values = ["-R", "--repo", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-w", "--weight"] },
+    TextCommand{ program = "glab", command = ["release", "create"], kind = releaseKind,
+        title = ["--name", "-n"], body = ["--notes", "-N"], bodyFile = ["--notes-file", "-F"],
+        values = ["-R", "--repo", "-m", "--milestone", "-r", "--ref", "-a", "--assets-links"] },
 ];
 
 // OutsideJudge is a command that judges text the way proofread does: it reads the text on
@@ -697,6 +725,15 @@ export fun judgedProblem(f: Judged, kind: str) > str {
     if (kind == descriptionKind and f.line > 1) {
         return "description line {f.line - 1}: {f.message} [{f.rule}]";
     }
+    if (kind == issueKind and f.line == 1) {
+        return "the title: {f.message} [{f.rule}]";
+    }
+    if (kind == issueKind and f.line > 1) {
+        return "body line {f.line - 1}: {f.message} [{f.rule}]";
+    }
+    if (kind == commitKind and f.line == 1) {
+        return "the subject: {f.message} [{f.rule}]";
+    }
     if (f.line > 0) {
         return "line {f.line}: {f.message} [{f.rule}]";
     }
@@ -959,7 +996,7 @@ export fun judgeText(t: Text, facts: fun () > Facts, judge: fun (text: str, kind
     final problems = mut [<str>];
     final advice = mut [<str>];
     var text = t.body ?? "";
-    if (t.kind == descriptionKind) {
+    if (t.kind == descriptionKind or t.kind == issueKind) {
         text = "{t.title ?? ""}\n{t.body ?? ""}";
     }
     final judgedWords = mut [<str>];
@@ -1218,6 +1255,31 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
     final advised = mut [<str>];
     var key = "";
     foreach (p in programs) {
+        foreach (message in subjects\recordedMessages(p)) {
+            final found = judgeText(Text{ kind = commitKind, body = message }, facts: fun () > Facts => unknownFacts(),
+                judge: advisingWhenUnrun(judge), cited: cited);
+            foreach (problem in found.denies) {
+                if (problems.indexOf(problem) == null) {
+                    problems.append(problem);
+                }
+            }
+            if (found.denies.len() > 0 and denied.indexOf(commitKind) == null) {
+                denied.append(commitKind);
+            }
+            if (found.advice.len() > 0) {
+                if (key == "") {
+                    key = "commit-message-text:" + message.split("\n")[0];
+                }
+                if (advised.indexOf(commitKind) == null) {
+                    advised.append(commitKind);
+                }
+            }
+            foreach (note in found.advice) {
+                if (advice.indexOf(note) == null) {
+                    advice.append(note);
+                }
+            }
+        }
         if (!writesText(p)) {
             continue;
         }
@@ -1245,37 +1307,84 @@ fun decideCiting(programs: [helpers\Program], line: str, files: {str: str}, diff
             }
         }
     }
-    final named = {"rule": "pull-request-text"};
     if (problems.len() > 0) {
-        return magus\guard.deny(opening(denied, description: "This pull request text breaks the description rules:",
-            reply: "This review reply breaks the reply rules:") + "\n  - " + problems.join("\n  - ") + "\n"
-            + teaching(denied, description: fixLine), named);
+        return magus\guard.deny(opening(denied, advice: false) + "\n  - " + problems.join("\n  - ") + "\n"
+            + teaching(denied, advice: false), {"rule": ruleName(denied)});
     }
     if (advice.len() > 0 and once(key)) {
-        return magus\guard.advise(opening(advised, description: "This pull request description could read better:",
-            reply: "This review reply could read better:") + "\n  - " + advice.join("\n  - ") + "\n"
-            + teaching(advised, description: shapeLine), named);
+        return magus\guard.advise(opening(advised, advice: true) + "\n  - " + advice.join("\n  - ") + "\n"
+            + teaching(advised, advice: true), {"rule": ruleName(advised)});
     }
     return magus\guard.allow();
 }
 
-// opening is the first line of a verdict on text of kinds.
-fun opening(kinds: [str], description: str, reply: str) > str {
-    if (kinds.indexOf(descriptionKind) != null) {
-        return description;
-    }
-    return reply;
+// advisingWhenUnrun wraps judge for a commit message: a judge that is missing, stale or did not
+// run (its "judge" finding) is advice there, not a denial. A commit is made in every fresh
+// checkout before anyone has linked proofread, and a pull request is not; the rest of the
+// rule, which needs no binary, still denies.
+fun advisingWhenUnrun(judge: fun (text: str, kind: str) > [Judged]) > fun (text: str, kind: str) > [Judged] {
+    return fun (text: str, kind: str) > [Judged] {
+        final found = mut [<Judged>];
+        foreach (f in judge(text, kind: kind)) {
+            if (f.rule == "judge") {
+                found.append(Judged{ rule = f.rule, line = f.line, message = f.message, matched = f.matched,
+                    decision = "advise", url = f.url });
+            } else {
+                found.append(f);
+            }
+        }
+        return found;
+    };
 }
 
-// teaching is the shape a verdict on text of kinds teaches: description's for a
-// description, replyLine for a reply, both for both.
-fun teaching(kinds: [str], description: str) > str {
+// ruleName is the guard rule a verdict on text of kinds answers as: a description or a reply
+// is pull-request-text, a commit message its own, and an issue or release notes forge-text.
+fun ruleName(kinds: [str]) > str {
+    if (kinds.indexOf(descriptionKind) != null or kinds.indexOf(replyKind) != null) {
+        return "pull-request-text";
+    }
+    if (kinds.indexOf(commitKind) != null) {
+        return "commit-message-text";
+    }
+    return "forge-text";
+}
+
+// opening is the first line of a verdict on text of kinds, the first of them in the order a
+// description, a reply, a commit message, an issue and release notes.
+fun opening(kinds: [str], advice: bool) > str {
+    if (kinds.indexOf(descriptionKind) != null) {
+        return if (advice) "This pull request description could read better:" else "This pull request text breaks the description rules:";
+    }
+    if (kinds.indexOf(replyKind) != null) {
+        return if (advice) "This review reply could read better:" else "This review reply breaks the reply rules:";
+    }
+    if (kinds.indexOf(commitKind) != null) {
+        return if (advice) "This commit message could read better:" else "This commit message breaks the writing rules:";
+    }
+    if (kinds.indexOf(issueKind) != null) {
+        return if (advice) "This issue could read better:" else "This issue breaks the writing rules:";
+    }
+    return if (advice) "These release notes could read better:" else "These release notes break the writing rules:";
+}
+
+// teaching is the shape a verdict on text of kinds teaches, one line per kind: a description's
+// fixLine, or its shapeLine for advice, replyLine for a reply, and one for each other kind.
+fun teaching(kinds: [str], advice: bool) > str {
     final lines = mut [<str>];
     if (kinds.indexOf(descriptionKind) != null) {
-        lines.append(description);
+        lines.append(if (advice) shapeLine else fixLine);
     }
     if (kinds.indexOf(replyKind) != null) {
         lines.append(replyLine);
+    }
+    if (kinds.indexOf(commitKind) != null) {
+        lines.append(commitLine);
+    }
+    if (kinds.indexOf(issueKind) != null) {
+        lines.append(issueLine);
+    }
+    if (kinds.indexOf(releaseKind) != null) {
+        lines.append(releaseLine);
     }
     return lines.join("\n");
 }
@@ -1497,6 +1606,12 @@ test "each forge command is judged as the kind it writes" {
         "review-reply|From a file.": ["gh", "api", "repos/o/r/issues/412/comments", "-F", "body=@reply.md"],
         "change-description|fix: pin the key\nPins the key.": ["glab", "mr", "create", "-t", "fix: pin the key", "-d", "Pins the key."],
         "review-reply|Thanks, done.": ["glab", "mr", "note", "12", "-m", "Thanks, done."],
+        "issue|The key changes\nIt changes after a rename.": ["gh", "issue", "create", "-t", "The key changes", "-b", "It changes after a rename."],
+        "issue|The key changes\nFrom a file.": ["gh", "issue", "create", "--title", "The key changes", "--body-file", "reply.md"],
+        "issue|The key changes\nIt changes.": ["glab", "issue", "create", "--title", "The key changes", "--description", "It changes."],
+        "release-notes|Fixed the key.": ["gh", "release", "create", "v1.0.0", "--title", "v1.0.0", "--notes", "Fixed the key."],
+        "release-notes|From a file.": ["gh", "release", "create", "v1.0.0", "-F", "reply.md"],
+        "release-notes|Fixed the port.": ["glab", "release", "create", "v1.0.0", "--name", "v1", "--notes", "Fixed the port."],
     };
     foreach (want, argv in cases) {
         final seen = mut [<Call>];
@@ -1519,6 +1634,101 @@ test "a reply denial teaches a reply, not a description" {
     std\assert(v.reason.startsWith("This review reply breaks the reply rules:"), message: v.reason);
     std\assert(v.reason.indexOf("line 1: Open with the point you answer. [reply-opener]") != null, message: v.reason);
     std\assert(v.reason.indexOf("acknowledge the point it answers") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
+}
+
+fun commit(message: str) > [helpers\Program] {
+    return helpers\vcsRequest([["git", "commit", "-m", message]]);
+}
+
+test "a commit message is judged as a commit message, its subject on line 1" {
+    final seen = mut [<Call>];
+    final recording = fun (text: str, kind: str) > [Judged] {
+        seen.append(Call{ text = text, kind = kind });
+        return [<Judged>];
+    };
+    decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 1 and seen[0].kind == "commit-message" and seen[0].text == "trim a fragment", message: "{seen.len()}");
+    decidePullRequest(helpers\vcsRequest([["git", "commit", "-m", "trim a fragment", "-m", "why"]]), line: "",
+        files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 2 and seen[1].text == "trim a fragment\n\nwhy", message: "each -m is a paragraph");
+    decidePullRequest(commit(""), line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    decidePullRequest(helpers\vcsRequest([["git", "status"]]), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 2, message: "a message known only at run time, and another subcommand, go unjudged");
+}
+
+test "a commit message denial names the subject, its rule and the shape, under its own rule name" {
+    final mood = Judged{ rule = "subject-mood", line = 1, message = "Open the subject with the imperative: 'Add', not 'Added'.", matched = "Added" };
+    final v = decidePullRequest(commit("Added the key"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(mood), once: helpers\counter());
+    std\assert(v.decision == "deny", message: v.reason);
+    std\assert(v.rule == "commit-message-text", message: "named: {v.rule}");
+    std\assert(v.reason.startsWith("This commit message breaks the writing rules:"), message: v.reason);
+    std\assert(v.reason.indexOf("the subject: Open the subject with the imperative: 'Add', not 'Added'. [subject-mood]") != null, message: v.reason);
+    std\assert(v.reason.indexOf("one line in the imperative") != null and v.reason.indexOf("conventional title") == null, message: v.reason);
+    final body = Judged{ rule = "filler", line = 3, message = "Drop 'actually': state the fact.", matched = "actually" };
+    final b = decidePullRequest(commit("trim a fragment\n\nIt actually works."), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(body), once: helpers\counter());
+    std\assert(b.reason.indexOf("line 3: Drop 'actually': state the fact. [filler]") != null, message: b.reason);
+}
+
+test "a commit message advice is told once per subject and never denies" {
+    final claim = Judged{ rule = "claim", line = 1, message = "Put the evidence in the sentence.", decision = "advise" };
+    final once = helpers\counter();
+    final first = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(claim), once: once);
+    std\assert(first.decision == "advise" and first.rule == "commit-message-text", message: "{first.decision} {first.reason}");
+    std\assert(first.reason.startsWith("This commit message could read better:"), message: first.reason);
+    final again = decidePullRequest(commit("cut the cold start by 40%"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(claim), once: once);
+    std\assert(again.decision == "allow", message: "told once");
+}
+
+test "a judge that did not run is advice for a commit message and a denial for a pull request" {
+    final unrun = Judged{ rule = "judge", line = 0, message = "proofread cannot run: it is not built; run `build`, then retry" };
+    final c = decidePullRequest(commit("trim a fragment"), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(unrun), once: helpers\counter());
+    std\assert(c.decision == "advise", message: "{c.decision} {c.reason}");
+    std\assert(c.reason.indexOf("proofread cannot run") != null, message: c.reason);
+    final p = decidePullRequest(create(goodTitle, body: "Pins the key."), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(unrun), once: helpers\counter());
+    std\assert(p.decision == "deny", message: "{p.decision} {p.reason}");
+    final denied = Judged{ rule = "subject-mood", line = 1, message = "Open with the imperative." };
+    std\assert(decidePullRequest(commit("Added it"), line: "", files: {<str: str>}, diff: facts(unknownFacts()),
+        judge: reporting(denied), once: helpers\counter()).decision == "deny", message: "a finding of a judge that ran still denies");
+}
+
+test "an issue is judged with its title on line 1 and denied under the forge-text rule" {
+    final repro = Judged{ rule = "issue-repro", line = 1, message = "Say what happened.", decision = "advise" };
+    final bad = Judged{ rule = "blame", line = 3, message = "Describe what happened." };
+    final argv = [["gh", "issue", "create", "--title", "The guard crashes", "--body", "It crashes.\n\nWhoever wrote it forgot."]];
+    final advised = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(repro), once: helpers\counter());
+    std\assert(advised.decision == "advise" and advised.rule == "forge-text", message: "{advised.decision} {advised.reason}");
+    std\assert(advised.reason.startsWith("This issue could read better:") and advised.reason.indexOf("the title: Say what happened. [issue-repro]") != null, message: advised.reason);
+    final denied = decidePullRequest(helpers\request(argv), line: "", files: {<str: str>},
+        diff: facts(unknownFacts()), judge: reporting(bad), once: helpers\counter());
+    std\assert(denied.decision == "deny" and denied.rule == "forge-text", message: denied.reason);
+    std\assert(denied.reason.startsWith("This issue breaks the writing rules:"), message: denied.reason);
+    std\assert(denied.reason.indexOf("body line 2: Describe what happened. [blame]") != null, message: denied.reason);
+    std\assert(denied.reason.indexOf("what happened against what you expected") != null, message: "teaches the issue shape");
+}
+
+test "release notes are judged as written, with no title, budget or shape" {
+    final hedge = Judged{ rule = "hedge", line = 2, message = "Drop 'might fix'." };
+    final v = decidePullRequest(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\nMight fix the key."]]),
+        line: "", files: {<str: str>}, diff: facts(unknownFacts()), judge: reporting(hedge), once: helpers\counter());
+    std\assert(v.decision == "deny" and v.rule == "forge-text", message: v.reason);
+    std\assert(v.reason.startsWith("These release notes break the writing rules:"), message: v.reason);
+    std\assert(v.reason.indexOf("line 2: Drop 'might fix'. [hedge]") != null, message: v.reason);
+    std\assert(v.reason.indexOf("Added, Changed, Deprecated, Removed, Fixed or Security") != null, message: "teaches the groups");
+    final clean = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "### Fixed\n- **The key is stable.**"]]),
+        line: "", files: {<str: str>});
+    std\assert(clean.decision == "allow", message: clean.reason);
+    final hyphen = judged(helpers\request([["gh", "release", "create", "v1.0.0", "--notes", "The key - fixed."]]),
+        line: "", files: {<str: str>});
+    std\assert(hyphen.decision == "deny", message: "a spaced hyphen is denied in every text");
 }
 
 test "parseJudged reads each finding's line, decision and page" {
@@ -1599,13 +1809,11 @@ test "an outside judge's findings take this repository's decisions" {
     fs\removeAll(dir) catch void;
 }
 
-test "a title is judged for the imperative and puffery after its prefix" {
+test "a title is judged for the imperative after its prefix" {
     foreach (title, want in {
         "feat(proofread): adds a vale spell": "not 'added' or 'adds'",
         "feat(proofread)!: added a vale spell": "not 'added' or 'adds'",
         "fix: updated the key": "not 'added' or 'adds'",
-        "fix(cache): add a robust key": "drop it and say what changed",
-        "feat(cache): add a powerful cache": "\"powerful\"",
     }) {
         final reason = judgedReason(title, body: "Pins the key.");
         std\assert(reason.indexOf("the title: ") != null and reason.indexOf(want) != null, message: "{title}: {reason}");
@@ -1837,7 +2045,10 @@ test "other commands and a line that only mentions gh pr create stay silent" {
         ["gh", "pr", "create", "--fill"],
         ["gh", "pr", "edit", "412", "--add-label", "merge-queue: squash"],
         ["gh", "pr", "review", "412", "--approve"],
-        ["gh", "issue", "create", "--title", "a bug", "--body", "x"],
+        ["gh", "issue", "view", "12"],
+        ["gh", "issue", "create", "--web"],
+        ["gh", "release", "create", "v1.0.0", "--generate-notes"],
+        ["gh", "release", "view", "v1.0.0"],
         ["gh", "api", "repos/o/r/pulls/412/comments"],
         ["gh", "api", "repos/o/r/labels", "-f", "body=x"],
         ["glab", "mr", "view", "12"],

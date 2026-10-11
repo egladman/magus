@@ -1,0 +1,9 @@
+A changelog version heading not in the Keep a Changelog shape.
+-- hit/changelog --
+## v0.5.0 - 2026-10-05
+## [0.5.0]
+## [0.5.0] (2026-10-05)
+-- pass/changelog --
+## [0.5.0-rc.3] - 2026-10-05
+## [Unreleased]
+## [0.4.3](https://github.com/egladman/magus/releases/tag/v0.4.3) - 2026-09-06

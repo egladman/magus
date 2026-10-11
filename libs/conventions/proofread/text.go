@@ -15,6 +15,10 @@ import (
 //
 // KindDocComment reads text as a doc comment, by the rules [Judge] applies to
 // one. KindMessage judges text as [JudgeMessage] does at its default cap.
+// KindChangeDescription, KindCommitMessage and KindIssue read the first line
+// as a title, a paragraph of its own. KindCommitMessage reads no headings.
+// KindCLIHelp reads plain text: no Markdown is stripped, only backticks mark
+// a literal. KindReleaseNotes and KindChangelog read Markdown pages.
 // KindAgentInstructionsTemplate renders text in both of its forms first, and
 // each finding's line is its line in the source.
 func JudgeText(text string, kind Kind, opts ...Option) []Finding {
@@ -35,11 +39,15 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		return judgeMessage(text, 0, o)
 	}
 
-	lines := markdownProse(raw, kind != KindChangeDescription && kind != KindReviewReply)
-	wrapCodeSpans(lines)
-	prose := readProse(lines, true)
+	if kind == KindCLIHelp {
+		return judgeHelp(raw, o)
+	}
 
-	if kind == KindChangeDescription {
+	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
+	wrapCodeSpans(lines)
+	prose := readProse(lines, kind != KindCommitMessage)
+
+	if titled(kind) {
 		// The title is a paragraph of its own, however close the description
 		// starts below it.
 		for i := range prose {
@@ -292,4 +300,10 @@ func mentions(kind Kind) func(string) string {
 	}
 
 	return mentionsMasked
+}
+
+// titled reports whether kind opens with a title line, a paragraph of its own
+// however close the body starts below it.
+func titled(kind Kind) bool {
+	return kind == KindChangeDescription || kind == KindCommitMessage || kind == KindIssue
 }

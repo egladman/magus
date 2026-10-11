@@ -1,0 +1,7 @@
+A commit subject that ends in a period.
+-- hit/commit-message --
+Fix the port.
+-- pass/commit-message --
+wait for the daemon...
+bump go to 1.25
+rename magus.lock to magus.sum

@@ -436,7 +436,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 
 		v := run("git add a.go && git commit -m \"$(cat <<'EOF'\nFix the port.\n\nCo-Authored-By: a <b@c>\nEOF\n)\"")
 		assert.Equal(t, "deny", v.Decision, v.Reason)
-		for _, want := range []string{"a trailing period", "a capitalized first word", "an attribution", "a line break"} {
+		for _, want := range []string{"a capitalized first word", "an attribution", "a line break"} {
 			assert.Contains(t, v.Reason, want)
 		}
 		assert.Contains(t, run(`git commit -m "fix(cache): keep the key"`).Reason, "a colon", "off the base branch a prefix is denied")

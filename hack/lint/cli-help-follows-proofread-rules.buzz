@@ -1,0 +1,295 @@
+// cli-help-follows-proofread-rules holds the help text of magus's own commands and flags to
+// libs/conventions/proofread's cli-help kind, under this repository's decisions table
+// (hack/policy/proofread.buzz). The text is read from internal/cli/registry.go, where the man
+// pages, the generated flag bindings and `--help` all take it from: the quoted Doc of a flag,
+// and the Short and the one-line Description of a command. A Long description is several
+// paragraphs by design and is not judged.
+//
+// A finding the table decides `deny` fails; `advise` is the reader's to weigh. BASELINE holds
+// the help texts that already broke a rule when the kind arrived, by their first 60 bytes; one
+// that stops breaking its rule is itself a finding, so the list only shrinks.
+namespace clihelp;
+
+import "assert";
+import "fs";
+import "path";
+import "proc";
+import "encoding/json";
+import "magus/lint";
+import "hack/lint/support" as support;
+import "hack/policy/proofread" as decisions;
+import "libs/conventions/proofread" as proofread;
+
+export final REGISTRY = "internal/cli/registry.go";
+
+// THIS is where a finding sends a reader to baseline a text.
+final THIS = "hack/lint/cli-help-follows-proofread-rules.buzz";
+
+final JUDGE = "{proofread\home}/{proofread\command}";
+
+// FIELDS are the registry fields whose double-quoted value is help text.
+final FIELDS = ["Doc", "Short", "Description"];
+
+// KEY is how many bytes of a text name it in BASELINE.
+final KEY = 60;
+
+// BASELINE is each help text that broke a cli-help rule when the kind arrived, by its first
+// KEY bytes: a sentence over 40 words, text over 240 runes, a spaced hyphen as a dash, or a
+// filler word. Reword the text in internal/cli/registry.go and delete its entry; the man
+// pages and the flag bindings regenerate from it.
+export final BASELINE: [str] = [
+    "Every exact source range, uncapped and verified against the ",
+    "Let hooks read magus's remote cache from the GitHub Actions ",
+    "Pack a spell directory's tracked files as an OCI artifact wi",
+    "Print every check magus would run - name, subject, and MGS c",
+    "Print what one job grants its holder: the criteria, the writ",
+    "Race-condition diagnostics (watch|replay, comma-combinable);",
+    "Raw substring search, no symbol index: print path:line:text ",
+    "Stream magus events as JSONL - one event per line - so an ed",
+    "The base's own regeneration `command` and its arguments, run",
+    "The mergequeue.changes/v1 `document`, or - for stdin",
+    "The records to apply: a file, or - for stdin; one JSON job, ",
+    "Verify a descriptor and its configured hook file by actually",
+    "With --cache: list every key input line, so you can confirm ",
+    "With --plan: add per-shard detail - the invocation, its spel",
+    "output <ref>: show the run's identity - descriptor, lineage,",
+];
+
+// reads keys lint-rules on the registry and on everything the judge is linked from.
+export fun reads() > [str] {
+    return [REGISTRY, "hack/policy/proofread.buzz", "libs/conventions/go.mod", "libs/conventions/go.sum",
+        "libs/conventions/**/*.go", "libs/conventions/proofread.buzz"];
+}
+
+// Help is one help text and the line of the registry it sits on.
+export object Help {
+    line: int,
+    text: str,
+}
+
+// Literal is a Go string literal read from a line: its unescaped text and the offset after
+// its closing quote.
+object Literal {
+    text: str,
+    end: int,
+}
+
+// unquote reads the double-quoted Go string literal opening at line[open], or null when it
+// does not close on the line. It unescapes \" \\ and \n, and keeps any other escape's
+// character.
+fun unquote(line: str, open: int) > Literal? {
+    final parts = mut [<str>];
+    var chunk = open + 1;
+    var i = open + 1;
+    while (i < line.len()) {
+        final b = line.byte(i);
+        if (b == 92) {
+            if (i + 1 >= line.len()) {
+                return null;
+            }
+            parts.append(line.sub(chunk, len: i - chunk));
+            if (line.byte(i + 1) == 110) {
+                parts.append("\n");
+            } else {
+                parts.append(line.sub(i + 1, len: 1));
+            }
+            i = i + 2;
+            chunk = i;
+        } else if (b == 34) {
+            parts.append(line.sub(chunk, len: i - chunk));
+            return Literal{ text = parts.join(""), end = i + 1 };
+        } else {
+            i = i + 1;
+        }
+    }
+    return null;
+}
+
+// extract is every help text of the registry source: a FIELDS key standing as a Go field
+// (after a space, a tab, a brace or a comma) whose value is a double-quoted literal on the
+// same line.
+export fun extract(src: str) > [Help] {
+    final found = mut [<Help>];
+    var n = 0;
+    foreach (line in src.split("\n")) {
+        n = n + 1;
+        foreach (field in FIELDS) {
+            var scan = 0;
+            while (scan < line.len()) {
+                final at = line.indexOf(field + ":", from: scan);
+                if (at == null) {
+                    break;
+                }
+                scan = at! + field.len() + 1;
+                if (at! > 0 and " \t\{,".indexOf(line.sub(at! - 1, len: 1)) == null) {
+                    continue;
+                }
+                var open = scan;
+                while (open < line.len() and (line.byte(open) == 32 or line.byte(open) == 9)) {
+                    open = open + 1;
+                }
+                if (open >= line.len() or line.byte(open) != 34) {
+                    continue;
+                }
+                final lit = unquote(line, open: open);
+                if (lit != null) {
+                    found.append(Help{ line = n, text = lit!.text });
+                    scan = lit!.end;
+                }
+            }
+        }
+    }
+    return found;
+}
+
+// keyOf names a help text in BASELINE.
+fun keyOf(text: str) > str {
+    if (text.len() <= KEY) {
+        return text;
+    }
+    return text.sub(0, len: KEY);
+}
+
+// judge is check over the judge's rows for each distinct text, so its tests need no run.
+export fun judge(helps: [Help], rows: {str: [any]}, baseline: [str]) > [Finding] {
+    final found = mut [<Finding>];
+    final used = mut {<str: bool>};
+    foreach (h in helps) {
+        foreach (r in rows[h.text] ?? [<any>]) {
+            if ((r["decision"] ?? "") != "deny") {
+                continue;
+            }
+            final key = keyOf(h.text);
+            if (baseline.indexOf(key) != null) {
+                used[key] = true;
+                continue;
+            }
+            final rule: str = r["rule"] ?? "";
+            final said: str = r["message"] ?? "";
+            final matched: str = r["match"] ?? "";
+            final shown = if (matched == "") "" else ": {matched}";
+            found.append(Finding{ path = REGISTRY, line = h.line, message = "{said}{shown} [{rule}]",
+                url = r["url"] ?? "",
+                fix = "Reword it in " + REGISTRY + "; the man pages and the flag bindings regenerate from it. "
+                    + "A text that must stay goes in BASELINE in " + THIS + " with its first {KEY} bytes." });
+        }
+    }
+    foreach (key in baseline) {
+        if (used[key] == null) {
+            found.append(Finding{ path = THIS, message = "baselines \"{key}\", which no longer has a finding",
+                fix = "Delete the entry: the list only shrinks." });
+        }
+    }
+    return found;
+}
+
+// judged runs the built proofread's cli-help kind over text and returns its rows.
+fun judged(bin: str, table: str, text: str) > [any] !> any {
+    final run = proc\exec(bin, args: ["cli-help", "-decisions", table],
+        opts: {"stdin": text, "quiet": true, "allow_failure": true});
+    if (run.code != 0) {
+        throw "proofread exited {run.code}: " + run.stderr.trim();
+    }
+    final rows: [any] = json\parse(run.stdout);
+    return rows;
+}
+
+export fun check(files: [Path]) > [Finding] !> any {
+    return checkAgainst(files, baseline: BASELINE);
+}
+
+// checkAgainst is check under a baseline of the caller's choosing.
+fun checkAgainst(files: [Path], baseline: [str]) > [Finding] !> any {
+    final registry = support\named(files, p: REGISTRY);
+    if (registry == null) {
+        return [support\missing(REGISTRY)];
+    }
+    final helps = extract(support\read(registry!));
+    final fix = "Run `{proofread\build}`, then {proofread\home}/{proofread\binary} cli-help, and read why it stopped.";
+    if (helps.len() == 0) {
+        return [Finding{ path = REGISTRY, message = "no help text was found, so none was judged: silence, not a pass",
+            fix = "The rule reads the quoted Doc, Short and Description fields; update it if the registry changed shape." }];
+    }
+    final bin = path\abs("{proofread\home}/{proofread\binary}");
+    final table = decisions\writeDecisions([<str>]);
+    final rows = mut {<str: [any]>};
+    try {
+        foreach (h in helps) {
+            if (rows[h.text] == null) {
+                rows[h.text] = judged(bin, table: table, text: h.text);
+            }
+        }
+    } catch (e) {
+        fs\remove(table) catch void;
+        return [Finding{ path = JUDGE, message = "proofread did not run, so no help text was judged: {e}", fix = fix }];
+    }
+    fs\remove(table) catch void;
+    return judge(helps, rows: rows, baseline: baseline);
+}
+
+fun parsed(text: str) > [any] !> any {
+    final rows: [any] = json\parse(text);
+    return rows;
+}
+
+test "the quoted Doc, Short and Description fields are read, with their escapes" {
+    final src = "var x = []Flag\{\n"
+        + "\t\t\{Name: \"race\", Kind: FlagString, Doc: \"Say \\\"hi\\\" now, a\\\\b.\"\},\n"
+        + "\tShort: \"A short one\",\n"
+        + "\tShort:       \"Aligned\",\n"
+        + "\tDescription: \"Long one.\",\n"
+        + "\tLong: `Not judged.`,\n"
+        + "\tName: \"not help\",\n"
+        + "\tAliasDoc: \"not a field\",\n"
+        + "\tDoc: \"no closing quote\n";
+    final got = extract(src);
+    final texts = mut [<str>];
+    foreach (h in got) {
+        texts.append("{h.line}:{h.text}");
+    }
+    assert\equal(texts, want: ["2:Say \"hi\" now, a\\b.", "3:A short one", "4:Aligned", "5:Long one."],
+        message: "{texts}");
+}
+
+test "a deny is reported at its line, a baselined text is kept, and a stale baseline entry is reported" {
+    final helps = [Help{ line = 4, text = "Simply pass it" }, Help{ line = 9, text = "Pass it" },
+        Help{ line = 12, text = "A text already past the cap" }];
+    final rows = mut {<str: [any]>};
+    rows["Simply pass it"] = parsed(`[{"rule": "filler", "decision": "deny", "message": "Drop 'Simply'.", "match": "Simply", "url": "https://example.com/filler/"}]`);
+    rows["Pass it"] = parsed(`[{"rule": "aside", "decision": "advise", "message": "advice"}]`);
+    rows["A text already past the cap"] = parsed(`[{"rule": "help-length", "decision": "deny", "message": "too long"}]`);
+    final got = judge(helps, rows: rows, baseline: ["A text already past the cap", "A text since reworded"]);
+    assert\equal(got.len(), want: 2, message: "{support\messages(got)}");
+    assert\equal(got[0].path, want: REGISTRY, message: "the registry");
+    assert\equal(got[0].line, want: 4, message: "the line");
+    assert\equal(got[0].message, want: "Drop 'Simply'.: Simply [filler]", message: "message and rule");
+    assert\equal(got[0].url, want: "https://example.com/filler/", message: "the rule's page");
+    assert\equal(got[1].path, want: THIS, message: "the stale entry");
+    assert\equal(got[1].message.indexOf("A text since reworded") != null, want: true, message: got[1].message);
+}
+
+test "the baseline names only texts the registry still holds, and nothing outside it fails" {
+    final registry = support\read(Path{ value = REGISTRY, base = "" }) catch "";
+    assert\equal(registry != "", want: true, message: "the registry is readable");
+    final keys = mut [<str>];
+    foreach (h in extract(registry)) {
+        keys.append(keyOf(h.text));
+    }
+    foreach (entry in BASELINE) {
+        assert\equal(keys.indexOf(entry) != null, want: true, message: "not in the registry: {entry}");
+    }
+}
+
+test "the registry's help text is judged by the built proofread" {
+    final got = checkAgainst(support\fixture({"internal/cli/registry.go": "var x = 1\n\tDoc: \"Simply pass the flag\",\n\tShort: \"Pass the flag\",\n"}),
+        baseline: [<str>]);
+    assert\equal(got.len(), want: 1, message: "{support\messages(got)}");
+    assert\equal(got[0].line, want: 2, message: "the line of the text");
+    assert\equal(got[0].message.indexOf("[filler]") != null, want: true, message: got[0].message);
+}
+
+test "a registry holding no help text is an error, not a pass" {
+    final got = check(support\fixture({"internal/cli/registry.go": "package cli\n"}));
+    assert\equal(got.len(), want: 1, message: "one error");
+    assert\equal(got[0].message.indexOf("silence, not a pass") != null, want: true, message: got[0].message);
+}

@@ -25,6 +25,8 @@ final RULES: {str: str} = {
     "comment-block": "deny",
     "comment-sentence": "deny",
     "name-suffix": "deny",
+    // A spaced hyphen is the em dash typed in ASCII: in a doc comment, and in the help text of
+    // a command or flag, which hack/lint/cli-help-follows-proofread-rules.buzz judges.
     "aside": "deny",
     "docstub": "deny",
     // An agent pays for every word of a skill on every load.

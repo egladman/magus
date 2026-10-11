@@ -164,6 +164,17 @@ var (
 	// sentence about past work or a teammate is about someone the reader knows.
 	teammate = []Kind{KindChangeDescription, KindReviewReply}
 	message  = []Kind{KindMessage}
+	// changeText is what a repository writes about its own changes for the people
+	// who follow them: a commit, an issue, release notes and a changelog.
+	changeText = []Kind{KindCommitMessage, KindIssue, KindReleaseNotes, KindChangelog}
+	// proseKinds are the written kinds and changeText: the kinds the word and claim
+	// rules read as another person's words.
+	proseKinds = slices.Concat(written, changeText)
+	help       = []Kind{KindCLIHelp}
+	// toneKinds are the kinds the posture rules judge: text written to the people
+	// working on the change. Release notes and a changelog speak to users, who are
+	// owed what changed rather than a posture, so only a commit and an issue join.
+	toneKinds = slices.Concat(teammate, []Kind{KindCommitMessage, KindIssue})
 )
 
 // check is one rule: the kinds it judges, its default decision on each, and
@@ -218,7 +229,7 @@ var templateCheck = check{rule: RuleTemplate, on: []Kind{KindAgentInstructionsTe
 var (
 	fillerCheck      = check{rule: RuleFiller, on: everywhere, judge: filler}
 	leadContextCheck = check{rule: RuleLeadContext, on: []Kind{KindChangeDescription}, judge: leadContext}
-	tenseCheck       = check{rule: RuleTense, on: written, house: true, judge: tense}
+	tenseCheck       = check{rule: RuleTense, on: proseKinds, house: true, judge: tense}
 )
 
 var coreChecks = []check{
@@ -227,21 +238,21 @@ var coreChecks = []check{
 	fillerCheck,
 	{rule: RuleTerms, on: everywhere, house: true, judge: terms},
 	{rule: RuleNameSuffix, on: docOnly, house: true, judge: nameSuffix},
-	{rule: RuleAside, on: docOnly, house: true, judge: aside},
+	{rule: RuleAside, on: slices.Concat(docOnly, help), house: true, judge: aside},
 	{rule: RuleHistory, on: docOnly, house: true, judge: history},
 	{rule: RuleDocStub, on: docOnly, house: true, judge: docStub},
 	leadContextCheck,
 	{rule: RuleReplyVoice, on: withReply, judge: replyVoice},
 	tenseCheck,
-	{rule: RuleHedge, on: written, judge: hedge},
+	{rule: RuleHedge, on: proseKinds, judge: hedge},
 	{rule: RuleAttribution, on: withReply, house: true, judge: attribution},
 	{rule: RuleTerseSentence, on: skill, house: true, judge: terseSentence},
 	{rule: RuleTerseParagraph, on: skill, house: true, judge: terseParagraph},
-	{rule: RuleWordy, on: written, judge: wordy},
+	{rule: RuleWordy, on: proseKinds, judge: wordy},
 	{rule: RuleBareRule, on: skill, house: true, judge: bareRule},
 	{rule: RuleSecondPerson, on: guide, judge: secondPerson},
 	{rule: RuleStepVerb, on: guide, judge: stepVerb},
-	{rule: RuleCondescension, on: withReply, judge: condescension},
+	{rule: RuleCondescension, on: slices.Concat(withReply, help), judge: condescension},
 }
 
 // Rules returns every rule in the order [Judge] and [JudgeText] report them.

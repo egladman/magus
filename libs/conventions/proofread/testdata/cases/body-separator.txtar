@@ -1,0 +1,14 @@
+A commit body that starts on the line after the subject. Every case is a whole message.
+-- hit/commit-message whole --
+fix: add the key
+The key was missing.
+-- pass/commit-message whole --
+fix: add the key
+
+The key was missing.
+-- pass/commit-message whole --
+fix: add the key
+Co-Authored-By: A Person <a@example.com>
+-- pass/commit-message whole --
+fix!: add the key
+BREAKING CHANGE: the old key is gone

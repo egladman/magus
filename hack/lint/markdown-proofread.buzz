@@ -26,6 +26,10 @@
 //   - A guide, a page the reader follows with a terminal open (GUIDES), is judged by the
 //     guide rules: the Markdown rules plus second person (no we, us or our), numbered
 //     steps that open with their verb, and no word telling the reader a step is easy.
+//   - A changelog fragment (FRAGMENTS) is judged as a changelog: its group heading names one
+//     of the six Keep a Changelog groups and an entry says what changed for the user, not
+//     only a Go identifier. hack/magusfile/changelog.buzz holds the grammar these rules sit
+//     beside.
 //
 // .markdownlint.json holds the rest of the decided Markdown style, which markdownlint
 // enforces: `-` bullets (MD004) and counting ordered lists (MD029), so a diff of a list
@@ -82,16 +86,23 @@ final ALLOW_PHRASES = ["Azure Pipelines", "Claude Code", "GitHub Actions", "GitH
 final JUDGE = "{proofread\home}/{proofread\command}";
 
 // KINDS are proofread's kinds this rule runs, one judge run each.
-final KINDS = ["reference", "guide", "agent-instructions", "agent-instructions-template"];
+final KINDS = ["reference", "guide", "agent-instructions", "agent-instructions-template", "changelog"];
 
 // GUIDES are the procedural pages; concepts, reference, doctrine and the decision records
 // explain and keep the general Markdown rules.
 final GUIDES = ["docs/guides/**"];
 
+// FRAGMENTS are the changelog fragments: one Keep a Changelog group heading and one entry
+// each, which changes/README.md describes and hack/magusfile/changelog.buzz parses.
+final FRAGMENTS = ["changes/unreleased/*.md"];
+
 // kindOf is proofread's kind for the hand-written file at rel: a skill body the
-// agent package renders, a skill an agent loads as written, a guide, or any other
-// Markdown, which a reader looks things up in.
+// agent package renders, a skill an agent loads as written, a changelog fragment, a
+// guide, or any other Markdown, which a reader looks things up in.
 export fun kindOf(rel: str) > str !> any {
+    if (path\matchesAny(FRAGMENTS, path: rel)) {
+        return "changelog";
+    }
     if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
         return "agent-instructions-template";
     }
@@ -596,6 +607,22 @@ test "a skill body, a loaded skill, a guide and any other page each take their o
     }
     assert\equal(kindOf("docs/concepts/cache.md"), want: "reference", message: "a concept page");
     assert\equal(kindOf("docs/doctrine.md"), want: "reference", message: "doctrine");
+    assert\equal(kindOf("changes/unreleased/affected-ci-sizes-its-gate.md"), want: "changelog", message: "a fragment");
+    assert\equal(kindOf("changes/README.md"), want: "reference", message: "the fragments' own page");
+}
+
+test "a fragment is judged as a changelog" {
+    final got = check(support\fixture({
+        "changes/unreleased/a.md": "### Bug fixes\n\n- **The key is stable.**\n",
+        "changes/unreleased/b.md": "### Fixed\n\n- **`Resolve`.**\n",
+        "changes/unreleased/c.md": "### Fixed\n\n- **The key is simply stable.**\n",
+    }));
+    final where = mut [<str>];
+    foreach (f in got) {
+        where.append("{f.path}:{f.line} " + f.message.sub(f.message.indexOf("[") ?? 0));
+    }
+    assert\equal(where, want: ["changes/unreleased/a.md:1 [changelog-group]", "changes/unreleased/c.md:3 [filler]"],
+        message: "a group deny and a word deny; an advised entry is not reported");
 }
 
 test "a guide is held to the guide rules and a concept page is not" {

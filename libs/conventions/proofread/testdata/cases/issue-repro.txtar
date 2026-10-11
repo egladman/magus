@@ -1,0 +1,29 @@
+A bug report with neither what happened against what was expected, nor steps to reproduce it. Every case is a whole issue, its title on the first line.
+-- hit/issue whole --
+The guard fails open in a split worktree
+-- hit/issue whole --
+magus affected crashes on a detached HEAD
+
+It crashes when I run it in CI.
+-- pass/issue whole --
+magus affected crashes on a detached HEAD
+
+## Expected
+
+A list of projects.
+
+## Actual
+
+A panic.
+-- pass/issue whole --
+The cache key changes after a rename
+
+Steps to reproduce:
+
+1. Rename a file.
+-- pass/issue whole --
+Make merge queue validation fast and observable
+
+## Problem
+
+A single change can spend more than 20 minutes in the queue.

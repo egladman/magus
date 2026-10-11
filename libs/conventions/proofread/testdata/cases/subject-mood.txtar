@@ -1,0 +1,10 @@
+A commit subject that opens in the past tense, the third person or a gerund.
+-- hit/commit-message --
+feat(proofread): adds a vale spell
+Fixed the port
+fix!: making the key stable
+-- pass/commit-message --
+feat: add an opt-in claude-code-mod harness and a harness_settings op (#577)
+address the review
+-- pass/commit-message whole --
+Revert "feat: added x"

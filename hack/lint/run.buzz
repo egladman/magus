@@ -27,6 +27,7 @@ import "hack/lint/support" as support;
 import "hack/lint/banned-words" as bannedwords;
 import "hack/lint/buzz-glue-is-wired-as-plain-argv" as buzzglue;
 import "hack/lint/cd-runs-agree-across-workflows" as cdruns;
+import "hack/lint/cli-help-follows-proofread-rules" as clihelp;
 import "hack/lint/code-follows-mined-precedents" as precedents;
 import "hack/lint/figure-modules-type-check-strictly" as figurecheck;
 import "hack/lint/generate-drift-throw-names-the-engine-drift-code" as generatedrift;
@@ -86,6 +87,7 @@ export fun rules() > [Rule] {
         Rule{ name = "prose-names-targets-that-exist", reads = prosetargets\reads(), check = prosetargets\check },
         Rule{ name = "code-follows-mined-precedents", reads = precedents\reads(), check = precedents\check },
         Rule{ name = "symbol-docs-follow-proofread-rules", reads = symbolproofread\reads(), check = symbolproofread\check },
+        Rule{ name = "cli-help-follows-proofread-rules", reads = clihelp\reads(), check = clihelp\check },
     ];
 }
 

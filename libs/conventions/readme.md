@@ -192,17 +192,17 @@ the baseline, 0 otherwise, and 2 when proofread could not judge (a bad flag, a
 missing file, a malformed table), so a caller tells a finding from a failure. The
 default is `never`.
 
-| Field      | Holds                                                                                     |
-| ---------- | ----------------------------------------------------------------------------------------- |
-| `node`     | what was judged: the symbol's node, the file argument, or the kind read from stdin        |
-| `source`   | where: the symbol's index position, `path:line`, or the path alone for a whole text       |
-| `kind`     | the kind judged, one of the seven above                                                   |
-| `rule`     | the rule's name                                                                           |
-| `code`     | the rule's `PRF` code, from its own domain in `libs/diagnostics`                          |
-| `decision` | `advise` or `deny`; `off` never appears                                                   |
-| `message`  | the fix, with an example where the rule has one                                           |
-| `match`    | the offending text, or `""` for a budget                                                  |
-| `url`      | the rule's page, `https://eli.gladman.cc/magus/reference/proofread/<rule>/`               |
+| Field      | Holds                                                                               |
+| ---------- | ----------------------------------------------------------------------------------- |
+| `node`     | what was judged: the symbol's node, the file argument, or the kind read from stdin  |
+| `source`   | where: the symbol's index position, `path:line`, or the path alone for a whole text |
+| `kind`     | the kind judged, one of the seven above                                             |
+| `rule`     | the rule's name                                                                     |
+| `code`     | the rule's `PRF` code, from its own domain in `libs/diagnostics`                    |
+| `decision` | `advise` or `deny`; `off` never appears                                             |
+| `message`  | the fix, with an example where the rule has one                                     |
+| `match`    | the offending text, or `""` for a budget                                            |
+| `url`      | the rule's page, `https://eli.gladman.cc/magus/reference/proofread/<rule>/`         |
 
 Codes are numbered by family and never reused: `PRF1xxx` shape, `PRF2xxx` tone,
 `PRF3xxx` claims and hedges, `PRF4xxx` generated-writing tells, `PRF5xxx` house

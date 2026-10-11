@@ -1,0 +1,25 @@
+A changelog entry that names only the code, not what changed for the user. Every case is a whole text.
+-- hit/changelog whole --
+### Changed
+
+- **`Resolve`.**
+-- hit/changelog whole --
+### Changed
+
+- Renamed `cache.Key` to `cache.ID`.
+-- hit/changelog whole --
+### Fixed
+
+- Fixed `Open()`.
+-- pass/changelog whole --
+### Added
+
+- **`AncestryReporter` answers whether one revision reaches another.** All four backends implement `IsAncestor`.
+-- pass/changelog whole --
+### Added
+
+- `--stdin`.
+-- pass/changelog whole --
+### Changed
+
+- `resolve`.
