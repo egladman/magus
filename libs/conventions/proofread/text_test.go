@@ -1,6 +1,7 @@
 package proofread
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -223,4 +224,78 @@ func TestHeadingMarker(t *testing.T) {
 			t.Errorf("headingMarker(%q) = %d, want %d", in, got, want)
 		}
 	}
+}
+
+// The footer and summaries a platform appends, as the AIDev export shows them,
+// and an open template checkbox. Each carries a word filler or attribution
+// refuses; only lines 6, 7 and 31 are the author's, an open to-do among them.
+const pullRequestWithBoilerplate = "fix: keep the key stable\n" +
+	"The key sorts its inputs before hashing.\n" +
+	"\n" +
+	"- [ ] Have you simply run the tests?\n" +
+	"  It simply wraps.\n" +
+	"- [ ] Rerun the flaky test, simply to be sure.\n" +
+	"- The worker simply waits.\n" +
+	"\n" +
+	"> [!WARNING]\n" +
+	">\n" +
+	"> <details>\n" +
+	"> <summary>Firewall rules blocked me from connecting to one or more addresses</summary>\n" +
+	">\n" +
+	"> If you need me to simply access something, Copilot can either:\n" +
+	"> </details>\n" +
+	"\n" +
+	"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n" +
+	"## Summary by CodeRabbit\n" +
+	"- It simply works.\n" +
+	"<!-- end of auto-generated comment: release notes by coderabbit.ai -->\n" +
+	"\n" +
+	"Created from VS Code via the [GitHub Pull Request](https://marketplace.visualstudio.com/items?" +
+	"itemName=GitHub.vscode-pull-request-github) extension.\n" +
+	"\n" +
+	"<!-- START COPILOT CODING AGENT TIPS -->\n" +
+	"---\n" +
+	"\n" +
+	"\U0001F4A1 You can make Copilot smarter by setting up custom instructions, customizing its development " +
+	"environment and configuring Model Context Protocol (MCP) servers. Learn more " +
+	"[Copilot coding agent tips](https://gh.io/copilot-coding-agent-tips) in the docs.\n" +
+	"\n" +
+	"\U0001F4AC Share your feedback on Copilot coding agent for the chance to win a $200 gift card! " +
+	"Click [here](https://survey3.medallia.com/?x) to start the survey.\n" +
+	"\n" +
+	"Copilot simply opened this without a test."
+
+func TestJudgeTextSkipsWhatAPlatformWrote(t *testing.T) {
+	got := ruleLines(JudgeText(pullRequestWithBoilerplate, KindChangeDescription, houseOn), RuleFiller, RuleAttribution)
+
+	if want := []string{"filler:6", "filler:7", "filler:31", "attribution:31"}; !slices.Equal(got, want) {
+		t.Errorf("findings: got %q, want %q", got, want)
+	}
+}
+
+// Only the platform's own shape is boilerplate: a marker with no partner
+// leaves the text after it judged, and so does a sentence quoting a tip.
+func TestJudgeTextKeepsATextThatOnlyResemblesBoilerplate(t *testing.T) {
+	text := "fix: keep the key stable\nThe key sorts its inputs.\n\n" +
+		"<!-- This is an auto-generated comment: release notes -->\nIt simply works.\n\n" +
+		"They said you can make Copilot smarter by simply asking."
+
+	if got, want := ruleLines(JudgeText(text, KindChangeDescription, houseOn), RuleFiller), []string{"filler:5", "filler:7"}; !slices.Equal(got, want) {
+		t.Errorf("findings: got %q, want %q", got, want)
+	}
+}
+
+// ruleLines renders each finding of rules as rule:line, sorted by line.
+func ruleLines(found []Finding, rules ...Rule) []string {
+	var out []string
+
+	slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
+
+	for _, f := range found {
+		if slices.Contains(rules, f.Rule) {
+			out = append(out, fmt.Sprintf("%s:%d", f.Rule, f.Line))
+		}
+	}
+
+	return out
 }

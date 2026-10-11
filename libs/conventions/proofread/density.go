@@ -90,10 +90,6 @@ func participles(in input) []Finding {
 	words, hits := 0, 0
 
 	for _, para := range densityParagraphs(in) {
-		if uncheckedTask.MatchString(para.text) {
-			continue
-		}
-
 		words += countWords(para.text)
 
 		for _, m := range participleTail.FindAllStringSubmatchIndex(para.text, -1) {
@@ -113,10 +109,6 @@ func participles(in input) []Finding {
 	return densityFinding(words, hits, maxParticiplesPerK, "present participial clauses",
 		"Give each -ing clause its own sentence with a subject, or cut the clause.")
 }
-
-// uncheckedTask is an open task-list item, which a pull request template
-// writes for its author to tick ("[ ] Have you done a self-review, ...").
-var uncheckedTask = regexp.MustCompile(`^\s*(?:[-*+]\s+)?\[ \]`)
 
 // issueRef is an issue or pull request a clause names.
 var issueRef = regexp.MustCompile(`#\d+\b`)

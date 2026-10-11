@@ -10,6 +10,9 @@ import (
 // a pull request with its title on the first line and its description after
 // it. Front matter, code (fenced, indented and in backticks), tables, HTML
 // comments and tags, link targets and URLs are not prose and are never judged.
+// Neither is what a platform wrote into a Markdown text: a coding agent's or
+// a review bot's footer and summary, and a checkbox a template left for its
+// author to tick.
 // Findings come in [Rules] order, then in the order their text appears, each
 // with its line in text.
 //
@@ -49,6 +52,7 @@ func judgeText(text string, kind Kind, o options) []Finding {
 		return judgeTool(raw, o)
 	}
 
+	raw = blankBoilerplate(raw)
 	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
 	wrapCodeSpans(lines)
 	prose := readProse(lines, kind != KindCommitMessage)
@@ -78,6 +82,114 @@ var (
 	bareURL        = regexp.MustCompile(`\bhttps?://[^\s)>\]]+`)
 	htmlTag        = regexp.MustCompile(`</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>`)
 )
+
+var (
+	// copilotTip is the line GitHub's Copilot coding agent appends to a pull
+	// request it opens: a tip, a survey or an offer to set itself up.
+	copilotTip = regexp.MustCompile(`^\s*(?:\x{1F4A1}|\x{1F4AC}|\x{2728})?\s*(?:You can make Copilot smarter by |` +
+		`Share your feedback on Copilot coding agent |Let Copilot coding agent \[set things up for you\]|` +
+		`We'd love your input! Share your thoughts on Copilot coding agent )`)
+	// vscodeFooter is the line the GitHub Pull Requests extension appends.
+	vscodeFooter = regexp.MustCompile(`^\s*Created from VS Code via the \[GitHub Pull Request\]\(`)
+	// templateTask is an open task-list item a template writes for its author
+	// to tick: an attestation or a question to the author ("- [ ] I have added
+	// tests", "- [ ] Have you done a self-review?"). An open item in the
+	// author's own words is a plan or a to-do, and stays prose.
+	templateTask = regexp.MustCompile(`^\s*(?:[-*+]\s+)?\[ \]\s*(?:\*\*[^*]+\*\*:?\s*|[^\w\s*]+\s*)?` +
+		`(?i:I have|I've|I haven't|I am|I'm|I confirm|I agree|I certify|I understand|I read|Have you|Did you|` +
+		`My code|My changes|This PR|This pull request|PR was|Any dependent|New and existing)\b`)
+)
+
+// copilotFirewall is the summary of the warning Copilot quotes into a pull
+// request when its firewall blocked a host.
+const copilotFirewall = "Firewall rules blocked me from connecting to one or more addresses"
+
+// botBlocks are the comment pairs a review bot writes its own text between:
+// CodeRabbit, cubic, mrge and Cypress mark theirs "auto-generated".
+var botBlocks = []struct{ open, close *regexp.Regexp }{
+	{
+		regexp.MustCompile(`(?i)<!--\s*This is an auto-generated (?:comment|description)\b`),
+		regexp.MustCompile(`(?i)<!--\s*end of auto-generated (?:comment|description)\b`),
+	},
+	{regexp.MustCompile(`<!--\s*Reviewable:start\s*-->`), regexp.MustCompile(`<!--\s*Reviewable:end\s*-->`)},
+	{regexp.MustCompile(`<!--\s*CURSOR_SUMMARY\s*-->`), regexp.MustCompile(`<!--\s*/CURSOR_SUMMARY\s*-->`)},
+	{regexp.MustCompile(`<!--\s*start pr-codex\s*-->`), regexp.MustCompile(`<!--\s*end pr-codex\s*-->`)},
+}
+
+// blankBoilerplate returns raw with what a platform wrote blanked, one entry
+// per line so a finding keeps its line: the author did not write it and
+// cannot be held to it. Each shape is the platform's own, matched whole, so
+// an author's paragraph that mentions a tool stays prose.
+func blankBoilerplate(raw []string) []string {
+	lines := slices.Clone(raw)
+
+	for _, b := range botBlocks {
+		for i := 0; i < len(lines); i++ {
+			if !b.open.MatchString(lines[i]) {
+				continue
+			}
+
+			for j := i; j < len(lines); j++ {
+				if b.close.MatchString(lines[j]) {
+					clear(lines[i : j+1])
+					i = j
+
+					break
+				}
+			}
+		}
+	}
+
+	for i := 0; i < len(lines); i++ {
+		switch {
+		case copilotTip.MatchString(lines[i]), vscodeFooter.MatchString(lines[i]):
+			lines[i] = ""
+		case strings.Contains(lines[i], copilotFirewall) && inQuote(lines[i]):
+			i = blankQuote(lines, i)
+		case templateTask.MatchString(lines[i]):
+			i = blankItem(lines, i)
+		}
+	}
+
+	return lines
+}
+
+func inQuote(line string) bool { return strings.HasPrefix(strings.TrimLeft(line, " "), ">") }
+
+// blankQuote blanks the block quote holding line at and returns its last line.
+func blankQuote(lines []string, at int) int {
+	start, end := at, at
+	for start > 0 && inQuote(lines[start-1]) {
+		start--
+	}
+
+	for end+1 < len(lines) && inQuote(lines[end+1]) {
+		end++
+	}
+
+	clear(lines[start : end+1])
+
+	return end
+}
+
+// blankItem blanks the list item opening at line at, with the lines that
+// continue it, and returns its last line.
+func blankItem(lines []string, at int) int {
+	end := at
+
+	for end+1 < len(lines) {
+		body := strings.TrimLeft(lines[end+1], " \t")
+		if body == "" || listMarker(body) > 0 || headingMarker(body) > 0 {
+			break
+		}
+
+		end++
+	}
+
+	clear(lines[at : end+1])
+
+	return end
+}
 
 // markdownProse returns raw with every line that is not prose blanked and the
 // markup that is not prose cut from the rest, one entry per line so a finding
