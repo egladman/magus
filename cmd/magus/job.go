@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -843,6 +844,34 @@ func (l *listFlag) Set(value string) error {
 	return nil
 }
 
+// evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
+const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
+	types.PrimaryGoalID + "` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"
+
+// evidenceFlag collects `--evidence <goal>=<ref>` pairs. A goal named twice is refused
+// rather than resolved to whichever came last, since the two refs may be different runs.
+type evidenceFlag map[string]string
+
+func (e *evidenceFlag) String() string {
+	pairs := make([]string, 0, len(*e))
+	for _, goal := range slices.Sorted(maps.Keys(*e)) {
+		pairs = append(pairs, goal+"="+(*e)[goal])
+	}
+	return strings.Join(pairs, ",")
+}
+
+func (e *evidenceFlag) Set(value string) error {
+	goal, ref, ok := strings.Cut(value, "=")
+	if goal, ref = strings.TrimSpace(goal), strings.TrimSpace(ref); !ok || goal == "" || ref == "" {
+		return fmt.Errorf("want <goal>=<ref>, got %q", value)
+	}
+	if _, dup := (*e)[goal]; dup {
+		return fmt.Errorf("goal %q is named twice", goal)
+	}
+	(*e)[goal] = ref
+	return nil
+}
+
 // forkFlags is the one-job case as flags, and job is the same record --stdin decodes.
 // One conversion rather than two paths into the store, so a job typed at a terminal and a
 // job piped in are the same declaration.
@@ -1338,13 +1367,16 @@ func abandonJobs(ctx context.Context, store *job.Store, ids []string) error {
 // was read and rejected (the work is not verified).
 func jobWait(ctx context.Context, root string, args []string) error {
 	var schema, stdin, integration bool
+	evidence := evidenceFlag{}
 	pos, err := cmdParse("job wait", args, func(fs *flag.FlagSet) {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
 		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
+		fs.Var(&evidence, "evidence", evidenceFlagDoc)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --stdin < result.json")
+			fmt.Fprintln(os.Stderr, "       magus job wait <job> --evidence <goal>=<ref> [--evidence <goal>=<ref> ...]")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --integration --stdin < evidence.json")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Verify the result a job was exited with, against the job it was handed: every")
@@ -1360,6 +1392,17 @@ func jobWait(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "It checks what is mechanical. Whether the work is GOOD, and whether the job's")
 			fmt.Fprintln(os.Stderr, "acceptance criteria are met, stay the reading of whoever forked it.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "--evidence <goal>=<ref> grades a check goal against a run recorded in THIS checkout")
+			fmt.Fprintln(os.Stderr, "instead of the one the job was exited with; the job's own check is `"+types.PrimaryGoalID+"`.")
+			fmt.Fprintln(os.Stderr, "It is for a goal that failed where the work was written but passes when run here,")
+			fmt.Fprintln(os.Stderr, "such as a build the author's machine could not complete. Repeat it for each goal.")
+			fmt.Fprintln(os.Stderr, "The ref is looked up in this checkout only and must be a fresh, passing run of")
+			fmt.Fprintln(os.Stderr, "that goal's own check. It is refused for a goal the job does not hold, one that is")
+			fmt.Fprintln(os.Stderr, "not a check, and one the job's own evidence already passes. Every changed path")
+			fmt.Fprintln(os.Stderr, "the result names must read byte for byte the same here as in the job's checkout,")
+			fmt.Fprintln(os.Stderr, "so the run here covers the work it stands in for. The goals that took a run from")
+			fmt.Fprintln(os.Stderr, "here are recorded on the job, beside the runs it was exited with.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--integration asks whether the work still passes in THIS tree, such as a branch")
 			fmt.Fprintln(os.Stderr, "it was merged into: the job's check and check goals are graded against the runs")
@@ -1413,9 +1456,12 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		}
 		return jobWaitIntegration(ctx, store, root, pos[0], *result)
 	}
+	if len(evidence) > 0 && (stdin || integration) {
+		return usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
+	}
 	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
 		return storedAttempt(ctx, root, ref)
-	}, jobObserver(root))
+	}, jobObserver(root), job.WithRootEvidence(evidence))
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}

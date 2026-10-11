@@ -321,6 +321,8 @@ const (
 	FlagJobPruneAll = "all"
 	// job rm: --force
 	FlagJobRmForce = "force"
+	// job wait: --evidence
+	FlagJobWaitEvidence = "evidence"
 	// job wait: --integration
 	FlagJobWaitIntegration = "integration"
 	// job wait: --schema
@@ -1789,6 +1791,9 @@ func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
 }
 
 // JobWaitFlags are the flags declared for `magus job wait`.
+//
+// It does NOT carry --evidence: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type JobWaitFlags struct {
 	Schema      bool // --schema
 	Stdin       bool // --stdin

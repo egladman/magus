@@ -1206,3 +1206,39 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1, "the fork went through")
 }
+
+func TestEvidenceFlagCollectsGoalRefPairs(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		values []string
+		want   evidenceFlag
+		err    string
+	}{
+		"one pair":       {values: []string{"check=abc123"}, want: evidenceFlag{"check": "abc123"}},
+		"repeated":       {values: []string{"check=a", "docs=b"}, want: evidenceFlag{"check": "a", "docs": "b"}},
+		"no separator":   {values: []string{"check"}, err: `want <goal>=<ref>, got "check"`},
+		"no ref":         {values: []string{"check="}, err: `want <goal>=<ref>, got "check="`},
+		"no goal":        {values: []string{"=abc"}, err: `want <goal>=<ref>, got "=abc"`},
+		"a goal's twice": {values: []string{"check=a", "check=b"}, err: `goal "check" is named twice`},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := evidenceFlag{}
+			var err error
+			for _, v := range tc.values {
+				if err = got.Set(v); err != nil {
+					break
+				}
+			}
+			if tc.err != "" {
+				require.EqualError(t, err, tc.err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
