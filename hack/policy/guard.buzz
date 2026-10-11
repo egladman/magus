@@ -62,6 +62,9 @@
 //     capture. The compiled rule only advises a filter of those files.
 //   host-terminals (deny): creating or reading a directory named terminals. A host
 //     session folder is not a run; magus status reads the lock.
+//   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread
+//     sets under $XDG_CACHE_HOME/proofread-calibration/sealed, however it spells the path.
+//     The labels beside them stay open.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
 // six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
@@ -69,7 +72,7 @@
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
 // commits.buzz, pull_requests.buzz,
-// comments.buzz and host.buzz (a run log, and a directory named terminals).
+// comments.buzz, host.buzz (a run log, and a directory named terminals) and sealed.buzz.
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
 // already binds (github, changelog) shadows the one here, so these avoid them.
@@ -90,12 +93,17 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/pull_requests" as pullRequests;
 import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
+import "./hack/policy/sealed" as sealed;
 import "./hack/policy/branches" as branches;
 import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
+    final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
+    if (held.decision != "allow") {
+        return held;
+    }
     var lease = "";
     if (req.lease != null) {
         lease = req.lease!.id;
@@ -409,4 +417,18 @@ test "a push is refused to a subagent the host names, under no lease and unseen 
     final leased = branches\decideAuthority(parsePrograms(worker), caller: requestPusher(worker));
     std\assert(leased.decision == "deny", message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
+}
+
+test "the line judge refuses the sealed directory before any other rule, and leaves the labels open" {
+    final dir = sealed\sealedDir(sealed\rootsFromEnv());
+    final read = CommandRequest{ command = "cat {dir}/round5/cases.txtar",
+        commands = [CommandInvocation{ program = "cat", args = ["{dir}/round5/cases.txtar"] }] };
+    final refused = judge(read);
+    std\assert(refused.decision == "deny", message: "a cat of the sealed directory");
+    verdict\assertVerdict(refused.reason, label: "a cat of the sealed directory");
+    std\assert(refused.reason.indexOf("sealed until its round is scored") != null, message: refused.reason);
+
+    final open = CommandRequest{ command = "cat {dir}/../labels/round4/scores.json",
+        commands = [CommandInvocation{ program = "cat", args = ["{dir}/../labels/round4/scores.json"] }] };
+    std\assert(judge(open).decision == "allow", message: "the labels directory");
 }
