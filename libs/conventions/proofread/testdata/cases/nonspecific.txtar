@@ -1,3 +1,4 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 A review reply that judges code or asks for a change and names nothing to act on.
 -- hit/review-reply --
 This is confusing.
@@ -12,3 +13,44 @@ This is unclear, e.g. what happens on a miss.
 This is redundant because the caller already sorts.
 Thanks, looks good.
 Does the caller hold the lock here?
+-- fp/review-reply --
+It's redundant.
+that test is pretty useless honestly
+The provider detection logic is fragile and relies on URL string matching.
+This is incorrect and inappropriate for usage instructions in the package registry.
+The indentation is inconsistent.
+not needed, remove
+I find this unnecessary.
+yeah. the naming is bad, but I didn't want to break this interface for now.
+I can change it in this change or a follow up.
+Using an OR condition on the log stream could mask issues where the expected message appears in the wrong stream.
+It is pointless.
+[nitpick] The spacing alignment is inconsistent with other boolean fields in the struct.
+This is incorrect.
+Removed the redundant assertion.
+This logic is a bit confusing.
+We shouldn't need to update this file.
+Either make the method synchronous or remove this unnecessary await.
+remove the client changes and any other unnecessary changes from this branch.
+The documentation is correct here but inconsistent with the mock implementation.
+This avoids unnecessary recompilation and improves performance.
+The YAML structure for the 'name' key is incorrect.
+Removed the unnecessary test case.
+[nitpick] The special case for reusing a single modulus across all keys is implicit and could be confusing.
+Removed unnecessary curly braces.
+It looks hacky...
+let's remove redundant docstrings.
+[nitpick] The spacing in the comment alignment is inconsistent.
+Drop this, it's redundant
+I've reviewed the code and there are no unnecessary newline changes or removed commas in the latest revision.
+what is the use of this part, it seems unrelated and unnecessary
+You're right - removed the redundant installation step.
+The step names 'Install Sdks' have inconsistent capitalization compared to standard naming conventions.
+[nitpick] The import statement formatting is inconsistent.
+Removed the redundant assertion wrapper and simplified the test to call the decompiler directly.
+The extra check for file existence after validating the index may be redundant.
+remove this file it's not needed
+please fix this comment
+ok, strange that we have two correlation IDs but that's a topic for another time.
+Do not change this
+Inconsistent data format for routing form responses

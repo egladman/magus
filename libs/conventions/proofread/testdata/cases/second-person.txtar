@@ -1,3 +1,4 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 The project's voice in a guide, where the reader is the one acting.
 -- hit/guide --
 A codec per host would cost us upkeep.
@@ -8,3 +9,38 @@ We added a flag.
 Set the locale to en-US.
 Pass `--ours`, or the side git calls "ours".
 Add a target, then run it.
+-- hit/guide --
+We document this order; we don't enforce it.
+rejected, what a constraint is, what bit us and is not visible in the code that
+We document this order, and we don't enforce it.
+-- fp/guide --
+separates a C ABI we can keep memory-safe from one that can crash the host.
+We never fork upstream and we patch nothing in its tree.
+(`magus ...`), never this process's `./magus`: the reader's checkout is not ours.
+[I think our tools are the problem](blog/tools-are-the-problem.md).
+Agents write code faster than we can review it, and review has become the bottleneck that does not scale.
+We never fork upstream, and we patch nothing in its tree.
+we operate; [Scope names them](scope.md#where-the-claim-is-strained).
+we render (Button, Tabs, Card). The bundler inlines them into
+our own registry's limits at the time.
+A failure against one of these is ours.
+Neither one lands on the person who added it, which is most of why we keep adding.
+Agents write code far faster than we can review it, and we are now the bottleneck.
+trade: you keep a little wiring in the repo, and we do not force every checkout
+we control, and it commits a project with no revenue to keeping an aggregator
+It almost never lands on the person who wrote it, and that is most of why we
+these means either magus drifted or our transcription is stale, and the `url` is where to settle it.
+That is not a bug we
+against, in our own tree.
+The complaint underneath all of them is that our developer tools have slipped.
+Nowhere in the codebase do we hardcode one coding agent, or
+`ui.css`: the base layer plus the per-component sheets we render.
+signed trust model on top; this page is the substrate it references, so we describe
+issue first so we can talk it through before you spend an evening on it.
+evidence we have: a language with close to no training data produces better
+## Verify our claims: don't take our word for it
+You can apply the test without trusting us.
+# I think our tools are the problem
+Then I fed them in, and we went back and forth over it.
+Because it is ours and not upstream's, it is ours to keep whole.
+I think we got lazy over the last ten or fifteen years and started

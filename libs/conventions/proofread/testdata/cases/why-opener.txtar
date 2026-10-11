@@ -1,3 +1,4 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 A review reply sentence that asks the author why they did something.
 -- hit/review-reply --
 Why did you add the lock?
@@ -7,3 +8,26 @@ Looks close. Why would you copy the map?
 Why does the cache miss here?
 I see why you added the lock.
 The guide says to avoid "Why did you" openers.
+-- hit/review-reply --
+Why do you keep missing the agent instructions file?
+Why are you conflating merge requests, this is not relevant to the radio stack.
+Why are you passing err here?
+Why are you making this change?
+Why do you need this?
+Why did you add this file?
+Why did you replace the direct table access with the queryable everywhere?
+Why are you doing `[mock_first, mock_second, mock_first]` instead of ending on the conditional task?
+Why did you downgrade this?
+Why are you reimplementing this?
+Why do you think it is an optional dependency? is it because of the env vars that can disable signing?
+Why did you skip that?
+Why do you push marks twice?
+Why are you taking the last artifact from the task ?
+Why did you change this again?
+Why did you write the tests with that BDD framework?
+Why are you type casting here? this is not correct and might break
+Why do you want to warn in those circumstances?
+Why do you need a null logger? just dont log
+Why would you add the manifest and ignore it?
+Why do you need this here?
+Why are you removing the icon path?
