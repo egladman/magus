@@ -26,6 +26,7 @@ import (
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
@@ -179,26 +180,66 @@ func openJobs(root string) (*job.Store, error) {
 
 // newCheckGrader grades a declared check against the guard's rules for the workspace at the
 // root it is handed. Each root's rules load on the first check graded there, so a fork
-// that declares none pays nothing, and stay loaded for the grader's life: a grader is
-// meant to live as long as the Store, or the command, it was made for. magus\job.put opens
-// its own Store inside std, which cannot import the guard, so runCLI registers one with
-// std as well.
+// that declares none pays nothing, and are reused until a file they were read from
+// changes: a grader lives as long as the Store, or the daemon, it was made for, and
+// grading against rules an edit has since replaced would admit or refuse the wrong check.
+// magus\job.put opens its own Store inside std, which cannot import the guard, so runCLI
+// registers one with std as well.
 func newCheckGrader() job.CheckGrader {
-	var loaded sync.Map // root -> func() guard.Dependencies
+	var (
+		mu     sync.Mutex
+		loaded = map[string]gradingRules{}
+	)
+	currentRules := func(ctx context.Context, root string) guard.Dependencies {
+		mu.Lock()
+		defer mu.Unlock()
+		if g, ok := loaded[root]; ok && g.unchanged() {
+			return g.deps
+		}
+		// The rules outlive this grade, so this caller's cancellation must not decide them.
+		g := loadGradingRules(context.WithoutCancel(ctx), root)
+		loaded[root] = g
+		return g.deps
+	}
 	return func(ctx context.Context, root string, row types.Job) job.CheckVerdict {
-		// Every later grade reads what the first one loaded, so the first caller's
-		// cancellation must not decide it.
-		load, _ := loaded.LoadOrStore(root, sync.OnceValue(func() guard.Dependencies {
-			return guardDependencies(context.WithoutCancel(ctx), root)
-		}))
-		once, _ := load.(func() guard.Dependencies)
-		verdict := gradeCheck(ctx, once(), root, row)
+		verdict := gradeCheck(ctx, currentRules(ctx, root), root, row)
 		if verdict.NotGraded != "" {
 			slog.WarnContext(ctx, "job "+row.ID+"'s check was not graded against the guard",
 				attr.Notice(""), attr.Why(verdict.NotGraded), attr.Component("magus job"))
 		}
 		return verdict
 	}
+}
+
+// gradingRules is a workspace's guard dependencies and the files its rules were read from.
+type gradingRules struct {
+	deps guard.Dependencies
+	// sources are the files the load read, with the id of the bytes it saw. Empty when no
+	// rules loaded: nothing says which file to watch, so the next grade loads again.
+	sources []interp.SourceFile
+}
+
+func loadGradingRules(ctx context.Context, root string) gradingRules {
+	deps, rules := loadGuardDependencies(ctx, root)
+	if rules == nil {
+		return gradingRules{deps: deps}
+	}
+	return gradingRules{deps: deps, sources: rules.Policy().Sources}
+}
+
+// unchanged reports whether every file the rules were read from still holds the bytes the
+// load saw. A file that cannot be read counts as changed, so the next load decides.
+func (g gradingRules) unchanged() bool {
+	if len(g.sources) == 0 {
+		return false
+	}
+	for _, s := range g.sources {
+		data, err := os.ReadFile(s.Path)
+		if err != nil || interp.ContentID(data) != s.ContentID {
+			return false
+		}
+	}
+	return true
 }
 
 // ownBinaryPrefix is how a holder types a check: with the ./magus of its own checkout,

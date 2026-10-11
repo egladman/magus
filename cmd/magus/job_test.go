@@ -1157,6 +1157,44 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	}
 }
 
+// denyBuildRule is a magusfile whose command rule denies a worker the go-build target
+// wherever the call runs.
+const denyBuildRule = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    foreach (c in req.commands) {
+        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+            return magus\guard.deny("builds are refused here");
+        }
+    }
+    return magus\guard.allow();
+});
+`
+
+// A grader outlives one command in a daemon serving magus\job.put, so a rule edited after
+// its first grade must apply to the next. The edit tightens the rules: an edit that only
+// relaxed them would be held back by the approved sources and prove nothing.
+func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+	grade := newCheckGrader()
+
+	before := grade(t.Context(), root, row)
+	require.Empty(t, before.NotGraded)
+	require.False(t, before.Denied, "the rule allows the check from the root: %s", before.Reason)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denyBuildRule), 0o644))
+
+	after := grade(t.Context(), root, row)
+	assert.Empty(t, after.NotGraded)
+	assert.True(t, after.Denied, "the edited rule denies the check")
+	assert.Contains(t, after.Reason, "builds are refused here")
+}
+
 // A workspace whose rules did not load is not graded, and says so rather than refuse on a
 // verdict nobody reached.
 func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {

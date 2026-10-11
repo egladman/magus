@@ -293,6 +293,13 @@ func shellInput(in io.Reader, operands []string) (string, error) {
 // asking for "the workspace" gets that one: resolving the cwd instead names a second
 // workspace whenever the command ran with --root from inside another checkout.
 func guardDependencies(ctx context.Context, rootOverride string) guard.Dependencies {
+	deps, _ := loadGuardDependencies(ctx, rootOverride)
+	return deps
+}
+
+// loadGuardDependencies is guardDependencies that also returns the rules it loaded, nil
+// when none loaded, for a caller that must know which files they came from.
+func loadGuardDependencies(ctx context.Context, rootOverride string) (guard.Dependencies, *magus.GuardRules) {
 	stop := traceFromContext(ctx).phase("guard.load_rules")
 	rules, loaded, loadErr := guard.TimeRuleLoad(ctx, func() (*magus.GuardRules, error) {
 		return loadGuardRules(ctx, rootOverride)
@@ -344,11 +351,11 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 		deps.ApprovedWriteRule = rules.ApprovedWriteRule
 		deps.Policy = func() guard.PolicyState { return guardPolicyState(rules) }
 		setGuardBuiltins(ctx, &deps, rules, "")
-		return deps
+		return deps, rules
 	}
 	root, err := guardRoot(rootOverride)
 	if err != nil {
-		return deps
+		return deps, nil
 	}
 	// The approved sources load when the working tree does not, and they are what an agent
 	// breaking the working tree must not be able to turn off.
@@ -365,7 +372,7 @@ func guardDependencies(ctx context.Context, rootOverride string) guard.Dependenc
 	deps.ApprovedWriteRule = func(ctx context.Context) (workspace.WriteRule, error) {
 		return magus.LoadApprovedWriteRule(ctx, root)
 	}
-	return deps
+	return deps, nil
 }
 
 // guardCacheDir resolves a workspace's cache directory for the guard: root's own, read from
