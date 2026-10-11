@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AnchorStatus, Scope, Staleness } from "@wire/notes/v1alpha1/notes_pb";
 import { demoNotes } from "./demo";
+import { parseTranscript } from "./transcript";
 
 // A demo of five healthy notes shows nothing the empty state did not. These four properties are
 // what makes it a demo of the APP rather than a screenshot of a list.
@@ -79,11 +80,11 @@ test("the sample notes inhabit the same workspace as every other showcase", () =
   const { notes } = demoNotes();
   const targets = notes.flatMap((n) => n.anchors.map((a) => a.target));
 
-  // The story's shared library and its two downstream consumers, by the names the Diff app,
+  // The shared library and its two downstream consumers, by the names the Diff app,
   // the run tree and the activity trail all use.
   assert.ok(
     targets.includes("libs/authkit"),
-    "no note anchors to the library the whole story turns on",
+    "no note anchors to the library the whole change turns on",
   );
   for (const needle of ["identity/token/Verify()", "dashboard/session/parseClaims()"]) {
     assert.ok(
@@ -98,4 +99,21 @@ test("the sample notes inhabit the same workspace as every other showcase", () =
   // to it is about acme's postgres, not magus's.
   const foreign = targets.filter((t) => /^(m )?(cache|sandbox)\b|internal\/lock/.test(t));
   assert.deepEqual(foreign, [], "these anchor into magus itself rather than into acme");
+});
+
+test("one sample note is a captured review thread the app can read back", () => {
+  const { notes, body } = demoNotes();
+  const quoted = notes.filter((n) => n.source);
+  assert.equal(quoted.length, 1, "exactly one quoted note");
+  const parsed = parseTranscript(quoted[0]?.source?.kind ?? "", body(quoted[0]?.name ?? ""));
+  assert.ok(parsed, "its body parses as a transcript");
+  assert.ok(
+    parsed.entries.some((e) => e.resolved),
+    "a resolved entry",
+  );
+  assert.ok(
+    parsed.entries.some((e) => e.author.endsWith("(agent)")),
+    "an agent voice beside the person",
+  );
+  assert.ok(new Set(parsed.entries.map((e) => e.subject)).size > 1, "more than one file divider");
 });

@@ -98,6 +98,10 @@ type Provider interface {
 	RecordAttentionDisposition(ctx context.Context, secs float64, sev string) // magus.attention.disposition.duration
 	RecordReviewRemark(ctx context.Context, author string)                    // magus.review.remarks
 	RecordReviewPublish(ctx context.Context, verdict string, downgraded bool) // magus.review.publishes
+	// RecordReviewMergedWhileReading counts one review that merged under a reader and records how
+	// long the reader had been reading it, in seconds (magus.review.merged_while_reading and
+	// magus.review.merged_while_reading.duration).
+	RecordReviewMergedWhileReading(ctx context.Context, secs float64)
 	// Snapshot returns the current metrics as standard OTLP protobuf, or (nil, nil) when this
 	// provider is not collecting locally. OTLP is the export format for real monitoring
 	// backends; it is never put on the dashboard's wire.

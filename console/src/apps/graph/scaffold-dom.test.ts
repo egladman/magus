@@ -1,7 +1,7 @@
 // scaffold-dom.test.ts - structural invariants of the graph app's markup.
 //
 // The Reference drawer (ui/ref-drawer.ts) CLONES every [data-ref-section] block, strips ids
-// from the clone, and leaves the source hidden by overrides.css's
+// from the clone, and leaves the source hidden by utilities/hidden.css's
 // [data-ref-section]{display:none}. A control wired BY ID from inside a reference block is
 // therefore unreachable both ways: invisible at its source, id-less in its clone. These tests
 // pin the placement rules that follow from that.
@@ -98,6 +98,87 @@ test("the query builder is named, and is not drawn as an overflow menu", () => {
     !(dots.length >= 3 && xs.size === 1),
     "a vertical column of three dots is an overflow menu to every reader who has used software",
   );
+});
+
+// Figures opens a different view; it is not a third graph. As a segment of the single-select Graph
+// group it was clipped off the sidebar's right edge and announced as one of the choices.
+test("Figures is a button of its own, not a segment of the Graph group", () => {
+  const host = parse();
+  const group = host.querySelector('[aria-labelledby="graphkind-label"]');
+  assert.ok(group, "the Graph group");
+  assert.deepEqual(
+    [...group.querySelectorAll("button")].map((b) => b.getAttribute("data-graphkind")),
+    ["targets", "knowledge"],
+  );
+  assert.equal(group.querySelector("[data-graph-mode]"), null);
+  const open = host.querySelector<HTMLElement>("#graph-figures-open");
+  assert.ok(open, "a Figures button");
+  assert.equal(open.getAttribute("data-graph-mode"), "figures");
+  assert.equal(open.closest(".pf-v6-c-toggle-group"), null);
+  assert.equal(open.hasAttribute("aria-pressed"), false, "it opens a view; it is not a toggle");
+});
+
+test("the Graph and Color groups each have a row to themselves", () => {
+  const host = parse();
+  assert.equal(host.querySelector(".console-graph-sidebar__viewpair"), null);
+  const kind = host.querySelector('[aria-labelledby="graphkind-label"]');
+  const color = host.querySelector('[aria-labelledby="color-label"]');
+  assert.ok(kind && color);
+  assert.notEqual(
+    kind.closest(".console-graph-sidebar__viewcell"),
+    color.closest(".console-graph-sidebar__viewcell"),
+  );
+});
+
+test("the query field is named by its visible label", () => {
+  const host = parse();
+  const input = host.querySelector<HTMLInputElement>("#node-search");
+  assert.ok(input);
+  const label = host.querySelector<HTMLLabelElement>('label[for="node-search"]');
+  assert.ok(label, "a real label");
+  assert.equal(label.textContent, "magus query");
+  assert.equal(input.hasAttribute("aria-label"), false, "an aria-label would override the label");
+});
+
+test("the notice host and the detail card carry no live region of their own", () => {
+  const host = parse();
+  assert.equal(host.querySelector("#explain-card")?.hasAttribute("aria-live"), false);
+  const status = host.querySelector("#graph-status");
+  assert.ok(status);
+  assert.equal(status.hasAttribute("role"), false, "ui/alert.ts's alert supplies the live role");
+  assert.equal(status.children.length, 0, "the alert is built by setStatus");
+  assert.ok(
+    host.querySelector("#explain-status[role='status']"),
+    "one line says what the card shows",
+  );
+});
+
+test("the remember row uses a PF check and the reference table a PF table", () => {
+  const host = parse();
+  const cb = host.querySelector("#live-remember-cb");
+  assert.ok(cb?.classList.contains("pf-v6-c-check__input"));
+  assert.equal(
+    host.querySelector('label[for="live-remember-cb"]')?.className,
+    "pf-v6-c-check__label",
+  );
+  assert.ok(host.querySelector("table.pf-v6-c-table"), "a PF table");
+  assert.equal(host.querySelector(".console-graph-help__table"), null);
+});
+
+test("the way back from Figures is a plain button, not a one-item navigation landmark", () => {
+  const host = parse();
+  const bar = host.querySelector("#graph-figures-controls");
+  assert.ok(bar);
+  assert.notEqual(bar.tagName, "NAV");
+  assert.ok(bar.querySelector("#graph-figures-back"));
+});
+
+test("the empty state names no menu that does not feed this app", () => {
+  const host = parse();
+  const empty = host.querySelector("#graph-empty-state");
+  assert.ok(empty);
+  assert.doesNotMatch(empty.textContent ?? "", /acme|Workspace menu/);
+  assert.match(empty.textContent ?? "", /#demo/);
 });
 
 test("data-conditional is the only mechanism for data-backed visibility", () => {

@@ -1424,7 +1424,7 @@ func (m *Magus) probeObservations(ctx context.Context, projects []*types.Project
 						}
 						slog.Log(ctx, level, "magus: observation probe failed; cache key records UNPROBED",
 							slog.String("spell", s.Name()), slog.String("tool", tool),
-							slog.String("dir", p.Dir), slog.String("err", err.Error()))
+							slog.String("dir", p.Dir), attr.Error(err))
 						probed = "UNPROBED"
 					}
 					value = probed
@@ -1670,7 +1670,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				stepCtx := buzz.WithTargetRuns(stageCtx, buzz.NewTargetRuns())
 				if err := st.handler(stepCtx, p); err != nil {
 					slog.With(attr.Component("dry-run")).WarnContext(ctx, "target evaluation stopped early",
-						slog.String("project", label), slog.String("target", st.target), slog.String("error", err.Error()))
+						slog.String("project", label), slog.String("target", st.target), attr.Error(err))
 				}
 			}
 		}
@@ -1949,7 +1949,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		defer func() {
 			if evs := diag.snapshot(); len(evs) > 0 {
 				if err := knowledge.RecordRuntimeEvents(resolveCacheDir(m.Root(), m.cfg), evs); err != nil {
-					slog.With(attr.Component("magus")).DebugContext(ctx, "could not persist runtime diagnostics", slog.String("error", err.Error()))
+					slog.With(attr.Component("magus")).DebugContext(ctx, "could not persist runtime diagnostics", attr.Error(err))
 				}
 			}
 		}()

@@ -14,6 +14,7 @@ import (
 // with its line in text.
 //
 // KindDoc reads text as a doc comment, by the rules [Judge] applies to one.
+// KindCSS reads text as a stylesheet, by [JudgeCSS].
 // KindMessage judges text as [JudgeMessage] does at its default cap.
 // KindSkillSource renders text in both of a skill's forms first, and each
 // finding's line is its line in the source.
@@ -25,6 +26,8 @@ func JudgeText(text string, kind Kind) []Finding {
 		return run(input{symbol: Symbol{Doc: text}, kind: kind, prose: readProse(raw, false), lines: raw})
 	case KindSkillSource:
 		return judgeSkillSource(strings.Join(raw, "\n"))
+	case KindCSS:
+		return JudgeCSS(text)
 	case KindMessage:
 		return JudgeMessage(text, 0)
 	}

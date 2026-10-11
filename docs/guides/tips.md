@@ -30,7 +30,7 @@ Non-obvious ways to combine magus subcommands.
 
 ## Live pool snapshot in a multiplexer sidebar
 
-`magus status` is a non-blocking, one-shot RPC snapshot: it returns immediately whether the server is running or not. Combine `--compact` (a single densely-packed line) with `--watch` to keep a tmux/screen sidebar pane current:
+`magus status` is a non-blocking, one-shot RPC snapshot: it returns immediately whether the daemon is running or not. Combine `--compact` (a single densely-packed line) with `--watch` to keep a tmux/screen sidebar pane current:
 
 ```sh
 magus status --compact --watch=15s
@@ -42,10 +42,10 @@ Sample output:
 server 3/8 busy · api:build(2.1s) · ui:test(0.5s) · 1 ws
 ```
 
-When no server is running the line reads `server: off`, with no error and no hang. Drop `--compact` for the full grid view when you have a wider pane to spare.
+When no daemon is running the line reads `server: off`, with no error and no hang. Drop `--compact` for the full grid view when you have a wider pane to spare.
 
 The full view also lists workspace locks held by ordinary `magus run` processes,
-which may exist without a server. When a run is refused by one, keep this watch
+which may exist without a daemon. When a run is refused by one, keep this watch
 open instead of writing a `sleep`/`ps` loop: it reports the lock holder's PID,
 command, directory, and age. A long run alone is not grounds to kill it; only act
 on a verified stale holder.
@@ -75,9 +75,9 @@ magus watch | while IFS= read -r path; do
 done
 ```
 
-## One-shot server health probe
+## One-shot daemon health probe
 
-`magus status` exits 0 even when the server is down (the pool block reads `server: off`). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:
+`magus status` exits 0 even when the daemon is down (the pool block reads `server: off`). Use it as a cheap, non-blocking reachability probe in scripts or CI health checks, with no risk of hanging on a network timeout:
 
 ```sh
 magus status
@@ -280,4 +280,4 @@ Targets can call `magus` recursively. Child invocations forward work to the pare
 magus\cmd("run", args: ["build", "api"]);
 ```
 
-`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [server](integrations/server.md) is running, the call rides the existing socket connection instead of spawning a new process.
+`magus\cmd` is the in-magusfile entry point for invoking magus recursively. When a [daemon](integrations/server.md) is running, the call rides the existing socket connection instead of spawning a new process.

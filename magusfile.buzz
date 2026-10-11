@@ -1943,7 +1943,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
                    "docs/guides/integrations/agents/lib/*.buzz", "docs/guides/integrations/agents/*.json",
                    "docs/guides/integrations/agents/*.ts", "docs/src/styles/site.css");
     // TestNodeKindPaletteDrift reads these console sources.
-    ctx.readsFiles("console/src/styles/tokens.css", "console/src/apps/graph/graph.css",
+    ctx.readsFiles("console/src/styles/base/tokens.css", "console/src/apps/graph/graph.css",
                    "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts");
     ctx.readsFiles("MAGUS.md");
     // The guard's pull-request-text test runs the judge judge-build links.
@@ -2220,7 +2220,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "libs/diagnostics/**/*.buzz", "libs/figure/**/*.buzz", "libs/gopherbuzz/**/*.buzz",
                    "libs/scipbuzz/**/*.buzz", "libs/testlayout/**/*.buzz", "libs/textsearch/**/*.buzz",
                    "proto/**/*.buzz",
-                   "**/*.css", "console/**/*.css", "docs/**/*.css",
+                   "**/*.css", "console/**/*.css", "docs/**/*.css", "libs/conventions/**/*.css",
                    "**/*.html", "console/**/*.html", "docs/**/*.html",
                    "**/*.mjs", "console/**/*.mjs",
                    "**/*.yaml", "console/**/*.yaml", "docs/**/*.yaml",

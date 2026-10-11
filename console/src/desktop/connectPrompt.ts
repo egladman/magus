@@ -16,6 +16,7 @@ import {
 } from "../lib/server";
 import { reportFailure } from "../lib/notifications";
 import { subscribeDefaultHost } from "../lib/settings";
+import { emptyStateShell } from "../ui/empty-state";
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 import type { ConnectionState } from "./status";
 import { h } from "./view";
@@ -216,22 +217,14 @@ export function appURL(app: string): string {
 }
 
 function gatePage(id: string): { page: HTMLElement; slots: EmptyStateSlots } {
-  const page = h("div", "pf-v6-c-empty-state");
-  page.dataset.connectPage = id;
-  const content = h("div", "pf-v6-c-empty-state__content");
-  const header = h("div", "pf-v6-c-empty-state__header");
-  const titleBox = h("div", "pf-v6-c-empty-state__title");
+  const state = emptyStateShell({ heading: "h2", ways: true });
+  state.root.dataset.connectPage = id;
   const slots: EmptyStateSlots = {
-    title: h("h2", "pf-v6-c-empty-state__title-text"),
-    message: h("div", "pf-v6-c-empty-state__body"),
-    actions: h("div", "pf-v6-c-empty-state__actions"),
+    title: state.title,
+    message: state.body,
+    actions: state.actions,
   };
-  slots.actions.dataset.emptyWays = "";
-  titleBox.append(slots.title);
-  header.append(titleBox);
-  content.append(header, slots.message, slots.actions);
-  page.append(content);
-  return { page, slots };
+  return { page: state.root, slots };
 }
 
 // renderSignIn writes the sign-in state: why the app cannot show anything, and the one command

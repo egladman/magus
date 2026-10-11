@@ -54,7 +54,7 @@ var buzzLoadWorkspace = loadMagus
 
 func warnWorkspaceNotAttached(err error) {
 	slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
-		slog.String("error", err.Error()))
+		attr.Error(err))
 }
 
 // lazyWorkspaceContext opens a script's workspace on the first read instead of at

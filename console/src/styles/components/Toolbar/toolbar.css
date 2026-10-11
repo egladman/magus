@@ -1,0 +1,41 @@
+/* The collapsed overflow panel the toolbar.ts kebab fills. PF's expandable content is a grid whose
+   children size to their content, so on a phone the stack sat in a narrow centred column. Every level
+   stretches so the menu is one full-width column. */
+[data-overflow-panel] {
+  grid-template-columns: minmax(0, 1fr);
+  justify-content: stretch;
+  justify-items: stretch;
+  /* A menu, not a sheet: the cap keeps controls control-sized below PF's lg stop. */
+  max-inline-size: 30rem;
+  /* Anchored to the end, so the menu drops from under the kebab. */
+  inset-inline: auto 0;
+}
+[data-overflow-panel] .pf-v6-c-toolbar__group {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--pf-t--global--spacer--sm);
+  justify-content: stretch;
+  justify-items: stretch;
+}
+/* Only leaf clusters flow: auto-fit pairs short actions such as Copy and Copy command, and collapses to
+   one column when two stop fitting. 11rem clears the longest label with its icon and padding. */
+[data-overflow-panel] .pf-v6-c-toolbar__group.pf-m-action-group-inline {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+/* A vertical rule divides nothing in a column; hide the item, or it keeps its cell. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> .pf-v6-c-divider.pf-m-vertical) { display: none; }
+/* A segmented control, a field, and a field's label each keep the whole row. */
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-toggle-group),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(.pf-v6-c-form-control),
+[data-overflow-panel] .pf-v6-c-toolbar__item:has(> label) {
+  grid-column: 1 / -1;
+}
+[data-overflow-panel] .pf-v6-c-toolbar__item { justify-self: stretch; }
+/* A stacked menu reads down its left edge; PF buttons centre by default. */
+[data-overflow-panel] .pf-v6-c-button { justify-content: flex-start; }
+/* A segmented control splits its row evenly, keeping one left and one right edge. */
+[data-overflow-panel] .pf-v6-c-toggle-group { display: flex; }
+[data-overflow-panel] .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+[data-overflow-panel] .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+}

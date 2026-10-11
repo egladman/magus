@@ -201,7 +201,7 @@ knowledge:
 
 `magus graph build` runs each declared adapter before it assembles, so the
 overlay is rebuilt from the same command that rebuilds everything else reading
-it, and the server's `sync-graph` job carries it on the server's own schedule
+it, and the daemon's `sync-graph` job carries it on the daemon's own schedule
 with nothing further to set up. `--no-sessions` skips them for one build;
 `knowledge.sessions.disabled` turns them off for good. An adapter that fails is
 reported and not fatal: the graph is then missing its newest sessions, which is a
@@ -288,7 +288,7 @@ the delegated half of every fanned-out session goes with them.
 // by the session-parity gate, which fails the build when an adapter drops a
 // dimension or the guide's table disagrees with it. A host that supplies less
 // declares less; the report then says unobservable rather than zero.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-session-coverage: schema=2 host=claude-code commands=yes exit=none skills=yes hook-output=yes spawn=yes session-id=yes model=yes host-version=yes
 
 // EVERY call that can fail is caught. A failure is a transcript this run does not
@@ -609,7 +609,7 @@ exit-like signal describes a patch rather than a command.
 // unobservable for those dimensions rather than zero. Declaring commands=yes on
 // the strength of what the other hosts supply is the failure this line exists
 // to prevent.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-session-coverage: schema=2 host=codex commands=yes exit=none skills=none hook-output=none spawn=yes session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a rollout this run cannot read is not a
@@ -830,7 +830,7 @@ a command's exit code, and the only one with no hook records and no spawn part.
 // both; a report reading it says unobservable, never zero. An export part carries
 // no CLI version and this adapter does not read a per-part model id with enough
 // confidence to publish it, so both are declared none rather than guessed.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a session whose export fails is not a reason

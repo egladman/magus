@@ -24,18 +24,17 @@ export function toolchainTile(): Tile {
   ]);
   // A workspace with no windows is a legitimate resting state, so the empty copy says what to
   // declare rather than only reporting an absence.
-  const empty = h(
-    "p",
-    "console-dashboard-row__empty",
-    "No project declares a probed tool. A spell declares what its ops need with supported; a project declares its own policy with the tools key.",
-  );
+  const EMPTY =
+    "No project declares a probed tool. A spell declares what its ops need with `supported`; a project declares its own policy with the `tools` key.";
   const open = document.createElement("button");
   open.type = "button";
   open.className = "pf-v6-c-button pf-m-link pf-m-inline";
   open.dataset.openApp = "tools";
+  // The way into the Tools app stays when the card is empty: it is where a policy gets declared.
+  open.dataset.keepEmpty = "";
   open.append(h("span", "pf-v6-c-button__text", "Open Tools"));
   open.addEventListener("click", () => openApp({ pageId: "tools" }));
-  card.body.append(counts.el, empty, open);
+  card.body.append(counts.el, open);
 
   return {
     el: card.el,
@@ -44,7 +43,7 @@ export function toolchainTile(): Tile {
       const rows = view?.rows ?? [];
       const c = toolCounts(rows);
       counts.el.hidden = rows.length === 0;
-      empty.hidden = rows.length > 0;
+      card.setEmpty(rows.length === 0 ? EMPTY : null);
       counts.set("eol", String(c.pastEol));
       counts.set("outside", String(c.outsideWindow));
       counts.set("unannounced", String(c.unannounced));
@@ -58,6 +57,7 @@ export function toolchainTile(): Tile {
       const notes = [windows];
       const lifecycle = lifecycleNote(view?.lifecycle);
       if (lifecycle) notes.push(lifecycle);
+      // Clauses, not items, so they take a semicolon: the second carries a colon of its own.
       card.setNote(notes.join("; "));
     },
     destroy() {},

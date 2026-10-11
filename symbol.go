@@ -266,7 +266,7 @@ func (si *symbolIndexer) execute(ctx context.Context, ref indexRef) {
 		// A missing indexer (scip-go not installed) lands here; the growing backoff keeps
 		// it from re-failing every window instead of spamming.
 		si.log.WarnContext(ctx, "background symbol index failed, backing off",
-			slog.String("project", ref.project), slog.String("op", ref.op), slog.Int("failures", st.failures), slog.String("error", err.Error()))
+			slog.String("project", ref.project), slog.String("op", ref.op), slog.Int("failures", st.failures), attr.Error(err))
 		return
 	}
 	st.failures = 0
@@ -392,7 +392,7 @@ func (m *Magus) WatchSymbolIndexing(ctx context.Context) (func(), error) {
 			err := m.Run(ctx, []types.Target{{Path: ref.project, Name: ref.op}})
 			if err == nil {
 				if gerr := m.WriteGuardIndex(ctx); gerr != nil {
-					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", slog.String("error", gerr.Error()))
+					slog.With(attr.Component("magus")).DebugContext(ctx, "guard index not written", attr.Error(gerr))
 				}
 			}
 			if err == nil || ctx.Err() != nil {
@@ -608,7 +608,7 @@ func (m *Magus) freshnessCache(ctx context.Context) *cache.Cache {
 	m.probeCacheOnce.Do(func() {
 		c, err := cache.Open(ctx, resolveCacheDir(m.Root(), m.cfg))
 		if err != nil {
-			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", slog.String("error", err.Error()))
+			slog.With(attr.Component("magus")).WarnContext(ctx, "cannot open the cache to probe symbol index freshness", attr.Error(err))
 			return
 		}
 		m.probeCache = c

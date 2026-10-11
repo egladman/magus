@@ -1,0 +1,177 @@
+/* The left navigation rail (#console-sidebar, sidebar.ts): a PF Nav docked beside the Drawer as a flex
+   sibling, so apps reflow around it as they do for a pinned Reference panel. Collapsed it is an icon
+   strip and expanded it shows labels; only the width animates. The rest is PF's Nav, returned through
+   PF's own per-link custom properties rather than by re-skinning. */
+#console-sidebar {
+  flex: 0 0 auto;
+  width: var(--console-sidebar-w);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The third face of the continuous frame the title bar and status bar make. */
+  background: var(--console-chrome);
+  transition: width var(--console-motion-fast) ease;
+  /* PF aligns a link's icon on a baseline and pads it for a full-width row; neither suits a square
+     icon button. Square and flush: chrome here is square, and gapped rows read as floating chips. */
+  --pf-v6-c-nav__link--AlignItems: center;
+  --pf-v6-c-nav__link--PaddingInlineStart: 0;
+  --pf-v6-c-nav__link--PaddingInlineEnd: 0;
+  --pf-v6-c-nav__link--ColumnGap: 0;
+  --pf-v6-c-nav--PaddingBlockStart: 0;
+  --pf-v6-c-nav--PaddingBlockEnd: 0;
+  --pf-v6-c-nav__link--BorderRadius: 0;
+  --pf-v6-c-nav__list--RowGap: 0;
+}
+#console-sidebar[data-expanded] {
+  width: var(--console-sidebar-expanded-w);
+  --pf-v6-c-nav__link--PaddingInlineStart: var(--pf-t--global--spacer--sm);
+  --pf-v6-c-nav__link--ColumnGap: var(--pf-t--global--spacer--sm);
+}
+/* PF's nav list is a grid, so growing it to fill the rail would spread the rows over the full height.
+   Only the destinations scroll; the two control groups are flex:0 0 auto. */
+#console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; }
+/* The lead group (the collapse row) is a separate list for pinning: a toggle in the scrolling run
+   would scroll off its corner. It fills exactly the title bar's band. */
+#console-sidebar [data-rail-lead] {
+  flex: 0 0 auto;
+  overflow: visible;
+  box-sizing: border-box;
+  block-size: var(--console-topchrome-h);
+  padding-block: 0;
+  /* Cancels the gap PF puts between nav lists (--pf-v6-c-nav--RowGap, spacer--lg) for this edge. */
+  margin-block-end: calc(-1 * var(--pf-t--global--spacer--lg));
+}
+/* The utility group sits at the foot, so Settings stays put whether six lenses are listed or sixteen. */
+#console-sidebar [data-rail-utility] {
+  flex: 0 0 auto;
+  overflow: visible;
+  padding-block-start: 0;
+  padding-block-end: var(--pf-t--global--spacer--sm);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+/* Collapsed, the icon sits dead centre of a square target; expanded, it keeps that column and the
+   label runs on beside it, so icons stay on one vertical line through the transition. */
+#console-sidebar .pf-v6-c-nav__link {
+  position: relative;
+  width: 100%;
+  min-height: var(--console-sidebar-w);
+  cursor: pointer;
+  border: 0;
+  display: grid;
+  grid-template-columns: var(--console-sidebar-w) minmax(0, 1fr);
+  align-items: center;
+  justify-items: center;
+}
+#console-sidebar[data-expanded] .pf-v6-c-nav__link { grid-template-columns: 1.5rem minmax(0, 1fr); justify-items: start; }
+#console-sidebar .pf-v6-c-nav__link-icon {
+  display: grid;
+  place-items: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+/* The label is in the DOM in both states and clipped by the rail's overflow when collapsed; it is
+   never the accessible name (the button's aria-label is). */
+#console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity var(--console-motion-fast) ease; }
+#console-sidebar:not([data-expanded]) .pf-v6-c-nav__link-text { opacity: 0; }
+
+/* A row's count. Square and normal-case like every chip here, since PF's Badge is a pill. Collapsed it
+   overlays the icon's top-trailing corner; expanded it sits at the row's trailing edge. */
+#console-sidebar [data-rail-badge] {
+  position: absolute;
+  inset-block-start: var(--pf-t--global--spacer--xs);
+  inset-inline-end: var(--pf-t--global--spacer--xs);
+  display: grid;
+  place-items: center;
+  min-inline-size: 1rem;
+  min-block-size: 1rem;
+  padding-inline: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1;
+  border-radius: var(--console-radius-micro);
+  background: var(--console-spruce);
+  color: var(--pf-t--global--text--color--on-brand--default);
+}
+#console-sidebar[data-expanded] [data-rail-badge] {
+  position: static;
+  justify-self: end;
+  margin-inline-end: var(--pf-t--global--spacer--sm);
+}
+/* A third column, so a long label is truncated by the count and does not run under it. */
+#console-sidebar[data-expanded] .pf-v6-c-nav__link:has([data-rail-badge]:not([hidden])) {
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+}
+#console-sidebar [data-rail-badge][hidden] { display: none; }
+
+/* The current row lifts top and bottom only (a side cast would read as a gap) and wears a filled
+   backdrop on the whole row. The fill is required: WCAG 1.4.1 forbids colour as the only state cue. */
+#console-sidebar .pf-v6-c-nav__link.pf-m-current {
+  box-shadow: var(--pf-t--global--box-shadow--sm--top), var(--pf-t--global--box-shadow--sm--bottom);
+  background: color-mix(in srgb, var(--console-accent) 26%, transparent);
+}
+/* Two edge bars the full height of the row. OPEN: this app has a tab elsewhere, marked quietly in
+   the border tone every hairline uses. CURRENT: the one row carrying colour, and wider, so the pair
+   differ on both axes. */
+#console-sidebar .pf-v6-c-nav__link[data-tab-open]::before,
+#console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block: 0;
+  inline-size: 3px;
+}
+#console-sidebar .pf-v6-c-nav__link[data-tab-open]:not(.pf-m-current)::before {
+  background: var(--pf-t--global--border--color--default);
+}
+#console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
+  background: var(--console-accent);
+  inline-size: 4px;
+}
+#console-sidebar #console-sidebar-toggle { cursor: pointer; }
+
+/* The pool reading at the foot borrows the nav link's grid, so its dot shares a vertical line with the
+   app icons above. */
+#console-sidebar #console-sidebar-pulse {
+  flex: 0 0 auto;
+  min-height: var(--console-sidebar-w);
+  display: grid;
+  grid-template-columns: var(--console-sidebar-w) 1fr;
+  align-items: center;
+  justify-items: center;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+#console-sidebar[data-expanded] #console-sidebar-pulse {
+  grid-template-columns: 1.5rem 1fr;
+  justify-items: start;
+  padding-inline-start: var(--pf-t--global--spacer--sm);
+}
+/* Collapsed, the number is the content: it takes the whole 44px, the dot steps aside, and state moves
+   onto the text colour. */
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse { grid-template-columns: 1fr; }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse .pf-v6-c-nav__link-icon { display: none; }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="running"] { color: var(--console-status-running); }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn-text); }
+#console-sidebar #console-sidebar-pulse .pf-v6-c-nav__link-icon {
+  /* min-inline-size:0 because a min-width outranks width and PF sizes the icon slot for a real glyph;
+     without it the dot renders as a pill. */
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  min-inline-size: 0;
+  border-radius: 50%;
+  background: var(--pf-t--global--icon--color--subtle);
+}
+/* Occupancy, not health: busy takes the info colour, a backed-up queue the caution colour, and idle
+   stays neutral. */
+#console-sidebar #console-sidebar-pulse[data-state="running"] .pf-v6-c-nav__link-icon { background: var(--console-status-running); }
+#console-sidebar #console-sidebar-pulse[data-state="queued"] .pf-v6-c-nav__link-icon { background: var(--console-status-warn); }
+
+/* No rail on a phone: collapsed it is still a permanent 44px bite, and every app is one tap away in
+   the Applications menu. After the rail's display:flex, since both selectors are a single id. */
+@media (max-width: 47.999rem) {
+  #console-sidebar { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #console-sidebar, #console-sidebar .pf-v6-c-nav__link-text { transition: none; }
+}

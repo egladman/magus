@@ -1,134 +1,96 @@
-/* settings.css - the Settings app's page-scoped stylesheet (loaded lazily when the tab opens,
- * like logs.css / graph.css / dashboard.css). Layout only: the app is built from PatternFly Form,
- * Button, and text-input components, so this file just frames the scrollable page and its titled
- * sections. The keybindings editor grid is styled globally in overrides.css ([data-kbeditor]) because
- * the same core also appears in the modal overlay, which exists before this tab is ever opened.
- *
- * Conventions (README.md): pf-v6-* is the only borrowed vocabulary; app hooks are console-settings-*
- * classes and data-*; colors come from --pf-t-* / --console-* tokens, never a raw hex. */
+/* The Settings app, loaded lazily when its tab opens. Layout only: the app is built from PatternFly
+   Form, Radio, Switch, Table, Tabs and Button, so this frames the scrollable page and its titled
+   sections. The keybindings editor grid is components/KeybindingsEditor, since the same core also
+   appears in the modal overlay, which exists before this tab is ever opened. */
 
-/* The page is a single scrolling column, capped for readability and centered in the pane. The global
- * transaction controls (action bar, status, pending diff) stack at the top; the section sub-tabs and
- * their one visible panel follow. */
+/* The page scrolls and its body carries the padding, so nothing sits above the stuck action bar for
+   content to show through. */
 .console-settings-page {
   height: 100%;
   overflow-y: auto;
-  padding-block: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
-  padding-inline: var(--console-pad);
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-settings-page__body {
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--lg);
-  background: var(--pf-t--global--background--color--primary--default);
+  padding-block: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--2xl);
+  padding-inline: var(--console-pad);
 }
-
-/* --- Section sub-tabs: one panel at a time, not one long scroll -----------------------------------
- * A horizontal underline tab strip over the section panels. The strip and its panels are grouped so
- * the page's inter-block gap does not detach the underline from the content it selects. */
+/* One panel at a time instead of one long scroll. */
 .console-settings-tabs__wrap {
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--lg);
 }
-.console-settings-tabs {
-  flex: 0 0 auto;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-.console-settings-tabs .pf-v6-c-tabs__list {
-  padding-inline: var(--pf-t--global--spacer--sm);
-  gap: var(--pf-t--global--spacer--sm);
-}
-.console-settings-tabs .pf-v6-c-tabs__item {
-  margin-bottom: -1px;
-}
-/* The default control tier rather than a bare 2.5rem. The 40px it used to carry was the only
-   instance of that number anywhere in the console, and it stacked under the shell's own 44px tab
-   strip - two tab strips, neither on a declared step. PF's untouched tabs link is 29px, which is too
-   quiet for the app's primary navigation, so this takes the default tier instead of the compact one. */
-.console-settings-tabs[data-control-size] .pf-v6-c-tabs__link {
-  min-block-size: var(--console-control-block-size);
-  padding-inline: var(--pf-t--global--spacer--md);
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-settings-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link {
-  color: var(--pf-t--global--text--color--regular);
-  font-weight: var(--pf-t--global--font--weight--body--bold);
-}
-.console-settings-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link::after {
-  border-bottom-color: var(--console-accent);
-}
-.console-settings-tabs__tab:focus-visible {
-  outline: 2px solid var(--console-accent);
-  outline-offset: -3px;
-}
-/* Only the current panel is shown; each is a stacked column of its lede + body. */
-.console-settings-tabs__panel[hidden] { display: none; }
 .console-settings-panel {
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--md);
 }
+/* Every settings form shares one label column, so Connection, Appearance and Keymap rows line up;
+   PF's default 9.375rem is wide for these short labels. */
+.console-settings-page .pf-v6-c-form.pf-m-horizontal {
+  --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 9rem;
+}
+.console-settings-radios {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+}
 
-/* --- Action bar: the staged-config controls ------------------------------------------------------
- * A pending-count indicator on the left, the Save & Apply / Save / Reset buttons on the right. Sticks
- * to the top of the scrolling column so the commit controls stay reachable on a long page. */
+/* The staged-config controls: what the buttons do on the left, Save & Apply, Save and Reset on the
+   right. It sticks to the top so the commit controls stay reachable. */
 .console-settings-actionbar {
   position: sticky;
   top: 0;
-  /* Sit above the page content while it scrolls under the bar. A PF ToggleGroup's selected button
-     (the Appearance theme toggle) is position:relative with z-index 100, so a plain z-index:1 here
-     let the scrolling "System" button paint over the pending-changes bar; clear that, staying below
-     the reference overlay (z-index 200). */
+  /* A PF ToggleGroup's selected button is position:relative at z-index 100, so z-index 1 let it paint
+     over the bar. Stays below the reference overlay (200). */
   z-index: calc(var(--pf-t--global--z-index--xs) + 1);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--pf-t--global--spacer--md);
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
   padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-settings-actionbar__count {
+.console-settings-actionbar__note {
+  flex: 1 1 16rem;
+  margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
-  font-weight: var(--pf-t--global--font--weight--body--bold);
   color: var(--pf-t--global--text--color--regular);
 }
 .console-settings-actionbar__actions {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: flex;
   flex-wrap: wrap;
   gap: var(--pf-t--global--spacer--sm);
 }
-
-/* The status line: neutral by default, tinted by outcome via data-kind. */
+/* A live region for import failures and clipboard errors, so it takes the text tier of the colours:
+   --console-status-queued is the saturation red and read 4.19:1 in dark, where danger-text reads 6.89:1. */
 .console-settings-actionbar__status {
   margin: 0;
-  min-height: 1.2em;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* A live region carrying import failures and clipboard errors, so the text tier. --console-status-queued
-   is the SATURATION red and was reading 4.19:1 in dark here; danger-text is 6.89:1 and is the right
-   semantic besides - this reports a failure, not a full pool. */
 .console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok-text); }
 .console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-danger-text); }
 
-/* --- Pending diff: the readable before -> after list ---------------------------------------------
- * One row per changed field, hidden entirely when the draft matches the baseline. The before/after
- * values sit in mono so a chord or host:port reads as a literal, with an arrow between them. */
+/* The pending diff has one row per changed field. Before and after values are monospace so a chord or
+   host:port reads as a literal. */
 .console-settings-diff {
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--sm);
   padding: var(--pf-t--global--spacer--md);
-  border: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }
-.console-settings-diff[hidden] { display: none; }
-/* Header: the title with the Pretty|Raw view toggle pushed to the right, wrapping on a narrow pane. */
 .console-settings-diff__head {
   display: flex;
   flex-wrap: wrap;
@@ -141,17 +103,11 @@
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   color: var(--pf-t--global--text--color--regular);
 }
-/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading.
-   Same control as the plan app's source switch, so it takes its height from the same token rather
-   than from a second copy of the same padding guess. */
-.console-settings-diff__view { margin-left: auto; }
-.console-settings-diff__view .pf-v6-c-toggle-group__button {
-  block-size: var(--console-control-block-size);
-  padding-block: 0;
-  padding-inline: 0.5rem;
-  font-size: var(--pf-t--global--font--size--body--sm);
+.console-settings-diff__view { margin-inline-start: auto; }
+.console-settings-diff__list {
+  margin: 0; padding: 0; list-style: none;
+  display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--xs);
 }
-.console-settings-diff__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.25rem; }
 .console-settings-diff__item {
   display: flex;
   flex-wrap: wrap;
@@ -160,83 +116,51 @@
   font-size: var(--pf-t--global--font--size--body--sm);
 }
 .console-settings-diff__label { flex: 0 0 auto; color: var(--pf-t--global--text--color--regular); font-weight: var(--pf-t--global--font--weight--body--bold); }
-.console-settings-diff__change { display: inline-flex; align-items: baseline; gap: 0.4rem; font-family: var(--pf-t--global--font--family--mono); }
+.console-settings-diff__change { display: inline-flex; align-items: baseline; gap: var(--pf-t--global--spacer--sm); font-family: var(--pf-t--global--font--family--mono); }
 .console-settings-diff__before { color: var(--pf-t--global--text--color--subtle); text-decoration: line-through; }
 .console-settings-diff__arrow { color: var(--pf-t--global--text--color--subtle); }
-.console-settings-diff__after { color: var(--console-status-ok); }
-
-/* Raw view: the settings envelope as a git-style line diff. Removed lines red, added lines green,
-   context lines muted; the block scrolls (it never wraps a JSON line) and is capped so a large keymap
-   does not run the page long. Pretty and Raw are mutually exclusive - the [hidden] rules beat the
-   list's own display:flex / the pre's block. */
-.console-settings-diff__list[hidden],
-.console-settings-diff__raw[hidden] { display: none; }
+.console-settings-diff__after { color: var(--console-status-ok-text); }
+/* Raw view: the settings envelope as a git-style line diff, each line led by a minus or plus sign. It
+   scrolls rather than wrapping a JSON line, and its cap keeps a large keymap from running the page long. */
 .console-settings-diff__raw {
   margin: 0;
   max-height: 22rem;
   overflow: auto;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
 }
 .console-settings-diff__rawline { display: block; white-space: pre; }
 .console-settings-diff__rawline[data-diff="del"] {
   color: var(--pf-t--global--text--color--status--danger--default);
-  background: color-mix(in srgb, var(--pf-t--global--color--status--danger--100) 45%, transparent);
+  background: color-mix(in srgb, var(--console-status-danger) 45%, transparent);
 }
 .console-settings-diff__rawline[data-diff="add"] {
-  color: var(--console-status-ok);
+  color: var(--console-status-ok-text);
   background: color-mix(in srgb, var(--console-status-ok) 12%, transparent);
 }
 .console-settings-diff__rawline[data-diff="same"] { color: var(--pf-t--global--text--color--subtle); }
 
-/* The panel lede (and the Backup section's own lede): a quiet intro line above a section's controls. */
+/* Two tabs (General, Access) stack several titled sections, with a rule between them. */
 .console-settings-section__lede,
 .console-settings-io__lede {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-
-/* Stacked sections: the console keeps two settings tabs (General, Agent), each stacking several titled
- * sections. A rule between sections and a heading per section keep them legible as distinct blocks in one
- * scroll. The first section needs no top rule. */
 .console-settings-section + .console-settings-section {
-  margin-top: 1.75rem; padding-top: 1.5rem;
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  margin-top: var(--pf-t--global--spacer--xl); padding-top: var(--pf-t--global--spacer--lg);
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
 }
 .console-settings-section__title {
-  margin: 0 0 0.75rem; font-size: var(--pf-t--global--font--size--body--lg);
+  margin: 0 0 var(--pf-t--global--spacer--sm); font-size: var(--pf-t--global--font--size--body--lg);
   font-weight: var(--pf-t--global--font--weight--body--bold); color: var(--pf-t--global--text--color--regular);
 }
-.console-settings-section__title + .console-settings-section__lede { margin-top: -0.4rem; margin-bottom: 0.75rem; }
+.console-settings-section__lede { margin-bottom: var(--pf-t--global--spacer--md); }
 
-/* The General form: keep the label column tight (PF's default 9.375rem is wide for two short labels)
- * and let the control column carry a small helper line under each field. */
-.console-settings-page .pf-v6-c-form.pf-m-horizontal {
-  --pf-v6-c-form--m-horizontal__group-label--md--GridColumnWidth: 9rem;
-}
-.console-settings-form__help {
-  margin: 0.35rem 0 0;
-  font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-settings-form__help[data-kind="ok"] { color: var(--console-status-ok-text); }
-.console-settings-form__help[data-kind="error"] { color: var(--console-status-danger-text); }
-
-/* The theme button sits at its natural width, not stretched across the control column. PF buttons
- * default to align-items:baseline (sized for a text glyph); center the row and the inline <svg> glyph
- * so the icon lines up with the label instead of hanging off the baseline. */
-.console-settings-theme { width: auto; align-items: center; }
-.console-settings-theme .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
-
-/* The focus-ring toggle group is the same 2-way control, sized like the theme toggle above. */
-.console-settings-focusring { width: auto; align-items: center; }
-
-/* Install: a status line and, only where the browser can actually be prompted, the Install button. The
-   button is hidden rather than disabled in every other state - the line above it already says what to do
-   instead, and a permanently greyed button invites a click that can do nothing. align-items keeps the
-   button at its natural width instead of stretching it across the column. */
+/* Install: a status line and, only where the browser can be prompted, the Install button. The button
+   is hidden rather than disabled elsewhere, since a greyed button invites a click that does nothing.
+   align-items keeps it at its natural width. */
 .console-settings-install {
   display: flex; flex-direction: column; align-items: flex-start;
   gap: var(--pf-t--global--spacer--md);
@@ -246,78 +170,35 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-/* Installed is the one state that is good news rather than an instruction, so it reads at full contrast
-   instead of as a muted helper line. */
+/* Installed is good news rather than an instruction, so it reads at full contrast. */
 .console-settings-install[data-state="installed"] .console-settings-install__status {
   color: var(--pf-t--global--text--color--regular);
 }
 
-/* Backup: the export/import controls stack, with the action rows wrapping on a narrow pane. */
 .console-settings-io { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 .console-settings-io__actions { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); }
 
-/* The file picker is a styled PF Button label wrapping a visually-hidden <input type=file>. */
-.console-settings-io__file { position: relative; overflow: hidden; cursor: pointer; }
-.console-settings-io__file input[type="file"] {
-  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-}
-
-/* Keymap-preset strip: a PF ToggleGroup of one-click preset loads, plus a muted "Custom" tag that shows
-   only when the current bindings match no preset. Custom is a READOUT of that state, never a button - so
-   it never competes with the Default preset, which simply means "the console defaults". */
-.console-settings-presets__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-presets__group { width: auto; flex-wrap: wrap; }
-.console-settings-presets__custom {
-  font-size: var(--pf-t--global--font--size--body--sm);
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-settings-presets__custom[hidden] { display: none; }
-
-/* --- Access tokens: the list + revoke view over the server's connector/share tokens ---------------
- * No PF Table sheet is bundled, so the list is a lightweight CSS grid with role=table semantics. Five
- * columns (type, name, fingerprint, expiry, action); the fingerprint sits in mono as a literal handle. */
+/* Access tokens: a PF compact table. The wrapper is the container PF's grid layout keys on, so a
+   narrow pane stacks each token into labelled rows, and it scrolls sideways before it would push a
+   control out of view. */
 .console-settings-tokens { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }
 .console-settings-tokens__table {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  overflow: hidden;
+  container-type: inline-size;
+  container-name: pf-v6-contain-table;
+  overflow-x: auto;
 }
-.console-settings-tokens__row {
-  display: grid;
-  grid-template-columns: minmax(6rem, auto) minmax(6rem, auto) minmax(6rem, 1fr) minmax(6rem, 1fr) minmax(8rem, auto) auto;
-  align-items: center;
-  gap: var(--pf-t--global--spacer--sm);
-  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
-  font-size: var(--pf-t--global--font--size--body--sm);
+.console-settings-tokens__fp {
+  font-family: var(--pf-t--global--font--family--mono);
+  overflow-wrap: anywhere;
 }
-.console-settings-tokens__row:first-child { border-top: 0; }
-.console-settings-tokens__row--head {
-  background: var(--pf-t--global--background--color--secondary--default);
-  font-weight: var(--pf-t--global--font--weight--body--bold);
+.console-settings-tokens__loading {
+  margin: 0; display: flex; align-items: center; gap: var(--pf-t--global--spacer--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-settings-tokens__cell { min-width: 0; overflow-wrap: anywhere; }
-.console-settings-tokens__name { color: var(--pf-t--global--text--color--regular); }
-.console-settings-tokens__fp { font-family: var(--pf-t--global--font--family--mono); color: var(--pf-t--global--text--color--subtle); }
-.console-settings-tokens__expiry { color: var(--pf-t--global--text--color--subtle); }
-/* The last cell (Revoke) hugs the right edge of its column. */
-.console-settings-tokens__row > .console-settings-tokens__cell:last-child { justify-self: end; }
-/* Stack the grid into label-less rows on a narrow pane so the fingerprint never overflows the pane. */
-@media (max-width: 34rem) {
-  .console-settings-tokens__row { grid-template-columns: 1fr; gap: 0.2rem; }
-  .console-settings-tokens__row--head { display: none; }
-  .console-settings-tokens__row > .console-settings-tokens__cell:last-child { justify-self: start; }
-}
 
-/* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------
- * Deliberately understated: a small link list over a folded, scrollable license. No marketing copy;
- * version info lives in the status bar, so it is not repeated here. */
+/* About: source, license and feedback, understated. Version info lives in the status bar. */
 .console-settings-about { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
-.console-settings-about__links { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
-/* Each row is a tight label + link pair, small text so the block reads as a footer note, not a form. */
+.console-settings-about__links { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--sm); }
 .console-settings-about__row {
   display: flex;
   flex-wrap: wrap;
@@ -326,37 +207,33 @@
   font-size: var(--pf-t--global--font--size--body--sm);
 }
 .console-settings-about__label { flex: 0 0 8rem; color: var(--pf-t--global--text--color--subtle); }
-.console-settings-about__link { color: var(--console-accent); text-decoration: none; overflow-wrap: anywhere; }
-.console-settings-about__link:hover,
-.console-settings-about__link:focus-visible { text-decoration: underline; }
-
-/* The license disclosure: a native <details> (the codebase's fold idiom), collapsed by default so the
-   long GPL text does not dominate. The summary is a plain, clickable caption; the marker is left in
-   place as the open/closed affordance. */
-.console-settings-about__license {
-  border: 1px solid var(--pf-t--global--border--color--default);
-  border-radius: var(--pf-t--global--border--radius--small);
-  background: var(--pf-t--global--background--color--secondary--default);
-}
-.console-settings-about__licensesummary {
-  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  cursor: pointer;
-  font-size: var(--pf-t--global--font--size--body--sm);
-  font-weight: var(--pf-t--global--font--weight--body--bold);
-  color: var(--pf-t--global--text--color--regular);
-}
-/* Preformatted, monospace, and scrollable within a bounded height so the verbatim license keeps its own
-   layout without ever running the page long. */
+.console-settings-about__row .pf-v6-c-button { overflow-wrap: anywhere; }
+/* Preformatted and bounded in height, so the verbatim license keeps its layout without running the
+   page long. */
 .console-settings-about__licensetext {
   margin: 0;
   max-height: 24rem;
   overflow: auto;
   padding: var(--pf-t--global--spacer--md);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--body--sm);
-  line-height: 1.5;
+  line-height: var(--pf-t--global--font--line-height--body);
   color: var(--pf-t--global--text--color--subtle);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* Pretty and Raw are mutually exclusive: [hidden] has to beat the list's display:flex and the pre's block. */
+.console-settings-tabs__panel[hidden],
+.console-settings-actionbar[hidden],
+.console-settings-actionbar__status[hidden],
+.console-settings-diff[hidden],
+.console-settings-diff__list[hidden],
+.console-settings-diff__raw[hidden] { display: none; }
+/* A keyboard-only section means nothing without a keyboard: a phone, or a tablet without one. */
+@media (hover: none) and (pointer: coarse) {
+  .console-settings-section[data-input="keyboard"] { display: none; }
 }

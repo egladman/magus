@@ -11,7 +11,9 @@
 // source line. With -kind pull-request it reads a pull
 // request on stdin, the title on the first line and the description after it.
 // A finding from text names its file, or "pull-request", and its line as
-// source, `path:line`, the way a symbol's index position reads.
+// source, `path:line`, the way a symbol's index position reads. -kind css judges
+// the comments of the stylesheets its arguments name, or of one read from stdin
+// when it names none, and a finding there is on the source line of its comment.
 //
 // This repository's lint rules and its pull request guard and CI step run it.
 // The magus module never imports libs/conventions, so the rules stay this
@@ -55,6 +57,9 @@ type finding struct {
 // pullRequestSource names a pull request's findings, which have no file.
 const pullRequestSource = "pull-request"
 
+// stylesheetSource names the findings of a stylesheet read from stdin.
+const stylesheetSource = "stdin"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
@@ -96,6 +101,17 @@ func judge(kind prose.Kind, paths []string, stdin io.Reader) ([]finding, error) 
 		}
 
 		return judgeSymbols(stdin)
+	case prose.KindCSS:
+		if len(paths) > 0 {
+			return judgeFiles(paths, kind)
+		}
+
+		text, err := io.ReadAll(stdin)
+		if err != nil {
+			return nil, fmt.Errorf("read the stylesheet: %w", err)
+		}
+
+		return textFindings(stylesheetSource, string(text), kind), nil
 	case prose.KindMarkdown, prose.KindGuide, prose.KindSkill, prose.KindSkillSource:
 		return judgeFiles(paths, kind)
 	case prose.KindPullRequest:
@@ -110,7 +126,7 @@ func judge(kind prose.Kind, paths []string, stdin io.Reader) ([]finding, error) 
 
 		return textFindings(pullRequestSource, string(text), kind), nil
 	default:
-		return nil, fmt.Errorf("unknown kind %q: want markdown, guide, skill, skill-source or pull-request", kind)
+		return nil, fmt.Errorf("unknown kind %q: want markdown, guide, skill, skill-source, css or pull-request", kind)
 	}
 }
 

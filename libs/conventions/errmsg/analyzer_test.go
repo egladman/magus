@@ -59,6 +59,16 @@ func TestAnalyzerJudgesNoticeMessagesForErrors(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), analyzer, "notice")
 }
 
+// A log record names its error as an attribute, whatever else it carries: the message of
+// any log/slog call, and an attribute keyed "error" or "err" holding err.Error(), are judged.
+func TestAnalyzerJudgesLogMessagesAndErrorAttributes(t *testing.T) {
+	analyzer, err := New(Options{Rules: []Rule{RuleLog, RuleAttr}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	analysistest.Run(t, analysistest.TestData(), analyzer, "logs")
+}
+
 func TestNewRejectsAnOperationNamingNoPackage(t *testing.T) {
 	sourcetest.Module(t, "example.com/m", "run/run.go")
 	_, err := New(Options{Module: "example.com/m", Operations: []string{"run", "usage"}})

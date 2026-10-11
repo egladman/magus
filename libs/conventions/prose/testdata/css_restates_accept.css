@@ -1,0 +1,10 @@
+/* A fixed 2px: even the tiny tier turns a mark this small into a lozenge. */
+.dot { border-radius: 2px; }
+
+/* The divider is a grid track, so it is the gap and a draggable hit box. */
+.divider { align-self: stretch; }
+
+.pane {
+  /* row split -> vertical divider */
+  cursor: col-resize;
+}

@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -186,7 +187,7 @@ func allToolDrivers(opts Options) []spells.Driver {
 		&statusTool{opts: opts},
 		&consoleTool{host: opts.httpAddr().String(), unavailable: consoleUnavailable},
 		&configTool{cfg: opts.Config},
-		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
+		&diffTool{sessions: opts.DiffSessions, workspaceRoot: opts.Magus.Root(), src: opts.Magus, anchors: opts.ReviewAnchors()},
 	}
 }
 
@@ -452,7 +453,7 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Client, trailD
 		case err != nil:
 			ev.Outcome = trail.OutcomeError
 			ev.Error = err.Error()
-			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), slog.String("error", err.Error()))
+			reqLog.ErrorContext(ctx, "toolerror", slog.Duration("duration", dur), attr.Error(err))
 		case result != nil && result.IsError:
 			ev.Outcome = trail.OutcomeError // the error text is the response body, captured above
 			reqLog.WarnContext(ctx, "toolfailed", slog.Duration("duration", dur))

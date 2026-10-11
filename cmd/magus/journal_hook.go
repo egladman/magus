@@ -46,7 +46,7 @@ func withInvocationJournal(ctx context.Context, handlers []slog.Handler, root, v
 	// claim as if nothing outranked it.
 	lease, leaseFrom, err := checkoutLease(root, spawn.Lease)
 	if err != nil {
-		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", slog.String("error", err.Error()))
+		slog.With(attr.Component("magus")).WarnContext(ctx, "this invocation records no lease", attr.Error(err))
 		lease, leaseFrom = "", ""
 	}
 	h := sessions.NewFactHandler(root, sessions.InvocationStart{

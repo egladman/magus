@@ -13,9 +13,37 @@ export enum<str> CheckStatus {
     advice = "advice",
 }
 
+export enum<str> DiffWhyRelation {
+    none = "",
+    starts = "starts",
+    uses = "uses",
+    usedBy = "used_by",
+    implements = "implements",
+    implementedBy = "implemented_by",
+    continues = "continues",
+    continuedBy = "continued_by",
+    sameStep = "same_step",
+    tests = "tests",
+    generated = "generated",
+    unranked = "unranked",
+}
+
+export enum<str> DiffGroupKind {
+    none = "",
+    connected = "connected",
+    generated = "generated",
+    unranked = "unranked",
+}
+
 export enum<str> DiffUncoveredReason {
     none = "",
     noIndexer = "no-indexer",
+}
+
+export enum<str> DiffReadState {
+    none = "",
+    known = "known",
+    unknown = "unknown",
 }
 
 export enum<str> KnowledgeResolution {
@@ -107,6 +135,17 @@ export object DiffSymbol {
     publicThrough: [DiffPublicPath] = [],
 }
 
+export object DiffHunk {
+    index: int = 0,
+    digest: str = "",
+    oldStart: int = 0,
+    oldCount: int = 0,
+    newStart: int = 0,
+    newCount: int = 0,
+    declaration: str = "",
+    symbols: [str] = [],
+}
+
 export object DiffTouch {
     host: str = "",
     session: str = "",
@@ -123,6 +162,14 @@ export object DiffChurn {
     projectTrend: int = 0,
 }
 
+export object DiffThreadRef {
+    id: str = "",
+    hunk: int = 0,
+    line: int = 0,
+    comments: int = 0,
+    outdated: bool = false,
+}
+
 export object DiffFile {
     path: str = "",
     project: str = "",
@@ -130,6 +177,7 @@ export object DiffFile {
     hint: str = "",
     coverage: ImpactCoverage? = null,
     symbols: [DiffSymbol] = [],
+    hunks: [DiffHunk] = [],
     layout: [Check] = [],
     visibility: str = "",
     touches: [DiffTouch] = [],
@@ -137,6 +185,7 @@ export object DiffFile {
     churn: DiffChurn? = null,
     noHistory: bool = false,
     reach: int? = null,
+    threads: [DiffThreadRef] = [],
 }
 
 export object ImpactProject {
@@ -156,6 +205,53 @@ export object DiffAPI {
     removed: int = 0,
     signature: int = 0,
     body: int = 0,
+}
+
+export object DiffHunkRef {
+    path: str = "",
+    index: int = 0,
+    digest: str = "",
+}
+
+export object DiffWhy {
+    relation: DiffWhyRelation = DiffWhyRelation.none,
+    step: int = 0,
+    symbol: str = "",
+    cycle: [str] = [],
+    text: str = "",
+}
+
+export object DiffStepHunk {
+    ref: DiffHunkRef = DiffHunkRef{},
+    label: str = "",
+    why: DiffWhy = DiffWhy{},
+}
+
+export object DiffStep {
+    number: int = 0,
+    hunks: [DiffStepHunk] = [],
+}
+
+export object DiffGroup {
+    kind: DiffGroupKind = DiffGroupKind.none,
+    label: str = "",
+    hunkCount: int = 0,
+    reach: int = 0,
+    steps: [DiffStep] = [],
+}
+
+export object DiffOrderCount {
+    hunkCount: int = 0,
+    placed: int = 0,
+    complete: bool = false,
+    repeated: [DiffHunkRef] = [],
+    missing: [DiffHunkRef] = [],
+    filesWithoutHunks: [str] = [],
+}
+
+export object DiffOrder {
+    groups: [DiffGroup] = [],
+    count: DiffOrderCount = DiffOrderCount{},
 }
 
 export object VCSCheckpoint {
@@ -184,6 +280,13 @@ export object DiffUncovered {
     reason: DiffUncoveredReason = DiffUncoveredReason.none,
 }
 
+export object DiffUnread {
+    readState: DiffReadState = DiffReadState.none,
+    reason: str = "",
+    hunks: int = 0,
+    unread: int = 0,
+}
+
 export object Diff {
     base: str = "",
     files: [DiffFile] = [],
@@ -191,9 +294,11 @@ export object Diff {
     affectedProjects: [ImpactProject] = [],
     notes: [str] = [],
     api: DiffAPI? = null,
+    order: DiffOrder? = null,
     reviewed: DiffReviewed = DiffReviewed{},
     conformanceError: Diagnostic? = null,
     uncovered: [DiffUncovered] = [],
+    unread: DiffUnread? = null,
 }
 
 export object DirCall {
@@ -1289,6 +1394,7 @@ export object Rule {
     name: str = "",
     decision: str = "",
     workspace: str = "",
+    fixed: bool = false,
     catches: str = "",
     why: str = "",
 }

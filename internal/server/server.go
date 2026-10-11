@@ -254,7 +254,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			)
 			if werr != nil {
 				bridgeLog.WarnContext(ctx, "file watcher unavailable; /api/v1/events will emit heartbeats only",
-					slog.String("error", werr.Error()))
+					attr.Error(werr))
 			} else {
 				// ONE consumer of the watcher, two audiences: the SSE stream's graph
 				// invalidation and the activity feed's attributed file changes. Two read
@@ -324,10 +324,14 @@ func (s *Server) Serve(ctx context.Context) error {
 			diffReviewH := diffhandler.NewReviewHandler(diffOpts, log)
 			diffLookupH := diffhandler.NewReviewLookupHandler(svc, log)
 			// The review store lets the lookup response say which threads the reader has not
-			// seen before; without it the conversation still serves, just unmarked.
+			// seen before; without it the comments still serve, just unmarked.
 			diffLookupH.Sessions = diffSessions
 			diffLookupH.Root = opts.Magus.Root()
 			diffBranchesH := diffhandler.NewBranchesHandler(svc, log)
+			diffThreadH := diffhandler.NewThreadHandler(diffhandler.ThreadOptions{
+				Workspace: svc,
+				Anchors:   opts.ReviewAnchors(),
+			}, log)
 			diffRunH := diffhandler.NewRunHandler(svc, opts.Magus.CacheDir(), opts.Version, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
 			// the same two sources the console already trusts (the service for structure and
@@ -362,6 +366,7 @@ func (s *Server) Serve(ctx context.Context) error {
 			f.api("/api/v1/diff/session", diffReviewH)
 			f.api("/api/v1/diff/review", diffLookupH)
 			f.api("/api/v1/diff/branches", diffBranchesH)
+			f.api("/api/v1/diff/thread", diffThreadH)
 			f.api("/api/v1/diff/run", diffRunH)
 			f.api("/api/v1/plan", planH)
 			f.api("/api/v1/attention", attentionH)
@@ -608,7 +613,7 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 		unmount, err := s.socket.Mount(f.socketMux)
 		if err != nil {
 			// Not fatal: loopback still serves all of it, to a bearer token.
-			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", slog.String("error", err.Error()))
+			log.WarnContext(ctx, "MCP and the APIs are not served on the server socket", attr.Error(err))
 		} else {
 			defer unmount()
 		}
@@ -620,7 +625,7 @@ func (s *Server) run(ctx context.Context, log *slog.Logger, f *frame) error {
 			slog.String("addr", bound.String()))
 	}
 	if err := httpServer.Serve(ctx); err != nil {
-		log.WarnContext(ctx, "shutdown error", slog.String("error", err.Error()))
+		log.WarnContext(ctx, "shutdown error", attr.Error(err))
 		return err
 	}
 	return nil

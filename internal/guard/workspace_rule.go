@@ -68,6 +68,14 @@ type rulesAnswer struct {
 	// no rule either, so no policy was read at all. A side that loaded and then raised is
 	// not unloaded: that stays fail-open.
 	unloaded bool
+	// loadFailure is why the working tree did not load, for denyUnloaded to tell a binary
+	// older than the tree from a typo.
+	loadFailure error
+	// rule is the built-in rule denyUnloaded refused under, "" when the answer is the
+	// workspace rule's own.
+	rule denyRuleName
+	// next is the command denyUnloaded's deny serves, nil for none.
+	next []hint.Next
 }
 
 // askWorkspaceRules runs the approved rule and the working-tree rule and keeps the
@@ -86,7 +94,7 @@ type rulesAnswer struct {
 // be resolved in time, which denies: the time is the part an agent can spend. No side
 // loading at all is reported as unloaded, for denyUnloaded to judge.
 func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error, resolveApproved func(context.Context) (ruleCall, error), worktree ruleCall) rulesAnswer {
-	var out rulesAnswer
+	out := rulesAnswer{loadFailure: loadFailure}
 	if loadFailure != nil {
 		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + loadFailure.Error()})
 	}
@@ -134,42 +142,89 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, loadFailure error
 	return out
 }
 
-// denyUnloaded turns asked into a deny of a gated call when no side of the policy loaded
-// while the last policy that did load registered seam's rule. verb names the gated call,
-// "" for one the rule's absence may pass. It reports whether it denied.
+// unloadedCall is one call whose policy did not load, as the three seams describe it.
+type unloadedCall struct {
+	seam functionSeam
+	// verb names, in backticks, the call the last loaded policy held back: a push, a merge,
+	// a magus verb that writes shared state. "" for one the rule's absence may pass.
+	verb string
+	// changes is whether the call changes state: a file write, a spawn, or a shell line
+	// that neither reads only nor is the fix.
+	changes bool
+	// what names the call in the deny.
+	what string
+	// lease is the acting lease, "" for the orchestrator or a person.
+	lease string
+}
+
+// denyUnloaded turns asked into a deny when no side of the policy loaded, and reports
+// whether it denied.
 //
-// Misconfiguration is an error: the rules that judge exactly these calls are not running,
-// most often because the binary answering the hook is older than the tree. Every other
-// call still passes on the built-ins, so the fix itself stays runnable. No record means
-// no rule was ever seen to protect, and the call passes.
-func denyUnloaded(asked *rulesAnswer, seam functionSeam, verb string, at location) bool {
-	if !asked.unloaded || verb == "" || asked.answer.Decision == types.GuardDeny || !recordedRule(at.cacheDir, seam) {
+// Misconfiguration is an error: the rules that judge these calls are not running. Two
+// cases deny, and every other call still passes on the built-ins, so the fix stays runnable.
+//
+// The binary judging the call cannot read the tree (older than it, or the checkout has no
+// ./magus): every call that changes state is denied, and it needs no record of an earlier
+// load, because a fresh worktree has none and is where this happens. The magusfile visibly
+// registering a guard rule is enough.
+//
+// Otherwise a gated verb is denied when the last policy that did load registered seam's
+// rule. No record means no rule was ever seen to protect, and the call passes.
+func denyUnloaded(asked *rulesAnswer, call unloadedCall, at location) bool {
+	if !asked.unloaded || asked.answer.Decision == types.GuardDeny {
 		return false
 	}
-	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: unloadedReason(seam, verb, asked.failures, ownSourceRoot(at.workspace))}
+	own := ownSourceRoot(at.workspace)
+	recorded := recordedRule(at.cacheDir, call.seam)
+	cause := unloadCause(asked.loadFailure, at.workspace)
+	var d denial
+	switch {
+	case call.changes && cause != "" && (recorded || declaresGuardRule(at.workspace)):
+		d, asked.rule = staleBinaryDenial(call, cause, failureLines(asked.failures), own, at.workspace), denyRuleStaleBinary
+	case call.verb != "" && recorded:
+		d, asked.rule = unloadedDenial(call, asked.failures, own, hasMagusBinary(at.workspace)), denyRulePolicyUnloaded
+	default:
+		return false
+	}
+	// One string, verdict first: verdictParts splits it again when the deny is worded.
+	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
+	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease).next(asked.rule)
 	asked.by = decidedByBuiltin
 	return true
 }
 
-// unloadedReason is the deny denyUnloaded gives. own is a checkout of magus itself, where
-// the fix is a rebuild of ./magus.
-func unloadedReason(seam functionSeam, verb string, failures []trail.RuleFailure, own bool) string {
-	var b strings.Builder
-	b.WriteString("magus workspace: " + verb + " is denied because this workspace's guard policy is not running.\n")
-	b.WriteString("It registered a " + seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
+// failureLines renders each failure as the side and the head of its error. An error
+// annotated as stale carries the generic fix after a blank line, and the deny states the
+// fix for the caller itself.
+func failureLines(failures []trail.RuleFailure) []string {
+	out := make([]string, len(failures))
+	for i, f := range failures {
+		head, _, _ := strings.Cut(f.Error, "\n\n")
+		out[i] = f.Side + ": " + head
+	}
+	return out
+}
+
+// unloadedDenial is the deny for a gated verb while the policy that registered seam's rule
+// does not load. own is a checkout of magus itself, where the fix is a rebuild of ./magus.
+func unloadedDenial(call unloadedCall, failures []trail.RuleFailure, own, hasBinary bool) denial {
+	fix := binaryRemedy(own, hasBinary, call.lease)
+	var why strings.Builder
+	why.WriteString("This workspace registered a " + call.seam.member() + " rule the last time it loaded, and now neither the working tree nor its approved copy loads:")
 	for _, f := range failures {
-		b.WriteString("\n  " + f.Side + ": " + f.Error)
+		why.WriteString("\n  " + f.Side + ": " + f.Error)
 	}
-	b.WriteString("\nThat rule judges " + gatedCalls(seam) + ", so these wait until it loads; every other call still runs on the built-in rules.\n")
-	if own {
-		b.WriteString("The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`. " +
-			"If that cannot load the tree either, move it aside and bootstrap, one command at a time: `mv magus magus.old`, " +
-			"`" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.")
-	} else {
-		b.WriteString("The likeliest cause is a magus older than this workspace's magusfile, or an error in it: " +
-			"`magus doctor` names the failure. Install a magus that loads it, or fix the line the error names.")
+	why.WriteString("\nThat rule judges " + gatedCalls(call.seam) + ", so these wait until it loads; every other call still runs on the built-in rules.")
+	switch {
+	case call.lease == "" && own && hasBinary:
+		why.WriteString("\nThe likeliest cause is a ./magus older than the tree.")
+	case call.lease == "" && !own:
+		why.WriteString("\nThe likeliest cause is a magus older than this workspace's magusfile, or an error in it.")
 	}
-	return b.String()
+	if fix.why != "" {
+		why.WriteString("\n" + fix.why)
+	}
+	return denial{Say: call.verb + " waits for this workspace's guard policy to load; " + fix.say + ".", Why: why.String()}
 }
 
 // gatedCalls words what denyUnloaded holds back on seam.
@@ -183,12 +238,17 @@ func gatedCalls(seam functionSeam) string {
 // applyWorkspaceAnswer merges a workspace rule's answer into the built-in verdict, which
 // decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
 // fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
-// on a built-in ask is dropped, as every notice is on an ask.
+// on a built-in ask is dropped, as every notice is on an ask. A deny denyUnloaded made is
+// filed under its own built-in rule rather than rule, with its next left unserved for the
+// caller's shapeDeny to grade.
 func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, rule string) (Verdict, string) {
 	answer := asked.answer
+	if asked.rule != "" {
+		rule = string(asked.rule)
+	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == "pass":
 		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "advise", Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == "advise":

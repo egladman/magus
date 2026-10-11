@@ -109,10 +109,29 @@ Delete the section to remove the integration; the next `magus server start` puts
 ## The drift notice
 
 `post-commit` and `pre-push` carry a second managed section, `magus-drift`, in the same
-shape: post a `check-drift` job, return. The server compares the commit's changed sources
-against the outputs they produce and runs `gofmt -l` over its changed, format-governed
-files, then prints the fix and the command that folds it into the offending commit
-(MGS4006 stale output, MGS4009 stale formatting).
+shape: post a `check-drift` job that names the hook, return. The server compares the
+commit's changed sources against the outputs they produce and runs `gofmt -l` over its
+changed, format-governed files, then prints the fix and the command that folds it into the
+offending commit (MGS4006 stale output, MGS4009 stale formatting).
+
+What fires when:
+
+- **After a commit**, only that drift notice, printed and raised as a desktop alert. A commit
+  never says anything about unread hunks.
+- **Before a push**, the same drift notice, plus the hunks of each pushed range that no read
+  mark covers. `pre-push` hands the job its remote and the refs git writes on its standard
+  input, so the range is exactly what this push sends: what the remote held against what
+  goes out, or the remote's default branch against it for a branch the remote does not have
+  yet. A deleted branch sends nothing. Each range with unread hunks adds one line, `N of M
+  hunks of this range (<remote>...<local>) unread`, with the `magus diff --unread --rev`
+  command that opens them, and the job raises the desktop alert for those lines even when
+  nothing drifted. If the read marks cannot be read, the line says the read state is unknown,
+  never that every hunk is unread.
+
+Nothing runs in the hook itself and nothing blocks the push. A section an older magus wrote
+names no hook, and the job then reads it as a commit; `magus server start` rewrites it. In
+Mercurial and Sapling the `outgoing` hook names only the first changeset it sends, not the
+range, so a push there counts no unread hunks.
 
 It never blocks and never writes to your tree. CI is the check; this is the earlier
 warning. A hook only runs where someone installed it and did not pass `--no-verify`, and

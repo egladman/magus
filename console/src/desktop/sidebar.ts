@@ -27,6 +27,7 @@
 import { tabHostsApp, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
 import { appIconSvg } from "./home";
+import { createContextMenu, isKeyboardContext, onContextKey } from "./contextMenu";
 import type { AppManifest } from "../apps/manifest";
 import { openAppWindow } from "../lib/appwindow";
 import { dispatchCommand } from "./commands";
@@ -197,84 +198,27 @@ export function createSidebar(
   const { ws, expanded, pulse, focused, badges, apps } = state;
   const sc: Scope = scope();
 
-  // One menu, moved to the pointer, living on <body> rather than in the rail - the same arrangement
-  // tabBar.ts uses and for the same reason: a menu parented to a list that gets rebuilt is a menu torn
-  // out from under the pointer. Its document listeners ride an AbortSignal that destroy() fires.
-  const menu = document.createElement("div");
-  menu.className = "pf-v6-c-menu console-shell-railmenu";
-  menu.hidden = true;
-  const menuList = document.createElement("ul");
-  menuList.className = "pf-v6-c-menu__list";
-  menuList.setAttribute("role", "menu");
-  const menuContent = document.createElement("div");
-  menuContent.className = "pf-v6-c-menu__content";
-  menuContent.append(menuList);
-  menu.append(menuContent);
-  // The row the menu was opened from, so focus has somewhere to land when it closes. Hiding the menu
-  // while focus is inside it drops focus to the body, and the next Tab restarts at the top of the page.
-  let menuInvoker: HTMLElement | null = null;
-  const closeMenu = (): void => {
-    if (!menu.hidden && menu.contains(document.activeElement)) menuInvoker?.focus();
-    menu.hidden = true;
-    menuInvoker = null;
-  };
-  const menuItem = (label: string, run: () => void): HTMLLIElement => {
-    const li = document.createElement("li");
-    li.className = "pf-v6-c-menu__list-item";
-    li.setAttribute("role", "none");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "pf-v6-c-menu__item";
-    b.setAttribute("role", "menuitem");
-    const main = document.createElement("span");
-    main.className = "pf-v6-c-menu__item-main";
-    const text = document.createElement("span");
-    text.className = "pf-v6-c-menu__item-text";
-    text.textContent = label;
-    main.append(text);
-    b.append(main);
-    b.addEventListener("click", () => {
-      closeMenu();
-      run();
+  // One menu, moved to the pointer or to the row, living on <body> rather than in the rail - the same
+  // menu the tab strip uses (contextMenu.ts), for the same reason: a menu parented to a list that gets
+  // rebuilt is a menu torn out from under the pointer. destroy() takes it away.
+  const menu = createContextMenu("console-shell-railmenu", "App actions");
+  const openMenu = (
+    pageId: string,
+    label: string,
+    origin: HTMLElement,
+    at: { x: number; y: number } | null,
+  ): void => {
+    menu.open({
+      origin,
+      at,
+      refind: () => links.get(pageId) ?? null,
+      items: [
+        { label: "Open " + label, run: () => cb.onOpen(pageId) },
+        { label: "Open in new window", run: () => openAppWindow(pageId) },
+      ],
     });
-    li.append(b);
-    return li;
   };
-  const openMenu = (pageId: string, label: string, x: number, y: number): void => {
-    menuInvoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    menuList.replaceChildren(
-      menuItem("Open " + label, () => cb.onOpen(pageId)),
-      menuItem("Open in new window", () => openAppWindow(pageId)),
-    );
-    menu.hidden = false;
-    // Measured after unhiding so the box has a real size, then pulled back inside the viewport - a row
-    // near the bottom edge would otherwise open its menu off-screen.
-    const r = menu.getBoundingClientRect();
-    menu.style.left = Math.min(x, window.innerWidth - r.width - 4) + "px";
-    menu.style.top = Math.min(y, window.innerHeight - r.height - 4) + "px";
-    menu.querySelector<HTMLElement>("button")?.focus();
-  };
-  document.body.append(menu);
-  const ac = new AbortController();
-  document.addEventListener(
-    "click",
-    (e) => {
-      const target = e.target instanceof Node ? e.target : null;
-      if (!menu.hidden && !menu.contains(target)) closeMenu();
-    },
-    { signal: ac.signal },
-  );
-  document.addEventListener(
-    "keydown",
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !menu.hidden) closeMenu();
-    },
-    { signal: ac.signal },
-  );
-  sc.add(() => {
-    ac.abort();
-    menu.remove();
-  });
+  sc.add(() => menu.destroy());
 
   // Two lists, one vocabulary: the lenses you work in, then the meta apps you consult. The split
   // is what keeps Settings out of the path of the six rows above it, and it is the arrangement both
@@ -323,8 +267,15 @@ export function createSidebar(
     // the only way to reach an app that could not also send it to its own window.
     link.addEventListener("contextmenu", (ev) => {
       ev.preventDefault();
-      openMenu(s.id, s.label, ev.clientX, ev.clientY);
+      openMenu(
+        s.id,
+        s.label,
+        link,
+        isKeyboardContext(ev) ? null : { x: ev.clientX, y: ev.clientY },
+      );
     });
+    // The keyboard's right-click: without it the rail's one extra action had no keyboard route.
+    onContextKey(link, () => openMenu(s.id, s.label, link, null));
     item.append(link);
     (s.utility ? utilityList : list).append(item);
     links.set(s.id, link);

@@ -1,0 +1,64 @@
+/* The "Share a read-only view" panel (share.ts): the SidePanel frame holding a centred single-task
+   column. The QR frame is pinned light in both themes so the code scans. */
+#console-sharepanel .console-shell-panel__body { gap: var(--pf-t--global--spacer--md); align-items: center; }
+.console-shell-share__picklabel {
+  margin: 0;
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* A ToggleGroup is one non-wrapping row and silently clips its last chip, the longest-lived link, so
+   the group wraps. flex-wrap sits on the element itself: pf-v6-c-toggle-group and this class share a
+   node, so a descendant selector would match nothing. */
+.console-shell-share__durations {
+  align-self: stretch;
+  flex-wrap: wrap;
+}
+.console-shell-share__generate { align-self: stretch; }
+.console-shell-share__revoked {
+  margin: 0;
+  align-self: flex-start;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--console-status-warn-text);
+}
+.console-shell-share__qr {
+  padding: var(--pf-t--global--spacer--sm);
+  background: var(--console-qr-frame);
+  border-radius: var(--pf-t--global--border--radius--tiny);
+  line-height: 0;
+}
+.console-shell-share__qr canvas { display: block; image-rendering: pixelated; max-width: 100%; height: auto; }
+.console-shell-share__qr[data-failed] { display: none; }
+/* The URL is a click-to-copy button reset to a bordered mono line. */
+.console-shell-share__url {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+  word-break: break-all;
+  text-align: center;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  padding: var(--pf-t--global--spacer--xs);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: transparent;
+}
+.console-shell-share__url:hover {
+  color: var(--pf-t--global--text--color--link--default);
+  border-color: var(--pf-t--global--text--color--link--default);
+}
+.console-shell-share__note {
+  margin: 0;
+  text-align: center;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-share__expiry {
+  margin: 0;
+  text-align: center;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-share__actions { display: flex; gap: var(--pf-t--global--spacer--sm); margin-top: var(--pf-t--global--spacer--xs); }

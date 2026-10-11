@@ -1,0 +1,178 @@
+:root {
+  --console-gap: var(--pf-t--global--spacer--sm);
+  --console-pad: clamp(var(--pf-t--global--spacer--sm), 1.6vw, var(--pf-t--global--spacer--md));
+  /* 2.75rem is 44px: every control that is not a tab lives on this bar. */
+  --console-titlebar-h: 2.75rem;
+  /* The real height of the top chrome (two rows on a phone); anything under it reads this. */
+  --console-topchrome-h: var(--console-titlebar-h);
+  --console-statusbar-h: 2.2rem;
+  --console-refdrawer-w: 22rem;
+  --console-shell-gutter: 0;
+  /* Rail widths. Expanded stays narrow because the Graph and Diff apps open their own sidebars. */
+  --console-sidebar-w: 2.75rem;
+  --console-sidebar-expanded-w: 11.5rem;
+  --console-launcher-w: 74rem;
+}
+
+/* A viewport-tall grid so the page never scrolls, only the panes. The rail takes the leading column
+   across every row; the status bar is a grid row rather than a fixed overlay so the rail can run
+   past it. With no rail the leading column resolves to zero. */
+body[data-console-fill] {
+  /* The chrome tone: it shows where a child steps back from its cell (the frame's curved corner). */
+  background: var(--console-chrome, var(--pf-t--global--background--color--secondary--default));
+  height: 100svh;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+/* The frame spans the title and content rows so they paint as one box. */
+body[data-console-fill] > #console-frame {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+#console-frame > header { flex: 0 0 auto; }
+body[data-console-fill] > #console-sidebar { grid-column: 1; grid-row: 1 / -1; }
+body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
+
+/* The outlet is the PF Drawer host: row, so the rail's neighbour is not stacked vertically. */
+#console-outlet {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  padding-block: var(--console-shell-gutter);
+  padding-inline: var(--console-shell-gutter);
+  display: flex;
+  flex-direction: row;
+  max-width: none;
+  margin-inline: 0;
+}
+/* Only the drawer carries the fill: painted on the outlet, the gutter would sit inside the card.
+   Square and flush; the corners are the frame's to round. */
+#console-outlet > #console-refdrawer {
+  background: var(--pf-t--global--background--color--primary--default);
+  overflow: hidden;
+}
+#console-refdrawer { flex: 1 1 auto; min-height: 0; }
+/* min-width:0 lets the content shrink so the inline Reference panel fits. */
+#console-outlet-content { position: relative; overflow: hidden; min-width: 0; }
+#console-outlet-content > div { position: absolute; inset: 0; overflow: auto; }
+#console-outlet-content > div[hidden] { display: none; }
+
+/* An app card stretches as a flex child; a percentage height against a flex parent can fail. */
+#console-outlet > .console-graph-app,
+#console-outlet > .console-notes-app,
+#console-outlet > .console-render-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  position: relative;
+}
+/* The flex/height chain has to reach an app through its tab host, tile and panes, or a
+   canvas-height app collapses to nothing. :not([hidden]) keeps an inactive tab at display:none. */
+#console-outlet-content > div[data-tab-id]:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+/* The tab panel is focusable; its ring is drawn inside, where the overflow would clip it. */
+#console-outlet-content > div[role="tabpanel"]:focus-visible { outline-offset: var(--console-focus-inset); }
+#console-outlet div[data-tile-root] {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#console-outlet div[data-tile-root] > div[data-pane-id],
+#console-outlet div[data-tile-root] > div[data-split-id] { flex: 1 1 auto; }
+/* tileView sets the row/column template inline from the split's ratio. */
+#console-outlet div[data-split-id] { display: grid; gap: 0; min-width: 0; min-height: 0; }
+#console-outlet div[data-pane-id] {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+/* The inset is the pane's to give, not each app's. The id in this selector beats any app class. */
+#console-outlet div[data-pane-id] > main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: var(--console-pad);
+}
+/* The connect page stands in a server app's place (requireServer). */
+#console-outlet div[data-pane-id] > [data-connect-page] {
+  flex: 1 0 auto;
+  padding-inline: var(--console-pad);
+}
+/* Full-bleed apps paint their own panel edge to edge, keyed on the panel they mount. */
+#console-outlet div[data-pane-id] > main:has(> .console-graph-app),
+#console-outlet div[data-pane-id] > main:has(> .console-render-panel) {
+  padding-inline: 0;
+}
+#console-outlet div[data-pane-id] > main > .console-graph-app,
+#console-outlet div[data-pane-id] > main > .console-render-panel,
+#console-outlet div[data-pane-id] > .console-notes-app,
+#console-outlet div[data-pane-id] > .console-render-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  position: relative;
+  /* A pane is already bounded; a rounded card changed the silhouette on every tab switch. */
+  border: 0;
+  border-radius: 0;
+}
+
+/* Everything on the content's edge lives on the frame. The cast falls left and down only: upward is
+   the window edge, and the rail and status bar are chrome it sits in front of. */
+#console-frame {
+  box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--bottom);
+  z-index: calc(var(--pf-t--global--z-index--xs) + 1);
+}
+/* The shell's one rounded corner, bottom-left, where the pane meets the rail and status bar. Gated on
+   the rail's 48rem edge, below which it would chip the corner of a phone screen. */
+@media (min-width: 48rem) {
+  #console-frame {
+    border-left: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+    border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
+}
+
+/* The dashboard's Big Picture mode covers the chrome, but the hidden drawer would stay focusable and
+   a shared screen must not render a tab strip behind the picture. */
+[data-bigpicture] #console-titlebar,
+[data-bigpicture] #console-statusbar,
+[data-bigpicture] #console-refdrawer .pf-v6-c-drawer__panel { display: none; }
+
+/* On a phone the pane is the page: the frame stops casting and the status bar casts up instead. */
+@media (max-width: 47.999rem) {
+  :root { --console-topchrome-h: calc(var(--console-titlebar-h) * 2); }
+  /* Zero open tabs: the second row would be empty. */
+  :root[data-no-tabs] { --console-topchrome-h: var(--console-titlebar-h); }
+  #console-outlet { padding-block: 0; }
+  /* The launcher (data-no-tabs) keeps the gutter: it has no pane, and its cards want the grey around them. */
+  html:not([data-no-tabs]) #console-outlet { padding-inline: 0; }
+  #console-frame { box-shadow: none; }
+  body[data-console-fill] > footer {
+    box-shadow: var(--pf-t--global--box-shadow--sm--top);
+    z-index: calc(var(--pf-t--global--z-index--xs) + 2);
+  }
+}
+
+/* Taller bar for a coarse pointer, paired with the tray-button sizing in StatusBar. */
+@media (pointer: coarse) {
+  :root { --console-statusbar-h: 44px; }
+}

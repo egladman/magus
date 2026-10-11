@@ -177,6 +177,70 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	}
 }
 
+// TestServeMountsTheDiffThreadRoute proves /api/v1/diff/thread is mounted behind the bearer
+// guard rather than falling through to the /api/ not-found handler: a caller with no token is
+// refused, and the operator reaches the thread handler itself, which answers a request with no
+// conversation id in its own words.
+func TestServeMountsTheDiffThreadRoute(t *testing.T) {
+	testkit.Isolate(t)
+	root := fixtureWorkspace(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m, err := magus.Open(ctx, root)
+	require.NoError(t, err)
+
+	port := freePort(t)
+	addr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), port)
+	d := New(mcp.Options{
+		Magus:    m,
+		Version:  "test",
+		HTTPAddr: addr,
+		HealthRoutes: map[string]http.Handler{
+			"/readyz": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
+		},
+	})
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- d.Serve(ctx) }()
+
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	waitReady(t, base+"/readyz")
+	operator, err := auth.LoadOperator()
+	require.NoError(t, err)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	get := func(token string) (int, string) {
+		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer reqCancel()
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, base+"/api/v1/diff/thread", nil)
+		require.NoError(t, err)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return resp.StatusCode, string(body)
+	}
+
+	code, _ := get("")
+	assert.Equal(t, http.StatusUnauthorized, code, "no token")
+	code, body := get(operator)
+	assert.Equal(t, http.StatusBadRequest, code, "the thread handler answers, not the /api/ fallback")
+	assert.Contains(t, body, "thread requires an id parameter")
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("server did not shut down")
+	}
+}
+
 // TestServeHealthRoutesCORS proves the health routes (a browser console PWA needs to read
 // /readyz cross-origin) carry the same CORSAllow allow-list the /api bridge uses, while
 // staying otherwise unguarded: no bearer token is required, and no rebind check blocks a

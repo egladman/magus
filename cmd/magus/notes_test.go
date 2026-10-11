@@ -61,7 +61,7 @@ func TestCaptureKeepsWhatColleaguesSaid(t *testing.T) {
 			{Path: "a.go", Hunk: 1, Author: types.DiffAuthorUnattributed, Body: "mine"},
 		},
 	}
-	threads := []types.ReviewThread{
+	threads := []types.ReviewComment{
 		{ID: "t1", Path: "a.go", Line: 12, Author: "priya", Body: "theirs"},
 		{ID: "t2", Path: "z.go", Line: 3, Author: "marcus", Body: "elsewhere"},
 	}
@@ -125,13 +125,13 @@ func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
 // A colleague's remark is a fact about the review, not about whether a background process is
 // up. Without a server the forge is asked directly rather than the reader being shown a review
 // with nobody else in it.
-func TestReviewThreadsReachTheForgeWithNoServer(t *testing.T) {
+func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
 	withFakeReviewProvider(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 	})
 	cache := t.TempDir()
 
-	threads, reason := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
 	require.Len(t, threads, 1)
 	assert.Equal(t, "theirs", threads[0].Body)
 	assert.Empty(t, reason)
@@ -150,9 +150,9 @@ func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
 	root := filepath.Join(cache, "ws")
 	sessions := changeset.NewStore(cache)
 	sessions.Attach(root, "main", types.Diff{Base: "main"}, "asof")
-	sessions.MarkThreadsSeen(root, []string{"t1"})
+	sessions.MarkCommentsSeen(root, []string{"t1"})
 
-	threads, _ := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
+	threads, _ := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, cache)
 	require.Len(t, threads, 1)
 	assert.False(t, threads[0].New)
 }
@@ -162,14 +162,14 @@ func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
 // into the note: New belongs to this reader's history with the review, and in a transcript a
 // colleague reads next year it would describe somebody else's morning.
 func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
-	threads := []types.ReviewThread{
+	threads := []types.ReviewComment{
 		{ID: "t1", Author: "priya", Body: "you weighed this already"},
 		{ID: "t2", Author: "marcus", Body: "arrived since you looked", New: true},
 	}
 
 	assert.Contains(t, newRemarkLine(threads), "1 remark on the review had not been in front of you before")
 	assert.Empty(t, newRemarkLine(threads[:1]), "a conversation the reader has already had says nothing")
-	assert.Contains(t, newRemarkLine(append(threads, types.ReviewThread{ID: "t3", New: true})), "2 remarks")
+	assert.Contains(t, newRemarkLine(append(threads, types.ReviewComment{ID: "t3", New: true})), "2 remarks")
 }
 
 // A malformed remark is reported rather than dropped: the threads that decoded still travel,
@@ -180,7 +180,7 @@ func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
 		"not a thread at all",
 	})
 
-	threads, reason := localReviewThreads(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
+	threads, reason := localReviewComments(t.Context(), types.ReviewOrigin{Branch: "feat/x"}, t.TempDir())
 	assert.Len(t, threads, 1)
 	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
 }

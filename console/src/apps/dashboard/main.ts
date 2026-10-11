@@ -23,7 +23,7 @@ import { bind } from "../../desktop/view";
 import { initialState, processSummary, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
-import { helpGlyph, type Tile } from "./tiles/card";
+import { disposeHelpGlyphs, helpGlyph, type Tile } from "./tiles/card";
 import { poolTile } from "./tiles/pool";
 import { utilizationTile } from "./tiles/utilization";
 import { cacheStatsTile } from "./tiles/cacheStats";
@@ -119,7 +119,9 @@ function setDashboardMode(mode: DashboardMode): void {
   const main = el("dash-main");
   const overview = el("dash-overview");
   const jobsHost = el("dash-jobs-host");
-  opt("dash-jobs-controls")?.toggleAttribute("hidden", mode !== "jobs");
+  opt("dash-jobs-back")?.toggleAttribute("hidden", mode !== "jobs");
+  // The presentation canvas is the board, so the Jobs view cannot open inside it.
+  if (mode === "jobs" && viewMode.get() === "bigPicture") resetBigPicture();
   dashboardMode = mode;
   main.dataset.mode = mode;
   overview.hidden = mode !== "overview";
@@ -161,6 +163,10 @@ const COMMANDS: readonly { id: string; label: string; key: string; run: () => vo
     run: () => setDashboardMode(dashboardMode === "jobs" ? "overview" : "jobs"),
   },
 ];
+
+// CONTROLS is what keeps focus's own keys: the app's single-letter shortcuts stay out of all of it.
+const CONTROLS =
+  'button, a[href], input, select, textarea, summary, [contenteditable]:not([contenteditable="false"]), [role="menuitem"], [role="separator"], [role="log"]';
 
 function isDashboardMode(mode: string | null): mode is DashboardMode {
   return mode === "jobs" || mode === "overview";
@@ -307,12 +313,14 @@ function boardSection(label: string, detail: string, asHint = false): HTMLElemen
   section.className = "console-dashboard-section";
   section.dataset.boardOnly = "";
   const title = document.createElement("h2");
+  title.className = "console-dashboard-section__title";
   title.textContent = label;
   section.append(title);
   if (asHint) {
     section.append(helpGlyph(detail, label));
   } else {
     const sub = document.createElement("p");
+    sub.className = "console-dashboard-section__detail";
     sub.textContent = detail;
     section.append(sub);
   }
@@ -339,10 +347,15 @@ function releaseTiles(): void {
   for (const t of tiles) t.destroy();
   tiles = [];
   boardOnlyTiles = new Set();
+  // The cards' "?" popovers are attached to triggers inside the container, so they are closed and
+  // unwired while the container still has them.
+  const host = opt("dash-panels");
+  if (host) disposeHelpGlyphs(host);
 }
 
 function mountTiles(): void {
   const host = el("dash-panels");
+  disposeHelpGlyphs(host);
   host.replaceChildren();
 
   // The dashboard header (the active-workspace picker, shown past a single workspace, + the Big
@@ -371,8 +384,6 @@ function mountTiles(): void {
   //  8. insight section      - the VCS/run-outcome lenses (on-demand poll).
   const pool = poolTile();
   const cacheStats = cacheStatsTile();
-  pool.el.dataset.half = "";
-  cacheStats.el.dataset.half = "";
 
   const attention = attentionTile();
   const jobs = jobsTile();
@@ -402,40 +413,47 @@ function mountTiles(): void {
     tile: Tile;
     section: BoardSection;
     bigPicture: BigPictureMembership;
+    // How many of the board's twelve columns the tile takes at full width. The spans of the tiles
+    // that follow each other add up to twelve, so a row has no hole in it; the tiles keep their
+    // place when they have nothing to show, so that stays true as data comes and goes.
+    span: 4 | 6 | 8 | 12;
   }
 
-  // One composition list owns both reading order and Big Picture membership. A tile never gets a
-  // mode-specific renderer; it only declares whether its existing renderer is permanent, rotated,
-  // or board-only in the presentation layout.
+  // One composition list owns reading order, Big Picture membership and the board's column
+  // spans. A tile never gets a mode-specific renderer; it only declares whether its existing
+  // renderer is permanent, rotated, or board-only in the presentation layout.
+  const INSIGHT_SPANS = [6, 12, 6, 6, 6, 12] as const;
   const boardTiles: BoardTile[] = [
-    { tile: attention, section: "live", bigPicture: "always" },
-    { tile: jobs, section: "live", bigPicture: "always" },
-    { tile: agents, section: "live", bigPicture: "always" },
-    { tile: activity, section: "live", bigPicture: "always" },
-    { tile: gantt, section: "live", bigPicture: "always" },
-    { tile: pool, section: "runtime", bigPicture: "always" },
-    { tile: cacheStats, section: "runtime", bigPicture: "always" },
-    { tile: locks, section: "runtime", bigPicture: "always" },
-    { tile: broker, section: "runtime", bigPicture: "rotate" },
-    { tile: server, section: "runtime", bigPicture: "board" },
-    { tile: workspaces, section: "runtime", bigPicture: "always" },
-    { tile: remote, section: "runtime", bigPicture: "rotate" },
-    { tile: cacheRate, section: "runtime", bigPicture: "rotate" },
-    { tile: utilization, section: "runtime", bigPicture: "rotate" },
-    { tile: targets, section: "diagnostics", bigPicture: "rotate" },
-    { tile: services, section: "diagnostics", bigPicture: "rotate" },
-    { tile: config, section: "diagnostics", bigPicture: "board" },
-    { tile: latency, section: "diagnostics", bigPicture: "board" },
-    { tile: buzz, section: "diagnostics", bigPicture: "board" },
-    { tile: sandbox, section: "diagnostics", bigPicture: "board" },
-    { tile: mcp, section: "diagnostics", bigPicture: "board" },
-    { tile: toolchain, section: "intelligence", bigPicture: "board" },
-    ...insight.tiles.map((tile) => ({
+    { tile: attention, section: "live", bigPicture: "always", span: 12 },
+    { tile: jobs, section: "live", bigPicture: "always", span: 6 },
+    { tile: agents, section: "live", bigPicture: "always", span: 6 },
+    { tile: activity, section: "live", bigPicture: "always", span: 6 },
+    { tile: gantt, section: "live", bigPicture: "always", span: 6 },
+    { tile: pool, section: "runtime", bigPicture: "always", span: 4 },
+    { tile: cacheStats, section: "runtime", bigPicture: "always", span: 8 },
+    { tile: locks, section: "runtime", bigPicture: "always", span: 4 },
+    { tile: broker, section: "runtime", bigPicture: "rotate", span: 4 },
+    { tile: server, section: "runtime", bigPicture: "board", span: 4 },
+    { tile: workspaces, section: "runtime", bigPicture: "always", span: 4 },
+    { tile: remote, section: "runtime", bigPicture: "rotate", span: 8 },
+    { tile: cacheRate, section: "runtime", bigPicture: "rotate", span: 6 },
+    { tile: utilization, section: "runtime", bigPicture: "rotate", span: 6 },
+    { tile: targets, section: "diagnostics", bigPicture: "rotate", span: 12 },
+    { tile: services, section: "diagnostics", bigPicture: "rotate", span: 6 },
+    { tile: config, section: "diagnostics", bigPicture: "board", span: 6 },
+    { tile: latency, section: "diagnostics", bigPicture: "board", span: 12 },
+    { tile: buzz, section: "diagnostics", bigPicture: "board", span: 6 },
+    { tile: sandbox, section: "diagnostics", bigPicture: "board", span: 6 },
+    { tile: mcp, section: "diagnostics", bigPicture: "board", span: 12 },
+    { tile: toolchain, section: "intelligence", bigPicture: "board", span: 12 },
+    ...insight.tiles.map((tile, i) => ({
       tile,
       section: "intelligence" as const,
       bigPicture: "board" as const,
+      span: INSIGHT_SPANS[i] ?? 12,
     })),
   ];
+  for (const item of boardTiles) item.tile.el.dataset.span = String(item.span);
   const appendSection = (section: BoardSection, title: string, description: string): void => {
     host.append(boardSection(title, description, true));
     for (const item of boardTiles) if (item.section === section) host.append(item.tile.el);
@@ -690,8 +708,12 @@ function wireKeys(): void {
     "keydown",
     (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      // A bare letter is a shortcut only while focus is on the page itself. Inside a control it is
+      // that control's: typing in a field, or a letter a menu or list takes for its own. A key a
+      // reader cannot turn off must not fire from there (WCAG 2.1.4); the command palette runs
+      // the same commands by name.
       const t = e.target;
-      if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
+      if (t instanceof Element && t !== main && t.closest(CONTROLS)) return;
       const run = byKey.get(e.key);
       if (!run) return;
       e.preventDefault();

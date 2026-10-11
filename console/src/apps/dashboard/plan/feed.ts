@@ -16,7 +16,9 @@ import { createClient } from "@connectrpc/connect";
 import { ActivityService, Kind, Outcome } from "@wire/activity/v1alpha1/activity_pb";
 import type { ActivityEvent } from "@wire/activity/v1alpha1/activity_pb";
 import { createServerTransport, getLiveToken } from "../../../lib/server";
+import { reportFailure } from "../../../lib/notifications";
 import { h } from "../../../desktop/view";
+import { scrollRegion } from "../scroll";
 
 // BACKFILL is what the drawer asks for when it opens. A stream that started at "now" would
 // paint a blank panel onto a job that has been running for an hour, and a blank panel reads
@@ -144,11 +146,21 @@ export class JobFeed {
       if (this.job === job) {
         this.trouble = "The feed ended. Reopen this job to start it again.";
         this.render();
+        reportFailure(
+          "Jobs",
+          "The live feed for " + job + " ended. Reopen the job to start it again.",
+          "jobs:feed-ended:" + job,
+        );
       }
     } catch (err) {
       if (signal.aborted || this.job !== job) return;
       this.trouble = "The feed could not be read (" + why(err) + ").";
       this.render();
+      reportFailure(
+        "Jobs",
+        "The live feed for " + job + " could not be read: " + why(err),
+        "jobs:feed:" + job,
+      );
     }
   }
 
@@ -177,7 +189,11 @@ export class JobFeed {
       );
     } else {
       const ul = h("ul", "console-plan-feed__list");
-      ul.setAttribute("role", "list");
+      // It scrolls, so it is a named, focusable log. aria-live is off: the list is rebuilt for
+      // every event, and a live region around that would read the whole feed out again each time.
+      scrollRegion(ul, "Live activity for this job");
+      ul.setAttribute("role", "log");
+      ul.setAttribute("aria-live", "off");
       // Newest last, and the container scrolls: this reads like a terminal, which is what a
       // person watching work happen already knows how to read.
       for (const row of this.rows) ul.append(renderRow(row));

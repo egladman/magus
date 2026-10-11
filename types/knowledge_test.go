@@ -146,7 +146,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 		return string(data)
 	}
 
-	tokens := read("console", "src", "styles", "tokens.css")
+	tokens := read("console", "src", "styles", "base", "tokens.css")
 	graphCSS := read("console", "src", "apps", "graph", "graph.css")
 	mainTS := read("console", "src", "apps", "graph", "main.ts")
 	shapesTS := read("console", "src", "apps", "graph", "shapes.ts")
@@ -327,6 +327,29 @@ func TestKnowledgeRelationShapesForMarkersAndPackages(t *testing.T) {
 	assert.False(t, KnowledgeRelationAllows(RelationReferences, KindMarker, KindTarget))
 	assert.False(t, KnowledgeRelationAllows(RelationCalls, KindDir, KindSymbol))
 	assert.False(t, KnowledgeRelationAllows(RelationDocuments, KindDocSection, KindSpell))
+}
+
+func TestKnowledgeRelationImplements(t *testing.T) {
+	var def *KnowledgeRelationDefinition
+	for _, d := range KnowledgeRelationDefinitions() {
+		if d.ID == RelationImplements {
+			def = &d
+		}
+	}
+	require.NotNil(t, def, "implements is declared in the vocabulary")
+	got := *def
+	assert.NotEmpty(t, got.Description)
+	got.Description = ""
+	got.Shapes = nil // the allowed endpoint pairs are pinned through KnowledgeRelationAllows below
+	assert.Equal(t, KnowledgeRelationDefinition{
+		ID:           RelationImplements,
+		ForwardLabel: "implements",
+		ReverseLabel: "implemented by",
+	}, got)
+
+	assert.True(t, KnowledgeRelationAllows(RelationImplements, KindSymbol, KindSymbol))
+	assert.False(t, KnowledgeRelationAllows(RelationImplements, KindFile, KindSymbol))
+	assert.False(t, KnowledgeRelationAllows(RelationImplements, KindFunction, KindFunction))
 }
 
 // Edge attrs are additive: an edge without any marshals exactly as it did before them.

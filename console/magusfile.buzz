@@ -8,7 +8,9 @@ import "os";
 import "proc";
 import "std";
 import "project/../libs/textsearch";
+import "project/../libs/conventions";
 import "project/../docs";
+import "encoding/json";
 import "project/.." as root;
 
 import "lcov";
@@ -25,7 +27,7 @@ magus\project({
                 "src/**/*.ts", "src/**/*.css", "src/**/*.html",
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
-                "stylelint.config.mjs", "stylelint-control-sizing.mjs", "stylelint-label-token.mjs",
+                "stylelint*.mjs",
                 "src/assets/**",
                 "src/apps/diff/demo.patch",
                 // proto:generate writes src/gen/ from these, and console owns what lands in
@@ -117,8 +119,8 @@ export fun diffdemo_generate(ctx: magus\Context, args: [str]) > void !> any {
                      "-out", "src/apps/diff/gen/demo.ts"], ".", {});
 }
 
-// The shared stylesheets, each bundled with what it @imports (console.css takes table.css).
-final SHELL_CSS = ["tokens.css", "overrides.css", "console.css"];
+// The shell stylesheet, bundled with the base, layout, component and utility sheets it @imports.
+final SHELL_CSS = ["console.css"];
 
 // appBundles derives each app's lazy bundle from the tree: src/apps/<id>/main.ts builds
 // gen/<id>/<id>.js, the path the shell loads it from. An app whose manifest (app.ts) says
@@ -151,7 +153,7 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(docs\build_playground);
     ctx.writesFiles(
         "gen/console.js", "gen/theme.js",
-        "gen/patternfly.css", "gen/tokens.css", "gen/overrides.css", "gen/console.css",
+        "gen/patternfly.css", "gen/console.css",
         "gen/*/*.js", "gen/*/*.css", "gen/*/scaffold.html",
         "gen/index.html", "gen/manifest.webmanifest", "gen/sw.js", "gen/assets/*",
         "gen/graph/knowledge-graph.json", "gen/graph/target-graph.json",
@@ -200,11 +202,46 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(install);
     ctx.needs(textsearch\lint);
+    ctx.needs(conventions\judge_build);
+    // The judge's digest keys this target, so a change to a prose rule reruns the lint. A
+    // declaration replaces the project baseline, hence the sources restated.
+    ctx.readsFiles("*.buzz", "src/**/*.ts", "src/**/*.css", "src/**/*.html", "index.html",
+                   "manifest.webmanifest", "sw.js", "scripts/**/*.mjs", "package.json",
+                   "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs",
+                   "src/assets/**", "src/apps/diff/demo.patch",
+                   "../libs/conventions/gen/judge-docs.inputs");
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.json"]});
     typescript["tsc"](ctx, {"args": ["--noEmit", "-p", "tsconfig.test.json"]});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
     proc\exec("pnpm", ["exec", "stylelint", "src/**/*.css"], ".", {});
+    judgeCssComments();
     proc\exec("node", ["scripts/lint-catch.mjs", "src"], ".", {});
+}
+
+// judgeCssComments holds the comments of every stylesheet to the prose rules of
+// libs/conventions (the comment budget, a comment that repeats its code, change history,
+// banned words and the writing rules of docs/conventions.md) and fails on any finding.
+fun judgeCssComments() > void !> any {
+    final args = mut ["-kind", "css"];
+    foreach (f in fs\glob("src/**/*.css")) {
+        args.append(f.value);
+    }
+    final run = proc\exec("../libs/conventions/gen/judge-docs", args: args, dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (run.code != 0) {
+        throw "lint: the CSS prose judge exited {run.code}: " + run.stderr.trim();
+    }
+    final rows: [any] = json\parse(run.stdout);
+    if (rows.len() == 0) {
+        return;
+    }
+    final lines = mut [<str>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        final said: str = r["message"] ?? "";
+        final rule: str = r["rule"] ?? "";
+        lines.append("{source}: {said} [{rule}]");
+    }
+    throw "lint: {rows.len()} CSS comment finding(s) against the prose rules (docs/conventions.md):\n  " + lines.join("\n  ");
 }
 
 // `format:rw` maintains declared source inputs.
@@ -213,8 +250,7 @@ export fun format(ctx: magus\Context, args: [str]) > void !> any {
     ctx.modifiesExistingFiles(
         "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
         "index.html", "manifest.webmanifest", "sw.js", "package.json",
-        "tsconfig.json", "tsconfig.test.json", "stylelint.config.mjs",
-        "stylelint-control-sizing.mjs", "stylelint-label-token.mjs");
+        "tsconfig.json", "tsconfig.test.json", "stylelint*.mjs");
     typescript["biome-format"](ctx);
 }
 

@@ -155,6 +155,46 @@ func TestSpawnRuleCannotLiftABuiltInDeny(t *testing.T) {
 	assert.Empty(t, probe.asked)
 }
 
+// A built-in spawn deny is worded as a command's is: the verdict inline, the rationale and
+// the rule's page behind the ref, and one line naming the rule on a repeat.
+func TestSpawnDenyIsTheVerdictAndARef(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := strict(Dependencies{})
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}
+
+	stored := shortDeny(t, cacheDir, Judge(ctx, deps, req), denySpawnUnbriefed,
+		"spawning before the magus-multi-agent skill loaded; load Skill(magus-multi-agent), then retry.")
+	assert.Contains(t, stored, "\nIt carries the lease, worktree, model-naming and git rules")
+	assert.Contains(t, stored, "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
+
+	repeat := Judge(ctx, deps, req)
+	doc, ok := Rule(string(denySpawnUnbriefed))
+	require.True(t, ok)
+	assert.True(t, strings.HasPrefix(repeat.Reason, "denied again [spawn-unbriefed]: "+doc.Catches+"\nfull verdict: "), repeat.Reason)
+}
+
+// The trail row of a denied spawn names the ref the deny cited, as a command's row does, so a
+// reader of the row can reopen the refusal the agent was shown.
+func TestSpawnDenyTrailRowCarriesTheVerdictRef(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	deps := strict(Dependencies{})
+	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}
+
+	first := Judge(ctx, deps, req)
+	repeat := Judge(ctx, deps, req)
+
+	rows := trailEvents(t, cacheDir, trail.KindAgentSpawn)
+	require.Len(t, rows, 2)
+	for i, shown := range []Verdict{first, repeat} {
+		ref := verdictRef.FindString(shown.Reason)
+		require.NotEmpty(t, ref, "the deny cites its stored verdict: %q", shown.Reason)
+		assert.Equal(t, ref, rows[i].VerdictRef, "row %d", i)
+		stored, err := trail.ReadBlob(cacheDir, rows[i].VerdictRef)
+		require.NoError(t, err)
+		assert.Contains(t, string(stored), "\nsee: "+ruleDocsBase+string(denySpawnUnbriefed)+"/")
+	}
+}
+
 func TestSpawnUnbriefedAdvisesByDefault(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	req := Request{Input: claudeSpawnEnvelope, Host: "claude-code", ReportsSkills: true}

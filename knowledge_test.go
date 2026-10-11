@@ -680,7 +680,8 @@ func TestSymbolOccurrencesReportsACorruptIndexAsAGap(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte("not a protobuf"), 0o644))
 
 	projects, spells := goWorkspace("pkg/a")
-	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), "gomod example.com/a Foo#")
+	foo := "gomod example.com/a Foo#"
+	got := symbolsOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{foo})[foo]
 
 	assert.Empty(t, got.Files, "a corrupt index yields no sites")
 	require.Len(t, got.Unreadable, 1, "and the hole must be recorded, not swallowed")
@@ -695,7 +696,8 @@ func TestSymbolOccurrencesReportsACorruptIndexAsAGap(t *testing.T) {
 func TestSymbolOccurrencesLeavesAnUnbuiltIndexToTheProbe(t *testing.T) {
 	root := t.TempDir()
 	projects, spells := goWorkspace("pkg/a") // no index written
-	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), "gomod example.com/a Foo#")
+	foo := "gomod example.com/a Foo#"
+	got := symbolsOccurrences(t.Context(), ingest(config.Config{}, root, filepath.Join(root, ".magus"), projects, spells), []string{foo})[foo]
 
 	assert.Empty(t, got.Files)
 	assert.Empty(t, got.Unreadable, "not-built belongs to SymbolGaps, which reports it already")
@@ -715,7 +717,8 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 	writeSCIP(t, goIndexPath(cacheDir, filepath.Join(root, "pkg/a")))
 
 	projects, spells := goWorkspace("pkg/a")
-	got := symbolOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), "gomod example.com/a Foo#")
+	foo := "gomod example.com/a Foo#"
+	got := symbolsOccurrences(t.Context(), ingest(config.Config{}, root, cacheDir, projects, spells), []string{foo})[foo]
 
 	assert.Empty(t, got.Unreadable)
 	require.Len(t, got.Files, 1)

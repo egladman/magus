@@ -89,7 +89,8 @@ func SeedsLazyLayer(input string) bool {
 		// A query field is whatever the caller typed, so it is compared as text rather
 		// than assumed to name a declared relation.
 		rel := types.RelationID(r)
-		return rel == types.RelationDefines || rel == types.RelationReferences || rel == types.RelationCalls
+		return rel == types.RelationDefines || rel == types.RelationReferences || rel == types.RelationCalls ||
+			rel == types.RelationImplements
 	})
 }
 

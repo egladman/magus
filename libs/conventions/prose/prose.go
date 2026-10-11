@@ -1,7 +1,9 @@
 // Package prose judges prose: the doc comment and name of one symbol a SCIP
 // index describes, a hand-written Markdown file, a skill, a pull request's
-// title and description, or a message a program prints. It parses no programming language, so every
-// indexer's symbols meet the same rules.
+// title and description, the comments of a stylesheet, or a message a program
+// prints. It parses no programming language, so every indexer's symbols meet
+// the same rules; the one reader it carries, for CSS, only finds comments and
+// the code beside them (see [JudgeCSS]).
 //
 // A doc is read the way go/doc/comment reads one: the common indent comes off,
 // a line still indented is preformatted unless it continues a list item, and a
@@ -69,6 +71,17 @@ const (
 	// RuleCondescension reports a word in a guide that tells the reader how
 	// hard a step should feel: easy, simple, obviously, just, please.
 	RuleCondescension Rule = "condescension"
+	// RuleRestates reports a CSS comment that only names the rule or
+	// declaration it sits on.
+	RuleRestates Rule = "restates"
+	// RuleCommentBudget reports a CSS comment over the lines its place earns.
+	RuleCommentBudget Rule = "comment-budget"
+	// RuleBlockBudget reports a CSS rule block whose comments, summed, run
+	// over what its size earns.
+	RuleBlockBudget Rule = "block-budget"
+	// RuleBannedWord reports a word this repository does not use in a CSS
+	// comment: story, chapter, handoff, `lane`, `corpus` and `surface` as a noun.
+	RuleBannedWord Rule = "banned-word"
 	// RuleMessageLength reports a message over its rune cap.
 	RuleMessageLength Rule = "message-length"
 	// RuleMessageRationale reports a message that stacks reasons: more than
@@ -107,6 +120,10 @@ const (
 	// in the second person, its numbered steps imperative and its words free
 	// of condescension.
 	KindGuide Kind = "guide"
+	// KindCSS is a stylesheet: [JudgeCSS] reads the comments out of it and
+	// holds each to the doc rules and the written ones, since a comment is
+	// both a doc on the code beside it and prose a maintainer reads cold.
+	KindCSS Kind = "css"
 	// KindMessage is one message magus prints to whoever runs it: a
 	// diagnostic, a guard verdict, a breadcrumb's reason. It is plain text, not
 	// Markdown, held to the message rules alone: a verdict, one next command,
@@ -116,10 +133,12 @@ const (
 
 var (
 	docOnly = []Kind{KindDoc}
-	written = []Kind{KindMarkdown, KindGuide, KindPullRequest, KindSkill}
-	all     = []Kind{KindDoc, KindMarkdown, KindGuide, KindPullRequest, KindSkill}
+	comment = []Kind{KindDoc, KindCSS}
+	written = []Kind{KindMarkdown, KindGuide, KindPullRequest, KindSkill, KindCSS}
+	all     = []Kind{KindDoc, KindMarkdown, KindGuide, KindPullRequest, KindSkill, KindCSS}
 	skill   = []Kind{KindSkill}
 	guide   = []Kind{KindGuide}
+	css     = []Kind{KindCSS}
 	message = []Kind{KindMessage}
 )
 
@@ -132,14 +151,20 @@ var checks = []struct {
 	on    []Kind
 	judge func(in input) []Finding
 }{
-	{RuleCommentBlock, docOnly, commentBlock},
-	{RuleCommentSentence, docOnly, commentSentence},
+	{RuleCommentBlock, comment, commentBlock},
+	{RuleCommentSentence, comment, commentSentence},
 	{RuleFiller, all, filler},
 	{RuleTerms, all, terms},
 	{RuleNameSuffix, docOnly, nameSuffix},
-	{RuleAside, docOnly, aside},
-	{RuleHistory, docOnly, history},
+	{RuleAside, comment, aside},
+	{RuleHistory, comment, history},
 	{RuleDocStub, docOnly, docStub},
+	{RuleRestates, css, restates},
+	{RuleCommentBudget, css, commentBudget},
+	// The budget of a whole block is judged by [JudgeCSS] once the file is
+	// read; the entry gives the rule its place in [Rules].
+	{RuleBlockBudget, nil, nil},
+	{RuleBannedWord, css, bannedWord},
 	{RuleLeadContext, []Kind{KindPullRequest}, leadContext},
 	{RuleReplyVoice, written, replyVoice},
 	{RuleTense, written, tense},
@@ -221,6 +246,8 @@ type input struct {
 	// still in place, for a rule that asks what a block is rather than what it
 	// says.
 	lines []string
+	// css is the comment [JudgeCSS] is judging, set for [KindCSS] alone.
+	css *cssComment
 	// text is a [KindMessage]'s whole text and maxRunes its length cap.
 	text     string
 	maxRunes int

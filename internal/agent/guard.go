@@ -185,7 +185,15 @@ var guardInputs = []string{"command", "path", "mcp"}
 // 21: magus-path.buzz accepts --reports-skills, which a config written for 21 passes
 // on every judging entry, and magus-command.buzz records a message the person typed. Under that
 // config a 20 copy reports the flag as unsupported and every skill gate stands down.
-const GuardTemplateVersion = 21
+//
+// 22: the glue finds the workspace root by the nearest magus.yaml rather than the nearest
+// magusfile.buzz. magus-session.buzz reads the SessionStart event, puts the root above the
+// event's cwd on PATH instead of the directory -C names, and tells the session once when
+// the binary it resolves cannot load the tree. A copy still walking to the magusfile
+// resolves no ./magus from a project directory and judges with whatever PATH holds, which
+// is the binary that cannot load the tree. What that binary then does is its own: it
+// denies each call it cannot show is a read, instead of passing it.
+const GuardTemplateVersion = 22
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

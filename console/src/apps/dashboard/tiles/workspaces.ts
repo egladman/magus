@@ -4,7 +4,7 @@
 import type { DashboardState, WorkspaceView } from "../state";
 import { publishWorkspaces } from "../../../lib/scope";
 import { relTime } from "../state";
-import { Card, h, type Tile } from "./card";
+import { Card, countBadge, h, type Tile } from "./card";
 import { fitRows } from "./density";
 // The scope this tile highlights against. Narrowed to what it actually reads - a value and a
 // subscription - so it can be fed either a persisted cell or the shell's per-tab workspace scope
@@ -26,26 +26,24 @@ export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
       "Which checkouts this server holds warm, and how well the cache serves each. One with a far" +
       " worse hit rate is usually a worktree whose absolute paths differ, so it reuses nothing.",
   });
-  const countLabel = h("span", "pf-v6-c-label pf-m-compact");
-  const count = h("span", "pf-v6-c-label__content", "0");
-  countLabel.append(count);
-  card.noteNode().replaceWith(countLabel);
+  const count = countBadge("workspaces");
+  card.noteNode().replaceWith(count.el);
   const list = h("ul", "console-dashboard-rowlist");
-  const empty = h("p", "console-dashboard-row__empty", "No workspaces loaded.");
-  card.body.append(list, empty);
+  card.body.append(list);
 
   function render(wss: WorkspaceView[]): void {
     // Tell the shell which workspaces exist. This tile is the one place that always has the list -
     // live from the status stream, and synthetic in the demo - so the title bar's scope picker can
     // offer them without a second call, and can offer them offline at all.
     publishWorkspaces(wss.map((w) => w.root).filter((r) => r !== ""));
-    count.textContent = String(wss.length);
-    empty.hidden = wss.length > 0;
+    count.set(wss.length);
+    card.setEmpty(wss.length === 0 ? "No workspaces are loaded." : null);
     list.replaceChildren();
     const active = activeWorkspace?.get();
     for (const w of wss) {
       const li = h("li", "console-dashboard-row");
-      if (active && w.root === active) li.dataset.active = "";
+      const isActive = !!active && w.root === active;
+      if (isActive) li.dataset.active = "";
       const root = h("code", "console-dashboard-row__cmd", w.root);
       const meta = h("span", "console-dashboard-row__wscache");
       if (w.hits != null) {
@@ -54,27 +52,28 @@ export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
           s.dataset.cache = cache;
           return s;
         };
-        meta.append(mk("hit", "H", w.hits), mk("miss", "M", w.misses ?? 0));
-        if ((w.errors ?? 0) > 0) meta.append(mk("err", "E", w.errors ?? 0));
+        meta.append(mk("hit", "hits", w.hits), mk("miss", "misses", w.misses ?? 0));
+        if ((w.errors ?? 0) > 0) meta.append(mk("err", "errors", w.errors ?? 0));
       } else {
         meta.textContent = relTime(w.lastAccessTime);
       }
-      // A declared secret provider gets a one-glyph slot before the path: enough to say
-      // credential resolution is wired up and through what, without a panel for it.
-      //
-      // Shown ONLY when a magusfile declared one. The built-in environment provider always
-      // applies, so marking it too would put a badge on every row and stop meaning
-      // anything. Absence here reads as "nothing declared", which is the truth.
-      //
-      // The initial, not a vendor logo: a provider is whatever spell the workspace names,
-      // so there is no bounded set to ship art for - and a letter carries no trademark.
-      // Square and monospaced on purpose; a round one reads as a person's avatar.
-      if (w.secretProvider) {
-        const slot = h("span", "console-dashboard-row__secret", w.secretProvider[0]);
-        slot.title = "secrets via " + w.secretProvider;
-        li.append(slot);
+      // The scope marker is a word, beside the row's border colour: the tab's workspace is the one
+      // row here the reader has chosen, and colour alone cannot say which.
+      if (isActive) {
+        const tag = h("span", "pf-v6-c-label pf-m-compact pf-m-outline");
+        tag.append(h("span", "pf-v6-c-label__content", "active"));
+        li.append(tag);
       }
       li.append(root, meta);
+      // A declared secret provider is named in words on its own line: enough to say credential
+      // resolution is wired up and through what, without a panel for it.
+      //
+      // Shown ONLY when a magusfile declared one. The built-in environment provider always
+      // applies, so naming it too would put a line on every row and stop meaning anything.
+      // Absence here reads as "nothing declared", which is the truth.
+      if (w.secretProvider) {
+        li.append(h("p", "console-dashboard-row__detail", "secrets via " + w.secretProvider));
+      }
       list.append(li);
     }
   }

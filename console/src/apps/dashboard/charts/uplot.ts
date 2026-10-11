@@ -48,7 +48,8 @@ function axisBase(): uPlot.Axis {
     stroke: cssVar("--console-chart-axis"),
     grid: { stroke: cssVar("--console-chart-grid"), width: 0.5 },
     ticks: { stroke: cssVar("--console-chart-grid"), width: 0.5 },
-    font: "11px " + cssVar("--pf-t--global--font--family--body", "system-ui, sans-serif"),
+    // 12px, the size PF's chart axes use and the console's text floor.
+    font: "12px " + cssVar("--pf-t--global--font--family--body", "system-ui, sans-serif"),
   };
 }
 
@@ -105,7 +106,9 @@ export class TimeChart {
     const opts: uPlot.Options = {
       width: this.width(),
       height: CHART_HEIGHT,
-      legend: { show: false },
+      // The legend is the cursor readout: while the pointer is over the plot it names each series
+      // with its value at that time, so a point can be read off the chart rather than estimated.
+      legend: { show: true, live: true },
       cursor: { points: { size: 5 }, focus: { prox: 16 } },
       scales: {
         x: { time: true },
@@ -116,6 +119,7 @@ export class TimeChart {
         {},
         ...this.spec.series.map((s) => ({
           label: s.label,
+          value: (_u: uPlot, v: number | null) => (v == null ? "-" : this.spec.yFormat(v)),
           stroke: cssVar(s.colorVar),
           fill: s.fillVar ? cssVar(s.fillVar) : undefined,
           width: s.width ?? 1.5,

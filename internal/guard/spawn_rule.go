@@ -83,8 +83,11 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
 	// their turn.
 	var held heldAdvice
+	// why is the rationale of the built-in deny standing, kept behind the deny's ref.
+	why := ""
+	verdictRef := ""
 	if env.IsSpawn {
-		verdict = spawnBuiltIns(ctx, req, who, at)
+		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
 		if verdict.Decision == "deny" {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
 				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
@@ -98,15 +101,15 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	if verdict.Decision != "deny" {
 		deps.scope = scopeAt(at)
 		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: denial{Say: v.Deny, Why: v.Why}.full(), Rule: v.RuleName()}
-			decided = decidedByBuiltin
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+			why, decided = v.Why, decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
 		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
 		held.speak(gate, &verdict, whys)
 		if verdict.Decision == "advise" {
-			verdict.Context, _ = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
+			verdict.Context, verdictRef = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
 		}
 		if verdict.Decision != "pass" {
 			decided = decidedByBuiltin
@@ -133,18 +136,25 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		failures = asked.failures
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
-		verb := ""
+		actingLease, _ := resolveActingLease(who, at, req.Lease)
+		call := unloadedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
 		if env.IsSpawn {
-			verb = "a subagent spawn"
+			call.verb, call.changes = call.what, true
 		}
 		// The unloaded deny names the failures itself.
-		denied := asked.unloaded && denyUnloaded(&asked, seamSpawn, verb, at)
+		denied := asked.unloaded && denyUnloaded(&asked, call, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied && !asked.timedOut {
 			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered), advisorySpawnRuleFailed)
 		}
 	}
+	// Worded as the command and write seams word theirs: the verdict, at most one next and
+	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
+	if verdict.Decision == "deny" && verdict.Rule != "" {
+		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
+	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
+		verdictRef:   verdictRef,
 		policyDigest: digest,
 		decidedBy:    decided,
 		target:       resolveAgentID(facts, env.Target),
@@ -158,19 +168,19 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and
 // never the prompt.
-func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) Verdict {
+func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) (Verdict, string) {
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
 	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
-		shown, _ := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}
+		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
-	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}, ""
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is

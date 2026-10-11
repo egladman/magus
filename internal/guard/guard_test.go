@@ -268,6 +268,8 @@ type policyCase struct {
 	jobs []types.Job
 	// corruptStore replaces the job store with bytes it cannot decode.
 	corruptStore bool
+	// lease is the job the caller acts under, "" for the orchestrator or a person.
+	lease string
 }
 
 func agentSpawn(toolInput map[string]any) map[string]any {
@@ -300,6 +302,10 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		{rule: "ci-batch-poll", name: "one pull request's checks", input: bash("gh pr checks 183"), decision: "advise", reason: "gh pr list --state open"},
 		{rule: "queue-poll", name: "the queue's runs", input: bash("gh run list --workflow queue.yaml --limit 5"), decision: "advise", reason: "magus queue ls"},
 		{rule: "admin-merge", name: "gh pr merge --admin", input: bash("gh pr merge 12 --squash --admin"), decision: "deny", reason: "--auto --squash"},
+		{rule: "auto-merge", name: "gh pr merge --auto", input: bash("gh pr merge 12 --squash --auto"), decision: "deny", reason: "a person enables auto-merge"},
+		{rule: "auto-merge", name: "the enablePullRequestAutoMerge mutation through gh api", input: bash(`gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: "PR_x"}) { clientMutationId } }'`),
+			decision: "deny", reason: "a person enables auto-merge"},
+		{rule: "auto-merge", name: "gh pr merge --disable-auto", input: bash("gh pr merge 12 --disable-auto"), decision: "pass"},
 		{rule: "pr-watch", name: "a for loop that sleeps over a pull request's state", input: bash("for i in 1 2 3; do gh pr view 300 --json state,autoMergeRequest; sleep 60; done"), decision: "deny", reason: "CI monitor"},
 		{rule: "pr-watch", name: "a while loop over the pulls endpoint", input: bash(`while true; do gh api repos/egladman/magus/pulls/300 --jq .merged; sleep 60; done`), decision: "deny", reason: "CI monitor"},
 		{rule: "pr-watch", name: "one read of a pull request's state", input: bash("gh pr view 300 --json state,autoMergeRequest"), decision: "pass"},
@@ -331,6 +337,17 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
+		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "a worker does not build magus"},
+		{rule: "worker-builds-magus", name: "a worker bootstraps the binary", input: bash("GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."),
+			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "ask the main session to place ./magus"},
+		{rule: "worker-builds-magus", name: "the orchestrator rebuilds the binary", input: bash("./magus run go-build ."), decision: "pass"},
+		{rule: "brief-builds-magus", name: "a brief tells its worker to build", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
+		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: "tells the worker to build magus"},
+		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
+			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
@@ -366,7 +383,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			if tc.checkout != nil {
 				deps.CheckoutState = func(context.Context, string) *types.CheckoutState { return tc.checkout }
 			}
-			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input)})
+			v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, input), Lease: tc.lease})
 			assert.Equal(t, tc.decision, v.Decision, v.Reason)
 			if tc.decision != "pass" {
 				assert.Contains(t, []string{workspaceCommandRule, workspaceSpawnRule}, v.Rule, "the policy decided, not a built-in")

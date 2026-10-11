@@ -1,0 +1,354 @@
+/* The page frame the log viewer and the Activity trail share: bordered panel, scrolling body, foldable
+   sections, empty state and the collapsible index panel. Layout answers to the pane, not the window,
+   so every query is a container query on the panel or the split. */
+@import "../../components/Render/render.css";
+
+/* The shared app gutter, so switching between Runs and the log viewer does not shift the content. */
+:root { --log-pad: var(--console-pad); }
+
+/* A bordered card filling its pane. The console's fill height comes from the Shell layout; block-size
+   is the standalone fallback. */
+.console-render-panel {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  container: console-pane / inline-size;
+  margin-block-start: var(--pf-t--global--spacer--lg);
+  block-size: calc(100svh - 12.5rem);
+  min-block-size: 420px;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-render-panel:fullscreen {
+  block-size: 100%;
+  inline-size: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-render-panel[data-drag-over] {
+  outline: var(--pf-t--global--border--width--strong) dashed var(--console-accent);
+  outline-offset: calc(var(--pf-t--global--spacer--sm) * -1);
+}
+.console-render-btn__icon { inline-size: 1em; block-size: 1em; flex: 0 0 auto; }
+
+.console-render-scroll {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow: auto;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-render-scroll:focus-visible { outline-offset: var(--console-focus-inset); }
+
+/* --log-zoom (applyZoom) scales the text view with CSS zoom, which keeps type on the token scale and
+   re-wraps the lines; the waterfall zooms its own SVG. */
+.console-render-body {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: var(--pf-t--global--font--line-height--body);
+  zoom: var(--log-zoom, 1);
+  padding-block: 0 var(--pf-t--global--spacer--sm);
+}
+.console-render-body[data-waterfall] { zoom: 1; }
+
+/* The head is a row, not a button: it holds the fold toggle and the section's actions, and a button
+   may not contain buttons. */
+.console-log-app { --log-head-fg: var(--pf-t--global--text--color--regular); }
+.console-render-section {
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-inline-start: var(--pf-t--global--border--width--extra-strong) solid transparent;
+}
+.console-render-section:last-child { border-block-end: 0; }
+.console-render-section[data-status="fail"],
+.console-render-section[data-status="error"] { border-inline-start-color: var(--console-status-danger); }
+.console-render-section[data-status="pass"] { border-inline-start-color: var(--console-status-ok); }
+.console-render-section[data-status="warn"],
+.console-render-section[data-status="dry"] { border-inline-start-color: var(--console-status-warn); }
+.console-render-section[data-status="cached"] { border-inline-start-color: var(--pf-t--global--border--color--default); }
+
+.console-render-section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline-end: var(--log-pad);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-render-section__head:hover { background: var(--pf-t--global--background--color--primary--default); }
+.console-render-section__toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  min-inline-size: 0;
+  min-block-size: 24px;
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--log-pad) 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  text-align: start;
+  background: none;
+  color: var(--log-head-fg, var(--pf-t--global--text--color--regular));
+  font: inherit;
+  cursor: pointer;
+}
+.console-render-section__title {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--log-head-fg, var(--pf-t--global--text--color--regular));
+}
+/* A clipped box draws the caret, which keeps the source ASCII. */
+.console-render-section__twist {
+  flex: 0 0 auto;
+  display: inline-block;
+  inline-size: 0.6em;
+  block-size: 0.36em;
+  background: var(--pf-t--global--text--color--subtle);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  transition: transform var(--console-motion-fast);
+}
+.console-render-section[data-collapsed] .console-render-section__twist { transform: rotate(-90deg); }
+.console-render-section__count {
+  flex: 0 0 auto;
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+/* Actions fade in on head hover or focus, stay in the tab order throughout, and sit permanently on a
+   device with no hover. */
+.console-render-section__actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  gap: var(--pf-t--global--spacer--xs);
+  opacity: 0;
+  transition: opacity var(--console-motion-fast);
+}
+.console-render-section__head:hover .console-render-section__actions,
+.console-render-section__head:focus-within .console-render-section__actions { opacity: 1; }
+@media (hover: none), (pointer: coarse) {
+  .console-render-section__actions { opacity: 1; }
+}
+.console-render-section__action { min-inline-size: 24px; min-block-size: 24px; }
+.console-render-section[data-collapsed] .console-render-section__lines { display: none; }
+.console-render-section__head[data-highlight] {
+  background: color-mix(in srgb, var(--console-accent) 22%, var(--pf-t--global--background--color--secondary--default));
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-render-section__twist,
+  .console-render-section__actions { transition: none; }
+}
+
+/* PF's EmptyState is display:flex, which beats the hidden attribute, so the toggle needs its own rule. */
+.console-render-empty,
+#log-empty { min-block-size: 100%; }
+.console-render-empty[hidden],
+#log-empty[hidden] { display: none; }
+.console-render-empty { box-sizing: border-box; }
+
+.console-filter { inline-size: 100%; }
+.console-filter .console-filter__count { white-space: nowrap; }
+
+/* mountCollapsiblePanel reparents .console-render-scroll into .console-log-split, so the scaffold
+   markup is unchanged; the split is the container the width queries ask. */
+.console-log-split {
+  display: flex;
+  flex: 1 1 auto;
+  min-block-size: 0;
+  position: relative;
+  container: console-split / inline-size;
+}
+.console-log-split > .console-render-scroll { flex: 1 1 auto; min-inline-size: 0; }
+/* Proportional between bounds: a fixed 240px squeezes the pane the panel navigates exactly when it is
+   tight. min-inline-size:0 makes the basis binding, since a flex item floors at its min-content. */
+.console-log-runs {
+  flex: 0 0 clamp(10rem, 26%, 19rem);
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  min-inline-size: 0;
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  background: var(--console-chrome);
+}
+.console-log-runs[hidden] { display: none; }
+/* One rule for both column headers so they cannot drift. The height is the shell head token as a
+   floor; the gutter matches the output lines, so a label and its content start on the same x. */
+.console-log-runs__head,
+.console-log-body__head {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--console-app-head-h);
+  padding-inline: var(--log-pad);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-log-body {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+.console-log-body__title,
+.console-log-runs__title {
+  margin-inline-end: auto;
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-body__title {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-log-body__meta {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--pf-t--global--spacer--xs);
+  overflow: hidden;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+.console-log-body__meta[hidden] { display: none; }
+.console-log-body__meta-value {
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--regular);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-log-runs__tree {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-block: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  padding-inline: var(--pf-t--global--spacer--xs);
+}
+/* The two controls stack: PF's control scales only disagree when two share a line. */
+.console-log-runs__controls {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--xs);
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+}
+.console-log-runs__modes { inline-size: 100%; }
+.console-log-runs__modes .pf-v6-c-toggle-group__item { flex: 1 1 0; }
+.console-log-runs__modes .pf-v6-c-toggle-group__button {
+  inline-size: 100%;
+  justify-content: center;
+  padding-inline: var(--pf-t--global--spacer--xs);
+}
+.console-log-runs__count {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__count:empty { display: none; }
+.console-log-runs__empty {
+  margin-block: var(--pf-t--global--spacer--sm);
+  margin-inline: var(--pf-t--global--spacer--sm);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  line-height: var(--pf-t--global--font--line-height--body);
+}
+.console-log-runs__empty > .pf-v6-c-button { margin-block-start: var(--pf-t--global--spacer--sm); }
+
+/* Tree rows truncate rather than widen the rail. min-inline-size:0 makes that binding, since a flex
+   item floors at its min-content and one long label would set the tree's width. The full text is on
+   the row's title attribute. */
+.console-log-runs .pf-v6-c-tree-view {
+  --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockStart: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-tree-view--m-compact__node-container--PaddingBlockEnd--base: var(--pf-t--global--spacer--xs);
+  /* PF zeroes an open branch's bottom padding, which sits its label low in the focus ring. */
+  --pf-v6-c-tree-view--m-compact__list-item--m-expanded__node-container--PaddingBlockEnd: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-tree-view--m-compact__node-container--PaddingInlineEnd: var(--pf-t--global--spacer--sm);
+  --pf-v6-c-tree-view--m-compact__node-container--nested--PaddingBlockStart: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-tree-view--m-compact__node-container--nested--PaddingBlockEnd: var(--pf-t--global--spacer--xs);
+  --pf-v6-c-tree-view--m-compact__node-container--nested--PaddingInlineEnd: var(--pf-t--global--spacer--sm);
+}
+.console-log-runs .pf-v6-c-tree-view__node-content,
+.console-log-runs .pf-v6-c-tree-view__node-title,
+.console-log-runs .pf-v6-c-tree-view__node-text { min-inline-size: 0; }
+.console-log-runs .pf-v6-c-tree-view__node-title {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+}
+.console-log-runs .pf-v6-c-tree-view__node-title > :last-child {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-log-runs .pf-v6-c-tree-view__node-text {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs [data-leaf] .pf-v6-c-tree-view__node-title { font-family: var(--pf-t--global--font--family--mono); }
+.console-log-runs .pf-v6-c-tree-view__node.pf-m-current { font-weight: var(--pf-t--global--font--weight--body--bold); }
+/* The item takes focus as in PF's markup, but a branch holds its subtree, so the global ring on the
+   item would box every child. The ring goes on the item's own row, inside the rail's overflow. */
+.console-log-runs .pf-v6-c-tree-view__list-item:focus-visible { outline: none; }
+.console-log-runs .pf-v6-c-tree-view__list-item:focus-visible > .pf-v6-c-tree-view__content {
+  outline: var(--pf-t--global--focus-ring--width--offset) solid var(--pf-t--global--focus-ring--color--default);
+  outline-offset: var(--console-focus-inset);
+}
+
+/* The reopen rail shows only while the aside is hidden but has content. A column, so a caller's count
+   stacks under the icon. */
+.console-log-runs__reopen {
+  flex: 0 0 auto;
+  align-self: stretch;
+  border-inline-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: 0;
+  padding-inline: var(--pf-t--global--spacer--xs);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--pf-t--global--spacer--xs);
+}
+.console-log-runs__reopen[hidden] { display: none; }
+.console-log-runs__reopen-badge {
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__reopen-badge:empty { display: none; }
+
+/* A narrow pane floats the open aside over the scroll area with a scrim. Open and closed is
+   JS-driven (runtree.ts, against this same container width); this only changes the open layout. */
+.console-log-split__scrim { display: none; }
+@container console-split (max-width: 47.999rem) {
+  .console-log-runs:not([hidden]) {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 5;
+    flex: 0 0 auto;
+    inline-size: min(17rem, 82%);
+    box-shadow: var(--pf-t--global--box-shadow--lg--right);
+  }
+  .console-log-split__scrim:not([hidden]) {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    border: 0;
+    background: var(--pf-t--global--background--color--backdrop--default);
+    cursor: default;
+  }
+}

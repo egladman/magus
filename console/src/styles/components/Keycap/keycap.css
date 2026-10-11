@@ -1,0 +1,14 @@
+/* One key of a shortcut, drawn as a key: the pressed edge is a thicker bottom border, not a shadow. */
+.console-shell-keycap {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  line-height: 1;
+  padding: var(--pf-t--global--spacer--xs);
+  min-width: 1.5rem;
+  text-align: center;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-bottom-width: var(--pf-t--global--border--width--strong);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  color: var(--pf-t--global--text--color--regular);
+}

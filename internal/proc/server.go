@@ -756,7 +756,7 @@ func (s *service) submitJob(req jobRequest, reply *jobReply) error {
 			s.onJobDone(ctx, req.Args, time.Since(jobStart), err)
 		}
 		if err != nil {
-			slog.With(attr.Component("proc")).WarnContext(ctx, "background job failed", slog.Any("args", req.Args), slog.String("error", err.Error()))
+			slog.With(attr.Component("proc")).WarnContext(ctx, "background job failed", slog.Any("args", req.Args), attr.Error(err))
 		}
 	}()
 	return nil

@@ -10,6 +10,10 @@
 // own constructor is never judged here. String constants and concatenations
 // resolve to their text; an operand only known at run time is opaque.
 //
+// It also judges a log/slog call: an error built into its message, or its
+// text passed as an attribute keyed "error" or "err", is reported, because
+// the error belongs in attr.Error where the display can name its origin once.
+//
 // Capitalization and trailing punctuation are staticcheck's ST1005.
 package errmsg
 
@@ -56,10 +60,16 @@ const (
 	// that carries one of [Options.NoticeAttrs]: the error rides as an
 	// attribute, so the display can name its origin once.
 	RuleNotice Rule = "error-notice"
+	// RuleLog reports an error built into the message of any other log/slog
+	// call, which the display prints the same way.
+	RuleLog Rule = "error-log"
+	// RuleAttr reports an error's text passed as a log/slog attribute keyed
+	// "error" or "err": the error itself rides attr.Error.
+	RuleAttr Rule = "error-attr"
 )
 
 // Rules lists every rule in report order.
-var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap, RuleOrigin, RuleStutter, RuleNotice}
+var Rules = []Rule{RuleJoin, RuleNewline, RuleSentences, RuleWrap, RuleOrigin, RuleStutter, RuleNotice, RuleLog, RuleAttr}
 
 var messages = map[Rule]string{
 	RuleJoin:      `a clause joined by %q: chain context with ": " or use a comma`,
@@ -68,7 +78,9 @@ var messages = map[Rule]string{
 	RuleWrap:      `%w only opens the format as "%w: " or closes it as ": %w"`,
 	RuleOrigin:    `a %q prefix names another package of this module: name the operation, and let the origin name itself`,
 	RuleStutter:   `a %q prefix on an error this package already returned: say what this call was doing`,
-	RuleNotice:    `an error in a notice's message: say what failed, and attach the error as an attribute`,
+	RuleNotice:    `an error in a notice's message: say what failed, and attach the error with attr.Error`,
+	RuleLog:       `an error in a log message: say what failed, and attach the error with attr.Error`,
+	RuleAttr:      `an error's text in an "error" attribute: attach the error itself with attr.Error, not err.Error()`,
 }
 
 // Options configures the analyzer returned by [New].
@@ -96,7 +108,7 @@ type Options struct {
 
 	// NoticeAttrs are the functions, as [types.Func.FullName] spells them,
 	// whose attribute marks a log record as a notice to a person. error-notice
-	// judges only a log/slog call passing one; empty judges none.
+	// judges a log/slog call passing one; error-log judges every other.
 	NoticeAttrs []string `json:"notice-attrs"`
 
 	// Hint is appended to every diagnostic: the repository's own remedy.
@@ -228,8 +240,24 @@ func run(pass *analysis.Pass, opts Options, packages map[string]bool) error {
 		ast.Inspect(f, func(n ast.Node) bool {
 			switch n := n.(type) {
 			case *ast.CallExpr:
-				if msg := noticeMessage(pass, n, opts.NoticeAttrs); msg != nil && carriesError(pass, msg) {
-					emit(msg.Pos(), []Finding{{RuleNotice, messages[RuleNotice]}})
+				if msg, rest := logMessage(pass, n); msg != nil {
+					if carriesError(pass, msg) {
+						rule := RuleLog
+						if passesAny(pass, rest, opts.NoticeAttrs) {
+							rule = RuleNotice
+						}
+						emit(msg.Pos(), []Finding{{rule, messages[rule]}})
+					}
+					for i := 0; i+1 < len(rest); i++ {
+						if isErrorKey(pass, rest[i]) && isErrorText(pass, rest[i+1]) {
+							emit(rest[i+1].Pos(), []Finding{{RuleAttr, messages[RuleAttr]}})
+						}
+					}
+				}
+				if fn, ok := typeutil.Callee(pass.TypesInfo, n).(*types.Func); ok && len(n.Args) == 2 &&
+					(fn.FullName() == "log/slog.String" || fn.FullName() == "log/slog.Any") &&
+					isErrorKey(pass, n.Args[0]) && isErrorText(pass, n.Args[1]) {
+					emit(n.Args[1].Pos(), []Finding{{RuleAttr, messages[RuleAttr]}})
 				}
 				switch callee(pass, n) {
 				case "errors.New":
@@ -252,30 +280,57 @@ func run(pass *analysis.Pass, opts Options, packages map[string]bool) error {
 	return nil
 }
 
-// noticeMessage is the message argument of call when it is a log/slog call
-// passing one of notices, or nil.
-func noticeMessage(pass *analysis.Pass, call *ast.CallExpr, notices []string) ast.Expr {
-	if len(notices) == 0 {
-		return nil
-	}
+// logMessage is the message argument of call and the arguments after it when
+// call is a log/slog logging call, or nil.
+func logMessage(pass *analysis.Pass, call *ast.CallExpr) (ast.Expr, []ast.Expr) {
 	fn, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func)
 	if !ok || fn.Pkg() == nil || fn.Pkg().Path() != "log/slog" {
-		return nil
+		return nil, nil
 	}
 	idx := slogMessageArg(fn)
 	if idx < 0 || idx >= len(call.Args) {
-		return nil
+		return nil, nil
 	}
-	for _, a := range call.Args[idx+1:] {
+	return call.Args[idx], call.Args[idx+1:]
+}
+
+// passesAny reports whether args holds a call to one of funcs.
+func passesAny(pass *analysis.Pass, args []ast.Expr, funcs []string) bool {
+	return slices.ContainsFunc(args, func(a ast.Expr) bool {
 		inner, ok := ast.Unparen(a).(*ast.CallExpr)
 		if !ok {
-			continue
+			return false
 		}
-		if f, ok := typeutil.Callee(pass.TypesInfo, inner).(*types.Func); ok && slices.Contains(notices, f.FullName()) {
-			return call.Args[idx]
-		}
+		f, ok := typeutil.Callee(pass.TypesInfo, inner).(*types.Func)
+		return ok && slices.Contains(funcs, f.FullName())
+	})
+}
+
+// isErrorKey reports whether e is the constant "error" or "err".
+func isErrorKey(pass *analysis.Pass, e ast.Expr) bool {
+	tv, ok := pass.TypesInfo.Types[e]
+	if !ok || tv.Value == nil || tv.Value.Kind() != constant.String {
+		return false
 	}
-	return nil
+	k := constant.StringVal(tv.Value)
+	return k == "error" || k == "err"
+}
+
+// isErrorText reports whether e calls an error's Error method.
+func isErrorText(pass *analysis.Pass, e ast.Expr) bool {
+	call, ok := ast.Unparen(e).(*ast.CallExpr)
+	if !ok || len(call.Args) != 0 {
+		return false
+	}
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	return ok && sel.Sel.Name == "Error" && isError(pass, sel.X)
+}
+
+// isError reports whether e's type implements error.
+func isError(pass *analysis.Pass, e ast.Expr) bool {
+	errType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
+	t := pass.TypesInfo.TypeOf(e)
+	return t != nil && types.Implements(t, errType)
 }
 
 // slogMessageArg is the index of the message argument of a log/slog logging
@@ -296,11 +351,7 @@ func slogMessageArg(fn *types.Func) int {
 // carriesError reports whether msg calls an error's Error method, or formats
 // an error-typed operand.
 func carriesError(pass *analysis.Pass, msg ast.Expr) bool {
-	errType := types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
-	isErr := func(e ast.Expr) bool {
-		t := pass.TypesInfo.TypeOf(e)
-		return t != nil && types.Implements(t, errType)
-	}
+	isErr := func(e ast.Expr) bool { return isError(pass, e) }
 	found := false
 	ast.Inspect(msg, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)

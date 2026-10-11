@@ -122,6 +122,12 @@ func TestBuiltinsMisdeclarationIsCoded(t *testing.T) {
 		{"unknown rule with nothing near", one("zzzzzzzzzzzz", vm.StrValue("deny")), "magus describe rules"},
 		{"unknown decision", one("whole-tree", vm.StrValue("warn")), "not off, advise or deny"},
 		{"neither a decision nor a setting", one("whole-tree", vm.IntValue(1)), "want"},
+		{"off on the command-failed notice", one("workspace-command-failed", vm.StrValue("off")), "cannot be set; remove it from the declaration"},
+		{"deny on the command-failed notice", one("workspace-command-failed", vm.StrValue("deny")), "cannot be set; remove it from the declaration"},
+		{"off on the write-failed notice", one("workspace-write-failed", vm.StrValue("off")), "cannot be set; remove it from the declaration"},
+		{"deny on the write-failed notice", one("workspace-write-failed", vm.StrValue("deny")), "cannot be set; remove it from the declaration"},
+		{"off on the spawn-failed notice", one("workspace-spawn-failed", vm.StrValue("off")), "cannot be set; remove it from the declaration"},
+		{"deny on the spawn-failed notice", one("workspace-spawn-failed", vm.StrValue("deny")), "cannot be set; remove it from the declaration"},
 		{"lines on a rule that takes none", one("whole-tree", setting(map[string]vm.Value{
 			"decision": vm.StrValue("deny"), "lines": vm.IntValue(10),
 		})), "takes no lines parameter"},

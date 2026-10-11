@@ -13,7 +13,7 @@
 //     also gets a CONTROL, because the way out of an over-narrow query should not be text editing.
 //   - THE THREE COUNTS AGREE. The header, the status facet and what a click leaves are all RUNS. An
 //     earlier version counted outputs in one of the three, which read as the page lying.
-//   - HAND-OFF, NOT RE-HOSTING. Opening output is a real link into the Log Viewer, so it keeps
+//   - LINK, NOT RE-HOSTING. Opening output is a real link into the Log Viewer, so it keeps
 //     middle-click and copy-link, and the two apps cannot drift on how a run renders.
 
 import assert from "node:assert/strict";
@@ -182,10 +182,10 @@ test("the facets list only values that occur, and a click writes its term into t
   assert.equal(projects?.length, 2, "only the two projects that actually ran");
 
   const docs = [...(projects ?? [])].find((b) => text(b).startsWith("docs")) as HTMLElement;
-  docs.click();
+  must(docs.querySelector<HTMLElement>("button")).click();
   await settle();
 
-  const query = host.querySelector<HTMLInputElement>("input[type=search]");
+  const query = host.querySelector<HTMLInputElement>(".console-runs__field input");
   assert.equal(query?.value, "project:docs", "the click is a demonstration of the syntax");
   assert.equal(host.querySelectorAll(".console-runs__row").length, 1);
 });
@@ -193,12 +193,12 @@ test("the facets list only values that occur, and a click writes its term into t
 test("clicking the same facet again removes its term", async () => {
   serve([output()], [runLog()]);
   const host = await mount();
-  const pass = host.querySelector<HTMLElement>(".console-runs__facet-value");
+  const pass = host.querySelector<HTMLElement>(".console-runs__facet-value button");
   pass?.click();
   await settle();
-  const query = host.querySelector<HTMLInputElement>("input[type=search]");
+  const query = host.querySelector<HTMLInputElement>(".console-runs__field input");
   assert.notEqual(query?.value, "");
-  host.querySelector<HTMLElement>(".console-runs__facet-value.pf-m-selected")?.click();
+  host.querySelector<HTMLElement>(".console-runs__facet-value.pf-m-selected button")?.click();
   await settle();
   assert.equal(query?.value, "", "a facet toggles rather than only ever narrowing");
 });
@@ -231,7 +231,7 @@ test("the detail pane names the run's facts and links its targets into the viewe
   const host = await mount();
 
   assert.equal(text(host.querySelector(".console-runs__detail-cmd")), "magus run build console");
-  assert.equal(text(host.querySelector(".console-runs__pill")), "failed");
+  assert.equal(text(host.querySelector(".console-runs__pill")), "Failed");
   const labels = [...host.querySelectorAll(".console-runs__fact-label")].map((l) => text(l));
   assert.deepEqual(labels, ["When", "Duration", "Trigger", "magus", "Run id"]);
   assert.equal(text(host.querySelector(".console-runs__target-error")), "boom");
@@ -282,7 +282,7 @@ test("no server, nothing kept, and nothing matching are three different empty st
 
   serve([output()], [runLog()]);
   const full = await remount();
-  const query = must(full.querySelector<HTMLInputElement>("input[type=search]"));
+  const query = must(full.querySelector<HTMLInputElement>(".console-runs__field input"));
   query.value = "project:nothing-matches-this";
   query.dispatchEvent(new Event("input"));
   await settleFilter();
@@ -308,4 +308,103 @@ test("every relative time carries the instant it was computed from", async () =>
     assert.match(el.dataset.time ?? "", /^\d+$/);
     assert.match(text(el), /ago|\d\d:\d\d/);
   }
+});
+
+// The list's highlight and the detail pane read one value. They used to read two: the highlight
+// followed the reader's choice while the detail fell back to the newest run, so a filter that hid the
+// choice left a page showing one run and marking another (or marking none).
+test("the highlighted row is the run the detail pane shows", async () => {
+  serve(
+    [
+      output({ ref: "o1", invocation: "invA", project: "console" }),
+      output({ ref: "o2", invocation: "invB", project: "docs" }),
+    ],
+    [
+      runLog({ id: "invA", command: { arguments: ["run", "alpha"], trigger: "TRIGGER_RUN" } }),
+      runLog({ id: "invB", command: { arguments: ["run", "beta"], trigger: "TRIGGER_RUN" } }),
+    ],
+  );
+  const host = await mount();
+  const current = (): string[] =>
+    [...host.querySelectorAll<HTMLElement>('.console-runs__row[aria-current="true"]')].map((b) =>
+      text(b.querySelector(".console-runs__row-cmd")),
+    );
+
+  assert.equal(current().length, 1, "something is highlighted before anything is chosen");
+  assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
+
+  const rows = [...host.querySelectorAll<HTMLElement>(".console-runs__row")];
+  const other = must(rows.find((r) => r.getAttribute("aria-current") !== "true"));
+  const otherInv = other.dataset.inv;
+  other.click();
+  await settle();
+  assert.deepEqual(current(), [text(other.querySelector(".console-runs__row-cmd"))]);
+  assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
+
+  // A filter that hides the choice moves both to the newest run that is left, together.
+  const query = must(host.querySelector<HTMLInputElement>(".console-runs__field input"));
+  query.value = otherInv === "invB" ? "project:console" : "project:docs";
+  query.dispatchEvent(new Event("input"));
+  await settleFilter();
+  assert.equal(current().length, 1);
+  assert.deepEqual(current(), [text(host.querySelector(".console-runs__detail-cmd"))]);
+});
+
+// A run's outcome is a mark with a shape and a word, and a row is PF's clickable data-list item:
+// the item itself is the control, named by its command, whose selection is aria-current, not a
+// class alone.
+test("a row names its outcome in words and marks the current run for assistive tech", async () => {
+  serve([output({ failed: true })], [runLog({ status: "STATUS_FAIL" })]);
+  const host = await mount();
+
+  const row = must(host.querySelector<HTMLElement>(".console-runs__list > li.console-runs__row"));
+  assert.ok(row.classList.contains("pf-m-clickable"));
+  assert.equal(row.tabIndex, 0, "the item takes the tab stop");
+  assert.ok(row.querySelector(".pf-v6-c-data-list__item-row > .pf-v6-c-data-list__item-content"));
+  assert.equal(row.querySelectorAll(".pf-v6-c-data-list__cell").length, 2);
+  assert.equal(
+    row.getAttribute("aria-labelledby"),
+    row.querySelector(".console-runs__row-cmd")?.id,
+    "named by the command it holds",
+  );
+  assert.equal(row.getAttribute("aria-current"), "true");
+  assert.match(text(row), /Failed/, "the outcome is in the row's text, not only its colour");
+  assert.ok(row.querySelector(".pf-v6-c-icon"), "and it has a shape");
+});
+
+// Every target in a run says "Open output"; a reader that lists links needs to know which.
+test("each Open output link names its target", async () => {
+  serve(
+    [output({ ref: "o1", target: "build" }), output({ ref: "o2", target: "test" })],
+    [runLog()],
+  );
+  const host = await mount();
+
+  const names = [
+    ...host.querySelectorAll<HTMLAnchorElement>(".console-runs__target .console-runs__open"),
+  ].map((a) => a.getAttribute("aria-label"));
+  assert.deepEqual(names, ["Open output of console:build", "Open output of console:test"]);
+});
+
+// The filter shows what it left, and clearing it is a control inside the box.
+test("the filter counts its results and clears from the box", async () => {
+  serve(
+    [
+      output({ ref: "o1", invocation: "invA", project: "console" }),
+      output({ ref: "o2", invocation: "invB", project: "docs" }),
+    ],
+    [runLog({ id: "invA" }), runLog({ id: "invB" })],
+  );
+  const host = await mount();
+  const query = must(host.querySelector<HTMLInputElement>(".console-runs__field input"));
+  query.value = "project:docs";
+  query.dispatchEvent(new Event("input"));
+  await settleFilter();
+
+  assert.equal(text(host.querySelector(".console-runs__field .console-filter__count")), "1 of 2");
+  assert.match(text(host.querySelector(".console-runs__field [role=status]")), /1 of 2 runs match/);
+  must(host.querySelector<HTMLElement>(".console-runs__field .console-filter__clear")).click();
+  await settle();
+  assert.equal(query.value, "");
+  assert.equal(host.querySelectorAll(".console-runs__row").length, 2);
 });

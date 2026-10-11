@@ -6,38 +6,37 @@
 // own. Global getElementById is kept (not scoped to a root) so shared status-bar elements that live
 // OUTSIDE the scaffold (console-conn, console-count) still resolve when mounted.
 
+import { inlineAlert } from "../../ui/alert";
+import { reportFailure } from "../../lib/notifications";
+import { copyText, flashLabel } from "../../render/clipboard";
+
 export const el = (id: string): HTMLElement | null => document.getElementById(id);
 
 // bodyEl is the render root, used unguarded throughout; boot gates on it (and scrollEl) before any
 // render runs, so it is typed non-null and assigned by resolveDom. The rest stay nullable.
 export let bodyEl: HTMLElement;
 export let scrollEl: HTMLElement | null;
-export let refEl: HTMLElement | null;
-export let refLabelEl: HTMLElement | null;
 export let emptyEl: HTMLElement | null;
 export let panelEl: HTMLElement | null;
-// The status strip: statusEl is the alert shell (toggled hidden and re-toned), statusTextEl carries
-// the message, statusIconEl the tone glyph. Split because writing textContent on the shell would
-// delete PF's icon slot, and PF lays the component out as a grid around that icon.
-// The two parts are NOT exported: setStatus is the only reader, and three separately-mutable
-// bindings for one widget is three things to keep in sync. statusEl stays exported because
-// resolveDom's callers already reach for it.
-export let statusEl: HTMLElement | null;
-let statusTextEl: HTMLElement | null;
-let statusIconEl: HTMLElement | null;
+// The notice strip's host. setStatus is the only writer: it swaps a whole PF Alert in and out, so
+// there is no half-updated widget to keep in sync.
+let statusEl: HTMLElement | null;
 
 // resolveDom (re)reads the handles from the document. Called once at boot, after the scaffold is in
 // place - always so for the standalone page; the console injects it before calling. Idempotent.
 export function resolveDom(): void {
   bodyEl = document.getElementById("log-body") as HTMLElement;
   scrollEl = el("log-scroll");
-  refEl = el("log-ref");
-  refLabelEl = el("log-ref-label");
   emptyEl = el("log-empty");
   panelEl = document.querySelector(".console-render-panel") as HTMLElement | null;
   statusEl = el("log-status");
-  statusTextEl = el("log-status-text");
-  statusIconEl = el("log-status-icon");
+}
+
+// showLog marks the viewer as holding something to read: the cold empty state goes away and the
+// toolbar, which has nothing to act on until now, appears.
+export function showLog(): void {
+  if (emptyEl) emptyEl.hidden = true;
+  if (panelEl) panelEl.dataset.loaded = "";
 }
 
 // setBtnLabel sets a toolbar button's text label without disturbing its icon: the label
@@ -49,59 +48,72 @@ export function setBtnLabel(btn: HTMLElement | null, text: string): void {
   else btn.textContent = text;
 }
 
-// setRefIdentity fills the file-bar identity strip. A real ref gets a "Reference ID:" label
-// (the codebase term, per docs/glossary.md) before the value; a non-ref state (a live run, a
-// pasted log) shows just the value with no label. An empty value (demo mode has no identity at
-// all) hides the pill entirely rather than leaving a bordered box with nothing in it - #log-bar-id's
-// own :has(:not(:empty)) rule already collapses the row on an empty value, so this keeps the pill
-// itself consistent with that.
-export function setRefIdentity(value: string, labeled: boolean): void {
-  if (refLabelEl) {
-    refLabelEl.hidden = !labeled;
-    refLabelEl.textContent = labeled ? "Reference ID:" : "";
-  }
-  if (refEl) {
-    refEl.hidden = !value;
-    refEl.textContent = value;
-  }
+// The reference id of the loaded output sits in the body header beside the run's name, which is
+// where a reader looks to ask "which output is this". The header is built by the run browser after
+// the first load can already have settled an identity, so the last value is kept and applied when
+// the slot arrives.
+let refSlot: HTMLElement | null = null;
+let refValue = "";
+let refLabeled = false;
+
+export function bindRefSlot(slot: HTMLElement | null): void {
+  refSlot = slot;
+  paintRef();
 }
 
+// setRefIdentity records what the header shows. A real ref gets a "Reference ID" label before the
+// value; a non-ref state (a live run, a pasted log) shows just the value. An empty value hides it.
+export function setRefIdentity(value: string, labeled: boolean): void {
+  refValue = value;
+  refLabeled = labeled;
+  paintRef();
+}
+
+function paintRef(): void {
+  if (!refSlot) return;
+  refSlot.hidden = !refValue;
+  refSlot.replaceChildren();
+  if (!refValue) return;
+  if (refLabeled) {
+    const label = document.createElement("span");
+    label.textContent = "Reference ID";
+    refSlot.append(label);
+  }
+  const value = document.createElement("span");
+  value.className = "console-log-body__meta-value";
+  value.textContent = refValue;
+  value.title = refValue;
+  refSlot.append(value);
+}
+
+// setStatus shows a loading or failure notice in the strip under the toolbar, as a PF Alert. A
+// failure is also a toast: the strip is on screen only while the reader happens to be looking at
+// this tab, and a failure that only a strip knows about is a failure nobody was told of.
 export function setStatus(msg: string, isErr?: boolean): void {
-  if (!statusEl) return;
-  if (statusTextEl) statusTextEl.textContent = msg || "";
-  statusEl.hidden = !msg;
-  statusEl.classList.toggle("pf-m-danger", !!isErr);
-  statusEl.classList.toggle("pf-m-info", !isErr);
-  if (statusIconEl) statusIconEl.textContent = isErr ? "!" : "i";
+  if (statusEl) {
+    statusEl.hidden = !msg;
+    statusEl.replaceChildren();
+    if (msg) {
+      statusEl.append(
+        inlineAlert({ variant: isErr ? "danger" : "info", title: msg, live: !isErr }),
+      );
+    }
+  }
+  if (msg && isErr) reportFailure("Log Viewer", msg, "log:" + msg);
 }
 
 // flashBtnLabel swaps a toolbar button's label to a transient message (e.g. "Copied") and reverts
-// it after ~1.5s, without disturbing the icon (setBtnLabel touches only .console-render-btn__label).
-export function flashBtnLabel(btn: HTMLElement | null, text: string): void {
-  if (!btn) return;
-  const label = btn.querySelector(".console-render-btn__label");
-  const prev = label ? label.textContent : btn.textContent;
-  setBtnLabel(btn, text);
-  setTimeout(() => setBtnLabel(btn, prev ?? ""), 1500);
-}
+// it after ~1.5s, without disturbing the icon.
+export const flashBtnLabel = flashLabel;
 
-export function copyToClipboard(text: string, btn: HTMLElement | null): void {
-  const done = (ok: boolean): void => {
-    if (!btn) return;
-    const prev = btn.textContent;
-    btn.textContent = ok ? "copied" : "failed";
-    setTimeout(() => {
-      btn.textContent = prev;
-    }, 1200);
-  };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(
-      () => done(true),
-      () => done(false),
-    );
-  } else {
-    done(false);
-  }
+// copyToClipboard copies text and reports the outcome on btn; a failure is also a toast.
+export function copyToClipboard(
+  text: string,
+  btn: HTMLElement | null,
+  what = "the log",
+  confirm?: string,
+): void {
+  void copyText(text, { source: "Log Viewer", what, button: btn, confirm });
 }
 
 // --- PF ToggleGroup switches (Log|Timeline, Pretty|Raw) -----------------------

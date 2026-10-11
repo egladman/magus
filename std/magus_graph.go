@@ -518,6 +518,7 @@ func MagusNeighborhood(ctx context.Context, focus string, opts map[string]any) (
 // symbolLayerRelations are the relations whose edges the symbol shards hold.
 var symbolLayerRelations = []types.RelationID{
 	types.RelationImports, types.RelationDefines, types.RelationReferences, types.RelationCalls, types.RelationContains,
+	types.RelationImplements,
 }
 
 func walksSymbolLayer(rels []types.RelationID) bool {

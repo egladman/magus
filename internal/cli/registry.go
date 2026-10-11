@@ -137,8 +137,8 @@ It also carries what the WORKSPACE knows and the job's author may not have
 written down: the projects the write paths reach, the declared output globs that
 land inside them, the paths another live job is holding, the build inputs and
 workspace config that have one owner, and the projects that change alongside the
-held ones without declaring a dependency. It is context and never a status, the
-same shape magus diff --prompt has, with one refusal: a job whose check is the ci
+held ones without declaring a dependency. It is context and never a status,
+with one refusal: a job whose check is the ci
 gate, or a target that chains to it, has no terms printed at all. The gate runs
 once, in the forking session's tree, after every job lands.
 
@@ -2520,14 +2520,34 @@ blast radius first. It reports no ratio and stays silent on a small change
 nobody has disturbed - a count with a target is a count that gets cleared
 instead of satisfied.
 
---prompt prints a review prompt for you to paste into whichever model you
-use, and magus stops there: it calls no model, holds no key, and sends
-nothing. It is the same refusal magus agent makes about your AGENTS.md -
-magus generates the text and a person carries it across, because a tool that
-crossed the boundary itself would leave bytes you did not write and cannot
-audit. It asks for findings rather than review prose; the words your
-colleague reads should be yours. Add --impact for the rationale behind each
-instruction.
+--thread <id> narrows the review to one thread on the pull request, the way a
+path narrows it to one file. At a terminal the viewer opens on the thread's
+hunk. Otherwise it prints the conversation oldest first, the hunk it is
+about, and what the change there reaches: the changed symbols with the files
+that reference them, who they are public to and the callers that reach them,
+the coverage, the conformance findings, and the notes anchored to the file.
+-o json carries the same record. The id is the thread id, its first comment's
+id, or any reply's id. While the server runs, the report lists each thread's
+id beside the hunk it sits on, and -o json carries them under each file's
+"threads"; without it the report lists none and says so. The comments
+are quoted from the host as other people's words. It does not combine with
+--ack, --unread or --impact.
+
+The report ends with the reading order: the hunks grouped by what links them, a
+definition before its uses, an interface before its implementations, code before
+its tests, each with the sentence that placed it. -o json carries the same order
+under "order". It is absent, with a note naming the rebuild, when the symbol index
+is not current, because an order drawn without the uses would read as "nothing is
+related".
+
+--unread narrows the report to the hunks no read mark covers, under every -o:
+-o name prints one path:start-end per unread hunk, and -o json is the same
+document, filtered, with an "unread" record saying how many were kept. It
+always exits 0; a push that blocked on it would be a gate, and a gate on a read
+count is the metric the paragraph below refuses. Where the marks cannot be read
+it says the read state is unknown, on stderr and as "read_state": "unknown",
+and calls no hunk unread. The drift notice a push hands off reports the same
+count for the range being pushed.
 
 A receipt covers a file at its CURRENT content, so editing it afterwards
 voids the receipt. Stepping a file through in the viewer earns one; --ack covers
@@ -2539,7 +2559,7 @@ terminal, and agent hosts are denied it outright.
 The count is never shown to anyone but the reader. There is no team view and
 no pull-request comment, because a read measure a second person can see is a
 performance metric, and a performance metric gets gamed rather than met.`,
-	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
+	Usage: "magus diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--thread <id>] [--rev <base>...<head>] [--patch <file>|-] [<path>...] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
 		{Name: "impact", Kind: FlagBool, Doc: "Append the blast radius of landing this: reach, ownership, an estimate from recorded run times, advisors, note anchors, and the evidence the authors consulted"},
@@ -2547,7 +2567,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 		{Name: "ack", Kind: FlagBool, Doc: "Record that you have read the changed files at their current content; --impact reports what carries no such record"},
 		{Name: "reason", Kind: FlagString, Doc: "An optional note kept with an --ack, for the next reader of the report"},
-		{Name: "prompt", Kind: FlagBool, Doc: "Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction"},
+		{Name: "thread", Kind: FlagString, Doc: "Narrow the review to one pull request thread, by the thread id or any of its comments' ids, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it is the conversation, the hunk and what the change there reaches"},
+		{Name: "unread", Kind: FlagBool, Doc: "Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread"},
 		{Name: "rev", Kind: FlagString, Doc: "Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work"},
 		{Name: "patch", Kind: FlagString, Doc: "Review a patch somebody handed you instead of the working tree; `-` reads stdin"},
 		{Name: "baseline", Kind: FlagString, Doc: "The base's `graph export --symbols -o json`: adds what each changed symbol did to the API and the smallest semver bump that proves"},
@@ -2561,7 +2582,8 @@ performance metric, and a performance metric gets gamed rather than met.`,
 		{"Include the generated files too", "magus diff --generated"},
 		{"Everything to know before landing it", "magus diff --impact"},
 		{"Print the report instead of opening the viewer", "magus diff --no-tui"},
-		{"Build a review prompt for the model of your choice", "magus diff --prompt"},
+		{"Read only the hunks of a branch you have not marked read", "magus diff --unread --rev main...HEAD"},
+		{"Open the review on one pull request thread", "magus diff --thread 2193847561"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
 	// Documented because git trained everyone to expect the opposite: there is no

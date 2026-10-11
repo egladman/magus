@@ -5,15 +5,7 @@
 
 import { relTime, type DashboardState, type ServerView } from "../state";
 import { Card, h, type Tile } from "./card";
-
-function fact(label: string, value: string): HTMLElement {
-  const li = h("li", "console-dashboard-row");
-  li.append(
-    h("code", "console-dashboard-row__cmd", label),
-    h("span", "console-dashboard-row__meta", value),
-  );
-  return li;
-}
+import { factList, type Fact } from "./widgets";
 
 export function serverTile(): Tile {
   const card = new Card("server", "Server", {
@@ -23,31 +15,36 @@ export function serverTile(): Tile {
       "The process behind this console, MCP and background jobs. A version older than the magus" +
       " you run means an upgrade has not reached it yet: restart it to serve the new build.",
   });
-  const facts = h("ul", "console-dashboard-rowlist");
-  card.body.append(facts);
+  const body = h("div", "console-dashboard-facts");
+  card.body.append(body);
 
+  let painted = "";
   function render(sv: ServerView | null): void {
-    card.el.hidden = false;
+    const rows: Fact[] = [];
     if (!sv) {
-      facts.replaceChildren(fact("state", "did not report itself"));
-      return;
+      rows.push({ term: "State", value: "did not report itself" });
+    } else {
+      rows.push({ term: "Process", value: "pid " + sv.pid });
+      rows.push({ term: "Version", value: sv.version || "unknown" });
+      const up = relTime(sv.startTime);
+      if (up) rows.push({ term: "Up", value: up });
+      for (const l of sv.listeners) rows.push({ term: l.kind || "Listener", value: l.address });
+      if (sv.watch.length)
+        rows.push({
+          term: "Watching",
+          value: sv.watch.length === 1 ? sv.watch[0] : sv.watch.length + " workspaces",
+        });
     }
-    const rows = [fact("process", "pid " + sv.pid), fact("version", sv.version || "unknown")];
-    const up = relTime(sv.startTime);
-    if (up) rows.push(fact("up", up));
-    for (const l of sv.listeners) rows.push(fact(l.kind || "listener", l.address));
-    if (sv.watch.length)
-      rows.push(
-        fact("watching", sv.watch.length === 1 ? sv.watch[0] : sv.watch.length + " workspaces"),
-      );
-    facts.replaceChildren(...rows);
+    const signature = JSON.stringify(rows.map((r) => [r.term, r.value]));
+    if (signature === painted) return;
+    painted = signature;
+    body.replaceChildren(factList(rows));
   }
 
   return {
     el: card.el,
     update(s: DashboardState) {
       if (s.status) render(s.status.server);
-      else card.el.hidden = true;
     },
     destroy() {},
   };

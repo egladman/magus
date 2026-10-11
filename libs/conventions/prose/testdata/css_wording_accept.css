@@ -1,0 +1,5 @@
+/* Squared corners: a PatternFly token rev is one edit here. */
+.a { border-radius: 0; }
+
+/* A tile is wider than it is tall, because the pool grid reads left to right. */
+.b { aspect-ratio: 2; }

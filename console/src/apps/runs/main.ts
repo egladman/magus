@@ -2,12 +2,12 @@
 //
 // It exists because the Log Viewer's side panel answers "take me to the next run" well and "I do not
 // know where to start" badly. A rail-width tree can only offer a filter BOX, which asks a reader to
-// know the grammar before they can use it. A page has room for the inverse: a facet rail listing
+// know the grammar before they can use it. A page has room for the inverse: a facet strip listing
 // every value that actually occurs, with counts, one click each - and the click writes its term into
 // the visible query box, so using it teaches the syntax for the times you do want to type.
 //
 // It is an INDEX, not a reader. Selecting a run shows what it did (its targets, outcomes, durations,
-// refs); "Open output" hands off to the Log Viewer through the #inv=/#ref= links it already
+// refs); "Open output" goes to the Log Viewer through the #inv=/#ref= links it already
 // understands. Neither app re-hosts the other's rendering, so they cannot drift.
 //
 // Data comes from the same two read-only server feeds the side panel reads (/api/v1/outputs and
@@ -20,7 +20,7 @@ import {
   durText,
   matchesFilter,
   parseRunFilter,
-  relTime,
+  statusWord,
   toggleFilterTerm,
   type Facet,
   type RunLog,
@@ -49,8 +49,12 @@ import {
   type ConnectPromptState,
   type EmptyStateSlots,
 } from "../../desktop/connectPrompt";
-import { attachHelpPopover } from "../../ui/help-popover";
+import { attachHelpPopover, createHelpButton } from "../../ui/help-popover";
+import { emptyStateShell } from "../../ui/empty-state";
 import { REFRESH, svgGlyph } from "../../ui/glyph";
+import { statusGlyph, statusMark, type Status } from "../../ui/status";
+import { createFilterField, type FilterField } from "../../render/filterField";
+import { timeEl } from "../../render/time";
 import { h } from "../../desktop/view";
 import type { AppInstance } from "../../desktop/standalone";
 
@@ -59,15 +63,31 @@ import type { AppInstance } from "../../desktop/standalone";
 const FILTER_HELP =
   "Terms combine with AND, case-insensitive. Free text matches the project, target, ref, error " +
   "and command line. Keys: project: target: status:pass|fail trigger: ref: cmd:. " +
-  "Clicking a facet on the left writes its term here.";
+  "Clicking a facet below writes its term here.";
+
+// The width of the page, not the window, below which the facets fold behind a disclosure. It is the
+// 40rem the container query in runs.css uses.
+const FACETS_WIDE_PX = 640;
 
 interface Refs {
-  query: HTMLInputElement;
+  field: FilterField;
   count: HTMLElement;
+  filters: HTMLDetailsElement;
+  filtersSummary: HTMLElement;
   facets: HTMLElement;
   list: HTMLElement;
   detail: HTMLElement;
+  body: HTMLElement;
+  dispose: () => void;
 }
+
+// How each run outcome is drawn: the shared mark's status and the PF Label colour that carries the
+// same word beside the run's name.
+const OUTCOME: Record<"pass" | "fail" | "mixed", { mark: Status; label: string }> = {
+  pass: { mark: "success", label: "pf-m-success" },
+  fail: { mark: "danger", label: "pf-m-danger" },
+  mixed: { mark: "warning", label: "pf-m-warning" },
+};
 
 // activate builds the app into host and returns the console's teardown handle. Everything below
 // is per-activation, so reopening the tab is a clean slate.
@@ -88,6 +108,9 @@ export function activate(host: HTMLElement): AppInstance {
   let runs: RunSummary[] = [];
   let logs: RunLog[] = [];
   let loaded = false;
+  // The run the reader chose. What the page SHOWS is `shown` in paint(): the choice when it is still
+  // listed, else the newest run, and the list's highlight and the detail pane both read that one
+  // value so they cannot disagree.
   let selected: string | null = null;
   let stale = false;
   let visible = true;
@@ -97,31 +120,48 @@ export function activate(host: HTMLElement): AppInstance {
   const refs = build(host, {
     onQuery: () => paint(),
     onRefresh: () => void load(),
+    onBack: () => focusRow(),
   });
   // Built once and re-attached on each paint, so a repaint with the prompt already on screen keeps
   // the same buttons and the reader's focus.
   const promptSlots: EmptyStateSlots = {
-    title: h("h2", "console-runs__empty-title"),
+    title: h("h2", "pf-v6-c-empty-state__title-text console-runs__empty-title"),
     message: h("p", "console-runs__note"),
-    actions: h("div"),
+    actions: h("div", "pf-v6-c-empty-state__actions"),
   };
   promptSlots.actions.dataset.emptyWays = "";
 
+  // focusRow moves focus to the selected row, the way back from the detail pane in a stacked layout
+  // and what a repaint restores after replacing the buttons.
+  function focusRow(): void {
+    const row = refs.list.querySelector<HTMLElement>('[aria-current="true"]');
+    row?.focus();
+    row?.scrollIntoView({ block: "nearest" });
+  }
+
   function paint(): void {
     const now = Date.now();
-    const filter = parseRunFilter(refs.query.value);
+    const filter = parseRunFilter(refs.field.value());
     const byInv = new Map<string, RunLog>();
     for (const l of logs) byInv.set(l.inv, l);
     const kept = runs.filter((r) => matchesFilter(r, byInv.get(r.inv || ""), filter));
     const rows = buildRunRows(kept, logs, filter.empty);
+    const shown = rows.find((r) => r.inv === selected) ?? rows[0];
     renderFacets(refs.facets, buildFacets(runs, logs, filter), (key, value) => {
-      refs.query.value = toggleFilterTerm(refs.query.value, key, value);
+      refs.field.setValue(toggleFilterTerm(refs.field.value(), key, value));
       paint();
     });
+    refs.filtersSummary.textContent = filtersLabel(filter.keyed.length);
     if (rows.length) {
-      renderList(refs.list, rows, now, selected, (inv) => {
+      renderList(refs.list, rows, now, shown?.inv ?? null, (inv) => {
         selected = inv;
         paint();
+        if (stacked(refs.body)) {
+          refs.detail.focus({ preventScroll: true });
+          refs.detail.scrollIntoView({ block: "start", behavior: motion() });
+        } else {
+          focusRow();
+        }
       });
     } else {
       renderEmpty(refs.list, {
@@ -131,19 +171,25 @@ export function activate(host: HTMLElement): AppInstance {
         loaded,
         filtered: !filter.empty,
         onClear: () => {
-          refs.query.value = "";
+          refs.field.setValue("");
           paint();
+          refs.field.focus();
         },
       });
     }
-    // The selection can survive a filter that hides it; showing its detail beside a list it is not
-    // in reads as a bug, so a hidden selection falls back to the newest visible run.
-    const shown = rows.find((r) => r.inv === selected) ?? rows[0];
     renderDetail(refs.detail, shown, now, demo);
     // "N of M" counts RUNS on both sides. M was the output count, which is larger and unrelated -
     // "2 runs of 31" beside a strip whose statuses summed to 28 is three numbers for two facts.
     const total = buildRunRows(runs, logs, true).length;
     refs.count.textContent = summary(rows, total, loaded, filter.empty);
+    refs.field.setResults(
+      !filter.empty && loaded ? rows.length + " of " + total : "",
+      !filter.empty && loaded
+        ? rows.length === 0
+          ? "No runs match the filter"
+          : rows.length + " of " + total + " runs match the filter"
+        : "",
+    );
   }
 
   function connectPromptState(): ConnectPromptState | null {
@@ -245,80 +291,126 @@ export function activate(host: HTMLElement): AppInstance {
       unwatch = null;
       untick?.();
       untick = null;
+      refs.dispose();
     },
   };
 }
 
-// build assembles the page: a toolbar over a three-column body (facets, list, detail). The columns
-// are plain flex children that stack below the shell's own breakpoint - see runs.css.
-function build(host: HTMLElement, on: { onQuery: () => void; onRefresh: () => void }): Refs {
+// motion is the scroll behaviour that respects a reader who asked for less of it.
+function motion(): ScrollBehavior {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+// stacked reports whether the body has folded its two columns into one, which a container query in
+// runs.css decides and the computed style reports back.
+function stacked(body: HTMLElement): boolean {
+  return getComputedStyle(body).flexDirection === "column";
+}
+
+function filtersLabel(active: number): string {
+  return active > 0 ? "Filters (" + active + " applied)" : "Filters";
+}
+
+// build assembles the page: a toolbar over a facet strip over a two-column body (the runs, and the
+// one you picked). The columns are plain flex children that stack when the PAGE is narrow - see
+// runs.css.
+function build(
+  host: HTMLElement,
+  on: { onQuery: () => void; onRefresh: () => void; onBack: () => void },
+): Refs {
   const page = h("section", "console-runs");
 
   const bar = h("header", "console-runs__bar");
   bar.dataset.controlSize = "default";
-  const search = h("div", "pf-v6-c-text-input-group console-runs__search");
-  const main = h("div", "pf-v6-c-text-input-group__main pf-m-icon");
-  const textWrap = h("span", "pf-v6-c-text-input-group__text");
-  const query = document.createElement("input");
-  query.type = "search";
-  query.className = "pf-v6-c-text-input-group__text-input";
-  query.placeholder = "Filter runs, or click a facet";
-  query.setAttribute("aria-label", "Filter runs");
-  query.spellcheck = false;
-  query.autocomplete = "off";
-  let debounce: ReturnType<typeof setTimeout>;
-  query.addEventListener("input", () => {
-    clearTimeout(debounce);
-    debounce = setTimeout(on.onQuery, 120);
+
+  const field = createFilterField({
+    label: "Filter runs",
+    placeholder: "Filter runs, or pick a facet",
+    onChange: () => on.onQuery(),
+    debounceMs: 120,
   });
-  query.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && query.value) {
-      ev.stopPropagation();
-      query.value = "";
-      on.onQuery();
-    }
-  });
-  textWrap.append(query);
-  main.append(textWrap);
-  search.append(main);
+  field.el.classList.add("console-runs__field");
 
   // The shared help circle, identical to the graph explorer's and the log viewer's.
-  const help = h("button", "console-render-help-glyph console-runs__help", "?");
-  help.setAttribute("type", "button");
-  help.setAttribute("aria-label", "Filter syntax");
-  help.title = FILTER_HELP;
-  attachHelpPopover(help);
+  const help = createHelpButton("Filter syntax");
+  const disposeHelp = attachHelpPopover(help, { text: FILTER_HELP, label: "Filter syntax" });
+  const search = h("div", "console-runs__search");
+  search.append(field.el, help);
 
   const count = h("span", "console-runs__count");
+  count.setAttribute("role", "status");
   const refresh = h("button", "pf-v6-c-button pf-m-secondary console-runs__refresh");
   refresh.setAttribute("type", "button");
   const refreshIcon = h("span", "pf-v6-c-button__icon pf-m-start");
   refreshIcon.append(svgGlyph(REFRESH, 14));
   refresh.append(refreshIcon, h("span", "pf-v6-c-button__text", "Refresh"));
   refresh.addEventListener("click", on.onRefresh);
-  bar.append(h("span", "console-runs__label", "Runs"), search, help, count, refresh);
+  bar.append(h("h1", "console-runs__label", "Runs"), search, count, refresh);
 
-  // The facets are a full-width STRIP under the toolbar, not a third column. They are a control for
-  // the query box directly above them, and a column gave that weight it does not carry - it cost a
-  // third of the page's width permanently to hold what is usually a dozen short chips, and squeezed
-  // the two things a reader is actually comparing (the run list and the run) into what was left.
-  const facets = h("nav", "console-runs__facets");
-  facets.setAttribute("aria-label", "Filter by");
+  // The facets are a strip under the toolbar, not a third column. They are a control for the query
+  // box directly above them; a column gave that weight it does not carry. In a narrow page they fold
+  // behind a disclosure so the list is not pushed off the screen by a dozen chips.
+  const filters = document.createElement("details");
+  filters.className = "console-runs__filters";
+  filters.open = true;
+  const filtersSummary = h("summary", "console-runs__filters-summary", "Filters");
+  const facets = h("div", "console-runs__facets");
+  filters.append(filtersSummary, facets);
 
   const body = h("div", "console-runs__body");
-  const list = h("div", "console-runs__list");
+  const list = h("ul", "pf-v6-c-data-list pf-m-compact pf-m-grid console-runs__list");
   list.setAttribute("role", "list");
+  list.setAttribute("aria-label", "Runs");
   const detail = h("div", "console-runs__detail");
+  detail.setAttribute("role", "region");
+  detail.setAttribute("aria-label", "Run details");
+  detail.tabIndex = -1;
   body.append(list, detail);
 
-  page.append(bar, facets, body);
+  page.append(bar, filters, body);
   host.replaceChildren(page);
-  return { query, count, facets, list, detail };
+
+  // The disclosure is open and summary-less on a wide page; on a narrow one it closes when the page
+  // crosses the line, and a reader who then opens it keeps it open until the next crossing.
+  let narrowNow = false;
+  let observer: ResizeObserver | null = null;
+  if (typeof ResizeObserver !== "undefined") {
+    observer = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1]?.contentRect.width ?? 0;
+      if (width === 0) return;
+      const narrow = width < FACETS_WIDE_PX;
+      if (narrow === narrowNow) return;
+      narrowNow = narrow;
+      filters.open = !narrow;
+    });
+    observer.observe(page);
+  }
+
+  // Back to the list, for the stacked layout where the detail is below the fold.
+  detail.addEventListener("click", (ev) => {
+    if (ev.target instanceof Element && ev.target.closest(".console-runs__back")) on.onBack();
+  });
+
+  return {
+    field,
+    count,
+    filters,
+    filtersSummary,
+    facets,
+    list,
+    detail,
+    body,
+    dispose: () => {
+      field.dispose();
+      disposeHelp();
+      observer?.disconnect();
+    },
+  };
 }
 
-// renderFacets paints the strip: each facet is its heading followed by its values, laid out inline.
-// Every value shown occurs in the data and its count says how many runs clicking it would leave, so
-// nothing here can lead to an empty list by surprise.
+// renderFacets paints the strip: each facet is a labelled group of clickable PF Labels, each with a
+// Badge for how many runs clicking it would leave. Every value shown occurs in the data, so nothing
+// here can lead to an empty list by surprise.
 function renderFacets(
   box: HTMLElement,
   facets: Facet[],
@@ -328,31 +420,53 @@ function renderFacets(
   if (!facets.length) return;
   for (const facet of facets) {
     const group = h("div", "console-runs__facet");
-    group.append(h("h3", "console-runs__facet-head", facet.label));
+    group.setAttribute("role", "group");
+    const headId = "console-runs-facet-" + facet.key;
+    group.setAttribute("aria-labelledby", headId);
+    const head = h("span", "console-runs__facet-head", facet.label);
+    head.id = headId;
+    group.append(head);
     for (const v of facet.values) {
-      const b = h("button", "console-runs__facet-value");
+      // A clickable PF Label: the whole chip is the button. Outline when off, filled and ticked when
+      // on, so the state is a shape and not only a hue; the status values also carry their mark.
+      const chip = h(
+        "span",
+        "pf-v6-c-label pf-m-clickable console-runs__facet-value" +
+          (v.active ? "" : " pf-m-outline"),
+      );
+      if (facet.key === "status")
+        chip.classList.add(v.value === "fail" ? "pf-m-danger" : "pf-m-success");
+      const b = h("button", "pf-v6-c-label__content");
       b.setAttribute("type", "button");
       b.setAttribute("aria-pressed", String(v.active));
-      if (v.active) b.classList.add("pf-m-selected");
+      if (v.active) chip.classList.add("pf-m-selected");
       b.title = (v.active ? "Remove " : "Add ") + facet.key + ":" + v.value;
-      const label = h("span", "console-runs__facet-label", v.label);
-      const n = h("span", "console-runs__facet-count", String(v.count));
       if (facet.key === "status") {
-        const dot = h("span", "console-runs__dot");
-        dot.dataset.status = v.value;
-        label.prepend(dot);
+        const mark = h("span", "pf-v6-c-label__icon");
+        mark.append(statusGlyph(v.value === "fail" ? "danger" : "success"));
+        b.append(mark);
+      } else if (v.active) {
+        const tick = h("span", "pf-v6-c-label__icon");
+        tick.append(statusGlyph("success"));
+        b.append(tick);
       }
-      b.append(label, n);
+      b.append(h("span", "pf-v6-c-label__text console-runs__facet-label", v.label));
+      b.append(h("span", "pf-v6-c-badge pf-m-read console-runs__facet-count", String(v.count)));
       b.addEventListener("click", () => onPick(facet.key, v.value));
-      group.append(b);
+      chip.append(b);
+      group.append(chip);
     }
     box.append(group);
   }
 }
 
-// renderList paints one row per run: the command that produced it, when, how long, and how many
-// targets it kept output for. The command is the row's identity because it is what a person
-// remembers a run by - the id is machine vocabulary and sits in the detail pane instead.
+// renderList paints one row per run: the command that produced it, its outcome, when, how long, and
+// how many targets it kept output for. The command is the row's identity because it is what a
+// person remembers a run by - the id is machine vocabulary and sits in the detail pane instead.
+//
+// The list is a roving-tabindex group: one row is a Tab stop and the arrow keys move between rows, so
+// a long history is not a wall of tab stops. A repaint (the feed refreshes on its own) restores focus
+// to the row that held it, since the buttons are rebuilt.
 function renderList(
   box: HTMLElement,
   rows: RunRow[],
@@ -360,31 +474,76 @@ function renderList(
   selected: string | null,
   onPick: (inv: string) => void,
 ): void {
+  const focused =
+    box.contains(document.activeElement) && document.activeElement instanceof HTMLElement
+      ? document.activeElement.dataset.inv
+      : undefined;
   box.replaceChildren();
+  const items: HTMLElement[] = [];
   for (const row of rows) {
-    const b = h("button", "console-runs__row");
-    b.setAttribute("type", "button");
-    b.setAttribute("role", "listitem");
-    if (row.inv === selected) b.classList.add("pf-m-current");
-    const dot = h("span", "console-runs__dot");
-    if (row.status) dot.dataset.status = row.status;
+    // PF's clickable data list: the item is the control, so it carries the tab stop and its name comes
+    // from the command it holds. Enter and Space press it, as they would a button.
+    const item = h("li", "pf-v6-c-data-list__item pf-m-clickable console-runs__row");
+    item.dataset.inv = row.inv;
+    const current = row.inv === selected;
+    if (current) {
+      item.classList.add("pf-m-selected");
+      item.setAttribute("aria-current", "true");
+    }
+    item.tabIndex = current ? 0 : -1;
+    const itemRow = h("div", "pf-v6-c-data-list__item-row");
+    const content = h("div", "pf-v6-c-data-list__item-content");
+    const head = h("div", "pf-v6-c-data-list__cell console-runs__row-head");
+    // A run with no recorded outcome (interrupted before it wrote one) still gets a mark, so the
+    // command column starts on the same x for every row.
+    head.append(
+      row.status
+        ? statusMark(OUTCOME[row.status].mark, statusWord(row.status))
+        : statusMark("neutral", "No outcome recorded"),
+    );
     const cmd = h("span", "console-runs__row-cmd", row.command);
-    const meta = h("span", "console-runs__row-meta");
-    // The "how long ago" half is its own element carrying the instant, so tickRelativeTimes can
-    // advance it in place; the rest of the line never changes and is one static node beside it.
-    const when = h("span", "", relTime(row.startMs, now));
-    if (row.startMs) when.dataset.time = String(row.startMs);
-    const rest = [];
-    if (row.durationMs) rest.push(durText(row.durationMs));
-    rest.push(row.outputs.length + (row.outputs.length === 1 ? " target" : " targets"));
-    if (row.trigger) rest.push(row.trigger);
-    meta.append(when, h("span", "", rest.length ? "  ·  " + rest.join("  ·  ") : ""));
-    const head = h("span", "console-runs__row-head");
-    head.append(dot, cmd);
-    b.append(head, meta);
-    b.addEventListener("click", () => onPick(row.inv));
-    box.append(b);
+    cmd.id = "console-runs-cmd-" + row.inv;
+    item.setAttribute("aria-labelledby", cmd.id);
+    head.append(cmd);
+    const meta = h("div", "pf-v6-c-data-list__cell console-runs__row-meta");
+    // The "how long ago" half is its own <time> carrying the instant, so tickRelativeTimes can
+    // advance it in place; the rest of the line never changes and is static beside it.
+    const parts: (string | HTMLElement)[] = [];
+    if (row.startMs) parts.push(timeEl(row.startMs, now));
+    if (row.durationMs) parts.push(durText(row.durationMs));
+    parts.push(row.outputs.length + (row.outputs.length === 1 ? " target" : " targets"));
+    if (row.trigger) parts.push(row.trigger);
+    for (const part of parts) {
+      meta.append(typeof part === "string" ? h("span", "", part) : part);
+    }
+    content.append(head, meta);
+    itemRow.append(content);
+    item.append(itemRow);
+    item.addEventListener("click", () => onPick(row.inv));
+    box.append(item);
+    items.push(item);
   }
+  if (!items.some((b) => b.tabIndex === 0) && items[0]) items[0].tabIndex = 0;
+  if (focused) items.find((b) => b.dataset.inv === focused)?.focus({ preventScroll: true });
+  box.onkeydown = (ev: KeyboardEvent) => {
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    if (at < 0) return;
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      items[at].click();
+      return;
+    }
+    let next = at;
+    if (ev.key === "ArrowDown") next = Math.min(items.length - 1, at + 1);
+    else if (ev.key === "ArrowUp") next = Math.max(0, at - 1);
+    else if (ev.key === "Home") next = 0;
+    else if (ev.key === "End") next = items.length - 1;
+    else return;
+    ev.preventDefault();
+    for (const b of items) b.tabIndex = -1;
+    items[next].tabIndex = 0;
+    items[next].focus();
+  };
 }
 
 // renderDetail shows what the selected run DID: every target it kept output for, with the outcome,
@@ -392,25 +551,40 @@ function renderList(
 function renderDetail(box: HTMLElement, row: RunRow | undefined, now: number, demo: boolean): void {
   box.replaceChildren();
   if (!row) return;
+  // The way back to the list, shown only when the page is narrow enough to stack the columns.
+  const back = h("button", "pf-v6-c-button pf-m-link console-runs__back", "Back to runs");
+  back.setAttribute("type", "button");
+  box.append(back);
   const head = h("div", "console-runs__detail-head");
   const title = h("div", "console-runs__detail-title");
   title.append(h("h2", "console-runs__detail-cmd", row.command));
-  if (row.status) title.append(statusPill(row.status));
+  if (row.status) title.append(statusLabel(row.status));
   head.append(title);
   // A LABELLED list, not a "·"-joined sentence. Run together, the five facts read as one long string
   // a reader has to parse before they can find the one they came for; labelled, each is a lookup.
   head.append(
-    facts([
-      ["When", new Date(row.startMs).toLocaleString(), relTime(row.startMs, now), row.startMs],
-      ["Duration", row.durationMs ? durText(row.durationMs) : "", ""],
-      ["Trigger", row.trigger, ""],
-      ["magus", row.log?.magus_version ?? "", ""],
-      ["Run id", row.inv, ""],
-    ]),
+    facts(
+      [
+        { label: "When", time: row.startMs },
+        { label: "Duration", text: row.durationMs ? durText(row.durationMs) : "" },
+        { label: "Trigger", text: row.trigger },
+        { label: "magus", text: row.log?.magus_version ?? "" },
+        { label: "Run id", text: row.inv },
+      ],
+      now,
+    ),
   );
   // The whole run opens as one journal, which is the reading a target list cannot give: the order
   // things ran in, and the waterfall over them.
-  if (row.log) head.append(openLink("Open the whole run", viewerHref("inv", row.inv, demo)));
+  if (row.log) {
+    head.append(
+      openLink(
+        "Open the whole run",
+        viewerHref("inv", row.inv, demo),
+        "Open the whole run: " + row.command,
+      ),
+    );
+  }
   box.append(head);
 
   if (!row.outputs.length) {
@@ -431,60 +605,63 @@ function renderDetail(box: HTMLElement, row: RunRow | undefined, now: number, de
       row.outputs.length === 1 ? "1 target" : row.outputs.length + " targets",
     ),
   );
-  const table = h("div", "console-runs__targets");
+  const table = h("ul", "console-runs__targets");
   table.setAttribute("role", "list");
   for (const o of row.outputs) {
-    const item = h("div", "console-runs__target");
-    item.setAttribute("role", "listitem");
-    const dot = h("span", "console-runs__dot");
-    dot.dataset.status = o.failed ? "fail" : "pass";
-    const name = h(
-      "span",
-      "console-runs__target-name",
-      (o.project ? o.project + ":" : "") + o.target,
-    );
-    const dur = h("span", "console-runs__target-dur", durText(o.duration_ms));
+    const item = h("li", "console-runs__target");
+    const name = (o.project && o.project !== "." ? o.project + ":" : "") + o.target;
     const line = h("div", "console-runs__target-line");
-    line.append(dot, name, dur);
+    line.append(
+      statusMark(o.failed ? "danger" : "success", o.failed ? "Failed" : "Passed"),
+      h("span", "console-runs__target-name", name),
+      h("span", "console-runs__target-dur", durText(o.duration_ms)),
+    );
     item.append(line);
     // Everything under the name is INDENTED to the name, so a target and its ref, error and link
     // read as one block rather than as four unrelated lines stacked down the pane.
     const under = h("div", "console-runs__target-body");
     under.append(h("code", "console-runs__target-ref", o.ref));
     if (o.error) under.append(h("p", "console-runs__target-error", o.error));
-    under.append(openLink("Open output", viewerHref("ref", o.ref, demo)));
+    under.append(openLink("Open output", viewerHref("ref", o.ref, demo), "Open output of " + name));
     item.append(under);
     table.append(item);
   }
   box.append(table);
 }
 
-// statusPill states the outcome as a word, not only as a dot. The dot alone carries the whole fact
-// in colour, which is exactly the thing a reader who cannot separate red from green does not get.
-function statusPill(status: "pass" | "fail" | "mixed"): HTMLElement {
-  const text = status === "pass" ? "passed" : status === "fail" ? "failed" : "partly failed";
-  const pill = h("span", "console-runs__pill", text);
-  pill.dataset.status = status;
-  return pill;
+// statusLabel states the outcome as a PF status Label: an icon, a colour and the word. The dot it
+// replaces carried the whole fact in hue, which is the one thing a reader who cannot separate red
+// from green does not get.
+function statusLabel(status: "pass" | "fail" | "mixed"): HTMLElement {
+  const out = OUTCOME[status];
+  const label = h("span", "pf-v6-c-label console-runs__pill " + out.label);
+  label.dataset.status = status;
+  const content = h("span", "pf-v6-c-label__content");
+  const icon = h("span", "pf-v6-c-label__icon");
+  icon.append(statusGlyph(out.mark));
+  content.append(icon, h("span", "pf-v6-c-label__text", statusWord(status)));
+  label.append(content);
+  return label;
 }
 
 // facts renders the labelled metadata list. A row whose value is empty is DROPPED rather than shown
 // blank: a run whose journal aged out genuinely has no trigger or version, and an empty cell beside
 // a label reads as a failure to load rather than as an absence.
-function facts(rows: [string, string, string, number?][]): HTMLElement {
+function facts(rows: { label: string; text?: string; time?: number }[], now: number): HTMLElement {
   const dl = h("dl", "console-runs__facts");
-  for (const [label, value, extra, timeMs] of rows) {
-    if (!value) continue;
-    dl.append(h("dt", "console-runs__fact-label", label));
-    const dd = h("dd", "console-runs__fact-value", value);
-    if (extra) {
-      const el = h("span", "console-runs__fact-extra", extra);
+  for (const r of rows) {
+    if (r.time) {
+      dl.append(h("dt", "console-runs__fact-label", r.label));
+      const dd = h("dd", "console-runs__fact-value", new Date(r.time).toLocaleString());
       // A relative gloss ages like every other one on the page, so it carries its instant for
       // tickRelativeTimes rather than sitting frozen beside a clock time that never lies.
-      if (timeMs) el.dataset.time = String(timeMs);
-      dd.append(el);
+      dd.append(timeEl(r.time, now, "console-runs__fact-extra"));
+      dl.append(dd);
+      continue;
     }
-    dl.append(dd);
+    if (!r.text) continue;
+    dl.append(h("dt", "console-runs__fact-label", r.label));
+    dl.append(h("dd", "console-runs__fact-value", r.text));
   }
   return dl;
 }
@@ -499,6 +676,43 @@ function note(...parts: (string | Node)[]): HTMLElement {
 // backticks in a DOM text node are just backticks on screen.
 function cmd(text: string): HTMLElement {
   return h("code", "console-runs__cmd", text);
+}
+
+// spinner is PF's Spinner with a name, for a load the reader is waiting on.
+function spinner(label: string): SVGElement {
+  const svg = statusGlyph("running");
+  svg.setAttribute("class", "pf-v6-c-spinner pf-m-lg");
+  svg.setAttribute("role", "progressbar");
+  svg.setAttribute("aria-label", label);
+  svg.removeAttribute("aria-hidden");
+  return svg;
+}
+
+// emptyCard is PF's EmptyState around a title, a body and any actions. actions is either the buttons
+// to place in a new group or an existing __actions group to adopt. icon is the status glyph, which
+// goes in __icon.
+function emptyCard(
+  title: HTMLElement,
+  body: (string | Node)[],
+  actions: Node[] | HTMLElement = [],
+  icon?: Node,
+): HTMLElement {
+  const state = emptyStateShell({ heading: "h2", classes: "pf-m-sm console-runs__empty", icon });
+  state.title.replaceWith(title);
+  if (body.length > 0) state.body.append(...body);
+  else state.body.remove();
+  if (Array.isArray(actions) && actions.length === 0) {
+    state.footer.remove();
+  } else if (Array.isArray(actions)) {
+    state.actions.append(...actions);
+  } else {
+    state.actions.replaceWith(actions);
+  }
+  return state.root;
+}
+
+function emptyTitle(text: string): HTMLElement {
+  return h("h2", "pf-v6-c-empty-state__title-text console-runs__empty-title", text);
 }
 
 // renderEmpty distinguishes the four ways this list can be empty, because only one of them is the
@@ -517,44 +731,50 @@ function renderEmpty(
   },
 ): void {
   box.replaceChildren();
-  const card = h("div", "console-runs__empty");
+  const item = h("li", "console-runs__empty-item");
   if (s.connection) {
     renderConnectPrompt(s.promptSlots, s.connection, {
       purpose: "This page reads the runs your local server has kept.",
       onRetry: s.onRetry,
     });
-    card.append(s.promptSlots.title, s.promptSlots.message, s.promptSlots.actions);
+    item.append(emptyCard(s.promptSlots.title, [s.promptSlots.message], s.promptSlots.actions));
   } else if (!s.loaded) {
-    card.append(h("h2", "console-runs__empty-title", "Loading runs..."));
+    const loading = emptyCard(emptyTitle("Loading runs"), [], [], spinner("Loading runs"));
+    loading.setAttribute("role", "status");
+    item.append(loading);
   } else if (s.filtered) {
-    card.append(h("h2", "console-runs__empty-title", "No runs match"));
-    card.append(note("Nothing here carries every term in the filter."));
-    const clear = h("button", "pf-v6-c-button pf-m-secondary", "Clear the filter");
+    const clear = h("button", "pf-v6-c-button pf-m-secondary", "Clear filter");
     clear.setAttribute("type", "button");
     clear.addEventListener("click", s.onClear);
-    card.append(clear);
-  } else {
-    card.append(h("h2", "console-runs__empty-title", "No runs kept yet"));
-    card.append(
-      note(
-        "Run a target and it shows up here. Every run is kept, and you never need its ref to find " +
-          "it again. Try ",
-        cmd("magus run build"),
-        " in this workspace, then Refresh.",
+    item.append(
+      emptyCard(
+        emptyTitle("No runs match"),
+        ["Nothing here carries every term in the filter."],
+        [clear],
       ),
     );
+  } else {
+    item.append(
+      emptyCard(emptyTitle("No runs kept yet"), [
+        "Run a target and it shows up here. Every run is kept, and you never need its ref to find it again. Try ",
+        cmd("magus run build"),
+        " in this workspace, then Refresh.",
+      ]),
+    );
   }
-  box.append(card);
+  box.append(item);
 }
 
-// openLink is the hand-off to the Log Viewer. A real <a href> rather than a click handler, so it
-// carries every affordance a link has - middle-click, copy, open in a new tab - which is exactly
-// what a reader comparing two runs wants.
-function openLink(text: string, href: string): HTMLElement {
+// openLink goes to the Log Viewer. A real <a href> rather than a click handler, so it carries every
+// affordance a link has - middle-click, copy, open in a new tab - which is exactly what a reader
+// comparing two runs wants. The name says which output, since a column of "Open output" links is
+// indistinguishable to a reader that lists links.
+function openLink(text: string, href: string, name: string): HTMLElement {
   const a = document.createElement("a");
-  a.className = "console-runs__open";
+  a.className = "pf-v6-c-button pf-m-link console-runs__open";
   a.href = href;
   a.textContent = text;
+  a.setAttribute("aria-label", name);
   return a;
 }
 

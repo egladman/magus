@@ -99,7 +99,7 @@ func (s *Server) newShareHandler(mgr *share.Manager, consoleDir string, guarded 
 			ExpiresAt:  link.ExpiresAt.UTC().Format(time.RFC3339),
 			Superseded: link.Superseded,
 		}); err != nil {
-			log.With(attr.Component("share")).WarnContext(r.Context(), "encode response", slog.String("error", err.Error()))
+			log.With(attr.Component("share")).WarnContext(r.Context(), "encode response", attr.Error(err))
 		}
 	})
 }

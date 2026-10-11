@@ -1,10 +1,12 @@
-// The spawn rules the root magusfile registers: spawn-without-job-row and
-// change-role-spawn-not-isolated.
+// The spawn rules the root magusfile registers: spawn-without-job-row,
+// change-role-spawn-not-isolated and brief-builds-magus.
 namespace agentpolicy\spawn;
 
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/builds" as builds;
+import "./hack/policy/verdict" as verdict;
 
 final isolationDenial = "a worker that changes code would share this checkout; spawn it with "
     + "`isolation: \"worktree\"`.\n"
@@ -28,6 +30,8 @@ export object Spawn {
     model: str = "",
     // lease is the job the spawner acts under, "" for the orchestrator or a person.
     lease: str = "",
+    // prompt is the brief handed to the spawned worker.
+    prompt: str = "",
 }
 
 // Lineage is a `<parent>/<role> <job>` title taken apart, or null for any other form.
@@ -48,7 +52,7 @@ fun lineage(title: str) > Lineage? {
 }
 
 // decideSpawn denies a spawn that names no live job row, then a code-changing worker that
-// would share the spawning checkout. rows is null when the store could not be read, which
+// would share the spawning checkout, then a brief that tells its worker to build magus. rows is null when the store could not be read, which
 // unreadable says why: the row rule then advises and never denies. A continue starts
 // nothing, so it passes both.
 export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
@@ -61,6 +65,10 @@ export fun decideSpawn(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) >
     }
     if (!spawn.isolated and changeRoles.indexOf(helpers\titleRole(spawn.title)) != null) {
         return magus\guard.deny(isolationDenial);
+    }
+    final building = builds\briefDenial(spawn.prompt);
+    if (building != "") {
+        return magus\guard.deny(building);
     }
     return row;
 }
@@ -76,8 +84,8 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
     }
     final line = lineage(spawn.title);
     if (line == null) {
-        return magus\guard.deny("the spawn description `{spawn.title}` names no job; it must read "
-            + "`<parent>/<role> <job>`, where <job> is a live row in this workspace's job store.\n"
+        return magus\guard.deny("this spawn's description names no job; it must read `<parent>/<role> <job>`\n"
+            + "The description is `{spawn.title}`, and <job> is a live row in this workspace's job store. "
             + remedy(spawn, line: null));
     }
     var found: helpers\JobRow? = null;
@@ -89,17 +97,17 @@ fun decideJobRow(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > Guard
         }
     }
     if (found == null) {
-        return magus\guard.deny("no row `{line!.job}` (or `{line!.parent}/{line!.job}`) is in this "
-            + "workspace's job store, so the guard has no lease to bind this spawn's child to.\n"
-            + remedy(spawn, line: line));
+        return magus\guard.deny("no row `{line!.job}` is in this workspace's job store; fork it before the spawn\n"
+            + "Neither `{line!.job}` nor `{line!.parent}/{line!.job}` is a row, so the guard has no lease "
+            + "to bind this spawn's child to. " + remedy(spawn, line: line));
     }
     if (["declared", "running", "exited"].indexOf(found!.state) == null) {
-        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state}), so a child bound to "
-            + "it is graded by nothing.\n" + remedy(spawn, line: line));
+        return magus\guard.deny("the row `{found!.id}` has ended ({found!.state}); fork a live one\n"
+            + "A child bound to an ended row is graded by nothing. " + remedy(spawn, line: line));
     }
     if (spawn.lease != "" and !descends(rows!, job: found!.id, ancestor: spawn.lease)) {
-        return magus\guard.deny("you act under the lease `{spawn.lease}`, and `{found!.id}` is neither "
-            + "it nor forked beneath it, so the guard will not bind the child to it.\n"
+        return magus\guard.deny("the row `{found!.id}` is not under your lease, so the guard will not bind the child to it\n"
+            + "You act under the lease `{spawn.lease}`, and `{found!.id}` is neither it nor forked beneath it. "
             + remedy(spawn, line: line));
     }
     return magus\guard.allow();
@@ -183,15 +191,20 @@ final store = helpers\jobRows([
     ["elsewhere", "running"],
 ]);
 
+// judged is decideSpawn with every denial held to the verdict shape.
+fun judged(spawn: Spawn, rows: [helpers\JobRow]?, unreadable: str) > GuardVerdict {
+    return verdict\checked(decideSpawn(spawn, rows: rows, unreadable: unreadable), label: spawn.title);
+}
+
 test "a live row passes" {
     foreach (title in ["orchestrator/review naming-advisory", "orchestrator/feat guard-command", "orchestrator/docs changelog-fragments"]) {
-        final v = decideSpawn(request(title, isolated: true), rows: store, unreadable: "");
+        final v = judged(request(title, isolated: true), rows: store, unreadable: "");
         std\assert(v.decision == "allow", message: title);
     }
 }
 
 test "a spawn with no lineage title is denied, naming the fork" {
-    final v = decideSpawn(Spawn{ kind = "spawn", title = "audit the store", isolated = true }, rows: store, unreadable: "");
+    final v = judged(Spawn{ kind = "spawn", title = "audit the store", isolated = true }, rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "no title grammar");
     std\assert(v.reason.indexOf("magus job fork <job> --model <model> --write-paths <paths>") != null, message: "names the fork");
     std\assert(v.reason.indexOf("`orchestrator/<role> <job>`") != null, message: "names the retitle");
@@ -200,7 +213,7 @@ test "a spawn with no lineage title is denied, naming the fork" {
 }
 
 test "a title naming a missing row is denied with the real command" {
-    final v = decideSpawn(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
+    final v = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "missing row");
     std\assert(v.reason.indexOf("magus job fork nothing-here --parent v050-prep --model opus --read-only") != null, message: v.reason);
     std\assert(v.reason.indexOf("magus\\job.put(\"nothing-here\", .\{ parent = \"v050-prep\"") != null, message: "names the client write");
@@ -210,46 +223,78 @@ test "a title naming a missing row is denied with the real command" {
 
 test "an ended row is denied" {
     foreach (title in ["v050-prep/refactor drop-improve", "orchestrator/fix footprint"]) {
-        final v = decideSpawn(request(title, isolated: true), rows: store, unreadable: "");
+        final v = judged(request(title, isolated: true), rows: store, unreadable: "");
         std\assert(v.decision == "deny", message: title);
         std\assert(v.reason.indexOf("has ended") != null, message: "says why");
     }
 }
 
 test "a nested id resolves under the title's parent" {
-    final v = decideSpawn(request("v050-prep/scout scout-callers", isolated: false), rows: store, unreadable: "");
+    final v = judged(request("v050-prep/scout scout-callers", isolated: false), rows: store, unreadable: "");
     std\assert(v.decision == "allow", message: "v050-prep/scout-callers");
 }
 
 test "a leased spawner hands out only its own tree" {
     final mine = Spawn{ kind = "spawn", title = "v050-prep/scout scout-callers", isolated = false, lease = "v050-prep" };
-    std\assert(decideSpawn(mine, rows: store, unreadable: "").decision == "allow", message: "a child of the lease");
+    std\assert(judged(mine, rows: store, unreadable: "").decision == "allow", message: "a child of the lease");
     final other = Spawn{ kind = "spawn", title = "v050-prep/review elsewhere", isolated = false, lease = "v050-prep" };
-    final v = decideSpawn(other, rows: store, unreadable: "");
+    final v = judged(other, rows: store, unreadable: "");
     std\assert(v.decision == "deny", message: "a row outside the lease");
     std\assert(v.reason.indexOf("--parent v050-prep") != null, message: "forks beneath the lease");
     std\assert(v.reason.indexOf("a child of `v050-prep`") != null, message: "says the fork is a child the store grades");
-    final unleased = decideSpawn(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
+    final unleased = judged(request("v050-prep/scout nothing-here", isolated: false), rows: store, unreadable: "");
     std\assert(unleased.reason.indexOf("a child of") == null, message: "an orchestrator's remedy names no lease");
 }
 
 test "an unreadable store advises and never denies" {
-    final v = decideSpawn(request("orchestrator/review anything", isolated: false), rows: null, unreadable: "job store schema 10 is newer than 9");
+    final v = judged(request("orchestrator/review anything", isolated: false), rows: null, unreadable: "job store schema 10 is newer than 9");
     std\assert(v.decision == "advise", message: "fails open");
     std\assert(v.reason.indexOf("schema 10") != null, message: "names the cause");
-    std\assert(decideSpawn(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == "deny", message: "isolation still denies");
+    std\assert(judged(request("orchestrator/feat anything", isolated: false), rows: null, unreadable: "x").decision == "deny", message: "isolation still denies");
 }
 
 test "a code-changing spawn without its own checkout is denied" {
     foreach (title in ["orchestrator/feat guard-command", "v050-prep/fix naming-advisory", "orchestrator/docs changelog-fragments"]) {
-        final v = decideSpawn(request(title, isolated: false), rows: store, unreadable: "");
+        final v = judged(request(title, isolated: false), rows: store, unreadable: "");
         std\assert(v.decision == "deny", message: title);
         std\assert(v.reason.indexOf("isolation: \"worktree\"") != null, message: "names the fix");
     }
 }
 
 test "a thinking role, an isolated worker and a continue pass" {
-    std\assert(decideSpawn(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == "allow", message: "a review");
-    std\assert(decideSpawn(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == "allow", message: "isolated");
-    std\assert(decideSpawn(Spawn{ kind = "continue", title = "", isolated = false }, rows: store, unreadable: "").decision == "allow", message: "a continue");
+    std\assert(judged(request("v050-prep/review naming-advisory", isolated: false), rows: store, unreadable: "").decision == "allow", message: "a review");
+    std\assert(judged(request("orchestrator/feat guard-command", isolated: true), rows: store, unreadable: "").decision == "allow", message: "isolated");
+    std\assert(judged(Spawn{ kind = "continue", title = "", isolated = false }, rows: store, unreadable: "").decision == "allow", message: "a continue");
+}
+
+fun briefed(prompt: str) > Spawn {
+    return Spawn{ kind = "spawn", title = "orchestrator/feat guard-command", isolated = true, prompt = prompt };
+}
+
+test "a brief that tells the worker to build magus is denied, naming the script" {
+    foreach (prompt in [
+        "SETUP:\n1. `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`\n2. Work.",
+        "Run `magus run go-build .` first.",
+        "```sh\ngo build -o magus ./cmd/magus\n```",
+    ]) {
+        final v = judged(briefed(prompt), rows: store, unreadable: "");
+        std\assert(v.decision == "deny", message: prompt);
+        std\assert(v.reason.indexOf("hack/dev/bootstrap-worktree.buzz") != null, message: "names the script");
+        std\assert(v.reason.indexOf("one binary per base commit") != null, message: "says the orchestrator places it");
+    }
+    final unreadable = judged(briefed("Run `magus run go-build .` first."), rows: null, unreadable: "x");
+    std\assert(unreadable.decision == "deny", message: "an unreadable store does not excuse the brief");
+}
+
+test "a brief that forbids the build or builds something else passes" {
+    foreach (prompt in [
+        "Never run `go build ./cmd/magus`; the orchestrator places ./magus.",
+        "Do not build magus:\n\n```sh\nmagus run go-build .\n```\n",
+        "Run `go run ./cmd/magus-utils` and `./magus run buzz-test .`.",
+        "",
+    ]) {
+        std\assert(judged(briefed(prompt), rows: store, unreadable: "").decision == "allow", message: prompt);
+    }
+    final continued = Spawn{ kind = "continue", title = "", isolated = false, prompt = "Run `magus run go-build .`" };
+    std\assert(judged(continued, rows: store, unreadable: "").decision == "allow", message: "a continue starts nothing");
 }

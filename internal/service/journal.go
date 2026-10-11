@@ -73,7 +73,7 @@ func (j *Journal) record(key string, stop spells.Command) {
 	}
 	if err != nil {
 		slog.With(attr.Component("magus")).WarnContext(context.Background(), "could not journal a hosted service; a broker crash would leave it running",
-			slog.String("key", key), slog.String("err", err.Error()))
+			slog.String("key", key), attr.Error(err))
 	}
 }
 

@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, metricsservice]
 
 MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
 
-Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto:17](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L17). Part of the [server API](../../index.md).
+Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Source: [metrics.proto:17](https://github.com/egladman/magus/blob/main/proto/magus/metrics/v1alpha1/metrics.proto#L17). Part of the [daemon API](../../index.md).
 
 ## Methods
 

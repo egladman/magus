@@ -1,0 +1,111 @@
+/* The Reference panel is #console-refpanel, the __panel of the outlet Drawer (#console-refdrawer).
+   PatternFly owns the open and inset mechanics (pf-m-expanded plus pf-m-inline); ref-drawer.ts toggles
+   the classes. These rules size the panel and make the cloned help and search results readable. The
+   panel flex-basis tokens are pinned on the drawer root: 22rem rather than PF's 50% or 28rem. */
+#console-refdrawer {
+  --pf-v6-c-drawer__panel--md--FlexBasis: var(--console-refdrawer-w);
+  --pf-v6-c-drawer__panel--xl--FlexBasis: var(--console-refdrawer-w);
+}
+/* Unpinned is an overlay. Pinning adds pf-m-inline (ref-drawer.ts), which lets PF inset the content;
+   unpinned, PF's CSS-only drawer parks the expanded panel off the right edge, so it docks like the
+   SidePanel instead, tracking the flex-basis the splitter drives. Below 48rem see the phone block. */
+@media (min-width: 48rem) {
+  #console-refdrawer:not(.pf-m-inline).pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
+    position: fixed;
+    top: var(--console-topchrome-h);
+    bottom: var(--console-statusbar-h);
+    inset-inline-end: 0;
+    inset-inline-start: auto;
+    width: var(--pf-v6-c-drawer__panel--md--FlexBasis, var(--console-refdrawer-w));
+    max-width: 100%;
+    margin: 0;
+    transform: none;
+    /* Left only: the top and bottom edges already sit flush against the title and status bars. */
+    box-shadow: var(--pf-t--global--box-shadow--lg--left);
+    z-index: var(--pf-t--global--z-index--sm);
+  }
+}
+/* Below the drawer's 48rem breakpoint the panel flex-basis is 100%, so PF's inline drawer has no room
+   beside the content and overflows. PF's CSS-only Drawer has no overlay mode, so the expanded panel
+   docks as a full-screen overlay, neutralising its inline sizing, collapse margin and slide. */
+@media (max-width: 47.999rem) {
+  #console-refdrawer.pf-m-expanded > .pf-v6-c-drawer__main > #console-refpanel {
+    position: fixed;
+    top: var(--console-topchrome-h);
+    right: 0;
+    bottom: var(--console-statusbar-h);
+    left: 0;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    flex-basis: auto;
+    margin: 0;
+    transform: none;
+    z-index: var(--pf-t--global--z-index--sm);
+  }
+  #console-refsplitter { display: none; }
+}
+/* The splitter drag suppresses the width transition so the panel tracks the pointer; the instant
+   class skips the slide while the persisted pinned state applies on load. */
+#console-refsplitter.console-shell-refsplitter--dragging { touch-action: none; }
+#console-refpanel:has(.console-shell-refsplitter--dragging) { transition: none !important; }
+.console-shell-refdrawer--instant .pf-v6-c-drawer__panel { transition: none !important; }
+
+/* The orange pop marks the pressed state so a pinned panel is unmistakable. The glyph is an SVG on
+   currentColor and PF resets .pf-v6-c-button__icon from a token, so the icon colour var is set too. */
+#console-refpin[aria-pressed="true"] {
+  --pf-v6-c-button__icon--Color: var(--console-pin-active);
+  color: var(--console-pin-active);
+  background: color-mix(in srgb, var(--console-pin-active) 14%, transparent);
+}
+.console-shell-refdrawer__title {
+  align-self: center;
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+/* PF buttons align to the baseline, which put the inline SVG high and off-centre in its square. */
+#console-refpin, #console-refclose, #console-refbreakout { align-items: center; }
+#console-refpin .pf-v6-c-button__icon,
+#console-refclose .pf-v6-c-button__icon,
+#console-refbreakout .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
+
+/* The reference app, the drawer's break-out-to-tab target: the same dense help styling in a scrolling,
+   width-capped column. */
+#console-outlet [data-app="reference"] {
+  height: 100%;
+  overflow: auto;
+  padding: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--lg);
+}
+#console-outlet [data-app="reference"] .console-shell-refdrawer__body {
+  max-width: 46rem;
+  font-size: var(--pf-t--global--font--size--body--default);
+  line-height: var(--pf-t--global--font--line-height--body);
+}
+#console-refpanel .console-shell-refdrawer__body { font-size: var(--pf-t--global--font--size--body--sm); line-height: var(--pf-t--global--font--line-height--body); }
+.console-shell-refdrawer__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+/* The cloned help blocks read as stacked, expanded sections. */
+.console-shell-refdrawer__body > * { margin: 0 0 var(--pf-t--global--spacer--md); }
+.console-shell-refdrawer__body > :last-child { margin-bottom: 0; }
+.console-shell-refdrawer__body summary {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  cursor: default;
+  list-style: none;
+  margin-bottom: var(--pf-t--global--spacer--xs);
+}
+.console-shell-refdrawer__body summary::-webkit-details-marker { display: none; }
+.console-shell-refdrawer__body dl {
+  margin: var(--pf-t--global--spacer--xs) 0 var(--pf-t--global--spacer--sm);
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--md);
+}
+.console-shell-refdrawer__body dt { margin: 0; white-space: nowrap; }
+.console-shell-refdrawer__body dd { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-refdrawer__body table { border-collapse: collapse; width: 100%; }
+.console-shell-refdrawer__body th, .console-shell-refdrawer__body td {
+  text-align: left;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--xs) 0;
+  vertical-align: baseline;
+}
+.console-shell-refdrawer__body code { font-size: inherit; }

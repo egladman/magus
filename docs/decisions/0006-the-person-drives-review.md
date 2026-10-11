@@ -1,7 +1,7 @@
 ---
 title: "ADR 0006: the person drives review"
 order: 6
-description: Draft. Agents write code faster than we can review it, and review has become the bottleneck that does not scale. This records what a review of agent-written pull requests found, what magus enforces on its own tree versus what it ships to anyone else, and how a local review that reads as a story should work, with a person driving every step.
+description: Draft. Agents write code faster than we can review it, and review has become the bottleneck that does not scale. This records what a review of agent-written pull requests found, what magus enforces on its own tree versus what it ships to anyone else, and how a local review reads in an order built from the code's own relationships, with a person driving every step.
 tags: [adr, decision, review, agents, guard, diff, conventions, precedents]
 status: proposed (a draft of where the thinking stands)
 date: 2026-10-07
@@ -83,15 +83,15 @@ standard from one tree leaked into the product.
 
 ### 2. The guard denies only what cannot be undone
 
-| Item                                                                                                                                                                                                                                                                          | State       |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| Built-in rules that deny a recoverable action (a whole read, a pipe, an in-place edit, staging everything, a raw tool) advise by default, once per session                                                                                                                    | done (#550) |
-| Every built-in rule can be set by name in the root magusfile: `magus\guard.builtins({name: "deny" \| "advise" \| "off" \| {decision, lines}})`; an unknown name is an error; the stricter of the committed and working-tree settings applies, so loosening waits for a commit | done (#550) |
-| No number measured on this repository ships in the binary; this repository restores its stricter settings, with the evidence, in its own guard policy                                                                                                                         | done (#550) |
-| A rule that guards destroyed work, publication, provenance, credentials, the guard's own authority, or a boundary a job declared keeps denying by default                                                                                                                     | done (#550) |
-| A guard rule that denies an agent enabling auto-merge on its own pull request (`gh pr merge --auto` and equivalents)                                                                                                                                                          | proposed    |
+| Item                                                                                                                                                                                                                                                                          | State                        |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| Built-in rules that deny a recoverable action (a whole read, a pipe, an in-place edit, staging everything, a raw tool) advise by default, once per session                                                                                                                    | done (#550)                  |
+| Every built-in rule can be set by name in the root magusfile: `magus\guard.builtins({name: "deny" \| "advise" \| "off" \| {decision, lines}})`; an unknown name is an error; the stricter of the committed and working-tree settings applies, so loosening waits for a commit | done (#550)                  |
+| No number measured on this repository ships in the binary; this repository restores its stricter settings, with the evidence, in its own guard policy                                                                                                                         | done (#550)                  |
+| A rule that guards destroyed work, publication, provenance, credentials, the guard's own authority, or a boundary a job declared keeps denying by default                                                                                                                     | done (#550)                  |
+| A guard rule that denies an agent enabling auto-merge on its own pull request (`gh pr merge --auto` and equivalents); the denial hands the person the command to run, and it lives in this repository's guard policy                                                          | done (`hack/policy/gh.buzz`) |
 
-### 3. Local review as a story
+### 3. Local review in reading order
 
 Research (empirical, prior art, and what magus already has) is in the plan this ADR came
 from. What it established:
@@ -106,27 +106,30 @@ from. What it established:
   same way every time. The closest product runs hosted, after the push, and lets a model
   pick the order.
 
-| Item                                                                                                                                                                                                           | State                       |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `magus diff --order=story`: hunks grouped into chapters by definition and use among changed symbols, definitions before uses, interfaces before implementations, code before its tests, central chapters first | planned                     |
-| Each step names the relationship that placed it; a completeness line proves every hunk appears exactly once; the order is deterministic and never chosen by a model                                            | planned                     |
-| Consecutive steps from one file merge into one screen; hunks magus cannot rank form a trailing "unranked" chapter; a declared index that is stale is an error naming the rebuild                               | planned                     |
-| The closing read keeps private read marks keyed by hunk content, plus an optional pre-push hook that magus prints (never installs) naming unread hunks as advice; nothing blocks a push                        | planned                     |
-| The console's focus mode presents the story one step at a time, with everything else put aside                                                                                                                 | planned                     |
-| The story opens with the intent: the job's criteria, the brief, and the rationale the session recorded, since magus already holds what an agent was asked and what it ran                                      | proposed                    |
-| A Buzz prototype ordered four recent pull requests; it read better than file order where a change was one connected feature, and worse where it was many small unconnected hunks                               | done (branch `story-order`) |
-| Prerequisites the prototype found: hunks from `magus\diff()`, a file and line to symbols lookup, an index-freshness call, and an `implements` edge from SCIP                                                   | planned                     |
+| Item                                                                                                                                                                                                                                                                                                                                                                                                        | State    |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `magus diff` carries a reading order with no flag: hunks grouped by definition and use among the changed symbols, definitions before uses, interfaces before implementations, code before its tests, larger and wider-reaching groups first                                                                                                                                                                 | done     |
+| Each step names the relationship that placed it; a completeness line proves every hunk appears exactly once; the order is deterministic and never chosen by a model                                                                                                                                                                                                                                         | done     |
+| Consecutive hunks from one file merge into one step; generated output folds into a group of its own; hunks magus cannot place form a final "unranked" group; when the symbol index cannot be brought current the order is omitted and a note names `magus graph build`                                                                                                                                      | done     |
+| The text report, the terminal viewer and `-o json` follow the order, and the console's focus mode walks it one step at a time with everything else put aside                                                                                                                                                                                                                                                | done     |
+| The closing read keeps private read marks keyed by hunk content; `magus diff --unread` narrows the review to the hunks no mark covers under every `-o` and always exits 0; the managed `pre-push` section hands the `check-drift` job the refs git is pushing, and the job counts the unread hunks of exactly those ranges and raises a desktop notice for them; a commit never does; nothing blocks a push | done     |
+| The reading order opens with the intent: the job's criteria, the brief, and the rationale the session recorded, since magus already holds what an agent was asked and what it ran                                                                                                                                                                                                                           | proposed |
+| A Buzz prototype ordered four recent pull requests; it read better than file order where a change was one connected feature, and worse where it was many small unconnected hunks                                                                                                                                                                                                                            | done     |
+| Prerequisites the prototype found: hunks with their symbols on `magus\diff()`, a file and line to symbols lookup, an index-freshness check, and an `implements` edge from SCIP (knowledge schema 17)                                                                                                                                                                                                        | done     |
 
 ### 4. Review between people
 
-| Item                                                                                                                                                                                              | State          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| A reviewer can mark "I am reading this now", so a merge does not land under them; a merge that lands mid-review is reported to the reviewer                                                       | proposed       |
-| Measure review time lost to merges that landed during an active review                                                                                                                            | proposed       |
-| A person enables auto-merge; an agent, or tooling acting for one, never does                                                                                                                      | done (decided) |
-| A review thread from the forge shows with its replies under its hunk, and a person can send it to an agent to work the code change                                                                | proposed       |
-| An agent sent a thread gets the context magus can prove, not just the hunk: the touched symbols' definitions, callers and tests, the workspace's conventions and precedents, and the whole change | proposed       |
-| An agent's outline of a reply is a few topics that cannot be copied or inserted; the person types every reply                                                                                     | proposed       |
+| Item                                                                                                                                                                                                                                                                                                             | State          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| A reviewer can mark a review as being read now. The mark is local; magus prints the `gh pr comment` line that tells the pull request, and the person runs it. It is a notice, not a hold: it does not stop the merge, and a merge that lands while the mark is set is reported to the reviewer                   | done (decided) |
+| Review time lost to merges that landed during an active review is measured by two opt-in metrics: a count of such merges and the time from the mark to the merge                                                                                                                                                 | done           |
+| A person enables auto-merge; an agent, or tooling acting for one, never does                                                                                                                                                                                                                                     | done (decided) |
+| A review thread from the forge shows with its replies under the hunk of its first comment, in the terminal and the console, and a reply goes to a named thread                                                                                                                                                   | done           |
+| The host's resolved state is not fetched. A thread carries only `outdated`, set when its commented line has left the head                                                                                                                                                                                        | done (decided) |
+| `magus diff --thread <id>` narrows the review to one thread for the person reading it: the viewer opens on its hunk, and printed it is the conversation, the hunk, and what the change there reaches. `-o json`, the console's thread route and the diff MCP tool's read-only `thread` op return the same record | done           |
+| A plain `magus diff` report never reaches the network: it names thread ids only from a running server's session, and with no server it lists none and names the command that starts one                                                                                                                          | done (decided) |
+| Every command a person types is for that person, and none of its flags exists to feed a model; `magus diff --prompt` and `--print-hook` are removed. The one exception is hook glue: `magus shell`, with `--message` and `--reports-skills`. Agent affordances live on the MCP tools                             | done (decided) |
+| An agent's outline of a reply is at most five topics of 60 characters that cannot be copied or inserted, and a second outline of a thread replaces the first; the person types every reply                                                                                                                       | done           |
 
 ### 5. Text a stranger can read
 
@@ -146,7 +149,7 @@ them. The fix is the principle to write for people, enforced.
 Weighed and declined:
 
 - An order chosen by a language model. It changes between runs, and it anchors the
-  reviewer on the story instead of the code it leaves out.
+  reviewer on the model's account of the change instead of the code it leaves out.
 - Review scores, completion ratios, or anything that rewards clearing a review unread.
 - A judging host call that ships this repository's prose rules to users (`magus\prose()`).
 - One-human-one-agent review as a speed target.
@@ -158,15 +161,21 @@ Weighed and declined:
 - This repository keeps its standards in its own policy files, and a depguard rule stops
   them from reaching the binary. Promoting one to something magus ships means meeting the
   bar in section 1 first.
-- A story order needs facts magus does not produce yet: per-hunk symbols, an `implements`
-  edge, and hunks from `magus\diff()`. Where the index is missing or stale, the story says
-  so instead of guessing.
+- The reading order depends on the symbol index: per-hunk symbols, the uses of the changed
+  symbols, and an `implements` edge. The edge raised the knowledge schema to 17, so a graph
+  built before it rebuilds. Where the index is missing or stale, the order is omitted and a
+  note names the rebuild, because an order drawn without the uses would read as "nothing
+  is related".
+- Marking a review as being read is a notice, and nothing holds a merge. A merge can still
+  land under a reader. In exchange magus keeps no state on the forge, and the metrics show
+  how often it happens.
+- A thread the host calls resolved looks the same as an open one. Fetching that state
+  takes a query the comments listing does not make, and `outdated` already says when the
+  code moved.
 
 ## Open questions
 
-- How the "reading now" signal reaches a hosted review without making magus own it: a
-  provider spell, or a printed command the person runs.
-- Whether a story keeps working at the scale agents produce (thousands of lines), or
-  whether the answer there is smaller changes.
-- How a story shows what it leaves out, so a reviewer reads the code as well as the
-  narration.
+- Whether the reading order keeps working at the scale agents produce (thousands of
+  lines), or whether the answer there is smaller changes.
+- Whether the completeness line and the folded group are enough to show what the order
+  leaves out, so a reviewer reads the code as well as the grouping.

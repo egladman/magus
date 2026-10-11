@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/maintenance"
+	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/service/console"
@@ -323,7 +324,7 @@ func startServerBackground(ctx context.Context, cfg config.Config, subArgs []str
 	logPath := serverLogPath()
 	pid, err := spawnDetached(serverChildArgs(os.Args[1:]), logPath)
 	if err != nil {
-		slog.ErrorContext(ctx, "server start: could not background the server", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).ErrorContext(ctx, "could not background the server", attr.Error(err))
 		return 1, true
 	}
 	if err := waitServerReady(ctx, addr, serverReadyTimeout); err != nil {
@@ -710,7 +711,7 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		return nil
 	}
 	name := args[0]
-	job, ok := job.Lookup(name)
+	entry, ok := job.Lookup(name)
 	if !ok {
 		return fmt.Errorf("magus job run: no job named %q, run `%s` to list them", name, hint.JobRun)
 	}
@@ -719,11 +720,15 @@ func jobRunCatalog(ctx context.Context, args []string) error {
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncNoServer})
 		return nil // no server: quietly do nothing so a checkout hook is never delayed
 	}
-	inv, err := proc.SubmitJob(ctx, addr, job.Argv, version)
+	argv := entry.Argv
+	if name == job.NameCheckDrift {
+		argv = checkDriftJobArgv(args[1:], hookStdin())
+	}
+	inv, err := proc.SubmitJob(ctx, addr, argv, version)
 	if err != nil {
 		// Best-effort: a hook must not fail a checkout. Swallow and succeed; the next
 		// trigger (hook, RPC, or manual submit) will catch up.
-		slog.DebugContext(ctx, "server job: submit failed", slog.String("job", name), slog.String("error", err.Error()))
+		slog.With(attr.Component("server job")).DebugContext(ctx, "submit failed", slog.String("job", name), attr.Error(err))
 		recordSyncRequest(ctx, name, maintenance.SyncRequest{Outcome: maintenance.SyncRefused, Detail: err.Error()})
 		return nil
 	}
@@ -756,7 +761,7 @@ func recordSyncRequest(ctx context.Context, name string, r maintenance.SyncReque
 		err = maintenance.RecordSyncRequest(dir, r)
 	}
 	if err != nil {
-		slog.DebugContext(ctx, "server job: sync request not recorded", slog.String("error", err.Error()))
+		slog.With(attr.Component("server job")).DebugContext(ctx, "sync request not recorded", attr.Error(err))
 	}
 }
 
@@ -828,6 +833,9 @@ func jobRunUsage() {
 	fmt.Fprintln(os.Stderr, "Submit one of the server's own jobs, the housekeeping magus does for itself,")
 	fmt.Fprintln(os.Stderr, "then return immediately. It shows beside every other job in `magus ls jobs`.")
 	fmt.Fprintln(os.Stderr, "A no-op when no server is running, so a VCS hook can call it unconditionally.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "check-drift takes the name of the git hook that runs it, then that hook's own")
+	fmt.Fprintln(os.Stderr, "arguments; for pre-push it reads the refs being pushed from standard input.")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Jobs:")
 	for _, j := range job.All() {
@@ -947,7 +955,7 @@ func installRefreshHooks(ctx context.Context) {
 		return // this VCS has no hook support
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "server start: could not install VCS refresh hook", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS refresh hook", attr.Error(err))
 		return
 	}
 	if len(installed) > 0 {
@@ -957,7 +965,8 @@ func installRefreshHooks(ctx context.Context) {
 
 // installDriftHooks installs the VCS drift-notice hook (types.DriftHookInstaller) so a
 // commit and the push that follows it each poke this server to check, in the background,
-// whether the commit left generated output stale. Same shape and same guarantees as
+// whether the commit left generated output stale, and a push also hands over the refs it
+// sends so the server counts their unread hunks. Same shape and same guarantees as
 // installRefreshHooks: best-effort, never fatal to starting the server, and a no-op on a
 // non-git tree or a VCS with no hook support (jj).
 func installDriftHooks(ctx context.Context) {
@@ -978,7 +987,7 @@ func installDriftHooks(ctx context.Context) {
 		return // this VCS has no hook support
 	}
 	if err != nil {
-		slog.WarnContext(ctx, "server start: could not install VCS drift-notice hook", slog.String("error", err.Error()))
+		slog.With(attr.Component("server start")).WarnContext(ctx, "could not install VCS drift-notice hook", attr.Error(err))
 		return
 	}
 	if len(installed) > 0 {
@@ -1056,6 +1065,11 @@ func serverReload(ctx context.Context, args []string) error {
 // this tree means the reader never opened a review here, and no forge is asked anything at all.
 // Opening a review is the opt-in.
 //
+// A merge that lands while the reader has marked the review as being read is reported even when
+// nothing was said on it, and is counted with the time the reader had been at it; see
+// [changeset.ReadingMark]. A mark stops counting after [changeset.ReadingTTL] and is cleared when
+// its review closes unmerged, so a forgotten mark does not keep the forge being asked.
+//
 // It records rather than notifies. The event is the durable fact; the console's watcher reads the
 // trail for it, exactly as it already does for a share being opened. Normally reached via
 // `magus job run check-review`.
@@ -1078,17 +1092,30 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// in-memory session map is empty by construction: reading it was a gate that could never
 	// open, and the job was a guaranteed no-op until this was fixed.
 	store := changeset.NewStore(m.CacheDir())
-	seen := store.LoadSeenThreads()
+	seen := store.LoadSeenComments()
 	drafts := store.LoadDrafts()
-	if len(seen) == 0 && len(drafts) == 0 {
+	reading := store.LoadReading()
+	if reading.Expired(time.Now()) {
+		// A forgotten tab is not a reader. Ignored from here on, and cleared so the gate below
+		// stops treating it as the reason to ask the forge.
+		dropReading(ctx, store, reading)
+		reading = changeset.ReadingMark{}
+	}
+	if len(seen) == 0 && len(drafts) == 0 && !reading.Active() {
 		// Nothing persisted means nobody has read or drafted anything in a review here, which is
-		// the opt-in: no forge is asked about a workspace whose reviews were never opened.
+		// the opt-in: no forge is asked about a workspace whose reviews were never opened. Saying
+		// "I am reading this now" is opening one.
 		return nil
 	}
 	from := m.ReviewOrigin(ctx)
 	at := bindings.FindReview(ctx, from.Branch, from.Remote)
 	if !at.Open() {
 		return nil
+	}
+	if at.Closed() && reading.Matches(at) {
+		// Closed without merging: nobody will be hurt by a merge that is not coming.
+		dropReading(ctx, store, reading)
+		reading = changeset.ReadingMark{}
 	}
 	// Reachability is READ here, unlike in the views that render what they could get. An
 	// unreachable forge answers with an EMPTY list, and every number below is derived from that
@@ -1098,9 +1125,9 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	// tell them apart.
 	//
 	// The error is a MALFORMED remark and never the unreachable host, so it is dropped rather
-	// than read: the threads that decoded are in hand, and one unreadable record must not blank
+	// than read: the comments that decoded are in hand, and one unreadable record must not blank
 	// the only report this merge will get.
-	threads, reached, _ := bindings.ReviewThreadsReached(ctx, at)
+	comments, reached, _ := bindings.ReviewCommentsReached(ctx, at)
 	if !reached {
 		// Not the job's failure to report: a forge that could not be reached is a fact about the
 		// network, and raising it would mark this job failed on the trail every fifteen minutes
@@ -1110,8 +1137,8 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 
 	// What arrived since the reader last had the conversation on screen. Ids rather than a count,
 	// because a deleted remark plus a new one nets zero and the new one would never be reported.
-	// The watermark is the READER's; see DiffReview.SeenThreads for why it cannot be the job's.
-	if unseen := (types.DiffReview{SeenThreads: seen}).UnseenThreads(threads); len(unseen) > 0 {
+	// The watermark is the READER's; see DiffReview.SeenComments for why it cannot be the job's.
+	if unseen := (types.DiffReview{SeenComments: seen}).UnseenComments(comments); len(unseen) > 0 {
 		trail.Append(ctx, m.CacheDir(), trail.Event{
 			Ts:        time.Now().UnixMilli(),
 			Kind:      trail.KindJob,
@@ -1128,13 +1155,19 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 	if !at.Merged() {
 		return nil
 	}
-	said := len(threads) + len(drafts)
-	if said == 0 {
+	said := len(comments) + len(drafts)
+	// A merge under a reader is worth reporting however little was said: the reader was in the
+	// middle of it. The mark must have been set against THIS review; one left over from a branch
+	// that has since moved to another pull request says nothing about this merge.
+	underReader := reading.Matches(at)
+	if said == 0 && !underReader {
 		// Merged with nothing said on it. There is no conversation to keep, and an event here
 		// would train the reader to ignore the ones that matter. A forge that could not be
 		// reached returned above rather than landing here, so this really is "nothing was said".
 		return nil
 	}
+	// Recorded before the mark is cleared: a crash between the two repeats the event on the next
+	// tick, where clearing first would lose it for good.
 	trail.Append(ctx, m.CacheDir(), trail.Event{
 		Ts:        time.Now().UnixMilli(),
 		Kind:      trail.KindJob,
@@ -1144,5 +1177,49 @@ func serverCheckReview(ctx context.Context, root string, args []string) error {
 		Outcome:   trail.OutcomeOK,
 		Preview:   fmt.Sprintf("%s: %d", at.Repo, said),
 	})
+	if !underReader {
+		return nil
+	}
+	// A failure to clear is an error and not a warning: the next tick would count the merge
+	// again with a duration that grew.
+	cleared, err := store.ClearReadingIf(ctx, reading)
+	if err != nil {
+		return fmt.Errorf("server %s: clear the reading mark: %w", job.NameCheckReview, err)
+	}
+	if !cleared {
+		// The mark changed or vanished since it was read, so another tick or the reader has
+		// already dealt with it, and counting it here would count it twice.
+		return nil
+	}
+	if tel := m.Telemetry(); tel != nil {
+		tel.RecordReviewMergedWhileReading(ctx, reading.Elapsed(time.Now()).Seconds())
+		shutdownOneShotTelemetry(ctx, tel)
+	}
 	return nil
+}
+
+// dropReading clears a mark the job has decided no longer counts, best-effort: the job already
+// ignores the mark it read, so a failed clear costs one more look on the next tick and nothing else.
+func dropReading(ctx context.Context, store *changeset.Store, mark changeset.ReadingMark) {
+	if _, err := store.ClearReadingIf(ctx, mark); err != nil {
+		slog.With(attr.Component("server")).WarnContext(ctx, "could not clear a stale reading mark", attr.Error(err))
+	}
+}
+
+// shutdownOneShotTelemetry flushes the meters of a process that is about to exit. The SDK
+// exports on an interval, so a counter recorded in the last moments of `magus server
+// check-review` run from a shell would otherwise die with the process. A job the server runs for
+// itself arrives with the server's workspace and its shared provider, which outlives the job and
+// must not be shut down here.
+func shutdownOneShotTelemetry(ctx context.Context, tel observability.Provider) {
+	if _, shared := magusFromContext(ctx); shared {
+		return
+	}
+	// Bounded, and detached from ctx so a cancelled job still flushes: an unreachable collector
+	// must not hold the process open.
+	flushCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := tel.Shutdown(flushCtx); err != nil {
+		slog.With(attr.Component("server")).WarnContext(ctx, "could not flush telemetry before exit", attr.Error(err))
+	}
 }

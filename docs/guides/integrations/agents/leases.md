@@ -336,7 +336,7 @@ A job is ended when:
    workspace's own `magus.yaml`: 2h by default, `0` for never.
 
 A job whose liveness cannot be decided stays live: a checkout path on a mount
-that cannot be read is not a path that is gone. The server's own maintenance
+that cannot be read is not a path that is gone. The daemon's own maintenance
 jobs are never ended this way. Ending a row moves its `updated`; nothing else
 magus does for a job does, so a job other agents keep writing near still ages.
 
@@ -756,7 +756,7 @@ examine.
 ## Watch it: the console jobs view
 
 The [console](../../../reference/console.md) draws one Jobs view, because a job
-is ONE KIND OF THING however it was created. The server holds its own
+is ONE KIND OF THING however it was created. The daemon holds its own
 maintenance jobs (graph sync, trail rotation, the review check) and a session
 holds the ones an orchestrator handed out; both list together, and a HOLDER
 column reading `server` or `session` is what separates them. `magus ls jobs`
@@ -770,12 +770,12 @@ detail beside the row. Beyond the jobs magus
 person, which is why a row that has merely gone quiet is a job YOU decide is
 possibly dead.
 
-The service behind it is `magus.job.v1alpha1.JobService`, the server's one
+The service behind it is `magus.job.v1alpha1.JobService`, the daemon's one
 mutating console service, mounted behind the same loopback bind and bearer token
 as everything else. Start it with `magus server start`; see
-[the server](../server.md). `magus server status` prints the mcp and console
-URLs, and says so explicitly when the server predates the tree, because every
-call through an older server is answered by the older build.
+[the daemon](../server.md). `magus server status` prints the mcp and console
+URLs, and says so explicitly when the daemon predates the tree, because every
+call through an older daemon is answered by the older build.
 
 ## The spawn is recorded, never judged
 

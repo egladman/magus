@@ -1,0 +1,89 @@
+/* The Shortcuts app (apps/shortcuts/main.ts, data-app="shortcuts") ships inside console.js, so its
+   sheet lives with the shell. It lists every shortcut grouped by area in one scrolling column. The
+   pane host already supplies height and clips, so this owns only its padding and scroll. It is a size
+   container because a tiled pane is narrower than the window. */
+#console-outlet [data-app="shortcuts"] {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--lg);
+  padding-block: var(--pf-t--global--spacer--lg) var(--pf-t--global--spacer--xl);
+  padding-inline: var(--console-pad);
+  container: shortcuts / inline-size;
+}
+/* The banner and every list share one measure, so they end on the same edge. */
+#console-outlet [data-app="shortcuts"] > * {
+  inline-size: 100%;
+  max-inline-size: 54rem;
+  box-sizing: border-box;
+}
+.console-shell-shortcuts__banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-shortcuts__banner p {
+  margin: 0;
+  flex: 1 1 16rem;
+  font-size: var(--pf-t--global--font--size--body--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-shortcuts__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+/* A group of shortcuts under a label, shared with the sheet. The label is a real h2. */
+.console-shell-shortcuts__group-title {
+  margin: 0 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-shortcuts__list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+/* A row is name and token, then keys, then Run and edit. minmax(0, 1fr) on the text track lets a long
+   token wrap instead of pushing the keys out of the pane. A faint alternating fill keeps the eye on
+   one row across the gap between the name and its keys. */
+.console-shell-shortcuts__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: var(--pf-t--global--spacer--lg);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+.console-shell-shortcuts__row:nth-child(odd) { background: var(--pf-t--global--background--color--secondary--default); }
+.console-shell-shortcuts__text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--pf-t--global--spacer--md); min-inline-size: 0; }
+.console-shell-shortcuts__label { font-size: var(--pf-t--global--font--size--body--default); }
+.console-shell-shortcuts__token {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--console-accent);
+  overflow-wrap: anywhere;
+}
+.console-shell-shortcuts__keys { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--pf-t--global--spacer--xs); }
+.console-shell-shortcuts__plus { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--body--sm); }
+/* Two fixed slots, so Run lands on the same x whether or not the row has an edit button. */
+.console-shell-shortcuts__actions {
+  display: inline-grid;
+  grid-template-columns: auto 2rem;
+  align-items: center;
+  justify-items: end;
+  gap: var(--pf-t--global--spacer--xs);
+}
+/* Secondary to Run without fading: the subtle token at full strength clears contrast on banded rows,
+   where a 0.6 opacity measured about 2.7:1. */
+.console-shell-shortcuts__actions [data-role="edit"] { color: var(--pf-t--global--text--color--subtle); }
+.console-shell-shortcuts__actions [data-role="edit"]:hover,
+.console-shell-shortcuts__actions [data-role="edit"]:focus-visible { color: var(--console-accent); }
+/* A narrow pane reflows each shortcut to two lines: the name, then the keys and buttons. */
+@container shortcuts (max-width: 36rem) {
+  .console-shell-shortcuts__row { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--pf-t--global--spacer--xs); }
+  .console-shell-shortcuts__text { grid-column: 1 / -1; }
+  .console-shell-shortcuts__keys { justify-content: flex-start; }
+}

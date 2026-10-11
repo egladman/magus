@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"context"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/types"
 )
 
@@ -239,7 +241,7 @@ func (s *Store) overlayShards(ctx context.Context, man *manifest) []Shard {
 		sf, err := s.readVerifiedShard(ctx, man, name)
 		if err != nil {
 			// mergeOverlayShard treats an unreadable overlay as absent, and so does this.
-			s.log.DebugContext(ctx, "overlay unreadable", "shard", name, "error", err.Error())
+			s.log.DebugContext(ctx, "overlay unreadable", slog.String("shard", name), attr.Error(err))
 			continue
 		}
 		out = append(out, Shard{Name: name, Nodes: sf.Nodes, Edges: sf.Edges})

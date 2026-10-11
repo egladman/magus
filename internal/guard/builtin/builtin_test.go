@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 80)
+	assert.Len(t, got, 85)
 	assert.Equal(t, map[string]Decision{
 		"read-navigation": Advise,
 		"brief-command":   Advise,
@@ -81,6 +81,45 @@ func TestResolveRefusesMisdeclarations(t *testing.T) {
 			require.ErrorAs(t, err, &de)
 			assert.Equal(t, tc.want, coded{de.Code, de.Msg})
 		})
+	}
+}
+
+// A notice that reports on the workspace's own rules cannot be set to anything: off would
+// hide that a rule judged nothing, deny would refuse a call over it, and advise is the
+// value it already has.
+func TestResolveRefusesAFixedRule(t *testing.T) {
+	for name, what := range map[string]string{
+		"workspace-command-failed": "a command rule",
+		"workspace-spawn-failed":   "a spawn rule",
+		"workspace-write-failed":   "a write rule",
+	} {
+		for _, d := range []Decision{Off, Advise, Deny} {
+			t.Run(name+"/"+string(d), func(t *testing.T) {
+				got, err := Resolve(map[string]Setting{name: {Decision: d}})
+				assert.Nil(t, got)
+				var de *types.DiagnosticError
+				require.ErrorAs(t, err, &de)
+				assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+				assert.Equal(t, `built-in rule "`+name+`" cannot be set; remove it from the declaration`, de.Msg)
+				assert.Equal(t, "it is how a workspace learns that "+what+
+					" of its own judged nothing, so it can be neither silenced nor promoted", types.DiagnosticRationale(err))
+			})
+		}
+	}
+}
+
+func TestFixedRulesAreCompiledRules(t *testing.T) {
+	for name := range fixed {
+		assert.Contains(t, defaults, name)
+		assert.Equal(t, Advise, defaults[name], name)
+		assert.True(t, Fixed(name))
+	}
+	assert.False(t, Fixed("stage-all"))
+
+	got, err := Resolve(nil)
+	require.NoError(t, err)
+	for name := range fixed {
+		assert.Equal(t, Setting{Decision: Advise}, got[name], "an undeclared fixed rule resolves to its default")
 	}
 }
 

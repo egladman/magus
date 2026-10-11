@@ -336,7 +336,7 @@ func TestWorkerCheckOnly(t *testing.T) {
 		{"affected", "./magus affected test", true},
 		{"affected of the check's own target", "./magus affected diagrams-generate", true},
 		{"a pipe whose second stage is not the check", "./magus run diagrams-generate docs | ./magus run lint docs", true},
-		{"the binary rebuild outside magus's own checkout", "./magus run go-build .", true},
+		{"the binary rebuild, which the orchestrator owns", "./magus run go-build .", true},
 	} {
 		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
 		if !tt.deny {

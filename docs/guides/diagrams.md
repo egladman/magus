@@ -112,7 +112,7 @@ them. The site render reads only the page copies, so it never needs the index.
 
 The console's Diagrams page draws the project graph, one project's targets and
 the import graph from `/api/v1/diagrams`, each through a lens of scope, focus
-and depth. The server embeds the same module this site builds with, and boxes
+and depth. The daemon embeds the same module this site builds with, and boxes
 link to their source.
 
 ## Credit

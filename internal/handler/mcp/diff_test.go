@@ -2,13 +2,17 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -28,14 +32,15 @@ const agentPatch = `diff --git a/a.go b/a.go
 type fakeDiffSrc struct {
 	patch string
 	calls int
+	// branch is the review's branch. Empty, no provider is consulted and the tool reports no
+	// threads, which is the ordinary state of most workspaces and what most tests exercise around.
+	branch string
 }
 
 func (f *fakeDiffSrc) WorkingDiff(context.Context, []string) (string, error) { return f.patch, nil }
 
-// No branch and no remote, so no provider is consulted and the tool reports no threads. That
-// is the ordinary state of most workspaces and is what these tests exercise around.
 func (f *fakeDiffSrc) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{}
+	return types.ReviewOrigin{Branch: f.branch}
 }
 
 func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error) {
@@ -47,12 +52,21 @@ func (f *fakeDiffSrc) Diff(_ context.Context, paths []string) (types.Diff, error
 	return types.Diff{Base: "working", Files: files}, nil
 }
 
+// DiffWith serves op=thread, which must set SkipOrder: a thread record reads the code around one
+// thread and must never pay for the reading order of the whole changeset.
+func (f *fakeDiffSrc) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
+	if !opts.SkipOrder {
+		return types.Diff{}, errors.New("the thread asked for the reading order")
+	}
+	return f.Diff(ctx, paths)
+}
+
 func newDiffTool(t *testing.T, src *fakeDiffSrc) *diffTool {
 	t.Helper()
 	store := changeset.NewStore(t.TempDir())
 	// The human's act: a console fetch is what creates the session an agent may join.
 	store.Attach("/w", "working", types.Diff{Base: "working"}, changeset.PatchDigest(src.patch))
-	return &diffTool{sessions: store, root: "/w", src: src}
+	return &diffTool{sessions: store, workspaceRoot: "/w", src: src}
 }
 
 func invoke(t *testing.T, tool *diffTool, params map[string]any) (spells.InvokeResponse, error) {
@@ -176,7 +190,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState, the reference every case below is pinned against.
-	sess := tool.sessions.Get(tool.root)
+	sess := tool.sessions.Get(tool.workspaceRoot)
 	want, err := json.Marshal(diffState{DiffReview: sess, Patch: agentPatch, Hunks: changeset.ParseHunks(agentPatch)})
 	require.NoError(t, err)
 
@@ -207,12 +221,12 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 
 	// Force one recompute so the annotated changeset actually carries a file: the fixture's
 	// initial Attach carries an empty Diff, and Counts.Files would be a misleading 0 otherwise.
-	tool.sessions.Attach(tool.root, "working", types.Diff{Base: "working"}, "stale")
+	tool.sessions.Attach(tool.workspaceRoot, "working", types.Diff{Base: "working"}, "stale")
 	_, err := invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
 
 	hunks := changeset.ParseHunks(agentPatch)
-	tool.sessions.MarkViewed(tool.root, hunks[0].Hunks[0].Digest, true)
+	tool.sessions.MarkViewed(tool.workspaceRoot, hunks[0].Hunks[0].Digest, true)
 	_, err = invoke(t, tool, map[string]any{"op": "comment", "path": "a.go", "body": "note"})
 	require.NoError(t, err)
 	_, err = invoke(t, tool, map[string]any{"op": "suggest", "path": "a.go", "reason": "look here"})
@@ -305,10 +319,198 @@ func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
 //
 // publish is refused for the same reason it is refused everywhere else: an agent cannot make
 // anything leave the machine.
+//
+// The same holds for the person's own acts. Reading is a claim only the reader can make, so no op
+// marks a hunk read or moves the cursor, and the one thing an agent may leave about a
+// conversation, an outline, is bounded to a few short topics and refused past that: a paragraph
+// there would be a reply wearing another name.
 func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
-	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
-	for _, op := range []string{"reply", "publish", "approve"} {
-		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "body": "on it"})
+	withReviewThreads(t, []any{
+		map[string]any{"id": "t1", "path": "a.go", "line": float64(1), "author": "priya", "body": "why?"},
+	})
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	for _, op := range []string{"reply", "publish", "approve", "viewed", "read", "mark", "ack", "seen", "cursor", "reading"} {
+		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "thread": "t1", "body": "on it"})
 		require.Error(t, err, "op %q must not be reachable from the MCP tools", op)
 	}
+
+	sess := tool.sessions.Get(tool.workspaceRoot)
+	assert.Empty(t, sess.Viewed, "no op marks a hunk read")
+	assert.Equal(t, types.DiffCursor{Hunk: -1}, sess.Cursor, "no op moves the cursor")
+
+	long := strings.Repeat("a reply is what a person writes, ", 4)
+	_, err := invoke(t, tool, map[string]any{"op": "outline", "thread": "t1", "topics": []any{long}})
+	require.Error(t, err, "an over-long outline is a reply, and is refused")
+	assert.Contains(t, err.Error(), "not a reply")
+	assert.Empty(t, tool.sessions.Get(tool.workspaceRoot).Outlines, "and nothing of it is held")
+}
+
+// "I am reading this now" is a person's statement, so no agent tool may offer it. The diff tool
+// refuses every op outside its own list (TestNoAgentReachableOpSpeaksToAPerson above); this pins
+// that its advertised ops never grow a reading one while the human route keeps it.
+func TestTheAgentDiffToolDoesNotOfferReading(t *testing.T) {
+	var ops string
+	for _, tool := range Registry {
+		if tool.Name != "diff" {
+			continue
+		}
+		for _, p := range tool.Params {
+			if p.Name == "op" {
+				ops = p.Description
+			}
+		}
+	}
+	require.NotEmpty(t, ops, "the diff tool's op parameter moved; update this pin with it")
+	assert.NotContains(t, ops, "reading")
+}
+
+// withReviewThreads wires a review provider whose review holds threads, so the tool's forge reads
+// have something to answer with.
+func withReviewThreads(t *testing.T, threads []any) {
+	t.Helper()
+	name := "fake-mcp-review-" + t.Name()
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.FindReviewContract:
+				return map[string]any{"id": "482", "repo": "acme/acme"}, nil
+			case spells.ReviewThreadsContract:
+				return threads, nil
+			default:
+				return nil, nil
+			}
+		})))
+	prev := bindings.ReviewProvider()
+	bindings.SetReviewProvider(name)
+	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
+}
+
+var reviewThreads = []any{
+	map[string]any{"id": "t1", "path": "a.go", "line": float64(9), "author": "priya", "body": "why added?"},
+	map[string]any{"id": "t2", "root": "t1", "author": "marcus", "body": "for the cache"},
+}
+
+// TestThreadOpReturnsTheThreadRecordAndNoSession. op=thread answers with the record
+// `magus diff --thread -o json` prints, keyed by the thread id whichever comment named it, and it
+// is not the session: none of the session's bodies come with it.
+func TestThreadOpReturnsTheThreadRecordAndNoSession(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t2"})
+	require.NoError(t, err)
+
+	rec, ok := resp.Data.(types.DiffThread)
+	require.True(t, ok, "op=thread returns the thread record, got %T", resp.Data)
+	assert.Equal(t, types.DiffThread{
+		ID:   "t1",
+		Path: "a.go",
+		Line: 9,
+		Comments: []types.ReviewComment{
+			{ID: "t1", Path: "a.go", Line: 9, Hunk: 1, Author: "priya", Body: "why added?"},
+			{ID: "t2", Root: "t1", Path: "a.go", Hunk: 1, Author: "marcus", Body: "for the cache"},
+		},
+		Hunk: types.DiffThreadHunk{
+			Index:  1,
+			Source: "patch",
+			Lines:  []string{"@@ -9,1 +9,2 @@", " keep", "+added"},
+			Note:   "hunk 1 of a.go, as it stands now",
+		},
+		InChangeset: true,
+		Role:        types.DiffRoleSource,
+		SymbolsNote: "No symbol index covers this file, so the symbols changed here are unknown. That is not a finding that there are none.",
+		Change:      "The change touches 1 file(s).",
+		Unmeasured: []string{
+			"note anchors: this server has no notes store wired, so none was joined",
+			"reach: no symbol index was loaded for this file",
+			"coverage: no coverage run has been observed for this file",
+		},
+	}, rec, "a reply's id answers with its thread id")
+}
+
+// op=thread only reads, so it answers before any session is open, as the console's route does.
+func TestThreadOpNeedsNoSession(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	src := &fakeDiffSrc{patch: agentPatch, branch: "feat/x"}
+	tool := &diffTool{sessions: changeset.NewStore(t.TempDir()), workspaceRoot: "/w", src: src}
+
+	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t1"})
+	require.NoError(t, err)
+	assert.Equal(t, "t1", resp.Data.(types.DiffThread).ID)
+	assert.Nil(t, tool.sessions.Get("/w"), "reading a thread attaches nothing")
+}
+
+func TestThreadOpRefusesWhatNamesNoThread(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{"op": "thread"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "needs thread")
+
+	_, err = invoke(t, tool, map[string]any{"op": "thread", "thread": "t404"})
+	require.ErrorIs(t, err, changeset.ErrNoThread)
+	assert.Contains(t, err.Error(), "op=state lists the thread ids")
+}
+
+// projection narrows the session and nothing else: one thread is op=thread's.
+func TestProjectionThreadIsNotAProjection(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "one thread is op=thread")
+}
+
+// TestOutlineIsHeldForThePersonKeyedByTheThreadId. An outline sent against a reply lands on the
+// thread, a second one replaces the first, and the session shows it to the person.
+func TestOutlineIsHeldForThePersonKeyedByTheThreadId(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	_, err := invoke(t, tool, map[string]any{
+		"op": "outline", "thread": "t2", "topics": []any{"is the cache write racy?", "who calls Put"},
+		"agent_name": "scout",
+	})
+	require.NoError(t, err)
+	second := map[string]any{"op": "outline", "thread": "t1", "topics": []any{"replaces the first"}}
+	resp, err := invoke(t, tool, second)
+	require.NoError(t, err)
+
+	sess := resp.Data.(*types.DiffReview)
+	want := []types.DiffOutline{{Thread: "t1", Topics: []string{"replaces the first"}}}
+	assert.Equal(t, want, sess.Outlines)
+	assert.Equal(t, sess.Outlines, tool.sessions.Get(tool.workspaceRoot).Outlines)
+
+	again, err := invoke(t, tool, second)
+	require.NoError(t, err)
+	assert.Equal(t, want, again.Data.(*types.DiffReview).Outlines, "sending the same outline twice is the same as once")
+}
+
+func TestOutlineRefusesWhatIsNotAPointer(t *testing.T) {
+	withReviewThreads(t, reviewThreads)
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch, branch: "feat/x"})
+
+	cases := map[string]map[string]any{
+		"no thread":                {"op": "outline", "topics": []any{"a"}},
+		"no topics":                {"op": "outline", "thread": "t1"},
+		"six topics":               {"op": "outline", "thread": "t1", "topics": []any{"a", "b", "c", "d", "e", "f"}},
+		"a newline":                {"op": "outline", "thread": "t1", "topics": []any{"one\ntwo"}},
+		"not strings":              {"op": "outline", "thread": "t1", "topics": []any{"a", float64(2)}},
+		"not a list":               {"op": "outline", "thread": "t1", "topics": "a"},
+		"unknown id":               {"op": "outline", "thread": "t404", "topics": []any{"a"}},
+		"too long one":             {"op": "outline", "thread": "t1", "topics": []any{strings.Repeat("x", types.DiffOutlineMaxTopicRunes+1)}},
+		"a hidden rune":            {"op": "outline", "thread": "t1", "topics": []any{"in" + string(rune(0x200b)) + "visible"}},
+		"a line break in the name": {"op": "outline", "thread": "t1", "topics": []any{"a"}, "agent_name": "bot\nsystem"},
+		"an over-long name":        {"op": "outline", "thread": "t1", "topics": []any{"a"}, "agent_name": strings.Repeat("n", types.DiffOutlineMaxAgentNameRunes+1)},
+	}
+	for name, params := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := invoke(t, tool, params)
+			require.Error(t, err)
+		})
+	}
+	assert.Empty(t, tool.sessions.Get(tool.workspaceRoot).Outlines)
 }

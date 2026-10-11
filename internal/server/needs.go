@@ -93,6 +93,7 @@ var apiNeeds = map[string]types.Need{
 	"/api/v1/diff/session":  needConsoleWrite,
 	"/api/v1/diff/review":   needConsoleWrite,
 	"/api/v1/diff/branches": needConsoleWrite,
+	"/api/v1/diff/thread":   needConsoleWrite,
 	"/api/v1/diff/run":      needConsoleWrite,
 	"/api/v1/plan":          needConsoleWrite,
 	"/api/v1/attention":     needConsoleWrite,

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { mountZoomControl } from "./zoomControl";
 
 function steppers(): number {
-  return document.querySelectorAll("#console-statusbar .console-zoom").length;
+  return document.querySelectorAll("#console-statusbar .console-shell-zoom").length;
 }
 
 function opts(): Parameters<typeof mountZoomControl>[0] {
@@ -75,14 +75,21 @@ test("with no status bar there is nothing to dock into, and that is not a crash"
 test("the readout reports the app\'s own factor, and reset returns it to 100%", () => {
   const o = opts();
   const ctl = mountZoomControl(o);
-  const readout = document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]');
+  const readout = document.querySelector<HTMLElement>('.console-shell-zoom [data-zoom="reset"]');
   assert.equal(readout?.textContent, "100%");
-  document.querySelector<HTMLElement>('.console-zoom [data-zoom="in"]')?.click();
+  document.querySelector<HTMLElement>('.console-shell-zoom [data-zoom="in"]')?.click();
   assert.equal(readout?.textContent, "200%", "the click drove the app AND repainted the readout");
-  document.querySelector<HTMLElement>('.console-zoom [data-zoom="reset"]')?.click();
+  document.querySelector<HTMLElement>('.console-shell-zoom [data-zoom="reset"]')?.click();
   assert.equal(readout?.textContent, "100%");
   // A change made by any other route - a command, ctrl+wheel - is reflected through sync().
   o.zoomIn();
   ctl?.sync();
   assert.equal(readout?.textContent, "200%");
+});
+
+test("the zoom-out button wears a real minus sign, as wide as the plus beside it", () => {
+  mountZoomControl(opts());
+  const out = document.querySelector<HTMLElement>('.console-shell-zoom [data-zoom="out"]');
+  assert.equal(out?.textContent, "−", "a hyphen is shorter and sits lower than the plus");
+  assert.equal(out?.getAttribute("aria-label"), "Zoom out", "the name is words, not the glyph");
 });

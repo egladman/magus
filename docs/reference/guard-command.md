@@ -102,6 +102,39 @@ and the stricter answer stands, as for
 [`magus\guard.spawn`](guard-spawn.md#tighten-live-loosen-on-approval). An agent's edit
 can tighten the policy that grades it and cannot loosen it.
 
+## When the magus judging the call cannot load the tree
+
+Failing open assumes the rule could have run. When the magus answering the hook cannot
+load the workspace at all, no rule in the magusfile was asked, so a pass from the
+built-ins says little. If it is older than the tree (the magusfile calls a name that
+build predates) or the checkout holds no `./magus`, and the magusfile visibly registers
+a guard rule, the guard denies every call that changes state: file edits, subagent
+spawns, pushes, the magus verbs that write shared state, shell commands it cannot show
+are read-only, and the magus MCP tools that write (`client`, and `diff` with an `op`
+other than `state` or `thread`). Reads still run, as do `git status` and the fix itself,
+so the session can repair what denied it. A read-only scout's lease may still run
+`magus job exec`, `magus job exit` and `magus buzz --record`. The deny is filed under the
+`stale-binary` rule: it prints the cause and the one likeliest command, and the fallbacks
+sit behind its `full verdict:` ref.
+
+The remedy depends on who is asking:
+
+- The main session or a person rebuilds with `./magus run go-build .`. Where that
+  binary cannot load the tree either, or the checkout holds none, they bootstrap with
+  the command the full verdict names.
+- A worker holding a lease never builds a binary. There is one per base: the main
+  session builds it in the root and places a copy in the worker's checkout with
+  `hack/dev/bootstrap-worktree.buzz`, so the deny tells the worker to ask for that.
+
+A failure that is not a stale binary, such as a typo in a magusfile, still denies only the
+calls a previously loaded policy gated, under the `policy-unloaded` rule, and still names
+the failing line.
+
+Two cases still fail open. A magus too old to run `magus shell` at all never produces a
+verdict, so the host's hook reports its own error and the call goes ahead; `magus doctor`
+and `magus agent harness verify` report that before a session starts. And no magus on
+PATH leaves nothing to answer.
+
 ## What it costs
 
 The guard reads its rules from the root magusfile alone, not the whole workspace, and

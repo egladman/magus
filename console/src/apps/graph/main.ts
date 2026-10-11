@@ -116,6 +116,13 @@ import { wireToolbarOverflow } from "../../desktop/toolbar";
 import { persisted } from "../../lib/persist";
 import { isServing } from "../../lib/workspace";
 import { attachHelpPopover } from "../../ui/help-popover";
+import {
+  type StatusAction,
+  type StatusLevel,
+  setActive,
+  setSelected,
+  showStatus,
+} from "./notice.js";
 import { signal } from "../../desktop/view";
 import { publishStatus } from "../../desktop/status";
 import { SERVER_GUIDE_URL } from "../../desktop/connectPrompt";
@@ -179,6 +186,7 @@ const RELATIONS = [
   "contains",
   "imports",
   "calls",
+  "implements",
   "uses",
   "references",
   "documents",
@@ -507,7 +515,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       setStatus("Decoding local graph...");
       return { data: await decodeFragment(params.data), source: "local" };
     } catch (e) {
-      setStatus("Could not decode the graph in the link (" + errMessage(e) + ").", true);
+      setStatus("Could not decode the graph in the link (" + errMessage(e) + ").", "danger");
     }
   }
   // #src= fetches the JSON from an address: a loopback server (`magus graph export --open
@@ -533,7 +541,10 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       else if (localhostHost)
         hint =
           " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph export --open --serve` or edit the URL to use 127.0.0.1.";
-      setStatus("Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint, true);
+      setStatus(
+        "Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint,
+        "danger",
+      );
     }
   }
   // Fetch the committed demo graph for the demo button (#demo) AND for any content deep link
@@ -562,7 +573,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return { data: await r.json(), source: "demo" };
     } catch (e) {
-      setStatus("Could not load the demo graph (" + errMessage(e) + ").", true);
+      setStatus("Could not load the demo graph (" + errMessage(e) + ").", "danger");
     }
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
@@ -571,23 +582,9 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
-// The notice is a PF Alert, so the text goes in the title slot and severity is a PF modifier -
-// an error then reads as an error everywhere in the console. Empty hides the whole notice.
-function setStatus(msg: string, isError?: boolean, action?: { label: string; run: () => void }) {
-  if (!statusEl) return;
-  const text = el("graph-status-text");
-  if (text) text.textContent = msg;
-  statusEl.classList.toggle("pf-m-danger", !!isError);
-  statusEl.classList.toggle("pf-m-info", !isError);
-  statusEl.hidden = !msg;
-  // Every write replaces the action with its own or none, so a control never outlives the message
-  // it belongs to.
-  const button = el("graph-status-action") as HTMLButtonElement | null;
-  if (button) {
-    button.textContent = action?.label ?? "";
-    button.onclick = action ? () => action.run() : null;
-    button.hidden = !action;
-  }
+// The app's one notice (see notice.ts for what each level does).
+function setStatus(msg: string, level: StatusLevel = "info", action?: StatusAction) {
+  if (statusEl) showStatus(statusEl, msg, level, action);
 }
 
 // ---- graph prep ------------------------------------------------------------
@@ -765,7 +762,7 @@ function applyLayeredMode() {
   if (visNodes.length > LAYERED_MAX) {
     setStatus(
       "layered layout is capped at 500 nodes: narrow with a query or the local graph",
-      true,
+      "warning",
     );
     return false;
   }
@@ -794,7 +791,10 @@ function applyLayeredMode() {
 function applyWavesMode() {
   const visNodes = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   if (visNodes.length > LAYERED_MAX) {
-    setStatus("waves layout is capped at 500 nodes: narrow with a query or the local graph", true);
+    setStatus(
+      "waves layout is capped at 500 nodes: narrow with a query or the local graph",
+      "warning",
+    );
     wavesMeta = null;
     return false;
   }
@@ -973,7 +973,7 @@ function switchLayout(mode: LayoutMode) {
     // Refuse without touching layoutMode (stay on whatever was showing); just
     // re-sync the toggle so a stale disabled/title doesn't linger.
     if (layoutBlockedReason("radial")) {
-      setStatus("select a node first (click one), then Radial", true);
+      setStatus("select a node first (click one), then Radial", "warning");
       syncLayoutToggle();
       return;
     }
@@ -1006,7 +1006,7 @@ function switchLayout(mode: LayoutMode) {
       layoutMode = "force";
       wavesMeta = null;
       syncLayoutToggle();
-      setStatus("too many nodes to lay out as " + mode + "; showing Force instead", true);
+      setStatus("too many nodes to lay out as " + mode + "; showing Force instead", "warning");
       // Clear fixed positions so the sim can move nodes, and any routes from
       // the dag pass so force mode never draws a stale curve.
       unpinAllNodes();
@@ -1987,6 +1987,10 @@ function nodeRefHtml(id: string) {
   );
 }
 
+// How many neighbours a relation lists before "+N more", and the most it will ever list.
+const CARD_REFS_SHOWN = 40;
+const CARD_REFS_MAX = 500;
+
 function relSectionHtml(title: string, rows: IncidentRow[]) {
   if (!rows.length) return "";
   const byRel = new Map<string, IncidentRow[]>();
@@ -2009,18 +2013,31 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
       ' <span class="console-graph-card__relcount">(' +
       items.length +
       ")</span></span> ";
-    html += items
-      .slice(0, 40)
-      .map(
-        (r) =>
-          nodeRefHtml(r.other) +
-          (r.transport
-            ? ' <span class="console-graph-card__muted">(' + escapeHtml(r.transport) + ")</span>"
-            : ""),
-      )
-      .join(" ");
-    if (items.length > 40)
-      html += ' <span class="console-graph-card__muted">+' + (items.length - 40) + " more</span>";
+    const refHtml = (r: IncidentRow) =>
+      nodeRefHtml(r.other) +
+      (r.transport
+        ? ' <span class="console-graph-card__muted">(' + escapeHtml(r.transport) + ")</span>"
+        : "");
+    html += items.slice(0, CARD_REFS_SHOWN).map(refHtml).join(" ");
+    // The rest wait behind a button instead of being dropped: a hub has hundreds of neighbours and a
+    // bare "+N more" gave the reader nothing to do about it. Past CARD_REFS_MAX the list stops, and
+    // the card says how many it left out.
+    const rest = items.slice(CARD_REFS_SHOWN, CARD_REFS_MAX);
+    if (rest.length) {
+      html +=
+        ' <span class="console-graph-card__morerefs" hidden>' +
+        rest.map(refHtml).join(" ") +
+        '</span> <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline console-graph-card__more" data-count="' +
+        rest.length +
+        '"><span class="pf-v6-c-button__text">+' +
+        rest.length +
+        " more</span></button>";
+    }
+    if (items.length > CARD_REFS_MAX)
+      html +=
+        ' <span class="console-graph-card__muted">' +
+        (items.length - CARD_REFS_MAX) +
+        " more not listed; narrow with a query</span>";
     html += "</div>";
   }
   return html + "</dd>";
@@ -2066,18 +2083,17 @@ function renderOverview() {
     ["Color", color],
     ["Scope", scope],
   ];
-  let html = '<p class="console-graph-card__section">What you are looking at</p>';
+  let html = '<h2 class="console-graph-card__section">What you are looking at</h2>';
   html += "<dl>"; // #explain-card dl already carries the two-column grid
   for (const [k, v] of rows) {
     html += "<dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(v) + "</dd>";
   }
   html += "</dl>";
-  // No counts in this sentence. The chips are conditional - cycles hides off the target graph,
-  // critical needs timing - so "the next three" was wrong the moment any of them was hidden.
+  // Names the Ask button, not a count of what it offers: which views it lists depends on the loaded
+  // graph (cycles needs the target graph, critical needs timing).
   html +=
-    '<p class="console-graph-card__hint">Click a node for its details. The questions on the left' +
-    " run what the CLI runs: the first group asks about one node you pick, the second asks about" +
-    " the whole graph.</p>";
+    '<p class="console-graph-card__hint">Click a node for its details, or choose Ask above the graph' +
+    " to build a filter or run a view such as what rebuilds when a node changes.</p>";
   cardEl.innerHTML = html;
   cardEl.hidden = false;
 }
@@ -2120,6 +2136,8 @@ function renderCard(id: string | null) {
   // selecting a node with the builder open still expects the tab to follow. Driven from here rather
   // than from selectNode's several assignment sites: the card is the one place a selection renders.
   docTitle.set(n?.label ?? null);
+  const announce = el("explain-status");
+  if (announce) announce.textContent = n ? "Showing details for " + n.label : "";
   // The builder owns the column while it is open, so a selection changes what is SELECTED without
   // evicting what the reader deliberately opened. Closing it repaints whatever is current.
   if (detailMode === "builder") return;
@@ -2129,10 +2147,10 @@ function renderCard(id: string | null) {
   }
   const { out, inc } = incidentEdges(n.id);
   let html = "";
-  html += '<p class="console-graph-card__section">Node details</p>';
+  html += '<h2 class="console-graph-card__section">Node details</h2>';
   html += '<header class="console-graph-card__head">';
   html += '<span class="console-graph-kinddot" data-kind="' + escapeHtml(n.kind) + '"></span>';
-  html += "<h2>" + escapeHtml(n.label) + "</h2>";
+  html += "<h3>" + escapeHtml(n.label) + "</h3>";
   html += '<span class="console-graph-card__kindtag">' + escapeHtml(nodeClass(n)) + "</span>";
   html += "</header>";
   html += "<dl>";
@@ -2179,6 +2197,17 @@ function renderCard(id: string | null) {
   cardEl
     .querySelectorAll<HTMLElement>(".console-graph-card__ref")
     .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
+  cardEl.querySelectorAll<HTMLElement>(".console-graph-card__more").forEach((b) =>
+    b.addEventListener("click", () => {
+      const more = b.previousElementSibling;
+      if (more instanceof HTMLElement) {
+        more.hidden = false;
+        // The button the reader pressed is about to leave; keep the keyboard where the list grew.
+        more.querySelector<HTMLElement>(".console-graph-card__ref")?.focus();
+      }
+      b.remove();
+    }),
+  );
   const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
   if (notesCardBtn) notesCardBtn.addEventListener("click", () => openApp({ pageId: "notes" }));
 }
@@ -2666,7 +2695,7 @@ function clearFocusOrQuery() {
     viewNodeTo = null;
     document
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-      .forEach((b) => b.removeAttribute("data-active"));
+      .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
     setFlowEdges(null);
     flowOn = false;
@@ -3096,7 +3125,10 @@ async function refineQueryFromServer(q: string, gen: number) {
     if (offCanvas > 0) notes.push(offCanvas + " more matched but are not in this graph");
     if (verdict === "unknown") notes.push("coverage unknown (" + (res.answer?.reason ?? "") + ")");
     if (notes.length)
-      setStatus(matchSet.size + " shown; " + notes.join("; "), verdict === "unknown");
+      setStatus(
+        matchSet.size + " shown; " + notes.join("; "),
+        verdict === "unknown" ? "warning" : "info",
+      );
     setListExpanded(true);
     renderList();
     syncLayoutToggle();
@@ -3141,7 +3173,7 @@ function applyQuery(q: string) {
     viewNodeTo = null;
     document
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-      .forEach((b) => b.removeAttribute("data-active"));
+      .forEach((b) => setActive(b, false));
     renderViewCommand(null, null, null);
     setFlowEdges(null);
     flowOn = false;
@@ -3210,16 +3242,10 @@ function applyQuery(q: string) {
 // count toggle, reveals it.
 let listExpanded = false;
 function setListExpanded(v: boolean) {
-  const changed = listExpanded !== v;
   listExpanded = v;
   listEl.hidden = !v;
   const btn = el("list-toggle");
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
-  // The toggle's own label reads "Show/Hide the N matching nodes" under a scope, so it has to be
-  // repainted when the disclosure flips. Only when it actually flipped: applyQuery expands and
-  // then renders on its own, so an unguarded repaint here would render the list twice for every
-  // keystroke that lands on an already-expanded list.
-  if (changed && graph) renderList();
 }
 
 // Cached per graph like adjacency(): the hubs ranking reads it once per node.
@@ -3269,14 +3295,11 @@ function renderList() {
   }
   const shown = pool.slice(0, 300);
   // The scope bar carries "N of TOTAL" whenever anything is applied, so this row drops the number
-  // then and states its own job instead - two counts within a few hundred pixels read as a
-  // disagreement waiting to happen.
+  // then and names the list instead - two counts within a few hundred pixels read as a
+  // disagreement waiting to happen. The wording never flips with the disclosure: the button already
+  // announces expanded or collapsed, and a name that changes with it reads the state twice.
   countEl.textContent = matchSet
-    ? (listExpanded ? "Hide" : "Show") +
-      " the " +
-      matchSet.size +
-      " matching node" +
-      (matchSet.size === 1 ? "" : "s")
+    ? matchSet.size + " matching node" + (matchSet.size === 1 ? "" : "s")
     : graph.nodes.length +
       " node" +
       (graph.nodes.length === 1 ? "" : "s") +
@@ -3305,8 +3328,9 @@ function renderList() {
         ' title="' +
         escapeHtml(nodeClass(n) + " - " + n.label) +
         '"' +
-        (n.id === selected ? ' aria-current="true"' : "") +
-        ">" +
+        ' aria-pressed="' +
+        (n.id === selected ? "true" : "false") +
+        '">' +
         '<span class="console-graph-kinddot" data-kind="' +
         escapeHtml(n.kind) +
         '"></span>' +
@@ -3336,8 +3360,7 @@ function renderList() {
 
 function syncListSelection() {
   listEl.querySelectorAll<HTMLElement>(".console-graph-nodelist__pill").forEach((b) => {
-    if (b.dataset.id === selected) b.setAttribute("aria-current", "true");
-    else b.removeAttribute("aria-current");
+    b.setAttribute("aria-pressed", b.dataset.id === selected ? "true" : "false");
   });
 }
 
@@ -3381,20 +3404,28 @@ function renderGroupLegend(preset: string) {
     }
   }
   setLegendTitle(GROUP_LEGEND_TITLES[preset] ?? "Color groups");
-  legendEl.innerHTML = groups
-    .map((g, i) =>
-      counts[i] === 0
-        ? ""
-        : '<li><span class="console-graph-legend__row" role="presentation">' +
-          '<span class="console-graph-kinddot" style="background:' +
-          escapeHtml(g.color) +
-          '"></span>' +
-          escapeHtml(groupLabel(g.query)) +
-          ' <span class="console-graph-legend__count">' +
-          counts[i] +
-          "</span></span></li>",
-    )
-    .join("");
+  legendEl.replaceChildren();
+  groups.forEach((g, i) => {
+    if (counts[i] === 0) return;
+    const row = document.createElement("span");
+    row.className = "console-graph-legend__row";
+    // The hue is the reader's pick or a preset's, so it rides a custom property set through the
+    // CSSOM (data, not authored style) and graph.css paints the dot from it.
+    const dot = document.createElement("span");
+    dot.className = "console-graph-kinddot";
+    dot.style.setProperty("--console-graph-swatch", g.color);
+    const name = document.createElement("span");
+    name.className = "console-graph-legend__name";
+    name.textContent = groupLabel(g.query);
+    name.title = name.textContent;
+    const count = document.createElement("span");
+    count.className = "console-graph-legend__count";
+    count.textContent = String(counts[i]);
+    row.append(dot, name, count);
+    const li = document.createElement("li");
+    li.append(row);
+    legendEl.append(li);
+  });
 }
 
 // The legend heading for each preset: what one swatch MEANS, in the reader's terms.
@@ -3430,7 +3461,7 @@ function renderLegend() {
   legendEl.innerHTML = legendKinds(counts)
     .map(
       (k) =>
-        '<li><button type="button" class="console-graph-legend__row" data-kind="' +
+        '<li><button type="button" class="console-graph-legend__row" aria-pressed="false" data-kind="' +
         escapeHtml(k) +
         '" title="Filter to kind:' +
         escapeHtml(k) +
@@ -3438,8 +3469,9 @@ function renderLegend() {
         '<span class="console-graph-kinddot" data-kind="' +
         escapeHtml(k) +
         '"></span>' +
+        '<span class="console-graph-legend__name">' +
         escapeHtml(k) +
-        ' <span class="console-graph-legend__count">' +
+        '</span> <span class="console-graph-legend__count">' +
         counts.get(k) +
         "</span></button></li>",
     )
@@ -3453,6 +3485,16 @@ function renderLegend() {
       applyQuery(next);
     }),
   );
+  syncLegendPressed();
+}
+
+// syncLegendPressed marks the kind row whose filter is the query in force, in the announced state
+// and in the drawn one (a check ahead of the name, in graph.css), so the active filter is not
+// carried by the swatch's hue alone.
+function syncLegendPressed(): void {
+  legendEl?.querySelectorAll<HTMLElement>(".console-graph-legend__row[data-kind]").forEach((b) => {
+    b.setAttribute("aria-pressed", query === "kind:" + b.dataset.kind ? "true" : "false");
+  });
 }
 
 // ---- scope bar ---------------------------------------------------------------
@@ -3555,6 +3597,7 @@ function clearFocus() {
 // typing, which has not been applied yet - shown immediately so the field answers every
 // keystroke instead of waiting out the debounce.
 function renderScope(previewCount?: number) {
+  syncLegendPressed(); // the legend's active kind is part of the applied state this bar reflects
   const bar = el("scope-bar");
   const pillsEl = el("scope-pills");
   const countEl = el("scope-count");
@@ -3566,20 +3609,40 @@ function renderScope(previewCount?: number) {
     return;
   }
   bar.hidden = false;
-  pillsEl.replaceChildren();
-  for (const p of pills) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "console-graph-scope__pill";
-    b.textContent = p.label;
-    b.title = p.title;
-    b.addEventListener("click", p.clear);
-    pillsEl.append(b);
-  }
+  pillsEl.replaceChildren(...pills.map(scopeLabel));
   const total = graph?.nodes.length ?? 0;
   const shown = typing ? previewCount : (matchSet?.size ?? total);
-  countEl.textContent =
-    shown + " of " + total + (typing ? " would match" : shown === total ? " shown" : " shown");
+  countEl.textContent = shown + " of " + total + (typing ? " would match" : " shown");
+}
+
+// scopeLabel is one applied emphasis as a PF Label: the term is its text, and a real close button,
+// named for the term it removes, is the only thing that clears it. The whole pill used to be the
+// button, named only by the term and closed by a CSS "x" nobody could hear.
+function scopeLabel(p: ScopePill): HTMLElement {
+  const label = document.createElement("span");
+  label.className = "pf-v6-c-label pf-m-compact pf-m-outline";
+  const content = document.createElement("span");
+  content.className = "pf-v6-c-label__content";
+  const text = document.createElement("span");
+  text.className = "pf-v6-c-label__text";
+  text.textContent = p.label;
+  content.append(text);
+  const actions = document.createElement("span");
+  actions.className = "pf-v6-c-label__actions";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "pf-v6-c-button pf-m-plain pf-m-no-padding";
+  close.setAttribute("aria-label", "Remove " + p.label);
+  close.title = p.title;
+  const icon = document.createElement("span");
+  icon.className = "pf-v6-c-button__icon";
+  icon.innerHTML =
+    '<svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+  close.append(icon);
+  close.addEventListener("click", p.clear);
+  actions.append(close);
+  label.append(content, actions);
+  return label;
 }
 
 // Reflect selection, query, layout mode, active view, and color preset in the
@@ -3731,10 +3794,10 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   projectionSet = null;
   document
     .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-    .forEach((b) => b.removeAttribute("data-active"));
+    .forEach((b) => setActive(b, false));
   document
     .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
-    .forEach((b) => b.removeAttribute("data-active"));
+    .forEach((b) => setActive(b, false));
   renderViewCommand(null, null, null);
   // Same scale-guard decision boot() makes, through the same function: a second collapse rule
   // here would make one file read differently depending on how it was opened. A dropped file
@@ -3803,7 +3866,7 @@ function syncLayoutToggle() {
     const mode = btn.dataset.layout;
     if (!mode || !isLayoutMode(mode)) return;
     const current = mode === layoutMode;
-    btn.classList.toggle("pf-m-selected", current);
+    setSelected(btn, current);
     const reason = layoutBlockedReason(mode);
     // Never disable the mode that is showing. layoutBlockedReason reads matchSet.size, so a
     // filter widening under a running Layered/Waves layout can block the very mode drawing the
@@ -3854,7 +3917,7 @@ function syncGraphKindToggle() {
   document.querySelectorAll<HTMLButtonElement>("[data-graphkind]").forEach((btn) => {
     const kind = btn.dataset.graphkind;
     if (kind !== "targets" && kind !== "knowledge") return;
-    btn.classList.toggle("pf-m-selected", kind === graphFlavor);
+    setSelected(btn, kind === graphFlavor);
     btn.disabled = !liveHost;
     btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
   });
@@ -3878,7 +3941,7 @@ async function switchGraphKind(kind: "targets" | "knowledge") {
   if (!liveHost) {
     setStatus(
       "To switch between the target and knowledge graphs, open a live workspace: magus graph export --open --follow",
-      true,
+      "warning",
     );
     syncGraphKindToggle();
     return;
@@ -3956,7 +4019,7 @@ async function readGraphFile(file: File | undefined) {
       "Loaded " + file.name + " (local file; it stays on your machine).",
     );
   } catch (e) {
-    setStatus("Could not read " + file.name + ": " + errMessage(e), true);
+    setStatus("Could not read " + file.name + ": " + errMessage(e), "danger");
   }
 }
 
@@ -4203,7 +4266,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
 
   // Sync button active state and show the clear button.
   document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
-    b.toggleAttribute("data-active", b.dataset.view === name);
+    setActive(b, b.dataset.view === name);
   });
   const cvb = el("clear-view-btn");
   if (cvb) cvb.hidden = false;
@@ -4346,7 +4409,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
       // Live mode: affected set is provided by caller or stored in window._liveAffectedIds.
       const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
       if (!aff || !aff.size) {
-        setStatus("no affected nodes in current diff", true);
+        setStatus("no affected nodes in current diff", "info");
         matchSet = null;
       } else {
         matchSet = aff;
@@ -4380,7 +4443,7 @@ function clearView() {
   viewNodeTo = null;
   document
     .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-    .forEach((b) => b.removeAttribute("data-active"));
+    .forEach((b) => setActive(b, false));
   const cvb = el("clear-view-btn");
   if (cvb) cvb.hidden = true;
   renderViewCommand(null, null, null);
@@ -4399,7 +4462,7 @@ function clearView() {
 }
 
 // preferredModeForView says which display mode a question chip should switch
-// to before applying its view (plan section 14, Decision 2). Two orthogonal
+// to before applying its view. Two orthogonal
 // axes: display mode (arrangement) and question view (emphasis/filter).
 // Questions are the front door - clicking one may auto-switch the mode - but
 // the mode control stays a manual override, so a question never fights a mode
@@ -4450,7 +4513,7 @@ function askQuestion(view: string) {
   // a beat over no data. Answering then writes a wrong answer that nothing recomputes once the
   // nodes land - "Nothing has a dependent" over a graph with six thousand edges.
   if (!graph?.nodes.length) {
-    setStatus("No graph loaded yet.", true);
+    setStatus("No graph loaded yet.", "warning");
     return;
   }
   applyPreferredMode(view);
@@ -4467,7 +4530,7 @@ function askQuestion(view: string) {
     flowOn = false;
     document
       .querySelectorAll<HTMLElement>(".console-graph-views__chip")
-      .forEach((x) => x.toggleAttribute("data-active", x.dataset.view === view));
+      .forEach((x) => setActive(x, x.dataset.view === view));
     renderViewCommand(view, null, null);
     if (view === "blast") setStatus("Click a node to see what breaks if you change it.");
     else setStatus("Click the first node for the path (trace view).");
@@ -4483,7 +4546,7 @@ function askQuestion(view: string) {
         affectedFallback
           ? "affected view: the workspace could not compute a diff: " + affectedFallback
           : "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
-        true,
+        "warning",
       );
       return;
     }
@@ -4629,18 +4692,28 @@ function renderViewCommand(name: string | null, nodeId?: string | null, nodeTo?:
     '<span class="console-graph-views__cmdargs">' +
     escapeHtml(args) +
     "</span>" +
-    '<button type="button" class="console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">&#10697;</button>';
+    '<button type="button" class="pf-v6-c-button pf-m-plain console-graph-views__copy" title="Copy this command to the clipboard" aria-label="Copy command">' +
+    '<span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span></button>';
   must(wrap.querySelector<HTMLElement>(".console-graph-views__copy")).addEventListener(
     "click",
-    () => {
-      navigator.clipboard
-        .writeText(cmd)
-        .then(() => {
-          setStatus("Copied: " + cmd);
-        })
-        .catch((err) => setStatus("Could not copy: " + errMessage(err), true));
-    },
+    () => copyCommand(cmd),
   );
+}
+
+// copyCommand puts a shell command on the clipboard and says so, or says why not: writeText rejects
+// when the document is unfocused or the permission is denied, and the reader needs to hear which.
+function copyCommand(cmd: string): void {
+  if (!navigator.clipboard) {
+    setStatus(
+      "Could not copy: the clipboard is not available here. Select the command instead.",
+      "danger",
+    );
+    return;
+  }
+  navigator.clipboard
+    .writeText(cmd)
+    .then(() => setStatus("Copied: " + cmd))
+    .catch((err) => setStatus("Could not copy: " + errMessage(err), "danger"));
 }
 
 // Update the search-box copy button with the full command to copy.
@@ -4655,8 +4728,8 @@ function updateSearchCopyBtn() {
 
 // ---- empty-state suggestions (chips) ----------------------------------------
 // After a graph loads, compute up to 3 quick facts and show clickable suggestion
-// chips. Targets graphs lead with the build-order suggestion (the discoverability
-// phase's "wow" - see the plan's ORDERING note); the rest fill remaining slots.
+// chips. Targets graphs lead with the build-order suggestion, which only magus can draw; the rest
+// fill the remaining slots.
 function renderSuggestions() {
   const wrap = el("suggestions");
   if (!wrap || !graph) {
@@ -4917,7 +4990,7 @@ function applyPreset(presetId: string) {
     activePreset = null;
     document
       .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
-      .forEach((b) => b.removeAttribute("data-active"));
+      .forEach((b) => setActive(b, false));
     renderLegend(); // back to the kind palette, which is what the canvas shows again
     setStatus(""); // the legend has already retitled back to "Node kinds"; nothing to add
     syncOverview();
@@ -4928,7 +5001,7 @@ function applyPreset(presetId: string) {
   activePreset = presetId;
   document
     .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
-    .forEach((b) => b.toggleAttribute("data-active", b.dataset.preset === presetId));
+    .forEach((b) => setActive(b, b.dataset.preset === presetId));
   if (!graph.relIndex) graph.relIndex = relationIndex();
   const newGroups = preset.groups();
   for (const g of newGroups) {
@@ -5285,14 +5358,14 @@ function showStaleNotice() {
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
   staleNotice = "Showing this workspace as of " + hhmm + "; the server stopped answering.";
-  setStatus(staleNotice, false, { label: "Reconnect", run: liveConnect });
+  setStatus(staleNotice, "warning", { label: "Reconnect", run: liveConnect });
 }
 
 function clearStaleNotice() {
   const mine = staleNotice;
   if (!mine) return;
   staleNotice = null;
-  const showing = el("graph-status")?.textContent ?? "";
+  const showing = el("graph-status")?.dataset.message ?? "";
   if (showing !== mine) return; // superseded by a real answer; leave that one alone
   setStatus("");
 }
@@ -5583,7 +5656,7 @@ export async function activate() {
         const f = await fileHandle.getFile();
         readGraphFile(f);
       } catch (e) {
-        setStatus("Could not open the launched file: " + errMessage(e), true);
+        setStatus("Could not open the launched file: " + errMessage(e), "danger");
       }
     });
   }
@@ -5663,7 +5736,7 @@ function bootWireEvents() {
   if (searchCopyBtn) {
     searchCopyBtn.addEventListener("click", () => {
       const cmd = searchCopyBtn.dataset.cmd || "magus query";
-      navigator.clipboard.writeText(cmd).then(() => setStatus("Copied: " + cmd));
+      copyCommand(cmd);
     });
   }
 
@@ -5697,7 +5770,7 @@ function bootWireEvents() {
   }
 
   // Wire view buttons (.console-graph-views__chip). Every explicit click routes through
-  // askQuestion (Decision 2: a question may auto-switch the display mode, guarded by
+  // askQuestion (a question may auto-switch the display mode, guarded by
   // layoutBlockedReason) - never the [data-layout] toggle, which switches mode alone.
   //
   // Must stay delegated: the Reference drawer CLONES this app's [data-ref-section] blocks,
@@ -5747,6 +5820,8 @@ function bootWireEvents() {
 
   // Color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
+    // A deep link may have applied a preset before this ran; only fill in the ones nothing has set.
+    if (!b.hasAttribute("aria-pressed")) setActive(b, false);
     b.addEventListener("click", () => {
       const preset = b.dataset.preset;
       if (preset) applyPreset(preset);
@@ -5757,10 +5832,21 @@ function bootWireEvents() {
   // it is the conventional global dismiss and has to fire while the search box has focus, which
   // the keybinding layer deliberately suppresses (isTyping). The focus-depth keys DID live here
   // too; they are commands now, so they reach the Shortcuts view and can be rebound.
+  // Escape cleared the query whenever it was pressed anywhere in the console - closing a menu in
+  // another pane, say - and after the builder or a help popover had already used the key to close
+  // itself. It now acts only when this explorer is showing and the key came from inside it or from
+  // nothing in particular (a click on the canvas leaves focus on the body), and not when something
+  // else already handled it.
+  const appRoot = document.querySelector(".console-graph-app");
   document.addEventListener(
     "keydown",
     (e) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented || !appVisible) return;
+      // An open help popover closes itself on this same key and is not told apart by its listener.
+      if (document.querySelector(".console-help-popover")) return;
+      const from = e.target instanceof Node ? e.target : null;
+      const loose = from === null || from === document.body || from === document.documentElement;
+      if (!loose && !appRoot?.contains(from)) return;
       clearFocusOrQuery();
       if (searchEl.blur) searchEl.blur();
     },
@@ -5836,9 +5922,11 @@ function bootWireEvents() {
 
   // Fullscreen toggle: expand the whole explorer panel (like the playground).
   // Hidden if the browser lacks the Fullscreen API rather than showing a dead
-  // button; label + aria-pressed follow fullscreenchange so Esc stays in sync.
+  // button; the label follows fullscreenchange so Esc stays in sync.
   const fsBtn = el("fullscreen-btn");
-  const appEl = document.querySelector<HTMLElement>(".console-graph-app");
+  // The pane root, not the app panel: it is the container the width queries measure, so fullscreening
+  // it makes them measure the screen and the explorer takes its wide layout.
+  const appEl = document.querySelector<HTMLElement>(".console-graph-main");
   if (fsBtn && appEl && appEl.requestFullscreen) {
     fsBtn.addEventListener("click", () => {
       if (document.fullscreenElement) document.exitFullscreen();
@@ -5849,8 +5937,8 @@ function bootWireEvents() {
       "fullscreenchange",
       () => {
         const on = document.fullscreenElement === appEl;
-        if (fsLabel) fsLabel.textContent = on ? "Exit" : "Fullscreen";
-        fsBtn.setAttribute("aria-pressed", on ? "true" : "false");
+        // The name says what the button does next; a pressed state on top of that would say it twice.
+        if (fsLabel) fsLabel.textContent = on ? "Exit fullscreen" : "Fullscreen";
         // The canvas is sized to its box; refit after the panel resizes.
         resizeCanvas();
         if (sim) {
@@ -6094,7 +6182,7 @@ async function bootLive() {
   if (!liveToken) {
     setStatus(
       "live mode: no token found. Re-run magus graph export --open --follow to get a fresh link.",
-      true,
+      "danger",
     );
     document.body.classList.add("graph-empty");
     return true;
@@ -6185,7 +6273,7 @@ async function bootLive() {
         " (" +
         errMessage(e) +
         "). Start it with magus server start, then reopen the link magus printed.",
-      true,
+      "danger",
       { label: "Setup guide", run: () => window.open(SERVER_GUIDE_URL, "_blank", "noopener") },
     );
     liveHost = null;

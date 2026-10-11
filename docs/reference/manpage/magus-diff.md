@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--impact] [--no-tui] [--watch] [--rev \<base\>...\<head\>] [--patch \<file\>|-] [\<path\>...] [flags]
+**magus** diff [--generated] [--impact] [--no-tui] [--watch] [--unread] [--thread \<id\>] [--rev \<base\>...\<head\>] [--patch \<file\>|-] [\<path\>...] [flags]
 
 ## Description
 
@@ -88,14 +88,34 @@ blast radius first. It reports no ratio and stays silent on a small change
 nobody has disturbed - a count with a target is a count that gets cleared
 instead of satisfied.
 
---prompt prints a review prompt for you to paste into whichever model you
-use, and magus stops there: it calls no model, holds no key, and sends
-nothing. It is the same refusal magus agent makes about your AGENTS.md -
-magus generates the text and a person carries it across, because a tool that
-crossed the boundary itself would leave bytes you did not write and cannot
-audit. It asks for findings rather than review prose; the words your
-colleague reads should be yours. Add --impact for the rationale behind each
-instruction.
+--thread \<id\> narrows the review to one thread on the pull request, the way a
+path narrows it to one file. At a terminal the viewer opens on the thread's
+hunk. Otherwise it prints the conversation oldest first, the hunk it is
+about, and what the change there reaches: the changed symbols with the files
+that reference them, who they are public to and the callers that reach them,
+the coverage, the conformance findings, and the notes anchored to the file.
+-o json carries the same record. The id is the thread id, its first comment's
+id, or any reply's id. While the server runs, the report lists each thread's
+id beside the hunk it sits on, and -o json carries them under each file's
+"threads"; without it the report lists none and says so. The comments
+are quoted from the host as other people's words. It does not combine with
+--ack, --unread or --impact.
+
+The report ends with the reading order: the hunks grouped by what links them, a
+definition before its uses, an interface before its implementations, code before
+its tests, each with the sentence that placed it. -o json carries the same order
+under "order". It is absent, with a note naming the rebuild, when the symbol index
+is not current, because an order drawn without the uses would read as "nothing is
+related".
+
+--unread narrows the report to the hunks no read mark covers, under every -o:
+-o name prints one path:start-end per unread hunk, and -o json is the same
+document, filtered, with an "unread" record saying how many were kept. It
+always exits 0; a push that blocked on it would be a gate, and a gate on a read
+count is the metric the paragraph below refuses. Where the marks cannot be read
+it says the read state is unknown, on stderr and as "read_state": "unknown",
+and calls no hunk unread. The drift notice a push hands off reports the same
+count for the range being pushed.
 
 A receipt covers a file at its CURRENT content, so editing it afterwards
 voids the receipt. Stepping a file through in the viewer earns one; --ack covers
@@ -134,14 +154,17 @@ performance metric, and a performance metric gets gamed rather than met.
 **--patch** *-*
 : Review a patch somebody handed you instead of the working tree; \`-\` reads stdin
 
-**--prompt**
-: Print a review prompt to paste into your own LLM: the context magus has, never a drafted review. With --impact, also carries the rationale behind each instruction
-
 **--reason** *string*
 : An optional note kept with an --ack, for the next reader of the report
 
 **--rev** *string*
 : Review a committed range instead of the working tree, as base...head: a colleague's branch, or your agent's finished work
+
+**--thread** *string*
+: Narrow the review to one pull request thread, by the thread id or any of its comments' ids, which the report lists beside each hunk while the server runs. The viewer opens on its hunk; printed, it is the conversation, the hunk and what the change there reaches
+
+**--unread**
+: Narrow the report to the hunks no read mark covers, under every -o; -o name prints one path:start-end per hunk. Always exits 0. Where the marks cannot be read it says the read state is unknown and calls no hunk unread
 
 **--watch**
 : Re-read and re-render whenever the working tree changes
@@ -195,10 +218,16 @@ magus diff --impact
 magus diff --no-tui
 ```
 
-*Build a review prompt for the model of your choice*
+*Read only the hunks of a branch you have not marked read*
 
 ```sh
-magus diff --prompt
+magus diff --unread --rev main...HEAD
+```
+
+*Open the review on one pull request thread*
+
+```sh
+magus diff --thread 2193847561
 ```
 
 *Machine-readable, for a script or a Buzz advisor*

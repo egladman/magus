@@ -15,8 +15,8 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 
 - Use `./magus`, built by `magus run go-build .`. A fresh worktree has none, and
   until it does the hooks run whatever `magus` is on PATH, which may not load this
-  tree; `hack/policy/guard.buzz` does not run at all then. Bootstrap before
-  relying on the guard: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`
+  tree; `hack/policy/guard.buzz` does not run at all then. Bootstrap the root
+  checkout before relying on the guard: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`
   runs the real target (the magus cache cannot key it; Go's cache stays on). Then
   `./magus run install /` installs every project's dependencies (node_modules
   included), which a fresh worktree also lacks.

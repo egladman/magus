@@ -37,7 +37,7 @@ import (
 // because shards load lazily and an edge legitimately arrives before the node that gives
 // its endpoint a kind. Graph.UndeclaredEdges reports violations, and a test over this
 // workspace's own graph fails when a producer widens the vocabulary without declaring it.
-const KnowledgeSchemaVersion = 16
+const KnowledgeSchemaVersion = 17
 
 // schemaStampRe matches the knowledge-schema version magus embeds in the output it
 // generates. Four renderers write one of these spellings: the target-graph index
@@ -153,6 +153,7 @@ const (
 	RelationReferences   RelationID = "references"    // charm->target; file->symbol; doc->doc; marker->dir/doc
 	RelationDocuments    RelationID = "documents"     // doc->spell/diagnostic/module; doc/docsection->target
 	RelationCalls        RelationID = "calls"         // function->function; symbol->symbol; dir->dir, declared
+	RelationImplements   RelationID = "implements"    // symbol->symbol; implementer->interface, from SCIP relationships
 	RelationImports      RelationID = "imports"       // file->file/import; dir->dir, folded from package imports
 	RelationRationaleFor RelationID = "rationale_for" // rationale->function/file
 	RelationEmits        RelationID = "emits"         // project/target->diagnostic, runtime
@@ -267,6 +268,10 @@ var knowledgeRelationDefinitions = []KnowledgeRelationDefinition{
 	// the one calls shape whose edges are ConfidenceDeclared and carry AttrTransport.
 	{ID: RelationCalls, Description: "invokes another callable, or declares a call into another package", ForwardLabel: "calls", ReverseLabel: "called by", Shapes: joinEndpointShapes(
 		endpointShapes(KindFunction, KindFunction), endpointShapes(KindSymbol, KindSymbol), endpointShapes(KindDir, KindDir))},
+	// implementer -> interface, like calls: the edge points at what the source depends on,
+	// so an ordering that reads dependencies first puts the interface before its
+	// implementations.
+	{ID: RelationImplements, Description: "implements an interface or overrides an interface method", ForwardLabel: "implements", ReverseLabel: "implemented by", Shapes: endpointShapes(KindSymbol, KindSymbol)},
 	// dir->dir folds every language's package imports once at ingest, so a reader walks
 	// stored edges instead of refolding the symbol shard.
 	{ID: RelationImports, Description: "imports another source file, package, or unresolved import", ForwardLabel: "imports", ReverseLabel: "imported by", Shapes: joinEndpointShapes(
@@ -538,6 +543,12 @@ type KnowledgeSymbol struct {
 	// callee yields one entry per caller, never one per call site. Empty when the indexer
 	// emits no enclosing ranges, which is the honest answer rather than a guess.
 	Calls []KnowledgeSymbolCall
+	// Implements are the keys of the workspace-defined interfaces, or interface methods,
+	// this symbol implements, as the indexer's implementation relationships say. Sorted and
+	// deduplicated; an interface outside the workspace has no definition to navigate to, so
+	// it is dropped, the same trade Calls makes. Empty when the indexer emits no
+	// implementation relationships.
+	Implements []string
 }
 
 // KnowledgeSymbolDefinition is one file's definition of a symbol. SCIP records a symbol's

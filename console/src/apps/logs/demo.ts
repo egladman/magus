@@ -25,7 +25,7 @@ import {
   Trigger,
 } from "@wire/viewer/v1alpha1/viewer_pb";
 import { state } from "./state";
-import { emptyEl, setRefIdentity } from "./dom";
+import { setRefIdentity, showLog } from "./dom";
 import { tsMs } from "./waterfall";
 import { scheduleLiveRender, setLiveStatus } from "./live";
 import {
@@ -65,7 +65,7 @@ interface PlacedRun {
 // and a terminal RESULT (status + duration + the run's real ref), then FINISHED. Start offsets and
 // the runs' own durations overlap into a real cascade; the Invocation start/end frame the axis. The
 // base is Date.now() so the reveal reads as "now"; the scenario's ref/status/output text carry the
-// story. Events are sorted by time so the pretty view and the waterfall both fill in as they arrive.
+// narrative. Events are sorted by time so the pretty view and the waterfall both fill in as they arrive.
 function buildJournal(
   placed: PlacedRun[],
   invId: string,
@@ -241,9 +241,9 @@ export function startDemo(): void {
   state.currentJournals = [sibling]; // the completed sibling invocation, rendered as its own group
   state.timeline = true; // open straight into the waterfall so it visibly fills in
   state.currentRef = "";
-  if (emptyEl) emptyEl.hidden = true;
-  // No real identity in demo mode - an empty value hides the ref pill entirely (setRefIdentity)
-  // rather than showing a bordered box around the literal word "demo".
+  showLog();
+  // No real identity in demo mode - an empty value hides the reference id entirely (setRefIdentity)
+  // rather than labelling the literal word "demo".
   setRefIdentity("", false);
   setLiveStatus("streaming");
 

@@ -313,13 +313,13 @@ func magusfilePresent(dir string) bool {
 func installMergeDriverForInit(ctx context.Context, root, vcsFlag string) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; workspace load failed", slog.String("error", err.Error()))
+		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; workspace load failed", attr.Error(err))
 		return nil
 	}
 
 	globs, err := settle.DriverGlobs(ctx, m)
 	if err != nil {
-		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; could not list the files output exclusions carve out", slog.String("error", err.Error()))
+		slog.With(attr.Component("init")).WarnContext(ctx, "skipping merge-driver setup; could not list the files output exclusions carve out", attr.Error(err))
 		return nil
 	}
 	if len(globs.Outputs) == 0 && len(globs.AutoResolve) == 0 {

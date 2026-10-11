@@ -94,17 +94,52 @@ diff --git a/vm_test.go b/vm_test.go
 -	run()
 +	check()
 `
-	lines, pf := impact.ChangedLines(patch), readPatchFacts(patch)
+	hunks, pf := impact.ChangedLinesByHunk(patch), readPatchFacts(patch)
 	const vm = "symbol:gomod example.com/m/libs/x `example.com/m/libs/x/vm`/"
-	assert.Equal(t, []types.DiffSymbol{
-		{ID: vm + "script.", Label: "script", Change: types.DiffChangeBody, Qualified: "script"},
-		{ID: vm + "Asm#Emit().", Label: "Emit", Change: types.DiffChangeBody, Qualified: "Asm.Emit", PublicBeyondWorkspace: true},
-		{ID: vm + "compile().", Label: "compile", Change: types.DiffChangeAdded, Qualified: "compile"},
-	}, parsedGoSymbols(root, "libs/x/vm/jit_amd64.go", lines["libs/x/vm/jit_amd64.go"], pf))
+	script := types.DiffSymbol{ID: vm + "script.", Label: "script", Change: types.DiffChangeBody, Qualified: "script"}
+	emit := types.DiffSymbol{ID: vm + "Asm#Emit().", Label: "Emit", Change: types.DiffChangeBody, Qualified: "Asm.Emit", PublicBeyondWorkspace: true}
+	compile := types.DiffSymbol{ID: vm + "compile().", Label: "compile", Change: types.DiffChangeAdded, Qualified: "compile"}
+	all, perHunk := parsedGoSymbols(root, "libs/x/vm/jit_amd64.go", hunks["libs/x/vm/jit_amd64.go"], pf)
+	assert.Equal(t, []types.DiffSymbol{script, emit, compile}, all)
+	assert.Equal(t, [][]types.DiffSymbol{{script}, {emit}, {compile}}, perHunk, "each hunk lists the symbols it touched")
+
+	all, _ = parsedGoSymbols(root, "vm_test.go", hunks["vm_test.go"], pf)
 	assert.Equal(t, []types.DiffSymbol{
 		{ID: "symbol:gomod example.com/m `example.com/m_test`/TestVM().", Label: "TestVM", Change: types.DiffChangeBody, Qualified: "TestVM"},
-	}, parsedGoSymbols(root, "vm_test.go", lines["vm_test.go"], pf), "an external test package is the import path plus _test")
-	assert.Nil(t, parsedGoSymbols(root, "gone.go", []int{1}, pf), "a file no longer on disk")
+	}, all, "an external test package is the import path plus _test")
+
+	all, perHunk = parsedGoSymbols(root, "gone.go", []impact.HunkLines{{Index: 0, Lines: []int{1}}}, pf)
+	assert.Nil(t, all, "a file no longer on disk")
+	assert.Nil(t, perHunk)
+}
+
+// A thread brief asks for SkipOrder, and the order must then be neither computed nor excused
+// by a note: it was never asked for.
+func TestDiffWithSkipOrderDoesNotComputeTheOrder(t *testing.T) {
+	t.Parallel()
+
+	files := map[string]string{
+		"magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+	}
+	for name, body := range orderTree {
+		files[name] = body
+	}
+	m, err := Open(t.Context(), writeWorkspace(t, files))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	paths := []string{"iface.go", "impl.go"}
+
+	full, err := m.DiffWith(t.Context(), paths, types.DiffOptions{Patch: orderPatch})
+	require.NoError(t, err)
+	require.NotNil(t, full.Order, "without SkipOrder the same diff carries an order")
+
+	brief, err := m.DiffWith(t.Context(), paths, types.DiffOptions{Patch: orderPatch, SkipOrder: true})
+	require.NoError(t, err)
+	assert.Nil(t, brief.Order)
+	assert.Len(t, brief.Files, len(full.Files), "the files are annotated either way")
+	for _, n := range brief.Notes {
+		assert.NotContains(t, n, "reading order")
+	}
 }
 
 func TestAttachAPIDeltaClassifiesAndBumps(t *testing.T) {

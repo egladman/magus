@@ -14,6 +14,7 @@ import {
   type Keymap,
 } from "./commands";
 import type { Persisted } from "../lib/persist";
+import { buildModal, keepFocus } from "./modal";
 import { h } from "./view";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -131,13 +132,25 @@ export interface KeybindingsOverlay {
 }
 
 // createKeybindingsEditor builds the table + capture core into a [data-kbeditor] container, re-rendering
-// on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in overrides.css.
+// on any keymap change so both embeddings stay in lockstep. The row grid is data-scoped in styles/components/KeybindingsEditor.
 // How long the recorder waits after the last chord before it commits the captured sequence. A single
 // chord thus saves after a brief pause; a multi-chord sequence (mod+x o) is typed in order and saved
 // when you stop. Roughly matches the matcher's own sequence timeout so recording feels like using it.
 const CAPTURE_COMMIT_MS = 900;
 
-export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEditor {
+// KEYBINDINGS_HELP is what the editor says about itself, once.
+export const KEYBINDINGS_HELP =
+  "Rebind a command: Record, then press the keys. It can be a single shortcut or a sequence like Ctrl+X then O. Pause to save, or press Esc to cancel. Clear disables a shortcut; the revert icon restores the default.";
+
+export interface KeybindingsEditorOptions {
+  // False leaves out the editor's own help paragraph, for a host that shows KEYBINDINGS_HELP itself.
+  help?: boolean;
+}
+
+export function createKeybindingsEditor(
+  deps: KeybindingsDeps,
+  opts: KeybindingsEditorOptions = {},
+): KeybindingsEditor {
   const mac = isMac();
   let capturing: string | null = null; // the command id currently being rebound
   let captureSeq: string[] = []; // chords collected so far in the in-progress recording
@@ -147,13 +160,16 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 
   const root = h("div");
   root.dataset.kbeditor = "";
-  const desc = h("p");
-  desc.dataset.kbdesc = "";
-  desc.textContent =
-    "Rebind a command: Record, then press the keys. It can be a single shortcut or a sequence like Ctrl+X then O. Pause to save, or press Esc to cancel. Clear disables a binding; the revert icon restores the default.";
   const table = h("div");
   table.dataset.rows = "";
-  root.append(desc, table);
+  // The help is one paragraph. A host that already shows it elsewhere (the modal's description) turns
+  // this one off rather than stacking a second copy under it.
+  if (opts.help !== false) {
+    const desc = h("p", undefined, KEYBINDINGS_HELP);
+    desc.dataset.kbdesc = "";
+    root.append(desc);
+  }
+  root.append(table);
 
   // setChord writes one command's override into the shared keymap cell: null RESETS (drop the override),
   // "" DISABLES, a chord CUSTOMIZES.
@@ -290,11 +306,18 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
       const actions = h("div");
       actions.dataset.kactions = "";
       // Record starts/cancels capture; Clear disables the binding; reset (a glyph-only danger-tinted
-      // control, aria-label "Reset to default") drops the custom binding back to the default.
+      // control) drops the custom binding back to the default. Every row carries the same three, so each
+      // is named for the command it acts on: a reader that lists the controls would otherwise hear the
+      // same three names for every row.
       const record = actionButton(
         "pf-m-secondary",
         capturing === r.id ? "Cancel" : "Record",
         rowIcon("record"),
+      );
+      record.setAttribute(
+        "aria-label",
+        (capturing === r.id ? "Cancel recording the shortcut for " : "Record a shortcut for ") +
+          r.label,
       );
       record.addEventListener("click", () => {
         if (capturing === r.id) {
@@ -303,10 +326,11 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
         } else beginCapture(r.id);
       });
       const clear = actionButton("pf-m-secondary", "Clear", rowIcon("clear"));
+      clear.setAttribute("aria-label", "Clear the shortcut for " + r.label);
       clear.addEventListener("click", () => {
         setChord(r.id, "");
       });
-      const reset = iconButton("", "Reset to default", rowIcon("reset"));
+      const reset = iconButton("", "Reset to default: " + r.label, rowIcon("reset"));
       reset.dataset.role = "reset";
       reset.disabled = r.source === "default";
       reset.addEventListener("click", () => {
@@ -343,37 +367,23 @@ export function createKeybindingsEditor(deps: KeybindingsDeps): KeybindingsEdito
 // createKeybindingsOverlay wraps the editor core in a modal overlay matching the cheat sheet. Its editor
 // drives the live shared cell, so rebinds here take effect immediately (unlike the staged Settings app).
 export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOverlay {
-  const overlay = h("div", "pf-v6-c-backdrop");
-  overlay.id = "keybindings-overlay";
-  overlay.hidden = true;
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
-  overlay.setAttribute("aria-label", "Keybindings");
-
-  const bullseye = h("div", "pf-v6-l-bullseye");
-  const box = h("div", "pf-v6-c-modal-box pf-m-md");
+  const modal = buildModal({
+    id: "keybindings-overlay",
+    title: "Shortcuts",
+    description: KEYBINDINGS_HELP,
+    onClose: () => close(),
+  });
+  const { overlay, box, body: bodyWrap } = modal;
+  modal.footer.remove(); // this dialog has no footer
   box.dataset.kbBox = "";
-  box.tabIndex = -1; // focusable so the open editor owns keydowns (Esc closes, chords do not leak out)
-  const head = h("div", "pf-v6-c-modal-box__header");
-  head.dataset.kbHead = "";
-  const titleWrap = h("div", "pf-v6-c-modal-box__title");
-  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Keybindings"));
-  head.append(titleWrap);
-  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
-  closeBtn.type = "button";
-  closeBtn.dataset.kbClose = "";
-  closeBtn.setAttribute("aria-label", "Close");
-  closeBtn.append(h("span", "pf-v6-c-button__icon", "×")); // multiplication sign - a crisp close glyph
-  closeBtn.addEventListener("click", () => close());
-  const bodyWrap = h("div", "pf-v6-c-modal-box__body");
-  const editor = createKeybindingsEditor(deps);
+  modal.closeBtn.dataset.kbClose = "";
+  const focus = keepFocus(box);
+  const editor = createKeybindingsEditor(deps, { help: false });
   bodyWrap.append(editor.el);
-  box.append(head, closeBtn, bodyWrap);
-  bullseye.append(box);
-  overlay.append(bullseye);
 
   function open(): void {
     if (!overlay.hidden) return;
+    focus.opened();
     overlay.hidden = false;
     box.focus();
   }
@@ -381,6 +391,7 @@ export function createKeybindingsOverlay(deps: KeybindingsDeps): KeybindingsOver
   function close(): void {
     if (overlay.hidden) return;
     overlay.hidden = true;
+    focus.closed();
     // Hiding the overlay does NOT stop a recording: beginCapture puts a capture-phase
     // keydown listener on `document` that preventDefault()s every key, and it outlives
     // the modal it was started from. Dismissed mid-Record without this, the console eats

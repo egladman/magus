@@ -1,0 +1,118 @@
+/* One masthead-style row: the tab bar (flex:1) and a right-aligned control group (#console-actions),
+   with no brand mark. Frame singletons carry ids; repeated parts are styled by ARIA role, [aria-*],
+   [data-*] and element selectors under them.
+
+   The manifest opts into window-controls-overlay, so an installed PWA overlays the OS buttons on this
+   row. The bar is the drag region and interactive children opt back out; in a browser tab app-region
+   is inert. */
+
+#console-titlebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  height: var(--console-topchrome-h);
+  margin: 0;
+  padding: 0;
+  /* The content tone, not the chrome tone: a tab is contiguous with the page it shows, so the strip
+     and the page are one plane while inactive tabs take the chrome fill and recede. The baseline
+     keeps an edge when only one tab is open. No cast: chrome that stays back must not lift. */
+  background: var(--pf-t--global--background--color--primary--default);
+  border-block-end: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+/* A drag region swallows clicks in the installed PWA. */
+#console-titlebar button,
+#console-titlebar [role="tab"],
+#console-titlebar #console-actions { -webkit-app-region: no-drag; app-region: no-drag; }
+
+/* The chrome buttons (command bar, apps, reference, settings gear) are PF plain icon Buttons, and the
+   positioning context for the Applications menu. */
+#console-actions {
+  flex: 0 0 auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding-inline: var(--pf-t--global--spacer--xs);
+}
+/* PF plain buttons align to the baseline, which hangs an icon-only svg below the row. */
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) { align-items: center; }
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) > :is(.pf-v6-c-button__icon, .pf-v6-c-menu-toggle__icon) { display: inline-flex; align-items: center; line-height: 0; }
+/* A compact inset control, not a full-height slab. The phone block stretches it to a finger target. */
+#console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) {
+  min-width: 2.25rem;
+  justify-content: center;
+  padding: var(--pf-t--global--spacer--sm);
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+
+/* Applications menu: only the position is here; the menu chrome is PatternFly. Right-aligned so it
+   stays inside the viewport. */
+#console-appmenu {
+  position: absolute;
+  top: calc(100% + var(--pf-t--global--spacer--xs));
+  right: var(--pf-t--global--spacer--sm);
+  left: auto;
+  min-width: 15rem;
+  max-width: calc(100vw - 2 * var(--pf-t--global--spacer--sm));
+  /* Above the drawer content (100) and panel (200). */
+  z-index: var(--pf-t--global--z-index--md);
+}
+.console-shell-appmenu__group-title {
+  font-size: var(--console-label-size);
+  font-weight: var(--console-label-weight);
+  letter-spacing: var(--console-label-tracking);
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* A trailing glyph marks the documentation row as leaving for the docs site (a new tab). */
+.console-shell-appmenu__ext-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--icon--color--subtle, var(--pf-t--global--text--color--subtle));
+}
+.pf-v6-c-menu__item:hover .console-shell-appmenu__ext-icon { color: inherit; }
+
+/* A dedicated single-app window (index.html?app=<id>, main.ts sets data-appmode). The window is the
+   app, so the tab bar goes; so does the rail, which would open other apps as tabs into a window with
+   no tab bar. Hidden here because the shell builds its chrome before it learns it is in app mode. */
+:root[data-appmode] #console-tabs { display: none; }
+:root[data-appmode] #console-sidebar { display: none; }
+:root[data-appmode] #console-actions { margin-inline-start: auto; }
+
+/* The rail and the Applications menu list the same set, so exactly one is present at every width:
+   complements on the same 48rem edge. Settings is a destination, so it belongs to the rail with the
+   command palette. */
+@media (min-width: 48rem) {
+  #console-appmenu-btn, #console-appmenu { display: none; }
+  #settings-btn { display: none; }
+  #console-commandbar-btn { display: none; }
+}
+
+/* Phone: two rows, the chrome buttons on top and the tabs full width beneath. Side by side the five
+   buttons take about 200px of a 375px bar and leave the tabs a sliver. The extra bar of height is
+   carried by --console-topchrome-h. */
+@media (max-width: 47.999rem) {
+  #console-titlebar { flex-direction: column; }
+  /* Zero open tabs (data-no-tabs): the second row would be empty. */
+  :root[data-no-tabs] #console-tabs { display: none; }
+  :root[data-no-tabs] #console-actions { border-bottom: none; }
+  /* The hairline sits inside the row's height (border-box), so the pair still totals the token. */
+  #console-actions {
+    order: -1;
+    height: var(--console-titlebar-h);
+    justify-content: flex-end;
+    border-bottom: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  }
+  /* An auto margin claims the row's slack with no DOM change. */
+  #console-commandbar-btn { margin-inline-end: auto; }
+  /* A finger-sized square, about 44px. */
+  #console-actions > :is(.pf-v6-c-button, .pf-v6-c-menu-toggle) {
+    align-self: stretch;
+    width: var(--console-titlebar-h);
+    min-width: var(--console-titlebar-h);
+    padding-inline: 0;
+  }
+}

@@ -168,7 +168,7 @@ test("every toolchain row is a table row, with the wire mapped into its cells", 
     "workspace",
     "too new (MGS3006)",
   ]);
-  assert.equal(count(), "3 tools, 1 outside window");
+  assert.equal(count(), "3 tools, 1 outside version window");
 });
 
 test("the table shows the server's window text and violation flag, not its own reading of them", async () => {
@@ -191,7 +191,7 @@ test("the table shows the server's window text and violation flag, not its own r
   await mount();
   assert.equal(table()[0][4], "whatever the server printed");
   assert.equal(table()[0][6], "too old");
-  assert.equal(count(), "1 tool, 1 outside window");
+  assert.equal(count(), "1 tool, 1 outside version window");
 });
 
 test("a column header sorts the table and a second press reverses it", async () => {
@@ -216,7 +216,7 @@ test("each filter narrows the table and names how many rows it would leave", asy
   filter("Past end of life").click();
   assert.deepEqual(tools(), ["go@services/identity"]);
   assert.equal(filter("Past end of life").getAttribute("aria-pressed"), "true");
-  assert.equal(count(), "1 of 3 tools, 1 outside window");
+  assert.equal(count(), "1 of 3 tools, 1 outside version window");
 
   filter("Past end of life").click();
   filter("Unannounced").click();
@@ -269,7 +269,49 @@ test("with no server address the connect prompt stands in for the table", async 
   await mount();
   assert.equal(host.querySelector<HTMLElement>(".console-tools__empty")?.hidden, false);
   assert.equal(host.querySelector<HTMLElement>(".console-tools__table")?.hidden, true);
-  assert.match(host.querySelector(".console-tools__empty-title")?.textContent ?? "", /No server/);
+  assert.match(
+    host.querySelector(".console-tools__empty .pf-v6-c-empty-state__title-text")?.textContent ?? "",
+    /No server/,
+  );
+});
+
+test("the filters are a PF toggle group whose pressed state is shown, not only coloured", async () => {
+  serve(PROJECTS);
+  await mount();
+  assert.ok(host.querySelector(".pf-v6-c-toggle-group[role=group][aria-label='Filter tools']"));
+  filter("Unpinned").click();
+  assert.equal(filter("Unpinned").classList.contains("pf-m-selected"), true);
+  assert.equal(filter("Unpinned").getAttribute("aria-pressed"), "true");
+  assert.equal(filter("Unannounced").classList.contains("pf-m-selected"), false);
+});
+
+test("the page has a heading and a named, single scroll container for its table", async () => {
+  serve(PROJECTS);
+  await mount();
+  assert.equal(host.querySelector("h1")?.textContent, "Tools");
+  assert.equal(host.querySelector("table")?.getAttribute("aria-label"), "Tools");
+  assert.equal(host.querySelectorAll(".console-table__wrap").length, 1);
+  assert.equal(host.querySelector(".console-tools__label"), null, "the tab already says Tools");
+});
+
+test("a refresh that fails over a table on screen says how old the reading is", async () => {
+  serve(PROJECTS);
+  await mount();
+  assert.equal(host.querySelector(".console-tools__stale")?.childElementCount, 0);
+
+  globalThis.fetch = (() => Promise.reject(new Error("stub: refused"))) as typeof fetch;
+  host.querySelector<HTMLButtonElement>(".console-tools__refresh")?.click();
+  await settle();
+
+  const alert = host.querySelector(".console-tools__stale .pf-v6-c-alert.pf-m-warning");
+  assert.match(alert?.textContent ?? "", /Could not refresh the tools/);
+  assert.match(alert?.textContent ?? "", /Showing the reading from \d+s ago/);
+  assert.equal(table().length, 3, "the last good rows stay on screen");
+
+  serve(PROJECTS);
+  host.querySelector<HTMLButtonElement>(".console-tools__refresh")?.click();
+  await settle();
+  assert.equal(host.querySelector(".console-tools__stale")?.childElementCount, 0);
 });
 
 test("a refused connection is the connect prompt with a retry, not an empty table", async () => {
@@ -278,7 +320,7 @@ test("a refused connection is the connect prompt with a retry, not an empty tabl
   await mount();
   assert.equal(host.querySelector<HTMLElement>(".console-tools__table")?.hidden, true);
   assert.match(
-    host.querySelector(".console-tools__empty-title")?.textContent ?? "",
+    host.querySelector(".console-tools__empty .pf-v6-c-empty-state__title-text")?.textContent ?? "",
     /Could not reach the server/,
   );
 });

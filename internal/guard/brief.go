@@ -111,7 +111,7 @@ func denyBriefOffCheck(deps Dependencies, brief string) ShellVerdict {
 	defines := func(target string) bool {
 		return slices.ContainsFunc(targets(), func(e types.TargetEntry) bool { return targetName(e.Name) == targetName(target) })
 	}
-	line, target, found := briefOffCheck(brief, row, at.workspace != "" && ownSourceRoot(at.workspace), produces, defines)
+	line, target, found := briefOffCheck(brief, row, produces, defines)
 	if !found {
 		return ShellVerdict{}
 	}
@@ -163,7 +163,7 @@ func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 // when the workspace defines one by that name ("magus run takes one target" names none),
 // and a run of the check's target passes whatever follows it, since no parser can tell a
 // project from the next word of the sentence.
-func briefOffCheck(brief string, row types.Job, ownSource bool, produces func() func(target, project string) bool, defines func(target string) bool) (line, target string, found bool) {
+func briefOffCheck(brief string, row types.Job, produces func() func(target, project string) bool, defines func(target string) bool) (line, target string, found bool) {
 	checks := rowChecks(row)
 	for _, r := range briefRuns(brief) {
 		if strings.ContainsAny(r.run.target, "<>$") || (r.prose && !defines(r.run.target)) {
@@ -172,7 +172,7 @@ func briefOffCheck(brief string, row types.Job, ownSource bool, produces func() 
 		if r.prose && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool { return sameTarget(c.Target, r.run.target) }) {
 			continue
 		}
-		if !r.run.allowed(checks, ownSource, produces) {
+		if !r.run.allowed(checks, produces) {
 			return r.line, r.run.target, true
 		}
 	}

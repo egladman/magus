@@ -7,8 +7,8 @@
   "scope": "./",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone"],
-  "background_color": "#31302e",
-  "theme_color": "#31302e",
+  "background_color": "#f2f2f2",
+  "theme_color": "#f2f2f2",
   "icons": [
     { "src": "./assets/favicon-32.png", "sizes": "32x32", "type": "image/png" },
     { "src": "./assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },

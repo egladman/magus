@@ -167,10 +167,10 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	}
 	for _, p := range written {
 		if af.DryRun {
-			slog.InfoContext(ctx, "agent install: would write", slog.String("path", p))
+			slog.With(attr.Component("agent install")).InfoContext(ctx, "would write", slog.String("path", p))
 			continue
 		}
-		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
+		slog.With(attr.Component("agent install")).InfoContext(ctx, "wrote", slog.String("path", p))
 	}
 	reportRemovedSkills(os.Stdout, removed, af.DryRun)
 	printAgentInstallNextSteps(ctx, af.Dir, written, changed, form, af.DryRun)

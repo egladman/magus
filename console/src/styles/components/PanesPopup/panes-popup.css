@@ -1,0 +1,145 @@
+/* The Panes tray popup (main.ts, #console-panespopup): a live map of the active tab's pane tree,
+   opened from the status bar. Point at a pane to focus it, drag one onto another to swap, split the
+   one you point at. It is pinned flush to the corner rather than floated off its anchor with JS
+   coordinates, because the tray sits on the status bar and the popup's own footer covers that bar
+   while open. */
+
+.console-shell-panespopup {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Above the drawer content (100), panel (200) and the status bar. */
+  z-index: var(--pf-t--global--z-index--md);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--pf-t--global--text--color--regular);
+  /* A transparent full-width shell lets the close bar span the screen while the map stays a small
+     card. pointer-events:none lets clicks beside the map fall through; children opt back in. */
+  pointer-events: none;
+  background: none;
+  border: none;
+}
+.console-shell-panespopup > * { pointer-events: auto; }
+/* The close footer below is a sibling of __body so it can bleed edge to edge. */
+.console-shell-panespopup__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pf-t--global--spacer--sm);
+  align-items: center;
+  padding: var(--pf-t--global--spacer--sm);
+  margin: 0 var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--sm) 0;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: var(--pf-t--global--box-shadow--md);
+}
+/* A full-width bar that covers the status strip while the popup is open. */
+.console-shell-panespopup__closebtn {
+  width: 100%;
+  height: var(--console-statusbar-h);
+  margin: 0;
+  border: none;
+  border-top: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: 0;
+  font-weight: var(--pf-t--global--font--weight--heading--bold);
+  /* Opaque: PF secondary buttons are transparent, and the bar must cover what is beneath it. */
+  background: var(--pf-t--global--background--color--primary--default);
+}
+.console-shell-panespopup__closebtn:hover { background: var(--console-chrome); }
+.console-shell-panespopup__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--sm);
+  width: 100%;
+}
+.console-shell-panespopup__title {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-panespopup__done {
+  padding: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  line-height: 0;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-panespopup__done:hover { color: var(--pf-t--global--text--color--regular); }
+
+/* A miniature of the pane tree (buildPaneMapNode), nesting flex boxes that mirror tileView's splits.
+   main.ts sizePanesMap sets its width and height inline from the window's aspect ratio. */
+.console-shell-panesmap {
+  display: flex;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden;
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-shell-panesmap__split { display: flex; flex: 1; gap: var(--pf-t--global--spacer--xs); min-width: 0; min-height: 0; }
+.console-shell-panesmap__split[data-dir="row"] { flex-direction: row; }
+.console-shell-panesmap__split[data-dir="col"] { flex-direction: column; }
+.console-shell-panesmap__split > * { flex-basis: 0; min-width: 0; min-height: 0; }
+
+/* touch-action:none hands the cell's pointermove stream to wirePaneCellDrag instead of the browser's
+   scroll gesture. */
+.console-shell-panesmap__cell {
+  position: relative;
+  flex: 1;
+  min-width: 28px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pf-t--global--spacer--xs);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  text-align: center;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.console-shell-panesmap__cell:hover { border-color: var(--console-accent); color: var(--pf-t--global--text--color--regular); }
+.console-shell-panesmap__cell[data-focus] {
+  border-color: var(--console-accent);
+  outline: var(--pf-t--global--border--width--strong) solid var(--console-accent);
+  outline-offset: -3px;
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--console-accent) 10%, var(--pf-t--global--background--color--primary--default));
+}
+/* A stronger tint than the focus ring, so mid-drag "drop here" never reads as "already focused". */
+.console-shell-panesmap__cell[data-drop] {
+  border-color: var(--console-accent);
+  background: color-mix(in srgb, var(--console-accent) 25%, var(--pf-t--global--background--color--primary--default));
+}
+.console-shell-panesmap__celllabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+/* The focused cell's split buttons, docked to its bottom edge, each a 24px target. */
+.console-shell-panesmap__splitctl { position: absolute; bottom: var(--pf-t--global--spacer--xs); display: flex; gap: var(--pf-t--global--spacer--xs); }
+.console-shell-panesmap__splitbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  padding: 0;
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--regular);
+  cursor: pointer;
+}
+.console-shell-panesmap__splitbtn:hover { border-color: var(--console-accent); color: var(--console-accent); }
+.console-shell-panesmap__hinthost {
+  max-width: 220px;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  overflow-x: auto;
+}
+.console-shell-panesmap__hint { display: flex; align-items: center; gap: var(--pf-t--global--spacer--xs); white-space: nowrap; }
+.console-shell-panesmap__hintgroup { display: inline-flex; align-items: center; gap: var(--pf-t--global--spacer--xs); }

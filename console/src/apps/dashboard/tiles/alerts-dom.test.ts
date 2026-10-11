@@ -148,3 +148,40 @@ test("leaving Big Picture clears the rail", () => {
   );
   rail.destroy();
 });
+
+// A live region is only spoken when its content changes while it is already exposed to assistive
+// technology. The rail itself is hidden until it has something to say, so the announcement lives in
+// a region that is in the page from the start and is never toggled aria-hidden.
+test("the announcement is a live region that is never hidden, whatever the rail is doing", () => {
+  const rail = mountAlertRail();
+  const announcer = rail.el.querySelector<HTMLElement>('[role="status"]');
+  assert.ok(announcer, "present before any alert");
+  assert.equal(announcer.getAttribute("aria-live"), "polite");
+  assert.equal(rail.el.getAttribute("aria-hidden"), null);
+
+  viewMode.set("bigPicture");
+  fire({ source: "Dashboard", kind: "error", key: "live1", message: "svc/api:test failed." });
+  assert.equal(announcer.textContent, "Dashboard: svc/api:test failed.");
+  assert.equal(rail.el.getAttribute("aria-hidden"), null, "shown and hidden by data-shown only");
+
+  viewMode.set("board");
+  assert.equal(rail.el.getAttribute("aria-hidden"), null);
+  assert.equal(announcer.textContent, "", "leaving the mode clears what was announced");
+  rail.destroy();
+});
+
+test("an action link is named for what it opens, not just 'Open'", () => {
+  const rail = mountAlertRail();
+  viewMode.set("bigPicture");
+  fire({
+    source: "Dashboard",
+    kind: "error",
+    key: "named",
+    message: "svc/api:test failed.",
+    link: "../logs/#ref=out1",
+  });
+  const [action] = actions(rail.el);
+  assert.equal(action.textContent, "Open Dashboard", "a bare string link names its source");
+  assert.equal(action.getAttribute("aria-label"), "Open Dashboard: svc/api:test failed.");
+  rail.destroy();
+});

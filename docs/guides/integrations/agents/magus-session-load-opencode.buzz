@@ -28,7 +28,7 @@
 // both; a report reading it says unobservable, never zero. An export part carries
 // no CLI version and this adapter does not read a per-part model id with enough
 // confidence to publish it, so both are declared none rather than guessed.
-// magus-guard-template: 21
+// magus-guard-template: 22
 // magus-session-coverage: schema=2 host=opencode commands=yes exit=yes skills=yes hook-output=none spawn=none session-id=yes model=none host-version=none
 
 // EVERY call that can fail is caught: a session whose export fails is not a reason

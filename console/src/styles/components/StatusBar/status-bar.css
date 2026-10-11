@@ -1,0 +1,163 @@
+/* PF has no status-bar component. The shell swaps one tab's status bar at a time into this wrapper
+   (main.ts); it is a grid row in the Shell layout, so the rail runs past it. */
+#console-statusbar {
+  z-index: var(--pf-t--global--z-index--xs);
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  min-height: var(--console-statusbar-h);
+  padding: 0 var(--console-pad);
+  /* The chrome tone with no border at any width: a hairline and the outlet's cast on one seam read
+     as a doubled border. */
+  background: var(--console-chrome);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+#console-statusbar > div {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  min-width: 0;
+}
+#console-statusbar [data-cluster] {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--md);
+  min-width: 0;
+}
+/* The left cluster gives way and may shrink to nothing. The right one (the tray, and whatever an app
+   docks, like the zoom stepper) never shrinks, so its controls stay reachable at any width. */
+#console-statusbar [data-cluster]:first-child { flex: 1 1 0; overflow: hidden; }
+#console-statusbar .console-shell-statusbar__right { flex: 0 0 auto; margin-left: auto; }
+#console-statusbar .console-shell-statusbar__item { white-space: nowrap; line-height: var(--pf-t--global--font--line-height--body); }
+#console-statusbar [data-item] { white-space: nowrap; line-height: var(--pf-t--global--font--line-height--body); }
+
+/* The subtle text token at full strength: faded, it measured 3.2:1. */
+#console-statusbar .console-shell-statusbar__version {
+  white-space: nowrap;
+  line-height: var(--pf-t--global--font--line-height--body);
+  cursor: default;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  /* Centred out of the flow, so a long version truncates against the centre and never displaces the
+     right-hand controls. */
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#console-statusbar .console-shell-statusbar__version:hover { color: var(--pf-t--global--text--color--regular); }
+
+/* Tray buttons: a 14px glyph in a 24px hit region. */
+#console-statusbar .console-shell-statusbar__shortcuts,
+#console-statusbar .console-shell-statusbar__activity,
+#console-statusbar .console-shell-statusbar__share {
+  flex: 0 0 auto;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+  line-height: 0;
+  border: 0;
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+}
+#console-statusbar .console-shell-statusbar__shortcuts:hover,
+#console-statusbar .console-shell-statusbar__activity:hover,
+#console-statusbar .console-shell-statusbar__share:hover { color: var(--pf-t--global--text--color--regular); }
+#console-statusbar .console-shell-statusbar__activity[aria-expanded="true"],
+#console-statusbar .console-shell-statusbar__share[aria-expanded="true"] { color: var(--console-accent); }
+
+/* The panes toggle's glyph reads out the persisted split direction (panesIcon). It is the one tray
+   button with a word, which earns it the fill that binds the pair into one pill. */
+#console-statusbar .console-shell-statusbar__panes {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: 0 var(--pf-t--global--spacer--sm);
+  min-block-size: var(--pf-t--global--spacer--lg);
+  border: 0;
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 7%, transparent);
+  border-radius: var(--pf-t--global--border--radius--small);
+  /* PF's button base sets 14px, which made this the largest text in the bar. */
+  font-size: inherit;
+  color: var(--pf-t--global--text--color--subtle);
+}
+#console-statusbar .console-shell-statusbar__panes:hover {
+  color: var(--pf-t--global--text--color--regular);
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 12%, transparent);
+}
+#console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); }
+/* The inline SVG baselines on a line box the button's line-height sizes; a flex box centres it. */
+#console-statusbar .console-shell-statusbar__panes .pf-v6-c-button__icon {
+  display: flex;
+  align-items: center;
+  line-height: 0;
+}
+/* Own line-height: the button's line-height 0 would squash the text. */
+#console-statusbar .console-shell-statusbar__panes-label { line-height: var(--pf-t--global--font--line-height--body); white-space: nowrap; }
+
+/* A PF link button, muted to the bar's weight. The label truncates; the icon and the 24px target do not. */
+#console-conn {
+  --pf-v6-c-button--AlignItems: center;
+  max-width: 100%;
+  min-width: 0;
+  min-block-size: var(--pf-t--global--spacer--lg);
+  font-size: inherit;
+  line-height: var(--pf-t--global--font--line-height--body);
+  color: var(--pf-t--global--text--color--subtle);
+  text-decoration: none;
+}
+#console-conn:hover { color: var(--pf-t--global--text--color--regular); text-decoration: underline; text-decoration-color: var(--console-accent); }
+#console-conn .pf-v6-c-button__icon { flex: 0 0 auto; }
+#console-conn .pf-v6-c-button__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Counts go first: below 40rem the bar cannot hold them beside the tray (473px of content measured in a
+   375px bar). The version names a build rather than live state, so it goes too. */
+@media (max-width: 40rem) {
+  #console-statusbar [data-item] { display: none; }
+  #console-statusbar .console-shell-statusbar__version { display: none; }
+}
+/* Below about 26rem the word goes, with the fill that exists to bind it to the glyph. */
+@media (max-width: 26rem) {
+  #console-statusbar .console-shell-statusbar__panes-label { display: none; }
+  #console-statusbar .console-shell-statusbar__panes,
+  #console-statusbar .console-shell-statusbar__panes:hover { background: none; }
+}
+
+/* Touch targets: only the hit region grows to Apple's 44pt, the glyph stays 14px. Paired with the
+   coarse --console-statusbar-h in the Shell layout; one without the other overflows the bar. */
+@media (pointer: coarse) {
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    min-block-size: 44px;
+    /* These buttons carry line-height 0, which pins a glyph to the top of a grown box. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #console-conn { min-block-size: 44px; }
+  /* At 44px the fill is as tall as the bar and reads as "active", which aria-expanded already means. */
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes:hover {
+    background: none;
+  }
+}
+/* Below the shell's inversion on a touch pointer, Shortcuts (keyboard) and Panes (tiling, folded away
+   at this width) control things the device lacks; dropping them leaves room for 44x44 on the rest.
+   After the block above: both selectors tie on specificity, so source order lets display:none win. */
+@media (pointer: coarse) and (max-width: 47.999rem) {
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__shortcuts,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes {
+    display: none;
+  }
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    min-inline-size: 44px;
+  }
+}

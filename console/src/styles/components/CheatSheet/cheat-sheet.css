@@ -1,0 +1,29 @@
+/* The keyboard shortcuts sheet (cheatsheet.ts): a read-only PF modal opened by holding "?". A
+   two-column label and keys grid grouped by area, scrollable for long lists. */
+#console-cheatsheet { z-index: var(--pf-t--global--z-index--lg); }
+.console-shell-cheatsheet { max-height: min(80vh, 40rem); overflow-y: auto; }
+/* The box takes focus only to own keydowns. */
+.console-shell-cheatsheet:focus { outline: none; }
+.console-shell-cheatsheet__body { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
+.console-shell-cheatsheet__hint {
+  margin: 0;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-cheatsheet__empty { margin: 0; color: var(--pf-t--global--text--color--subtle); }
+.console-shell-cheatsheet__list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--lg);
+  margin: 0;
+}
+.console-shell-cheatsheet__label { margin: 0; font-size: var(--pf-t--global--font--size--body--default); }
+.console-shell-cheatsheet__chord {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  justify-self: end;
+}
+.console-shell-cheatsheet__plus { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--body--sm); }

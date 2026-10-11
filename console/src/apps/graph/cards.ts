@@ -20,6 +20,12 @@ export const CARD_COL_W = 240; // CARD_MAX_W plus gutter; the DAG column spacing
 
 const STRIP_W = 3; // world units; a fill, so it scales with the card like the rest of its geometry
 
+// The lower line (project, duration) is body-small, 12px: the console's type floor, and what the
+// 34-unit card has room for under a 12px label.
+const SUBTITLE_PX = 12;
+const SUBTITLE_FONT_WEIGHT = 400;
+const SUBTITLE_GAP = 6; // world units between a project name and a duration on the same line
+
 // Cards are laid out in WORLD units, so the zoom that frames a whole build DAG also shrinks
 // them: at the scale that fits 111 targets on screen a 12-unit label paints about two pixels
 // tall, and a column of cards reads as noise rather than as nodes. Card geometry therefore
@@ -199,24 +205,23 @@ export function drawCard(
   ctx.textAlign = "left";
   ctx.fillStyle = theme.text;
   ctx.font = "500 12px " + theme.font;
-  ctx.fillText(
-    ellipsize(ctx, n.label, maxTextW),
-    textX,
-    project && project !== "." ? n.y - 6 : n.y,
-  );
+  const subtitle = project && project !== "." ? project : null;
+  const twoLines = subtitle !== null || durationText != null;
+  ctx.fillText(ellipsize(ctx, n.label, maxTextW), textX, twoLines ? n.y - 6 : n.y);
 
-  if (project && project !== ".") {
-    ctx.fillStyle = theme.muted;
-    ctx.font = "400 9px " + theme.font;
-    ctx.fillText(ellipsize(ctx, project, maxTextW), textX, n.y + 7);
+  // The subtitle and the duration share the card's lower line, both at the console's 12px floor, so
+  // the project name gives up the width the duration needs instead of painting under it.
+  ctx.fillStyle = theme.muted;
+  ctx.font = SUBTITLE_FONT_WEIGHT + " " + SUBTITLE_PX + "px " + theme.font;
+  const durationW = durationText != null ? ctx.measureText(durationText).width + SUBTITLE_GAP : 0;
+  if (subtitle !== null) {
+    ctx.fillText(ellipsize(ctx, subtitle, Math.max(0, maxTextW - durationW)), textX, n.y + 7);
   }
 
   // Duration, right-aligned within the card.
   if (durationText != null) {
-    ctx.fillStyle = theme.muted;
-    ctx.font = "400 9px " + theme.font;
     ctx.textAlign = "right";
-    ctx.fillText(durationText, x + w - CARD_PAD_X, y + h - 8);
+    ctx.fillText(durationText, x + w - CARD_PAD_X, n.y + 7);
     ctx.textAlign = "left";
   }
 

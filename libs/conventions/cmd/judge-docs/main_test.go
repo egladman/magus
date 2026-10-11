@@ -154,13 +154,46 @@ func TestRunJudgesAPullRequestFromStdin(t *testing.T) {
 	}
 }
 
+func TestRunJudgesAStylesheetCommentAtItsSourceLine(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "a.css")
+	body := ".a { color: red; }\n\n/* Simply put.\n   Still fine. */\n.b { color: blue; }\n"
+
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-kind", "css", path}, strings.NewReader(""), &out, &errOut)
+
+	want := `[{"node":"` + path + `","source":"` + path + `:3","language":"css","rule":"filler",` +
+		`"message":"Drop 'Simply': state the fact.","match":"Simply"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
+func TestRunJudgesAStylesheetFromStdinWhenNoPathIsNamed(t *testing.T) {
+	var out, errOut bytes.Buffer
+
+	code := run([]string{"-kind", "css"}, strings.NewReader("/* Fine. */\n.a { color: red; }\n\n/* Used to be a grid. */\n.b { color: blue; }\n"),
+		&out, &errOut)
+
+	want := `[{"node":"stdin","source":"stdin:4","language":"css","rule":"history",` +
+		`"message":"Comment narrates a change (\"Used to\"); describe the code as it stands and leave its history to the commit message.",` +
+		`"match":"Used to"}]` + "\n"
+	if code != 0 || out.String() != want || errOut.String() != "" {
+		t.Errorf("run:\n got code %d stdout %q stderr %q\nwant code 0 stdout %q", code, out.String(), errOut.String(), want)
+	}
+}
+
 func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 	cases := []struct {
 		name       string
 		args       []string
 		wantStderr string
 	}{
-		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source or pull-request\n"},
+		{"unknown kind", []string{"-kind", "doc"}, "judge-docs: unknown kind \"doc\": want markdown, guide, skill, skill-source, css or pull-request\n"},
 		{"a path for symbols", []string{"a.md"}, "judge-docs: a path needs -kind markdown, since symbols are read from stdin\n"},
 		{"a path for a pull request", []string{"-kind", "pull-request", "a.md"}, "judge-docs: a pull request is read from stdin, not from a path\n"},
 		{"a missing file", []string{"-kind", "markdown", "missing.md"}, "judge-docs: read missing.md: open missing.md: no such file or directory\n"},

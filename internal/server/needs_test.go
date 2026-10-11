@@ -59,6 +59,7 @@ var pinnedNeeds = map[string]types.Need{
 	"/api/v1/diff/session":  write,
 	"/api/v1/diff/review":   write,
 	"/api/v1/diff/branches": write,
+	"/api/v1/diff/thread":   write,
 	"/api/v1/diff/run":      write,
 	"/api/v1/plan":          write,
 	"/api/v1/attention":     write,

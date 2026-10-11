@@ -1,0 +1,99 @@
+/* Line-level renderers from render/sections.ts, shared by the log viewer, the activity trail and the
+   dashboard's live-activity preview. The page frame is layouts/Frame. --log-pad comes from the
+   importing sheet, since a dashboard tile wants a much smaller gutter; the fallback keeps this sheet
+   usable alone. */
+
+/* Fill and ink are a pair from PatternFly's status tokens, so the ink follows the fill in both
+   themes; pinning it to white or near-black measured 2.2:1 on the light fills. */
+.console-render-badge {
+  display: inline-block;
+  margin-inline-end: var(--pf-t--global--spacer--sm);
+  padding-block: 0;
+  padding-inline: var(--pf-t--global--spacer--xs);
+  font-size: var(--console-chip-size);
+  font-weight: var(--console-chip-weight);
+  line-height: var(--pf-t--global--font--line-height--body);
+  text-transform: uppercase;
+  letter-spacing: var(--console-chip-tracking);
+  /* At about 15px tall, the platform-tuned radius tokens read as a lozenge. */
+  border-radius: var(--console-radius-micro);
+  /* Transparent so the outline variant takes no extra height. */
+  border: var(--pf-t--global--border--width--regular) solid transparent;
+  vertical-align: baseline;
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-render-badge--pass {
+  background: var(--pf-t--global--color--status--success--default);
+  color: var(--pf-t--global--text--color--status--on-success--default);
+}
+.console-render-badge--fail,
+.console-render-badge--error {
+  background: var(--pf-t--global--color--status--danger--default);
+  color: var(--pf-t--global--text--color--status--on-danger--default);
+}
+.console-render-badge--warn,
+.console-render-badge--dry {
+  background: var(--pf-t--global--color--status--warning--default);
+  color: var(--pf-t--global--text--color--status--on-warning--default);
+}
+/* CACHED is the one outline badge: no work happened, and it stays apart from info and summary without
+   a third grey. */
+.console-render-badge--cached {
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  border: var(--pf-t--global--border--width--regular) solid var(--pf-t--global--border--color--control--default);
+}
+/* INFO and SUMMARY are narration, so neither borrows an outcome colour. */
+.console-render-badge--info {
+  background: var(--pf-t--global--color--nonstatus--teal--default);
+  color: var(--pf-t--global--text--color--nonstatus--on-teal--default);
+}
+.console-render-badge--summary {
+  background: var(--pf-t--global--color--nonstatus--purple--default);
+  color: var(--pf-t--global--text--color--nonstatus--on-purple--default);
+}
+
+.console-render-line {
+  display: flex;
+  gap: var(--pf-t--global--spacer--sm);
+  padding-block: 0;
+  padding-inline: var(--log-pad, var(--console-pad));
+}
+.console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
+/* Never selectable, so copying the body grabs the text without the numbers. */
+.console-render-line__gutter {
+  flex: 0 0 auto;
+  min-inline-size: 2.5em;
+  text-align: end;
+  color: var(--pf-t--global--text--color--subtle);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+}
+.console-render-line .console-render-line__content {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Rows named by an #L<n> or #L<a>-L<b> fragment. */
+.console-render-line[data-highlight] { background: color-mix(in srgb, var(--console-accent) 16%, transparent); }
+
+/* Opt-in zebra for a rolling tail with no gutter to track along, read at a distance. Low contrast, so
+   it does not fight the ANSI colours and badges. */
+[data-zebra] .console-render-line:nth-child(even) {
+  background: color-mix(in srgb, var(--pf-t--global--text--color--subtle) 7%, transparent);
+}
+[data-zebra] .console-render-line:hover { background: var(--pf-t--global--background--color--secondary--default); }
+
+.console-render-ansi--bold { font-weight: var(--pf-t--global--font--weight--body--bold); }
+.console-render-ansi--dim { opacity: 0.6; }
+.console-render-ansi--italic { font-style: italic; }
+.console-render-ansi--underline { text-decoration: underline; }
+.console-render-ansi__fg--red { color: var(--console-ansi-red); }
+.console-render-ansi__fg--green { color: var(--console-ansi-green); }
+.console-render-ansi__fg--yellow { color: var(--console-ansi-yellow); }
+.console-render-ansi__fg--blue { color: var(--console-ansi-blue); }
+.console-render-ansi__fg--magenta { color: var(--console-ansi-magenta); }
+.console-render-ansi__fg--cyan { color: var(--console-ansi-cyan); }

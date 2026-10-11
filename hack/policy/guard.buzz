@@ -15,6 +15,9 @@
 //   admin-merge (deny): `gh pr merge --admin`, which lands a pull request past the queue.
 //   pr-watch (deny): a pull request's own state (merged, auto-merge, mergeability) read
 //     again and again, which the host's PR monitor reports as it changes.
+//   auto-merge (deny): `gh pr merge --auto`, or a `gh api` call naming the
+//     enablePullRequestAutoMerge mutation. A person enables auto-merge; disabling it and
+//     reading it stay open.
 //   worker-runs-gate (deny): the gate run by a subagent whose role is not integrate.
 //   detached-push-unqualified (deny): `git push <remote> HEAD:<name>` from a detached HEAD
 //     to a branch the checkout does not know the remote has.
@@ -24,6 +27,12 @@
 //     pull request's head, that is not a short topic of lowercase words.
 //   foreign-binary (deny): a magus binary built in one checkout of magus run against another.
 //   go-into-checkout (deny): `go -C` into another checkout of magus, the bootstrap aside.
+//   worker-builds-magus (deny): a caller holding a worker lease compiling magus (`go run`,
+//     `go build` or `go install` of cmd/magus, or `magus run go-build` / `build` of the root
+//     project), the bootstrap included. The main session builds ./magus once per base commit and
+//     hack/dev/bootstrap-worktree.buzz places it; the main session and a person build freely.
+//   brief-builds-magus (deny, spawn): a spawn brief that tells its worker to compile magus. A
+//     line that names the command only to forbid it ("never ...") is not graded.
 //   worker-bootstrap (deny): the bootstrap run by any caller but the main session, which
 //     places ./magus instead; foreign-binary lets the placement script through.
 //   stale-binary (advise once per state): the ./magus answering this hook was built from
@@ -54,9 +63,11 @@
 //     session folder is not a run; magus status reads the lock.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
-// five), cadence.buzz (the gate and the push), branches.buzz (push-authority and
+// six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
 // branch-name), binaries.buzz (foreign-binary and
-// go-into-checkout), stale.buzz, spawn.buzz, commits.buzz, pull_requests.buzz,
+// go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
+// magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
+// commits.buzz, pull_requests.buzz,
 // comments.buzz and host.buzz (a run log, and a directory named terminals).
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
@@ -68,6 +79,7 @@ import "magus";
 import "fs";
 import "vcs";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 import "./hack/policy/gh" as gh;
 import "./hack/policy/cadence" as cadence;
 import "./hack/policy/binaries" as binaries;
@@ -83,7 +95,11 @@ import "./hack/magusfile/commits" as conventional;
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
-    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace }, disk: binaries\onDisk(),
+    var lease = "";
+    if (req.lease != null) {
+        lease = req.lease!.id;
+    }
+    final denial = binaries\decideBinaries(programs, where: binaries\Where{ dir = req.dir, workspace = req.workspace, lease = lease }, disk: binaries\onDisk(),
         worker: req.role == "worker" or req.parent != "" or req.agent != "");
     if (denial != "") {
         return magus\guard.deny(denial);
@@ -111,12 +127,12 @@ export fun judge(req: CommandRequest) > GuardVerdict {
         return branchTopic(req.dir);
     };
     final texts = withHeredocs(programs, line: req.command);
-    final verdict = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
+    final decided = decide(texts, caller: cadence\Caller{ role = req.role, title = req.parent }, checkout: checkout,
         baseBranch: baseBranch, line: req.command, files: bodyFiles(texts, dir: req.dir),
         diff: pullRequests\branchDiff(req.workspace), judge: pullRequests\judgeRunner(req.workspace), once: once,
         publishing: Publishing{ pusher = pusher, current = currentBranch(req), remote = requestRemote(req), topic = topic });
-    if (verdict.decision != "allow" or stale\rebuilds(programs)) {
-        return verdict;
+    if (decided.decision != "allow" or stale\rebuilds(programs)) {
+        return decided;
     }
     return stale\decideStale(stale\hookBinary(req.workspace), once: once);
 }
@@ -229,7 +245,7 @@ export fun judgeSpawn(req: SpawnRequest) > GuardVerdict {
     if (req.lease != null) {
         lease = req.lease!.id;
     }
-    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease };
+    final facts = spawn\Spawn{ kind = req.kind, title = req.description, isolated = req.isolated, model = req.model, lease = lease, prompt = req.prompt };
     var rows: [helpers\JobRow]? = null;
     var unreadable = "";
     try {
@@ -285,7 +301,8 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
             after = current.replace(req.oldText, with: req.newText);
         }
     }
-    return comments\decideComments(req.path, before: before, after: after, once: once);
+    return comments\decideWrite(req.path, before: before, after: after, once: once,
+        judge: comments\cssJudgeRunner(req.workspace));
 }
 
 // decide is judge over plain records. The order is the verdict: push authority first, then
@@ -304,9 +321,9 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
     if (authority.decision != "allow") {
         return authority;
     }
-    final verdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
-    if (verdict.decision != "allow") {
-        return verdict;
+    final cadenceVerdict = cadence\decideCadence(programs, caller: caller, checkout: checkout);
+    if (cadenceVerdict.decision != "allow") {
+        return cadenceVerdict;
     }
     final names = branches\decideNames(programs, current: publishing.current, remote: publishing.remote,
         topic: publishing.topic, once: once);
@@ -323,7 +340,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
 // denials, the gh advisories, then the pull request text advisories.
 fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
-    final github = gh\decideGitHub(programs, once: once);
+    final github = gh\decideGitHub(programs, once: once, line: line);
     if (github.decision == "deny") {
         return github;
     }
@@ -350,6 +367,30 @@ test "the remote's base is read from the caller's checkout, and one that cannot 
     final missing = (fs\tempDir("remote-of") catch "") + "/gone";
     final gone = requestRemote(CommandRequest{ dir = missing });
     std\assert(gone.unreadable.indexOf(missing) != null, message: gone.unreadable);
+}
+
+test "a commit and a pull request text denied together open with one verdict" {
+    final line = helpers\vcsRequest([["git", "commit", "-m", "Fixed the port."]])
+        + helpers\request([["gh", "pr", "create", "--title", "Fixed the port.", "--body", "Pins the port."]]);
+    final diff = fun (base: str) > pullRequests\Facts {
+        return pullRequests\unknownFacts();
+    };
+    final judge = fun (text: str) > [pullRequests\Judged] {
+        return [<pullRequests\Judged>];
+    };
+    final once = fun (key: str) > bool {
+        return true;
+    };
+    final both = decideText(line, baseBranch: "", line: "", files: {<str: str>}, diff: diff, judge: judge, once: once);
+    std\assert(both.decision == "deny", message: both.reason);
+    verdict\assertVerdict(both.reason, label: "a commit and a pull request together");
+    std\assert(both.reason.indexOf("this pull request text breaks") != null, message: "both rationales are kept: " + both.reason);
+}
+
+test "a write into a run log is denied with the verdict a command's read gets" {
+    final write = judgeWrite(WriteRequest{ workspace = "/w", path = ".magus/logs/abc.log", content = "x" });
+    std\assert(write.decision == "deny", message: write.decision);
+    verdict\assertVerdict(write.reason, label: "a write into a run log");
 }
 
 test "a push is refused to a subagent the host names, under no lease and unseen spawning" {

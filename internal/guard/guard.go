@@ -146,6 +146,10 @@ type Dependencies struct {
 	// workspace declared over builtin.Defaults. Nil means the defaults, with no
 	// parameters set.
 	Builtins map[string]builtin.Setting
+	// Binary and BinaryVersion are the running magus's path and version. The trail records
+	// them on every hook row, so a verdict can be tied to the build that reached it.
+	Binary        string
+	BinaryVersion string
 
 	// scope is where the judged call runs. Judge fills it from the location it resolved,
 	// so Evaluate can tell a path outside the workspace without reading anything itself.
@@ -156,6 +160,10 @@ type Dependencies struct {
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
+	// lease is the lease the judged call acts under, "" for the orchestrator or a person.
+	// Judge fills it once it has resolved the lease, so the rules that word a remedy can
+	// tell a worker, who never builds the binary, from the one who does.
+	lease string
 }
 
 // workingDir is where a relative path on the judged line resolves. The hook process's cwd
@@ -580,6 +588,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	// there to pin a location.
 	callDir := ""
 	description := ""
+	mcpTool, readOnlyTool := "", false
 	var write writeFields
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
@@ -625,6 +634,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 		}
 		input = env.Value
+		mcpTool, readOnlyTool = env.MCPTool, env.ReadOnlyTool
 		description = env.Description
 		write = env.Write
 		hasInput = input != ""
@@ -664,6 +674,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	skills := hint.NewGate(stateAt.cacheDir, who.skillsKey())
 	binding := boundJob(who, location)
 	actingLease, leaseFrom := resolveLease(who, req.Lease, binding.Job)
+	deps.lease = actingLease
 	// A subagent's first call registers its checkout. A command line runs where the call
 	// does; a host's hook may run from the session's checkout, so an envelope counts only
 	// the call's reported directory, and without one `magus job exec` registers it.
@@ -1073,6 +1084,8 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			dialect:     shellD,
 			preauth:     preauth,
 			lease:       actingLease,
+			mcpTool:     mcpTool,
+			readOnly:    readOnlyTool,
 		}, who, stateAt)
 		// Last, so a line any rule refused or put to a person binds nobody.
 		if !req.DryRun && (verdict.Decision == "pass" || verdict.Decision == "advise") {
@@ -1151,11 +1164,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// rule's refusal is about something else.
 		var next []hint.Next
 		why := whys[verdict.Reason]
-		if len(remedy.Next) > 0 && verdict.Reason == remedy.Deny {
+		switch {
+		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
 			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
+		case len(verdict.Next) > 0:
+			// The workspace seam's own deny, which words its reason without the command.
+			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
@@ -1172,9 +1189,20 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		record.Decision, record.Reason, record.Context = "", "", ""
 	}
 	if !req.DryRun {
-		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord)
+		appendHookActivity(ctx, location, input, who, tool, actingLease, preauth, verdictRef, policyDigest, record, ruleRecord, deps.judge(env.Cwd))
 	}
 	return verdict
+}
+
+// judgeSource is the magus that judged a hook call, and the directory the host said the
+// call ran in, as the trail records them.
+type judgeSource struct {
+	binary, version, cwd string
+}
+
+// judge is the judging binary with the host's reported directory.
+func (d Dependencies) judge(cwd string) judgeSource {
+	return judgeSource{binary: d.Binary, version: d.BinaryVersion, cwd: cwd}
 }
 
 // judgeShellLine ranks the rules every caller meets on a shell line, whatever lease it
@@ -1227,11 +1255,18 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 //
 // Graded by the rules the next call meets, rather than filtered by a list of its own,
 // so a rule added later grades remedies without anyone remembering to.
+//
+// A worker's placement of ./magus is kept whatever its write paths: it writes outside
+// every one by design, as the only way a worker gets its base's binary.
 func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []hint.Next) []hint.Next {
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	d := effectiveDialect(deps.ShellDialect)
+	candidates := next
+	if len(next) != 1 || !placesBinary(next[0], actingLease) {
+		candidates = hint.ServableTo(role, writePaths, next)
+	}
 	var kept []hint.Next
-	for _, n := range hint.ServableTo(role, writePaths, next) {
+	for _, n := range candidates {
 		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run).refused() {
 			continue
 		}
@@ -1408,6 +1443,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// being present: requiring `op` left the tools that do not carry one,
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
+		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
@@ -1542,6 +1578,10 @@ func HostAttribution(raw string) (session, transcript string) {
 type hookRequest struct {
 	Value  string
 	IsPath bool
+	// MCPTool is the magus MCP tool Value is the rendering of, "" for any other request.
+	// ReadOnlyTool is whether that call only reads, which the line cannot always say.
+	MCPTool      string
+	ReadOnlyTool bool
 	// Description is the label the caller wrote for a shell command, "" when it wrote none.
 	Description string
 	// Write is the text a file write carries, each field empty when the host sent none.
@@ -1871,7 +1911,7 @@ func WithLocation(ctx context.Context, cacheDir, workspace, dir string) context.
 //
 // rule is how the workspace command or write rule judged, which alone knows whether its answer came
 // from the approved side or the working tree.
-func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord) {
+func appendHookActivity(ctx context.Context, location location, input string, who hookAttribution, tool, lease, preauth, verdictRef, policyDigest string, verdict Verdict, rule workspaceRuleRecord, by judgeSource) {
 	if input == "" || location.cacheDir == "" {
 		return
 	}
@@ -1897,6 +1937,9 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		Rule:            verdict.Rule,
 		StdinClosed:     verdict.UpdatedCommand != "",
 		VerdictRef:      verdictRef,
+		Binary:          by.binary,
+		BinaryVersion:   by.version,
+		Cwd:             by.cwd,
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -1908,6 +1951,8 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 
 // spawnVerdictRecord is what the trail keeps about how a spawn or continuation was judged.
 type spawnVerdictRecord struct {
+	// verdictRef is the grd blob the spawn's deny or advisory cites, empty when none was stored.
+	verdictRef   string
 	policyDigest string
 	decidedBy    string
 	// target is the agent a continuation addresses, resolved to its id when magus knows it.
@@ -1929,6 +1974,7 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		return
 	}
 	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
+		VerdictRef:    rec.verdictRef,
 		PolicyDigest:  rec.policyDigest,
 		DecidedBy:     rec.decidedBy,
 		Continue:      req.IsContinue,
@@ -1944,6 +1990,9 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		Child:         req.Child,
 		Context:       req.Value,
 		DeclaredModel: req.DeclaredModel,
+		Binary:        deps.Binary,
+		BinaryVersion: deps.BinaryVersion,
+		Cwd:           req.Cwd,
 	})
 }
 

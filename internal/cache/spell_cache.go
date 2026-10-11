@@ -22,6 +22,7 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // A SPELL CACHE BUNDLE carries the caches a spell declares (for go, GOCACHE and
@@ -613,7 +614,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 			// is no verification refusal, and misconfiguration was refused above.
 			c.log.WarnContext(ctx, "cache.spell_cache.unreachable",
 				slog.String("backend", c.remote.backend.Name()), slog.String("key", want.name),
-				slog.Duration("elapsed", time.Since(start)), slog.String("error", err.Error()))
+				slog.Duration("elapsed", time.Since(start)), attr.Error(err))
 			return false, errSpellCacheUnreachable
 		}
 		defer rc.Close()
@@ -621,7 +622,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		stats, err := readSpellCacheBundle(ctx, counted, c.verifier, want, roots, c.importLimit(), now)
 		if err != nil {
 			res.Refused = append(res.Refused, want.name+": "+err.Error())
-			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", want.name), slog.String("error", err.Error()))
+			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", want.name), attr.Error(err))
 			return false, nil
 		}
 		res.SpellCacheStats, res.Key, res.Transferred, res.Exact = stats, want.name, counted.N, !want.anyLocks
@@ -646,7 +647,7 @@ func (c *Cache) restoreSpellCache(ctx context.Context, key SpellCacheKey, roots 
 		}
 		if err != nil {
 			res.Refused = append(res.Refused, pk+": "+err.Error())
-			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", pk), slog.String("error", err.Error()))
+			c.log.WarnContext(ctx, "cache.spell_cache.refused", slog.String("key", pk), attr.Error(err))
 			continue
 		}
 		var ptr spellCachePointer

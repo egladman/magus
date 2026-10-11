@@ -1,0 +1,62 @@
+/* The one sortable table (ui/table.ts: Dashboard tiles, Tools app), on PatternFly's compact Table.
+   The wrapper is the one scroll container: PF's sticky header sticks to the nearest scrolling
+   ancestor, so a second overflow box between wrapper and pane would leave it a scrollport that never
+   scrolls. A caller bounds the wrapper's height with --console-table-max-block-size or a parent height.
+   It is also the inline-size container PF's grid modifiers key on, named as PF documents it
+   (pf-v6-contain-table), so a narrow pane stacks the table into labelled rows. */
+
+.console-table__wrap {
+  overflow: auto;
+  max-block-size: var(--console-table-max-block-size, 100%);
+  container-type: inline-size;
+  container-name: pf-v6-contain-table;
+}
+.console-table { inline-size: 100%; margin: 0; }
+.console-table :is(th, td)[data-num] {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.console-table th[data-num] .pf-v6-c-table__button-content { justify-content: flex-end; }
+.console-table td[data-num] { font-family: var(--pf-t--global--font--family--mono); }
+/* PF's sort button can land under the console's 24px floor for anything pressed. */
+.console-table .pf-v6-c-table__button {
+  min-block-size: var(--pf-t--global--spacer--lg);
+  min-inline-size: var(--pf-t--global--spacer--lg);
+}
+.console-table__empty {
+  margin: var(--pf-t--global--spacer--xs) 0 0;
+  font-size: var(--pf-t--global--font--size--body--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* The scroll cue: the frame names the edges with more table past them in data-more, and a fade on
+   each says so. The frame carries it because a pseudo-element inside the scroller would scroll away
+   with the rows. */
+.console-table__frame { position: relative; min-block-size: 0; }
+.console-table__frame::before,
+.console-table__frame::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--console-motion-fast) ease;
+  z-index: var(--pf-t--global--z-index--xs);
+}
+.console-table__frame::before {
+  inset-block: 0;
+  inset-inline-start: 0;
+  inline-size: var(--pf-t--global--spacer--md);
+  background: linear-gradient(to right, var(--pf-t--global--border--color--default), transparent);
+}
+.console-table__frame::after {
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: var(--pf-t--global--spacer--md);
+  background: linear-gradient(to left, var(--pf-t--global--border--color--default), transparent);
+}
+.console-table__frame[data-more~="inline-start"]::before,
+.console-table__frame[data-more~="inline-end"]::after { opacity: 1; }
+/* Rows past the bottom of a bounded wrapper hint on the frame's edge, which is the wrapper's too. */
+.console-table__frame[data-more~="block-end"] > .console-table__wrap {
+  border-block-end: var(--pf-t--global--border--width--strong) solid var(--pf-t--global--border--color--default);
+}
