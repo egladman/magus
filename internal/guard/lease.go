@@ -1400,7 +1400,8 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	if backend == "git" && unlocated == "" {
 		site, unlocated, relocated = gitEnvSite(site, env)
 	}
-	if unlocated == "" && !relocated && backend == "git" && recordsCommit(inv) && inOtherRepository(site, row.CheckoutRoot) {
+	if unlocated == "" && !relocated && backend == "git" && actsInPlace(inv) &&
+		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
 	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
@@ -1475,6 +1476,31 @@ func inOtherRepository(site vcsSite, checkout string) bool {
 	}
 	_, own, ok := gitCheckout(checkout)
 	return ok && !samePath(common, own)
+}
+
+// actsInPlace reports whether a git argv acts only on the repository it runs in, so that
+// standing in another repository is enough to keep it off the job's. A push writes to a
+// remote, which may be the job's repository; inline config can move the work tree
+// (core.worktree) or define an alias that runs anything.
+func actsInPlace(inv hint.Invocation) bool {
+	g := parseGit(inv.Args)
+	return g.at >= 0 && g.sub != "push" && !g.configured
+}
+
+// workTreeAt reports whether git, run in dir, takes dir's own checkout as its work tree
+// and that work tree lies outside checkout. git is asked rather than the directory read:
+// the repository's config, or one it includes, can set core.worktree to the job's checkout.
+func workTreeAt(ctx context.Context, dir, checkout string) bool {
+	root, _, ok := gitCheckout(dir)
+	if !ok {
+		return false
+	}
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{Name: "git"})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	top, err := res.VCS.Root(ctx, dir)
+	return err == nil && samePath(top, root) && !within(top, checkout)
 }
 
 // workerRole says why row, acted under by caller, is a worker rather than the root, ""

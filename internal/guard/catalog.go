@@ -276,9 +276,9 @@ var denyRuleDocs = []types.RuleDoc{
 			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
 			"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
-			"vcs\\cmd may also commit in a repository standing wholly outside the job's checkout, such as a script's scratch repository, unless its environment sets GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR or GIT_INDEX_FILE. " +
+			"vcs\\cmd may also run any git operation but a push in a repository standing wholly outside the job's checkout, such as a script's scratch repository: its directory, -C and the work tree a --git-dir implies are outside the checkout, its common git directory is not the job's, git reports that directory as its work tree, and neither -c nor --config-env nor GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR or GIT_INDEX_FILE is set. " +
 			"A scratch repository inside the checkout, under .magus/ say, is refused like a submodule there: it holds the job's files under another git directory. " +
-			"Version control a Buzz script runs through proc\\exec or proc\\shell is not judged by this rule. " +
+			"proc\\exec and proc\\shell refuse git, hg, sl and jj outright and name the vcs\\cmd call to make instead, so a Buzz script's version control is judged here. " +
 			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite),
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",

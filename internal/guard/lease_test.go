@@ -736,12 +736,14 @@ func mustRel(t *testing.T, base, target string) string {
 	return rel
 }
 
-// TestVCSCmdRefusalExemptsNothingButAnOutsideCommit pins the scratch-repository exemption
-// to a commit standing outside the job's checkout. Pointed at another repository with
-// --git-dir, git takes the job's checkout as the work tree, so a clean or checkout there
-// wipes the job's files; a submodule or nested repository inside the checkout is the
-// job's files under another git directory.
-func TestVCSCmdRefusalExemptsNothingButAnOutsideCommit(t *testing.T) {
+// TestVCSCmdRefusalExemptsOnlyAnotherRepository pins the scratch-repository exemption to a
+// git operation whose site and work tree stand outside the job's checkout, in a repository
+// of their own. Pointed at another repository with --git-dir, git takes the job's checkout
+// as the work tree, so a clean or checkout there wipes the job's files; a submodule or
+// nested repository inside the checkout is the job's files under another git directory;
+// core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
+// a push writes to a remote that may be the job's repository.
+func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepo(t)
 	scratch := testkit.NewRepo(t, nil)
 	scratchGit := "--git-dir=" + filepath.Join(scratch.Root(), ".git")
@@ -750,25 +752,44 @@ func TestVCSCmdRefusalExemptsNothingButAnOutsideCommit(t *testing.T) {
 	r.git(wt, "init", "-q", nested)
 	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
 	sub := filepath.Join(wt, "sub")
+	moved := testkit.NewRepo(t, nil)
+	moved.Git("config", "core.worktree", wt)
 
 	for name, c := range map[string]struct {
 		args []string
 		dir  string
+		env  []string
 	}{
-		"clean through --git-dir":    {[]string{scratchGit, "clean", "-fdx"}, wt},
-		"checkout through --git-dir": {[]string{scratchGit, "checkout", "--", "."}, wt},
-		"commit through --git-dir":   {[]string{scratchGit, "commit", "-m", "done"}, wt},
-		"clean in a submodule":       {[]string{"clean", "-fdx"}, sub},
-		"commit in a submodule":      {[]string{"commit", "-m", "done"}, sub},
-		"commit in a nested repo":    {[]string{"-C", nested, "commit", "-m", "done"}, wt},
-		"checkout in a nested repo":  {[]string{"checkout", "--", "."}, nested},
-		"clean in a scratch repo":    {[]string{"clean", "-fdx"}, scratch.Root()},
+		"clean through --git-dir":             {[]string{scratchGit, "clean", "-fdx"}, wt, nil},
+		"checkout through --git-dir":          {[]string{scratchGit, "checkout", "--", "."}, wt, nil},
+		"commit through --git-dir":            {[]string{scratchGit, "commit", "-m", "done"}, wt, nil},
+		"clean in a submodule":                {[]string{"clean", "-fdx"}, sub, nil},
+		"commit in a submodule":               {[]string{"commit", "-m", "done"}, sub, nil},
+		"commit in a nested repo":             {[]string{"-C", nested, "commit", "-m", "done"}, wt, nil},
+		"checkout in a nested repo":           {[]string{"checkout", "--", "."}, nested, nil},
+		"clean with GIT_DIR on the scratch":   {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_DIR=" + filepath.Join(scratch.Root(), ".git")}},
+		"clean with GIT_WORK_TREE on the job": {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_WORK_TREE=" + wt}},
+		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
+		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
+		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
 	} {
-		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
 	}
 
-	fresh := testkit.NewRepo(t, nil).Root()
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh, nil))
+	fresh := testkit.NewRepo(t, nil)
+	linked := filepath.Join(t.TempDir(), "linked")
+	fresh.Git("worktree", "add", "-q", linked)
+	for name, c := range map[string]struct {
+		args []string
+		dir  string
+	}{
+		"commit in a scratch repo":          {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
+		"clean in a scratch repo":           {[]string{"clean", "-fdx"}, scratch.Root()},
+		"worktree remove in a scratch repo": {[]string{"worktree", "remove", "--force", linked}, fresh.Root()},
+		"reset -C a scratch repo":           {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
+	}
 }
 
 // TestUndeclaredLeaseRepairsReadsGitsSubcommand pins that an unenrolled session's git
