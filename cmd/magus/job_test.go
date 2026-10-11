@@ -25,7 +25,6 @@ import (
 	"github.com/egladman/magus/internal/queue"
 	qtypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/sessions"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/txtar"
@@ -135,13 +134,13 @@ func TestPrintJobTreeNamesWhoHoldsEachJob(t *testing.T) {
 // rather than fenced with the rest.
 func TestGeneratedBoundaryNamesWhatAnOutputCarvesOut(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
-`), 0o644))
-	m, err := magus.Open(t.Context(), root)
+`)
+	m, err := magus.Open(t.Context(), w.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -465,7 +464,6 @@ func seedJobStore(t *testing.T, root string, rows ...types.Job) (string, string)
 // A deny path naming a declaration of a file no diff driver reads is refused at fork
 // (MGS3031): the guard could only honor it by denying the whole file.
 func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
 	repo, cacheDir := execRepoFixture(t)
 	root := repo.Root()
@@ -489,7 +487,6 @@ func TestJobForkRefusesAnUngradableDenyPath(t *testing.T) {
 // A row naming no write paths bounds its holder by nothing unless it is read-only, so fork
 // refuses it even with a check, and the refusal teaches the script check a scout passes by.
 func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
 	root, cacheDir := execFixture(t)
 	fork := func(args ...string) error { return jobFork(t.Context(), root, args) }
@@ -515,7 +512,6 @@ func TestJobForkRefusesARowScopedByNothing(t *testing.T) {
 // A fork resolves the checkpoint it is handed: a full-length revision the repository
 // never held is refused and writes no row, and a real abbreviated one is stored in full.
 func TestJobForkResolvesItsCheckpoint(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
 	repo, cacheDir := execRepoFixture(t)
 	root := repo.Root()
@@ -562,7 +558,6 @@ export fun harness_limits(target: Target, cb: fun(any)) > {str: any} {
 // A fork notes a check whose last real run took longer than a wired host lets a foreground
 // call wait, naming both numbers, and says nothing when no wired host declares a limit.
 func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	// The spell's harness_limits decode is the bindings' own test. Here the loader answers
 	// for the wired id directly, since another test in this package may have cleared the
 	// spell-backed one.
@@ -587,10 +582,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tt.magusfile), 0o644))
 			require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "limit-host"), 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(root, "spells", "limit-host", "spell.buzz"), []byte(limitHostSpell), 0o644))
-			// The store is keyed on the workspace root as loaded, symlinks resolved.
-			resolved, err := filepath.EvalSymlinks(root)
-			require.NoError(t, err)
-			dir, err := sessions.Dir(resolved)
+			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
 			w, err := sessions.Open(dir, "invmv00001", sessions.InvocationStart{Command: "run"})
 			require.NoError(t, err)
@@ -613,7 +605,6 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 // The store the CLI opens resolves a ref the worker recorded in its own checkout, so an
 // orchestrator can exit a job on its worker's behalf.
 func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	worker := t.TempDir()
 	recorded, err := cache.NewOutputStore(filepath.Join(worker, ".magus")).
 		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "test"})
@@ -635,7 +626,6 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 // Prune prints each job it ends with the reason, then the count; under --dry-run it says
 // what would end and leaves the row live.
 func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	exited := leaseRow("returned", "")
 	exited.State = types.StateExited
 	busy := leaseRow("busy", "")
@@ -664,7 +654,6 @@ func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
 // Apply prints the spec diff, writes nothing under --dry-run, and keeps the job's state
 // either way.
 func TestJobApplyPrintsTheSpecDiffAndKeepsTheState(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	row := leaseRow("w", "")
 	row.State, row.WritePaths, row.Check = types.StateRunning, []string{"a.go", "b.go"}, &types.LeaseCheck{Target: "test", Project: "."}
 	row.Validation = row.Check.String()
@@ -708,7 +697,6 @@ func bindCheckout(t *testing.T, cacheDir, id string) {
 // from its parent, so a binding it wrote was the checkout's, and the parent sharing that
 // checkout was graded as the subagent from its next call.
 func TestJobExecWritesNoMarker(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	row := leaseRow("lease-enforcement/wave4/docs", "")
 	row.State = types.StateRunning
 	root, cacheDir := execFixture(t, row)
@@ -834,7 +822,6 @@ func TestLsJobsRendersTheRecordTheSameTwice(t *testing.T) {
 }
 
 func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	root, _ := execFixture(t, leaseRow("fleet", ""))
 	withOutput(t, "")
 	out := captureStdout(t, func() {
@@ -845,7 +832,6 @@ func TestLsJobsSaysWhenTheQueueWasNeverFetched(t *testing.T) {
 
 // Read end to end from a snapshot: a caller no job or login names sees everyone's.
 func TestLsJobsReadsTheSnapshot(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	root, _ := execFixture(t, leaseRow("fleet", ""))
 	_, in := inflightFixture()
 	require.NoError(t, queue.WriteSnapshot(root, queue.Snapshot{Fetched: *in.Fetch, Changes: in.Changes}))
@@ -1009,7 +995,6 @@ func guideBlock(t *testing.T, script, section string) string {
 // A -run that leaves out a test of the write paths' package is refused at fork, listing
 // the tests and a pattern that covers them, and a check running the whole package passes.
 func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	resetWorkspaceMemo(t)
 	root, cacheDir := execFixture(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
@@ -1048,7 +1033,6 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // that turns on the worker role denies it, the same line from the orchestrator would pass,
 // and the refusal names the target that compiles without linking the binary.
 func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
@@ -1098,7 +1082,6 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // "elsewhere" directory, so a grade that took the process cwd for the call's directory
 // would deny the check.
 func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
@@ -1135,7 +1118,6 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 // A workspace whose rules did not load is not graded, and says so rather than refuse on a
 // verdict nobody reached.
 func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
@@ -1161,7 +1143,6 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // A deny that holds for the compiling check too is about the binary or the workspace, so
 // the fork is not refused over it and says the check was not graded.
 func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"}).Root()

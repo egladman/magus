@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	store "github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -189,8 +189,7 @@ func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
 // can be exercised against threads instead of only against an unwired workspace.
 func withFakeReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
-	name := "fake-notes-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-notes-review-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -200,7 +199,7 @@ func withFakeReviewProvider(t *testing.T, threads []any) {
 			default:
 				return map[string]any{}, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

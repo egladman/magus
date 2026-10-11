@@ -84,11 +84,10 @@ const buzzSandboxTarget = "/magus-buzz-sandbox-test/victim"
 // process singleton.
 func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context, *magus.Magus, string) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
-		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err, "fixture workspace must open")
@@ -197,13 +196,10 @@ func countWorkspaceOpens(t *testing.T, open func(context.Context, string) (*magu
 // and the script path.
 func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
-	path := filepath.Join(root, "script.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))
-	return root, path
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	w.Write("magus.yaml", "sandbox:\n  mode: off\n")
+	return w.Root(), w.Write("script.buzz", script)
 }
 
 func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {

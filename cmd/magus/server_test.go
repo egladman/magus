@@ -20,7 +20,7 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -338,14 +338,13 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	// would have these two tests reading each other's events.
 	t.Setenv("MAGUS_CACHE_DIR", "")
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	root := w.Root()
 	m, err := magus.Open(context.Background(), root, opts...)
 	require.NoError(t, err, "fixture workspace must open")
 
-	name := "fake-job-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := fakespell.Register(t, "fake-job-review-"+t.Name(),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -355,7 +354,7 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 			default:
 				return map[string]any{}, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
@@ -545,10 +544,9 @@ func (r *shutdownRecorder) Shutdown(ctx context.Context) error {
 func TestShutdownOneShotTelemetryFlushesOnlyAProviderThisProcessOwns(t *testing.T) {
 	base, err := otlp.New(t.Context(), observability.Config{})
 	require.NoError(t, err)
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	m, err := magus.Open(context.Background(), root)
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	m, err := magus.Open(context.Background(), w.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 

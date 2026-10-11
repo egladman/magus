@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -52,8 +50,9 @@ func TestConsoleLinkCarriesAOneTimeCode(t *testing.T) {
 // by whom, and none carries the secret.
 func TestCLIMintsAreAudited(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	t.Chdir(root)
 
 	secret, rec, err := mintToken(auth.MintRequest{Name: "laptop", Grant: types.GrantConsole, TTL: time.Hour}, false)

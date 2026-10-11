@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
@@ -17,8 +15,9 @@ import (
 // null, and never empty stdout.
 func TestCleanCmdReportsEmptyListsWhenNothingIsRemoved(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	prev := global.output
 	t.Cleanup(func() { global.output = prev })
 	global.output = "json"

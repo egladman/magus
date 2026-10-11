@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -259,9 +258,10 @@ func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T
 // must not be told to bind it.
 func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -283,9 +283,10 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 // every other live lease is one count line with the command that lists them.
 func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -328,9 +329,10 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 // window.
 func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

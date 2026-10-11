@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/egladman/magus/broker"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
@@ -381,17 +382,18 @@ func TestDetachRunsAsItsOwnSessionWithABrokerAndNoServer(t *testing.T) {
 		}
 	})
 
-	ws := t.TempDir()
+	wsDir := testkit.NewWorkspace(t)
+	ws := wsDir.Root()
 	gate := filepath.Join(t.TempDir(), "gate")
 	require.NoError(t, unix.Mkfifo(gate, 0o600))
 	done := filepath.Join(t.TempDir(), "done")
-	require.NoError(t, os.WriteFile(filepath.Join(ws, "magusfile.buzz"), fmt.Appendf(nil, `import "magus";
+	wsDir.Magusfile(fmt.Sprintf(`import "magus";
 import "proc";
 
 export fun block(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("sh", ["-c", "cat %s > %s"]);
 }
-`, gate, done), 0o644))
+`, gate, done))
 
 	cmd := exec.Command(magusBin(t), "run", "--detach", "block", ".")
 	cmd.Dir = ws

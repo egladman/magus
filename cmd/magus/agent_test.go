@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -268,10 +269,10 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 		"root declares no MAGUS.md": {silent, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tc.magusfile), 0o644))
-			assert.Equal(t, tc.want, declaresRoutingIndex(context.Background(), root))
+			w := testkit.NewWorkspace(t)
+			w.Write("magus.yaml", "")
+			w.Magusfile(tc.magusfile)
+			assert.Equal(t, tc.want, declaresRoutingIndex(context.Background(), w.Root()))
 		})
 	}
 
@@ -279,10 +280,10 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 		assert.False(t, declaresRoutingIndex(context.Background(), t.TempDir()))
 	})
 	t.Run("below the root", func(t *testing.T) {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(writer), 0o644))
-		sub := filepath.Join(root, "sub")
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "")
+		w.Magusfile(writer)
+		sub := filepath.Join(w.Root(), "sub")
 		require.NoError(t, os.Mkdir(sub, 0o755))
 		assert.False(t, declaresRoutingIndex(context.Background(), sub))
 	})

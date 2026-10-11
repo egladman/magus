@@ -20,7 +20,8 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	runPkg "github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -35,18 +36,16 @@ func newPrintingWorkspace(t *testing.T, output string) (*magus.Magus, string) {
 // output; a non-nil runErr is a failed run, whose output is stored all the same.
 func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magus, string) {
 	t.Helper()
-	spellName := "zzz-output-import-" + strings.ToLower(t.Name())
-	s := spells.NewSpell(spellName, spells.WithTargets("build"),
+	spellName := fakespell.Register(t, "zzz-output-import-"+strings.ToLower(t.Name()), spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprint(stdout, output)
 			return nil, runErr
 		}))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
 	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg))
@@ -181,7 +180,8 @@ func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
 func TestComposedTargetRecordsTheFailedNeedsRef(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun lint_go(ctx: magus\Context, args: [str]) > void !> any {
     throw "golangci found 3 issues";
@@ -197,7 +197,7 @@ magus\project({"targets": {
     "lint-all": {"skip_cache": "composes"}
 }})
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 	m, err := magus.Open(context.Background(), root)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })

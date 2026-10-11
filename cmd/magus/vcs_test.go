@@ -247,8 +247,9 @@ func TestMergeDriverRelPath(t *testing.T) {
 	})
 
 	t.Run("hg passes an absolute path, made workspace-relative", func(t *testing.T) {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("magus.project({})\n"), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile("magus.project({})\n")
+		root := w.Root()
 
 		got, err := mergeDriverRelPath(root, filepath.Join(root, "gen", "catalog.md"))
 		require.NoError(t, err)

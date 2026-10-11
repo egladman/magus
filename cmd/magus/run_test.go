@@ -733,7 +733,6 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	require.NoError(t, err)
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	ctx := context.Background()

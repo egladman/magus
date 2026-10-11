@@ -29,9 +29,6 @@ import (
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	testkit.Isolate(t)
-	// A developer running with a lease in BAGGAGE would otherwise have it stamped on every request
-	// these tests raise. A test that wants one sets it after this call.
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	withInteractiveTTY(t)
 	return t.TempDir()

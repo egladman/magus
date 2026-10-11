@@ -177,7 +177,6 @@ func TestGuardDecisionsCoverEveryVerdictTheHookEmits(t *testing.T) {
 // and the fail-open contract for empty input. Host-specific event extraction
 // happens before the command is piped to magus.
 func TestHookCmd(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	auditDir := t.TempDir()
 	run := func(stdin string, args ...string) string {
 		var out strings.Builder
@@ -231,7 +230,6 @@ func TestHookCmd(t *testing.T) {
 // person is the other caller, a terminal's stdin is a keyboard, and reading it would hang
 // on a command that was already supplied.
 func TestShellJudgesAnOperandTheSameAsStdin(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	ctx := guard.WithLocation(context.Background(), t.TempDir(), "/repo/magus", "")
 
@@ -261,7 +259,6 @@ func TestShellRefusesAnUnquotedCommand(t *testing.T) {
 // guard never saw as cleared. The manpage's exit table promises the same: deny and
 // unreadable input share code 2 so a host that blocks on 2 fails closed in both.
 func TestHookCmd_UnreadableStdinFailsClosed(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -321,7 +318,6 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 // A hook row times the rule load against the hook's deadline, which starts before it, and
 // ends with the whole judgment.
 func TestHookCmd_RecordsEachPhase(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
@@ -354,7 +350,6 @@ func assertJudgedBy(t *testing.T, got *trail.Event) {
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -384,7 +379,6 @@ func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
 }
 
 func TestHookCmd_PathAndEmptyInputActivity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -419,7 +413,6 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	// The whole-struct assertion below includes Lease, which the hook reads off the
 	// environment, so a developer or CI job that exported one would fail this test over
 	// its own baggage.
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -462,7 +455,6 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 // TestHookCmd_AttributionIsOptional holds the fail-open contract: attribution is best-effort
 // metadata, so a wrapper that supplies none still gets a verdict and still records an event.
 func TestHookCmd_AttributionIsOptional(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -489,7 +481,6 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 // failing to fire. Without it, a hook wired to a host's read tool would advise "you are
 // editing a declared output" at a file the agent only opened.
 func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -519,7 +510,6 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 // read event carries a file_path will send --observe alongside the envelope that sets --path,
 // and the observation must win. The reverse would silently restore the false advisory.
 func TestHookCmd_ObserveOutranksPath(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -537,7 +527,6 @@ func TestHookCmd_ObserveOutranksPath(t *testing.T) {
 // session's events; the path is what a reader follows to see the rest. magus records the
 // POINTER and never opens the file, which is what keeps the trail paths-and-timings.
 func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -563,7 +552,6 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 // without the flag the transcript link exists only for hosts that pipe raw JSON, which is
 // none of the ones magus ships a template for.
 func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -589,7 +577,6 @@ func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
 // has nothing to report, and an observation with no subject is dropped like any other empty
 // one rather than being invented as ".", which would claim a reach the host never described.
 func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -616,7 +603,6 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 // this test would stop covering what it is named for; TestHookCmd_DeniesSpawnBeforeTheBrief
 // carries that rule.
 func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -661,7 +647,6 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 // read back as "" here, and it is [renderSessionShow]'s job to word that as "none declared"
 // rather than let it read as blank-looks-fine.
 func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -698,7 +683,6 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 // is exercised end to end elsewhere; what matters here is that the mode parses,
 // shares the standard output arm, and FAILS OPEN on anything it cannot classify.
 func TestHookPathMode(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, tt := range []struct {
 		name string
 		args []string
@@ -730,7 +714,6 @@ func TestHookPathMode(t *testing.T) {
 // pinned by TestDecodeHookEnvelope in internal/guard/guard_test.go; this covers only the
 // end-to-end hookCmd path.
 func TestHookCmd_EnvelopeWithNothingToJudge(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	const payload = `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"TodoWrite",` +
 		`"tool_input":{"todos":[{"content":"never use sed -i here"}]}}`
 
@@ -813,7 +796,6 @@ func TestReadGuardInputRefusesAnOversizePayload(t *testing.T) {
 // runs: a held advisory prints its verdict and the ref to its full text once per session,
 // and its brief after.
 func TestHookCmdAdvisesOncePerSession(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	base, root := t.TempDir(), t.TempDir()
 	ctx := guard.WithLocation(t.Context(), base, root, "")
 	run := func(session string) string {
@@ -902,10 +884,10 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 // pins the dedupe on the path input, where a suppressed advisory must leave silence
 // rather than let the next rung speak into it.
 func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	t.Chdir(root)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w.Magusfile("")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "agent"), 0o755))
 
@@ -953,7 +935,6 @@ func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
 			ctx, root, _ := fleetFixture(t)
 			// The fixture's cache dir is already elsewhere, so these rows exercise the
 			// literal spelling against a RELOCATED dir, which is the harder half.
@@ -980,7 +961,6 @@ func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 // about whose boundary it is.
 func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.WritePaths = []string{"**"}
 	// Unregistered, so the write-path rule has a denial of its own to be outranked BY. A
@@ -1009,7 +989,6 @@ func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 // test picked would pass or fail on test ORDER, since the rule is silent whenever the
 // loaded workspace is not the one the host reported.
 func TestHookCmdRecordsTheProjectAWriteTouched(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	ws, err := inspectWorkspace(t.Context(), "")
 	require.NoError(t, err)
 
@@ -1031,7 +1010,6 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 	global = globalFlags{}
 	// The hook falls back to the environment for the lease, so a developer or CI job that
 	// exported one would decide the control case below.
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 	command := "./magus affected ci --no-default-charms"
 
@@ -1082,7 +1060,6 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 // rules would otherwise miss: the same envelope a host forwards for an MCP tool call.
 func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	wide := narrowLease()
 	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _, _ := fleetFixture(t, wide)
@@ -1124,7 +1101,6 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 // looked exactly like a guarded one.
 func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
@@ -1141,7 +1117,6 @@ func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 // a checkout whose row had moved could not read the plan, print a schema, or bind again.
 func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	for _, command := range []string{
@@ -1168,7 +1143,6 @@ func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 // names a session, and every rule keyed on it has quietly stopped applying.
 func TestHookCmdNoticesATerminalLease(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	done := narrowLease()
 	done.State = types.StatePass
 	ctx, _, _ := fleetFixture(t, done)
@@ -1189,7 +1163,6 @@ func TestHookCmdNoticesATerminalLease(t *testing.T) {
 // person see WHICH row decided a verdict.
 func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var leased bytes.Buffer
@@ -1220,7 +1193,6 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
 			ctx, _, _ := fleetFixture(t, narrowLease())
 
 			var out bytes.Buffer
@@ -1235,7 +1207,6 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 // files' stated order.
 func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
@@ -1252,7 +1223,6 @@ func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 // the tool that does it. It passed unjudged while the coverage line said deny=model.
 func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	ctx, _, _ := fleetFixture(t, lease)
 
@@ -1278,7 +1248,6 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 // role-scoped rule and cleared once magus is the one that suggested it.
 func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t, narrowLease())
 	gate := hint.NewGate(cacheDir, "session-preauth")
 	command := "./magus affected ci --no-default-charms"
@@ -1302,7 +1271,6 @@ func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 // cannot be undone, and they protect everyone, so a journal entry naming one buys nothing.
 func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t)
 	gate := hint.NewGate(cacheDir, "session-carveout")
 
@@ -1322,7 +1290,6 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 // contain the file must not clear it.
 func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.WritePaths = []string{".claude/**", "cmd/magus/**"}
 	ctx, _, _ := fleetFixture(t, lease)
@@ -1458,7 +1425,6 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
 			ctx, root, cacheDir := fleetFixture(t, fixture.FleetLeases()...)
 			if tc.setup != nil {
 				tc.setup(t, ctx, cacheDir, root)
@@ -1473,7 +1439,6 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 
 	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
 		global = globalFlags{}
-		t.Setenv(trail.EnvBaggage, "")
 		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
@@ -1482,7 +1447,6 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 
 	t.Run("verify is a read", func(t *testing.T) {
 		global = globalFlags{}
-		t.Setenv(trail.EnvBaggage, "")
 		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
@@ -1510,7 +1474,6 @@ func loadSkillForTest(t *testing.T, ctx context.Context, dir, session string) {
 // The prompt is deliberately innocuous. The rule reads a marker file and never the prose,
 // so nothing about the handed context should change the verdict either way.
 func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
@@ -1542,7 +1505,6 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 // The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
 // same run in the foreground passes, and the foreground limits parse as milliseconds.
 func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	global = globalFlags{}
 	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
