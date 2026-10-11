@@ -97,7 +97,7 @@ func TestRegistryRecordsAndForgetsWithJournal(t *testing.T) {
 	dir := t.TempDir()
 	j, err := NewJournal(dir)
 	require.NoError(t, err)
-	r := New(&fakeRunner{}, 0, WithJournal(j)) // idle 0: Release stops immediately
+	r := New(&countingRunner{}, 0, WithJournal(j)) // idle 0: Release stops immediately
 
 	svc := spells.Service{
 		Command: spells.Command{Bin: "docker", Args: []string{"run", "postgres:15"}},
@@ -120,7 +120,7 @@ func TestRegistryJournalsOnlyOwnedServices(t *testing.T) {
 	dir := t.TempDir()
 	j, err := NewJournal(dir)
 	require.NoError(t, err)
-	r := New(&fakeRunner{adopt: true}, time.Hour, WithJournal(j))
+	r := New(&countingRunner{adopt: true}, time.Hour, WithJournal(j))
 
 	svc := spells.Service{
 		Start:     spells.Command{Bin: "podman", Args: []string{"machine", "start"}},

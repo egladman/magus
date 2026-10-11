@@ -113,7 +113,7 @@ func TestZoneRedrawsInFullAfterAResize(t *testing.T) {
 	// A resize re-reserves, which erases the zone, so nothing the diff believes
 	// is on screen still is.
 	var buf ttyBuf
-	p := &shrinkingProbe{fakeProbe: fakeProbe{isTTY: true, width: 80, height: 40}}
+	p := &shrinkingProbe{presetProbe: presetProbe{isTTY: true, width: 80, height: 40}}
 	z := NewZone(&buf, p)
 	l := z.Acquire(2)
 	_, err := l.Set([]Line{{Text: "keep me"}})
@@ -213,7 +213,7 @@ func TestZoneReportsNotRenderedWhenTheWindowShrinks(t *testing.T) {
 	// The window is measurable at grant time but too small by the time the
 	// region is built, which is what a resize mid-run looks like.
 	var buf ttyBuf
-	p := &shrinkingProbe{fakeProbe: fakeProbe{isTTY: true, width: 80, height: 40}}
+	p := &shrinkingProbe{presetProbe: presetProbe{isTTY: true, width: 80, height: 40}}
 	z := NewZone(&buf, p)
 	l := z.Acquire(6)
 	require.True(t, l.Enabled())
@@ -225,7 +225,7 @@ func TestZoneReportsNotRenderedWhenTheWindowShrinks(t *testing.T) {
 }
 
 // shrinkingProbe reports a size that the test mutates between calls.
-type shrinkingProbe struct{ fakeProbe }
+type shrinkingProbe struct{ presetProbe }
 
 func (p *shrinkingProbe) Size(uintptr) (int, int, error) {
 	return p.width, p.height, p.sizeErr

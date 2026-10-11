@@ -60,7 +60,7 @@ func TestProseFallsBackToEightyOffATerminal(t *testing.T) {
 
 	var buf ttyBuf
 	assert.Equal(t, proseFallback, proseWidth(&buf, notATerminal()), "a descriptor that is a pipe")
-	assert.Equal(t, proseFallback, proseWidth(&buf, fakeProbe{isTTY: true, sizeErr: errors.New("no size")}))
+	assert.Equal(t, proseFallback, proseWidth(&buf, presetProbe{isTTY: true, sizeErr: errors.New("no size")}))
 	assert.Equal(t, proseFallback, proseWidth(&buf, terminal(0, 24)), "a terminal reporting no width")
 }
 

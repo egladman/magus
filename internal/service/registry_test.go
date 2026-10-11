@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeRunner records starts and stops without touching a real process.
-type fakeRunner struct {
+// countingRunner records starts and stops without touching a real process.
+type countingRunner struct {
 	mu       sync.Mutex
 	started  int
 	stopped  int
@@ -24,7 +24,7 @@ type fakeRunner struct {
 
 type numberedHandle struct{ id int }
 
-func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) {
+func (f *countingRunner) Start(_ context.Context, _ spells.Service) (Handle, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.startErr != nil {
@@ -37,13 +37,13 @@ func (f *fakeRunner) Start(_ context.Context, _ spells.Service) (Handle, error) 
 	return numberedHandle{id: f.started}, nil
 }
 
-func (f *fakeRunner) Stop(context.Context, Handle) {
+func (f *countingRunner) Stop(context.Context, Handle) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.stopped++
 }
 
-func (f *fakeRunner) counts() (int, int) {
+func (f *countingRunner) counts() (int, int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.started, f.stopped
@@ -54,7 +54,7 @@ func svc() spells.Service {
 }
 
 func TestAcquireSharesOneInstance(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
@@ -91,7 +91,7 @@ func TestKeyScopesOnlyCommandServices(t *testing.T) {
 // TestAdoptedIsNeverStopped pins that the Registry hands an Adopted service back to no
 // Runner.Stop, on release, idle reap or Shutdown alike.
 func TestAdoptedIsNeverStopped(t *testing.T) {
-	f := &fakeRunner{adopt: true}
+	f := &countingRunner{adopt: true}
 	r := New(f, 0)
 	ctx := context.Background()
 
@@ -107,7 +107,7 @@ func TestAdoptedIsNeverStopped(t *testing.T) {
 }
 
 func TestRefCountKeepsRunningUntilLastRelease(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, 0) // no keep-warm: reap at ref-count zero
 	ctx := context.Background()
 
@@ -125,7 +125,7 @@ func TestRefCountKeepsRunningUntilLastRelease(t *testing.T) {
 }
 
 func TestKeepWarmThenIdleReap(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, 30*time.Millisecond)
 	ctx := context.Background()
 
@@ -146,7 +146,7 @@ func TestKeepWarmThenIdleReap(t *testing.T) {
 }
 
 func TestReAcquireCancelsIdleReap(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, 40*time.Millisecond)
 	ctx := context.Background()
 
@@ -164,7 +164,7 @@ func TestReAcquireCancelsIdleReap(t *testing.T) {
 }
 
 func TestPerServiceIdleOverride(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour) // long default...
 	ctx := context.Background()
 
@@ -180,7 +180,7 @@ func TestPerServiceIdleOverride(t *testing.T) {
 }
 
 func TestDistinctKeysAreSeparateInstances(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
@@ -192,7 +192,7 @@ func TestDistinctKeysAreSeparateInstances(t *testing.T) {
 }
 
 func TestFailedStartNotCached(t *testing.T) {
-	f := &fakeRunner{startErr: errors.New("boom")}
+	f := &countingRunner{startErr: errors.New("boom")}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
@@ -210,7 +210,7 @@ func TestFailedStartNotCached(t *testing.T) {
 }
 
 func TestShutdownStopsAll(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
@@ -326,7 +326,7 @@ func TestShutdownRespectsCtx(t *testing.T) {
 }
 
 func TestSuperviseGating(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	sess := NewSession(New(f, time.Hour), nil, nil) // in-process only (no broker)
 	s := svc()
 
@@ -353,7 +353,7 @@ func TestSuperviseGating(t *testing.T) {
 }
 
 func TestSessionRoutesToBrokerWhenPresent(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	var acquired, released []string
 	sess := NewSession(New(f, time.Hour),
 		func(_ context.Context, key string, _ spells.Service) (bool, error) {
@@ -382,7 +382,7 @@ func TestSessionRoutesToBrokerWhenPresent(t *testing.T) {
 // ref-leak: the broker-side Registry ref-counts per Acquire, so two acquires of the
 // same key in one run must be released twice, not deduped to one release.
 func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	var acquireCount, releaseCount int
 	sess := NewSession(New(f, time.Hour),
 		func(context.Context, string, spells.Service) (bool, error) {
@@ -407,7 +407,7 @@ func TestSessionReleaseAllMatchesAcquireCount(t *testing.T) {
 // teardown ctx has to reach it. While it took no ctx at all there was no bound anywhere
 // on that path and a wedged broker hung every run at exit.
 func TestSessionReleaseAllPassesItsContextToTheBroker(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	var got context.Context
 	sess := NewSession(New(f, time.Hour),
 		func(context.Context, string, spells.Service) (bool, error) { return true, nil },
@@ -428,7 +428,7 @@ func TestSessionReleaseAllPassesItsContextToTheBroker(t *testing.T) {
 }
 
 func TestSessionFallsBackToInProcessOnBrokerFailure(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	var released []string
 	sess := NewSession(New(f, time.Hour),
 		func(context.Context, string, spells.Service) (bool, error) { return false, errors.New("broker gone") },
@@ -450,7 +450,7 @@ func TestSessionFallsBackToInProcessOnBrokerFailure(t *testing.T) {
 }
 
 func TestConcurrentAcquireStartsOnce(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
@@ -480,7 +480,7 @@ func portSvc() spells.Service {
 }
 
 func TestSnapshotRunningEntry(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 
 	_, err := r.Acquire(context.Background(), "fingerprintabcdef", portSvc())
@@ -503,7 +503,7 @@ func TestSnapshotRunningEntry(t *testing.T) {
 }
 
 func TestSnapshotStateTransitions(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour) // long keep-warm so a released entry stays "idle"
 	ctx := context.Background()
 
@@ -544,7 +544,7 @@ func TestSnapshotStartingEntry(t *testing.T) {
 }
 
 func TestSnapshotNonContainerLabel(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 
 	local := spells.Service{Command: spells.Command{Bin: "/usr/local/bin/myserver", Args: []string{"--port", "8080"}}}
@@ -566,7 +566,7 @@ func TestSnapshotNonContainerLabel(t *testing.T) {
 }
 
 func TestSnapshotSortedByID(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	r := New(f, time.Hour)
 	ctx := context.Background()
 
