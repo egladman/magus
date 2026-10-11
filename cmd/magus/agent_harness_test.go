@@ -33,7 +33,7 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	require.NoError(t, installHarnessSkillPath(context.Background(), root, dest, agent.FormFull, false))
-	assert.Contains(t, log.String(), `component="agent harness install" msg=wrote`)
+	assert.Contains(t, log.String(), `msg=wrote component="agent harness install"`)
 
 	// An orphan from an earlier release: magus stamped it, so this install prunes it.
 	orphan := filepath.Join(root, dest, "magus-retired")
