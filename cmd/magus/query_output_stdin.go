@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
 )
 
@@ -46,6 +47,13 @@ func writeRecordProvenance(w io.Writer, rec types.StoredOutput) {
 	if d.ErrMsg != "" {
 		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(d.ErrMsg, "\n")), false)
 		fmt.Fprintf(w, "  error:    %s\n", strings.ReplaceAll(string(msg), "\n", "\n            "))
+	}
+	// A record is another machine's, so the member's ref is only named when it has the shape
+	// of one, and the target is neutralized like the error. The command reads the member's
+	// output wherever the record came from, not here.
+	if cache.IsMintedRef(d.FailedNeedRef) {
+		target, _ := cache.NeutralizeTerminal([]byte(d.FailedNeed), false)
+		fmt.Fprintf(w, "  failed:   ctx.needs %s; where the record was made, read it with %s\n", target, hint.QueryOutput.With(d.FailedNeedRef))
 	}
 	if d.Attempt != "" {
 		fmt.Fprintf(w, "  attempt:  %s\n", d.Attempt)

@@ -424,8 +424,20 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		// neutralized as an imported record's is, so stdout stays exactly what the run wrote.
 		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(desc.ErrMsg, "\n")), false)
 		slog.ErrorContext(ctx, string(msg), attr.Notice(""), attr.Component("magus query output"))
+		noticeFailedNeed(ctx, desc)
 	}
 	return err
+}
+
+// noticeFailedNeed names the ctx.needs member a composed target failed on and the command
+// that reads its output, which holds the findings the parent's own output and error only
+// restate. It says nothing for a descriptor that records no member.
+func noticeFailedNeed(ctx context.Context, d magus.OutputDescriptor) {
+	if d.FailedNeedRef == "" {
+		return
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("the failing step is %s, a ctx.needs member; its output is under its own ref:", d.FailedNeed),
+		attr.Notice(""), attr.Component("magus query output"), attr.Next(hint.QueryOutput.With(d.FailedNeedRef)))
 }
 
 // trailPayloadRecord is the -o json/yaml projection of a stored payload: no run stands
@@ -675,6 +687,9 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
 	if desc.ErrMsg != "" {
 		fmt.Printf("error:   %s\n", desc.ErrMsg)
+	}
+	if desc.FailedNeedRef != "" {
+		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeed, hint.QueryOutput.With(desc.FailedNeedRef))
 	}
 	if desc.Attempt != "" {
 		fmt.Printf("attempt: %s\n", desc.Attempt)

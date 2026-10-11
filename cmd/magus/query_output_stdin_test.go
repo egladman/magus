@@ -131,6 +131,128 @@ func TestQueryOutputTextPrintsAFailedRunsErrorToStderr(t *testing.T) {
 	assert.NotContains(t, stderr, "\x1b", "a recorded error is neutralized before it reaches the terminal")
 }
 
+// A composed target's own log restates the member's error; the findings are under the
+// member's ref, so every reader of the failed descriptor names it.
+func TestQueryOutputNamesTheFailedNeed(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	const memberRef = "out0123456789ab"
+	member := cache.WrapNeedFailure(errors.New("golangci exited 1"), "lint-go", memberRef)
+	m, ref := newRunningWorkspace(t, "", fmt.Errorf("ctx.needs: %w", member))
+	ctx := withMagus(context.Background(), m)
+	want := "magus query output " + memberRef
+
+	t.Run("text", func(t *testing.T) {
+		stderr := captureStderr(t, func() {
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatText}}))
+		})
+		assert.Contains(t, stderr, "ctx.needs: golangci exited 1", "the error notice is unchanged")
+		assert.Contains(t, stderr, "lint-go")
+		assert.Contains(t, stderr, want)
+	})
+
+	t.Run("identity", func(t *testing.T) {
+		stdout := captureStdout(t, func() {
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{identity: true, out: OutputOptions{Format: FormatText}}))
+		})
+		assert.Contains(t, stdout, "ctx.needs: golangci exited 1")
+		assert.Contains(t, stdout, want)
+	})
+
+	t.Run("json", func(t *testing.T) {
+		stdout := captureStdout(t, func() {
+			require.NoError(t, queryOutputRef(ctx, "", ref, outputRefOpts{out: OutputOptions{Format: FormatJSON}}))
+		})
+		assert.Contains(t, stdout, `"failed_need": "lint-go"`)
+		assert.Contains(t, stdout, `"failed_need_ref": "`+memberRef+`"`)
+	})
+
+	t.Run("imported record", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		require.NoError(t, printOutputRecords(strings.NewReader(exportJSONL(t, ctx, ref)), &stdout, &stderr))
+		assert.Contains(t, stderr.String(), want)
+		assert.Contains(t, stderr.String(), "lint-go")
+	})
+}
+
+// The real path: a Buzz composer whose ctx.needs member throws. The composer's descriptor
+// names the member and the ref the member's own run stored, the member's error text is
+// still the one hopChain reads, and two hops down it is the deepest member that is named.
+func TestComposedTargetRecordsTheFailedNeedsRef(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	root := t.TempDir()
+	const mf = `import "magus";
+export fun lint_go(ctx: magus\Context, args: [str]) > void !> any {
+    throw "golangci found 3 issues";
+}
+export fun lint_all(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint_go);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(lint_all);
+}
+magus\project({"targets": {
+    "lint": {"skip_cache": "composes"},
+    "lint-all": {"skip_cache": "composes"}
+}})
+`
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	m, err := magus.Open(context.Background(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+	ctx := context.Background()
+
+	require.Error(t, m.Run(ctx, []types.Target{{Path: ".", Name: "lint"}}))
+
+	byTarget := func(target string) magus.OutputDescriptor {
+		key, _, err := m.ComputeTargetKey(ctx, ".", target, nil)
+		require.NoError(t, err, target)
+		_, d, err := m.OutputByRef(ctx, cache.PortableRef(key))
+		require.NoError(t, err, target)
+		require.True(t, d.Failed, target)
+		return d
+	}
+	for _, target := range []string{"lint", "lint-all"} {
+		d := byTarget(target)
+		assert.Contains(t, d.ErrMsg, "ctx.needs: ", target)
+		assert.Contains(t, d.ErrMsg, "golangci found 3 issues", target)
+		assert.Equal(t, "lint-go", d.FailedNeed, target, "the deepest member, not lint-all")
+		require.NotEmpty(t, d.FailedNeedRef, target)
+
+		_, member, err := m.OutputByRef(ctx, d.FailedNeedRef)
+		require.NoError(t, err, target)
+		assert.True(t, member.Failed)
+		assert.Equal(t, "lint-go", member.Target)
+		assert.Empty(t, member.FailedNeed, "the throwing member composes nothing")
+	}
+}
+
+func TestOutputImportNamesOnlyAShapedFailedNeedRef(t *testing.T) {
+	key := strings.Repeat("ab", 32)
+	rec := func(ref string) []byte {
+		b, err := jsonMarshalLine(types.StoredOutput{
+			Schema: types.Schema{Version: types.StoredOutputSchemaVersion},
+			OutputDescriptor: types.OutputDescriptor{
+				Ref: cache.PortableRef(key), Key: key, Project: "libs/x", Target: "lint", Failed: true,
+				FailedNeed: "lint-go\x1b[2J", FailedNeedRef: ref,
+			},
+		})
+		require.NoError(t, err)
+		return b
+	}
+
+	var stdout, stderr bytes.Buffer
+	require.NoError(t, printOutputRecords(bytes.NewReader(rec("out0123456789ab")), &stdout, &stderr))
+	assert.Contains(t, stderr.String(), "magus query output out0123456789ab")
+	assert.NotContains(t, stderr.String(), "\x1b", "the member's target is neutralized like the error")
+
+	stderr.Reset()
+	require.NoError(t, printOutputRecords(bytes.NewReader(rec("x; rm -rf ~")), &stdout, &stderr))
+	assert.NotContains(t, stderr.String(), "rm -rf", "a ref no magus mints is never echoed as a command")
+	assert.NotContains(t, stderr.String(), "failed:")
+}
+
 func TestQueryOutputTextPrintsNoErrorForAPassingRun(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
