@@ -97,7 +97,7 @@ var slopChecks = []check{
 	{rule: RuleCloser, on: agentWords, judge: tellJudge("Cut '%s': the paragraph above already says it.", closers...)},
 	{
 		rule: RuleIngTail, on: slices.Concat(proseKinds, agentReply), advise: slices.Concat(proseKinds, agentReply),
-		judge: tellJudge("Make '%s' a sentence with a subject, or cut it.", ingTails...),
+		judge: ownWords(tellJudgeExcept("Make '%s' a sentence with a subject, or cut it.", ingTailExempt, ingTails...)),
 	},
 	{rule: RuleStaccato, on: prosePages, advise: []Kind{KindReference}, judge: ownWords(staccato)},
 	{rule: RuleDash, on: agentWords, house: true, judge: dash},
@@ -371,10 +371,57 @@ var closers = []tell{
 }
 
 // ingTails leaves "underscoring" to [buzzwords], which reports the word
-// however the sentence uses it.
+// however the sentence uses it. "reflecting" is left out: in every labeled
+// firing it named what a change mirrors ("reflecting the new location").
 var ingTails = []tell{
-	anywhere(`(?i),\s+(?:highlighting|emphasi[sz]ing|reflecting|symboli[sz]ing|contributing to|` +
+	anywhere(`(?i),\s+(highlighting|emphasi[sz]ing|symboli[sz]ing|contributing to|` +
 		`cultivating|fostering|encompassing|showcasing|resonating)\b`),
+}
+
+var (
+	// presenting are the tail verbs that present content: before a bare noun
+	// phrase they name what is shown ("showcasing custom validators and CORS
+	// support"), not its importance ("showcasing its advantages").
+	presenting = wordSet("highlighting", "emphasizing", "emphasising", "showcasing", "encompassing")
+
+	// determinedObject are the words that open an object which is a claim
+	// about a thing rather than the thing: "the importance of", "its
+	// flexibility", "how to".
+	determinedObject = wordSet("the", "a", "an", "its", "their", "his", "her", "our", "your", "this", "that",
+		"these", "those", "how", "what", "why", "which", "whether", "both", "it", "them")
+
+	// qualityClaim opens a bare object that claims a gain rather than naming
+	// content: "showcasing improved guidance".
+	qualityClaim = wordSet("improved", "enhanced", "better", "greater", "increased", "higher", "faster", "cleaner",
+		"stronger", "superior")
+
+	// gerundItem opens an item of a list of actions: "by providing better
+	// links, highlighting the logs, and ordering the steps".
+	gerundItem = regexp.MustCompile(`(?i)(?:^\s*|\b(?:by|for|while) )\w+ing\b`)
+)
+
+// ingTailExempt reports a tail that is no clause (a noun in a list:
+// "numbers, highlighting, drawing"), one that names the content it presents,
+// and one that is an item in a list of actions.
+func ingTailExempt(text string, at []int) bool {
+	rest := strings.TrimLeft(text[at[1]:], " ")
+	next := leadingWord(rest)
+
+	if next == "" {
+		return true
+	}
+
+	verb := strings.ToLower(strings.TrimLeft(text[at[0]:at[1]], ", \t\n"))
+	if presenting[verb] && !determinedObject[strings.ToLower(next)] && !qualityClaim[strings.ToLower(next)] {
+		return true
+	}
+
+	before := sentenceBefore(text, at[0])
+	if i := strings.LastIndex(before, ","); i >= 0 {
+		before = before[i+1:]
+	}
+
+	return gerundItem.MatchString(before)
 }
 
 // Measured 2026-10-10 over the 261 hand-written docs pages and 200 merged pull

@@ -27,18 +27,20 @@ These additions ensure the state machine behaves as expected, contributing to be
 - Introduced examples of the procedural API for conversation analysis, highlighting its flexibility and benefits.
 - Updated the README to give a clearer overview of the example, highlighting its core features and simplifying the language.
 - Updated the basic usage tutorial with a procedural API example, showcasing its usage and advantages.
--- fp/agent-reply --
+-- pass/agent-reply --
 Added **Parallel Operations** as the top efficiency guideline, emphasizing simultaneous tool use with specific examples.
 - I created two example files to demonstrate table versioning, showcasing blue/green migration scenarios with different engines and schemas.
 - I updated every reference to the server config properties in the end-to-end tests to the new camelCase names, reflecting the changes in the constants file.
 - I moved the import of the browser check helper to the new utils path, reflecting the new location of the utility file.
 All examples now match the output format of the current tests, reflecting the enhanced string comparison with context windowing and control character display.
 -- fp/change-description --
+**Documentation**: Recommend the make target over the direct script, emphasizing that it runs the tests first
+Strengthened the instruction to add the "fixed" label to issues a change addresses, emphasizing this as the preferred approach over auto-closing.
+-- pass/change-description --
 > Please write a README for the group that introduces it, highlighting its mission, key projects, and objectives.
 - `editor/view` - the editor view, line numbers, highlighting, drawing
 - surface agenda warnings in the meeting view, highlighting missing prerequisites such as the chair role
 * The default expressor received a new prompt template for private chats, emphasizing concise, direct, and polite replies.
-**Documentation**: Recommend the make target over the direct script, emphasizing that it runs the tests first
 Updated the type definition to make the field required, reflecting the actual usage:
 After: the diff is updated before each test run, reflecting all current changes
 URLs that used `taskRunId` now use `runId`, reflecting the updated parameter name in public routes.
@@ -49,9 +51,9 @@ This PR updates the docs to drop the old toolkit version, reflecting that its su
 > - Removes the platform exclusion from the test directive, reflecting that the test now passes there with the fix.
 • Expands the API gotchas, emphasizing token types, webhook security, and integration nuances.
 **Repository Overview**: A guide to the 44-package repository structure, highlighting key packages like the command interface and the persistent host.
-Strengthened the instruction to add the "fixed" label to issues a change addresses, emphasizing this as the preferred approach over auto-closing.
 -- fp/commit-message --
-- Add new examples for two adapters, showcasing real-time chat and mobile applications.
 Added a test script to check audio encoding support on the desktop host, highlighting the limits of the system recorder with that format.
+-- pass/commit-message --
+- Add new examples for two adapters, showcasing real-time chat and mobile applications.
 - Update the TODO file for the pull implementation, emphasizing streaming database queries and the transport refactor.
 This commit adds an example script for the API library, showcasing custom validators, token authentication, custom middleware, and CORS support.

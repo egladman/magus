@@ -260,6 +260,14 @@ func TestIngTailReportsAParticipleClaimingSignificance(t *testing.T) {
 		{"underscoring is left to buzzword", KindReference, "The key sorts, underscoring the design.", nil},
 		{"emphasizing", KindReference, "The key sorts, emphasizing the design.", []string{"1:, emphasizing"}},
 		{"showcasing", KindChangeDescription, pr("- Sorts the inputs, showcasing the new hasher."), []string{"4:, showcasing"}},
+		{"contributing to", KindReference, "It drops dead code, contributing to less bloat.", []string{"1:, contributing to"}},
+		{"reflecting names what a change mirrors", KindReference, "The import moved, reflecting the new path.", nil},
+		{"a noun in a list", KindReference, "The view draws line numbers, highlighting, drawing.", nil},
+		{"the content it presents", KindReference, "Adds an example, showcasing custom validators and CORS.", nil},
+		{"a gain it claims", KindReference, "Adds a workflow, showcasing improved guidance.", []string{"1:, showcasing"}},
+		{"an item in a list of actions", KindReference,
+			"It helps by providing links, highlighting the logs, and ordering the steps.", nil},
+		{"a quoted request", KindChangeDescription, pr("> Write a README, highlighting its mission."), nil},
 	})
 }
 
