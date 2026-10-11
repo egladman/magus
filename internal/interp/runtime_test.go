@@ -442,6 +442,20 @@ func TestCompilerStampIsStable(t *testing.T) {
 	assert.Equal(t, stamp, compilerStamp())
 }
 
+// An executable with no readable build ID has no name to store chunks under, so the load
+// compiles every time and leaves nothing behind.
+func TestGuardBytecodeStoreIsOffWithoutABuildID(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	old := compilerStamp
+	compilerStamp = func() string { return "" }
+	t.Cleanup(func() { compilerStamp = old })
+
+	assert.Nil(t, guardBytecodeStore(t.TempDir()))
+	assert.NoDirExists(t, filepath.Join(cache, "magus", "buzz-bytecode"))
+}
+
 // A chunk is code the next load runs. One that does not verify is compiled over,
 // whoever wrote it: here, a valid chunk of other source moved to this source's key.
 func TestGuardLoadRefusesATamperedChunk(t *testing.T) {

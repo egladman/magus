@@ -138,6 +138,17 @@ func TestBinaryBuildIsStable(t *testing.T) {
 	assert.Equal(t, build, BinaryBuild())
 }
 
+// With no readable build ID the key still gets a never-empty identity, while a per-build
+// store has no name and the digest says so.
+func TestBinaryBuildFallsBackToTheFileIdentityWithoutABuildID(t *testing.T) {
+	old := binaryDigest
+	binaryDigest = func() string { return "" }
+	t.Cleanup(func() { binaryDigest = old })
+
+	assert.Empty(t, BinaryDigest())
+	assert.Equal(t, binaryIdentity, BinaryBuild())
+}
+
 // CI builds a fresh binary on every run: same bytes, new file, new mtime. It is the same
 // build, so its cache entries and compiled chunks are the ones the last run wrote.
 func TestBinaryBuildIsTheBuildsContentNotItsFile(t *testing.T) {

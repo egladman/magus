@@ -166,13 +166,13 @@ func RemovedAPICall(src string) (call, replacement string, ok bool) {
 	return "", "", false
 }
 
-// magusRooted reports whether e is the member path `magus.<path...>`, written with
+// magusRooted reports whether e is the member path `magus.<member...>`, written with
 // either separator: the dot and backslash forms are the same access, and a stale
 // magusfile predates the backslash spelling entirely.
-func magusRooted(e ast.Node, path []string) bool {
-	for i := len(path) - 1; i >= 0; i-- {
+func magusRooted(e ast.Node, member []string) bool {
+	for i := len(member) - 1; i >= 0; i-- {
 		me, isMember := e.(*ast.MemberExpr)
-		if !isMember || me.Name != path[i] {
+		if !isMember || me.Name != member[i] {
 			return false
 		}
 		e = me.Object
@@ -201,7 +201,7 @@ func BinaryAnswerTargets(src string, dirs []string, read func(path string) ([]by
 		return nil
 	}
 	w := binaryAnswerWalk{
-		dirs: dirs, read: read, answers: binaryAnswers(),
+		dirs: dirs, read: read,
 		modules: map[string]*buzzModule{}, memo: map[string]bool{}, visiting: map[string]bool{},
 	}
 	root := newBuzzModule("", prog)
@@ -251,11 +251,10 @@ func newBuzzModule(file string, prog *ast.Program) *buzzModule {
 type binaryAnswerWalk struct {
 	dirs     []string
 	read     func(path string) ([]byte, error)
-	answers  [][]string
 	modules  map[string]*buzzModule // by resolved file path; nil records a miss
 	memo     map[string]bool        // final answers, by module path + "\x00" + function
 	visiting map[string]bool        // the call stack, which breaks a recursion cycle
-	cut      bool                   // a cycle cut the current walk short
+	cut      bool                   // a cycle cut the current walk short, so a miss in it is provisional
 }
 
 // imported is the module m binds under name: an alias, the basename of an unaliased
@@ -332,7 +331,7 @@ func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
 		}
 		switch e := n.(type) {
 		case *ast.MemberExpr:
-			found = slices.ContainsFunc(w.answers, func(path []string) bool { return magusRooted(e, path) })
+			found = slices.ContainsFunc(binaryAnswers(), func(member []string) bool { return magusRooted(e, member) })
 		case *ast.CallExpr:
 			switch callee := e.Callee.(type) {
 			case *ast.IdentExpr:
@@ -531,6 +530,9 @@ func guardBytecodeStore(root string) buzz.BytecodeStore {
 		return nil
 	}
 	stamp := compilerStamp()
+	if stamp == "" {
+		return nil
+	}
 	base, err := config.UserCacheDir()
 	if err != nil {
 		return nil
@@ -657,13 +659,15 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 	}
 }
 
-// compilerStamp identifies the build that compiles a chunk, so a chunk is only ever run
-// by the compiler that wrote it: proc.BinaryBuild, the build a binary-answer step keys on
-// too. A rebuild of the same source matches (a fresh CI binary reuses the last run's
-// chunks) and any other build does not. Where the build ID cannot be read it falls back
-// to the executable file's identity, which still never lets another build's chunk run;
-// at worst it caches per file rather than per build.
-func compilerStamp() string { return proc.BinaryBuild() }
+// compilerStamp identifies the build that compiles a chunk, so a chunk is stored under
+// the build that wrote it: the Go build ID's digest, which a rebuild of the same source
+// shares (a fresh CI binary reuses the last run's chunks) and any other build does not.
+// "" where the build ID cannot be read: the bytecode cache is then off, because the only
+// other name is per file or per process, and each would leave a directory of chunks no
+// later process reuses.
+//
+// A var so a test can stand in for an executable with no build ID.
+var compilerStamp = proc.BinaryDigest
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no

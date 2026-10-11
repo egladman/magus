@@ -152,20 +152,31 @@ var buildVCS = func() (rev string, modified bool, ok bool) {
 // build ID, which the toolchain derives from the build's inputs, so two builds of the same
 // source share it and any other build does not, dirty tree or not. An executable whose
 // build ID cannot be read falls back to binaryIdentity, which only separates builds
-// further. Never empty. Read once per process, like binaryIdentity and for the same
-// reason: a file rebuilt underneath this process must not speak for the code it loaded.
-func BinaryBuild() string { return binaryBuild() }
+// further. Never empty: a cache key can carry it, a store directory cannot (see
+// [BinaryDigest]).
+func BinaryBuild() string { return cmp.Or(BinaryDigest(), binaryIdentity) }
 
-var binaryBuild = sync.OnceValue(func() string {
+// BinaryDigest is BinaryBuild's digest of the Go build ID alone: "" when the executable
+// carries none or cannot be read. It names a build only by what the toolchain derived
+// from its inputs, so a caller that stores something per build uses it and stores
+// nothing when it is empty, rather than keying on a per-file identity that gives every
+// rebuilt or copied binary a store of its own.
+//
+// Read once per process, like binaryIdentity and for the same reason: a file rebuilt
+// underneath this process must not speak for the code it loaded. A func rather than the
+// OnceValue itself so no caller can reassign it.
+func BinaryDigest() string { return binaryDigest() }
+
+var binaryDigest = sync.OnceValue(func() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return binaryIdentity
+		return ""
 	}
 	digest, err := buildIDDigest(exe)
 	if err != nil {
-		return binaryIdentity
+		return ""
 	}
-	return cmp.Or(digest, binaryIdentity)
+	return digest
 })
 
 // buildIDDigest is BinaryBuild's digest of exe's build ID: "" with no error when exe
