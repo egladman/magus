@@ -66,6 +66,27 @@ func TestParticiplesReportsATextOverTheRate(t *testing.T) {
 			"- **Saving keys**: tests the store, the cache", nil},
 		{"a comma inside the opener's parenthesis", padded(14, "") + "\n\n- Troubleshooting for build quirks " +
 			"(case issues, stale keys)\n- Tracing for slow runs (cold caches, long hashes)", nil},
+		{"an adjective before its noun", padded(14, "The flag defaults to off, existing code unchanged. It only "+
+			"adds exports to tested, working code."), nil},
+		{"an adjective opening a sentence", padded(14, "Existing code keeps working as before, with the same keys. "+
+			"Incoming calls reach the cache, as they did."), nil},
+		{"a gerund subject after an opening element", padded(14, "Currently, setting the flag on the view behaves "+
+			"oddly. When the dialog is hidden, closing it becomes the last event."), nil},
+		{"an -ing item in a series of topics", padded(14, "The tests cover moving keys between stores, moving to the "+
+			"root store, error handling, and missing keys. It covers reading keys from disk, reading from the "+
+			"cache, timeouts, and retries."), nil},
+		{"a tail after a main clause", padded(14, "It sorts the inputs, making the key easier to read. It drops "+
+			"the lock, allowing callers to retry."), []string{"2 present participial clauses in 228 words, 8.8 per 1000"}},
+		{"a tail whose object is a series", padded(14, "The change adds guiding notes for the team, emphasizing "+
+			"speed, safety, and tests. It fails, leading to retries, timeouts, and crashes."),
+			[]string{"2 present participial clauses in 231 words, 8.7 per 1000"}},
+		{"a tail of a verb that takes no object", padded(14, "The fix keeps the old path, working around the race. "+
+			"It stops early, remaining safe."), []string{"2 present participial clauses in 225 words, 8.9 per 1000"}},
+		{"an opening clause after an opening element", padded(14, "However, using the cache, we skip the hash. "+
+			"Today, holding the lock, the worker reads."),
+			[]string{"2 present participial clauses in 225 words, 8.9 per 1000"}},
+		{"a period inside a name", padded(14, "It moves tests to Unit.Parallel, enabling parallel runs. It moves "+
+			"docs to Docs.Site, keeping old links."), []string{"2 present participial clauses in 226 words, 8.8 per 1000"}},
 	}
 
 	for _, tc := range cases {

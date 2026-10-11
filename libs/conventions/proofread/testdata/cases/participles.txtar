@@ -15,6 +15,11 @@ of a series, which round 5's adjudicator read as a noun, not a clause: "missing 
 closing a parenthesized list in the text titled "Add a workflow directory flag ...", and
 "matching compilation" before the series' "and" in "Make the static label type abstract
 ...". With it struck each text is under the cap.
+
+Moved after labeling round 6, was: fp. The text titled "refactor: add auto-pruning to the
+buffer lists" counted "clarifying the docs", an item of a series of -ing objects after "on"
+that closes with "and", which the rule now reads as an item, not a clause. With it struck
+the text is under the cap.
 -- hit/reference whole --
 The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The cache stores each blob under a key that the run derives from its inputs. The worker reads the key, using the lock it holds, keeping the order.
 -- hit/reference whole --
@@ -302,7 +307,7 @@ Why it helps:
 The rest of the change is small. Each file keeps its old layout and its old names. The tests cover the new path and the old one. A reader can run the suite with the usual command and see the same output as before. No public type moves, and no default changes. The docs page for the feature gets one new paragraph and one new example. The example uses the same data as the other examples on that page. The commit history keeps each step apart, so a reviewer can read them in order. The first commit adds the code, the second adds the tests, and the third updates the docs. Nothing in the build changes. The release notes get one line under the next version. A follow-up can tidy the helper names, but this change leaves them as they are so the diff stays easy to read. The reviewer can check the new path by hand with the sample project in the repository, which already has the settings it needs.
 
 You can make the coding agent smarter by setting up custom instructions, customizing its development environment and configuring the servers it can reach.
--- fp/change-description whole --
+-- pass/change-description whole --
 refactor: add auto-pruning to the buffer lists
 
 The main focus is on making list pruning automatic and configurable, clarifying the docs, and enhancing test coverage. It adds a max list size property, defaulting to 90% of the integer maximum.
