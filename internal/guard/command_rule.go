@@ -62,7 +62,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
-	if verdict.Decision == "deny" {
+	if verdict.Decision == decisionDeny {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
@@ -93,7 +93,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
 	decided := ""
-	if verdict.Decision != "pass" {
+	if verdict.Decision != decisionPass {
 		decided = decidedByBuiltin
 	}
 	verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceCommandRule)
@@ -103,8 +103,10 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if denied || asked.timedOut {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered,
-		judgingBinaryNote(deps, at, asked.loadFailure, in.lease))
+	note := ruleFailureNote(ruleFailures{
+		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered,
+		judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
+	})
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 

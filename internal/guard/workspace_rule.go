@@ -16,6 +16,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+// The decisions a Verdict carries. A workspace rule answers advise or deny, spelled by
+// types; pass and ask exist only on the wire.
+const (
+	decisionPass   = "pass"
+	decisionAsk    = "ask"
+	decisionAdvise = string(types.GuardAdvise)
+	decisionDeny   = string(types.GuardDeny)
+)
+
 // ruleTimeout bounds one workspace rule call. The shipped host wiring kills a hook at ten
 // seconds and reads that as a failed hook, so a rule that loops is cut off well inside it
 // and fails open like any other broken rule.
@@ -251,10 +260,10 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, ru
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
-	case answer.Decision == types.GuardAdvise && verdict.Decision == "pass":
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "advise", Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
-	case answer.Decision == types.GuardAdvise && verdict.Decision == "advise":
+		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionDeny, Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
+	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionPass:
+		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: decisionAdvise, Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+	case answer.Decision == types.GuardAdvise && verdict.Decision == decisionAdvise:
 		// The built-in advice keeps its rule; the workspace's is added, never dropped.
 		verdict.Context += "\n\n" + answer.Reason
 		return verdict, decided + decidedByJoin + asked.by
@@ -267,12 +276,12 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, ru
 func applyRuleFailureNote(verdict Verdict, note string, kind hint.MarkerKind) Verdict {
 	switch {
 	case note == "":
-	case verdict.Decision == "deny" || verdict.Decision == "ask":
+	case verdict.Decision == decisionDeny || verdict.Decision == decisionAsk:
 		verdict.Reason += "\n\n" + note
-	case verdict.Decision == "advise":
+	case verdict.Decision == decisionAdvise:
 		verdict.Context += "\n\n" + note
 	default:
-		verdict.Decision, verdict.Context, verdict.Rule = "advise", note, string(kind)
+		verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, note, string(kind)
 	}
 	return verdict
 }
@@ -294,34 +303,60 @@ func sideName(seam functionSeam, side string) string {
 	}
 }
 
+// ruleFailures is what ruleFailureNote tells: the rules of one seam that could not judge a
+// call, and the ones that did.
+type ruleFailures struct {
+	gate     hint.Gate
+	seam     functionSeam
+	failures []trail.RuleFailure
+	answered []string
+	// judged builds the line naming the magus that judged the call. It is read only when a
+	// rule failed, since it stats the checkout.
+	judged func() string
+}
+
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
 // could not, "" when none failed. A set of failures is told in full the first time it fires
 // in a session and as one line naming what applied on every repeat, so the reader never
-// takes a call for judged by a rule that was skipped.
-//
-// judged is judgingBinaryNote's line, appended to the full telling only: the repeat stays
-// one line.
-func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFailure, answered []string, judged string) string {
-	if len(failures) == 0 {
+// takes a call for judged by a rule that was skipped. The judging binary's line is part of
+// the full telling only: the repeat stays one line.
+func ruleFailureNote(r ruleFailures) string {
+	if len(r.failures) == 0 {
 		return ""
 	}
 	applied := []string{"the built-in rules"}
-	for _, by := range answered {
-		applied = append(applied, "the "+sideName(seam, by))
+	for _, by := range r.answered {
+		applied = append(applied, "the "+sideName(r.seam, by))
 	}
-	summary := "Only " + strings.Join(applied, " and ") + " applied to this " + string(seam) + "."
+	summary := "Only " + strings.Join(applied, " and ") + " applied to this " + string(r.seam) + "."
 	var full strings.Builder
 	h := sha256.New()
-	for _, f := range failures {
-		full.WriteString("The " + sideName(seam, f.Side) + " judged nothing: " + f.Error + "\n\n")
+	for _, f := range r.failures {
+		full.WriteString("The " + sideName(r.seam, f.Side) + " judged nothing: " + f.Error + "\n\n")
 		_, _ = h.Write([]byte(f.Side + "\x00" + f.Error + "\x00"))
 	}
 	full.WriteString(summary)
-	if judged != "" {
-		full.WriteString("\n\n" + judged)
+	if r.judged != nil {
+		if judged := r.judged(); judged != "" {
+			full.WriteString("\n\n" + judged)
+		}
 	}
-	kind := hint.MarkerKind(string(ruleFailedKind(seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
-	return gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(seam)+" rule is still failing, as told earlier in this session.")
+	kind := hint.MarkerKind(string(ruleFailedKind(r.seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
+	return r.gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(r.seam)+" rule is still failing, as told earlier in this session.")
+}
+
+// judgingBinary is what is known about the magus that judged a call, told by String.
+type judgingBinary struct {
+	path, version string
+	// root is the checkout's workspace root, "" when the call is outside one.
+	root      string
+	hasBinary bool
+	// same reports that path is the checkout's own ./magus.
+	same bool
+	// stale reports that the load failure is the binary being older than the tree; fix is
+	// then the remedy to name.
+	stale bool
+	fix   string
 }
 
 // judgingBinaryNote names the magus that judged the call and how it relates to the
@@ -331,42 +366,44 @@ func judgingBinaryNote(deps Dependencies, at location, loadFailure error, lease 
 	if deps.Binary == "" {
 		return ""
 	}
-	who := "Judged by " + deps.Binary
-	if deps.BinaryVersion != "" {
-		who += " (" + deps.BinaryVersion + ")"
+	j := judgingBinary{path: deps.Binary, version: deps.BinaryVersion, root: at.workspace}
+	if j.root != "" {
+		j.hasBinary = hasMagusBinary(j.root)
+		if j.hasBinary {
+			a, errA := os.Stat(deps.Binary)
+			b, errB := os.Stat(filepath.Join(j.root, "magus"))
+			j.same = errA == nil && errB == nil && os.SameFile(a, b)
+		}
+		if j.stale = ward.IsStaleBinary(loadFailure); j.stale {
+			j.fix = binaryRemedy(ownSourceRoot(j.root), j.hasBinary, lease).say
+		}
 	}
-	root := at.workspace
-	if root == "" {
+	return j.String()
+}
+
+func (j judgingBinary) String() string {
+	who := "Judged by " + j.path
+	if j.version != "" {
+		who += " (" + j.version + ")"
+	}
+	if j.root == "" {
 		return who + "."
 	}
-	hasBinary := hasMagusBinary(root)
-	same := false
-	if hasBinary {
-		a, errA := os.Stat(deps.Binary)
-		b, errB := os.Stat(filepath.Join(root, "magus"))
-		same = errA == nil && errB == nil && os.SameFile(a, b)
-	}
-	var fix binaryFix
-	stale := ward.IsStaleBinary(loadFailure)
-	if stale {
-		fix = binaryRemedy(ownSourceRoot(root), hasBinary, lease)
-	}
 	switch {
-	case !hasBinary:
+	case !j.hasBinary:
 		who += "; this checkout has no ./magus."
-	case same:
+	case j.same:
 		who += ", this checkout's ./magus."
 	default:
 		who += ", which is not this checkout's ./magus."
-		if stale {
-			return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + fix.say + "."
-		}
+	}
+	switch {
+	case !j.stale:
 		return who
+	case j.hasBinary && !j.same:
+		return who + " It is older than the tree: the hook uses ./magus when the call runs inside this checkout and ./magus is executable. Otherwise " + j.fix + "."
 	}
-	if stale {
-		who += " Fix: " + fix.say + "."
-	}
-	return who
+	return who + " Fix: " + j.fix + "."
 }
 
 // ruleFailedKind names the notice that a seam's workspace rule judged nothing.

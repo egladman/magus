@@ -16,6 +16,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
@@ -73,23 +74,23 @@ func (g goCall) buildRoot(cwd string) string {
 	return filepath.Join(cwd, g.chdir)
 }
 
-// bootstrapGoArgv is the go command a checkout of magus with no binary runs to get one:
-// the real go-build target, driven by a magus compiled on the fly. The target's own key
-// cannot express the embedded-spell ordering, so its cache is bypassed; Go's
-// content-addressed build cache stays on, and -trimpath matches the target's build so
-// packages compile once.
-var bootstrapGoArgv = []string{"go", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."}
+// bootstrapCommand is what a checkout of magus with no binary runs to get one: the real
+// go-build target, driven by a magus compiled on the fly. The target's own key cannot
+// express the embedded-spell ordering, so its cache is bypassed; Go's content-addressed
+// build cache stays on, and -trimpath matches the target's build so packages compile once.
+const bootstrapCommand = ward.BootstrapCommand
+
+// bootstrapArgv is the bootstrap as a shell line spells it, prefix first. The prefix is an
+// assignment, so it runs through a shell, never through exec.
+var bootstrapArgv = strings.Fields(bootstrapCommand)
 
 // bootstrapEnv is the one prefix the bootstrap carries. internal/json refuses to compile
 // without the experiment, and a fresh checkout cannot count on mise to set it; the
 // go-build target sets it for the builds it runs.
-const bootstrapEnv = "GOEXPERIMENT=jsonv2"
+var bootstrapEnv = bootstrapArgv[0]
 
-// bootstrapArgv is the bootstrap as a shell line spells it, prefix first. The prefix is an
-// assignment, so it runs through a shell, never through exec.
-var bootstrapArgv = slices.Concat([]string{bootstrapEnv}, bootstrapGoArgv)
-
-var bootstrapCommand = strings.Join(bootstrapArgv, " ")
+// bootstrapGoArgv is the go command after the prefix.
+var bootstrapGoArgv = bootstrapArgv[1:]
 
 const bootstrapWhy = "it runs the real go-build target (generate steps and stamped link) past a magus cache that cannot key it, while Go's build cache stays on."
 

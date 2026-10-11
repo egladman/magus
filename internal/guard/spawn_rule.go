@@ -72,12 +72,12 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
 
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	decided := ""
 	var failures []trail.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
@@ -88,39 +88,39 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	verdictRef := ""
 	if env.IsSpawn {
 		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
-		if verdict.Decision == "deny" {
+		if verdict.Decision == decisionDeny {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
-				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 		}
-		if verdict = deps.gradeAdvice(verdict); verdict.Decision != "pass" {
+		if verdict = deps.gradeAdvice(verdict); verdict.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	// A continuation carries a brief as much as a spawn does, so both are graded.
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value, env.Spawn.Description)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description})); refused {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
-		} else if v.Context != "" && verdict.Decision == "pass" {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: v.Context, Rule: v.RuleName()}
+		} else if v.Context != "" && verdict.Decision == decisionPass {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
 			decided = decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
 		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
 		held.speak(gate, &verdict, whys)
-		if verdict.Decision == "advise" {
+		if verdict.Decision == decisionAdvise {
 			verdict.Context, verdictRef = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
 		}
-		if verdict.Decision != "pass" {
+		if verdict.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease)
 		bind := func(rule workspace.SpawnRule) ruleCall {
 			if rule == nil {
@@ -148,14 +148,16 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		denied := asked.unloaded && denyUnloaded(&asked, call, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
 		if !denied && !asked.timedOut {
-			note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered,
-				judgingBinaryNote(deps, at, asked.loadFailure, actingLease))
+			note := ruleFailureNote(ruleFailures{
+				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered,
+				judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
-	if verdict.Decision == "deny" && verdict.Rule != "" {
+	if verdict.Decision == decisionDeny && verdict.Rule != "" {
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
@@ -165,7 +167,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		target:       resolveAgentID(facts, env.Target),
 		ruleFailures: failures,
 	})
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		markAgentSeen(facts, env)
 	}
 	return verdict
@@ -177,15 +179,15 @@ func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at loc
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
 	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}, ref
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
-	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}, ""
+	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
@@ -719,7 +721,7 @@ func writeAgentMarker(facts hint.Gate, kind hint.MarkerKind, body []byte) {
 // working tree's: it has no approved twin to be stricter than.
 func decidedBy(v Verdict) string {
 	switch {
-	case v.Decision == "pass" || v.Decision == "":
+	case v.Decision == decisionPass || v.Decision == "":
 		return ""
 	case strings.HasPrefix(v.Rule, workspaceShellPrefix):
 		return decidedByWorktree

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/internal/workspace"
@@ -406,4 +407,19 @@ func TestWorkspaceRuleApprovedDenyCarriesTheNote(t *testing.T) {
 			"Only the built-in rules and the approved magus\\guard.command rule applied to this command.",
 		Rule: workspaceCommandRule,
 	}, v)
+}
+
+// The judging binary's line stats the checkout, so a call no rule failed on never builds it.
+func TestRuleFailureNoteBuildsTheJudgingLineOnlyForAFailure(t *testing.T) {
+	called := false
+	r := ruleFailures{
+		gate: hint.NewGate(t.TempDir(), "s1"), seam: seamCommand,
+		judged: func() string { called = true; return "Judged by x." },
+	}
+	assert.Empty(t, ruleFailureNote(r))
+	assert.False(t, called)
+
+	r.failures = []trail.RuleFailure{{Side: decidedByWorktree, Error: "boom"}}
+	assert.Contains(t, ruleFailureNote(r), "Judged by x.")
+	assert.True(t, called)
 }

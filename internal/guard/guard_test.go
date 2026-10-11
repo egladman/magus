@@ -441,8 +441,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		require.NoError(t, os.WriteFile(capture, []byte("[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n"), 0o644))
 
 		v := shellIn(t, "trim-key", ws)("cat " + capture)
-		assert.Equal(t, "deny", v.Decision, v.Reason)
-		assert.Equal(t, workspaceCommandRule, v.Rule, "the policy decided, not a built-in")
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), "the policy decided, not a built-in: %s", v.Reason)
 		assert.Contains(t, v.Reason, "`magus query output out1afa17d04e90`")
 	})
 

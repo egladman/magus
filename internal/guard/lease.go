@@ -433,7 +433,7 @@ func verbFlagTakesValue(verb, name string) bool {
 // copy in each worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
-func (r targetRun) allowed(checks []types.LeaseCheck, produces func() func(target, project string) bool) bool {
+func (r targetRun) allowed(checks []types.LeaseCheck, produces producerLookup) bool {
 	projects := r.projects
 	if len(projects) == 0 {
 		projects = []string{"."}

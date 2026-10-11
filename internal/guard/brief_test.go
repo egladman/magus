@@ -52,7 +52,7 @@ func TestBriefThatTeachesADeniedCommandIsRefused(t *testing.T) {
 		{"bootstrap beside a denied line", "Setup:\n```bash\nGOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .\ngit add -A\n```\n", denyRuleStageAll},
 		{"go run of anything else", "Run `go run ./cmd/magus-docs` to render.", denyRuleRawTool},
 	} {
-		v := denyBriefCommand(strict(testDependencies()), tt.brief, "")
+		v := judgeBriefCommand(strict(testDependencies()), briefInput{text: tt.brief})
 		if tt.arg == "" {
 			assert.Empty(t, v.Deny, tt.name)
 			continue
@@ -132,15 +132,15 @@ func TestBriefOffCheckIsRefused(t *testing.T) {
 		{"a placeholder", "Run `./magus run <target> <project>` for the row's check.", ""},
 		{"a read", "Read `./magus describe job figures/flow` first.", ""},
 	} {
-		line, target, found := briefOffCheck(tt.brief, row, produces, defines)
+		off, found := briefOffCheck(tt.brief, row, produces, defines)
 		if tt.target == "" {
-			assert.False(t, found, "%s: refused over %q", tt.name, line)
+			assert.False(t, found, "%s: refused over %q", tt.name, off.line)
 			continue
 		}
 		require.True(t, found, tt.name)
-		assert.Equal(t, tt.target, target, tt.name)
-		deny := briefOffCheckDeny(row, line, target)
-		assert.Contains(t, deny, strconv.Quote(strings.TrimSpace(line)), "%s: the refusal quotes the line", tt.name)
+		assert.Equal(t, tt.target, off.run.target, tt.name)
+		deny := briefOffCheckDeny(row, off.line, off.run.target)
+		assert.Contains(t, deny, strconv.Quote(strings.TrimSpace(off.line)), "%s: the refusal quotes the line", tt.name)
 		assert.Contains(t, deny, "`magus run diagrams_generate docs`", "%s: the refusal names the row's check", tt.name)
 		assert.Contains(t, deny, "["+string(denyRuleWorkerCheckOnly)+"]", tt.name)
 	}
@@ -176,7 +176,7 @@ func TestBriefGradingExplainsAPass(t *testing.T) {
 		assert.Equal(t, verdictWithRule("advise", string(denyRuleBriefCommand)), unworded(v))
 		assert.Contains(t, v.Context, "no row was held to a check")
 		assert.Contains(t, v.Context, "names no job")
-		assert.Contains(t, v.Context, `"Also run `+"`./magus run lint docs -s`"+` when done." went ungraded`)
+		assert.Contains(t, v.Context, `"Also run `+"`./magus run lint docs -s`"+` when done." is not graded: no row was held to a check`)
 	})
 	t.Run("a brief naming a job the store does not hold live", func(t *testing.T) {
 		v := Judge(ctx, strict(Dependencies{}), Request{Input: agentEnvelope(t, "orchestrator/worker draft", "JOB ID: ghost/job\n"+offCheck), Host: "claude-code"})
