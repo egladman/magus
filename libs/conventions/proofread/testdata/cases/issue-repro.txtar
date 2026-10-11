@@ -68,23 +68,23 @@ Fix typo and bug, improve error message and tests
 Fix the CI interpreter setup failure on the desktop runner
 
 - update the package workflow to a newer interpreter version to avoid the gettext failure
--- fp/issue whole --
+-- pass/issue whole --
 docs: fix the incorrect cloud docs heading
 
 - update the cloud docs section heading to use the provider's full name
--- fp/issue whole --
+-- pass/issue whole --
 test: complete the regression test baselines
 
 All tasks for the regression baselines feature are done and wired into CI.
--- fp/issue whole --
+-- pass/issue whole --
 Add a links plugin regression test
 
 - add a spec covering image resolution after a deleted root image is replaced in a nested folder
--- fp/issue whole --
+-- pass/issue whole --
 Investigate the example compilation failure
 
 The execution step iterated over every directory in the build folder rather than only the examples compiled in this run, so examples from earlier full runs executed too.
--- fp/issue whole --
+-- pass/issue whole --
 Replace file-based IPC with a pipe to fix a crash on one Cyrillic character
 
 The tool crashed on files whose names contain one Cyrillic capital letter. It failed silently, leaving only an exception in the system event log.
@@ -92,29 +92,29 @@ The tool crashed on files whose names contain one Cyrillic capital letter. It fa
 fix: trading address refresh bug
 
 The cached public keys were not reset when a new wallet session began, so screens kept showing the previous wallet's addresses. This change makes them show the active wallet's.
--- fp/issue whole --
+-- pass/issue whole --
 Fails to build on a recent C++ standard library
 
 Original issue description:
 
 > Building with the newer standard library fails in the string formatter template; the older one compiles it.
--- fp/issue whole --
+-- pass/issue whole --
 Add a regression test for issue #2571
 
 This adds an integration test to check that sync does not delete public keys used in subdirectory key files.
--- fp/issue whole --
+-- pass/issue whole --
 Capture the tool call name in logs on success and not just failure
 
 - [x] Add the tool name parameter to log messages for tool call requests
--- fp/issue whole --
+-- pass/issue whole --
 Remove the blog access regression test
 
 - remove the recently added access regression test per review feedback
--- fp/issue whole --
+-- pass/issue whole --
 Build a conformal regression package
 
 Introduce a package for fast conformal regression with data thinning.
--- fp/issue whole --
+-- pass/issue whole --
 fix(cli): scaffold fails to add to the index file in ES module projects
 
 The scaffold command failed in ES module projects with the error "Nothing is exported from this file". Run the scaffold create command in a project created with the ES module option.
@@ -124,78 +124,78 @@ Fix the VM optimizer crash on query 17
 ## Testing
 - `run tests/dataset/job/q17`
 - `test tests/dataset/job/q17`
--- fp/issue whole --
+-- pass/issue whole --
 fix(processing): catch JSON decode errors in the retry handler; add regression tests
 
 A decode error in JSON mode was wrapped in a different error type, so it bypassed the retry handler and retries got no error feedback.
--- fp/issue whole --
+-- pass/issue whole --
 Fix the audio input build failure
 
 The capabilities header exists only on SDK 4.0 and later, so builds on 3.3 stopped with a fatal "No such file or directory" error; they now build with audio input disabled.
--- fp/issue whole --
+-- pass/issue whole --
 fix(docs): update broken standards links in the table navigation docs
 
 The table navigation docs linked to pages that now return 404 errors after the standards site restructured its URLs.
--- fp/issue whole --
+-- pass/issue whole --
 Make the update check a background task to prevent a startup hang
 
 The update check blocked startup, so the UI hung for 10 seconds or more while waiting for the network request; it should render at once.
--- fp/issue whole --
+-- pass/issue whole --
 fix: dashboard course card wrong ordering
 
 Course cards should be ordered by completion percentage, highest first, with completed courses last.
--- fp/issue whole --
+-- pass/issue whole --
 Fix a multi-client unsubscribe crash when the order differs from the subscribe order
 
 1. Client 1 subscribes to an encrypted channel
 2. Client 2 subscribes to the same channel
 3. Client 1 unsubscribes, and the raw service is deleted
 4. Client 2 unsubscribes, and it crashes
--- fp/issue whole --
+-- pass/issue whole --
 Add a workflow for investigating failed smoke test runs
 
 This adds a workflow that finds the root cause of failed smoke test runs.
--- fp/issue whole --
+-- pass/issue whole --
 Enhance the output style for step failure or success
 
 > Make the output when a step succeeds or fails more distinct; do not change the logic.
--- fp/issue whole --
+-- pass/issue whole --
 Allow nullable exceptions for Failure
 
 - allow a nullable exception on the failure overloads
--- fp/issue whole --
+-- pass/issue whole --
 fix(credits): handle failed payment intents
 
 Every payment failed event now creates a failed transaction record.
--- fp/issue whole --
+-- pass/issue whole --
 [Bug]: Migrate the area chart tests to the newer testing library
 
 This change migrates the area chart test cases from the old testing library to the newer one.
--- fp/issue whole --
+-- pass/issue whole --
 Fix `Error: Failed to replace env in config` during local development
 
 The package manager fails with `Failed to replace env in config` when the registry token variable is not set, which it is only in CI.
--- fp/issue whole --
+-- pass/issue whole --
 Implement stack overrun crash detection and analysis tooling
 
 - [x] Detect and analyze stack buffer overrun crashes in the crash script
--- fp/issue whole --
+-- pass/issue whole --
 Fix a critical recurring failure in the scripting model
 
 > The smoke workflow failed again: the model name it requests is invalid, so every run stops at the first call.
--- fp/issue whole --
+-- pass/issue whole --
 Clarify what a 'fail' result means in the similarity evaluator
 
 > what does a "fail" result from the similarity evaluator indicate
--- fp/issue whole --
+-- pass/issue whole --
 Fix the error details display when a workspace deletion fails
 
 Users see "Cannot read properties of undefined (reading 'split')" when viewing details of a workspace deletion that failed after its app registration was removed.
--- fp/issue whole --
+-- pass/issue whole --
 Fix a broken link in the README
 
 The link pointed to `RAI_README` but should point to `RAI_README.md`.
--- fp/issue whole --
+-- pass/issue whole --
 bug: add a block explorer to the link checker ignore list
 
 The link checker fails with 403 errors on the explorer URLs when running the link-check script, like the other explorers already excluded.

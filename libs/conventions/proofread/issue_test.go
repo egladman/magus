@@ -45,6 +45,16 @@ func TestIssueReproAdvisesABugReportThatCannotBeReproduced(t *testing.T) {
 			want: nil,
 		},
 		{name: "the other real issue", text: "Merge queue\n\nTrack the queue's rollout."},
+		{name: "a fix title", text: "Fix comment bug\n\n- fix the comments", want: advise("bug")},
+		{name: "a tagged title", text: "[WIP] Bug: the bot fails to push\n\n- [x] Find the cause", want: advise("fails")},
+		{name: "a test change", text: "test: cover the crash path\n\nAdds a case."},
+		{name: "a work verb", text: "Add a regression test for the parser\n\nAdds a case."},
+		{name: "a defect word naming a topic", text: "Detect crash reports\n\nReads the dumps."},
+		{name: "a defect word in code", text: "Fix `Error: failed to load` in CI\n\nSets the token."},
+		{name: "the expected state", text: "Fix a broken link\n\nIt should point to the guide."},
+		{name: "what happened", text: "Fix the build failure\n\nThe build stopped with a fatal error."},
+		{name: "numbered steps", text: "Fix the unsubscribe crash\n\n1. Subscribe twice.\n2. Unsubscribe."},
+		{name: "the original report quoted", text: "Fails to build\n\n> The new library fails in the template."},
 	}
 
 	for _, tc := range cases {
