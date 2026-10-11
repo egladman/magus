@@ -85,6 +85,18 @@ func TestAbsoluteReportsNeverAndNobodyAboutThePast(t *testing.T) {
 		{"nothing with a past verb", KindReviewReply, "Nothing checked it.", []string{"1:Nothing checked:advise"}},
 		{"a contract", KindChangeDescription, pr("- Resolve never returns nil, and the value is never used."), nil},
 		{"a present verb ending in ed", KindReviewReply, "Nobody need run it twice.", nil},
+		{"never with a passive past verb", KindReviewReply, "It is an old line that was never updated.",
+			[]string{"1:never updated:advise"}},
+		{"a verb said of code", KindReviewReply, "The field was never used by the compiler.", nil},
+		{"has never with a verb said of code", KindReviewReply, "The option had never been read.", nil},
+		{"set against what the code did", KindReviewReply, "The results were collected but never posted.", nil},
+		{"a supposed case", KindReviewReply, "If the listener never fired, the test would time out.", nil},
+		{"a mechanism", KindReviewReply, "The hook never fired when the chain failed.", nil},
+		{"a parenthetical note", KindReviewReply, "Drop the mapping (never shipped).", nil},
+		{"the writer in the first person", KindReviewReply, "I've never tested it on Windows.", nil},
+		{"nothing with no object", KindReviewReply, "Drop the flag nothing ever cleared.", nil},
+		{"nothing with a preposition", KindReviewReply, "It reruns though nothing changed in the file.", nil},
+		{"a quoted issue", KindReviewReply, "> We never finished it.\n\nThis lands the rest.", nil},
 	})
 }
 

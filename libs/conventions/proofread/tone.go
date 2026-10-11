@@ -378,7 +378,7 @@ var (
 	// Each group holds the verb.
 	pastAbsolute = regexp.MustCompile(`(?i)\b(?:has|have|had) never\b|` +
 		`\bnever (?:once |ever )?(\w+ed|ran|saw|got|was|were|did|knew|broke|wrote|found|caught|made|took|hit)\b|` +
-		`\b(?:nobody|no one|nothing) (?:ever )?(\w+ed|ran|saw|got|did|knew|broke|wrote|found|caught|made|took|hit)\b`)
+		`\b(nobody|no one|nothing) (?:ever )?(\w+ed|ran|saw|got|did|knew|broke|wrote|found|caught|made|took|hit)\b`)
 
 	// edPresent end in "ed" and are not in the past tense.
 	edPresent = wordSet("need", "feed", "speed", "seed", "proceed", "succeed", "exceed", "bleed", "breed", "embed",
@@ -388,21 +388,100 @@ var (
 	// the code does ("is never used", "can never fire").
 	contract = wordSet("is", "are", "be", "am", "s", "re", "can", "will", "may", "must", "should", "would", "could",
 		"does", "do")
+
+	// codeVerbs are said of what code does with code or data, not of
+	// anyone's work: "the field was never used", "a visitor never called",
+	// "a version that never existed". Each is something a reader can check.
+	codeVerbs = wordSet("used", "called", "referenced", "invoked", "exported", "imported", "read", "executed",
+		"populated", "cached", "tracked", "existed", "instantiated", "initialized", "assigned", "accessed")
+
+	// mechanismAfter is a condition after a "never", which makes it a bug's
+	// mechanism: "never fired when the chain failed". A "because" is left
+	// out: "never fired after a rename, because ..." still dates a history.
+	mechanismAfter = regexp.MustCompile(`(?i)\b(?:when|whenever)\b`)
+
+	// supposedOrContrasted opens a clause that supposes the absolute ("if the
+	// listener never fired") or sets it against what the code did do
+	// ("created but never used").
+	supposedOrContrasted = regexp.MustCompile(`(?i)\b(?:if|unless|but)\b`)
+
+	// firstPersonBefore is the writer as the subject: "I've never used it".
+	firstPersonBefore = regexp.MustCompile(`(?i)\b(?:I|we)(?:'ve|'d| have| had)?\s+$`)
+
+	// nothingNoObject are the words after "nothing <verb>" that show the verb
+	// has no object: "the directives nothing required", "nothing changed in
+	// the definition". "Nothing checked it" names the work left undone.
+	nothingNoObject = wordSet("in", "on", "at", "to", "for", "with", "from", "by", "or", "and", "but", "about",
+		"here", "there", "yet", "since")
 )
 
 // absolute reports never, nobody or nothing about the past: an absolute over
 // every run since a change reads as a verdict on whoever made it. "never
-// returns nil" states a contract and is left alone.
+// returns nil" states a contract and is left alone, as is what code or data
+// did or lacks (guideline: judge by the subject): a verb said of code, a
+// supposed or contrasted case, a mechanism, a parenthetical note, the writer
+// in the first person, and a "nothing" with no object.
 func absolute(in input) []Finding {
-	return matchFindings(in, pastAbsolute, func(text string, at []int) bool {
-		for g := 2; g+1 < len(at); g += 2 {
-			if at[g] >= 0 && edPresent[strings.ToLower(text[at[g]:at[g+1]])] {
-				return true
-			}
-		}
+	return unquoted(in, matchFindings(in, pastAbsolute, absoluteExempt,
+		"Say when and how often in place of '%s', as in 'fired 0 times in 40 runs since #558'."))
+}
 
-		return strings.HasPrefix(strings.ToLower(text[at[0]:]), "never") && contract[prevWord(text, at[0])]
-	}, "Say when and how often in place of '%s', as in 'fired 0 times in 40 runs since #558'.")
+func absoluteExempt(text string, at []int) bool {
+	for _, g := range []int{2, 6} {
+		if at[g] >= 0 && edPresent[strings.ToLower(text[at[g]:at[g+1]])] {
+			return true
+		}
+	}
+
+	before := sentenceBefore(text, at[0])
+	if parenthesized(text, at[0]) || firstPersonBefore.MatchString(before) ||
+		supposedOrContrasted.MatchString(before) {
+		return true
+	}
+
+	if at[4] >= 0 {
+		return strings.EqualFold(text[at[4]:at[5]], "nothing") && !hasObjectAfter(text[at[1]:])
+	}
+
+	if strings.HasPrefix(strings.ToLower(text[at[0]:]), "never") && contract[prevWord(text, at[0])] {
+		return true
+	}
+
+	after := text[at[1]:]
+
+	for _, b := range sentenceBounds(text) {
+		if b[0] <= at[0] && at[0] < b[1] {
+			after = text[at[1]:max(at[1], b[1])]
+		}
+	}
+
+	return codeVerbs[verbAfterNever(text[at[0]:])] || mechanismAfter.MatchString(after)
+}
+
+// verbAfterNever is the first word after "never" in rest, past "once",
+// "ever" and "been", lowercased.
+func verbAfterNever(rest string) string {
+	i := strings.Index(strings.ToLower(rest), "never")
+	if i < 0 {
+		return ""
+	}
+
+	for _, w := range strings.Fields(rest[i+len("never"):]) {
+		w = strings.ToLower(strings.Trim(w, ".,;:!?()\"'"))
+		if w != "once" && w != "ever" && w != "been" {
+			return w
+		}
+	}
+
+	return ""
+}
+
+// hasObjectAfter reports whether rest, the text after "nothing <verb>", opens
+// with the verb's object.
+func hasObjectAfter(rest string) bool {
+	next := leadingWord(strings.TrimLeft(rest, " "))
+
+	return next != "" && !nothingNoObject[strings.ToLower(next)]
 }
 
 var (

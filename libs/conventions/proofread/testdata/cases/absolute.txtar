@@ -16,18 +16,21 @@ No, you were not supposed to add this change, which nobody asked for.
 The section of the guide needs restoring; it was accidentally removed or perhaps never created.
 I think this is just an old line that was never updated.
 -- fp/change-description --
+The cache check never worked because the quotes prevent tilde expansion.
+-- pass/change-description --
 - The watcher only detected new changes but never scanned for existing saves.
 If the listener never fired, the test would time out at 5000ms
 The schema held a deprecated top-level field that was never used by the compiler.
 - A testing exception class that was never referenced
-The cache check never worked because the quotes prevent tilde expansion.
 > We never finished implementing translation support.
 On a cancelled touch only the ripple was reset, but the icon color was never restored
 - The dynamic fee functions were never populated or called
 -- fp/commit-message --
-* drop the orphaned manpage for a command that never existed
 * claims never entered the cache key
 However, the frontend never enabled this feature.
+start the daemon for follow mode; reap a child that never served
+-- pass/commit-message --
+* drop the orphaned manpage for a command that never existed
 - Remove the dead status mapping (never used)
 was misleading since it never executed for the first line
 * drop two directives nothing required
@@ -36,12 +39,11 @@ Version 21.0.0 never existed on the package index
 the sources option had never been read
 * add the worker script (precache the shell and bundles, loopback never cached).
 - Make the todo tool immutable (never removed by the skill loader)
-start the daemon for follow mode; reap a child that never served
 **BUG C**: The post-load hook never fired when the chain failed
 so its documented source globs were silently never tracked
 The results were collected but never posted as review comments.
 Investigation: the dot-node visitor was never called for indexed field access
--- fp/review-reply --
+-- pass/review-reply --
 This never existed before.
 The two step fields are computed but never used.
 There is nothing encrypted or secure here.
