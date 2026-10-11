@@ -286,6 +286,16 @@ func (c LeaseCheck) String() string {
 	return line
 }
 
+// Equal reports whether c and o declare the same check. Two nil checks are equal, and a nil
+// check equals no declared one.
+func (c *LeaseCheck) Equal(o *LeaseCheck) bool {
+	if c == nil || o == nil {
+		return c == o
+	}
+	return c.Target == o.Target && c.Script == o.Script && c.Project == o.Project &&
+		c.NoDefaultCharms == o.NoDefaultCharms && slices.Equal(c.Args, o.Args)
+}
+
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
 // shape a record is written in. The project defaults to ".".
 //

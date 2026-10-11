@@ -1,6 +1,7 @@
 package types
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -370,6 +371,42 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
 	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
 	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
+}
+
+func TestLeaseCheckEqualComparesEveryField(t *testing.T) {
+	t.Parallel()
+
+	base := LeaseCheck{Target: "test", Script: "probe.buzz", Project: "p", Args: []string{"-run", "A"}, NoDefaultCharms: true}
+	assert.True(t, base.Equal(&base))
+	same := base
+	same.Args = []string{"-run", "A"}
+	assert.True(t, base.Equal(&same), "equal by value, not by identity")
+
+	for i := range reflect.TypeFor[LeaseCheck]().NumField() {
+		other := base
+		field := reflect.ValueOf(&other).Elem().Field(i)
+		switch field.Kind() {
+		case reflect.String:
+			field.SetString(field.String() + "x")
+		case reflect.Bool:
+			field.SetBool(!field.Bool())
+		case reflect.Slice:
+			field.Set(reflect.ValueOf([]string{"-run", "B"}))
+		default:
+			t.Fatalf("LeaseCheck.%s has kind %s, which this test does not know how to vary", reflect.TypeFor[LeaseCheck]().Field(i).Name, field.Kind())
+		}
+		assert.False(t, base.Equal(&other), "a differing %s is a different check", reflect.TypeFor[LeaseCheck]().Field(i).Name)
+	}
+}
+
+func TestLeaseCheckEqualTreatsNilAsNoCheck(t *testing.T) {
+	t.Parallel()
+
+	declared := &LeaseCheck{Target: "test", Project: "."}
+	var none *LeaseCheck
+	assert.True(t, none.Equal(nil))
+	assert.False(t, none.Equal(declared))
+	assert.False(t, declared.Equal(nil))
 }
 
 // The parse is what makes a check comparable with a stored run, so the shapes it refuses

@@ -45,10 +45,15 @@ func testRoot(t *testing.T) string {
 		{"nested/x/deep.go", "package x\n"},
 		{"nested/x/d_test.go", deepTests},
 	} {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, f[0])), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, f[0]), []byte(f[1]), 0o644))
+		writeFixture(t, root, f[0], f[1])
 	}
 	return root
+}
+
+func writeFixture(t *testing.T, root, rel, body string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(body), 0o644))
 }
 
 func goTestCheck(args ...string) *types.LeaseCheck {
@@ -58,12 +63,13 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, testRoot(t))
+	root := testRoot(t)
 	row := types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")}
 
-	err := RefuseSkippedTests(s, "w", row)
+	err := RefuseSkippedTests(root, row)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "pkg: TestBeta, TestGamma_sub")
+	assert.NotContains(t, err.Error(), "\n", "an error is one line")
+	assert.Contains(t, err.Error(), "pkg (TestBeta, TestGamma_sub)")
 	for _, notATest := range []string{"TestAlpha,", "Testlower", "TestWrongType", "TestMain", "helper", "TestMethod"} {
 		assert.NotContains(t, err.Error(), notATest)
 	}
@@ -72,13 +78,13 @@ func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
 	const covering = "Alpha|^(TestBeta|TestGamma_sub)$"
 	assert.Contains(t, err.Error(), "`"+covering+"`", "the refusal prints a pattern that covers them")
 	row.Check = goTestCheck("-run", covering)
-	require.NoError(t, RefuseSkippedTests(s, "w", row), "and that pattern is accepted")
+	require.NoError(t, RefuseSkippedTests(root, row), "and that pattern is accepted")
 }
 
 func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, testRoot(t))
+	root := testRoot(t)
 	for _, tc := range []struct {
 		name    string
 		check   *types.LeaseCheck
@@ -103,11 +109,16 @@ func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 		{"-run covers, -skip drops", goTestCheck("-run", "Test", "-skip", "Gamma"), "TestGamma_sub"},
 		{"a script check", &types.LeaseCheck{Script: "probe.buzz", Args: []string{"-run", "Alpha"}}, ""},
 		{"an invalid pattern", goTestCheck("-run", "("), ""},
+		{"an element that does not compile keeps its place", goTestCheck("-run", "*bad/Sub"), ""},
+		{"a subtest alternative first leaves the test running", goTestCheck("-skip", "Beta/case|Beta"), ""},
+		{"a whole-test alternative first skips it", goTestCheck("-skip", "Beta|Beta/case"), "TestBeta"},
+		{"another tool's -run is not go test's", &types.LeaseCheck{Target: "cargo-test", Project: ".", Args: []string{"-run", "Alpha"}}, ""},
+		{"the spell-qualified go test", &types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Alpha"}}, "TestBeta"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseSkippedTests(s, "w", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: tc.check})
+			err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: tc.check})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -120,28 +131,28 @@ func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 	t.Parallel()
 
-	s := tmpStore(t, testRoot(t))
+	root := testRoot(t)
 	narrow := goTestCheck("-run", "NoSuchTest")
 	for _, tc := range []struct {
 		name    string
 		paths   []string
 		refused string
 	}{
-		{"a file", []string{"pkg/b.go"}, "pkg: TestAlpha"},
-		{"a glob of files", []string{"pkg/*.go"}, "pkg: TestAlpha"},
-		{"a claim of a declaration", []string{"pkg/b.go#Helper"}, "pkg: TestAlpha"},
-		{"a glob across directories", []string{"nested/**/deep.go"}, "nested/x: TestDeep"},
-		{"two packages", []string{"pkg/a.go", "nested/x/deep.go"}, "nested/x: TestDeep"},
+		{"a file", []string{"pkg/b.go"}, "pkg (TestAlpha"},
+		{"a glob of files", []string{"pkg/*.go"}, "pkg (TestAlpha"},
+		{"a claim of a declaration", []string{"pkg/b.go#Helper"}, "pkg (TestAlpha"},
+		{"a glob across directories", []string{"nested/**/deep.go"}, "nested/x (TestDeep"},
+		{"two packages", []string{"pkg/a.go", "nested/x/deep.go"}, "nested/x (TestDeep"},
 		{"a package without tests", []string{"other/o.go"}, ""},
-		{"a file not written yet", []string{"pkg/new.go"}, "pkg: TestAlpha"},
+		{"a file not written yet", []string{"pkg/new.go"}, "pkg (TestAlpha"},
 		{"a directory that does not exist", []string{"nowhere/new.go"}, ""},
 		{"a non-Go file", []string{"docs/page.md"}, ""},
-		{"a test file", []string{"pkg/a_test.go"}, "pkg: TestAlpha"},
+		{"a test file", []string{"pkg/a_test.go"}, "pkg (TestAlpha"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseSkippedTests(s, "w", types.Job{ID: "w", WritePaths: tc.paths, Check: narrow})
+			err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: tc.paths, Check: narrow})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -150,12 +161,39 @@ func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 		})
 	}
 
-	t.Run("a store with no root", func(t *testing.T) {
+	t.Run("no root", func(t *testing.T) {
 		t.Parallel()
 
-		require.NoError(t, RefuseSkippedTests(tmpStore(t, ""), "w", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
-		require.NoError(t, RefuseSkippedTests(nil, "w", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
+		require.NoError(t, RefuseSkippedTests("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
 	})
+}
+
+// A write path that is a pattern reads packages the way go list does: fixtures under
+// testdata, vendored code, hidden and underscore directories and nested modules are not the
+// job's packages.
+func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
+	t.Parallel()
+
+	root := testRoot(t)
+	for rel, name := range map[string]string{
+		"pkg/testdata/fixture/f_test.go": "TestFixture",
+		"vendor/v/v_test.go":             "TestVendored",
+		".claude/worktrees/w/w_test.go":  "TestWorktree",
+		"_scratch/s_test.go":             "TestScratch",
+		"lib/l_test.go":                  "TestNestedModule",
+	} {
+		writeFixture(t, root, rel, "package x\n\nimport \"testing\"\n\nfunc "+name+"(t *testing.T) {}\n")
+	}
+	writeFixture(t, root, "lib/go.mod", "module lib\n")
+
+	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"**/*.go"}, Check: goTestCheck("-run", "NoSuchTest")})
+	require.Error(t, err)
+	for _, tested := range []string{"pkg (TestAlpha", "nested/x (TestDeep"} {
+		assert.Contains(t, err.Error(), tested)
+	}
+	for _, left := range []string{"TestFixture", "TestVendored", "TestWorktree", "TestScratch", "TestNestedModule"} {
+		assert.NotContains(t, err.Error(), left)
+	}
 }
 
 func TestForkAndApplyRefuseASkippingCheck(t *testing.T) {
@@ -197,59 +235,21 @@ func TestForkLetsARowThatAlreadySkipsTakeAnUnrelatedUpdate(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func graderStore(t *testing.T, verdict CheckVerdict, calls *[]types.Job) *Store {
-	t.Helper()
-	loc := tmpLoc(t, testRoot(t))
-	loc.Grader = func(_ context.Context, row types.Job) CheckVerdict {
-		*calls = append(*calls, row)
-		return verdict
-	}
-	return NewStore(loc)
-}
-
-func TestRefuseDeniedCheckQuotesTheVerdictAndNamesATargetThatCompiles(t *testing.T) {
+// An update that keeps the check grades the packages of the paths it adds, not the ones the
+// row already held, which its own check was accepted against.
+func TestForkGradesOnlyTheAddedWritePathsOfAnUpdate(t *testing.T) {
 	t.Parallel()
 
-	var calls []types.Job
-	s := graderStore(t, CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus;\nask the main session"}, &calls)
-	build := &types.LeaseCheck{Target: "go-build", Project: "."}
+	ctx := context.Background()
+	root := testRoot(t)
+	writeFixture(t, root, "other/o_test.go", "package other\n\nimport \"testing\"\n\nfunc TestOther(t *testing.T) {}\n")
+	s := tmpStore(t, root)
+	seed(t, s, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha"), State: types.StateDeclared})
 
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, build }, config.Jobs{}, nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "w's check `magus run go-build .` would be denied to its worker by the guard (worker-builds-magus)")
-	assert.Contains(t, err.Error(), "a worker does not build magus;\n    ask the main session", "the verdict is quoted")
-	assert.Contains(t, err.Error(), "`go::go-vet .`", "the remedy names a target that compiles without linking the binary")
-	require.Len(t, calls, 1)
-	assert.Equal(t, "w", calls[0].ID, "the grader is handed the row, its id the lease to grade under")
-	assert.Equal(t, build, calls[0].Check)
+	_, err := ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "other/o.go") }, config.Jobs{}, nil)
+	require.ErrorContains(t, err, "other (TestOther)", "the added package is graded")
+	assert.NotContains(t, err.Error(), "pkg (", "and the package the row already held is not")
 
-	rows, err := s.List()
-	require.NoError(t, err)
-	assert.Empty(t, rows, "a refused fork wrote nothing")
-
-	_, err = Apply(t.Context(), s, []types.Declaration{{ID: "w", WritePaths: []string{"pkg/b.go"}, Check: build}}, config.Jobs{}, nil, nil, true)
-	require.ErrorContains(t, err, "would be denied to its worker", "job apply grades too")
-}
-
-func TestRefuseDeniedCheckAcceptsWhatTheGuardLets(t *testing.T) {
-	t.Parallel()
-
-	var calls []types.Job
-	s := graderStore(t, CheckVerdict{}, &calls)
-	_, err := ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.WritePaths, u.Check = []string{"pkg/b.go"}, forkCheck() }, config.Jobs{}, nil)
-	require.NoError(t, err)
-	require.Len(t, calls, 1)
-
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Model = "opus" }, config.Jobs{}, nil)
-	require.NoError(t, err)
-	assert.Len(t, calls, 1, "an update that leaves the check alone is not graded again")
-
-	_, err = ForkMerge(t.Context(), s, "w", func(u *types.Job) { u.Check = &types.LeaseCheck{Target: "lint", Project: "."} }, config.Jobs{}, nil)
-	require.NoError(t, err)
-	assert.Len(t, calls, 2, "a changed check is")
-
-	require.NoError(t, RefuseDeniedCheck(t.Context(), tmpStore(t, t.TempDir()), types.Job{ID: "w", Check: forkCheck()}), "a store with no grader refuses nothing")
-	_, err = ForkMerge(t.Context(), s, "scout", func(u *types.Job) { u.ReadOnly = true }, config.Jobs{}, nil)
-	require.NoError(t, err)
-	assert.Len(t, calls, 2, "a job with no check has nothing to grade")
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = append(u.WritePaths, "docs/page.md") }, config.Jobs{}, nil)
+	require.NoError(t, err, "a path that names no Go package adds nothing to grade")
 }

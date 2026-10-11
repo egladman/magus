@@ -26,7 +26,7 @@ import (
 //
 // Only a fork with a `#` entry reads the version control; any other fork refuses nothing
 // here. A nil store, or one with no workspace root, has no tree to ask and refuses nothing.
-func RefuseUngradableClaims(ctx context.Context, store *Store, id string, candidate types.Job) error {
+func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) error {
 	if store == nil || store.root == "" {
 		return nil
 	}
@@ -36,7 +36,7 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, id string, candid
 	for _, list := range []struct {
 		field   string
 		entries []string
-	}{{"", candidate.WritePaths}, {"deny path ", candidate.DenyPaths}} {
+	}{{"", row.WritePaths}, {"deny path ", row.DenyPaths}} {
 		for _, entry := range list.entries {
 			if !types.HasClaim(entry) {
 				continue
@@ -79,7 +79,7 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, id string, candid
 	}
 	return types.DiagnosticErrorf(types.WritePathClaimUngradable,
 		"job: %s claims a declaration no footprint can grade: %s. Claim the whole file instead, or fix what is named",
-		id, strings.Join(refused, "; "))
+		row.ID, strings.Join(refused, "; "))
 }
 
 // claimDrivers asks root's version control which diff driver names each path's
@@ -118,14 +118,14 @@ func driverPattern(p string) string {
 // editing is over (see [Editing]); a holder blocked on
 // depends_on, which owns none of its write paths yet (types.JobBlockedOn); and a file with
 // no diff driver, for which depends_on is the only move.
-func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, id string, candidate types.Job) error {
-	if store == nil || store.root == "" || len(candidate.WritePaths) == 0 {
+func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Job, row types.Job) error {
+	if store == nil || store.root == "" || len(row.WritePaths) == 0 {
 		return nil
 	}
 	here, _ := filepath.Abs(store.root)
 	// A re-fork replaces its stored row, so the pair is ordered by what it declares now.
-	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == id }), candidate)
-	for _, mine := range candidate.WritePaths {
+	combined := append(slices.DeleteFunc(slices.Clone(rows), func(r types.Job) bool { return r.ID == row.ID }), row)
+	for _, mine := range row.WritePaths {
 		file, ok := literalClaimableFile(store.root, mine)
 		if !ok {
 			continue
@@ -134,7 +134,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 			continue
 		}
 		for _, holder := range rows {
-			if holder.ID == id || !Editing(holder) || len(holder.WritePaths) == 0 {
+			if holder.ID == row.ID || !Editing(holder) || len(holder.WritePaths) == 0 {
 				continue
 			}
 			// A row nobody has taken yet is not in a different checkout from anyone.
@@ -146,7 +146,7 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 			if _, blocked := types.JobBlockedOn(rows, holder); blocked {
 				continue
 			}
-			if orderedPair(combined, id, holder.ID) {
+			if orderedPair(combined, row.ID, holder.ID) {
 				continue
 			}
 			for _, theirs := range holder.WritePaths {
@@ -162,11 +162,11 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 						" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
 						" say otherwise. %s has touched %s in it so far. Claim `%s#<declaration>` on both rows, add"+
 						" `--depends-on %s` to %s, or fold %s into %s",
-					id, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
+					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
 					file,
 					holder.ID, touched,
-					file, holder.ID, id,
-					id, holder.ID)
+					file, holder.ID, row.ID,
+					row.ID, holder.ID)
 			}
 		}
 	}

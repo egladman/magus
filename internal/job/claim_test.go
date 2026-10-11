@@ -99,7 +99,7 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	t.Run("a checkout with no version control", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tmpLoc(t, t.TempDir()))
-		err := RefuseUngradableClaims(context.Background(), s, "wave/job", types.Job{WritePaths: []string{"run.go#executeStages"}})
+		err := RefuseUngradableClaims(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `"run.go": `)
 	})
@@ -167,7 +167,7 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 			require.NoError(t, err)
 
 			candidate := types.Job{ID: "B", WritePaths: tc.bWrite, Parent: tc.bParent, DependsOn: tc.bDependsOn}
-			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate)
+			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, candidate)
 			if !tc.wantRefused {
 				require.NoError(t, refErr)
 				return
@@ -197,7 +197,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = RefuseUnorderedFileShare(context.Background(), s, rows, "B", types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}})
+		err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}})
 		if refused {
 			require.ErrorIs(t, err, types.WritePathFileShared, state)
 			continue
@@ -223,9 +223,9 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	replacement := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"A"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement))
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement))
 	replacement.DependsOn = nil
-	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement), types.WritePathFileShared)
+	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement), types.WritePathFileShared)
 }
 
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
@@ -251,5 +251,5 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	candidate := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"M"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate))
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, candidate))
 }

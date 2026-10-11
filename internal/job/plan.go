@@ -100,64 +100,61 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 			return "", err
 		}
 		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })
-		if err := RefuseUngradableClaims(ctx, store, id, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
+		if err := RefuseUngradableClaims(ctx, store, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
 			return "", err
 		}
-		candidate := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
+		addedPaths := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		if err := RefuseUnorderedFileShare(ctx, store, rows, addedPaths); err != nil {
 			return "", err
 		}
 		// Judged on what the update changes, so a check the row already held never blocks an
-		// unrelated update.
-		if len(added) > 0 || !sameCheck(prev.Check, merged.Check) {
-			if err := RefuseSkippedTests(store, id, merged); err != nil {
+		// unrelated update: a new check is graded against every write path, an old one
+		// only against the paths this update adds.
+		checkChanged := !prev.Check.Equal(merged.Check)
+		if checkChanged || len(added) > 0 {
+			graded := merged
+			if !checkChanged {
+				graded.WritePaths = added
+			}
+			if err := RefuseSkippedTests(store.workspaceRoot(), graded); err != nil {
 				return "", err
 			}
 		}
-		if !sameCheck(prev.Check, merged.Check) {
+		if checkChanged {
 			return "", RefuseDeniedCheck(ctx, store, merged)
 		}
 		return "", nil
 	}
-	candidate := types.Job{ID: id}
-	merge(&candidate)
-	if err := RefuseUngraded(candidate); err != nil {
+	row := types.Job{ID: id}
+	merge(&row)
+	if err := RefuseUngraded(row); err != nil {
 		return "", err
 	}
-	if err := RefuseForkLimits(rows, id, candidate.Parent, limits); err != nil {
+	if err := RefuseForkLimits(rows, id, row.Parent, limits); err != nil {
 		return "", err
 	}
-	if err := RefuseAmbiguousSymbols(ctx, candidate.Goals, read); err != nil {
+	if err := RefuseAmbiguousSymbols(ctx, row.Goals, read); err != nil {
 		return "", err
 	}
-	if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+	if err := RefuseDirectoryWritePaths(store, row); err != nil {
 		return "", err
 	}
-	if err := RefuseUngradableClaims(ctx, store, id, candidate); err != nil {
+	if err := RefuseUngradableClaims(ctx, store, row); err != nil {
 		return "", err
 	}
-	if err := RefuseSharedCheckout(store, rows, id, candidate); err != nil {
+	if err := RefuseSharedCheckout(store, rows, row); err != nil {
 		return "", err
 	}
-	if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
+	if err := RefuseUnorderedFileShare(ctx, store, rows, row); err != nil {
 		return "", err
 	}
-	if err := RefuseSkippedTests(store, id, candidate); err != nil {
+	if err := RefuseSkippedTests(store.workspaceRoot(), row); err != nil {
 		return "", err
 	}
-	if err := RefuseDeniedCheck(ctx, store, candidate); err != nil {
+	if err := RefuseDeniedCheck(ctx, store, row); err != nil {
 		return "", err
 	}
-	return store.WriteProof(rows, id, candidate), nil
-}
-
-// sameCheck reports whether a and b declare the same check.
-func sameCheck(a, b *types.LeaseCheck) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
-		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
+	return store.WriteProof(rows, id, row), nil
 }
 
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
@@ -286,11 +283,11 @@ func RefuseAddedWritePaths(ctx context.Context, store *Store, id string, added [
 	if len(added) == 0 {
 		return nil
 	}
-	candidate := types.Job{ID: id, WritePaths: added}
-	if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+	row := types.Job{ID: id, WritePaths: added}
+	if err := RefuseDirectoryWritePaths(store, row); err != nil {
 		return err
 	}
-	return RefuseUngradableClaims(ctx, store, id, candidate)
+	return RefuseUngradableClaims(ctx, store, row)
 }
 
 // RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`
