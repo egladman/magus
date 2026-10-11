@@ -749,7 +749,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	facts := leaseBoundary(ctx, root, row, leases)
+	facts, unrun := leaseBoundary(ctx, root, row, leases)
 	facts.Evidence, facts.GraphCold = leaseGraphEvidence(ctx, root, row.WritePaths)
 	brief := job.NewTerms(row, facts)
 
@@ -770,6 +770,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		return emitNames([]string{row.ID})
 	case outputText:
 		fmt.Print(brief.String())
+		job.RenderUnrunGates(os.Stdout, unrun)
 		job.RenderGates(os.Stdout, status)
 		printJobEntries(os.Stdout, row.Entries)
 		joined, _, err := joinInflight(ctx, root, store, types.JobList{Jobs: leases})
@@ -780,7 +781,7 @@ func describeJob(ctx context.Context, root string, args []string) error {
 		pointAtConsole(ctx, row.ID)
 		return nil
 	default:
-		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status})
+		return emitFormatted(opts, describeJobOutput{Terms: brief, Goals: status, UnrunGates: unrun})
 	}
 }
 
@@ -796,6 +797,9 @@ type describeJobOutput struct {
 	// advances a job and never blocks the holder still working on it. It is the same
 	// grading `job wait` does, so the two cannot disagree.
 	Goals types.JobStatus `json:"goals" yaml:"goals"`
+	// UnrunGates are the ci targets over the write paths that neither the check nor a goal
+	// runs, beside regenerated_outside in what the workspace says about the paths.
+	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
 }
 
 // checkoutBaseToken is the base this checkout is on, in the one form the store compares
@@ -1063,11 +1067,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		fmt.Printf("forked %s, %s, with %d write path(s). Its holder reads the terms with `%s` and takes it with `%s`\n",
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
-		job.RenderRegenerated(os.Stdout, jobRegenerated(ctx, root, []types.Job{stored})[stored.ID])
+		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
+		job.RenderRegenerated(os.Stdout, notes.Regenerated)
+		job.RenderUnrunGates(os.Stdout, notes.Unrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
-		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: jobRegenerated(ctx, root, []types.Job{stored})[stored.ID]})
+		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
+		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.Regenerated, UnrunGates: notes.Unrun})
 	}
 }
 
@@ -1759,27 +1766,31 @@ const leaseAffinityCommits = 200
 // A workspace that will not load DEGRADES rather than failing, the way the graph evidence
 // already does: the row alone carries the criteria, the boundary and the check, and a worker
 // in a tree whose magusfile is mid-edit is exactly who needs to read them.
-func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) job.TermsFacts {
+//
+// The ci targets over the write paths that nothing the job is graded on runs come back
+// beside the facts, because the terms render only the facts.
+func leaseBoundary(ctx context.Context, root string, row types.Job, leases []types.Job) (job.TermsFacts, []job.UnrunGate) {
 	if len(row.WritePaths) == 0 {
-		return job.TermsFacts{}
+		return job.TermsFacts{}, nil
 	}
 	m, err := loadMagus(ctx, root)
 	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}
+		return job.TermsFacts{WorkspaceCold: true}, nil
 	}
 	affected, err := m.AffectedFromPaths(ctx, row.WritePaths)
 	if err != nil {
-		return job.TermsFacts{WorkspaceCold: true}
+		return job.TermsFacts{WorkspaceCold: true}, nil
 	}
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
+	notes := loadNotes(ctx, m, row)
 	return job.TermsFacts{
 		Projects:           affected.Affected,
 		DerivedDenyPaths:   derived,
-		RegeneratedOutside: regeneratedIn(ctx, m, row),
+		RegeneratedOutside: notes.Regenerated,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
-	}
+	}, notes.Unrun
 }
 
 // generatedBoundary is the declared output globs, across every project the lease
@@ -2314,9 +2325,9 @@ func jobApply(ctx context.Context, root string, args []string) error {
 			reshaped = append(reshaped, a.Next)
 		}
 	}
-	regenerated := jobRegenerated(ctx, root, reshaped)
+	notes := jobNotes(ctx, root, reshaped)
 	if opts.Format == outputText {
-		printJobApply(os.Stdout, applied, regenerated, globalCfg.DryRun)
+		printJobApply(os.Stdout, applied, notes, globalCfg.DryRun)
 		if len(applied) == 1 && !globalCfg.DryRun {
 			pointAtConsole(ctx, applied[0].Next.ID)
 		}
@@ -2324,7 +2335,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := applyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: regenerated[a.Next.ID]})
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].Regenerated, UnrunGates: notes[a.Next.ID].Unrun})
 	}
 	return emitFormatted(opts, report)
 }
@@ -2341,10 +2352,12 @@ type applyEntry struct {
 	Changed []string  `json:"changed" yaml:"changed"`
 	// RegeneratedOutside is computed for a row whose write or deny paths the apply set.
 	RegeneratedOutside []job.RegeneratedOutput `json:"regenerated_outside,omitempty" yaml:"regenerated_outside,omitempty"`
+	// UnrunGates is computed beside it, for the same rows.
+	UnrunGates []job.UnrunGate `json:"unrun_gates,omitempty" yaml:"unrun_gates,omitempty"`
 }
 
-// printJobApply prints each row's change, then what regenerated holds for it.
-func printJobApply(out io.Writer, applied []job.Applied, regenerated map[string][]job.RegeneratedOutput, dryRun bool) {
+// printJobApply prints each row's change, then what the workspace notes for it.
+func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNotes, dryRun bool) {
 	for _, a := range applied {
 		switch {
 		case a.Created && dryRun:
@@ -2363,7 +2376,8 @@ func printJobApply(out io.Writer, applied []job.Applied, regenerated map[string]
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
 		}
-		job.RenderRegenerated(out, regenerated[a.Next.ID])
+		job.RenderRegenerated(out, notes[a.Next.ID].Regenerated)
+		job.RenderUnrunGates(out, notes[a.Next.ID].Unrun)
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")
