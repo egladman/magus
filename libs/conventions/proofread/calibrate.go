@@ -4,8 +4,10 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io/fs"
 	"maps"
+	"math"
 	"path"
 	"slices"
 	"strconv"
@@ -251,6 +253,17 @@ func (c Case) Fires() bool {
 // Agrees reports whether the rule still does what the case's label records.
 func (c Case) Agrees() bool { return c.Fires() == c.Label.fires() }
 
+// HeldOut reports whether c is in the fifth of the cases kept out of tuning: a
+// rule's exceptions are never written against it, so its precision is the one
+// a gate can trust. The split is a hash of the text, so adding or editing one
+// case never moves another into or out of it.
+func (c Case) HeldOut() bool {
+	h := fnv.New64a()
+	h.Write([]byte(c.Text))
+
+	return h.Sum64()%5 == 0
+}
+
 // Score is one rule's tally over its labeled cases. Precision is null when no
 // case is labeled as firing, and Recall when no case is labeled as text the
 // rule should report.
@@ -262,7 +275,15 @@ type Score struct {
 	FN        int      `json:"fn"`
 	TN        int      `json:"tn"`
 	Precision *float64 `json:"precision"`
-	Recall    *float64 `json:"recall"`
+	// Lower is the Wilson 95% lower bound on Precision over the TP + FP
+	// firings, null with Precision.
+	Lower  *float64 `json:"lower"`
+	Recall *float64 `json:"recall"`
+	// HeldOut counts the cases [Case.HeldOut] keeps out of tuning, and
+	// HeldOutPrecision is the precision over those alone, null when none of
+	// them fires. The other counts include them.
+	HeldOut          int      `json:"held_out"`
+	HeldOutPrecision *float64 `json:"held_out_precision"`
 	// Disagree counts the cases whose rule no longer does what their label
 	// records; their verdicts are tallied as observed.
 	Disagree int `json:"disagree"`
@@ -273,6 +294,7 @@ type Score struct {
 // reports is a true positive, one it does not a false negative.
 func Calibrate(cases []Case) []Score {
 	byRule := map[Rule]*Score{}
+	heldTP, heldFP := map[Rule]int{}, map[Rule]int{}
 
 	for _, c := range cases {
 		s, ok := byRule[c.Rule]
@@ -283,14 +305,27 @@ func Calibrate(cases []Case) []Score {
 
 		fired := c.Fires()
 		shouldFire := c.Label == LabelHit || c.Label == LabelFalseNegative
+		held := c.HeldOut()
 
 		s.Cases++
+
+		if held {
+			s.HeldOut++
+		}
 
 		switch {
 		case fired && shouldFire:
 			s.TP++
+
+			if held {
+				heldTP[c.Rule]++
+			}
 		case fired:
 			s.FP++
+
+			if held {
+				heldFP[c.Rule]++
+			}
 		case shouldFire:
 			s.FN++
 		default:
@@ -312,10 +347,180 @@ func Calibrate(cases []Case) []Score {
 
 		s.Precision = ratio(s.TP, s.TP+s.FP)
 		s.Recall = ratio(s.TP, s.TP+s.FN)
+		s.HeldOutPrecision = ratio(heldTP[r], heldTP[r]+heldFP[r])
+
+		if s.Precision != nil {
+			lb := wilsonLower(*s.Precision, s.TP+s.FP)
+			s.Lower = &lb
+		}
+
 		out = append(out, *s)
 	}
 
 	return out
+}
+
+// z95 is the standard normal quantile of a two-sided 95% interval.
+const z95 = 1.959963984540054
+
+// wilsonLower is the lower end of the Wilson score interval at 95% on a
+// proportion p observed over n trials, n > 0.
+func wilsonLower(p float64, n int) float64 {
+	nf, z2 := float64(n), z95*z95
+	center := p + z2/(2*nf)
+	margin := z95 * math.Sqrt(p*(1-p)/nf+z2/(4*nf*nf))
+
+	return (center - margin) / (1 + z2/nf)
+}
+
+// The precision gates of the proofread method: a rule ships advise once at
+// least GateFirings of its firings are labeled and the Wilson 95% lower bound
+// on their precision reaches AdviseLower, and deny once that bound reaches
+// DenyLower (0 wrong of 35, 1 of 53, 2 of 69).
+const (
+	GateFirings = 30
+	AdviseLower = 0.70
+	DenyLower   = 0.90
+)
+
+// denyUnmeasured names the conditions of the deny gate that labeled cases
+// cannot show: firings from a second source outside this repository, and a
+// not-useful rate under 10% once the rule is in use.
+var denyUnmeasured = []string{"firings from two sources", "a not-useful rate under 10% in use"}
+
+// Gate is one rule's shipped default held against what its labeled cases
+// support.
+type Gate struct {
+	Rule      Rule      `json:"rule"`
+	Dimension Dimension `json:"dimension"`
+	// Shipped is the strictest default the rule takes on any kind it judges.
+	Shipped Decision `json:"shipped"`
+	// Supports is the strictest decision the precision gates allow.
+	Supports Decision `json:"supports"`
+	// Firings counts the cases the rule reports, and Wrong those labeled fp.
+	Firings          int      `json:"firings"`
+	Wrong            int      `json:"wrong"`
+	Precision        *float64 `json:"precision"`
+	Lower            *float64 `json:"lower"`
+	HeldOutPrecision *float64 `json:"held_out_precision"`
+	// Pass is false when Shipped is stricter than Supports.
+	Pass bool `json:"pass"`
+	// Needs is how many more labeled firings Shipped's gate takes at the
+	// rule's current precision, or at a precision of 1 when it has no firing:
+	// 0 when it passes, null when no count reaches the gate at that precision.
+	Needs *int `json:"needs"`
+	// Unmeasured lists the conditions of Shipped's gate this replay does not
+	// see: for deny, firings from two sources and a not-useful rate under 10%
+	// in use.
+	Unmeasured []string `json:"unmeasured"`
+}
+
+// Gates holds each scored rule's shipped default against its score, in the
+// order of scores. Precision and its lower bound come from TP and FP alone.
+func Gates(scores []Score) []Gate {
+	out := make([]Gate, 0, len(scores))
+
+	for _, s := range scores {
+		g := Gate{
+			Rule: s.Rule, Dimension: ruleTexts[s.Rule].dimension, Shipped: DecisionOff,
+			Firings: s.TP + s.FP, Wrong: s.FP, Precision: ratio(s.TP, s.TP+s.FP),
+			HeldOutPrecision: s.HeldOutPrecision, Unmeasured: []string{},
+		}
+
+		if c, ok := ruleCheck(s.Rule); ok {
+			for _, k := range c.on {
+				if d := c.defaultDecision(k); decisionRank(d) > decisionRank(g.Shipped) {
+					g.Shipped = d
+				}
+			}
+		}
+
+		precision := 1.0
+
+		if g.Precision != nil {
+			precision = *g.Precision
+			lb := wilsonLower(precision, g.Firings)
+			g.Lower = &lb
+		}
+
+		g.Supports = supported(g.Firings, g.Lower)
+		g.Pass = decisionRank(g.Shipped) <= decisionRank(g.Supports)
+
+		if g.Shipped == DecisionDeny {
+			g.Unmeasured = slices.Clone(denyUnmeasured)
+		}
+
+		if g.Pass {
+			g.Needs = new(int)
+		} else if n, ok := firingsNeeded(precision, gateLower(g.Shipped)); ok {
+			more := max(n-g.Firings, 0)
+			g.Needs = &more
+		}
+
+		out = append(out, g)
+	}
+
+	return out
+}
+
+func decisionRank(d Decision) int {
+	switch d {
+	case DecisionDeny:
+		return 2
+	case DecisionAdvise:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func supported(firings int, lower *float64) Decision {
+	switch {
+	case lower == nil || firings < GateFirings:
+		return DecisionOff
+	case *lower >= DenyLower:
+		return DecisionDeny
+	case *lower >= AdviseLower:
+		return DecisionAdvise
+	default:
+		return DecisionOff
+	}
+}
+
+func gateLower(d Decision) float64 {
+	if d == DecisionDeny {
+		return DenyLower
+	}
+
+	return AdviseLower
+}
+
+// firingsNeeded is the fewest labeled firings, at least [GateFirings], whose
+// Wilson lower bound at precision reaches bar. It is false when precision
+// does not exceed bar, since the bound only approaches the precision.
+func firingsNeeded(precision, bar float64) (int, bool) {
+	if precision <= bar {
+		return 0, false
+	}
+
+	reaches := func(n int) bool { return wilsonLower(precision, n) >= bar }
+
+	hi := GateFirings
+	for !reaches(hi) {
+		hi *= 2
+	}
+
+	lo := GateFirings
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		if reaches(mid) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+
+	return lo, true
 }
 
 func ratio(n, d int) *float64 {

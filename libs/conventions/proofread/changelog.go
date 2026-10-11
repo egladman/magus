@@ -30,23 +30,26 @@ var changelogChecks = []check{
 
 var changelogTexts = map[Rule]ruleText{
 	RuleChangelogHeading: {
-		code:    "PRF1030",
-		catches: "a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\"",
+		code:      "PRF1030",
+		dimension: DimensionConventions,
+		catches:   "a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\"",
 		why: "Keep a Changelog heads each release \"[version] - date\", so a reader and a tool find a release " +
 			"by its number and see when it shipped; \"[Unreleased]\" carries no date because nothing has " +
 			"shipped. A fragment under changes/unreleased/ has no version heading and is not judged by it.",
 	},
 	RuleChangelogGroup: {
-		code:    "PRF1031",
-		catches: "a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security",
+		code:      "PRF1031",
+		dimension: DimensionConventions,
+		catches:   "a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security",
 		why: "The six groups are the ones Keep a Changelog names, and the ones this repository's fragment " +
 			"grammar accepts, so a reader finds a kind of change in the same place in every release. In " +
 			"release notes, which are looser, the rule advises and only for a heading that is a plain " +
 			"synonym (\"Bug fixes\", \"Features\").",
 	},
 	RuleChangelogEntry: {
-		code:    "PRF1032",
-		catches: "a changelog entry that names a Go identifier and says little else",
+		code:      "PRF1032",
+		dimension: DimensionStance,
+		catches:   "a changelog entry that names a Go identifier and says little else",
 		why: "An entry says what changed for the person using the software, not the mechanism that changed. " +
 			"An entry of fewer than three words around an exported or qualified Go identifier names the " +
 			"mechanism and leaves the effect out. A lowercase name in backticks is a flag, a key or a " +

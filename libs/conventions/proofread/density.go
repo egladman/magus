@@ -28,8 +28,9 @@ var densityChecks = []check{
 
 var densityTexts = map[Rule]ruleText{
 	RuleParticiples: {
-		code:    "PRF4020",
-		catches: "a text that hangs present participial clauses on its sentences at a generated-writing rate",
+		code:      "PRF4020",
+		dimension: DimensionEconomy,
+		catches:   "a text that hangs present participial clauses on its sentences at a generated-writing rate",
 		why: "Reinhart et al. (PNAS 2025) measured GPT-4o using present participial clauses at 5.3 times " +
 			"the human rate. The rule counts a comma before an -ing word that opens a clause, and an " +
 			"-ing word opening a sentence whose comma closes the clause, per 1000 words, over texts of 200 " +
@@ -41,8 +42,9 @@ var densityTexts = map[Rule]ruleText{
 			"tell a participle from a gerund without a tagger, so it advises.",
 	},
 	RuleNominalizations: {
-		code:    "PRF4021",
-		catches: "a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate",
+		code:      "PRF4021",
+		dimension: DimensionEconomy,
+		catches:   "a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate",
 		why: "Reinhart et al. (PNAS 2025) measured GPT-4o using nominalizations at 2.1 times the human " +
 			"rate. A suffix is a guess at a nominalization, so the rule advises over a whole text and " +
 			"never points at one word. Over texts of 200 words or more, measured 2026-10-10: 808 agent " +

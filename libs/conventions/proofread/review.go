@@ -36,8 +36,9 @@ var reviewChecks = []check{
 
 var reviewTexts = map[Rule]ruleText{
 	RuleNonspecific: {
-		code:    "PRF8010",
-		catches: "a review reply that judges or asks for a change and names no code, path, line, example or reason",
+		code:      "PRF8010",
+		dimension: DimensionEvidence,
+		catches:   "a review reply that judges or asks for a change and names no code, path, line, example or reason",
 		why: "Gunawardena et al. (CSCW 2022) define destructive criticism as feedback that is nonspecific " +
 			"and inconsiderate, and over half of their respondents had received it in the past year; Bosu " +
 			"et al. (MSR 2015) found a third of review comments were not useful. Measured 2026-10-10 over " +
@@ -46,8 +47,9 @@ var reviewTexts = map[Rule]ruleText{
 			"cannot see.",
 	},
 	RuleWhyOpener: {
-		code:    "PRF8011",
-		catches: "a review reply sentence that opens \"Why did you\" or \"Why would you\"",
+		code:      "PRF8011",
+		dimension: DimensionStance,
+		catches:   "a review reply sentence that opens \"Why did you\" or \"Why would you\"",
 		why: "Danescu-Niculescu-Mizil et al. (ACL 2013) found a direct question opening with \"why\" among " +
 			"the strongest cues of an impolite request: it asks the author to defend themselves. Asking " +
 			"what the code needs (\"Does this need the lock?\") asks the same. Measured 2026-10-10 over " +
@@ -55,8 +57,9 @@ var reviewTexts = map[Rule]ruleText{
 			"by bots. It advises: the author may want the reason on record.",
 	},
 	RuleBareImperative: {
-		code:    "PRF8012",
-		catches: "a short command in a review reply that gives no reason anywhere (\"Fix this.\")",
+		code:      "PRF8012",
+		dimension: DimensionStance,
+		catches:   "a short command in a review reply that gives no reason anywhere (\"Fix this.\")",
 		why: "Danescu-Niculescu-Mizil et al. (ACL 2013) found a bare imperative, and a request opening " +
 			"with \"Please\", read as less polite than one that gives its reason or asks. A command of " +
 			"five words or fewer counts, unless the reply gives a reason anywhere or the command names " +
@@ -65,8 +68,9 @@ var reviewTexts = map[Rule]ruleText{
 			"the context, a short command can be read as intended.",
 	},
 	RuleAllCaps: {
-		code:    "PRF8013",
-		catches: "words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")",
+		code:      "PRF8013",
+		dimension: DimensionStance,
+		catches:   "words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")",
 		why: "Capitals read as shouting. An acronym is left alone: the rule reports a run of capital words " +
 			"only when it holds an English word such as NOT, NEVER or ALL. Measured 2026-10-10 over the " +
 			"AIDev review comments: 0.41 percent of 39639 written by people and 0.37 percent of 42076 " +
@@ -74,8 +78,9 @@ var reviewTexts = map[Rule]ruleText{
 			"tell the two apart and only advises.",
 	},
 	RuleRepeatedMarks: {
-		code:    "PRF8014",
-		catches: "a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")",
+		code:      "PRF8014",
+		dimension: DimensionStance,
+		catches:   "a run of question or exclamation marks in a review reply (\"??\", \"!!\", \"?!\")",
 		why: "Repeated marks read as exasperation where one mark asks the same question. Measured " +
 			"2026-10-10 over the AIDev review comments: 0.17 percent of 39639 written by people and 0.05 " +
 			"percent of 42076 written by bots. Code spans are masked, so an operator such as ?? passes.",

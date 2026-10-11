@@ -28,8 +28,9 @@ var (
 	suppressChecks = []check{suppressUnusedCheck}
 	suppressTexts  = map[Rule]ruleText{
 		RuleSuppressionUnused: {
-			code:    "PRF1090",
-			catches: "a suppression comment that gives no reason or that matched no finding",
+			code:      "PRF1090",
+			dimension: DimensionEvidence,
+			catches:   "a suppression comment that gives no reason or that matched no finding",
 			why: "A suppression is a claim that a finding is wrong here, and a reviewer can only weigh the " +
 				"claim when the reason is written beside it. One with no reason suppresses nothing. One that " +
 				"matched nothing is left over from text that has since changed, and it would hide the next " +

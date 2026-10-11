@@ -161,19 +161,39 @@ export fun write(dir: str, rules: [magus\Rule]) > void !> any {
 }
 
 // ProofreadRule is one entry of `proofread rules`, proofread's rule list.
-// decisions maps each kind in kinds to the default decision on that kind.
+// decisions maps each kind in kinds to the default decision on that kind, and
+// dimension is one of PROOFREAD_DIMENSIONS.
 export object ProofreadRule {
     name: str,
     code: str,
     kinds: [str],
     decisions: {str: str},
     house: bool,
+    dimension: str,
     catches: str,
     why: str,
 }
 
+// PROOFREAD_DIMENSIONS is each dimension a rule is counted on, in the order
+// proofread ranks findings, with what a finding on it costs the reader.
+final PROOFREAD_DIMENSIONS = [
+    ["evidence", "a claim says more or less than what was shown"],
+    ["stance", "the text reads as a verdict on a person, or as addressed to someone else"],
+    ["structure", "the reader has to reconstruct the order or the purpose"],
+    ["economy", "words that carry nothing"],
+    ["conventions", "a house or genre convention is broken"],
+];
+
+fun dimensionCost(dimension: str) > str? {
+    foreach (d in PROOFREAD_DIMENSIONS) {
+        if (d[0] == dimension) { return d[1]; }
+    }
+    return null;
+}
+
 // proofreadRules reads the JSON `proofread rules` writes. A catalog that is empty or
-// not a rule list raises: proofread moved, not the rules.
+// not a rule list raises: proofread moved, not the rules. So does a rule whose
+// dimension no page can explain.
 export fun proofreadRules(raw: str) > [ProofreadRule] !> any {
     final entries: [any] = json\parse(raw);
     if (entries.len() == 0) {
@@ -186,11 +206,15 @@ export fun proofreadRules(raw: str) > [ProofreadRule] !> any {
         final house: bool = e["house"];
         final name: str = e["name"];
         final code: str = e["code"];
+        final dimension: str = e["dimension"] ?? "";
         final catches: str = e["catches"];
         final why: str = e["why"];
+        if (dimensionCost(dimension) == null) {
+            throw "proofread rule {name} has dimension \"{dimension}\", which is none of evidence, stance, structure, economy or conventions";
+        }
         rules.append(ProofreadRule{
             name = name, code = code, kinds = kinds, decisions = decisions, house = house,
-            catches = catches, why = why,
+            dimension = dimension, catches = catches, why = why,
         });
     }
     return rules;
@@ -287,7 +311,10 @@ export fun renderProofreadRule(r: ProofreadRule) > str {
         + "# " + r.name + "\n\n"
         + proofreadDescribe(r) + "\n\n"
         + "## What it catches\n\n"
-        + upperFirst(r.catches) + ".\n\n";
+        + upperFirst(r.catches) + ".\n\n"
+        + "## Dimension\n\n"
+        + "`" + r.dimension + "`: " + (dimensionCost(r.dimension) ?? "") + ". A finding is counted on\n"
+        + "the dimension of its rule, the cost it names to the reader.\n\n";
     if (r.why != "") {
         page = page + "## Why\n\n" + r.why + "\n\n";
     }
@@ -327,6 +354,7 @@ export fun renderProofreadRule(r: ProofreadRule) > str {
 final PROOFREAD_FAMILIES = [
     ["1", "Shape"], ["2", "Tone"], ["3", "Claims and hedges"], ["4", "Generated-writing tells"],
     ["5", "House style"], ["6", "Doc comments"], ["7", "Agent instructions"], ["8", "Review replies"],
+    ["9", "Messages a program prints"],
 ];
 
 fun proofreadDefault(r: ProofreadRule) > str {
@@ -344,6 +372,7 @@ fun proofreadTable(heading: str, rules: [ProofreadRule]) > str {
     final catches = mut [<str>];
     var nameWidth = "Rule".len();
     var codeWidth = "Code".len();
+    var dimensionWidth = "Dimension".len();
     var defaultWidth = "Default".len();
     var catchWidth = "Catches".len();
     foreach (r in rules) {
@@ -354,19 +383,22 @@ fun proofreadTable(heading: str, rules: [ProofreadRule]) > str {
         catches.append(cell);
         if (name.len() > nameWidth) { nameWidth = name.len(); }
         if (r.code.len() > codeWidth) { codeWidth = r.code.len(); }
+        if (r.dimension.len() > dimensionWidth) { dimensionWidth = r.dimension.len(); }
         if (proofreadDefault(r).len() > defaultWidth) { defaultWidth = proofreadDefault(r).len(); }
         if (cell.len() > catchWidth) { catchWidth = cell.len(); }
     }
     final rows = mut [<str>];
     foreach (i, r in rules) {
         rows.append("| " + pad(names[i], width: nameWidth) + " | " + pad(r.code, width: codeWidth)
+            + " | " + pad(r.dimension, width: dimensionWidth)
             + " | " + pad(defaults[i], width: defaultWidth) + " | " + pad(catches[i], width: catchWidth) + " |\n");
     }
     return "## " + heading + "\n\n"
         + "| " + pad("Rule", width: nameWidth) + " | " + pad("Code", width: codeWidth)
+        + " | " + pad("Dimension", width: dimensionWidth)
         + " | " + pad("Default", width: defaultWidth) + " | " + pad("Catches", width: catchWidth) + " |\n"
-        + "| " + "-".repeat(nameWidth) + " | " + "-".repeat(codeWidth) + " | " + "-".repeat(defaultWidth)
-        + " | " + "-".repeat(catchWidth) + " |\n"
+        + "| " + "-".repeat(nameWidth) + " | " + "-".repeat(codeWidth) + " | " + "-".repeat(dimensionWidth)
+        + " | " + "-".repeat(defaultWidth) + " | " + "-".repeat(catchWidth) + " |\n"
         + rows.join("")
         + "\n";
 }
@@ -387,8 +419,14 @@ export fun renderProofreadIndex(rules: [ProofreadRule]) > str {
         + "of them.\n\n"
         + "A finding carries the rule's name and its `PRF` code, and links to the rule's page\n"
         + "here. The first digit of a code is its family. `proofread rules` prints the\n"
-        + "same list as JSON.\n\n";
+        + "same list as JSON.\n\n"
+        + "Each rule also has a dimension, the cost its findings name to the reader:\n\n";
+    final dimensions = mut [<str>];
+    foreach (d in PROOFREAD_DIMENSIONS) {
+        dimensions.append("- **" + d[0] + "**: " + d[1] + "\n");
+    }
     final tables = mut [<str>];
+    tables.append(dimensions.join("") + "\n");
     foreach (family in PROOFREAD_FAMILIES) {
         final members = mut [<ProofreadRule>];
         foreach (r in ordered) {
@@ -545,9 +583,9 @@ test "the index pads both tables and ends in one newline" {
 }
 
 fun proofreadCatalog() > str {
-    return `[{"name":"blame","code":"PRF2001","kinds":["change-description","review-reply"],"decisions":{"change-description":"deny","review-reply":"deny"},"house":false,"catches":"a person as the subject of a fault","why":"The fault is in the code."},`
-        + `{"name":"verdict","code":"PRF2002","kinds":["change-description","review-reply"],"decisions":{"change-description":"advise","review-reply":"deny"},"house":false,"catches":"a judgment word","why":""},`
-        + `{"name":"dash","code":"PRF5002","kinds":["reference"],"decisions":{"reference":"off"},"house":true,"catches":"an em dash","why":""}]`;
+    return `[{"name":"blame","code":"PRF2001","kinds":["change-description","review-reply"],"decisions":{"change-description":"deny","review-reply":"deny"},"house":false,"dimension":"stance","catches":"a person as the subject of a fault","why":"The fault is in the code."},`
+        + `{"name":"verdict","code":"PRF2002","kinds":["change-description","review-reply"],"decisions":{"change-description":"advise","review-reply":"deny"},"house":false,"dimension":"stance","catches":"a judgment word","why":""},`
+        + `{"name":"dash","code":"PRF5002","kinds":["reference"],"decisions":{"reference":"off"},"house":true,"dimension":"conventions","catches":"an em dash","why":""}]`;
 }
 
 test "a proofread rule page names its code, per-kind defaults and override" {
@@ -560,6 +598,21 @@ test "a proofread rule page names its code, per-kind defaults and override" {
     std\assert(page.indexOf("| `change-description` | advise  |") != null, message: page);
     std\assert(page.indexOf("\"rules\": \{\"verdict\": \"deny\"}") != null, message: page);
     std\assert(page.indexOf("\"url\": \"https://eli.gladman.cc/magus/reference/proofread/verdict/\"") != null, message: page);
+    std\assert(page.indexOf("## Dimension\n\n`stance`: the text reads as a verdict on a person, or as addressed to someone else.") != null, message: page);
+}
+
+test "a proofread rule with no known dimension raises" {
+    final unknown = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"dimension":"tone","catches":"x","why":""}]`;
+    final missing = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"catches":"x","why":""}]`;
+    foreach (raw in [unknown, missing]) {
+        var message = "";
+        try {
+            proofreadRules(raw);
+        } catch (err: str) {
+            message = err;
+        }
+        std\assert(message.startsWith("proofread rule blame has dimension"), message: "got: " + message);
+    }
 }
 
 test "a house rule says it ships off" {
@@ -572,16 +625,17 @@ test "a house rule says it ships off" {
 test "the proofread index groups rules by family and pads the tables" {
     final page = renderProofreadIndex(proofreadRules(proofreadCatalog()) catch [<ProofreadRule>]);
     final want = "## Tone\n\n"
-        + "| Rule                  | Code    | Default        | Catches                            |\n"
-        + "| --------------------- | ------- | -------------- | ---------------------------------- |\n"
-        + "| [blame](blame.md)     | PRF2001 | deny           | a person as the subject of a fault |\n"
-        + "| [verdict](verdict.md) | PRF2002 | varies by kind | a judgment word                    |\n"
+        + "| Rule                  | Code    | Dimension | Default        | Catches                            |\n"
+        + "| --------------------- | ------- | --------- | -------------- | ---------------------------------- |\n"
+        + "| [blame](blame.md)     | PRF2001 | stance    | deny           | a person as the subject of a fault |\n"
+        + "| [verdict](verdict.md) | PRF2002 | stance    | varies by kind | a judgment word                    |\n"
         + "\n"
         + "## House style\n\n"
-        + "| Rule            | Code    | Default     | Catches    |\n"
-        + "| --------------- | ------- | ----------- | ---------- |\n"
-        + "| [dash](dash.md) | PRF5002 | off (house) | an em dash |\n";
+        + "| Rule            | Code    | Dimension   | Default     | Catches    |\n"
+        + "| --------------- | ------- | ----------- | ----------- | ---------- |\n"
+        + "| [dash](dash.md) | PRF5002 | conventions | off (house) | an em dash |\n";
     std\assert(page.endsWith(want), message: page);
+    std\assert(page.indexOf("- **evidence**: a claim says more or less than what was shown\n") != null, message: page);
 }
 
 test "an empty proofread catalog raises" {

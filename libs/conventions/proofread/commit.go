@@ -36,8 +36,9 @@ var commitChecks = []check{
 
 var commitTexts = map[Rule]ruleText{
 	RuleSubjectMood: {
-		code:    "PRF1010",
-		catches: "a commit subject opening in the past tense, the third person or a gerund (\"added\", \"fixes\", \"making\")",
+		code:      "PRF1010",
+		dimension: DimensionConventions,
+		catches:   "a commit subject opening in the past tense, the third person or a gerund (\"added\", \"fixes\", \"making\")",
 		why: "A subject completes \"if applied, this commit will ...\", so it opens with the verb in the " +
 			"imperative. The rule reads a closed list of about 30 verbs in their past, third-person and " +
 			"gerund forms, not a tagger, so a plural noun that is also a verb (\"changes to the key\") " +
@@ -45,8 +46,9 @@ var commitTexts = map[Rule]ruleText{
 			"commit messages on main it found nothing, so it denies at no cost.",
 	},
 	RuleSubjectLength: {
-		code:    "PRF1011",
-		catches: "a commit subject over 100 bytes",
+		code:      "PRF1011",
+		dimension: DimensionStructure,
+		catches:   "a commit subject over 100 bytes",
 		why: "A one-line log cuts a long subject off. The cap is 100 bytes, commitlint's header-max-length " +
 			"and the limit this repository's commit hook applies, not git's customary 72, since a " +
 			"semicolon joining two clauses already runs past 72 on main. A \" (#123)\" a forge appends is " +
@@ -55,14 +57,16 @@ var commitTexts = map[Rule]ruleText{
 			"decisions table sets the rule off, advise or deny.",
 	},
 	RuleSubjectPeriod: {
-		code:    "PRF1012",
-		catches: "a commit subject ending in a period",
+		code:      "PRF1012",
+		dimension: DimensionConventions,
+		catches:   "a commit subject ending in a period",
 		why: "A subject is a title, and a title carries no full stop. A subject ending in \"...\" is left " +
 			"alone. None of the 1729 commit messages on main ends in one.",
 	},
 	RuleBodySeparator: {
-		code:    "PRF1013",
-		catches: "a commit body that starts on the line after the subject",
+		code:      "PRF1013",
+		dimension: DimensionStructure,
+		catches:   "a commit body that starts on the line after the subject",
 		why: "Git, and every tool built on it, takes the first paragraph as the subject; with no blank line " +
 			"the body joins it and a one-line log shows both. A message that is a subject and trailers " +
 			"(\"Key: value\" lines) is left alone. None of the 1729 commit messages on main runs the body " +

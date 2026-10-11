@@ -20,8 +20,9 @@ var issueChecks = slices.Concat([]check{
 
 var issueTexts = mergeTexts(map[Rule]ruleText{
 	RuleIssueRepro: {
-		code:    "PRF1020",
-		catches: "a bug report with neither what happened against what was expected, nor steps to reproduce it",
+		code:      "PRF1020",
+		dimension: DimensionEvidence,
+		catches:   "a bug report with neither what happened against what was expected, nor steps to reproduce it",
 		why: "A maintainer cannot start on a defect they cannot see. A title with a defect word (\"crash\", " +
 			"\"fails\", \"regression\") that is followed by no \"expected\", \"actual\", \"observed\", \"steps " +
 			"to reproduce\" or \"instead of\" sends the first reply to asking for them. It advises: the " +
