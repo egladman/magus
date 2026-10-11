@@ -36,7 +36,7 @@ func newPrintingWorkspace(t *testing.T, output string) (*magus.Magus, string) {
 // output; a non-nil runErr is a failed run, whose output is stored all the same.
 func newRunningWorkspace(t *testing.T, output string, runErr error) (*magus.Magus, string) {
 	t.Helper()
-	spellName := fakespell.Register(t, "zzz-output-import-"+strings.ToLower(t.Name()), spells.WithTargets("build"),
+	spellName := fakespell.Register(t, "zzz-output-import", spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprint(stdout, output)

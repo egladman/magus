@@ -344,7 +344,7 @@ func checkReviewWorkspaceIn(t *testing.T, state string, threads func() (any, err
 	m, err := magus.Open(context.Background(), root, opts...)
 	require.NoError(t, err, "fixture workspace must open")
 
-	name := fakespell.Register(t, "fake-job-review-"+t.Name(),
+	name := fakespell.Register(t, "fake-job-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:

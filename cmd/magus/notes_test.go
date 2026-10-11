@@ -189,7 +189,7 @@ func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
 // can be exercised against threads instead of only against an unwired workspace.
 func withFakeReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
-	name := fakespell.Register(t, "fake-notes-review-"+t.Name(),
+	name := fakespell.Register(t, "fake-notes-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:

@@ -369,7 +369,7 @@ func TestTheAgentDiffToolDoesNotOfferReading(t *testing.T) {
 // have something to answer with.
 func withReviewThreads(t *testing.T, threads []any) {
 	t.Helper()
-	name := fakespell.Register(t, "fake-mcp-review-"+t.Name(),
+	name := fakespell.Register(t, "fake-mcp-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:

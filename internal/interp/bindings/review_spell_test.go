@@ -21,7 +21,7 @@ import (
 // succeed on a lookup and refuse a publish, which no real spell can be made to do on demand.
 func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
 	t.Helper()
-	name := fakespell.Register(t, "fake-review-"+t.Name(),
+	name := fakespell.Register(t, "fake-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			return answer(req.Target)
 		}))
