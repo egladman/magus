@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -255,25 +254,6 @@ func TestMergeDriverRelPath(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "gen/catalog.md", got)
 	})
-}
-
-// initGitRepo and runGit stay only for query_test.go, which another change moves onto
-// testkit.Repo; delete both with its last call.
-func initGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "test")
-	return dir
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-	require.NoErrorf(t, err, "git %v: %s", args, out)
 }
 
 // TestSplitExplainedOutputsCountsCommittedSources pins the fix for a false positive that
