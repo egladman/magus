@@ -20,7 +20,8 @@ import (
 // recall, or with -gates each rule's shipped default against what that
 // precision supports. With -sample it instead judges one field of each JSON-lines record
 // as -kind and prints each rule's firing rate per value of -group. calibrate
-// round sample, freeze and score run a labeling round (see runRound).
+// round sample, freeze and score run a labeling round, and round pool decides
+// a deny over two (see runRound).
 func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "round" {
 		return runRound(args[1:], stdout, stderr)

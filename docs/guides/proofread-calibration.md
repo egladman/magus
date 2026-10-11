@@ -198,9 +198,9 @@ you promote it.
    rounds that share a source name or a source sha256, and two freezes with different
    deny gates or Wilson z. Per rule it prints, as JSON, the pooled firings, wrong count,
    precision, Wilson lower bound and `deny_gate`, true when the pooled firings reach the
-   gate's 60 and wrong stays within 1. A rule that fired in only one round gets a null
-   `deny_gate`. Each round's agreement gate and unnoted count ride along per rule; a
-   rule whose agreement gate failed in either round needs a look before you promote it.
+   gate's 60, wrong stays within 1, and both rounds passed their own agreement gate. A
+   rule that fired in only one round gets a null `deny_gate`. Each round's agreement gate
+   and unnoted count ride along per rule, and `why` names whatever fell short.
    Pass `-out FILE` to write the JSON there and print a table instead. `pool` never
    writes into a round directory, and refuses an `-out` inside one.
 

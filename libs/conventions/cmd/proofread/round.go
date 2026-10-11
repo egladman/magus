@@ -1399,11 +1399,11 @@ type digest struct {
 // freezeRecord is freeze.json: what a round committed to before anyone
 // labeled it. A rule file changed after RuleCommit voids the round.
 type freezeRecord struct {
-	Round            int            `json:"round"`
-	Frozen           string         `json:"frozen"`
-	Purpose          string         `json:"purpose,omitempty"`
-	RuleCommit       string         `json:"rule_commit"`
-	RulePaths        []string       `json:"rule_paths"`
+	Round      int      `json:"round"`
+	Frozen     string   `json:"frozen"`
+	Purpose    string   `json:"purpose,omitempty"`
+	RuleCommit string   `json:"rule_commit"`
+	RulePaths  []string `json:"rule_paths"`
 	// ProofreadVersion is build info and informative only: a cached build
 	// output keeps the stamp of the checkout that built it. ProofreadSHA256 and
 	// RuleCommit identify the sampler. Records frozen before the field existed
@@ -2027,10 +2027,10 @@ type poolRule struct {
 
 // poolRecord is the pool.json of two rounds.
 type poolRecord struct {
-	Rounds  []poolRoundInfo     `json:"rounds"`
-	Deny    denyGate            `json:"deny"`
-	WilsonZ float64             `json:"wilson_z"`
-	Method  map[string]string   `json:"method"`
+	Rounds  []poolRoundInfo      `json:"rounds"`
+	Deny    denyGate             `json:"deny"`
+	WilsonZ float64              `json:"wilson_z"`
+	Method  map[string]string    `json:"method"`
 	Rules   map[string]*poolRule `json:"rules"`
 }
 
@@ -2228,6 +2228,14 @@ func poolRounds(rounds []*poolRound) (*poolRecord, error) {
 			short = append(short, fmt.Sprintf("wrong %d > %d", pr.Wrong, g.MaxWrong))
 		}
 
+		// A deny refuses text outright, so it rests only on labels both rounds
+		// agreed on well enough to pass their own agreement gate.
+		for _, rr := range pr.Rounds {
+			if !rr.AgreementGate {
+				short = append(short, fmt.Sprintf("round %d fails its agreement gate", rr.Round))
+			}
+		}
+
 		pass := len(short) == 0
 		pr.DenyGate = &pass
 		pr.Why = strings.Join(short, ", ")
@@ -2238,8 +2246,8 @@ func poolRounds(rounds []*poolRound) (*poolRecord, error) {
 
 func poolMethod(g denyGate, z float64) map[string]string {
 	return map[string]string{
-		"pooled":    "per rule, the firings of both rounds; wrong is n less final CORRECT, UNSURE counting as WRONG",
-		"deny_gate": fmt.Sprintf("pooled n >= %d and wrong <= %d, over %d frozen rounds", g.PooledFirings, g.MaxWrong, g.Rounds),
+		"pooled":     "per rule, the firings of both rounds; wrong is n less final CORRECT, UNSURE counting as WRONG",
+		"deny_gate":  fmt.Sprintf("pooled n >= %d and wrong <= %d, over %d frozen rounds", g.PooledFirings, g.MaxWrong, g.Rounds),
 		"no_verdict": "deny_gate is null for a rule that fired in one round only",
 		"wilson":     fmt.Sprintf("Wilson score interval lower bound, z=%g, on pooled CORRECT over n", z),
 		"sources":    "refused unless both rounds are frozen, unvoided and share no source name and no source sha256",

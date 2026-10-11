@@ -16,20 +16,20 @@ package proofread
 //
 // The second group was tuned after labeling round 2 and measured over frozen
 // round 4 (178 fresh firings, two labelers, adjudicated): each entry gives its
-// correct firings over all labeled, then the lower bound. nonspecific and
-// second-person were left out of round 4 for a redesign and keep their round-2
-// precision and lower bound. participles' 36/40 is not evidence: in 10 of its
-// correct firings a platform footer's clause carries the rate over the cap.
+// correct firings over all labeled, then the lower bound. nonspecific,
+// second-person and participles were redesigned after round 4 and measured
+// over frozen round 5 (testdata/rounds/round5.json); second-person fired on no
+// guide there, so it keeps its round-2 precision and lower bound.
 var evidenceCeiling = map[Rule]Decision{
-	RuleNonspecific:      DecisionOff, // round 2: 0.07, 0.02
+	RuleNonspecific:      DecisionOff, // round 5: 13/40, 0.20
 	RuleAbsolute:         DecisionOff, // 6/40, 0.07
-	RuleSecondPerson:     DecisionOff, // round 2: 0.19, 0.10
+	RuleSecondPerson:     DecisionOff, // round 2: 0.19, 0.10; no fresh firing in round 5
 	RuleIssueRepro:       DecisionOff, // 26/40, 0.50
 	RuleChangelogHeading: DecisionOff, // no fresh firing
 	RuleIngTail:          DecisionOff, // 3/17, 0.06
 	RuleClaim:            DecisionOff, // 22/40, 0.40
 	RuleOptionList:       DecisionOff, // 0/1
-	RuleParticiples:      DecisionOff, // 36/40, 0.77; see above
+	RuleParticiples:      DecisionOff, // round 5: 24/40, 0.45
 
 	RuleVerdict:        DecisionOff,    // 16/40, 0.26
 	RuleJudgmentAsFact: DecisionOff,    // 15/40, 0.24

@@ -592,6 +592,21 @@ func poolTestRound(round int, source, sha string, rules map[string][2]int) *pool
 	return &poolRound{Round: round, RuleCommit: "abc", Sources: []poolSource{{source, sha}}, Gates: g, Score: score}
 }
 
+func TestPoolRoundsDeniesNothingARoundDisagreedOn(t *testing.T) {
+	a := poolTestRound(5, "aidev-pr", "sha-a", map[string][2]int{"r": {40, 40}})
+	b := poolTestRound(6, "git-commit", "sha-b", map[string][2]int{"r": {30, 30}})
+	b.Score.Rules["r"].AgreementGate = false
+
+	rec, err := poolRounds([]*poolRound{a, b})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if pr := rec.Rules["r"]; pr.DenyGate == nil || *pr.DenyGate || pr.Why != "round 6 fails its agreement gate" {
+		t.Errorf("pooled = %+v; want a refused deny naming round 6's agreement gate", pr)
+	}
+}
+
 func TestPoolRoundsDecidesDenyFromPooledFirings(t *testing.T) {
 	a := poolTestRound(5, "aidev-pr", "sha-a", map[string][2]int{
 		"passes": {40, 40}, "one-wrong": {40, 39}, "two-wrong": {40, 38}, "short": {30, 30}, "lone": {70, 70}, "quiet": {0, 0},

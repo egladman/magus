@@ -1,0 +1,235 @@
+{
+  "round": 5,
+  "date": "2026-10-11",
+  "frozen": true,
+  "spent": true,
+  "spent_because": "it was scored, and the fix round after it reads its findings",
+  "purpose": "confirm participles, nonspecific and second-person after proofread-fix5",
+  "rule_commit": "aa56a97d96d140b0416e00650ecd169e60fefa68",
+  "seed": 20261015,
+  "sampler": "proofread calibrate round sample: excludes rounds 1 to 4 and the committed cases, at most 2 firings of a rule per text, 40 per rule, at least 10 per source where a source has them",
+  "candidate_ids": "r5-NNNN",
+  "candidates": 80,
+  "sources": {
+    "aidev-comment-bot": {
+      "texts": 52724,
+      "sha256": "a7c3ec803a7cb5ba2666f68acfa4e7194a0ff44f8ab2a40771c47b6803ca0aed"
+    },
+    "aidev-comment-user": {
+      "texts": 34426,
+      "sha256": "b59f5534cbe22ee2949127047f7c6dc8cf0d09a3454689a9107a7f5c90c5c3b2"
+    },
+    "aidev-pr": {
+      "texts": 70909,
+      "sha256": "0d2077529320cfb10ad95a461cd2bdf8dac06387a1e6f3196789b009fa2105e4"
+    },
+    "aidev-review-bot": {
+      "texts": 40118,
+      "sha256": "27f21cbd3e03911e93630244f72ee5ee226616913ccff6a8f3a4d1d20f867409"
+    },
+    "aidev-review-user": {
+      "texts": 34971,
+      "sha256": "19e95c6e89a09c5f8c622d29901f9d013c1a50f6a54a9e08e60f728ca9dc047d"
+    },
+    "docs-guide": {
+      "texts": 48,
+      "sha256": "c3f0f6cdcd7dde05990f22580e5ad3a482d0968b80b8067e1247951f6421f2ec"
+    },
+    "docs-reference": {
+      "texts": 219,
+      "sha256": "f23a3b56b0b9f2d7c9f96e3b8dfce32f2dcca97b1bd9f9398a6d22b4a0a82270"
+    }
+  },
+  "gates": {
+    "advise": {
+      "wilson_z": 1.96,
+      "lower_bound": 0.7,
+      "min_firings": 30
+    },
+    "deny": {
+      "rounds": 2,
+      "pooled_firings": 60,
+      "max_wrong": 1
+    },
+    "agreement": {
+      "firings_per_disagreement": 10,
+      "alpha": 0.8
+    },
+    "source": {
+      "min_firings": 10
+    }
+  },
+  "scored_with": "proofread calibrate round score at the round's rule commit",
+  "advise_passed": [],
+  "deny_passed": [],
+  "promoted": [],
+  "caveats": [
+    "second-person fired on no guide in this repository and no procedural page exists in the AIDev export, so it was not measured",
+    "participles counted clauses inside platform text (a coding agent's quoted original prompt and chat prompt, pasted bot summaries, a template checkbox) and nouns or gerund subjects as clauses",
+    "nonspecific fired on comments that name a findable symptom, which the adjudicator judged a reason",
+    "the freeze recorded the sampler's build stamp from a cached build of another checkout; proofread_sha256 records the binary from round 6 on"
+  ],
+  "rules": {
+    "participles": {
+      "code": "PRF4020",
+      "counts": {
+        "taken": 40,
+        "seen": 3237,
+        "excluded": 64,
+        "fresh": 3168,
+        "by_source_seen": {
+          "aidev-pr": 3234,
+          "docs-guide": 1,
+          "docs-reference": 2
+        },
+        "by_source_taken": {}
+      },
+      "score": {
+        "n": 40,
+        "correct": 24,
+        "precision": 0.6,
+        "wilson_lb": 0.446,
+        "disagreements": 3,
+        "unnoted_disagreements": 0,
+        "raw_agreement": 0.925,
+        "alpha": 0.8398,
+        "precision_gate": false,
+        "agreement_gate": true,
+        "by_source": {
+          "aidev-pr": {
+            "n": 38,
+            "correct": 24,
+            "precision": 0.6316,
+            "wilson_lb": 0.4728,
+            "disagreements": 3,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 0.9211,
+            "alpha": 0.8235,
+            "precision_gate": false,
+            "agreement_gate": true
+          },
+          "docs-guide": {
+            "n": 1,
+            "correct": 0,
+            "precision": 0,
+            "wilson_lb": 0,
+            "disagreements": 0,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 1,
+            "alpha": null,
+            "precision_gate": false,
+            "agreement_gate": true
+          },
+          "docs-reference": {
+            "n": 1,
+            "correct": 0,
+            "precision": 0,
+            "wilson_lb": 0,
+            "disagreements": 0,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 1,
+            "alpha": null,
+            "precision_gate": false,
+            "agreement_gate": true
+          }
+        },
+        "worst_source": {
+          "source": "aidev-pr",
+          "n": 38,
+          "wilson_lb": 0.4728,
+          "pass": false
+        },
+        "advise_gate": false,
+        "spot_check": []
+      }
+    },
+    "nonspecific": {
+      "code": "PRF8010",
+      "counts": {
+        "taken": 40,
+        "seen": 223,
+        "excluded": 8,
+        "fresh": 191,
+        "by_source_seen": {
+          "aidev-comment-bot": 10,
+          "aidev-comment-user": 213
+        },
+        "by_source_taken": {}
+      },
+      "score": {
+        "n": 40,
+        "correct": 13,
+        "precision": 0.325,
+        "wilson_lb": 0.2008,
+        "disagreements": 1,
+        "unnoted_disagreements": 0,
+        "raw_agreement": 0.975,
+        "alpha": 0.9425,
+        "precision_gate": false,
+        "agreement_gate": true,
+        "by_source": {
+          "aidev-comment-bot": {
+            "n": 8,
+            "correct": 0,
+            "precision": 0,
+            "wilson_lb": 0,
+            "disagreements": 0,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 1,
+            "alpha": null,
+            "precision_gate": false,
+            "agreement_gate": true
+          },
+          "aidev-comment-user": {
+            "n": 32,
+            "correct": 13,
+            "precision": 0.4063,
+            "wilson_lb": 0.2552,
+            "disagreements": 1,
+            "unnoted_disagreements": 0,
+            "raw_agreement": 0.9688,
+            "alpha": 0.9354,
+            "precision_gate": false,
+            "agreement_gate": true
+          }
+        },
+        "worst_source": {
+          "source": "aidev-comment-user",
+          "n": 32,
+          "wilson_lb": 0.2552,
+          "pass": false
+        },
+        "advise_gate": false,
+        "spot_check": []
+      }
+    },
+    "second-person": {
+      "code": "PRF1003",
+      "counts": {
+        "taken": 0,
+        "seen": 0,
+        "excluded": 0,
+        "fresh": 0,
+        "by_source_seen": {},
+        "by_source_taken": {}
+      },
+      "score": {
+        "n": 0,
+        "correct": 0,
+        "precision": null,
+        "wilson_lb": null,
+        "disagreements": 0,
+        "unnoted_disagreements": 0,
+        "raw_agreement": null,
+        "alpha": null,
+        "precision_gate": false,
+        "agreement_gate": false,
+        "by_source": {},
+        "worst_source": null,
+        "advise_gate": false,
+        "spot_check": []
+      }
+    }
+  },
+  "data": "$XDG_CACHE_HOME/proofread/calibration/labels/round5/"
+}
