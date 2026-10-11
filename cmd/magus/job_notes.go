@@ -87,7 +87,7 @@ func checkOverrun(m *magus.Magus, row types.Job, foregroundMax func() (time.Dura
 		return nil
 	}
 	lastRun := func(project, target string) (time.Duration, bool) {
-		return sessions.LastRealDuration(dir, project, target)
+		return sessions.LastRunDuration(dir, project, target)
 	}
 	overrun, ok := job.OverrunsForeground(row, lastRun, foregroundMax)
 	if !ok {

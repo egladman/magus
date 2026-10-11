@@ -20,7 +20,7 @@ func recordResults(t *testing.T, dir string, results ...TargetResult) {
 	}
 }
 
-func TestLastRealDurationIsTheNewestRealRun(t *testing.T) {
+func TestLastRunDurationIsTheNewestRun(t *testing.T) {
 	dir := t.TempDir()
 	recordResults(t, dir,
 		TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 400_000},
@@ -31,23 +31,23 @@ func TestLastRealDurationIsTheNewestRealRun(t *testing.T) {
 		TargetResult{Target: "lint", Project: ".", Outcome: OutcomePass, DurationMs: 70_000},
 	)
 
-	got, ok := LastRealDuration(dir, ".", "go-test")
+	got, ok := LastRunDuration(dir, ".", "go-test")
 	require.True(t, ok)
 	assert.Equal(t, 300*time.Second, got, "the newest run that ran: a replay, a refusal and another project do not count, and a spell filter or charm names the same target")
 
-	got, ok = LastRealDuration(dir, "", "go_test:rw")
+	got, ok = LastRunDuration(dir, "", "go_test:rw")
 	require.True(t, ok)
 	assert.Equal(t, 300*time.Second, got, "an empty project is the root, and the name is compared normalized")
 
-	_, ok = LastRealDuration(dir, ".", "build")
+	_, ok = LastRunDuration(dir, ".", "build")
 	assert.False(t, ok, "a target that never ran here has no duration")
-	_, ok = LastRealDuration(t.TempDir(), ".", "go-test")
+	_, ok = LastRunDuration(t.TempDir(), ".", "go-test")
 	assert.False(t, ok, "an empty store")
-	_, ok = LastRealDuration(dir+"/absent", ".", "go-test")
+	_, ok = LastRunDuration(dir+"/absent", ".", "go-test")
 	assert.False(t, ok, "a missing store")
 }
 
-func TestLastRealDurationReadsOnlyTheNewestFiles(t *testing.T) {
+func TestLastRunDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	dir := t.TempDir()
 	results := make([]TargetResult, maxInvocationFiles+1)
 	results[0] = TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 60_000}
@@ -56,6 +56,6 @@ func TestLastRealDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	}
 	recordResults(t, dir, results...)
 
-	_, ok := LastRealDuration(dir, ".", "go-test")
+	_, ok := LastRunDuration(dir, ".", "go-test")
 	assert.False(t, ok, "a run older than the newest %d files is not read", maxInvocationFiles)
 }

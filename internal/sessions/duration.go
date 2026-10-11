@@ -13,7 +13,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// maxInvocationFiles bounds LastRealDuration to the newest invocation files: it runs on
+// maxInvocationFiles bounds LastRunDuration to the newest invocation files: it runs on
 // a hook's path with a deadline, each file is read whole, and a store holds thousands.
 const maxInvocationFiles = 100
 
@@ -21,11 +21,11 @@ const maxInvocationFiles = 100
 // result is filed under. Its base36 millisecond stamp sorts by name in time order.
 const invocationPrefix = "inv"
 
-// LastRealDuration is how long target last ran on project for real, read from the newest
+// LastRunDuration is how long target last ran on project, read from the newest
 // invocation files under dir. A replay, a run refused before it started and a result with
 // no duration are not a run. The charm and a spell filter are ignored, so `lint:rw` answers
 // for `lint`. ok is false when none of the newest files records one.
-func LastRealDuration(dir, project, target string) (time.Duration, bool) {
+func LastRunDuration(dir, project, target string) (time.Duration, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0, false

@@ -128,7 +128,7 @@ func adviseCheckTimeout(at location, run workerRun, call shellCall) advice {
 		}
 		var last time.Duration
 		for _, p := range projects {
-			if d, ok := sessions.LastRealDuration(dir, p, r.target); ok {
+			if d, ok := sessions.LastRunDuration(dir, p, r.target); ok {
 				last = max(last, d)
 			}
 		}
