@@ -76,7 +76,8 @@ func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths 
 			return nil
 		}
 	}
-	tests := testsInWritePaths(root, writePaths)
+	tags, _ := goTestFlag(check.Args, "tags")
+	tests := testsInWritePaths(root, writePaths, strings.FieldsFunc(tags, func(r rune) bool { return r == ',' || r == ' ' }))
 	var (
 		notRun, skipped []string
 		packages        []string
@@ -282,13 +283,14 @@ func (f *testFilter) excludes(name string) bool {
 }
 
 // testsInWritePaths returns, per workspace-relative package directory, the sorted names of
-// the Test functions defined in the _test.go files beside the .go files the paths declare.
-func testsInWritePaths(root string, writePaths []string) map[string][]string {
+// the Test functions defined in the _test.go files beside the .go files the paths declare,
+// built with tags.
+func testsInWritePaths(root string, writePaths, tags []string) map[string][]string {
 	out := map[string][]string{}
 	for _, entry := range writePaths {
 		for _, dir := range writePathDirs(root, entry) {
 			if _, seen := out[dir]; !seen {
-				if names := testNames(filepath.Join(root, filepath.FromSlash(dir))); len(names) > 0 {
+				if names := testNames(filepath.Join(root, filepath.FromSlash(dir)), tags); len(names) > 0 {
 					out[dir] = names
 				}
 			}
@@ -350,19 +352,22 @@ func ignoredDir(root, rel string) bool {
 	return err == nil
 }
 
-// testNames lists the Test functions declared by the _test.go files of dir that a plain
-// `go test` builds here, sorted. A file go ignores (named with a leading `_` or `.`) and
-// one whose build constraints or GOOS/GOARCH suffix exclude it on this platform with no
-// tags declare nothing: a test the check could never run is not one it leaves out.
-func testNames(dir string) []string {
+// testNames lists the Test functions declared by the _test.go files of dir that `go test
+// -tags` with tags builds here, sorted. A file go ignores (named with a leading `_` or `.`)
+// and one whose build constraints or GOOS/GOARCH suffix exclude it on this platform with
+// those tags declare nothing: a test the check could never run is not one it leaves out. A
+// file whose constraints do not read counts as built, so it cannot hide a test.
+func testNames(dir string, tags []string) []string {
 	files, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
 	if err != nil {
 		return nil
 	}
+	ctxt := build.Default
+	ctxt.BuildTags = tags
 	var names []string
 	fset := token.NewFileSet()
 	for _, file := range files {
-		if built, err := build.Default.MatchFile(dir, filepath.Base(file)); err != nil || !built {
+		if built, err := ctxt.MatchFile(dir, filepath.Base(file)); err == nil && !built {
 			continue
 		}
 		parsed, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)

@@ -217,6 +217,40 @@ func TestRefuseNarrowedTestsCountsOnlyTestsGoTestBuilds(t *testing.T) {
 	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))
 }
 
+// The check's own -tags decide which files it builds, so a tagged test it builds and leaves
+// out is refused.
+func TestRefuseNarrowedTestsBuildsWithTheChecksTags(t *testing.T) {
+	t.Parallel()
+
+	w := testRoot(t)
+	w.WriteTree(map[string]string{
+		"pkg/tagged_test.go": "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
+	})
+	for _, args := range [][]string{
+		{"-run", "Alpha|Beta|Gamma", "-tags", "integration"},
+		{"-tags=other,integration", "-run", "Alpha|Beta|Gamma"},
+	} {
+		err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck(args...)})
+		require.Error(t, err, args)
+		assert.Contains(t, err.Error(), "pkg (TestTagged)", args)
+	}
+}
+
+// A file whose build constraint does not read is one go test would report, never one it
+// silently leaves out, so its tests count.
+func TestRefuseNarrowedTestsCountsAFileWhoseConstraintDoesNotRead(t *testing.T) {
+	t.Parallel()
+
+	w := testRoot(t)
+	w.WriteTree(map[string]string{
+		"pkg/broken_test.go": "//go:build (\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestUnread(t *testing.T) {}\n",
+	})
+
+	err := refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pkg (TestUnread)")
+}
+
 // A check goal narrowed with -run is held to the same rule as the job's own check.
 func TestRefuseNarrowedTestsGradesEveryCheckGoal(t *testing.T) {
 	t.Parallel()
