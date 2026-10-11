@@ -40,7 +40,7 @@ The code is `PRF5002`. The decision depends on the kind of text judged:
 | `agent-reply`        | off     |
 
 House style ships `off`: the rule encodes one repository's conventions, not
-a rule of writing a teammate reads. A repository turns it on in its decisions table.
+a rule of plain writing. A repository turns it on in its decisions table.
 
 ## Changing it
 

@@ -65,7 +65,7 @@ var reviewTexts = map[Rule]ruleText{
 			"five words or fewer counts, unless the reply gives a reason anywhere or the command names " +
 			"code or its target (\"change this to appsettings\"). Measured 2026-10-10 over the AIDev review " +
 			"comments: 4.56 percent of 39639 written by people and 0.07 percent of 42076 written by bots. " +
-			"It advises: between teammates who share the context, a short command can be read as " +
+			"It advises: between people who share the context, a short command can be read as " +
 			"intended. Measured 2026-10-11 over the adjudicated labeling round: 37.2% precision (16 of " +
 			"43) before, 100% (16 of 16) after. Most firings followed a sentence stating the problem " +
 			"(\"Duplicate documentation. Remove it.\"), so only a reply made of bare commands is judged. " +

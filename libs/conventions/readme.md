@@ -157,7 +157,7 @@ apart from the one it means; `lead-context` marks a lead that opens on a defect
 those included.
 
 House style ships `off`: the rules that encode one repository's conventions
-rather than writing a teammate reads (its glossary, plain-ASCII typography, the
+rather than plain writing (its glossary, plain-ASCII typography, the
 present tense with no author, credit to tools, the doc-comment budgets, the
 agent-instruction budgets). With no table proofread holds text to shape, tone,
 claims and the generated-writing tells alone; a repository turns its house style
@@ -362,7 +362,7 @@ instructions take every reference and change-description rule but
 conversations, `attribution`'s credit to a tool, `condescension`, the tone rules
 and its own four; it speaks in the first person, so `tense` and `hedge` do not
 run on it. `blame`, `verdict`, `absolute`, `intent` and `claim` judge only text
-written to teammates: a page names its reader's possible mistakes and states
+written to reviewers: a page names its reader's possible mistakes and states
 contracts ("never returns nil"). `hedge` and `claim` leave alone a sentence that
 states a limit: one under a heading such as "Not verified" or "Limits", or one
 opening with "Not measured", "Not tested", "Not verified" or "Untested". A claim's

@@ -329,7 +329,7 @@ export fun renderProofreadRule(r: ProofreadRule) > str {
         + proofreadDecisionTable(r) + "\n";
     if (r.house) {
         page = page + "House style ships `off`: the rule encodes one repository's conventions, not\n"
-            + "a rule of writing a teammate reads. A repository turns it on in its decisions table.\n\n";
+            + "a rule of plain writing. A repository turns it on in its decisions table.\n\n";
     }
     return page + "## Changing it\n\n"
         + "A decisions table sets this rule to `deny`, `advise` or `off`, for everything judged\n"

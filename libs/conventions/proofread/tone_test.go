@@ -72,7 +72,7 @@ func TestVerdictReportsAJudgmentInPlaceOfTheBehavior(t *testing.T) {
 		// #505, #373 and #369 pick out a thing.
 		{"the wrong checkout", KindChangeDescription, pr("- Answered from the wrong checkout; a bad plan and a broken test fail."), nil},
 		{"garbage collection", KindChangeDescription, pr("- Runs garbage collection after the build."), nil},
-		{"only text to a teammate", KindReference, "The cache was broken.", nil},
+		{"only text to a reviewer", KindReference, "The cache was broken.", nil},
 	})
 }
 
@@ -141,7 +141,7 @@ func TestClaimReportsAClaimWithNoEvidenceBesideIt(t *testing.T) {
 		{"fixes as a noun", KindChangeDescription, pr("- Adds five nesting fixes"), nil},
 		{"the title", KindChangeDescription, "perf: make startup 2x faster\n" +
 			"Startup answers before the graph loads, which a profile of `magus ls` showed waiting on it.", nil},
-		{"only text to a teammate", KindReference, "Startup drops to 260ms.", nil},
+		{"only text to a reviewer", KindReference, "Startup drops to 260ms.", nil},
 	})
 }
 

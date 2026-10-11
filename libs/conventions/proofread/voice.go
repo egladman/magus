@@ -366,12 +366,12 @@ func attribution(in input) []Finding {
 	// A reply and a description are both posted to a review, so a tool or an
 	// agent credited in either is the story of the work.
 	patterns := []*regexp.Regexp{credit}
-	teammate := in.kind == KindChangeDescription || in.kind == KindReviewReply
+	reviewed := in.kind == KindChangeDescription || in.kind == KindReviewReply
 
 	switch {
 	case in.kind == KindReviewReply:
 		patterns = append(patterns, workNarrative)
-	case teammate:
+	case reviewed:
 		patterns = append(patterns, narrative, workNarrative)
 	default:
 		patterns = append(patterns, narrative)
@@ -383,7 +383,7 @@ func attribution(in input) []Finding {
 			spans = append(spans, re.FindAllStringIndex(para.text, -1)...)
 		}
 
-		if teammate {
+		if reviewed {
 			for _, at := range toolName.FindAllStringSubmatchIndex(para.text, -1) {
 				if !namesProduct(para.text, at[2], at[3]) && !within(at[2], spans) {
 					spans = append(spans, at[2:4])

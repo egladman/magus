@@ -18,7 +18,7 @@ type RuleDoc struct {
 	// kind for a house rule.
 	Decisions map[Kind]Decision `json:"decisions"`
 	// House marks a rule that encodes one repository's conventions rather than
-	// writing a teammate reads, so it runs only where a decisions table names it.
+	// plain writing, so it runs only where a decisions table names it.
 	House bool `json:"house"`
 	// Dimension is what the rule protects for the reader.
 	Dimension Dimension `json:"dimension"`

@@ -173,9 +173,9 @@ var (
 	all     = []Kind{KindDocComment, KindReference, KindGuide, KindChangeDescription, KindAgentInstructions}
 	skill   = []Kind{KindAgentInstructions}
 	guide   = []Kind{KindGuide}
-	// teammate is text written to the people working on the change, where a
-	// sentence about past work or a teammate is about someone the reader knows.
-	teammate = []Kind{KindChangeDescription, KindReviewReply}
+	// reviewed is text written to the people working on the change, where a
+	// sentence about past work or a reviewer is about someone the reader knows.
+	reviewed = []Kind{KindChangeDescription, KindReviewReply}
 	message  = []Kind{KindMessage}
 	// changeText is what a repository writes about its own changes for the people
 	// who follow them: a commit, an issue, release notes and a changelog.
@@ -187,7 +187,7 @@ var (
 	// toneKinds are the kinds the posture rules judge: text written to the people
 	// working on the change. Release notes and a changelog speak to users, who are
 	// owed what changed rather than a posture, so only a commit and an issue join.
-	toneKinds = slices.Concat(teammate, []Kind{KindCommitMessage, KindIssue})
+	toneKinds = slices.Concat(reviewed, []Kind{KindCommitMessage, KindIssue})
 )
 
 // check is one rule: the kinds it judges, its default decision on each, and
@@ -200,7 +200,7 @@ type check struct {
 	// means. On the rest of on the default is [DecisionDeny].
 	advise []Kind
 	// house marks a rule that encodes one repository's conventions rather than
-	// writing a teammate reads. It defaults to [DecisionOff] on every kind and
+	// plain writing. It defaults to [DecisionOff] on every kind and
 	// runs only where a decisions table names it.
 	house bool
 	judge func(in input) []Finding

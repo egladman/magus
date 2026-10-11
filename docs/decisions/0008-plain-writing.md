@@ -1,5 +1,5 @@
 ---
-title: "ADR 0008: writing a teammate reads"
+title: "ADR 0008: plain writing for the people who review it"
 order: 8
 description: Pull request descriptions, review replies and commit messages are read by people who were not there, and text loses tone on the way. This records the evidence, the shape a description takes (outcome first, then how the work came up, why it mattered, the changes), the claims a description may make, the tone rules, the port of the AI-writing checks into the Go prose judge, and the boundaries that keep it usable outside magus.
 tags: [adr, decision, writing, conventions, prose, pull-requests, review]
@@ -7,7 +7,7 @@ status: accepted (in progress)
 date: 2026-10-10
 ---
 
-# ADR 0008: writing a teammate reads
+# ADR 0008: plain writing for the people who review it
 
 Each item below carries its own state: _done_ is in the tree, _in progress_ sits on a
 branch, _planned_ is decided and queued, _proposed_ is an idea not yet decided, and _not
@@ -60,7 +60,7 @@ in reviews generally:
 - Confidence reads from evidence and scope; arrogance reads from certainty words the
   evidence does not carry ("obviously", "as I said").
 
-The same rules are meant for repositories other than this one, written with teammates,
+The same rules are meant for repositories other than this one, written with other people,
 so nothing in the judge may assume magus, git or GitHub.
 
 ## Decision
@@ -121,7 +121,7 @@ The judge enforces nothing of its own. Each rule ships a default decision, `deny
 A caller denies on `deny`, tells `advise` once, and never sees `off`.
 
 - **What ships is portable.** House style, the rules that encode one repository's
-  conventions rather than writing a teammate reads (its glossary, plain-ASCII typography,
+  conventions rather than plain writing (its glossary, plain-ASCII typography,
   no author in a description, the doc-comment budgets, the agent-instruction budgets),
   ships `off`. Run with no table, the judge holds text to tone, claims, shape and the
   generated-writing tells alone.

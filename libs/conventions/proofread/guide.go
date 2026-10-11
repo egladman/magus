@@ -230,7 +230,7 @@ var (
 	// sense."
 	assent = regexp.MustCompile(`^\W*Of course,`)
 
-	// obviously is a booster anywhere in text written to a teammate. On a page
+	// obviously is a booster anywhere in text written to a reviewer. On a page
 	// it also describes how something looks ("looked obviously correct") or
 	// denies it ("none is obviously the mistake"), so there only the opener
 	// counts.
@@ -259,7 +259,7 @@ func condescension(in input) []Finding {
 			spans = condescending.FindAllStringIndex(para.text, -1)
 		default:
 			spans = presuming.FindAllStringIndex(para.text, -1)
-			if slices.Contains(teammate, in.kind) {
+			if slices.Contains(reviewed, in.kind) {
 				spans = append(spans, obviously.FindAllStringIndex(para.text, -1)...)
 			}
 

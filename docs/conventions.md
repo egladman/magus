@@ -381,14 +381,14 @@ supersedes: <what this replaces, optional>
 ## Writing rules
 
 Hand-written Markdown, every pull request's title and description, review replies, doc
-comments and the text an agent loads read as plain technical writing: a teammate
+comments and the text an agent loads read as plain technical writing: a reader
 understands each sentence without the request, the conversation or the tool behind it.
 The checks are a Go package, proofread, in
 [`libs/conventions/proofread`](https://github.com/egladman/magus/blob/main/libs/conventions/proofread);
 the `proofread` command runs it. The guard's `pull-request-text` rule runs it on a
 pull request description and on a reply an agent posts, and the `pr-description` check
 runs it on every pull request, so the two cannot disagree. A person runs it on a draft
-before posting. [ADR 0008](decisions/0008-writing-a-teammate-reads.md) holds the
+before posting. [ADR 0008](decisions/0008-plain-writing.md) holds the
 design.
 
 [Each rule has a page](reference/proofread/index.md): what it catches, why, its default
@@ -422,7 +422,7 @@ carries its reason, as a guard override does. There are no named profiles; a tab
 the one spelling.
 
 House style ships `off`. It is the set of rules that encode one repository's
-conventions rather than writing a teammate reads: the glossary (`terms`), the present
+conventions rather than plain writing: the glossary (`terms`), the present
 tense with no author (`tense`), no credit to a tool (`attribution`), plain ASCII
 typography (`dash`, `ascii`), the doc-comment budgets, and the agent-instruction budgets.
 This repository turns them on in `hack/policy/proofread.buzz`, with a reason beside every
