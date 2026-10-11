@@ -405,18 +405,19 @@ func loadGuardRules(ctx context.Context, rootOverride string) (*magus.GuardRules
 // lineage asks only when the policy moved.
 func guardPolicyState(rules *magus.GuardRules) guard.PolicyState {
 	policy := rules.Policy()
+	files := make([]string, len(policy.Sources))
+	for i, s := range policy.Sources {
+		files[i] = s.Path
+	}
 	return guard.PolicyState{
+		Files:       files,
 		Digest:      policy.Digest,
 		ShellRules:  policy.ShellRules,
 		SpawnRule:   policy.SpawnRule,
 		CommandRule: policy.CommandRule,
 		WriteRule:   policy.WriteRule,
 		Sources: func(ctx context.Context) []guard.PolicySource {
-			paths := make([]string, len(policy.Sources))
-			for i, s := range policy.Sources {
-				paths[i] = s.Path
-			}
-			approved := rules.ApprovedContentIDs(ctx, paths)
+			approved := rules.ApprovedContentIDs(ctx, files)
 			if approved == nil {
 				return nil
 			}

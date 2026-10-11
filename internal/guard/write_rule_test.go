@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/trail"
@@ -132,4 +133,60 @@ func TestWriteRulesKeepTheStricterSide(t *testing.T) {
 	v = Judge(ctx, Dependencies{WriteRule: broken.rule()}, Request{Input: filepath.Join(root, "x.go"), IsPath: true, Host: "claude-code", Session: "s1"})
 	assert.Equal(t, "advise", v.Decision)
 	assert.Contains(t, v.Context, "Only the built-in rules applied to this write.")
+}
+
+// A write to a file the guard loads goes through, advised, when its judgment runs out of
+// time: denying it would leave a looping rule with no way to be fixed. Any other write is
+// still denied.
+func TestLapsedJudgmentAdvisesAWriteToAPolicySource(t *testing.T) {
+	lapsedLoad := Dependencies{
+		LoadFailure: errors.New("magusfile: context deadline exceeded"),
+		LoadRules:   trail.Phase{Name: phaseLoadRules, ElapsedMs: 6600, BudgetMs: 6500, Lapsed: true},
+	}
+	const spared = "lets it through, because the guard loads this file itself"
+
+	t.Run("the root magusfile", func(t *testing.T) {
+		ctx, root, _ := writeFixture(t)
+		v := Judge(ctx, lapsedLoad, Request{Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, verdictWithRule("advise", string(advisoryWriteRuleFailed)), unworded(v))
+		assert.Contains(t, v.Context, spared)
+	})
+
+	t.Run("a source the last loaded policy read", func(t *testing.T) {
+		ctx, root, cacheDir := writeFixture(t)
+		policy := filepath.Join(root, "hack", "policy", "guard.buzz")
+		RecordPolicy(t.Context(), cacheDir, root, PolicyState{Digest: "d1", WriteRule: true, Files: []string{filepath.Join(root, "magusfile.buzz"), policy}}, false)
+		v := Judge(ctx, lapsedLoad, Request{Input: policy, IsPath: true, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, "advise", v.Decision)
+		assert.Contains(t, v.Context, spared)
+	})
+
+	t.Run("a source this call's policy read, while its rule loops", func(t *testing.T) {
+		ctx, root, _ := writeFixture(t)
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		loops := func(ctx context.Context, _ types.WriteRequest, _ hint.Gate) (types.GuardVerdict, error) {
+			<-ctx.Done()
+			return types.GuardVerdict{}, ctx.Err()
+		}
+		deps := Dependencies{
+			WriteRule: loops,
+			Policy: func() PolicyState {
+				return PolicyState{Digest: "d1", WriteRule: true, Files: []string{"hack/policy/guard.buzz"}}
+			},
+		}
+		v := Judge(ctx, deps, Request{Input: filepath.Join(root, "hack", "policy", "guard.buzz"), IsPath: true, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, "advise", v.Decision, "a relative source is the workspace's")
+		assert.Contains(t, v.Context, spared)
+
+		other := Judge(ctx, deps, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, "deny", other.Decision, "any other write is still denied")
+	})
+
+	t.Run("any other file", func(t *testing.T) {
+		ctx, root, _ := writeFixture(t)
+		v := Judge(ctx, lapsedLoad, Request{Input: filepath.Join(root, "notes.txt"), IsPath: true, Host: "claude-code", Session: "s1"})
+		assert.Equal(t, "deny", v.Decision)
+		assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
+	})
 }

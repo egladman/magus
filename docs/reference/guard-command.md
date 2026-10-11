@@ -91,10 +91,17 @@ already spoke and is added to one that did, and nothing it returns lifts a built
 deny. On a command magus itself served as a `next`, its advice stands down and its deny
 still holds.
 
-A rule that raises, runs past three seconds, or returns something other than a verdict
-judges nothing: the built-ins apply alone and the agent is told once per session that
-the workspace rule failed. Registering twice, from a project's magusfile, or with a
-non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+A rule that raises or returns something other than a verdict judges nothing: the
+built-ins apply alone and the agent is told once per session that the workspace rule
+failed. Registering twice, from a project's magusfile, or with a non-function stops the
+workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+
+A hook judgment answers within seven seconds of the hook starting, inside the host's
+own hook timeout. Loading the rules, resolving the committed rule, calling it, and
+calling the working tree's rule share that deadline: each phase gets its share of what
+is left, so one that answers early leaves its time to the ones after it. A phase that
+runs out denies a command that changes state, since letting it through would run it
+unjudged, and lets a read through with a note naming the phase and its budget.
 
 When a file the root magusfile's load read differs from the checked-out commit, the rule
 runs from both the working tree and the committed sources, files it imports included,

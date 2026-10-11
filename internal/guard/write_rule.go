@@ -76,8 +76,12 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	asked := askWorkspaceRules(ctx, seamWrite, deps, resolve, bind(deps.WriteRule))
 	// Either deny names the failures itself.
 	call := unloadedCall{seam: seamWrite, changes: true, what: "this file write", lease: lease}
-	var denied bool
+	var denied, spared bool
 	switch {
+	case asked.lapse != nil && guardLoads(deps, at, path):
+		// The guard loads this file itself, so refusing the write when a rule ran out of
+		// time would leave a slow or looping rule with no way to be fixed.
+		spared = true
 	case asked.lapse != nil:
 		denied = applyLapse(&asked, call)
 	case asked.unloaded:
@@ -98,7 +102,17 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, lapsed: asked.lapse != nil,
 		judged: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
 	})
+	if spared {
+		note = policyEditLapse(*asked.lapse) + "\n\n" + note
+	}
 	return applyRuleFailureNote(verdict, note, advisoryWriteRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
+}
+
+// policyEditLapse is the advice for a write to a file the guard loads when a phase of its
+// judgment ran out of time, which every other write is denied for.
+func policyEditLapse(l ruleLapse) string {
+	return "magus ran out of time judging this write (" + l.what + ") and lets it through, because the guard loads this file itself: " +
+		"refusing it would leave a slow or looping rule with no way to be fixed. Check the rule answers quickly before relying on it."
 }
 
 // writeWorkspace is the root of the workspace holding path, which is the checkout the write
