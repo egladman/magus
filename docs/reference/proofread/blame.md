@@ -1,13 +1,13 @@
 ---
 title: "blame"
-description: "A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision."
+description: "A rule that denies on `change-description`, `review-reply`, `commit-message`, and `issue` and advises on `agent-reply` by default: it reports a person or past work as the subject of a fault, and contempt for code or a decision."
 tags: [proofread, rules, blame, deny]
 aliases: [reference/prose/blame]
 ---
 
 # blame
 
-A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision.
+A rule that denies on `change-description`, `review-reply`, `commit-message`, and `issue` and advises on `agent-reply` by default: it reports a person or past work as the subject of a fault, and contempt for code or a decision.
 
 ## What it catches
 
@@ -32,6 +32,7 @@ The code is `PRF2001`. The decision depends on the kind of text judged:
 | `review-reply`       | deny    |
 | `commit-message`     | deny    |
 | `issue`              | deny    |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

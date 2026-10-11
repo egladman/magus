@@ -1,13 +1,13 @@
 ---
 title: "wordy"
-description: "A deny rule by default: it refuses a phrase with a shorter equivalent (\"in order to\")."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent (\"in order to\")."
 tags: [proofread, rules, wordy, deny]
 aliases: [reference/prose/wordy]
 ---
 
 # wordy
 
-A deny rule by default: it refuses a phrase with a shorter equivalent ("in order to").
+A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a phrase with a shorter equivalent ("in order to").
 
 ## What it catches
 
@@ -36,6 +36,7 @@ The code is `PRF4002`. The decision depends on the kind of text judged:
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

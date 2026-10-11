@@ -32,6 +32,7 @@ The code is `PRF2004`. The decision depends on the kind of text judged:
 | `review-reply`       | advise  |
 | `commit-message`     | advise  |
 | `issue`              | advise  |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

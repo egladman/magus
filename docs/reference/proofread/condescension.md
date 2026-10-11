@@ -38,6 +38,7 @@ The code is `PRF2006`. The decision depends on the kind of text judged:
 | `changelog`          | deny    |
 | `review-reply`       | deny    |
 | `cli-help`           | deny    |
+| `agent-reply`        | deny    |
 
 ## Changing it
 

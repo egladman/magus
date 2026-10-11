@@ -36,6 +36,7 @@ The code is `PRF4011`. The decision depends on the kind of text judged:
 | `issue`              | advise  |
 | `release-notes`      | advise  |
 | `changelog`          | advise  |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

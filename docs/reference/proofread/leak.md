@@ -1,13 +1,13 @@
 ---
 title: "leak"
-description: "A deny rule by default: it refuses residue of a tool or a template: a citation marker or an unfilled placeholder."
+description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder."
 tags: [proofread, rules, leak, deny]
 aliases: [reference/prose/leak]
 ---
 
 # leak
 
-A deny rule by default: it refuses residue of a tool or a template: a citation marker or an unfilled placeholder.
+A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports residue of a tool or a template: a citation marker or an unfilled placeholder.
 
 ## What it catches
 
@@ -39,6 +39,7 @@ The code is `PRF4005`. The decision depends on the kind of text judged:
 | `changelog`          | deny    |
 | `cli-help`           | deny    |
 | `review-reply`       | deny    |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

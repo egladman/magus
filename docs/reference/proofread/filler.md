@@ -1,13 +1,13 @@
 ---
 title: "filler"
-description: "A deny rule by default: it refuses throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
+description: "A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
 tags: [proofread, rules, filler, deny]
 aliases: [reference/prose/filler]
 ---
 
 # filler
 
-A deny rule by default: it refuses throat-clearing ("Note that") and filler adverbs ("simply", "basically").
+A rule that denies on `doc-comment`, `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, `changelog`, `cli-help`, and `review-reply` and advises on `agent-reply` by default: it reports throat-clearing ("Note that") and filler adverbs ("simply", "basically").
 
 ## What it catches
 
@@ -39,6 +39,7 @@ The code is `PRF4001`. The decision depends on the kind of text judged:
 | `changelog`          | deny    |
 | `cli-help`           | deny    |
 | `review-reply`       | deny    |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

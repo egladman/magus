@@ -1,13 +1,13 @@
 ---
 title: "hedge"
-description: "A deny rule by default: it refuses a softener qualifying a claim (\"might fix\", \"could potentially\")."
+description: "A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a softener qualifying a claim (\"might fix\", \"could potentially\")."
 tags: [proofread, rules, hedge, deny]
 aliases: [reference/prose/hedge]
 ---
 
 # hedge
 
-A deny rule by default: it refuses a softener qualifying a claim ("might fix", "could potentially").
+A rule that denies on `reference`, `guide`, `change-description`, `agent-instructions`, `commit-message`, `issue`, `release-notes`, and `changelog` and advises on `agent-reply` by default: it reports a softener qualifying a claim ("might fix", "could potentially").
 
 ## What it catches
 
@@ -36,6 +36,7 @@ The code is `PRF3002`. The decision depends on the kind of text judged:
 | `issue`              | deny    |
 | `release-notes`      | deny    |
 | `changelog`          | deny    |
+| `agent-reply`        | advise  |
 
 ## Changing it
 
