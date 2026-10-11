@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/symbols"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -21,9 +21,8 @@ import (
 // calls, so a test can tell a read the stamp answered from one that forked.
 func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *atomic.Int32) {
 	t.Helper()
-	const spellName = "zzz-scip-stamp-test-spell"
 	probes = &atomic.Int32{}
-	spell := spells.NewSpell(spellName,
+	spellName := fakespell.Register(t, "zzz-scip-stamp-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
@@ -36,8 +35,6 @@ func newStampedWorkspace(t *testing.T) (m *Magus, src, index string, probes *ato
 		}),
 		spells.WithInvoker(writesTheIndex),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))

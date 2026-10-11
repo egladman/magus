@@ -22,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit/fakespell"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -190,20 +191,17 @@ func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
 // TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
 // raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
 func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
-	const spellName = "zzz-source-mutation-spell"
 	root := t.TempDir()
 	src := filepath.Join(root, "a.txt")
 	require.NoError(t, os.WriteFile(src, []byte("before\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	spell := spells.NewSpell(spellName,
+	spellName := fakespell.Register(t, "zzz-source-mutation-spell",
 		spells.WithTargets("touch"),
 		spells.WithSources("*.txt"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			return nil, os.WriteFile(src, []byte("after\n"), 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -357,11 +355,10 @@ func indexerOnPath(t *testing.T) {
 // (MGS3007), so the reader read a stale index. The rebuild now runs inside the outer run.
 func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	indexerOnPath(t)
-	const readerSpell = "zzz-index-reader-spell"
 	var m *Magus
 	var freshenErr error
 	var seen types.SymbolIndexFreshness
-	reader := spells.NewSpell(readerSpell,
+	readerSpell := fakespell.Register(t, "zzz-index-reader-spell",
 		spells.WithTargets("lint"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target != "lint" {
@@ -372,8 +369,6 @@ func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(reader)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(readerSpell) })
 
 	m, src, _ := newIndexedWorkspaceWith(t, readerSpell)
 	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
@@ -436,10 +431,8 @@ const indexerBin = "zzz-scip-freshness-indexer"
 // further registered spells to bind the root project to.
 func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *string) {
 	t.Helper()
-	const spellName = "zzz-scip-freshness-test-spell"
-	const skillsSpell = "zzz-scip-freshness-skills-spell"
 	version := "1.0.0"
-	spell := spells.NewSpell(spellName,
+	spellName := fakespell.Register(t, "zzz-scip-freshness-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
 		spells.WithOps(map[string]spells.Op{
@@ -462,13 +455,7 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 		}),
 		spells.WithInvoker(writesTheIndex),
 	)
-	skills := spells.NewSpell(skillsSpell, spells.WithSources(".claude/skills/**/SKILL.md"))
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	project.DefaultSpellRegistry().RegisterSpell(skills)
-	t.Cleanup(func() {
-		project.DefaultSpellRegistry().UnregisterSpell(spellName)
-		project.DefaultSpellRegistry().UnregisterSpell(skillsSpell)
-	})
+	skillsSpell := fakespell.Register(t, "zzz-scip-freshness-skills-spell", spells.WithSources(".claude/skills/**/SKILL.md"))
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
@@ -779,7 +766,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}
 	}
 	indexer := spells.WithInvoker(writesTheIndex)
-	goSpell := spells.NewSpell("zzz-uses-go-spell",
+	goSpell := fakespell.Register(t, "zzz-uses-go-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.go"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-go"}, Uses: []string{"zzz-uses-go"}}),
@@ -790,7 +777,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}),
 		spells.WithVersionProber(prober), indexer,
 	)
-	tsSpell := spells.NewSpell("zzz-uses-ts-spell",
+	tsSpell := fakespell.Register(t, "zzz-uses-ts-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.ts"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}),
@@ -801,10 +788,6 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}),
 		spells.WithVersionProber(prober), indexer,
 	)
-	for _, sp := range []*spells.Spell{goSpell, tsSpell} {
-		project.DefaultSpellRegistry().RegisterSpell(sp)
-		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
-	}
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
@@ -814,8 +797,8 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(root, dir, file), []byte("x\n"), 0o644))
 	}
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("svc", WithSpell(goSpell.Name()))
-	reg.RegisterProject("web", WithSpell(tsSpell.Name()))
+	reg.RegisterProject("svc", WithSpell(goSpell))
+	reg.RegisterProject("web", WithSpell(tsSpell))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
@@ -1107,9 +1090,8 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 // the tree went back to must not replay over an index built from the edit: `magus refs`
 // then answered with a line the source no longer held, and status called it up to date.
 func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
-	const spellName = "zzz-scip-replay-test-spell"
 	runs := 0
-	spell := spells.NewSpell(spellName,
+	spellName := fakespell.Register(t, "zzz-scip-replay-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
@@ -1126,8 +1108,6 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 			return nil, os.WriteFile(index, body, 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
