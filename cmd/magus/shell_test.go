@@ -20,11 +20,11 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
-	"github.com/egladman/magus/internal/job/jobtest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
@@ -55,7 +55,7 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 // returns the context pinning both, the workspace root, and the resolved cache dir.
 func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
-	root, cacheDir = jobtest.Ledger(t, leases...)
+	root, cacheDir = fixture.Ledger(t, leases...)
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
 }
 
@@ -1343,7 +1343,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 // flag reaches the rule, a denial exits with the blocking status, and the flag outranks
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
-	ctx, root, cacheDir := fleetFixture(t, jobtest.FleetLeases()...)
+	ctx, root, cacheDir := fleetFixture(t, fixture.FleetLeases()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1459,7 +1459,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
 			t.Setenv(trail.EnvBaggage, "")
-			ctx, root, cacheDir := fleetFixture(t, jobtest.FleetLeases()...)
+			ctx, root, cacheDir := fleetFixture(t, fixture.FleetLeases()...)
 			if tc.setup != nil {
 				tc.setup(t, ctx, cacheDir, root)
 			}
@@ -1474,7 +1474,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
 		global = globalFlags{}
 		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, jobtest.FleetLeases()...)
+		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
 		assert.NotContains(t, out.String(), "leave the host harness alone")
@@ -1483,7 +1483,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	t.Run("verify is a read", func(t *testing.T) {
 		global = globalFlags{}
 		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, jobtest.FleetLeases()...)
+		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
 		assert.NotContains(t, out.String(), "leave the host harness alone")

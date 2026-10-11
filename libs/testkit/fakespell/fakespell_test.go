@@ -1,4 +1,4 @@
-package spelltest
+package fakespell
 
 import (
 	"context"

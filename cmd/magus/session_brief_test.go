@@ -11,7 +11,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/agent/agenttest"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
@@ -137,7 +137,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// directory left to write it into): a WorkspaceRegistry records the wiring the
 	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
 	// it the way a real spell's harness_config would.
-	agenttest.WireHarness(t, agent.HarnessDescriptor{
+	fixture.WireHarness(t, agent.HarnessDescriptor{
 		SchemaVersion: 2,
 		ID:            "brief-host",
 		Display:       agent.HarnessDisplay{Name: "Brief Host"},

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/agent/agenttest"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +38,7 @@ func writeDoctorHarness(t *testing.T, root string) {
 	t.Helper()
 	var descriptor agent.HarnessDescriptor
 	require.NoError(t, json.Unmarshal([]byte(doctorHarnessDescriptorJSON), &descriptor))
-	agenttest.WireHarness(t, descriptor)
+	fixture.WireHarness(t, descriptor)
 	// VerifyHarness now actually runs the wired command (see internal/agent's
 	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every

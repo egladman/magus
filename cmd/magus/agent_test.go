@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/agent/agenttest"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -399,7 +399,7 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 // spell would.
 func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
-	agenttest.WireHarness(t, agent.HarnessDescriptor{
+	fixture.WireHarness(t, agent.HarnessDescriptor{
 		SchemaVersion: 2,
 		ID:            "status-test",
 		Display:       agent.HarnessDisplay{Name: "Status test"},

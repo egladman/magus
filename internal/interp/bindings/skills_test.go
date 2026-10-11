@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
-	"github.com/egladman/magus/internal/agent/agenttest"
+	"github.com/egladman/magus/internal/fixture"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +72,7 @@ func callSkills(t *testing.T, ctx context.Context, sess *buzz.Session, name stri
 // against the real catalog, installed the way `magus agent install` writes it.
 func TestSkillsThroughBuzzScript(t *testing.T) {
 	root := t.TempDir()
-	agenttest.WireHarness(t, agent.HarnessDescriptor{
+	fixture.WireHarness(t, agent.HarnessDescriptor{
 		SchemaVersion: 2,
 		ID:            "skills-test",
 		Display:       agent.HarnessDisplay{Name: "Skills test"},

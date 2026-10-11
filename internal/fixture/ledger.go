@@ -1,4 +1,4 @@
-package jobtest
+package fixture
 
 import (
 	"testing"
