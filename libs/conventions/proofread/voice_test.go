@@ -136,6 +136,8 @@ func TestAttributionReportsCreditAndNarrativeButNotTheSubject(t *testing.T) {
 			"Every state was written by an agent. The agent found nothing. File imports are unavailable in this session.", nil},
 		{"the harness and its paths in a pull request", KindChangeDescription,
 			pr("- Wires the Claude Code hooks under `.claude/` and spells/harness/claude-code."), nil},
+		{"credit beside the product name", KindChangeDescription,
+			"feat: add a Claude Code mod\n\nAdds the mod, written by Claude.", []string{"3:written by Claude"}},
 		{"a subagent and a prompt", KindChangeDescription, pr("- Hands the subagent its prompt through the hook."), nil},
 		// #577's title and lead name the product as a slug.
 		{"a product slug and its files in a pull request", KindChangeDescription,

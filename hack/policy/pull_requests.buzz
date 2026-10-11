@@ -84,6 +84,9 @@ final maxLine = 3000;
 // The judge's rules that read a whole command line sensibly when its text could not be
 // read: credit to a tool, and typography.
 final lineRules = ["attribution", "dash", "ascii"];
+// A command line's quotes are shell syntax, but the judge reads quoted text as a mention
+// and skips it, so they come off before it reads the line.
+final shellQuote = $"[\"']";
 
 final spacedHyphen = $"\S - \S";
 final word = $"\S+";
@@ -1162,7 +1165,7 @@ export fun textProblems(p: helpers\Program, line: str, files: {str: str}, diff: 
         return judgeText(Text{ kind = c.kind, title = title, body = body }, facts: facts, judge: judge, cited: cited);
     }
     final problems = mut [<str>];
-    foreach (f in judge(line, kind: c.kind)) {
+    foreach (f in judge(shellQuote.replaceAll(line, with: ""), kind: c.kind)) {
         if (f.decision == "deny" and (lineRules.indexOf(f.rule) != null or f.rule == "judge")) {
             problems.append("{f.message} [{f.rule}]");
         }
@@ -1482,7 +1485,7 @@ test "proofread reads the title and the description as one pull request" {
     final unread = helpers\request([["gh", "pr", "create", "--title", goodTitle, "--body", ""]]);
     decidePullRequest(unread, line: "gh pr create --body \"$BODY\"", files: {<str: str>},
         diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
-    std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body \"$BODY\"", message: "an unreadable description is judged as its line");
+    std\assert(seen.len() == 2 and seen[1].text == "gh pr create --body $BODY", message: "an unreadable description is judged as its line");
 }
 
 test "each forge command is judged as the kind it writes" {
@@ -1815,13 +1818,16 @@ test "an unreadable description is judged from the whole line for credit and typ
     std\assert(judged(programs, line: long, files: {<str: str>}).reason.indexOf("the command runs") != null, message: "a long line");
 }
 
-test "an unreadable description that names the Claude Code harness is not credit" {
+test "an unreadable description reaches proofread without its shell quotes" {
+    final seen = mut [<str>];
+    final recording = fun (text: str, kind: str) > [Judged] {
+        seen.append(text);
+        return [<Judged>];
+    };
     final programs = helpers\request([["gh", "pr", "create", "--title", "feat: add a Claude Code mod", "--body-file", "/elsewhere/pr.md"]]);
-    final line = "gh pr create --title \"feat: add a Claude Code mod\" --body-file /elsewhere/pr.md";
-    final reason = judged(programs, line: line, files: {<str: str>}).reason;
-    std\assert(reason.indexOf("[attribution]") == null, message: reason);
-    final credited = "gh pr create --title \"feat: add a Claude Code mod\" --body \"$BODY by Claude\"";
-    std\assert(judged(programs, line: credited, files: {<str: str>}).reason.indexOf("[attribution]") != null, message: "credit beside the harness name");
+    final line = "gh pr create --title \"feat: add a Claude Code mod\" --body 'written by Claude'";
+    decidePullRequest(programs, line: line, files: {<str: str>}, diff: facts(unknownFacts()), judge: recording, once: helpers\counter());
+    std\assert(seen.len() == 1 and seen[0] == "gh pr create --title feat: add a Claude Code mod --body written by Claude", message: "{seen}");
 }
 
 test "other commands and a line that only mentions gh pr create stay silent" {
