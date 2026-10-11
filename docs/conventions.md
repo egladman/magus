@@ -399,15 +399,15 @@ and links to that page.
 
 A rule judges text by what the text is for.
 
-| Kind                          | Text                                                             |
-| ----------------------------- | ---------------------------------------------------------------- |
-| `reference`                   | a hand-written page a reader looks things up in                  |
-| `guide`                       | a procedural page, under `docs/guides/`                          |
-| `change-description`          | a pull request: its title on the first line, its description     |
-| `review-reply`                | a review comment, a review's body or a reply in a thread         |
-| `agent-instructions`          | Markdown an agent loads as written, such as a SKILL.md           |
-| `agent-instructions-template` | a template that renders a short and a full form of such a skill  |
-| `doc-comment`                 | one symbol's doc comment, read from the symbol index             |
+| Kind                          | Text                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| `reference`                   | a hand-written page a reader looks things up in                 |
+| `guide`                       | a procedural page, under `docs/guides/`                         |
+| `change-description`          | a pull request: its title on the first line, its description    |
+| `review-reply`                | a review comment, a review's body or a reply in a thread        |
+| `agent-instructions`          | Markdown an agent loads as written, such as a SKILL.md          |
+| `agent-instructions-template` | a template that renders a short and a full form of such a skill |
+| `doc-comment`                 | one symbol's doc comment, read from the symbol index            |
 
 ### Decisions
 
@@ -440,15 +440,15 @@ A change description is read by a reviewer now and by whoever follows the squash
 to it later, so it opens with what changed for a reader and keeps the rest in named
 sections.
 
-| Part              | Required                                   | What it holds                                                                                                   |
-| ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| Part              | Required                                   | What it holds                                                                                                      |
+| ----------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Lead (no heading) | yes                                        | The outcome first: what a reader can now do or no longer has to do. Then how the work came up and why it mattered. |
-| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                                      |
-| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                                                |
-| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                                          |
-| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                                                 |
-| Not verified      | when something was not tested              | What was not checked, and why.                                                                                  |
-| Reading guide     | optional                                   | Where to start reading.                                                                                         |
+| What changes      | yes                                        | One bullet per change, in the present tense, with the code as the subject.                                         |
+| Why this approach | when an alternative was weighed            | The alternative and the reason it was set aside.                                                                   |
+| Evidence          | when the description claims a measurement  | The numbers, how they were taken and where the run is.                                                             |
+| How we got here   | when the origin needs more than a sentence | The earlier design, what it was for and what changed around it.                                                    |
+| Not verified      | when something was not tested              | What was not checked, and why.                                                                                     |
+| Reading guide     | optional                                   | Where to start reading.                                                                                            |
 
 The lead is at least 12 words and names a result, not the defect: the defect is the
 reason (`lead-context`). A change in a series names the destination and its own place in
@@ -465,7 +465,7 @@ A sentence that states a measurement (`410ms to 260ms`, `7 of 50`), a comparison
 (`faster`, `fewer`), a completion (`fixes`, `no longer flakes`) or an absolute about
 behavior carries its evidence in the same sentence or bullet: a code span naming the
 command, test or benchmark, a link, or an output ref (`claim`). A claim covers exactly
-what was measured. A judgment call is labelled as one, with its reason. What is not known
+what was measured. A judgment call is labeled as one, with its reason. What is not known
 goes under Not verified, or opens a sentence with `Not measured`, `Not tested` or
 `Untested`.
 

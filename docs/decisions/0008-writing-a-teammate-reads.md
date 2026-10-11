@@ -85,7 +85,7 @@ so nothing in the judge may assume magus, git or GitHub.
   design's reason is known, say it: "a per-process cache suited one worker; it stops
   holding at eight".
 - **A claim covers exactly what was measured.** Evidence gets a plain statement; a
-  judgment call is labelled as one with its reason; what is not known is said.
+  judgment call is labeled as one with its reason; what is not known is said.
 - **Deterministic checks belong to the Go judge, not to a skill.** A check a regex or a
   parse can prove costs no tokens and cannot drift between two copies. A skill keeps only
   what needs meaning.
@@ -217,14 +217,14 @@ Allowed: Not measured on Linux; CI's runners report it.
 Each rule names the posture it catches and how to say the same fact instead. Code spans,
 quotes, link text and fenced blocks are never judged.
 
-| Rule | Default | Catches | Instead |
-| --- | --- | --- | --- |
-| `condescension` (widened from guides to all written kinds) | deny | obviously, of course, everyone knows, needless to say, clearly (as a booster), simply, easy                                                                                                                                                                  | state the step or fact                                             |
-| `blame` (new) | deny | a person or past work as the subject of a fault: "should have", "failed to", "forgot to", "neglected to" with a person or a pull request as subject; "whoever wrote"; lazy, sloppy, careless, naive, incompetent, stupid, crazy, insane of code or decisions | describe what happened: "the rename left the old key"              |
-| `verdict` (new) | advise | judgment words about the earlier design: broken (outside "broken test/build/link"), wrong, bad, messy, hacky, ugly, terrible, nightmare, mess, garbage, ridiculous                                                                                           | name the behavior the word stands for                              |
-| `absolute` (new) | advise | never, always, nothing, nobody, every time about the past or about people ("has never fired", "nobody checked")                                                                                                                                              | say when and how often: "fired 0 times in <N> runs since <change>" |
-| `intent` (new) | advise | a tool or a person given motives: "pretends", "lies", "guessed", "doesn't care", "hates", "refuses to understand"                                                                                                                                            | describe the mechanism                                             |
-| `credit` (new) | advise, change descriptions only | a description that replaces or removes a design and names nothing it did well                                                                                                                                                                                | one clause on what the earlier design was for                      |
+| Rule                                                       | Default                          | Catches                                                                                                                                                                                                                                                      | Instead                                                            |
+| ---------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `condescension` (widened from guides to all written kinds) | deny                             | obviously, of course, everyone knows, needless to say, clearly (as a booster), simply, easy                                                                                                                                                                  | state the step or fact                                             |
+| `blame` (new)                                              | deny                             | a person or past work as the subject of a fault: "should have", "failed to", "forgot to", "neglected to" with a person or a pull request as subject; "whoever wrote"; lazy, sloppy, careless, naive, incompetent, stupid, crazy, insane of code or decisions | describe what happened: "the rename left the old key"              |
+| `verdict` (new)                                            | advise                           | judgment words about the earlier design: broken (outside "broken test/build/link"), wrong, bad, messy, hacky, ugly, terrible, nightmare, mess, garbage, ridiculous                                                                                           | name the behavior the word stands for                              |
+| `absolute` (new)                                           | advise                           | never, always, nothing, nobody, every time about the past or about people ("has never fired", "nobody checked")                                                                                                                                              | say when and how often: "fired 0 times in <N> runs since <change>" |
+| `intent` (new)                                             | advise                           | a tool or a person given motives: "pretends", "lies", "guessed", "doesn't care", "hates", "refuses to understand"                                                                                                                                            | describe the mechanism                                             |
+| `credit` (new)                                             | advise, change descriptions only | a description that replaces or removes a design and names nothing it did well                                                                                                                                                                                | one clause on what the earlier design was for                      |
 
 The default follows measured precision. A list with no legitimate sense in this tree
 denies; a list whose words state invariants elsewhere ("never returns nil") advises,
@@ -236,12 +236,12 @@ and every sampled use states a contract.
 A new kind, `review-reply`, covers a review comment, a review body and a reply in a
 thread. It takes every tone rule, plus:
 
-| Rule | Default | Catches |
-| --- | --- | --- |
-| `reply-opener` | deny | a reply that opens by contradicting: "No,", "Actually,", "Wrong", "As I said", "Again,", "Like I said"                                                                 |
-| `judgment-as-fact` | advise | a recommendation stated as a fact with no reason: "This should be a map." Instead: "I'd use a map here: lookups dominate. Open to keeping the slice if order matters." |
-| `stacked-hedge` | advise | two or more softeners in one sentence, or an apology before a valid point: "Sorry if this is dumb, but maybe...". Instead: state it.                                   |
-| `long-thread` | advise | the reply is the fourth or later by one author in a thread: suggest a call. Needs the thread length, which the caller passes in.                                       |
+| Rule               | Default | Catches                                                                                                                                                                |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reply-opener`     | deny    | a reply that opens by contradicting: "No,", "Actually,", "Wrong", "As I said", "Again,", "Like I said"                                                                 |
+| `judgment-as-fact` | advise  | a recommendation stated as a fact with no reason: "This should be a map." Instead: "I'd use a map here: lookups dominate. Open to keeping the slice if order matters." |
+| `stacked-hedge`    | advise  | two or more softeners in one sentence, or an apology before a valid point: "Sorry if this is dumb, but maybe...". Instead: state it.                                   |
+| `long-thread`      | advise  | the reply is the fourth or later by one author in a thread: suggest a call. Needs the thread length, which the caller passes in.                                       |
 
 The same judge runs on replies a person types (`proofread review-reply` reads a draft on
 stdin), and the guard runs it on replies an agent posts. Illustrative replies:
@@ -251,7 +251,7 @@ Reads as arrogant: Obviously this needs a lock. As I said, the map is shared.
 Reads as unsure:   Sorry, I might be wrong, but maybe this could possibly need a lock?
 Reads as expertise: This needs a lock: the map is written from two goroutines
                     (`go test -race` output below).
-Judgment, labelled: I'd move the retry into the client: the upstream drops about 1% of
+Judgment, labeled: I'd move the retry into the client: the upstream drops about 1% of
                     calls. Open to keeping it here if you see a cleaner seam.
 ```
 
@@ -265,20 +265,20 @@ pages, 665 changelog fragments, 200 merged pull requests and the Go comments; ev
 error-tier rule has zero hits in the docs pages, changelog fragments and pull requests
 except four `wordy` sites in the docs, which the change fixes.
 
-| Rule | Catches | Default |
-| --- | --- | --- |
-| `leak` | chatbot residue: `oaicite`, `turn0search0`, `[cite: 1]`, `grok_card`, unfilled placeholders (`[insert ...]`, `TBD`) | deny |
-| `chatbot` | "I hope this helps", "feel free to", "great question", "as an AI", knowledge-cutoff disclaimers | deny |
-| `signpost` | sentence-initial "Here's the thing", "It turns out", "Let's dive in", "The truth is" | deny |
-| `buzzword`, `buzzword-weak` | delve, tapestry, testament, pivotal, meticulous, "plays a key role", "serves as a testament"; a weaker list of words with plain senses | deny; advise |
-| `vague` | "experts say", "it is widely believed", "paves the way", "only the beginning" | deny |
-| `closer` | "In summary,", "In conclusion,", "All in all," | deny |
-| `contrast` | "not only X but also Y", "it is not X, it is Y" | deny in a change description, advise in docs (15 deliberate sites) |
-| `staccato` | three or more sentences of six words or fewer in a row | deny in a change description, advise elsewhere |
-| `ing-tail` | ", highlighting ...", ", underscoring ...", ", reflecting ..." | advise |
-| `dash`, `ascii` | em and en dashes, `--`, curly quotes, ellipsis, emoji; ported from Buzz so the Go judge alone reproduces the policy | house style: off unless a repository turns it on |
-| `heading-case` | Title Case Headings | advise |
-| `filler`, `hedge`, `wordy` | extended lists (truly, fundamentally, "at its core", "in order to") | deny |
+| Rule                        | Catches                                                                                                                                | Default                                                            |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `leak`                      | chatbot residue: `oaicite`, `turn0search0`, `[cite: 1]`, `grok_card`, unfilled placeholders (`[insert ...]`, `TBD`)                    | deny                                                               |
+| `chatbot`                   | "I hope this helps", "feel free to", "great question", "as an AI", knowledge-cutoff disclaimers                                        | deny                                                               |
+| `signpost`                  | sentence-initial "Here's the thing", "It turns out", "Let's dive in", "The truth is"                                                   | deny                                                               |
+| `buzzword`, `buzzword-weak` | delve, tapestry, testament, pivotal, meticulous, "plays a key role", "serves as a testament"; a weaker list of words with plain senses | deny; advise                                                       |
+| `vague`                     | "experts say", "it is widely believed", "paves the way", "only the beginning"                                                          | deny                                                               |
+| `closer`                    | "In summary,", "In conclusion,", "All in all,"                                                                                         | deny                                                               |
+| `contrast`                  | "not only X but also Y", "it is not X, it is Y"                                                                                        | deny in a change description, advise in docs (15 deliberate sites) |
+| `staccato`                  | three or more sentences of six words or fewer in a row                                                                                 | deny in a change description, advise elsewhere                     |
+| `ing-tail`                  | ", highlighting ...", ", underscoring ...", ", reflecting ..."                                                                         | advise                                                             |
+| `dash`, `ascii`             | em and en dashes, `--`, curly quotes, ellipsis, emoji; ported from Buzz so the Go judge alone reproduces the policy                    | house style: off unless a repository turns it on                   |
+| `heading-case`              | Title Case Headings                                                                                                                    | advise                                                             |
+| `filler`, `hedge`, `wordy`  | extended lists (truly, fundamentally, "at its core", "in order to")                                                                    | deny                                                               |
 
 Rejected on measurement, because this tree uses them correctly hundreds of times:
 Wh-sentence openers, passive voice, three-item lists, "-ly" adverbs, bold density and
@@ -291,16 +291,16 @@ skills once the judge carries them.
 
 ### 7. Where each piece lives
 
-| Piece                                                                                                                  | Home                                                                                                                                          | Why there                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Rules, kinds, default decisions, `PRF` codes, the catalog | `libs/conventions/proofread` (Go) | text in, findings out; no forge, VCS or repository knowledge; its own `go.mod`, installable anywhere |
-| `proofread <kind> -decisions -only -thread-length`, `proofread rules`, `proofread explain` | `libs/conventions/cmd/proofread` | the one command every layer runs; its findings JSON is the contract an outside judge also writes |
-| This repository's decisions table and path exemptions | `hack/policy/proofread.buzz` | a repository's own preferences, kept like `hack/policy/builtins.buzz` |
-| A workspace guard rule's name | `types.GuardVerdict`, `magus\guard.deny(reason, {rule})` | a named rule shortens on repeat and is stored, as a built-in is |
-| Which command writes which kind (`gh pr create` writes a description, `gh pr comment` a reply, `glab mr note` a reply) | a table in `hack/policy/` (Buzz)                                                                                                              | recognizing a forge's CLI is forge knowledge, and provider I/O is Buzz (docs/doctrine.md)                                 |
-| Thread length for `long-thread`                                                                                        | the forge spells (`spells/github/review`, `spells/gitlab`)                                                                                    | reading a thread is provider I/O                                                                                          |
-| Changed lines and files for the budget                                                                                 | a diff-stat method on the backend interface in `vcs/`, exposed through `std/vcs`                                                              | today `branchDiff` passes git's `diff --numstat` through `vcs\cmd`, which fails quietly on Mercurial, Sapling and Jujutsu |
-| Output-ref verification, word budget, changelog-fragment count                                                         | `hack/policy/pull_requests.buzz`                                                                                                              | this repository's policy, inputs the judge never sees                                                                     |
+| Piece                                                                                                                  | Home                                                                                                                                        | Why there                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Rules, kinds, default decisions, `PRF` codes, the catalog                                                              | `libs/conventions/proofread` (Go)                                                                                                           | text in, findings out; no forge, VCS or repository knowledge; its own `go.mod`, installable anywhere                      |
+| `proofread <kind> -decisions -only -thread-length`, `proofread rules`, `proofread explain`                             | `libs/conventions/cmd/proofread`                                                                                                            | the one command every layer runs; its findings JSON is the contract an outside judge also writes                          |
+| This repository's decisions table and path exemptions                                                                  | `hack/policy/proofread.buzz`                                                                                                                | a repository's own preferences, kept like `hack/policy/builtins.buzz`                                                     |
+| A workspace guard rule's name                                                                                          | `types.GuardVerdict`, `magus\guard.deny(reason, {rule})`                                                                                    | a named rule shortens on repeat and is stored, as a built-in is                                                           |
+| Which command writes which kind (`gh pr create` writes a description, `gh pr comment` a reply, `glab mr note` a reply) | a table in `hack/policy/` (Buzz)                                                                                                            | recognizing a forge's CLI is forge knowledge, and provider I/O is Buzz (docs/doctrine.md)                                 |
+| Thread length for `long-thread`                                                                                        | the forge spells (`spells/github/review`, `spells/gitlab`)                                                                                  | reading a thread is provider I/O                                                                                          |
+| Changed lines and files for the budget                                                                                 | a diff-stat method on the backend interface in `vcs/`, exposed through `std/vcs`                                                            | today `branchDiff` passes git's `diff --numstat` through `vcs\cmd`, which fails quietly on Mercurial, Sapling and Jujutsu |
+| Output-ref verification, word budget, changelog-fragment count                                                         | `hack/policy/pull_requests.buzz`                                                                                                            | this repository's policy, inputs the judge never sees                                                                     |
 | Outside magus                                                                                                          | `proofread` plus a user-level `idiomatic-pr-descriptions` skill; the `idiomatic-hooks pr` hook calls `proofread` instead of its own regexes | one rule set at work and here                                                                                             |
 
 Adding a forge is one table row. Adding a VCS is one more method implementation in
@@ -309,17 +309,17 @@ both already run the same judge.
 
 ### 8. What changes together
 
-| Unit | Write set | State |
-| --- | --- | --- |
-| U1 judge: the review-reply kind, shape and heading rules, the ported AI-writing rules, the tone rules, the claim rule, one selling-word list | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, `libs/conventions/readme.md` | done |
-| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRF` codes, the catalog, purpose-named kinds, the findings contract | the same | done |
-| U1c the judge is named `proofread`, with a subcommand per kind plus `rules` and `explain` | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, every caller | done |
-| U2 diff stat for every backend | `vcs/*.go`, `types/vcs.go`, `std/vcs.go` | done |
-| U2b a workspace guard rule names itself, and repeats only an identical reason in short | `types/guard.go`, `internal/interp/bindings/guard_rule.go`, `internal/guard/workspace_rule.go`, `internal/guard/denial.go` | done |
-| U3 guard and CI: this repository's decisions table, the command table, replies, outside judges, lead exempt from the budget, denials that teach the shape with one example, CI running the same checks as the guard | `hack/policy/*.buzz`, `hack/lint/markdown-proofread.buzz`, `magusfile.buzz` (`pr-title`, `pr-description`), `.github/workflows/pr.yaml` | done |
-| U4 docs: writing rules, a page per proofread rule rendered from the catalog, CONTRIBUTING's PR checks | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/proofread/`, `CONTRIBUTING.md`, `changes/unreleased/` | done |
-| U5 outside this tree: the portable skill and the hook that runs `proofread` | `~/.claude/skills/`, `~/.dotfiles/claude/.claude/hooks/idiomatic-hooks` | done (the hook binary installs once this merges) |
-| U6 `proofread` ships as a signed release archive beside magus | `magusfile.buzz`, `hack/magusfile/releases.buzz`, `.github/workflows/release.yaml` | done |
+| Unit                                                                                                                                                                                                                | Write set                                                                                                                               | State                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| U1 judge: the review-reply kind, shape and heading rules, the ported AI-writing rules, the tone rules, the claim rule, one selling-word list                                                                        | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, `libs/conventions/readme.md`                                        | done                                             |
+| U1b judge speaks decisions: off/advise/deny, house style off by default, `PRF` codes, the catalog, purpose-named kinds, the findings contract                                                                       | the same                                                                                                                                | done                                             |
+| U1c the judge is named `proofread`, with a subcommand per kind plus `rules` and `explain`                                                                                                                           | `libs/conventions/proofread/*`, `libs/conventions/cmd/proofread/*`, every caller                                                        | done                                             |
+| U2 diff stat for every backend                                                                                                                                                                                      | `vcs/*.go`, `types/vcs.go`, `std/vcs.go`                                                                                                | done                                             |
+| U2b a workspace guard rule names itself, and repeats only an identical reason in short                                                                                                                              | `types/guard.go`, `internal/interp/bindings/guard_rule.go`, `internal/guard/workspace_rule.go`, `internal/guard/denial.go`              | done                                             |
+| U3 guard and CI: this repository's decisions table, the command table, replies, outside judges, lead exempt from the budget, denials that teach the shape with one example, CI running the same checks as the guard | `hack/policy/*.buzz`, `hack/lint/markdown-proofread.buzz`, `magusfile.buzz` (`pr-title`, `pr-description`), `.github/workflows/pr.yaml` | done                                             |
+| U4 docs: writing rules, a page per proofread rule rendered from the catalog, CONTRIBUTING's PR checks                                                                                                               | `docs/conventions.md`, `hack/magusfile/ruledocs.buzz`, `docs/reference/proofread/`, `CONTRIBUTING.md`, `changes/unreleased/`            | done                                             |
+| U5 outside this tree: the portable skill and the hook that runs `proofread`                                                                                                                                         | `~/.claude/skills/`, `~/.dotfiles/claude/.claude/hooks/idiomatic-hooks`                                                                 | done (the hook binary installs once this merges) |
+| U6 `proofread` ships as a signed release archive beside magus                                                                                                                                                       | `magusfile.buzz`, `hack/magusfile/releases.buzz`, `.github/workflows/release.yaml`                                                      | done                                             |
 
 U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
 
@@ -341,11 +341,11 @@ U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
 
 ### 10. Measuring it
 
-| What | How | State |
-| --- | --- | --- |
-| Precision of each rule on this tree | the judge over the hand-written docs and the last 200 merged pull requests; a `deny` rule with a false positive is narrowed or moved to `advise` | done |
+| What                                          | How                                                                                                                                                                                                                    | State   |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| Precision of each rule on this tree           | the judge over the hand-written docs and the last 200 merged pull requests; a `deny` rule with a false positive is narrowed or moved to `advise`                                                                       | done    |
 | Whether the rules change what an agent writes | an arm in `benchmarks/agent` that runs SWE-bench tasks with and without the judge in the loop, several runs per task, scoring each description by its deny and advise findings and by a blinded read against section 1 | planned |
-| Precision outside magus | the shipped defaults over pull requests from repositories that adopt them, before any `advise` rule moves to `deny` | planned |
+| Precision outside magus                       | the shipped defaults over pull requests from repositories that adopt them, before any `advise` rule moves to `deny`                                                                                                    | planned |
 
 ## Alternatives
 
@@ -379,4 +379,3 @@ U3 depends on U1b, U2 and U2b; U4 on U1b's catalog.
 - `docs/conventions.md` stops claiming every rule is an error; it names the two tiers.
 - The tone rules state posture, not warmth. A person still reads text written in their
   name before it is pushed; the judge does not certify it.
-

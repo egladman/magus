@@ -506,8 +506,8 @@ push reports all three:
   keeps its claims next to their evidence, and describes the situation rather than a
   person or the earlier code. The guard's `pull-request-text` rule runs the same checks
   when a description is posted. The shape, the claim and tone rules, and the
-  decisions they take are in [Writing rules](docs/conventions.md#writing-rules), and
-  each rule has a [page](docs/reference/proofread/index.md). Check a draft with
+  decisions they take are in [Writing rules](https://github.com/egladman/magus/blob/main/docs/conventions.md#writing-rules),
+  and each rule has a [page](https://github.com/egladman/magus/blob/main/docs/reference/proofread/index.md). Check a draft with
   `magus run pr-description . -- "--title=<title>" "--body=<body>"`.
 - A `feat`, `fix` or `perf` change to shipped code adds a changelog
   fragment, as does any title marked breaking with `!`. Every other type
