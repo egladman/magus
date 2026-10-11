@@ -151,11 +151,30 @@ func compareBase(checkpoint, reported string) types.JobBaseVerdict {
 	}
 }
 
-// SameRevision reports whether a and b name one revision, either abbreviating the other.
-// Two empty revisions name nothing, so they are not the same.
+// SameRevision reports whether a and b name one revision: equal ignoring case, or hex ids
+// one of which abbreviates the other in at least minAbbrev digits, the shortest prefix git
+// prints. Two empty revisions name nothing, so they are not the same.
 func SameRevision(a, b string) bool {
-	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
-	return a != "" && b != "" && (strings.HasPrefix(a, b) || strings.HasPrefix(b, a))
+	a, b = strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	short, long := a, b
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	return len(short) >= minAbbrev && isHex(long) && strings.HasPrefix(long, short)
+}
+
+// minAbbrev is the fewest digits an abbreviated revision may have: shorter prefixes match
+// too many commits to name one.
+const minAbbrev = 7
+
+func isHex(s string) bool {
+	return strings.Trim(s, "0123456789abcdef") == ""
 }
 
 // BaseAdvice is what the registering worker is told: what the verdict means in

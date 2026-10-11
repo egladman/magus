@@ -1706,11 +1706,11 @@ type workspaceJobLimits interface {
 	JobLimits() config.Jobs
 }
 
-// jobGrader builds the CheckGrader for the Stores jobStoreFromContext opens, nil until the
+// jobGrader is the CheckGrader for the Stores jobStoreFromContext opens, nil until the
 // composition root registers one.
 var (
 	jobGraderMu sync.RWMutex
-	jobGrader   func(root string) job.CheckGrader
+	jobGrader   job.CheckGrader
 )
 
 // RegisterJobGrader installs the grader magus\job.put and its siblings judge a declared
@@ -1719,14 +1719,14 @@ var (
 // package; with none registered a check is not graded. A later call replaces it and
 // returns the one it replaced, for a test that swaps in its own to put back. Safe to call
 // while a magus\job member runs; that member sees the old grader or the new one.
-func RegisterJobGrader(forRoot func(root string) job.CheckGrader) (previous func(root string) job.CheckGrader) {
+func RegisterJobGrader(g job.CheckGrader) (previous job.CheckGrader) {
 	jobGraderMu.Lock()
 	defer jobGraderMu.Unlock()
-	previous, jobGrader = jobGrader, forRoot
+	previous, jobGrader = jobGrader, g
 	return previous
 }
 
-func currentJobGrader() func(root string) job.CheckGrader {
+func currentJobGrader() job.CheckGrader {
 	jobGraderMu.RLock()
 	defer jobGraderMu.RUnlock()
 	return jobGrader
@@ -1928,13 +1928,13 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 	// The CLI and the MCP tool both hold one and wire it.
 	observe := job.CheckpointObserver(types.WorkspaceFromContext(ctx).Root(), nil)
 	if result == nil {
-		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe)
+		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe, nil)
 	}
 	report, err := jobResultFromMap(result)
 	if err != nil {
 		return types.JobStatus{}, err
 	}
-	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe)
+	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe, nil)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

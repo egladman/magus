@@ -34,7 +34,6 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -175,51 +174,51 @@ func openJobs(root string) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: checkGrader}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: newCheckGrader()}), nil
 }
 
-// magus\job.put opens its own Store inside std, which cannot import the guard, so the
-// grader reaches it through std's registration seam.
-func init() { std.RegisterJobGrader(checkGrader) }
-
-// checkGrader grades a declared check against the guard's rules for the workspace at root.
-// The rules load on the first check graded, so a fork that declares none pays nothing.
-func checkGrader(root string) job.CheckGrader {
-	var (
-		once sync.Once
-		deps guard.Dependencies
-	)
-	return func(ctx context.Context, row types.Job) job.CheckVerdict {
+// newCheckGrader grades a declared check against the guard's rules for the workspace at the
+// root it is handed. Each root's rules load on the first check graded there, so a fork
+// that declares none pays nothing, and stay loaded for the grader's life: a grader is
+// meant to live as long as the Store, or the command, it was made for. magus\job.put opens
+// its own Store inside std, which cannot import the guard, so runCLI registers one with
+// std as well.
+func newCheckGrader() job.CheckGrader {
+	var loaded sync.Map // root -> func() guard.Dependencies
+	return func(ctx context.Context, root string, row types.Job) job.CheckVerdict {
 		// Every later grade reads what the first one loaded, so the first caller's
 		// cancellation must not decide it.
-		once.Do(func() { deps = guardDependencies(context.WithoutCancel(ctx), root) })
-		verdict, notGraded := gradeCheck(ctx, deps, root, row)
-		if notGraded != "" {
+		load, _ := loaded.LoadOrStore(root, sync.OnceValue(func() guard.Dependencies {
+			return guardDependencies(context.WithoutCancel(ctx), root)
+		}))
+		once, _ := load.(func() guard.Dependencies)
+		verdict := gradeCheck(ctx, once(), root, row)
+		if verdict.NotGraded != "" {
 			slog.WarnContext(ctx, "job "+row.ID+"'s check was not graded against the guard",
-				attr.Notice(""), attr.Why(notGraded), attr.Component("magus job"))
+				attr.Notice(""), attr.Why(verdict.NotGraded), attr.Component("magus job"))
 		}
 		return verdict
 	}
 }
 
-// checkCommandPrefix is how a holder types a check: with the ./magus of its own checkout,
+// ownBinaryPrefix is how a holder types a check: with the ./magus of its own checkout,
 // not whichever binary the PATH holds.
-const checkCommandPrefix = "./"
+const ownBinaryPrefix = "./"
 
 // gradeCheck judges row's check as the guard would judge its holder typing it in the
 // checkout at root, with the row standing in for a lease the store does not carry yet.
 //
 // Only a deny of the check itself refuses. A deny that holds just as well for the
 // compiling check describes the binary or the workspace (a stale hook binary, rules that
-// would not load) and not the command, so it is not graded and notGraded says why: a
-// refusal has to come from a verdict on the check.
-func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) (verdict job.CheckVerdict, notGraded string) {
+// would not load) and not the command, so it is not graded and the verdict's NotGraded
+// says why: a refusal has to come from a verdict on the check.
+func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row types.Job) job.CheckVerdict {
 	if deps.LoadFailure != nil {
-		return job.CheckVerdict{}, "the workspace's rules did not load: " + deps.LoadFailure.Error()
+		return job.CheckVerdict{NotGraded: "the workspace's rules did not load: " + deps.LoadFailure.Error()}
 	}
 	judge := func(pending types.Job) guard.Verdict {
 		return guard.Judge(ctx, deps, guard.Request{
-			Input:      checkCommandPrefix + pending.Check.String(),
+			Input:      ownBinaryPrefix + pending.Check.String(),
 			DryRun:     true,
 			Lease:      pending.ID,
 			PendingRow: &pending,
@@ -228,16 +227,16 @@ func gradeCheck(ctx context.Context, deps guard.Dependencies, root string, row t
 	}
 	declared := judge(row)
 	if declared.Decision != string(types.GuardDeny) {
-		return job.CheckVerdict{}, ""
+		return job.CheckVerdict{}
 	}
 	baseline := row
 	compiling := job.CompilingCheck()
 	baseline.Check = &compiling
 	if baselineVerdict := judge(baseline); baselineVerdict.Decision == string(types.GuardDeny) {
 		first, _, _ := strings.Cut(strings.TrimSpace(baselineVerdict.Reason), "\n")
-		return job.CheckVerdict{}, "the guard denies this worker `" + compiling.String() + "` as well, so the deny describes the binary or the workspace and not the check: " + first
+		return job.CheckVerdict{NotGraded: "the guard denies this worker `" + compiling.String() + "` as well, so the deny describes the binary or the workspace and not the check: " + first}
 	}
-	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}, ""
+	return job.CheckVerdict{Denied: true, Rule: declared.Rule, Reason: declared.Reason}
 }
 
 // outputsIn resolves a ref against the output store of the checkout at root. That
@@ -251,16 +250,22 @@ func outputsIn(root string) job.AttemptResolver {
 		if err != nil {
 			return types.JobAttempt{}, err
 		}
-		switch d, err := cache.NewOutputStore(dir).DescriptorByRef(ref); {
-		case err == nil:
-			return types.JobAttempt{
-				Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
-			}, nil
-		case errors.Is(err, fs.ErrNotExist):
-			return types.JobAttempt{}, nil
-		default:
-			return types.JobAttempt{}, err
-		}
+		return attemptIn(dir, ref)
+	}
+}
+
+// attemptIn is what the output store under cacheDir recorded about the run behind ref,
+// and only that store: an empty attempt for a ref it does not hold.
+func attemptIn(cacheDir, ref string) (types.JobAttempt, error) {
+	switch d, err := cache.NewOutputStore(cacheDir).DescriptorByRef(ref); {
+	case err == nil:
+		return types.JobAttempt{
+			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
+		}, nil
+	case errors.Is(err, fs.ErrNotExist):
+		return types.JobAttempt{}, nil
+	default:
+		return types.JobAttempt{}, err
 	}
 }
 
@@ -846,29 +851,31 @@ func (l *listFlag) Set(value string) error {
 
 // evidenceFlagDoc is `job wait --evidence`, spelled once for the flag set and the registry.
 const evidenceFlagDoc = "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `" +
-	types.PrimaryGoalID + "` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"
+	types.PrimaryGoalID + "` names the job's check. The paths the job changed must read the same here as in the job's checkout," +
+	" and none may change after the run; repeatable"
 
 // evidenceFlag collects `--evidence <goal>=<ref>` pairs. A goal named twice is refused
 // rather than resolved to whichever came last, since the two refs may be different runs.
+// Set writes through the map it was made with, so it must not be nil.
 type evidenceFlag map[string]string
 
-func (e *evidenceFlag) String() string {
-	pairs := make([]string, 0, len(*e))
-	for _, goal := range slices.Sorted(maps.Keys(*e)) {
-		pairs = append(pairs, goal+"="+(*e)[goal])
+func (e evidenceFlag) String() string {
+	pairs := make([]string, 0, len(e))
+	for _, goal := range slices.Sorted(maps.Keys(e)) {
+		pairs = append(pairs, goal+"="+e[goal])
 	}
 	return strings.Join(pairs, ",")
 }
 
-func (e *evidenceFlag) Set(value string) error {
+func (e evidenceFlag) Set(value string) error {
 	goal, ref, ok := strings.Cut(value, "=")
 	if goal, ref = strings.TrimSpace(goal), strings.TrimSpace(ref); !ok || goal == "" || ref == "" {
 		return fmt.Errorf("want <goal>=<ref>, got %q", value)
 	}
-	if _, dup := (*e)[goal]; dup {
+	if _, dup := e[goal]; dup {
 		return fmt.Errorf("goal %q is named twice", goal)
 	}
-	(*e)[goal] = ref
+	e[goal] = ref
 	return nil
 }
 
@@ -1059,13 +1066,13 @@ func jobFork(ctx context.Context, root string, args []string) error {
 	if err := job.RefuseUnorderedFileShare(ctx, store, plan, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	if err := job.RefuseSkippedTests(root, probe); err != nil {
+	if err := job.RefuseNarrowedTests(store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	if err := job.RefuseDeniedCheck(ctx, store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
-	proof := store.WriteProof(plan, row.ID, probe)
+	proof := store.WriteProof(plan, probe)
 	// A writing job is verified against the diff since its checkpoint, so one forked without
 	// a checkpoint could never pass. The fork records this checkout's state instead; where it
 	// cannot be read (no VCS here) the row stays without one and wait says why it cannot verify.
@@ -1307,9 +1314,7 @@ func jobExit(ctx context.Context, root string, args []string) error {
 	// Exit owns the portable evidence snapshot for every declared gate. Keeping the
 	// CLI as a decoder/renderer avoids a second lifecycle that silently files only
 	// the historical primary check.
-	stored, err := job.Exit(ctx, store, pos[0], &result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
-		return storedAttempt(ctx, root, ref)
-	})
+	stored, err := job.Exit(ctx, store, pos[0], &result, storedAttempts(root))
 	if err != nil {
 		return usagef("magus job exit: %s", err)
 	}
@@ -1372,7 +1377,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 		fs.BoolVar(&schema, "schema", false, "Print the JSON schema a result must satisfy, and exit")
 		fs.BoolVar(&stdin, "stdin", false, "Read the result from stdin instead of from the job, for one that was never filed")
 		fs.BoolVar(&integration, "integration", false, "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state")
-		fs.Var(&evidence, "evidence", evidenceFlagDoc)
+		fs.Var(evidence, "evidence", evidenceFlagDoc)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job wait <job>")
 			fmt.Fprintln(os.Stderr, "       magus job wait <job> --stdin < result.json")
@@ -1459,9 +1464,7 @@ func jobWait(ctx context.Context, root string, args []string) error {
 	if len(evidence) > 0 && (stdin || integration) {
 		return usagef("magus job wait: --evidence starts from the result filed with the job, so it takes neither --stdin nor --integration")
 	}
-	status, err := job.Wait(ctx, store, pos[0], result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
-		return storedAttempt(ctx, root, ref)
-	}, jobObserver(root), job.WithRootEvidence(evidence))
+	status, err := job.Wait(ctx, store, pos[0], result, storedAttempts(root), jobObserver(root), evidence)
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -1498,9 +1501,7 @@ func jobWaitIntegration(ctx context.Context, store *job.Store, root, id string, 
 	if err != nil {
 		return err
 	}
-	grade, err := job.WaitIntegration(ctx, store, id, result, func(ctx context.Context, ref string) (types.JobAttempt, error) {
-		return storedAttempt(ctx, root, ref)
-	}, checkout)
+	grade, err := job.WaitIntegration(ctx, store, id, result, storedAttempts(root), checkout)
 	if err != nil {
 		return usagef("magus job wait: %s", err)
 	}
@@ -1691,30 +1692,28 @@ func printFeedLine(out io.Writer, e job.FeedEvent) {
 	}
 }
 
-// storedAttempt is what the output store recorded about the run behind ref: which command
-// produced it, and whether it failed. An empty ref, and one that aged out of the cache,
-// both report MISSING rather than an error: nobody can reopen either, and that is the fact
-// verification turns on.
+// storedAttempts resolves a ref against the output store of THIS checkout, root, alone:
+// which command produced the run, and whether it failed. An empty ref, and one that aged
+// out of the cache, both report MISSING rather than an error: nobody can reopen either,
+// and that is the fact verification turns on.
+//
+// Never another checkout's store, which `magus query output` falls back to: --evidence and
+// --integration certify runs made here, and a ref the holder recorded would otherwise
+// resolve as one. The fallback a filed result needs is the job's own checkouts, which
+// [job.Exit] and [job.Wait] add through Location.Outputs.
 //
 // The DESCRIPTOR, not the bytes. Verification reads the run's identity and its exit status,
 // both of which are metadata, and a captured log is as large as the target was noisy.
-func storedAttempt(ctx context.Context, root, ref string) (types.JobAttempt, error) {
-	if strings.TrimSpace(ref) == "" {
-		return types.JobAttempt{}, nil
-	}
-	m, err := loadMagus(ctx, root)
-	if err != nil {
-		return types.JobAttempt{}, err
-	}
-	switch d, err := m.OutputDescriptorByRef(ctx, ref); {
-	case err == nil:
-		return types.JobAttempt{
-			Found: true, Ref: ref, Project: d.Project, Target: d.Target, Spell: d.Spell, Failed: d.Failed, TimestampMs: d.TimestampMs,
-		}, nil
-	case errors.Is(err, fs.ErrNotExist):
-		return types.JobAttempt{}, nil
-	default:
-		return types.JobAttempt{}, err
+func storedAttempts(root string) job.AttemptResolver {
+	return func(_ context.Context, ref string) (types.JobAttempt, error) {
+		if strings.TrimSpace(ref) == "" {
+			return types.JobAttempt{}, nil
+		}
+		dir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+		if err != nil {
+			return types.JobAttempt{}, err
+		}
+		return attemptIn(dir, ref)
 	}
 }
 

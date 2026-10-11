@@ -64,7 +64,7 @@ func checkOverrun(ctx context.Context, m *magus.Magus, row types.Job) *job.Foreg
 	lastRun := func(project, target string) (time.Duration, bool) {
 		return sessions.LastRealDuration(dir, project, target)
 	}
-	return job.CheckOverrun(row, lastRun, func() (time.Duration, bool) {
+	overrun, ok := job.OverrunsForeground(row, lastRun, func() (time.Duration, bool) {
 		wired := m.Harnesses()
 		ctx := agent.ContextWithWiredHarnesses(ctx, wired)
 		var loaded []agent.HarnessDescriptor
@@ -75,6 +75,10 @@ func checkOverrun(ctx context.Context, m *magus.Magus, row types.Job) *job.Foreg
 		}
 		return agent.ForegroundMax(loaded)
 	})
+	if !ok {
+		return nil
+	}
+	return &overrun
 }
 
 // forkOutput is `job fork`'s structured output: the row as stored, plus three keys. The

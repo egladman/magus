@@ -342,20 +342,6 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 	return slices.DeleteFunc(HeldIn(rows, root), func(row types.Job) bool { return row.ID == forking })
 }
 
-// proofPeers is [heldHere] plus the editing rows no checkout has taken yet. A job is bound
-// only by `job exec`, so two jobs forked back to back are both unbound, and proving the
-// second "alone" would be a claim about a plan nobody has started.
-func proofPeers(rows []types.Job, root, forking string) []types.Job {
-	abs, err := filepath.Abs(root)
-	if root == "" || err != nil {
-		return nil
-	}
-	return slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool {
-		return row.ID == forking || !Editing(row) || len(row.WritePaths) == 0 ||
-			row.CheckoutRoot != "" && row.CheckoutRoot != abs
-	})
-}
-
 // RefuseSharedCheckout refuses a fork whose write paths cover a file the WORKSPACE has to
 // load, while another live job with write paths is already working in this checkout.
 //
@@ -501,21 +487,32 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 	return "", false
 }
 
-// WriteProof grades candidate's write paths against every other live job working in this
-// checkout. See [types.JobWriteProof] for why the three answers are distinct.
+// WriteProof grades row's write paths against every other job in rows still editing with
+// write paths, that is working in this checkout or not yet taken by any. An untaken job
+// counts because only `job exec` binds one: two jobs forked back to back are both
+// untaken, and proving the second "alone" would be a claim about a plan nobody has
+// started. See [types.JobWriteProof] for why the three answers are distinct.
 //
-// A nil Store answers alone: a caller with no store knows of no other holder.
-func (s *Store) WriteProof(rows []types.Job, id string, candidate types.Job) types.JobWriteProof {
-	if s == nil {
+// A nil Store, or one with no root, answers alone: a caller with no checkout knows of no
+// other holder.
+func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof {
+	if s == nil || s.root == "" {
 		return types.WriteProofAlone
 	}
-	held := proofPeers(rows, s.root, id)
-	if len(held) == 0 {
+	here, err := filepath.Abs(s.root)
+	if err != nil {
 		return types.WriteProofAlone
 	}
-	for _, row := range held {
-		for _, mine := range candidate.WritePaths {
-			for _, theirs := range row.WritePaths {
+	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
+		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
+			peer.CheckoutRoot != "" && peer.CheckoutRoot != here
+	})
+	if len(peers) == 0 {
+		return types.WriteProofAlone
+	}
+	for _, peer := range peers {
+		for _, mine := range row.WritePaths {
+			for _, theirs := range peer.WritePaths {
 				if types.PathsIntersect(mine, theirs) {
 					return types.WriteProofOverlapping
 				}

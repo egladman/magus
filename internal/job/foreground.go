@@ -23,11 +23,24 @@ type ForegroundOverrun struct {
 	ForegroundMaxMs int64 `json:"foreground_max_ms" yaml:"foreground_max_ms"`
 }
 
-// CheckOverrun is row's first check when its last real run, as lastRun reports it, took
-// longer than foregroundMax reports; nil when it did not, when the row names no target
-// check, or when either is unknown. foregroundMax is asked only once a run is found, since
-// answering it loads the wired harnesses.
-func CheckOverrun(row types.Job, lastRun func(project, target string) (time.Duration, bool), foregroundMax func() (time.Duration, bool)) *ForegroundOverrun {
+// LastRun reports how long the newest real run of target in project took, false when none
+// is recorded.
+type LastRun func(project, target string) (time.Duration, bool)
+
+// ForegroundMax reports the longest a wired host lets a foreground call wait, false when
+// no host declares one.
+type ForegroundMax func() (time.Duration, bool)
+
+// OverrunsForeground reports row's first target check whose last real run, as lastRun
+// reports it, took longer than limit reports; false when none did, when the row names no
+// target check, or when the limit is unknown. A check with no recorded run is passed over.
+// limit is asked once, and only once a run is found, since answering it loads the wired
+// harnesses.
+func OverrunsForeground(row types.Job, lastRun LastRun, limit ForegroundMax) (ForegroundOverrun, bool) {
+	var (
+		longest         time.Duration
+		asked, declared bool
+	)
 	for _, g := range row.EffectiveGoals() {
 		if g.Kind != types.GoalKindCheck || g.Check.Target == "" {
 			continue
@@ -35,19 +48,25 @@ func CheckOverrun(row types.Job, lastRun func(project, target string) (time.Dura
 		project := cmp.Or(g.Check.Project, ".")
 		took, ok := lastRun(project, g.Check.Target)
 		if !ok {
-			return nil
+			continue
 		}
-		limit, ok := foregroundMax()
-		if !ok || took <= limit {
-			return nil
+		if !asked {
+			longest, declared = limit()
+			asked = true
 		}
-		return &ForegroundOverrun{
+		if !declared {
+			return ForegroundOverrun{}, false
+		}
+		if took <= longest {
+			continue
+		}
+		return ForegroundOverrun{
 			Check:           hint.Run.With(g.Check.Target, project),
 			LastRunMs:       took.Milliseconds(),
-			ForegroundMaxMs: limit.Milliseconds(),
-		}
+			ForegroundMaxMs: longest.Milliseconds(),
+		}, true
 	}
-	return nil
+	return ForegroundOverrun{}, false
 }
 
 // RenderForegroundOverrun writes o as one note, and nothing for nil.

@@ -623,6 +623,48 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 	assert.Equal(t, &types.JobAttempt{Found: true, Ref: recorded.Ref, Project: ".", Target: "test"}, stored.Attempt)
 }
 
+// --evidence names a run the WAITER recorded. The holder's checkout is the primary one, the
+// checkout `magus query output` falls back to, so a resolver that searched other checkouts
+// would find the holder's own passing run there and certify it as the waiter's.
+func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
+	testkit.Isolate(t)
+	global = globalFlags{}
+	holder := testkit.NewRepo(t, map[string]string{"magus.yaml": "", "a.go": "package a\n"})
+	waiter := holder.AddWorktree("waiter")
+	holderCache, err := magus.ResolveCacheDir(holder.Root())
+	require.NoError(t, err)
+	passed, err := cache.NewOutputStore(holderCache).
+		Persist(t.Context(), "key1", []byte("ok\n"), cache.OutputDescriptor{Project: ".", Target: "go-test", TimestampMs: time.Now().UnixMilli()})
+	require.NoError(t, err)
+
+	found, err := storedAttempts(holder.Root())(t.Context(), passed.Ref)
+	require.NoError(t, err)
+	require.True(t, found.Found, "the control: the holder's checkout holds the run")
+	missed, err := storedAttempts(waiter.Root())(t.Context(), passed.Ref)
+	require.NoError(t, err)
+	assert.False(t, missed.Found, "the waiter's resolver reads its own store alone")
+
+	row := types.Job{
+		ID: "w", Created: 1, State: types.StateExited, WritePaths: []string{"a.go"}, CheckoutRoot: holder.Root(),
+		Check:   &types.LeaseCheck{Target: "go-test", Project: "."},
+		Result:  &types.JobResult{Job: "w", ChangedPaths: []string{"a.go"}, Validation: types.JobResultValidation{OutputRef: "failed"}},
+		Attempt: &types.JobAttempt{Found: true, Ref: "failed", Project: ".", Target: "go-test", Failed: true, TimestampMs: 2_000},
+	}
+	seedJobStore(t, waiter.Root(), row)
+	store, err := openJobs(waiter.Root())
+	require.NoError(t, err)
+	observe := func(context.Context, types.Job) (job.Observed, error) {
+		return job.Observed{Changed: []string{"a.go"}, ChangedKnown: true}, nil
+	}
+
+	_, err = job.Wait(t.Context(), store, row.ID, nil, storedAttempts(waiter.Root()), observe, map[string]string{types.PrimaryGoalID: passed.Ref})
+
+	require.ErrorContains(t, err, "names no run this checkout recorded")
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Equal(t, types.StateExited, rows[0].State)
+}
+
 // Prune prints each job it ends with the reason, then the count; under --dry-run it says
 // what would end and leaves the row live.
 func TestJobPrunePrintsEachRowAndTheCount(t *testing.T) {
@@ -1096,7 +1138,7 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	t.Run("the rule answers differently from elsewhere", func(t *testing.T) {
 		t.Chdir(elsewhere)
 		unplaced := guard.Judge(t.Context(), guardDependencies(t.Context(), root), guard.Request{
-			Input:      checkCommandPrefix + row.Check.String(),
+			Input:      ownBinaryPrefix + row.Check.String(),
 			DryRun:     true,
 			Lease:      row.ID,
 			PendingRow: &row,
@@ -1108,8 +1150,8 @@ func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
 	for name, cwd := range map[string]string{"the root": root, "elsewhere": elsewhere} {
 		t.Run(name, func(t *testing.T) {
 			t.Chdir(cwd)
-			verdict, notGraded := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
-			assert.Empty(t, notGraded)
+			verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+			assert.Empty(t, verdict.NotGraded)
 			assert.False(t, verdict.Denied, "the check is judged from the workspace, wherever the process runs: %s", verdict.Reason)
 		})
 	}
@@ -1121,11 +1163,11 @@ func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
 	testkit.Isolate(t)
 	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	verdict, notGraded := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
+	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, t.TempDir(), row)
 
 	assert.False(t, verdict.Denied)
-	assert.Contains(t, notGraded, "the workspace's rules did not load")
-	assert.Contains(t, notGraded, "magusfile.buzz:3: expected ';'")
+	assert.Contains(t, verdict.NotGraded, "the workspace's rules did not load")
+	assert.Contains(t, verdict.NotGraded, "magusfile.buzz:3: expected ';'")
 }
 
 // denyEveryWorkerRule is a magusfile whose command rule denies a worker every command, the
@@ -1150,12 +1192,12 @@ func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
 	t.Chdir(root)
 	row := types.Job{ID: "w", WritePaths: []string{"run.go"}, Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
 
-	verdict, notGraded := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
+	verdict := gradeCheck(t.Context(), guardDependencies(t.Context(), root), root, row)
 
 	assert.False(t, verdict.Denied)
-	assert.Contains(t, notGraded, "denies this worker `magus run go::go-vet .` as well")
-	assert.Contains(t, notGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
-	assert.NotContains(t, notGraded, "rebuild it")
+	assert.Contains(t, verdict.NotGraded, "denies this worker `magus run go::go-vet .` as well")
+	assert.Contains(t, verdict.NotGraded, "the hook binary is older than the tree", "the first line of the verdict is quoted")
+	assert.NotContains(t, verdict.NotGraded, "rebuild it")
 
 	require.NoError(t, jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", "go-build ."}))
 	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))

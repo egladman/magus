@@ -11,21 +11,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// gitRepo is a git checkout holding files, none of them committed and with no commit at
-// all, as `git init` leaves it. The repository's own config shuts out the box's, so a
-// global attributes file cannot name a driver the test did not.
-func gitRepo(t *testing.T, files map[string]string) *testkit.Repo {
-	t.Helper()
-	repo := testkit.NewRepo(t, nil)
-	repo.Git("update-ref", "-d", "refs/heads/main")
-	repo.WriteTree(files)
-	return repo
-}
-
 func TestRefuseUngradableClaims(t *testing.T) {
 	t.Parallel()
 
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"}).Root()
+	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"}).Root()
 	for _, tc := range []struct {
 		name  string
 		paths []string
@@ -95,20 +84,14 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	})
 }
 
-// commitRepo commits everything gitRepo wrote and returns HEAD, so a footprint has a
-// revision to diff against.
-func commitRepo(repo *testkit.Repo) string {
-	return repo.Commit("seed", nil)
-}
-
 func TestRefuseUnorderedFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n", "notes.txt": "hi\n", "docs/x.md": "# X\n"}
-	bRoot := gitRepo(t, files).Root()
-	aRepo := gitRepo(t, files)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
 	aRoot := aRepo.Root()
-	aRev := commitRepo(aRepo)
+	aRev := aRepo.Head()
 
 	for _, tc := range []struct {
 		name        string
@@ -165,10 +148,10 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files).Root()
-	aRepo := gitRepo(t, files)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
 	aRoot := aRepo.Root()
-	aRev := commitRepo(aRepo)
+	aRev := aRepo.Head()
 
 	for state, refused := range map[types.JobState]bool{types.StateRunning: true, types.StateExited: false} {
 		s := NewStore(tmpLoc(t, bRoot))
@@ -191,10 +174,10 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files).Root()
-	aRepo := gitRepo(t, files)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
 	aRoot := aRepo.Root()
-	aRev := commitRepo(aRepo)
+	aRev := aRepo.Head()
 
 	s := NewStore(tmpLoc(t, bRoot))
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
@@ -219,10 +202,10 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files).Root()
-	aRepo := gitRepo(t, files)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
 	aRoot := aRepo.Root()
-	aRev := commitRepo(aRepo)
+	aRev := aRepo.Head()
 
 	loc := tmpLoc(t, bRoot)
 	s := NewStore(loc)

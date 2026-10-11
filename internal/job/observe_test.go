@@ -327,10 +327,17 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 		mergeBase          error
 		wantRev, wantNamed string
 	}{
-		{"no head", "def5678+00ff", errors.New("no revision"), nil, "def5678", "def5678 (the base its holder reported, not its checkpoint abc1234)"},
-		{"no merge base", "def5678", nil, &types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}, "def5678", "def5678 (the base its holder reported, not its checkpoint abc1234)"},
-		{"no reported base", "", errors.New("no revision"), nil, "abc1234", "abc1234"},
-		{"a reported base on the checkpoint", "abc1234+00ff", errors.New("no revision"), nil, "abc1234", "abc1234"},
+		{
+			"no head", "def5678+00ff", errors.New("no revision"), nil, "def5678",
+			"def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: the holder's HEAD could not be read: no revision)",
+		},
+		{
+			"no merge base", "def5678", nil, &types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}, "def5678",
+			"def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: " +
+				(&types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}).Error() + ")",
+		},
+		{"no reported base", "", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},
+		{"a reported base on the checkpoint", "abc1234+00ff", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -340,9 +347,9 @@ func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
 				driver.EXPECT().MergeBase(mock.Anything, "/repo", "head1", "abc1234").Return("", false, tc.mergeBase)
 			}
 
-			rev, named := diffBase(t.Context(), driver, "/repo", types.Job{Checkpoint: "abc1234+deadbeef", ReportedBase: tc.reported})
+			got := diffBase(t.Context(), driver, "/repo", types.Job{Checkpoint: "abc1234+deadbeef", ReportedBase: tc.reported})
 
-			assert.Equal(t, []string{tc.wantRev, tc.wantNamed}, []string{rev, named})
+			assert.Equal(t, diffFrom{revision: tc.wantRev, named: tc.wantNamed}, got)
 		})
 	}
 }
@@ -527,9 +534,9 @@ func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 func TestMeasureOverlaps(t *testing.T) {
 	t.Parallel()
 
-	repo := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
 	root := repo.Root()
-	rev := commitRepo(repo)
+	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
 	rows := []types.Job{
 		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api"}},

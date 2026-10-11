@@ -24,8 +24,8 @@ type UnrunGate struct {
 	Goal types.Goal `json:"goal"    yaml:"goal"`
 }
 
-// UnrunGatesLimit is how many gates a text rendering lists before it counts the rest.
-const UnrunGatesLimit = 6
+// unrunGatesLimit is how many gates a text rendering lists before it counts the rest.
+const unrunGatesLimit = 6
 
 // ciTarget is the target the gate is named after, run from the workspace's root project.
 const ciTarget = "ci"
@@ -73,11 +73,14 @@ func UnrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		}
 	}
 
+	type unrun struct {
+		gate  UnrunGate
+		visit types.ChainVisit
+	}
 	var (
 		written []string
 		walked  bool
-		found   []UnrunGate
-		visits  []types.ChainVisit
+		found   []unrun
 	)
 	_ = types.WalkChain(top, ciTarget, lookup, func(v types.ChainVisit) error {
 		if v.Depth == 0 || run[v.Key()] {
@@ -95,44 +98,54 @@ func UnrunGates(root string, row types.Job, projects []*types.Project, regenerat
 		if !ok {
 			return nil
 		}
-		found = append(found, UnrunGate{
-			Target:  v.Target,
-			Project: v.Project.Path,
-			Source:  source.String(),
-			Goal:    unrunGoal(v.Project.Path, v.Target),
+		found = append(found, unrun{
+			gate:  UnrunGate{Target: v.Target, Project: v.Project.Path, Source: source.String()},
+			visit: v,
 		})
-		visits = append(visits, v)
 		return nil
 	})
 
 	composed := map[string]bool{}
-	for _, v := range visits {
-		_ = types.WalkChain(v.Project, v.Target, lookup, func(m types.ChainVisit) error {
+	for _, u := range found {
+		_ = types.WalkChain(u.visit.Project, u.visit.Target, lookup, func(m types.ChainVisit) error {
 			if m.Depth > 0 {
 				composed[m.Key()] = true
 			}
 			return nil
 		})
 	}
+	taken := map[string]bool{}
+	for _, g := range row.EffectiveGoals() {
+		taken[g.ID] = true
+	}
 	var out []UnrunGate
-	for i, g := range found {
-		if !composed[visits[i].Key()] {
-			out = append(out, g)
+	for _, u := range found {
+		if composed[u.visit.Key()] {
+			continue
 		}
+		u.gate.Goal = unrunGoal(u.gate.Project, u.gate.Target, taken)
+		out = append(out, u.gate)
 	}
 	return out
 }
 
-var goalIDRun = regexp.MustCompile(`[^a-z0-9]+`)
+var nonIDChars = regexp.MustCompile(`[^a-z0-9]+`)
 
 // unrunGoal is the goal that runs target in project: the target's name, with the project
-// after it when it is not the root.
-func unrunGoal(project, target string) types.Goal {
-	id := target
+// after it when it is not the root, and a counter after that when taken already holds the
+// id. Two projects can fold to one id ("a/b" and "a-b"), and a target can share its name
+// with a goal the row holds. The id it returns is added to taken.
+func unrunGoal(project, target string, taken map[string]bool) types.Goal {
+	base := target
 	if project != "." {
-		id += "-" + project
+		base += "-" + project
 	}
-	id = strings.Trim(goalIDRun.ReplaceAllString(strings.ToLower(id), "-"), "-")
+	base = strings.Trim(nonIDChars.ReplaceAllString(strings.ToLower(base), "-"), "-")
+	id := base
+	for n := 2; taken[id]; n++ {
+		id = fmt.Sprintf("%s-%d", base, n)
+	}
+	taken[id] = true
 	return types.Goal{ID: id, Check: types.LeaseCheck{Target: target, Project: project}}.Resolve()
 }
 
@@ -151,13 +164,13 @@ func RenderUnrunGates(w io.Writer, gates []UnrunGate) {
 	}
 }
 
-// unrunLines is one line per gate up to UnrunGatesLimit, then the goals that add the ones
+// unrunLines is one line per gate up to unrunGatesLimit, then the goals that add the ones
 // listed as the JSON a job's goals take.
 func unrunLines(gates []UnrunGate) []string {
 	if len(gates) == 0 {
 		return nil
 	}
-	shown := gates[:min(len(gates), UnrunGatesLimit)]
+	shown := gates[:min(len(gates), unrunGatesLimit)]
 	var (
 		lines []string
 		goals []types.Goal

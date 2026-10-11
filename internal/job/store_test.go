@@ -340,7 +340,7 @@ func TestStorePutReleasesADeclaration(t *testing.T) {
 	t.Parallel()
 
 	const src = "package run\n\nfunc A() {\n\ta()\n}\n\nfunc B() {\n\tb()\n}\n"
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
+	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": src}).Root()
 	s := tmpStore(t, root)
 	seed(t, s, types.Job{ID: "u1", WritePaths: []string{"run.go#A", "run.go#B", "run.go#Gone"}, State: types.StateRunning})
 

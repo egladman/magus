@@ -91,7 +91,7 @@ type Store struct {
 	outputs func(root string) AttemptResolver
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
 	landed func(context.Context, types.Job) string
-	// grader is Location.Grader built for root.
+	// grader is Location.Grader.
 	grader CheckGrader
 }
 
@@ -126,11 +126,11 @@ type Location struct {
 	// result its worker recorded in another checkout of the repository. Nil tries the
 	// caller's resolver alone.
 	Outputs func(root string) AttemptResolver
-	// Grader builds the CheckGrader for the checkout at Root, which judges a declared check
-	// the way the guard will judge the row's holder running it, for the fork doors. Nil
-	// grades nothing: the guard lives above this package, so only a door that can reach it
+	// Grader judges a declared check the way the guard will judge the row's holder running
+	// it, for the fork doors, against the rules of the workspace at Root. Nil grades
+	// nothing: the guard lives above this package, so only a door that can reach it
 	// supplies one.
-	Grader func(root string) CheckGrader
+	Grader CheckGrader
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -145,20 +145,9 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs}
-	if loc.Grader != nil {
-		s.grader = loc.Grader(loc.Root)
-	}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader}
 	s.path, s.err = jobsPath(loc)
 	return s
-}
-
-// workspaceRoot is the checkout this Store was opened from, empty for a nil Store.
-func (s *Store) workspaceRoot() string {
-	if s == nil {
-		return ""
-	}
-	return s.root
 }
 
 // Actor is who this Store writes as RIGHT NOW, for a door that has to refuse before it

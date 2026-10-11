@@ -59,6 +59,7 @@ import (
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 )
 
@@ -74,6 +75,9 @@ func main() {
 // (os.Exit(runCLI())) and the testscript harness (testscript.Main) can drive the
 // real command in process. It must never call os.Exit itself.
 func runCLI() int {
+	// Before the worker branches: a client worker runs magus\job.put, which opens its own
+	// Store inside std and grades the check through this.
+	std.RegisterJobGrader(newCheckGrader())
 	// A worker's stderr is the pipe its parent reads, not a terminal a display draws on.
 	if os.Getenv(transform.WorkerEnv) == "1" {
 		return runBuzzWorker(context.Background(), os.Stdin, os.Stdout, os.Stderr)

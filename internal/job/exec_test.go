@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -183,9 +184,9 @@ func TestStoreExecIsIdempotentPerBase(t *testing.T) {
 func TestStoreExecResolvesAnAbbreviatedRevision(t *testing.T) {
 	t.Parallel()
 
-	repo := gitRepo(t, map[string]string{"a.txt": "a\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
 	root := repo.Root()
-	rev := commitRepo(repo)
+	rev := repo.Head()
 	short := rev[:9]
 	const digest = "+00112233445566778899aabbccddeeff"
 
@@ -245,9 +246,9 @@ func TestStoreExecCountsUntrackedFilesAsThePatch(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
-			repo := gitRepo(t, map[string]string{"a.txt": "a\n"})
+			repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
 			root := repo.Root()
-			rev := commitRepo(repo)
+			rev := repo.Head()
 			for name, body := range tt.edits {
 				require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
 			}
@@ -366,7 +367,7 @@ func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got.State)
 }
 
-func TestSameRevision(t *testing.T) {
+func TestSameRevisionMatchesAnAbbreviationOfSevenOrMoreHexDigits(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -376,9 +377,14 @@ func TestSameRevision(t *testing.T) {
 		{"07e1c163ea67b4d6", "07e1c16", true},
 		{"07e1c16", "07e1c163ea67b4d6", true},
 		{"07e1c16", " 07e1c16\n", true},
+		{"07E1C163EA67B4D6", "07e1c16", true},
 		{"07e1c16", "24114cc", false},
 		{"07e1c16", "", false},
 		{"", "", false},
+		{"07e1c163ea67b4d6", "0", false},
+		{"07e1c163ea67b4d6", "07e1c1", false},
+		{"main", "main", true},
+		{"mainline", "mainlin", false},
 	} {
 		assert.Equal(t, tc.want, SameRevision(tc.a, tc.b), "%q %q", tc.a, tc.b)
 	}

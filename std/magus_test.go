@@ -877,11 +877,11 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	}
 }
 
-// withJobGrader registers forRoot for the test and restores whatever was registered. The
+// withJobGrader registers g for the test and restores whatever was registered. The
 // registration is process-wide, so a test that uses it does not run in parallel.
-func withJobGrader(t *testing.T, forRoot func(root string) job.CheckGrader) {
+func withJobGrader(t *testing.T, g job.CheckGrader) {
 	t.Helper()
-	previous := RegisterJobGrader(forRoot)
+	previous := RegisterJobGrader(g)
 	t.Cleanup(func() { RegisterJobGrader(previous) })
 }
 
@@ -891,14 +891,12 @@ func withJobGrader(t *testing.T, forRoot func(root string) job.CheckGrader) {
 func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	testkit.Isolate(t)
 	var roots []string
-	withJobGrader(t, func(root string) job.CheckGrader {
+	withJobGrader(t, func(_ context.Context, root string, row types.Job) job.CheckVerdict {
 		roots = append(roots, root)
-		return func(_ context.Context, row types.Job) job.CheckVerdict {
-			if row.Check.Target != "go-build" {
-				return job.CheckVerdict{}
-			}
-			return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
+		if row.Check.Target != "go-build" {
+			return job.CheckVerdict{}
 		}
+		return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
 	})
 
 	root := t.TempDir()
@@ -912,7 +910,7 @@ func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "would be denied to its worker by the guard (worker-builds-magus)")
 	assert.Contains(t, err.Error(), "`go::go-vet .`")
-	assert.Equal(t, []string{root}, roots, "the grader is built for the workspace the put runs in")
+	assert.Equal(t, []string{root}, roots, "the grader judges the workspace the put runs in")
 
 	stored, err := jobStoreFromContext(ctx, "job.list")
 	require.NoError(t, err)

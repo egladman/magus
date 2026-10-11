@@ -12,33 +12,32 @@ import (
 )
 
 // gradeRecorder answers every grade with verdict and keeps the rows it was asked about and
-// the roots it was built for.
+// the roots it judged them in.
 type gradeRecorder struct {
 	verdict CheckVerdict
 	graded  []types.Job
 	roots   []string
 }
 
-func (r *gradeRecorder) forRoot(root string) CheckGrader {
+func (r *gradeRecorder) grade(_ context.Context, root string, row types.Job) CheckVerdict {
 	r.roots = append(r.roots, root)
-	return func(_ context.Context, row types.Job) CheckVerdict {
-		r.graded = append(r.graded, row)
-		return r.verdict
-	}
+	r.graded = append(r.graded, row)
+	return r.verdict
 }
 
 func graderStore(t *testing.T, verdict CheckVerdict) (*Store, *gradeRecorder) {
 	t.Helper()
 	rec := &gradeRecorder{verdict: verdict}
 	loc := tmpLoc(t, testRoot(t).Root())
-	loc.Grader = rec.forRoot
+	loc.Grader = rec.grade
 	return NewStore(loc), rec
 }
 
-func TestStoreBuildsItsGraderForItsRoot(t *testing.T) {
+func TestStoreGradesAgainstItsOwnRoot(t *testing.T) {
 	t.Parallel()
 
 	s, rec := graderStore(t, CheckVerdict{})
+	require.NoError(t, RefuseDeniedCheck(t.Context(), s, types.Job{ID: "w", Check: forkCheck()}))
 	assert.Equal(t, []string{s.root}, rec.roots)
 	assert.Nil(t, tmpStore(t, t.TempDir()).grader, "a Location that names no grader grades nothing")
 }

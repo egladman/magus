@@ -929,7 +929,7 @@ export object Job {
     gateAttempts: [JobGateAttempt] = [],
     lastRun: JobRun? = null,
     integration: JobIntegration? = null,
-    rootEvidence: JobIntegration? = null,
+    waiterEvidence: JobIntegration? = null,
 }
 
 export object SpawnTarget {

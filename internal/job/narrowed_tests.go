@@ -3,6 +3,7 @@ package job
 import (
 	"fmt"
 	"go/ast"
+	"go/build"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -21,22 +22,44 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// RefuseSkippedTests refuses a job whose go test check narrows the run with -run or -skip
-// to a set that leaves out a Test function defined in the Go packages of the job's write
-// paths. A hand-picked pattern passes while a test it never ran fails in the root's gate.
+// RefuseNarrowedTests refuses a job whose go test check, or any check goal, narrows the run
+// with -run or -skip to a set that leaves out a Test function defined in the Go packages of
+// the job's write paths. A hand-picked pattern passes while a test it never ran fails in the
+// root's gate.
 //
 // Pure path math: the packages are the directories of the .go write paths (globs
-// expanded), the tests are the top-level `func TestXxx(*testing.T)` declarations of their
-// _test.go files, and a pattern is read the way go test reads it, by the first element of
-// each top-level alternative. Only the go-test target is read: another tool's -run says
-// nothing about Go tests. A pattern that does not compile is left to go test, which refuses
-// it itself. root is the workspace the paths are relative to; empty has no tree to read.
-func RefuseSkippedTests(root string, row types.Job) error {
-	if root == "" || !runsGoTest(row.Check) {
+// expanded), the tests are the top-level `func TestXxx(*testing.T)` declarations of the
+// _test.go files go test builds there (see [testNames]), and a pattern is read the way go
+// test reads it, by the first element of each top-level alternative. Only the go-test
+// target is read: another tool's -run says nothing about Go tests. A pattern that does not
+// compile is left to go test, which refuses it itself. The paths are relative to the
+// store's workspace root; a nil store, or one with no root, has no tree to read.
+func RefuseNarrowedTests(store *Store, row types.Job) error {
+	if store == nil || store.root == "" {
 		return nil
 	}
-	runArg, hasRun := goTestFlag(row.Check.Args, "run")
-	skipArg, hasSkip := goTestFlag(row.Check.Args, "skip")
+	for _, g := range row.EffectiveGoals() {
+		if g.Kind != types.GoalKindCheck {
+			continue
+		}
+		named := fmt.Sprintf("%s's check", row.ID)
+		if g.ID != types.PrimaryGoalID {
+			named = fmt.Sprintf("%s's goal %q", row.ID, g.ID)
+		}
+		if err := refuseNarrowedCheck(store.root, named, g.Check, row.WritePaths); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// refuseNarrowedCheck is [RefuseNarrowedTests] for one check, named as the refusal names it.
+func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths []string) error {
+	if !runsGoTest(check) {
+		return nil
+	}
+	runArg, hasRun := goTestFlag(check.Args, "run")
+	skipArg, hasSkip := goTestFlag(check.Args, "skip")
 	if !hasRun && !hasSkip {
 		return nil
 	}
@@ -53,7 +76,7 @@ func RefuseSkippedTests(root string, row types.Job) error {
 			return nil
 		}
 	}
-	tests := testsInWritePaths(root, row.WritePaths)
+	tests := testsInWritePaths(root, writePaths)
 	var (
 		notRun, skipped []string
 		packages        []string
@@ -72,7 +95,7 @@ func RefuseSkippedTests(root string, row types.Job) error {
 			missed = append(missed, name)
 		}
 		if len(missed) > 0 {
-			packages = append(packages, dir+" ("+listTests(missed)+")")
+			packages = append(packages, dir+" ("+summarizeTests(missed)+")")
 		}
 	}
 	if len(packages) == 0 {
@@ -85,15 +108,15 @@ func RefuseSkippedTests(root string, row types.Job) error {
 	if len(skipped) > 0 {
 		fixes = append(fixes, narrowSkipFix(skipArg, skipped))
 	}
-	return fmt.Errorf("job: %s's check `%s` leaves out tests defined in the packages of its write paths,"+
+	return fmt.Errorf("job: %s `%s` leaves out tests defined in the packages of its write paths,"+
 		" so a break they would catch passes unchecked: %s, to fix it %s",
-		row.ID, row.Check.String(), strings.Join(packages, " and "), strings.Join(fixes, " and "))
+		named, check.String(), strings.Join(packages, " and "), strings.Join(fixes, " and "))
 }
 
 // runsGoTest reports whether check is the go-test target, the one whose -run and -skip
 // select Go tests.
-func runsGoTest(check *types.LeaseCheck) bool {
-	return check != nil && check.Script == "" && (check.Target == "go-test" || check.Target == "go::go-test")
+func runsGoTest(check types.LeaseCheck) bool {
+	return check.Script == "" && (check.Target == "go-test" || check.Target == "go::go-test")
 }
 
 // maxListedTests is how many test names the refusal prints per package, and maxPastedPattern
@@ -104,8 +127,8 @@ const (
 	maxPastedPattern = 120
 )
 
-// listTests names the first maxListedTests of names and counts the rest.
-func listTests(names []string) string {
+// summarizeTests names the first maxListedTests of names and counts the rest.
+func summarizeTests(names []string) string {
 	if len(names) <= maxListedTests {
 		return strings.Join(names, ", ")
 	}
@@ -327,7 +350,10 @@ func ignoredDir(root, rel string) bool {
 	return err == nil
 }
 
-// testNames lists the Test functions the _test.go files of dir declare, sorted.
+// testNames lists the Test functions declared by the _test.go files of dir that a plain
+// `go test` builds here, sorted. A file go ignores (named with a leading `_` or `.`) and
+// one whose build constraints or GOOS/GOARCH suffix exclude it on this platform with no
+// tags declare nothing: a test the check could never run is not one it leaves out.
 func testNames(dir string) []string {
 	files, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
 	if err != nil {
@@ -336,6 +362,9 @@ func testNames(dir string) []string {
 	var names []string
 	fset := token.NewFileSet()
 	for _, file := range files {
+		if built, err := build.Default.MatchFile(dir, filepath.Base(file)); err != nil || !built {
+			continue
+		}
 		parsed, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
 		if err != nil {
 			continue

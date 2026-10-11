@@ -96,27 +96,31 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 			return "", err
 		}
 		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool { return slices.Contains(prev.WritePaths, p) })
-		if err := RefuseAddedWritePaths(ctx, store, id, added); err != nil {
+		addedRow := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		if err := RefuseAddedWritePaths(ctx, store, addedRow); err != nil {
 			return "", err
 		}
 		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })
 		if err := RefuseUngradableClaims(ctx, store, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
 			return "", err
 		}
-		addedPaths := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		if err := RefuseUnorderedFileShare(ctx, store, rows, addedPaths); err != nil {
+		if err := RefuseUnorderedFileShare(ctx, store, rows, addedRow); err != nil {
 			return "", err
 		}
 		// Judged on what the update changes, so a check the row already held never blocks an
-		// unrelated update: a new check is graded against every write path, an old one
-		// only against the paths this update adds.
-		checkChanged := !prev.Check.Equal(merged.Check)
-		if checkChanged || len(added) > 0 {
-			graded := merged
-			if !checkChanged {
-				graded.WritePaths = added
-			}
-			if err := RefuseSkippedTests(store.workspaceRoot(), graded); err != nil {
+		// unrelated update: a new check or goal is graded against every write path, an old
+		// one only against the paths this update adds.
+		checkChanged := !types.SameLeaseCheck(prev.Check, merged.Check)
+		newChecks := types.Job{ID: id, WritePaths: merged.WritePaths, Goals: goals}
+		if checkChanged {
+			newChecks.Check = merged.Check
+		}
+		if err := RefuseNarrowedTests(store, newChecks); err != nil {
+			return "", err
+		}
+		if len(added) > 0 {
+			oldChecks := types.Job{ID: id, WritePaths: added, Check: merged.Check, Goals: merged.Goals}
+			if err := RefuseNarrowedTests(store, oldChecks); err != nil {
 				return "", err
 			}
 		}
@@ -148,13 +152,13 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 	if err := RefuseUnorderedFileShare(ctx, store, rows, row); err != nil {
 		return "", err
 	}
-	if err := RefuseSkippedTests(store.workspaceRoot(), row); err != nil {
+	if err := RefuseNarrowedTests(store, row); err != nil {
 		return "", err
 	}
 	if err := RefuseDeniedCheck(ctx, store, row); err != nil {
 		return "", err
 	}
-	return store.WriteProof(rows, id, row), nil
+	return store.WriteProof(rows, row), nil
 }
 
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
@@ -275,19 +279,19 @@ func specChanges(prev, next types.Job) []string {
 	})
 }
 
-// RefuseAddedWritePaths holds the write paths a write adds to job id to the rules a fork's
+// RefuseAddedWritePaths holds the write paths a write adds to a job to the rules a fork's
 // are held to: no directory (MGS3018) and no claim a footprint cannot grade (MGS3031). A
-// rule that held only at creation would depend on which call wrote the path. Only the added
-// paths are judged, so a path the row already carried never blocks an unrelated write.
-func RefuseAddedWritePaths(ctx context.Context, store *Store, id string, added []string) error {
-	if len(added) == 0 {
+// rule that held only at creation would depend on which call wrote the path. added is the
+// job's row carrying only the write paths the write adds, so a path the row already held
+// never blocks an unrelated write.
+func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) error {
+	if len(added.WritePaths) == 0 {
 		return nil
 	}
-	row := types.Job{ID: id, WritePaths: added}
-	if err := RefuseDirectoryWritePaths(store, row); err != nil {
+	if err := RefuseDirectoryWritePaths(store, added); err != nil {
 		return err
 	}
-	return RefuseUngradableClaims(ctx, store, row)
+	return RefuseUngradableClaims(ctx, store, added)
 }
 
 // RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`

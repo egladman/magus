@@ -46,7 +46,7 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return store.Update(ctx, id, func(row *types.Job) { row.State = types.StateNoReturn })
 	}
 	if resolve == nil {
-		return types.Job{}, fmt.Errorf("job: no output resolver files a result's validation evidence")
+		return types.Job{}, errors.New("job: no output resolver files a result's validation evidence")
 	}
 	resolve, where := store.acrossCheckouts(rows, id, resolve)
 	attempt, gateAttempts, err := resolveResultAttempts(ctx, *result, resolve, where)
@@ -70,15 +70,14 @@ func Exit(ctx context.Context, store *Store, id string, result *types.JobResult,
 // the result and attempt filed by Exit; a supplied result is resolved in this checkout.
 // A bound store verifies only a row below its own lease (see [Actor.Verifies]).
 //
-// [WithRootEvidence] swaps the filed run behind named check goals for runs recorded in
-// this checkout; see [takeRootEvidence] for what must hold first.
-func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer, opts ...WaitOption) (types.JobStatus, error) {
-	var cfg waitOptions
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	if len(cfg.evidence) > 0 && result != nil {
-		return types.JobStatus{}, fmt.Errorf("job: root evidence starts from the result filed with the job, and a supplied result is not that")
+// evidence names, per check goal, a run recorded in the waiter's checkout to grade in place
+// of the holder's: the key is the goal id, or [types.PrimaryGoalID] for the job's own
+// check, and the value the run's output ref, which resolve must look up in this checkout
+// alone. Nil or empty grades the filed evidence. See [graded.withWaiterEvidence] for what
+// must hold first.
+func Wait(ctx context.Context, store *Store, id string, result *types.JobResult, resolve AttemptResolver, observe Observer, evidence map[string]string) (types.JobStatus, error) {
+	if len(evidence) > 0 && result != nil {
+		return types.JobStatus{}, errors.New("job: waiter evidence starts from the result filed with the job, and a supplied result is not that")
 	}
 	jobs, err := store.List()
 	if err != nil {
@@ -93,20 +92,20 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		return types.JobStatus{}, fmt.Errorf("job: there is no job %q", id)
 	}
 
-	var attempt types.JobAttempt
-	var gateAttempts []types.JobGateAttempt
+	var ev graded
 	if result == nil {
 		if jobs[i].Result == nil {
 			return types.JobStatus{}, fmt.Errorf("job: %s has filed no result", id)
 		}
-		result = jobs[i].Result
+		ev.result = *jobs[i].Result
 		if jobs[i].Attempt != nil {
-			attempt = *jobs[i].Attempt
+			ev.attempt = *jobs[i].Attempt
 		}
-		gateAttempts = jobs[i].GateAttempts
+		ev.gateAttempts = jobs[i].GateAttempts
 	} else {
 		resolve, where := store.acrossCheckouts(jobs, id, resolve)
-		attempt, gateAttempts, err = resolveResultAttempts(ctx, *result, resolve, where)
+		ev.result = *result
+		ev.attempt, ev.gateAttempts, err = resolveResultAttempts(ctx, *result, resolve, where)
 		if err != nil {
 			return types.JobStatus{}, err
 		}
@@ -124,12 +123,10 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 	}
 
 	var taken *types.JobIntegration
-	if len(cfg.evidence) > 0 {
-		filed := *result
-		if taken, err = takeRootEvidence(ctx, store, inheritGoals(jobs[i], jobs), cfg.evidence, resolve, seen, &filed, &attempt, &gateAttempts); err != nil {
+	if len(evidence) > 0 {
+		if ev, taken, err = ev.withWaiterEvidence(ctx, store, inheritGoals(jobs[i], jobs), evidence, resolve, seen); err != nil {
 			return types.JobStatus{}, err
 		}
-		result = &filed
 	}
 
 	var status types.JobStatus
@@ -137,12 +134,11 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 		if !exists {
 			return fmt.Errorf("job: there is no job %q", id)
 		}
-		status = VerifyGates(inheritGoals(*row, jobs), *result, attempt, gateAttempts, jobs, seen)
+		status = VerifyGates(inheritGoals(*row, jobs), ev.result, ev.attempt, ev.gateAttempts, jobs, seen)
 		if status.Verified {
 			row.State = types.StatePass
 			if taken != nil {
-				taken.At = now
-				row.RootEvidence = taken
+				row.WaiterEvidence = gradedTake(*taken, status, now)
 			}
 		}
 		return nil
@@ -164,40 +160,35 @@ func (a Actor) Verifies(rows []types.Job, id string) bool {
 	return slices.ContainsFunc(types.JobAncestors(rows, id), func(r types.Job) bool { return r.ID == a.Lease })
 }
 
-// WaitOption adjusts [Wait].
-type WaitOption func(*waitOptions)
-
-type waitOptions struct {
-	evidence map[string]string
+// graded is the evidence a verdict grades: the result, the run behind its check, and the
+// runs behind its goals.
+type graded struct {
+	result       types.JobResult
+	attempt      types.JobAttempt
+	gateAttempts []types.JobGateAttempt
 }
 
-// WithRootEvidence names, per check goal, a run recorded in the waiter's checkout to
-// grade in place of the holder's. The key is the goal id, or [types.PrimaryGoalID] for
-// the job's own check. A nil or empty map changes nothing.
-func WithRootEvidence(refs map[string]string) WaitOption {
-	return func(o *waitOptions) { o.evidence = refs }
-}
-
-// takeRootEvidence swaps the runs behind the goals in refs for runs resolved in THIS
-// checkout, editing the copies of the filed result and attempts it is handed (the
-// holder's own attempts on the row stay as filed). It returns the record Wait stores
-// beside them, its time left for Wait to stamp.
+// withWaiterEvidence is ev with the runs behind the goals in refs swapped for runs
+// resolved in THIS checkout, and the record Wait stores beside them once they verify, its
+// verdicts and time left for Wait (see [gradedTake]). The holder's own attempts on the row
+// stay as filed: ev's slices are cloned before they are edited.
 //
-// Each ref is resolved here and nowhere else: a fallback to the holder's checkout would
-// make this the holder's evidence under another name. Verification then runs as always,
-// so a run of the wrong check, older than the row or failed is refused there.
+// Each ref is resolved by resolve and nowhere else, and resolve must read this checkout's
+// store alone: a fallback to the holder's checkout would make this the holder's evidence
+// under another name. Verification then runs as always, so a run of the wrong check, older
+// than the row or failed is refused there.
 //
 // It refuses a goal the job does not hold as a check, and a goal that already passes on
-// the holder's evidence, which another run would only hide. It also refuses changed paths
-// that differ between the checkouts: only identical files make a run here a run of the
-// holder's tree.
-func takeRootEvidence(ctx context.Context, store *Store, row types.Job, refs map[string]string, resolve AttemptResolver, seen Observed,
-	result *types.JobResult, attempt *types.JobAttempt, gateAttempts *[]types.JobGateAttempt) (*types.JobIntegration, error) {
+// the holder's evidence, which another run would only hide. It also refuses unless the
+// files the job changed read the same here as in the holder's checkout and none changed
+// here after the oldest run taken (see [sameChangedPaths]): only then is a run here a run
+// of the holder's tree.
+func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types.Job, refs map[string]string, resolve AttemptResolver, seen Observed) (graded, *types.JobIntegration, error) {
 	if resolve == nil {
-		return nil, fmt.Errorf("job: no output resolver reads the runs recorded in this checkout")
+		return graded{}, nil, errors.New("job: no output resolver reads the runs recorded in this checkout")
 	}
 	if store.root == "" {
-		return nil, fmt.Errorf("job: root evidence names runs recorded in a checkout, and this store has none")
+		return graded{}, nil, errors.New("job: waiter evidence names runs recorded in a checkout, and this store has none")
 	}
 	goals := row.EffectiveGoals()
 	ids := slices.Sorted(maps.Keys(refs))
@@ -208,125 +199,221 @@ func takeRootEvidence(ctx context.Context, store *Store, row types.Job, refs map
 			for j, g := range goals {
 				held[j] = g.ID
 			}
-			return nil, fmt.Errorf("job: %s holds no goal %q to take evidence for (it holds %s)", row.ID, goalID, strings.Join(held, ", "))
+			return graded{}, nil, fmt.Errorf("job: %s holds no goal %q to take evidence for (it holds %s)", row.ID, goalID, strings.Join(held, ", "))
 		}
 		if goals[i].Kind != types.GoalKindCheck {
-			return nil, fmt.Errorf("job: goal %q is a %s goal, and only a check goal is graded from a run", goalID, goals[i].Kind)
+			return graded{}, nil, fmt.Errorf("job: goal %q is a %s goal, and only a check goal is graded from a run", goalID, goals[i].Kind)
 		}
-		ownRef, ownAttempt := result.Validation.OutputRef, *attempt
-		if goalID != types.PrimaryGoalID {
-			ownRef, ownAttempt = "", types.JobAttempt{}
-			if j := slices.IndexFunc(result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
-				ownRef = result.GateEvidence[j].OutputRef
-			}
-			if j := slices.IndexFunc(*gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
-				ownAttempt = (*gateAttempts)[j].Attempt
-			}
-		}
+		ownRef, ownAttempt := ev.goalRun(goalID)
 		if verifyGate(row, goals[i], ownRef, ownAttempt, seen).Verified {
-			return nil, fmt.Errorf("job: goal %q already passes on the holder's own evidence, so there is no verdict for another run to replace", goalID)
+			return graded{}, nil, fmt.Errorf("job: goal %q already passes on the holder's own evidence, so there is no verdict for another run to replace", goalID)
 		}
 	}
 
 	here, err := filepath.Abs(store.root)
 	if err != nil {
-		return nil, err
+		return graded{}, nil, err
 	}
-	if err := sameChangedPaths(row.CheckoutRoot, here, result.ChangedPaths); err != nil {
-		return nil, err
-	}
-
-	result.GateEvidence = slices.Clone(result.GateEvidence)
-	*gateAttempts = slices.Clone(*gateAttempts)
-	taken := &types.JobIntegration{Checkout: here, Verified: true}
+	out := graded{result: ev.result, attempt: ev.attempt, gateAttempts: slices.Clone(ev.gateAttempts)}
+	out.result.GateEvidence = slices.Clone(ev.result.GateEvidence)
+	taken := &types.JobIntegration{Checkout: here}
+	var oldest int64
 	for _, goalID := range ids {
 		ref := strings.TrimSpace(refs[goalID])
 		found, err := resolve(ctx, ref)
 		if err != nil {
-			return nil, err
+			return graded{}, nil, err
 		}
 		if !found.Found {
-			return nil, fmt.Errorf("job: goal %q output ref %q names no run this checkout recorded", goalID, ref)
+			return graded{}, nil, fmt.Errorf("job: goal %q output ref %q names no run this checkout recorded", goalID, ref)
 		}
-		if goalID == types.PrimaryGoalID {
-			result.Validation.OutputRef, *attempt = ref, found
-		} else {
-			if j := slices.IndexFunc(result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
-				result.GateEvidence[j].OutputRef = ref
-			} else {
-				result.GateEvidence = append(result.GateEvidence, types.GateEvidence{GateID: goalID, OutputRef: ref})
-			}
-			if j := slices.IndexFunc(*gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
-				(*gateAttempts)[j].Attempt = found
-			} else {
-				*gateAttempts = append(*gateAttempts, types.JobGateAttempt{GateID: goalID, Attempt: found})
-			}
+		if oldest == 0 || found.TimestampMs < oldest {
+			oldest = found.TimestampMs
 		}
-		taken.Gates = append(taken.Gates, types.GateStatus{ID: goalID, Verified: true, OutputRef: ref})
+		out.setGoalRun(goalID, ref, found)
+		taken.Gates = append(taken.Gates, types.GateStatus{ID: goalID, OutputRef: ref})
 	}
-	return taken, nil
+
+	if !seen.ChangedKnown {
+		return graded{}, nil, errors.New("job: the job's diff could not be read, so nothing names the files a run here has to share with the holder's checkout")
+	}
+	changed := slices.Compact(slices.Sorted(slices.Values(append(slices.Clone(seen.Changed), ev.result.ChangedPaths...))))
+	if err := sameChangedPaths(row.CheckoutRoot, here, changed, time.UnixMilli(oldest)); err != nil {
+		return graded{}, nil, err
+	}
+	return out, taken, nil
 }
 
-// sameChangedPaths refuses unless every path reads byte for byte the same under the
-// holder's checkout and this one, a path absent from both counting as the same. The
-// check is on disk, not at a commit: a run here graded the files here.
-func sameChangedPaths(holder, here string, changed []string) error {
+// goalRun is the ref and the run ev holds for goalID, zero when it holds none.
+func (ev graded) goalRun(goalID string) (string, types.JobAttempt) {
+	if goalID == types.PrimaryGoalID {
+		return ev.result.Validation.OutputRef, ev.attempt
+	}
+	var (
+		ref     string
+		attempt types.JobAttempt
+	)
+	if j := slices.IndexFunc(ev.result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
+		ref = ev.result.GateEvidence[j].OutputRef
+	}
+	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
+		attempt = ev.gateAttempts[j].Attempt
+	}
+	return ref, attempt
+}
+
+// setGoalRun makes ref and run the evidence for goalID, in place. ev's slices must not be
+// shared with a row.
+func (ev *graded) setGoalRun(goalID, ref string, run types.JobAttempt) {
+	if goalID == types.PrimaryGoalID {
+		ev.result.Validation.OutputRef, ev.attempt = ref, run
+		return
+	}
+	if j := slices.IndexFunc(ev.result.GateEvidence, func(e types.GateEvidence) bool { return e.GateID == goalID }); j >= 0 {
+		ev.result.GateEvidence[j].OutputRef = ref
+	} else {
+		ev.result.GateEvidence = append(ev.result.GateEvidence, types.GateEvidence{GateID: goalID, OutputRef: ref})
+	}
+	if j := slices.IndexFunc(ev.gateAttempts, func(g types.JobGateAttempt) bool { return g.GateID == goalID }); j >= 0 {
+		ev.gateAttempts[j].Attempt = run
+	} else {
+		ev.gateAttempts = append(ev.gateAttempts, types.JobGateAttempt{GateID: goalID, Attempt: run})
+	}
+}
+
+// gradedTake is taken as the row records it: each goal's verdict copied from status, the
+// verdict as a whole status's own, stamped at.
+func gradedTake(taken types.JobIntegration, status types.JobStatus, at int64) *types.JobIntegration {
+	taken.At, taken.Verified = at, status.Verified
+	taken.Gates = slices.Clone(taken.Gates)
+	for i, g := range taken.Gates {
+		if j := slices.IndexFunc(status.Gates, func(s types.GateStatus) bool { return s.ID == g.ID }); j >= 0 {
+			taken.Gates[i].Verified = status.Gates[j].Verified
+			taken.Gates[i].Violations = slices.Clone(status.Gates[j].Violations)
+		}
+	}
+	return &taken
+}
+
+// sameChangedPaths refuses unless every changed path reads the same under the holder's
+// checkout and this one, a path absent from both counting as the same, and none changed
+// here after ranAt. The bytes are compared now, so ranAt is what ties them to the run: a
+// run made before the job's changes arrived here graded other files.
+//
+// A path is changed here when its modification time, or for a directory that of anything
+// beneath it, is after ranAt. An absent path is changed when the nearest directory above
+// it inside the checkout is: removing a file stamps its directory. The checkout's own root
+// is never read for that, since recording a run creates entries there.
+func sameChangedPaths(holder, here string, changed []string, ranAt time.Time) error {
 	if holder == "" {
-		return fmt.Errorf("job: the job records no checkout for its holder, so nothing shows this one holds the work the holder changed")
+		return errors.New("job: the job records no checkout for its holder, so nothing shows this one holds the work the holder changed")
 	}
 	if info, err := os.Stat(holder); err != nil || !info.IsDir() {
 		return fmt.Errorf("job: the holder's checkout %s is not there to compare against", holder)
 	}
-	if holder == here {
-		return nil
-	}
-	var differ []string
+	var differ, later []string
 	for _, c := range changed {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(c)))
 		rel := filepath.FromSlash(p)
-		if !filepath.IsLocal(rel) || !samePath(filepath.Join(holder, rel), filepath.Join(here, rel)) {
+		if !filepath.IsLocal(rel) {
 			differ = append(differ, p)
+			continue
+		}
+		if holder != here && !sameContent(filepath.Join(holder, rel), filepath.Join(here, rel)) {
+			differ = append(differ, p)
+			continue
+		}
+		if changedAfter(here, rel, ranAt) {
+			later = append(later, p)
 		}
 	}
-	if len(differ) == 0 {
-		return nil
+	switch {
+	case len(differ) > 0:
+		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read the same in both checkouts,"+
+			" and %d differ between %s and %s: %s", len(differ), holder, here, listPaths(differ))
+	case len(later) > 0:
+		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths did not change after it,"+
+			" and %d changed in %s after %s: %s", len(later), here, ranAt.UTC().Format(time.RFC3339), listPaths(later))
 	}
-	shown := differ[:min(len(differ), 5)]
-	more := ""
-	if len(differ) > len(shown) {
-		more = fmt.Sprintf(" and %d more", len(differ)-len(shown))
-	}
-	return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read the same in both checkouts,"+
-		" and %d differ between %s and %s: %s%s", len(differ), holder, here, strings.Join(shown, ", "), more)
+	return nil
 }
 
-// samePath reports whether left and right hold the same bytes, a directory comparing by
-// its entries. Both absent is the same; any other read failure is not.
-func samePath(left, right string) bool {
-	li, lerr := os.Stat(left)
-	ri, rerr := os.Stat(right)
+// listPaths names the first five of paths and counts the rest.
+func listPaths(paths []string) string {
+	shown := paths[:min(len(paths), 5)]
+	if rest := len(paths) - len(shown); rest > 0 {
+		return fmt.Sprintf("%s and %d more", strings.Join(shown, ", "), rest)
+	}
+	return strings.Join(shown, ", ")
+}
+
+// changedAfter reports whether rel, a local path under root, was modified after t. A read
+// failure other than absence reports true: an unread file proves nothing unchanged.
+func changedAfter(root, rel string, t time.Time) bool {
+	full := filepath.Join(root, rel)
+	if _, err := os.Lstat(full); errors.Is(err, fs.ErrNotExist) {
+		for dir := filepath.Dir(rel); dir != "."; dir = filepath.Dir(dir) {
+			info, err := os.Lstat(filepath.Join(root, dir))
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return err != nil || info.ModTime().After(t)
+		}
+		return false
+	}
+	later := false
+	err := filepath.WalkDir(full, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.ModTime().After(t) {
+			later = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return later || err != nil
+}
+
+// sameContent reports whether left and right hold the same thing: the same bytes for a
+// file, the same target for a symbolic link, which is never followed, and for a directory
+// the same entries, each the same. Both absent is the same; any other read failure is not.
+func sameContent(left, right string) bool {
+	li, lerr := os.Lstat(left)
+	ri, rerr := os.Lstat(right)
 	if lerr != nil || rerr != nil {
 		return errors.Is(lerr, fs.ErrNotExist) && errors.Is(rerr, fs.ErrNotExist)
 	}
-	if li.IsDir() != ri.IsDir() {
+	if li.Mode().Type() != ri.Mode().Type() {
 		return false
 	}
-	if !li.IsDir() {
+	switch {
+	case li.Mode()&fs.ModeSymlink != 0:
+		l, lerr := os.Readlink(left)
+		r, rerr := os.Readlink(right)
+		return lerr == nil && rerr == nil && l == r
+	case li.IsDir():
+		l, lerr := os.ReadDir(left)
+		r, rerr := os.ReadDir(right)
+		if lerr != nil || rerr != nil || len(l) != len(r) {
+			return false
+		}
+		for i := range l {
+			if l[i].Name() != r[i].Name() || !sameContent(filepath.Join(left, l[i].Name()), filepath.Join(right, r[i].Name())) {
+				return false
+			}
+		}
+		return true
+	case li.Mode().IsRegular():
 		l, lerr := os.ReadFile(left)
 		r, rerr := os.ReadFile(right)
 		return lerr == nil && rerr == nil && bytes.Equal(l, r)
 	}
-	l, lerr := os.ReadDir(left)
-	r, rerr := os.ReadDir(right)
-	if lerr != nil || rerr != nil || len(l) != len(r) {
-		return false
-	}
-	for i := range l {
-		if l[i].Name() != r[i].Name() || !samePath(filepath.Join(left, l[i].Name()), filepath.Join(right, r[i].Name())) {
-			return false
-		}
-	}
-	return true
+	return false
 }
 
 // resolveResultAttempts takes a portable snapshot for every evidence reference the
@@ -336,7 +423,7 @@ func samePath(left, right string) bool {
 // checkouts resolve searched, for the refusal.
 func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve AttemptResolver, where string) (types.JobAttempt, []types.JobGateAttempt, error) {
 	if resolve == nil {
-		return types.JobAttempt{}, nil, fmt.Errorf("job: no output resolver files a result's evidence")
+		return types.JobAttempt{}, nil, errors.New("job: no output resolver files a result's evidence")
 	}
 	var primary types.JobAttempt
 	if ref := result.Validation.OutputRef; ref != "" {
@@ -353,7 +440,7 @@ func resolveResultAttempts(ctx context.Context, result types.JobResult, resolve 
 	gates := make([]types.JobGateAttempt, 0, len(result.GateEvidence))
 	for _, evidence := range result.GateEvidence {
 		if evidence.GateID == "" || evidence.OutputRef == "" {
-			return types.JobAttempt{}, nil, fmt.Errorf("job: each gate_evidence entry requires gate_id and output_ref")
+			return types.JobAttempt{}, nil, errors.New("job: each gate_evidence entry requires gate_id and output_ref")
 		}
 		if seen[evidence.GateID] {
 			return types.JobAttempt{}, nil, fmt.Errorf("job: the result carries duplicate evidence for goal %q", evidence.GateID)

@@ -41,7 +41,7 @@ func gateTargets(gates []UnrunGate) []string {
 	return out
 }
 
-func TestUnrunGates(t *testing.T) {
+func TestUnrunGatesListsCiTargetsNothingTheJobRuns(t *testing.T) {
 	t.Parallel()
 
 	check := func(target string) *types.LeaseCheck { return &types.LeaseCheck{Target: target, Project: "."} }
@@ -119,24 +119,52 @@ func TestUnrunGatesNeedsACiChain(t *testing.T) {
 func TestUnrunGoalNamesTheProject(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, "lint", unrunGoal(".", "lint").ID)
-	assert.Equal(t, "lint-libs-conventions", unrunGoal("libs/conventions", "lint").ID)
-	assert.Equal(t, types.GoalKindCheck, unrunGoal(".", "lint").Kind)
+	assert.Equal(t, "lint", unrunGoal(".", "lint", map[string]bool{}).ID)
+	assert.Equal(t, "lint-libs-conventions", unrunGoal("libs/conventions", "lint", map[string]bool{}).ID)
+	assert.Equal(t, types.GoalKindCheck, unrunGoal(".", "lint", map[string]bool{}).Kind)
+}
+
+// Two projects can fold to one id, and a ci target can share its name with a goal the row
+// already holds: each goal to add gets an id of its own.
+func TestUnrunGatesGiveEachGoalItsOwnID(t *testing.T) {
+	t.Parallel()
+
+	projects := []*types.Project{
+		{
+			Path:    ".",
+			Sources: types.MustParseGlobs("**/*.go"),
+			TargetChains: map[string][]types.ChainStep{
+				"ci": {{Target: "check"}, {Project: "a/b", Target: "lint"}, {Project: "a-b", Target: "lint"}},
+			},
+		},
+		{Path: "a/b", Sources: types.MustParseGlobs("**/*.go")},
+		{Path: "a-b", Sources: types.MustParseGlobs("**/*.go")},
+	}
+	row := types.Job{ID: "j", WritePaths: []string{"a/b/x.go", "a-b/y.go", "z.go"}, Check: &types.LeaseCheck{Target: "go-test", Project: "."}}
+
+	got := UnrunGates(t.TempDir(), row, projects, nil)
+
+	var ids []string
+	for _, g := range got {
+		ids = append(ids, g.Goal.ID)
+	}
+	assert.Equal(t, []string{"check-2", "lint-a-b", "lint-a-b-2"}, ids)
 }
 
 func TestRenderUnrunGatesCapsTheListAndPrintsTheGoals(t *testing.T) {
 	t.Parallel()
 
 	var gates []UnrunGate
-	for i := range UnrunGatesLimit + 2 {
-		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Goal: unrunGoal(".", fmt.Sprintf("t%d", i))})
+	taken := map[string]bool{}
+	for i := range unrunGatesLimit + 2 {
+		gates = append(gates, UnrunGate{Target: fmt.Sprintf("t%d", i), Project: ".", Source: "**/*.go", Goal: unrunGoal(".", fmt.Sprintf("t%d", i), taken)})
 	}
 	var buf bytes.Buffer
 	RenderUnrunGates(&buf, gates)
 	out := buf.String()
 	assert.Contains(t, out, unrunHeading)
 	assert.Contains(t, out, "t0 . (reads **/*.go)")
-	assert.NotContains(t, out, fmt.Sprintf("t%d . (reads", UnrunGatesLimit))
+	assert.NotContains(t, out, fmt.Sprintf("t%d . (reads", unrunGatesLimit))
 	assert.Contains(t, out, "and 2 more; -o json lists every one")
 	assert.Contains(t, out, `goals to add: [{"id":"t0","kind":"check"`)
 

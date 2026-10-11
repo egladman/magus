@@ -288,14 +288,15 @@ func (c LeaseCheck) String() string {
 	return line
 }
 
-// Equal reports whether c and o declare the same check. Two nil checks are equal, and a nil
-// check equals no declared one.
-func (c *LeaseCheck) Equal(o *LeaseCheck) bool {
-	if c == nil || o == nil {
-		return c == o
+// SameLeaseCheck reports whether a and b declare the same check. Two nil checks are the
+// same, and a nil check is not the same as any declared one. A function over pointers
+// rather than a method, because a row's Check is optional and either side may be nil.
+func SameLeaseCheck(a, b *LeaseCheck) bool {
+	if a == nil || b == nil {
+		return a == b
 	}
-	return c.Target == o.Target && c.Script == o.Script && c.Project == o.Project &&
-		c.NoDefaultCharms == o.NoDefaultCharms && slices.Equal(c.Args, o.Args)
+	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
+		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
 }
 
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
@@ -797,13 +798,17 @@ type Job struct {
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
 	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
-	// RootEvidence names the goals whose passing run came from the waiter's checkout
+	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
 	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
 	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
 	// failed where the work was written and passed once re-run here is two facts. Each
-	// Gates entry is one goal and the ref taken for it; Checkout and At say where and
-	// when.
-	RootEvidence *JobIntegration `json:"root_evidence,omitempty" yaml:"root_evidence,omitempty"`
+	// Gates entry is one goal, the ref taken for it and its verdict; Checkout and At say
+	// where and when.
+	//
+	// A JobIntegration because the record is the same one --integration keeps: goals graded
+	// against runs in another checkout. What differs is only that these verdicts moved the
+	// job's state, so the record exists only for a job that passed.
+	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
 
 // JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
@@ -1745,7 +1750,7 @@ func pathsShareGround(a, b string) bool {
 	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
 		return false
 	}
-	if lit, glob := literalAgainstGlob(a, b); lit != "" {
+	if lit, glob, ok := literalAgainstGlob(a, b); ok {
 		return globReaches(glob, lit)
 	}
 	a, b = LiteralPrefix(a), LiteralPrefix(b)
@@ -1756,29 +1761,31 @@ func pathsShareGround(a, b string) bool {
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
-// literalAgainstGlob returns the cleaned literal and the cleaned glob when exactly one of
-// a and b holds a glob metacharacter, and "" for lit for any other pair: two literals and
-// two globs keep the prefix rule, since deciding whether two globs share a path is a
-// solver and a missed collision costs more than a pair read and dismissed.
-func literalAgainstGlob(a, b string) (lit, glob string) {
+// literalAgainstGlob returns the cleaned literal and the cleaned glob, and true, when
+// exactly one of a and b holds a glob metacharacter and the literal is not the root. Any
+// other pair reports false: two literals and two globs keep the prefix rule, since deciding
+// whether two globs share a path is a solver and a missed collision costs more than a pair
+// read and dismissed.
+func literalAgainstGlob(a, b string) (lit, glob string, ok bool) {
 	a, _ = SplitClaim(a)
 	b, _ = SplitClaim(b)
 	a, b = path.Clean(a), path.Clean(b)
 	switch aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b); {
 	case aMeta && !bMeta && b != ".":
-		return b, a
+		return b, a, true
 	case bMeta && !aMeta && a != ".":
-		return a, b
+		return a, b, true
 	}
-	return "", ""
+	return "", "", false
 }
 
 // globReaches reports whether glob can match lit, an ancestor of lit, or a path beneath
 // lit, segment by segment, so "internal/guard/*_test.go" reaches "internal/guard" and not
 // "internal/guard/guard.go". A `**` segment can absorb anything below it and so answers
-// true, as does a pattern split on "/" would cut apart: the answer errs toward overlapping.
+// true, as does a glob that cannot be split on "/" (see [unsplittableGlob]): the answer
+// errs toward overlapping.
 func globReaches(glob, lit string) bool {
-	if bracedSlash(glob) {
+	if unsplittableGlob(glob) {
 		return true
 	}
 	litSegs := strings.Split(lit, "/")
@@ -1793,9 +1800,10 @@ func globReaches(glob, lit string) bool {
 	return true
 }
 
-// bracedSlash reports whether a "/" sits inside a {...} alternation, or the braces do not
-// balance.
-func bracedSlash(glob string) bool {
+// unsplittableGlob reports whether glob cannot be read one "/" segment at a time: a "/"
+// sits inside a {...} alternation, or the braces do not balance, so no split is sure to
+// keep an alternation whole.
+func unsplittableGlob(glob string) bool {
 	depth, slash := 0, false
 	for _, r := range glob {
 		switch {
@@ -1866,21 +1874,20 @@ func (u Job) Clone() Job {
 		run := *u.LastRun
 		c.LastRun = &run
 	}
-	if u.Integration != nil {
-		integration := *u.Integration
-		integration.Gates = slices.Clone(u.Integration.Gates)
-		for i := range integration.Gates {
-			integration.Gates[i].Violations = slices.Clone(integration.Gates[i].Violations)
-		}
-		c.Integration = &integration
-	}
-	if u.RootEvidence != nil {
-		taken := *u.RootEvidence
-		taken.Gates = slices.Clone(u.RootEvidence.Gates)
-		for i := range taken.Gates {
-			taken.Gates[i].Violations = slices.Clone(taken.Gates[i].Violations)
-		}
-		c.RootEvidence = &taken
-	}
+	c.Integration = cloneIntegration(u.Integration)
+	c.WaiterEvidence = cloneIntegration(u.WaiterEvidence)
 	return c
+}
+
+// cloneIntegration is a deep copy of g, nil for nil.
+func cloneIntegration(g *JobIntegration) *JobIntegration {
+	if g == nil {
+		return nil
+	}
+	c := *g
+	c.Gates = slices.Clone(g.Gates)
+	for i := range c.Gates {
+		c.Gates[i].Violations = slices.Clone(c.Gates[i].Violations)
+	}
+	return &c
 }

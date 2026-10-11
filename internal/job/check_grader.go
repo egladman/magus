@@ -9,20 +9,24 @@ import (
 )
 
 // CheckVerdict is a [CheckGrader]'s answer. Denied is false for a check the guard lets the
-// holder run, and for one the grader could not judge: a grader that cannot load the rules
-// says so itself and accepts, because a refusal must come from a verdict, not from a
-// failure to reach one.
+// holder run, and for one the grader could not judge: a grader that cannot reach a verdict
+// on the check accepts and says why in NotGraded, because a refusal must come from a
+// verdict, not from a failure to reach one.
 type CheckVerdict struct {
 	Denied bool
 	// Rule names the rule that refused, as the guard prints it.
 	Rule string
 	// Reason is the guard's own wording, quoted back to the person forking.
 	Reason string
+	// NotGraded says why no verdict on the check was reached, empty when one was.
+	NotGraded string
 }
 
-// CheckGrader judges row's check the way the guard will judge row's holder running it.
-// The guard lives above this package, so the CLI supplies the implementation.
-type CheckGrader func(ctx context.Context, row types.Job) CheckVerdict
+// CheckGrader judges row's check the way the guard will judge row's holder running it in
+// the checkout at root, against that workspace's rules. The guard lives above this
+// package, so the CLI supplies the implementation. One grader serves every checkout a
+// door opens stores for, so it must be safe for concurrent use.
+type CheckGrader func(ctx context.Context, root string, row types.Job) CheckVerdict
 
 // CompilingCheck is the check a refusal recommends: it compiles the workspace without
 // linking its binary, so a worker the guard keeps from building can still run it. The
@@ -40,7 +44,7 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 	if store == nil || store.grader == nil || row.Check == nil {
 		return nil
 	}
-	verdict := store.grader(ctx, row)
+	verdict := store.grader(ctx, store.root, row)
 	if !verdict.Denied {
 		return nil
 	}
@@ -49,7 +53,7 @@ func RefuseDeniedCheck(ctx context.Context, store *Store, row types.Job) error {
 		rule = " (" + verdict.Rule + ")"
 	}
 	compiling := CompilingCheck()
-	recommended := strings.TrimPrefix(compiling.String(), "magus run ")
+	recommended := compiling.Target + " " + compiling.Project
 	return fmt.Errorf("job: %s's check `%s` would be denied to its worker by the guard%s: %s,"+
 		" and the holder runs the check under its lease, so a denied one can never verify the job,"+
 		" declare a target that compiles without building the binary, such as `%s`,"+

@@ -3,6 +3,7 @@ package job
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -53,13 +54,18 @@ func goTestCheck(args ...string) *types.LeaseCheck {
 	return &types.LeaseCheck{Target: "go-test", Project: ".", Args: args}
 }
 
-func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
+// refuseNarrowedIn is RefuseNarrowedTests with a store opened at root, which is all it reads.
+func refuseNarrowedIn(root string, row types.Job) error {
+	return RefuseNarrowedTests(&Store{root: root}, row)
+}
+
+func TestRefuseNarrowedTestsListsWhatTheCheckLeavesOut(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
 	row := types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")}
 
-	err := RefuseSkippedTests(root, row)
+	err := refuseNarrowedIn(root, row)
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "\n", "an error is one line")
 	assert.Contains(t, err.Error(), "pkg (TestBeta, TestGamma_sub)")
@@ -71,10 +77,10 @@ func TestRefuseSkippedTestsListsWhatTheCheckSkips(t *testing.T) {
 	const covering = "Alpha|^(TestBeta|TestGamma_sub)$"
 	assert.Contains(t, err.Error(), "`"+covering+"`", "the refusal prints a pattern that covers them")
 	row.Check = goTestCheck("-run", covering)
-	require.NoError(t, RefuseSkippedTests(root, row), "and that pattern is accepted")
+	require.NoError(t, refuseNarrowedIn(root, row), "and that pattern is accepted")
 }
 
-func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
+func TestRefuseNarrowedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
@@ -111,7 +117,7 @@ func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: tc.check})
+			err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: tc.check})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -121,7 +127,7 @@ func TestRefuseSkippedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 	}
 }
 
-func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
+func TestRefuseNarrowedTestsFindsPackagesFromWritePaths(t *testing.T) {
 	t.Parallel()
 
 	root := testRoot(t).Root()
@@ -145,7 +151,7 @@ func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: tc.paths, Check: narrow})
+			err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: tc.paths, Check: narrow})
 			if tc.refused == "" {
 				require.NoError(t, err)
 				return
@@ -157,14 +163,15 @@ func TestRefuseSkippedTestsFindsPackagesFromWritePaths(t *testing.T) {
 	t.Run("no root", func(t *testing.T) {
 		t.Parallel()
 
-		require.NoError(t, RefuseSkippedTests("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
+		require.NoError(t, refuseNarrowedIn("", types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}))
+		require.NoError(t, RefuseNarrowedTests(nil, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: narrow}), "nor a nil store")
 	})
 }
 
 // A write path that is a pattern reads packages the way go list does: fixtures under
 // testdata, vendored code, hidden and underscore directories and nested modules are not the
 // job's packages.
-func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
+func TestRefuseNarrowedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 	t.Parallel()
 
 	w := testRoot(t)
@@ -180,7 +187,7 @@ func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 	}
 	w.Write("lib/go.mod", "module lib\n")
 
-	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"**/*.go"}, Check: goTestCheck("-run", "NoSuchTest")})
+	err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"**/*.go"}, Check: goTestCheck("-run", "NoSuchTest")})
 	require.Error(t, err)
 	for _, tested := range []string{"pkg (TestAlpha", "nested/x (TestDeep"} {
 		assert.Contains(t, err.Error(), tested)
@@ -190,10 +197,46 @@ func TestRefuseSkippedTestsLeavesOutWhatGoListLeavesOut(t *testing.T) {
 	}
 }
 
+// A test plain `go test` never builds is not one the check leaves out: a file behind a build
+// tag, one for another platform, and one go ignores by its name.
+func TestRefuseNarrowedTestsCountsOnlyTestsGoTestBuilds(t *testing.T) {
+	t.Parallel()
+
+	w := testRoot(t)
+	other := "windows"
+	if runtime.GOOS == other {
+		other = "darwin"
+	}
+	w.WriteTree(map[string]string{
+		"pkg/tagged_test.go":           "//go:build integration\n\npackage pkg\n\nimport \"testing\"\n\nfunc TestTagged(t *testing.T) {}\n",
+		"pkg/os_" + other + "_test.go": "package pkg\n\nimport \"testing\"\n\nfunc TestOtherPlatform(t *testing.T) {}\n",
+		"pkg/_ignored_test.go":         "package pkg\n\nimport \"testing\"\n\nfunc TestIgnored(t *testing.T) {}\n",
+		"pkg/.hidden_test.go":          "package pkg\n\nimport \"testing\"\n\nfunc TestHidden(t *testing.T) {}\n",
+	})
+
+	require.NoError(t, refuseNarrowedIn(w.Root(), types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha|Beta|Gamma")}))
+}
+
+// A check goal narrowed with -run is held to the same rule as the job's own check.
+func TestRefuseNarrowedTestsGradesEveryCheckGoal(t *testing.T) {
+	t.Parallel()
+
+	root := testRoot(t).Root()
+	row := types.Job{
+		ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck(),
+		Goals: []types.Goal{{ID: "unit", Kind: types.GoalKindCheck, Check: *goTestCheck("-run", "Alpha")}},
+	}
+
+	err := refuseNarrowedIn(root, row)
+
+	require.ErrorContains(t, err, `w's goal "unit" `+"`magus run go-test . -- -run Alpha`")
+	assert.Contains(t, err.Error(), "pkg (TestBeta, TestGamma_sub)")
+}
+
 // A package with hundreds of tests would print them all, in one line. The refusal names the
 // first few per package, counts the rest, and prints a covering pattern only when a person
 // could paste it.
-func TestRefuseSkippedTestsCapsWhatItLists(t *testing.T) {
+func TestRefuseNarrowedTestsCapsWhatItLists(t *testing.T) {
 	t.Parallel()
 
 	w := testRoot(t)
@@ -206,7 +249,7 @@ func TestRefuseSkippedTestsCapsWhatItLists(t *testing.T) {
 	w.Write("big/b.go", "package big\n")
 	w.Write("big/b_test.go", many.String())
 
-	err := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-run", "TestCase000")})
+	err := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-run", "TestCase000")})
 	require.Error(t, err)
 	msg := err.Error()
 	assert.NotContains(t, msg, "\n", "an error is one line")
@@ -216,20 +259,20 @@ func TestRefuseSkippedTestsCapsWhatItLists(t *testing.T) {
 	assert.NotContains(t, msg, "widen -run to")
 	assert.Less(t, len(msg), 600)
 
-	few := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")})
+	few := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"pkg/a.go"}, Check: goTestCheck("-run", "Alpha")})
 	require.Error(t, few)
 	assert.Contains(t, few.Error(), "pkg (TestBeta, TestGamma_sub)", "a short list is named whole")
 	assert.NotContains(t, few.Error(), "more)")
 	assert.Contains(t, few.Error(), "widen -run to `Alpha|^(TestBeta|TestGamma_sub)$`", "and a short pattern is printed")
 
-	skipped := RefuseSkippedTests(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-skip", "TestCase")})
+	skipped := refuseNarrowedIn(root, types.Job{ID: "w", WritePaths: []string{"big/b.go"}, Check: goTestCheck("-skip", "TestCase")})
 	require.Error(t, skipped)
 	assert.NotContains(t, skipped.Error(), "\n")
 	assert.Contains(t, skipped.Error(), "and 195 more)")
 	assert.Contains(t, skipped.Error(), "drop -skip")
 }
 
-func TestForkAndApplyRefuseASkippingCheck(t *testing.T) {
+func TestForkAndApplyRefuseACheckThatLeavesOutATest(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -253,11 +296,16 @@ func TestForkAndApplyRefuseASkippingCheck(t *testing.T) {
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.Check = narrow }, config.Jobs{}, nil)
 	require.ErrorContains(t, err, "TestBeta", "narrowing the check of a row that exists")
 
+	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) {
+		u.Goals = append(u.Goals, types.Goal{ID: "unit", Kind: types.GoalKindCheck, Check: *narrow}.Resolve())
+	}, config.Jobs{}, nil)
+	require.ErrorContains(t, err, `goal "unit"`, "adding a narrowed goal to a row that exists")
+
 	_, err = ForkMerge(ctx, s, "w", func(u *types.Job) { u.WritePaths = []string{"pkg/a.go", "pkg/b.go"} }, config.Jobs{}, nil)
 	require.NoError(t, err, "an update that leaves the check alone is held to nothing new")
 }
 
-func TestForkLetsARowThatAlreadySkipsTakeAnUnrelatedUpdate(t *testing.T) {
+func TestForkLetsARowThatAlreadyNarrowsTakeAnUnrelatedUpdate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()

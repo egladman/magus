@@ -67,7 +67,7 @@ func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
 	bare := NewTerms(briefRow(), TermsFacts{}).String()
 	assert.NotContains(t, bare, unrunHeading)
 
-	gate := UnrunGate{Target: "lint", Project: ".", Source: "**/*.go", Goal: unrunGoal(".", "lint")}
+	gate := UnrunGate{Target: "lint", Project: ".", Source: "**/*.go", Goal: unrunGoal(".", "lint", map[string]bool{})}
 	got := NewTerms(briefRow(), TermsFacts{UnrunGates: []UnrunGate{gate}}).String()
 	assert.Contains(t, got, "\n"+unrunHeading+"\n  lint . (reads **/*.go)\n  goals to add: ")
 	assert.Less(t, strings.Index(got, unrunHeading), strings.Index(got, "the only check you run"),

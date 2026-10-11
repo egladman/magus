@@ -1866,7 +1866,6 @@ github.com/egladman/magus/types.Job.RegisteredBy field Origin "json:\"registered
 github.com/egladman/magus/types.Job.Releases field []JobRelease "json:\"releases,omitempty\" yaml:\"releases,omitempty\""
 github.com/egladman/magus/types.Job.ReportedBase field string "json:\"reported_base,omitempty\" yaml:\"reported_base,omitempty\""
 github.com/egladman/magus/types.Job.Result field *JobResult "json:\"result,omitempty\"  yaml:\"result,omitempty\""
-github.com/egladman/magus/types.Job.RootEvidence field *JobIntegration "json:\"root_evidence,omitempty\" yaml:\"root_evidence,omitempty\""
 github.com/egladman/magus/types.Job.Schema embedded Schema "yaml:\",inline\""
 github.com/egladman/magus/types.Job.StaleAt method func(now int64, after time.Duration) bool
 github.com/egladman/magus/types.Job.State field JobState "json:\"state,omitempty\" yaml:\"state,omitempty\""
@@ -1874,6 +1873,7 @@ github.com/egladman/magus/types.Job.Unattributed field []JobUnattributedWrite "j
 github.com/egladman/magus/types.Job.Unmet method func(known []string) []string
 github.com/egladman/magus/types.Job.Updated field int64 "json:\"updated\" yaml:\"updated\""
 github.com/egladman/magus/types.Job.Validation field string "json:\"validation,omitempty\" yaml:\"validation,omitempty\""
+github.com/egladman/magus/types.Job.WaiterEvidence field *JobIntegration "json:\"waiter_evidence,omitempty\" yaml:\"waiter_evidence,omitempty\""
 github.com/egladman/magus/types.Job.WritePaths field []string "json:\"write_paths,omitempty\" yaml:\"write_paths,omitempty\""
 github.com/egladman/magus/types.Job.WriteProof field JobWriteProof "json:\"write_proof,omitempty\" yaml:\"write_proof,omitempty\""
 github.com/egladman/magus/types.JobAncestors func(rows []Job, id string) []Job
@@ -2361,7 +2361,6 @@ github.com/egladman/magus/types.LayerDeclarationInvalid const DiagnosticCode = "
 github.com/egladman/magus/types.LayerNotDeclared const DiagnosticCode = "MGS7006"
 github.com/egladman/magus/types.LeaseCheck type struct
 github.com/egladman/magus/types.LeaseCheck.Args field []string "json:\"args,omitempty\"     yaml:\"args,omitempty\""
-github.com/egladman/magus/types.LeaseCheck.Equal method(ptr) func(o *LeaseCheck) bool
 github.com/egladman/magus/types.LeaseCheck.NoDefaultCharms field bool "json:\"no_default_charms,omitzero\" yaml:\"no_default_charms,omitempty\""
 github.com/egladman/magus/types.LeaseCheck.Project field string "json:\"project,omitempty\"  yaml:\"project,omitempty\""
 github.com/egladman/magus/types.LeaseCheck.Script field string "json:\"script,omitempty\"   yaml:\"script,omitempty\""
@@ -3072,6 +3071,7 @@ github.com/egladman/magus/types.RuleDoc.Fixed field bool "json:\"fixed,omitempty
 github.com/egladman/magus/types.RuleDoc.Name field string "json:\"name\""
 github.com/egladman/magus/types.RuleDoc.Why field string "json:\"why,omitempty\""
 github.com/egladman/magus/types.RuleDoc.Workspace field string "json:\"workspace,omitempty\""
+github.com/egladman/magus/types.SameLeaseCheck func(a *LeaseCheck, b *LeaseCheck) bool
 github.com/egladman/magus/types.SandboxMode type string
 github.com/egladman/magus/types.SandboxMode.Enabled method func() bool
 github.com/egladman/magus/types.SandboxMode.MarshalText method func() ([]byte, error)
