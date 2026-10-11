@@ -173,7 +173,42 @@ func openJobs(root string) (*job.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn}), nil
+	return job.NewStore(job.Location{CacheDir: cacheDir, Root: root, Outputs: outputsIn, Grader: checkGrader(root)}), nil
+}
+
+// checkGrader grades a declared check against the guard's rules for the workspace at root.
+// The rules load on the first check graded, so a fork that declares none pays nothing.
+func checkGrader(root string) job.CheckGrader {
+	var (
+		once sync.Once
+		deps guard.Dependencies
+	)
+	return func(ctx context.Context, row types.Job) job.CheckVerdict {
+		once.Do(func() { deps = guardDependencies(ctx, root) })
+		return gradeCheck(ctx, deps, row, func(msg string) {
+			slog.WarnContext(ctx, msg, attr.Notice(""), attr.Component("magus job fork"))
+		})
+	}
+}
+
+// gradeCheck judges row's check as the guard would judge its holder typing it, with the row
+// standing in for a lease the store does not carry yet. A workspace whose rules did not load
+// is not graded, and say reports it: a refusal has to come from a verdict.
+func gradeCheck(ctx context.Context, deps guard.Dependencies, row types.Job, say func(string)) job.CheckVerdict {
+	if deps.LoadFailure != nil {
+		say("job " + row.ID + "'s check was not graded against the guard: the workspace's rules did not load: " + deps.LoadFailure.Error())
+		return job.CheckVerdict{}
+	}
+	verdict := guard.Judge(ctx, deps, guard.Request{
+		Input:     "./" + row.Check.String(),
+		DryRun:    true,
+		Lease:     row.ID,
+		Candidate: &row,
+	})
+	if verdict.Decision != "deny" {
+		return job.CheckVerdict{}
+	}
+	return job.CheckVerdict{Denied: true, Rule: verdict.Rule, Reason: verdict.Reason}
 }
 
 // outputsIn resolves a ref against the output store of the checkout at root. That
@@ -964,6 +999,12 @@ func jobFork(ctx context.Context, root string, args []string) error {
 		return usagef("magus job fork: %s", err)
 	}
 	if err := job.RefuseUnorderedFileShare(ctx, store, plan, row.ID, candidate); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if err := job.RefuseSkippedTests(store, row.ID, probe); err != nil {
+		return usagef("magus job fork: %s", err)
+	}
+	if err := job.RefuseDeniedCheck(ctx, store, probe); err != nil {
 		return usagef("magus job fork: %s", err)
 	}
 	proof := store.WriteProof(plan, row.ID, candidate)

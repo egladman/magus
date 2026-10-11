@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
@@ -929,4 +931,97 @@ func guideBlock(t *testing.T, script, section string) string {
 		}
 	}
 	return command + "\n" + golden
+}
+
+// A -run that leaves out a test of the write paths' package is refused at fork, listing
+// the tests and a pattern that covers them, and a check running the whole package passes.
+func TestJobForkRefusesACheckThatSkipsATestOfItsPackage(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	resetWorkspaceMemo(t)
+	root, cacheDir := execFixture(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a.go"), []byte("package pkg\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "pkg", "a_test.go"),
+		[]byte("package pkg\n\nimport \"testing\"\n\nfunc TestAlpha(t *testing.T) {}\nfunc TestBeta(t *testing.T) {}\n"), 0o644))
+	fork := func(check string) error {
+		return jobFork(t.Context(), root, []string{"w", "--write-paths", "pkg/a.go", "--check", check})
+	}
+
+	err := fork("go-test . -- -run Alpha")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "pkg: TestBeta")
+	assert.Contains(t, err.Error(), "`Alpha|^(TestBeta)$`")
+
+	require.NoError(t, fork("go-test . -- -run Alpha|^(TestBeta)$"))
+	rows, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1, "the refused fork wrote no row")
+}
+
+// denyWorkerBuildRule is a magusfile whose command rule denies a worker the go-build target.
+const denyWorkerBuildRule = `import "magus";
+
+magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
+    foreach (c in req.commands) {
+        if (req.role == "worker" and c.args.indexOf("go-build") != null) {
+            return magus\guard.deny("a worker does not build magus");
+        }
+    }
+    return magus\guard.allow();
+});
+`
+
+// The fork judges the check as its not-yet-stored worker would meet the guard: the rule
+// that turns on the worker role denies it, the same line from the orchestrator would pass,
+// and the refusal names the target that compiles without linking the binary.
+func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
+	global = globalFlags{}
+	root := initGitRepo(t)
+	for name, body := range map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"} {
+		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
+	}
+	runGit(t, root, "add", "-A")
+	runGit(t, root, "commit", "-q", "-m", "init")
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	fork := func(check string) error {
+		return jobFork(t.Context(), root, []string{"w", "--write-paths", "run.go", "--check", check})
+	}
+
+	err := fork("go-build .")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "w's check `magus run go-build .` would be denied to its worker by the guard")
+	assert.Contains(t, err.Error(), "a worker does not build magus")
+	assert.Contains(t, err.Error(), "`go::go-vet .`")
+
+	cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg))
+	require.NoError(t, err)
+	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
+	rows, err := store.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows, "grading dry-runs the guard and the refused fork wrote no row")
+
+	require.NoError(t, fork("go::go-vet ."))
+	rows, err = store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+}
+
+// A workspace whose rules did not load is not graded, and says so rather than refuse on a
+// verdict nobody reached.
+func TestGradeCheckSkipsAWorkspaceThatDidNotLoad(t *testing.T) {
+	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
+	row := types.Job{ID: "w", Check: &types.LeaseCheck{Target: "go-build", Project: "."}}
+
+	var said []string
+	verdict := gradeCheck(t.Context(), guard.Dependencies{LoadFailure: errors.New("magusfile.buzz:3: expected ';'")}, row,
+		func(msg string) { said = append(said, msg) })
+
+	assert.False(t, verdict.Denied)
+	require.Len(t, said, 1)
+	assert.Contains(t, said[0], "job w's check was not graded against the guard")
+	assert.Contains(t, said[0], "magusfile.buzz:3: expected ';'")
 }

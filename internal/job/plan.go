@@ -74,7 +74,8 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // to, and returns the write proof a created row records. A merge that creates the row meets
 // every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
 // are no directory (MGS3018), ungradable claim (MGS3031), shared checkout or unordered
-// shared file (MGS3032). A merge onto an existing row meets the same rules for what it
+// shared file (MGS3032), and a check that skips a test of its write paths' packages or that
+// the guard denies its holder. A merge onto an existing row meets the same rules for what it
 // ADDS: the goals and write paths it did not carry, so a path the row already held never
 // blocks an unrelated update.
 func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
@@ -103,7 +104,20 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 			return "", err
 		}
 		candidate := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		return "", RefuseUnorderedFileShare(ctx, store, rows, id, candidate)
+		if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
+			return "", err
+		}
+		// Judged on what the update changes, so a check the row already held never blocks an
+		// unrelated update.
+		if len(added) > 0 || !sameCheck(prev.Check, merged.Check) {
+			if err := RefuseSkippedTests(store, id, merged); err != nil {
+				return "", err
+			}
+		}
+		if !sameCheck(prev.Check, merged.Check) {
+			return "", RefuseDeniedCheck(ctx, store, merged)
+		}
+		return "", nil
 	}
 	candidate := types.Job{ID: id}
 	merge(&candidate)
@@ -128,7 +142,22 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 	if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
 		return "", err
 	}
+	if err := RefuseSkippedTests(store, id, candidate); err != nil {
+		return "", err
+	}
+	if err := RefuseDeniedCheck(ctx, store, candidate); err != nil {
+		return "", err
+	}
 	return store.WriteProof(rows, id, candidate), nil
+}
+
+// sameCheck reports whether a and b declare the same check.
+func sameCheck(a, b *types.LeaseCheck) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
+		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
 }
 
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
