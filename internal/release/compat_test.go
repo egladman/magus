@@ -3,9 +3,6 @@ package release
 import (
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -111,27 +108,25 @@ func TestJudge(t *testing.T) {
 // archived revision, and both broken projects and the broken spell must be reported.
 func TestCheckCompat_LoadsTheTaggedTree(t *testing.T) {
 	testkit.Isolate(t)
-	repo := t.TempDir()
 	broken := "magus.project({});\n"
-	write(t, repo, "magus.yaml", "")
-	write(t, repo, "a/magusfile.buzz", broken)
-	write(t, repo, "b/magusfile.buzz", broken)
-	// Nothing imports this spell, so only the spell walk can find it.
-	write(t, repo, "spells/fixture/spell.buzz", `export fun mgs_getName() > str { return "fixture"; }
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":       "",
+		"a/magusfile.buzz": broken,
+		"b/magusfile.buzz": broken,
+		// Nothing imports this spell, so only the spell walk can find it.
+		"spells/fixture/spell.buzz": `export fun mgs_getName() > str { return "fixture"; }
 
 fun unused() > void { magus.project({}); }
-`)
-	// A plain library is not a spell, and not a failure.
-	write(t, repo, "spells/lib/spell.buzz", "export fun helper() > int { return 1; }\n")
-	git(t, repo, "init", "-q")
-	git(t, repo, "add", ".")
-	git(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
-	git(t, repo, "tag", "v1.0.0")
+`,
+		// A plain library is not a spell, and not a failure.
+		"spells/lib/spell.buzz": "export fun helper() > int { return 1; }\n",
+	})
+	repo.Git("tag", "v1.0.0")
 	fixed := "import \"magus\";\n\n" + broken
-	write(t, repo, "a/magusfile.buzz", fixed)
-	write(t, repo, "b/magusfile.buzz", fixed)
+	repo.Write("a/magusfile.buzz", fixed)
+	repo.Write("b/magusfile.buzz", fixed)
 
-	got, err := CheckCompat(t.Context(), repo, "v1.0.0")
+	got, err := CheckCompat(t.Context(), repo.Root(), "v1.0.0")
 	require.NoError(t, err)
 	assert.Equal(t, CompatReport{
 		Base:  "v1.0.0",
@@ -140,21 +135,7 @@ fun unused() > void { magus.project({}); }
 }
 
 func TestCheckCompat_UnknownTagIsAnError(t *testing.T) {
-	repo := t.TempDir()
-	git(t, repo, "init", "-q")
-	_, err := CheckCompat(t.Context(), repo, "v9.9.9")
+	repo := testkit.NewRepo(t, nil)
+	_, err := CheckCompat(t.Context(), repo.Root(), "v9.9.9")
 	assert.ErrorContains(t, err, "release: export v9.9.9")
-}
-
-func write(t *testing.T, root, rel, body string) {
-	t.Helper()
-	p := filepath.Join(root, rel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-	require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-}
-
-func git(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-	require.NoError(t, err, "%s", out)
 }

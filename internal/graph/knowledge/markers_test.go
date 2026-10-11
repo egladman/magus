@@ -1,10 +1,9 @@
 package knowledge
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,13 +70,9 @@ func TestFoldMarkers(t *testing.T) {
 // markerTree writes a workspace whose root is its only project.
 func markerTree(t *testing.T, files map[string]string) Inputs {
 	t.Helper()
-	root := t.TempDir()
-	for rel, body := range files {
-		full := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
-		require.NoError(t, os.WriteFile(full, []byte(body), 0o644))
-	}
-	return Inputs{Root: root, Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}}}
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(files)
+	return Inputs{Root: ws.Root(), Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{{Path: "."}}}}
 }
 
 func TestAssembleMarkers(t *testing.T) {

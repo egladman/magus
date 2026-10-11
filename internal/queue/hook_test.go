@@ -23,6 +23,7 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	sandboxenv "github.com/egladman/magus/internal/sandbox/env"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	magustypes "github.com/egladman/magus/types"
 )
@@ -36,7 +37,8 @@ func init() { retryDelay = time.Millisecond }
 
 // TestMain lets the test binary serve as the sandbox launcher, since a hook confined by
 // the kernel re-executes it, and keeps the private temp dirs hook policies make out of
-// the host's TMPDIR.
+// the host's TMPDIR. The launcher runs before the environment is reduced: it reads the
+// variables its parent passed.
 func TestMain(m *testing.M) {
 	sandbox.MaybeLaunch()
 	tmp, err := os.MkdirTemp("", "queue-test")
@@ -47,7 +49,7 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	code := m.Run()
+	code := testkit.Isolated(m).Run()
 	_ = os.RemoveAll(tmp)
 	os.Exit(code)
 }

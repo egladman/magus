@@ -2,11 +2,11 @@ package settle
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -18,8 +18,8 @@ import (
 // the repository, and only `magus init --vcs git` writes into it.
 func TestWorkspaceLoadWritesNoHook(t *testing.T) {
 	ctx := context.Background()
-	root := initGitRepo(t)
-	magusfile := `import "magus";
+	root := testkit.NewRepo(t, map[string]string{
+		"magusfile.buzz": `import "magus";
 import "fs";
 
 magus\project({})
@@ -28,12 +28,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
     fs\writeFile("gen/catalog.md", "regenerated\n");
 }
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "catalog.md"), []byte("kept\n"), 0o644))
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-m", "initial")
+`,
+		"gen/catalog.md": "kept\n",
+	}).Root()
 	m, err := magus.Open(ctx, root)
 	require.NoError(t, err)
 

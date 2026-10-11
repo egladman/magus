@@ -2,38 +2,24 @@ package race
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/testkit"
 )
 
-func gitInit(t *testing.T, dir string) {
-	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	for _, args := range [][]string{
-		{"init"},
-		{"config", "user.email", "test@example.com"},
-		{"config", "user.name", "test"},
-	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		require.NoError(t, cmd.Run(), "git %v", args)
-	}
-}
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestTrackedFilter_AllowsTrackedRejectsUntracked(t *testing.T) {
-	root := t.TempDir()
-	gitInit(t, root)
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
 
-	tracked := filepath.Join(root, "tracked.txt")
-	require.NoError(t, os.WriteFile(tracked, []byte("x"), 0o644))
-	require.NoError(t, exec.Command("git", "-C", root, "add", "tracked.txt").Run())
+	tracked := r.Write("tracked.txt", "x")
+	r.Git("add", "tracked.txt")
 
-	untracked := filepath.Join(root, "untracked.txt")
-	require.NoError(t, os.WriteFile(untracked, []byte("y"), 0o644))
+	untracked := r.Write("untracked.txt", "y")
 
 	f := newTrackedFilter(t.Context(), root)
 	require.True(t, f.Allow(tracked), "staged file is tracked")

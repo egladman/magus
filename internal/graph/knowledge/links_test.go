@@ -1,10 +1,10 @@
 package knowledge
 
 import (
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -61,10 +61,9 @@ func TestParseCitationRejects(t *testing.T) {
 // source, and returns the merged docs+links graph for it.
 func linksTree(t *testing.T, files map[string]string) types.KnowledgeGraphOutput {
 	t.Helper()
-	root := t.TempDir()
-	for rel, content := range files {
-		writeFile(t, root, rel, content)
-	}
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(files)
+	root := ws.Root()
 	docShard, cites := assembleDocs(root, nil, nil, "")
 	links := assembleLinks(root, nil, newDocIndex(docShard.Nodes), cites)
 	return mergeAll([]Shard{docShard, links}).Output()
@@ -175,16 +174,17 @@ func TestLinksIndexesGeneratedFrom(t *testing.T) {
 // edge must sit inside types.KnowledgeRelationDefinitions, or the closed vocabulary is a
 // claim nobody checked.
 func TestLinksEdgesAreDeclared(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/concepts/cache.md", "# Cache\n\n## Eviction\n\nprose\n")
-	writeFile(t, root, "docs/reference/cli.md", "---\ntitle: CLI\ngenerated_from: internal/cache/lru.go\ntags: []\n---\n\n# CLI\n\n"+
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/concepts/cache.md", "# Cache\n\n## Eviction\n\nprose\n")
+	ws.Write("docs/reference/cli.md", "---\ntitle: CLI\ngenerated_from: internal/cache/lru.go\ntags: []\n---\n\n# CLI\n\n"+
 		"[code](https://github.com/o/r/blob/main/internal/cache/lru.go) "+
 		"[dir](https://github.com/o/r/tree/main/internal) "+
 		"[page](https://site.example-host.dev/b/concepts/cache/) "+
 		"[anchor](https://site.example-host.dev/b/concepts/cache/#eviction) "+
 		"[away](https://buzz-lang.dev/x/y)\n")
-	writeFile(t, root, "internal/cache/policy.go", "package cache\n")
-	writeFile(t, root, "internal/cache/lru.go", "package cache\n\n"+
+	ws.Write("internal/cache/policy.go", "package cache\n")
+	ws.Write("internal/cache/lru.go", "package cache\n\n"+
 		"// Upstream: https://buzz-lang.dev/x/y\n"+
 		"// Concept: https://site.example-host.dev/b/concepts/cache/\n"+
 		"// Anchor: https://site.example-host.dev/b/concepts/cache/#eviction\n"+
@@ -229,18 +229,12 @@ func TestCitedRankLiftsOnlyCitedProse(t *testing.T) {
 // the committed graph held a file node on one machine and a link node on the other. A
 // path the VCS ignores is a build product, and the citation is an upstream link.
 func TestCitedPathTheVCSIgnoresIsALink(t *testing.T) {
-	root := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		require.NoError(t, cmd.Run(), "git %v", args)
-	}
-	git("init", "-q")
-	writeFile(t, root, ".gitignore", "/magus\n")
-	writeFile(t, root, "magus", "binary")
-	writeFile(t, root, "mise.toml", "[tools]\n")
-	writeFile(t, root, "README.md", "# readme\n\nSee [the site](https://eli.gladman.cc/magus/) and [the tools](https://eli.gladman.cc/mise.toml).\n")
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
+	r.Write(".gitignore", "/magus\n")
+	r.Write("magus", "binary")
+	r.Write("mise.toml", "[tools]\n")
+	r.Write("README.md", "# readme\n\nSee [the site](https://eli.gladman.cc/magus/) and [the tools](https://eli.gladman.cc/mise.toml).\n")
 
 	docShard, cites := assembleDocs(root, nil, nil, "")
 	links := assembleLinks(root, nil, newDocIndex(docShard.Nodes), cites)

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -566,25 +567,8 @@ func TestFetchHeadFallsBackToTheCommitWhenTheRefMoved(t *testing.T) {
 // gitRepo commits files into a new git repository and returns it and the commit.
 func gitRepo(t *testing.T, files map[string]string) (string, string) {
 	t.Helper()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	root := t.TempDir()
-	for path, content := range files {
-		abs := filepath.Join(root, filepath.FromSlash(path))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
-	git := func(args ...string) string {
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
-		cmd.Dir = root
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-		return strings.TrimSpace(string(out))
-	}
-	git("init", "-q")
-	git("add", "-A")
-	git("commit", "-q", "-m", "base")
-	return root, git("rev-parse", "HEAD")
+	r := testkit.NewRepo(t, files)
+	return r.Root(), r.Head()
 }
 
 // gitDriver is the git backend the queue runs on, for root.

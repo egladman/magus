@@ -5,10 +5,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMain(m *testing.M) {
+	testkit.Main(m, "MAGUS_CONFORMANCE_GRAPH", "MAGUS_CONFORMANCE_HISTORY")
+}
 
 func TestQualified(t *testing.T) {
 	g := NewGraph()

@@ -3,12 +3,12 @@ package knowledge
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,13 +188,9 @@ func TestMergeOverlayPutsSessionOnlyOnExistingNodes(t *testing.T) {
 }
 
 func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	write := ws.Write
 	write("docs/a.md", "# a\n")
 	write("lib/x.buzz", "fn x() > void {}\n")
 	base := WalkTree(root).Digest()
@@ -222,19 +218,9 @@ func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
 
 // One walk serves every scan, and the first scan's ignore query answers for all of them.
 func TestTreeWalkScansShareOneWalkAndOneIgnoreQuery(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = root
-	require.NoError(t, cmd.Run())
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
+	write := r.Write
 	write(".gitignore", "dist/\n*.out.md\n")
 	write("README.md", "# readme\n")
 	write("notes.out.md", "# ignored\n")

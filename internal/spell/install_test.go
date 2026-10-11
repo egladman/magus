@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -232,7 +233,7 @@ func fakeWorktrees(t *testing.T) (primary, linked string) {
 // the admin-dir plumbing per case.
 func fakeWorktreeSet(t *testing.T, names ...string) map[string]string {
 	t.Helper()
-	base := t.TempDir()
+	base := testkit.NewWorkspace(t).Root()
 	primary := filepath.Join(base, "primary")
 	require.NoError(t, os.MkdirAll(primary, 0o755))
 	out := map[string]string{"primary": primary}
@@ -264,8 +265,7 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(primary)
-		assert.Equal(t, real, from)
+		assert.Equal(t, primary, from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", ".pnpm", "lock.yaml"))
 		leftovers, _ := filepath.Glob(filepath.Join(proj, "node_modules"+seedSuffix+"*"))
 		assert.Empty(t, leftovers)
@@ -339,8 +339,7 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(roots["good"])
-		assert.Equal(t, real, from)
+		assert.Equal(t, roots["good"], from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", "x"))
 	})
 	t.Run("prefers the sibling installed from the same lock", func(t *testing.T) {
@@ -362,8 +361,7 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), withLock, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(roots["same"])
-		assert.Equal(t, real, from)
+		assert.Equal(t, roots["same"], from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", "from-same"))
 	})
 }

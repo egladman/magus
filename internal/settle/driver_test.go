@@ -27,8 +27,15 @@ func TestMain(m *testing.M) { testkit.Main(m) }
 // gen/regenerated.txt behind if that target ever ran.
 func mergeDriverWorkspace(t *testing.T) (*magus.Magus, string) {
 	t.Helper()
-	root := t.TempDir()
-	magusfile := `import "magus";
+	return openMergeDriverWorkspace(t, testkit.NewWorkspace(t))
+}
+
+// openMergeDriverWorkspace is mergeDriverWorkspace over ws, for a test that needs the
+// root to be something more, a git repository.
+func openMergeDriverWorkspace(t *testing.T, ws *testkit.Workspace) (*magus.Magus, string) {
+	t.Helper()
+	root := ws.Root()
+	ws.Magusfile(`import "magus";
 import "fs";
 
 magus\project({})
@@ -37,9 +44,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
     fs\writeFile("gen/regenerated.txt", "the merge driver regenerated");
 }
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+`)
+	require.NoError(t, os.MkdirAll(ws.Path("gen"), 0o755))
 
 	m, err := magus.Open(context.Background(), root)
 	require.NoError(t, err, "fixture workspace must open")
@@ -140,17 +146,16 @@ func TestSettleTargetHonorsExclusions(t *testing.T) {
 // TestMergeDriverTreatsAnExcludedFileAsSource: a hand file an output carves out is not an
 // output, so the driver must not keep one side of it the way it keeps a generated file.
 func TestMergeDriverTreatsAnExcludedFileAsSource(t *testing.T) {
-	root := t.TempDir()
-	magusfile := `import "magus";
+	ws := testkit.NewWorkspace(t)
+	ws.Magusfile(`import "magus";
 
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/**", "!gen/hand.txt");
 }
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	m, err := magus.Open(context.Background(), root)
+`)
+	m, err := magus.Open(context.Background(), ws.Root())
 	require.NoError(t, err)
 	result := writeResultFile(t, t.TempDir(), "hand written\n")
 
@@ -167,18 +172,17 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // with no conflict marker, and the VCS only invokes a driver when BOTH sides changed the
 // file. go.mod and the lockfiles in this repo are wired to the driver in exactly this shape.
 func TestMergeDriverRefusesUnrebuildableOutput(t *testing.T) {
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
 	// gen/** is declared project-wide, and no target claims it via ctx.writesFiles.
-	magusfile := `import "magus";
+	ws.Magusfile(`import "magus";
 
 magus\project({
     "outputs": ["gen/**"],
 })
 
 export fun build(ctx: magus\Context, args: [str]) > void {}
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	m, err := magus.Open(context.Background(), root)
+`)
+	m, err := magus.Open(context.Background(), ws.Root())
 	require.NoError(t, err)
 
 	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
@@ -192,17 +196,16 @@ export fun build(ctx: magus\Context, args: [str]) > void {}
 // through merge_low_risk, and declares gen/** an output its generate target rebuilds.
 func autoResolveWorkspace(t *testing.T) *magus.Magus {
 	t.Helper()
-	root := t.TempDir()
-	magusfile := `import "magus";
+	ws := testkit.NewWorkspace(t)
+	ws.Magusfile(`import "magus";
 
 magus\project({"merge_low_risk": ["fixtures/**"]})
 
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.writesFiles("gen/**");
 }
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	m, err := magus.Open(context.Background(), root)
+`)
+	m, err := magus.Open(context.Background(), ws.Root())
 	require.NoError(t, err)
 	return m
 }
@@ -292,11 +295,10 @@ func gitArgvRecorder(t *testing.T) (logPath string) {
 	t.Helper()
 	real, err := exec.LookPath("git")
 	require.NoError(t, err)
-	shimDir := t.TempDir()
-	logPath = filepath.Join(shimDir, "argv.log")
-	script := fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real)
-	require.NoError(t, os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0o755))
-	t.Setenv("PATH", shimDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	shim := testkit.NewWorkspace(t)
+	logPath = shim.Path("argv.log")
+	shim.Executable("git", fmt.Sprintf("#!/bin/sh\necho \"$@\" >> %q\nexec %q \"$@\"\n", logPath, real))
+	t.Setenv("PATH", shim.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
 	return logPath
 }
 
@@ -339,8 +341,7 @@ func TestMergeDriverRunsNoGitCommandThatTakesARepositoryLock(t *testing.T) {
 // TestMergeDriverRecordsOwedRegeneration pins the driver's half: in a git checkout it
 // keeps %A untouched and records the target that rebuilds the file.
 func TestMergeDriverRecordsOwedRegeneration(t *testing.T) {
-	m, root := mergeDriverWorkspace(t)
-	runGit(t, root, "init")
+	m, root := openMergeDriverWorkspace(t, testkit.NewRepo(t, nil).Workspace)
 	result := writeResultFile(t, t.TempDir(), "generated: the current version\n")
 
 	require.NoError(t, settleFile(t, m, []string{"ancestor", result, "other", "7", "gen/catalog.md"}))
@@ -374,22 +375,4 @@ func snapshotTree(t *testing.T, root string) map[string]string {
 		return nil
 	}))
 	return out
-}
-
-// initGitRepo creates a temp git repo with an identity, so a commit can be made in it.
-func initGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "test")
-	return dir
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-	require.NoErrorf(t, err, "git %v: %s", args, out)
 }

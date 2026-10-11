@@ -3,12 +3,11 @@ package knowledge
 import (
 	"fmt"
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,13 +90,6 @@ func findEdge(out types.KnowledgeGraphOutput, source, target string, relation ty
 		}
 	}
 	return types.KnowledgeEdge{}, false
-}
-
-func writeFile(t *testing.T, root, rel, content string) {
-	t.Helper()
-	p := filepath.Join(root, rel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-	require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
 }
 
 func TestAssembleNodes(t *testing.T) {
@@ -542,14 +534,10 @@ func TestContainsChainRefusesEscape(t *testing.T) {
 func fullInputs(t *testing.T) Inputs {
 	t.Helper()
 	in := sampleInputs()
-	root := t.TempDir()
-	in.Root = root
+	ws := testkit.NewWorkspace(t)
+	in.Root = ws.Root()
 
-	write := func(rel, body string) {
-		full := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
-		require.NoError(t, os.WriteFile(full, []byte(body), 0o644))
-	}
+	write := ws.Write
 
 	// A Buzz source under pkg/a gives the file node the rest of the fixture hangs off, and
 	// carries three relations itself: rationale_for (the WHY marker), imports (the import
