@@ -18,8 +18,8 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `testisolation` | a test binary linking the runtime-directory package with no isolating `TestMain`                            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
-| `diagmsg`       | a message magus prints that runs long, stacks reasons, names two commands or opens with a tag               |
-| `errmsg`        | an error text joining clauses, spanning lines or sentences, misplacing `%w`, or naming the wrong origin     |
+| `diagmsg`       | a message that runs long, stacks reasons, names two commands or opens with a one- to three-word tag         |
+| `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record    |
 | `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 
 Every path, word list, host name, ceiling and exemption lives in the root
@@ -27,6 +27,13 @@ Every path, word list, host name, ceiling and exemption lives in the root
 policy. No diagnostic names this repository's identifiers or paths on its own: an
 analyzer whose remedy is repository-specific takes a `hint` setting, appended to
 each of its diagnostics.
+
+`diagmsg` holds a `log/slog` message to the tag rule alone, and never lets an
+allowlist exempt one: a record names what logged it with `attr.Component`, not a
+tag in its text. `errmsg` judges a `log/slog` call too. `error-log` reports an
+error built into a message, and `error-attr` an error's text passed as an `error`
+or `err` attribute; both belong in `attr.Error`, so the display names the error's
+origin once.
 
 ## Scope
 
