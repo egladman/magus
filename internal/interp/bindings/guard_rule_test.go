@@ -61,7 +61,7 @@ func TestGuardVerdictRuleNameIsValidated(t *testing.T) {
 
 	err := callVoidDirect(t, deny, vm.StrValue("why"), opts("rule", vm.StrValue("Pull_Request")))
 	require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))
-	require.ErrorContains(t, err, `guard rule name "Pull_Request" is not lowercase letters and digits joined by single hyphens; write "pull-request"`)
+	require.ErrorContains(t, err, `guard rule name "Pull_Request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
 
 	err = callVoidDirect(t, deny, vm.StrValue("why"), opts("rule", vm.StrValue("command")))
 	require.ErrorContains(t, err, string(types.GuardRuleMisdeclared))

@@ -442,7 +442,7 @@ func readTable(p string, kind proofread.Kind, stdin io.Reader, args []string) (t
 
 	if p == "-" {
 		if !readsFiles(kind) {
-			return table{}, fmt.Errorf("-decisions -: the %s itself is read from stdin; name the table's file", kind)
+			return table{}, fmt.Errorf("-decisions -: name the table's file, since the %s itself is read from stdin", kind)
 		}
 
 		data, err = io.ReadAll(stdin)

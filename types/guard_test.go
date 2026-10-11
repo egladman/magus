@@ -90,8 +90,8 @@ func TestValidateGuardRuleName(t *testing.T) {
 	for _, name := range []string{"pull-request-text", "no-curl", "rule-2", "rule2", "h1-heading"} {
 		require.NoError(t, ValidateGuardRuleName(name), name)
 	}
-	require.EqualError(t, ValidateGuardRuleName("pullRequestText"), `guard rule name "pullRequestText" is not lowercase letters and digits joined by single hyphens; write "pull-request-text"`)
-	require.EqualError(t, ValidateGuardRuleName("pull_request"), `guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens; write "pull-request"`)
+	require.EqualError(t, ValidateGuardRuleName("pullRequestText"), `guard rule name "pullRequestText" is not lowercase letters and digits joined by single hyphens, as in "pull-request-text"`)
+	require.EqualError(t, ValidateGuardRuleName("pull_request"), `guard rule name "pull_request" is not lowercase letters and digits joined by single hyphens, as in "pull-request"`)
 	require.EqualError(t, ValidateGuardRuleName(""), `guard rule name is empty`)
 	require.EqualError(t, ValidateGuardRuleName("command"), `guard rule name "command" is reserved: an unnamed command rule reports under it`)
 }

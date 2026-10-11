@@ -404,7 +404,7 @@ func TestRunExitsOneOnAFlagItCannotUse(t *testing.T) {
 		{"an unknown field", []string{"doc-comment", "-decisions", unknownField},
 			"proofread: decisions " + unknownField + ": json: unknown field \"rule\"\n"},
 		{"decisions on stdin beside the text", []string{"review-reply", "-decisions", "-"},
-			"proofread: -decisions -: the review-reply itself is read from stdin; name the table's file\n"},
+			"proofread: -decisions -: name the table's file, since the review-reply itself is read from stdin\n"},
 		{"a missing table", []string{"doc-comment", "-decisions", "missing.json"},
 			"proofread: read decisions missing.json: open missing.json: no such file or directory\n"},
 	}

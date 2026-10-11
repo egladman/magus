@@ -99,7 +99,7 @@ func requireVars(root string, opts Options) error {
 	}
 	for _, v := range opts.Vars {
 		if !declared[v] {
-			return fmt.Errorf("globalrestore: vars entry %q is no package-level var of %s under %s; it was renamed or moved, fix the setting",
+			return fmt.Errorf("globalrestore: vars entry %q is no package-level var of %s under %s, so it was renamed or moved",
 				v, opts.Package, root)
 		}
 	}

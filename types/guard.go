@@ -142,7 +142,7 @@ func ValidateGuardRuleName(name string) error {
 		return errors.New("guard rule name is empty")
 	}
 	if !guardRuleName.MatchString(name) {
-		return fmt.Errorf("guard rule name %q is not lowercase letters and digits joined by single hyphens; write %q", name, Normalize(name))
+		return fmt.Errorf("guard rule name %q is not lowercase letters and digits joined by single hyphens, as in %q", name, Normalize(name))
 	}
 	if slices.Contains(reservedGuardRuleNames, name) {
 		return fmt.Errorf("guard rule name %q is reserved: an unnamed %s rule reports under it", name, name)
