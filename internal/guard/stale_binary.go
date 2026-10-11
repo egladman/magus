@@ -300,17 +300,17 @@ func scoutRecord(args []string) bool {
 
 // recoveryLine reports the line that gets a binary able to load this tree: the rebuild, or
 // the move-aside and bootstrap it falls back to. Each stands alone on its line. A leased
-// worker has none: there is one binary per base, the main session places it, and a worker
-// building a second is the thing the deny exists to prevent.
+// worker's only one is the placement of its base's binary: a worker building a second is
+// the thing the deny exists to prevent.
 func recoveryLine(command string, d Dialect, lease string) bool {
-	if lease != "" {
-		return false
-	}
 	call, ok := soleCall(command, d)
 	if !ok {
 		return false
 	}
 	words := literalWords(call.Args)
+	if lease != "" {
+		return len(call.Assigns) == 0 && len(words) >= 3 && path.Base(words[0]) == "magus" && words[1] == "buzz" && words[2] == placementScript
+	}
 	switch prog := path.Base(words[0]); {
 	case words[0] == "go":
 		g, ok := readGoCall(hint.Invocation{Name: "go", Args: words[1:]})
@@ -375,8 +375,17 @@ func staleBinaryDenial(call unloadedCall, cause string, failures []string, own b
 }
 
 // binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
-// carrying at most one command, and why the rationale and the fallbacks.
-type binaryFix struct{ say, why string }
+// carrying at most one command, and why the rationale and the fallbacks. placeFor is the
+// lease whose checkout the main session places ./magus in, "" when the fix is not that.
+type binaryFix struct{ say, why, placeFor string }
+
+// next is the fix's command, served as the deny's next under rule.
+func (f binaryFix) next(rule denyRuleName) []hint.Next {
+	if f.placeFor == "" {
+		return nil
+	}
+	return []hint.Next{placementNext(rule, f.placeFor)}
+}
 
 // binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
 // leased worker is never told to build: there is one binary per base, and the main
@@ -385,8 +394,9 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 	switch {
 	case lease != "" && own:
 		return binaryFix{
-			say: "ask the main session to place a ./magus that loads this workspace",
-			why: "There is one binary per base, so a worker never builds one. The main session places it: `" + placementCommand(lease) + "`.",
+			say:      "ask the main session to place a ./magus that loads this workspace",
+			why:      onePerBase,
+			placeFor: lease,
 		}
 	case lease != "":
 		return binaryFix{
@@ -408,15 +418,32 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 	}
 }
 
-// placementCommand is how the main session places ./magus in a worker's checkout.
-func placementCommand(lease string) string {
-	return "<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job " + lease + " --from <main checkout>"
+// placementScript copies the main checkout's ./magus into a worker's checkout.
+const placementScript = "hack/dev/bootstrap-worktree.buzz"
+
+// onePerBase is why a worker never builds magus, worded as hack/policy/builds.buzz words it.
+const onePerBase = "The main session places one binary per base commit: it builds ./magus once, in the root checkout, " +
+	"and " + placementScript + " copies it into a worker checkout whenever no Go build input differs. " +
+	"A build per worker is two Go compiles each, and a fan-out runs a dozen at once."
+
+// workerBuildVerdict is the verdict for a worker building magus. Its command is
+// placementNext, served apart from it.
+const workerBuildVerdict = "a worker does not build magus; ask the main session to place ./magus"
+
+// placementNext is the command that places the main checkout's ./magus in lease's checkout.
+// The main checkout stays a placeholder: a worker's checkout does not say which one it is.
+func placementNext(rule denyRuleName, lease string) hint.Next {
+	return hint.NextForDenyRemedy(string(rule), placementArgv(lease), "copies the main checkout's ./magus into this checkout.")
 }
 
-// workerBuildVerdict is the verdict for a worker building magus: the main session places
-// it, so the worker reads the command it asks the main session to run.
-func workerBuildVerdict(lease string) string {
-	return "a worker does not build magus; ask the main session to place ./magus, then run `" + placementCommand(lease) + "`."
+// placementArgv is placementNext's command as argv, for matching a served next against it.
+func placementArgv(lease string) []string {
+	return []string{"<main checkout>/magus", "buzz", placementScript, "--", "--job", lease, "--from", "<main checkout>"}
+}
+
+// placesBinary reports whether n is lease's placement of ./magus.
+func placesBinary(n hint.Next, lease string) bool {
+	return lease != "" && slices.Equal(n.Argv, placementArgv(lease))
 }
 
 // soleCall is the line's call when it is one command and nothing else: no pipe, chain,

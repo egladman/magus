@@ -1164,11 +1164,15 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// rule's refusal is about something else.
 		var next []hint.Next
 		why := whys[verdict.Reason]
-		if len(remedy.Next) > 0 && verdict.Reason == remedy.Deny {
+		switch {
+		case len(remedy.Next) > 0 && verdict.Reason == remedy.Deny:
 			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, remedy.Next)
 			if len(next) > 0 {
 				verdict.Reason, why = remedy.Lead, remedy.Why
 			}
+		case len(verdict.Next) > 0:
+			// The workspace seam's own deny, which words its reason without the command.
+			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
 	}
@@ -1251,11 +1255,18 @@ func oneString(rule func(context.Context, Dependencies, string, string) string) 
 //
 // Graded by the rules the next call meets, rather than filtered by a list of its own,
 // so a rule added later grades remedies without anyone remembering to.
+//
+// A worker's placement of ./magus is kept whatever its write paths: it writes outside
+// every one by design, as the only way a worker gets its base's binary.
 func servableRemedy(ctx context.Context, deps Dependencies, at location, callDir string, standing leaseStanding, actingLease string, next []hint.Next) []hint.Next {
 	role, writePaths := hint.LeaseRole(standing.rows, actingLease)
 	d := effectiveDialect(deps.ShellDialect)
+	candidates := next
+	if len(next) != 1 || !placesBinary(next[0], actingLease) {
+		candidates = hint.ServableTo(role, writePaths, next)
+	}
 	var kept []hint.Next
-	for _, n := range hint.ServableTo(role, writePaths, next) {
+	for _, n := range candidates {
 		if judgeShellLine(ctx, deps, at, callDir, n.Run, d).Deny != "" || denyUndeclaredLease(standing, actingLease, n.Run).refused() {
 			continue
 		}

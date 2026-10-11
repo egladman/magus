@@ -74,6 +74,8 @@ type rulesAnswer struct {
 	// rule is the built-in rule denyUnloaded refused under, "" when the answer is the
 	// workspace rule's own.
 	rule denyRuleName
+	// next is the command denyUnloaded's deny serves, nil for none.
+	next []hint.Next
 }
 
 // askWorkspaceRules runs the approved rule and the working-tree rule and keeps the
@@ -186,6 +188,7 @@ func denyUnloaded(asked *rulesAnswer, call unloadedCall, at location) bool {
 	}
 	// One string, verdict first: verdictParts splits it again when the deny is worded.
 	asked.answer = types.GuardVerdict{Decision: types.GuardDeny, Reason: d.full()}
+	asked.next = binaryRemedy(own, hasMagusBinary(at.workspace), call.lease).next(asked.rule)
 	asked.by = decidedByBuiltin
 	return true
 }
@@ -236,7 +239,8 @@ func gatedCalls(seam functionSeam) string {
 // decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
 // fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
 // on a built-in ask is dropped, as every notice is on an ask. A deny denyUnloaded made is
-// filed under its own built-in rule rather than rule.
+// filed under its own built-in rule rather than rule, with its next left unserved for the
+// caller's shapeDeny to grade.
 func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, rule string) (Verdict, string) {
 	answer := asked.answer
 	if asked.rule != "" {
@@ -244,7 +248,7 @@ func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, ru
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
-		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
+		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "deny", Reason: answer.Reason, Rule: rule, Lease: verdict.Lease, Next: asked.next}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == "pass":
 		return Verdict{SchemaVersion: verdict.SchemaVersion, Decision: "advise", Context: answer.Reason, Rule: rule, Lease: verdict.Lease}, asked.by
 	case answer.Decision == types.GuardAdvise && verdict.Decision == "advise":
