@@ -191,8 +191,8 @@ func validate(name string, s Setting) error {
 	}
 	if what, ok := fixed[name]; ok {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-			"built-in rule %q cannot be set: it is how a workspace learns that %s of its own judged nothing, so it can be neither silenced nor promoted; remove it from the declaration",
-			name, what)
+			"built-in rule %q cannot be set; remove it from the declaration", name).
+			WithWhy("it is how a workspace learns that " + what + " of its own judged nothing, so it can be neither silenced nor promoted")
 	}
 	if rank(s.Decision) < 0 {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,

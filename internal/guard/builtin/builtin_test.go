@@ -100,8 +100,9 @@ func TestResolveRefusesAFixedRule(t *testing.T) {
 				var de *types.DiagnosticError
 				require.ErrorAs(t, err, &de)
 				assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
-				assert.Equal(t, `built-in rule "`+name+`" cannot be set: it is how a workspace learns that `+what+
-					` of its own judged nothing, so it can be neither silenced nor promoted; remove it from the declaration`, de.Msg)
+				assert.Equal(t, `built-in rule "`+name+`" cannot be set; remove it from the declaration`, de.Msg)
+				assert.Equal(t, "it is how a workspace learns that "+what+
+					" of its own judged nothing, so it can be neither silenced nor promoted", types.DiagnosticRationale(err))
 			})
 		}
 	}
