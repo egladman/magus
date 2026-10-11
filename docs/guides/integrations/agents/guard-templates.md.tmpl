@@ -265,6 +265,26 @@ It declares no `magus-guard-coverage` line: it carries no verdict on any input.
 
 <!-- embed: magus-session.buzz -->
 
+## `proofread-reply.buzz`
+
+The fifth template that carries no verdict. It runs proofread rather than magus. Wire
+it to your host's stop event and it judges the reply a turn ends with, then hands up to
+five findings back to the agent as context for the next step. It needs only the
+`proofread` binary from the same release as magus: on `PATH`, in `__PROOFREAD_BIN`,
+or named with `-- --proofread PATH`. `-- --decisions FILE` passes a JSON table of
+`{"rules": {"<rule>": "deny"}}` to proofread.
+
+It advises and nothing more: it prints no decision, always exits 0, and prints
+nothing when proofread is missing or fails. A reply written while a stop hook has the
+agent continuing (`stop_hook_active`) is never judged, so the context it hands back
+cannot loop the agent. [Check writing in a commit hook](../../proofread.md) covers
+choosing decisions.
+
+It declares no `magus-guard-coverage` line, for the reason
+`magus-observe.buzz` declares none: it carries no verdict on any input.
+
+<!-- embed: proofread-reply.buzz -->
+
 ## Trying a verdict by hand
 
 ```sh

@@ -676,6 +676,71 @@ cd $WORK
 env HOME=/no-home
 env XDG_STATE_HOME=
 
+# --- proofread-reply.buzz: advice on the reply a turn ends with ----------------
+#
+# It carries no verdict, so it owes no `# case:` label. A stand-in proofread answers with
+# seven findings, the first echoing the argv it was run with.
+chmod 0755 $WORK/fake-proofread
+chmod 0755 $WORK/failing-proofread
+
+# The findings go back as Stop context, capped at five with the rest counted, and no
+# decision is printed. The binary comes from the environment, the decisions file is passed
+# through as -decisions, and the reply is judged as agent-reply.
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --decisions $WORK/proofread-decisions.json
+stdout '"hookEventName":"Stop"'
+stdout 'closing-offer \(line 3\): argv agent-reply -format json -decisions'
+stdout 'and 2 more'
+! stdout '"decision"'
+! stderr .
+
+# --proofread outranks the environment.
+env __PROOFREAD_BIN=$WORK/nonexistent-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --proofread $WORK/fake-proofread
+stdout 'closing-offer'
+
+# A reply made while a stop hook has the agent continuing is never judged, so the context
+# this hook hands back cannot loop the agent.
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/proofread-again.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+! stderr .
+
+# A missing proofread, one that fails, and an envelope with no reply are all silent and
+# exit 0: the hook fires on every turn, and none of them is worth a note.
+env __PROOFREAD_BIN=$WORK/nonexistent-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+! stderr .
+
+env __PROOFREAD_BIN=$WORK/failing-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+! stderr .
+
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/stop-event.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+! stderr .
+
+stdin $WORK/observe-garbage.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+! stderr .
+
+# An argument it does not take is reported on stderr and changes nothing else.
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST_NAME
+stdout 'closing-offer'
+stderr 'unsupported argument'
+env __PROOFREAD_BIN=
+
 # --- fail-open: a missing magus must degrade the way each template promises ---
 
 env __MAGUS_BIN=$WORK/nonexistent-magus
@@ -1359,6 +1424,26 @@ The instruction file the rehydrate wrapper's rules line points back at.
 {"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "hook_event_name": "Stop", "stop_hook_active": false}
 -- session-start.json --
 {"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "hook_event_name": "SessionStart", "source": "compact"}
+-- proofread-stop.json --
+{"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": false, "last_assistant_message": "Done. Want me to run the tests?"}
+-- proofread-again.json --
+{"session_id": "s1", "hook_event_name": "Stop", "stop_hook_active": true, "last_assistant_message": "Done. Want me to run the tests?"}
+-- proofread-decisions.json --
+{"rules": {"filler": "deny"}}
+-- fake-proofread --
+#!/bin/sh
+# Stands in for proofread: seven findings, the first echoing the argv it was run with.
+printf '[{"source":"stdin:3","rule":"closing-offer","message":"argv %s"}' "$*"
+i=1
+while [ $i -lt 7 ]; do
+  printf ',{"source":"stdin:%s","rule":"filler","message":"x"}' "$i"
+  i=$((i + 1))
+done
+printf ']\n'
+-- failing-proofread --
+#!/bin/sh
+echo 'proofread: cannot judge' >&2
+exit 2
 -- observe-read.json --
 {"session_id": "s1", "transcript_path": "/tmp/t.jsonl", "tool_name": "Read", "tool_input": {"file_path": "README.md"}}
 -- observe-garbage.json --

@@ -1,0 +1,232 @@
+// proofread-reply hook: judges the reply an agent ends its turn with and hands the findings
+// back as context for the next step.
+//
+// Run it as `magus buzz -s proofread-reply.buzz`; see magus-command.buzz for why `-s` is
+// load-bearing. It imports no magus module and no spell, so the workspace stays CLOSED, and
+// it needs only the proofread release binary: https://github.com/egladman/magus/releases
+//
+// Wire it to your host's stop event. It reads the envelope's last assistant message and
+// stop_hook_active, runs `proofread agent-reply -format json` over the message, and prints
+// at most 5 findings as a Stop hook's hookSpecificOutput.additionalContext.
+//
+// Contract: ADVISE ONLY. It prints no decision and always exits 0, so it can never block
+// the stop. It prints nothing when
+//
+//   - stop_hook_active is true, because the context this hook hands back is what keeps
+//     the agent going for one more step, and judging that step's reply would loop it;
+//   - the message is empty or the envelope is unreadable;
+//   - proofread is missing, not executable, or exits non-zero;
+//   - proofread finds nothing.
+//
+// A missing proofread is silent because the hook fires on every turn: a note on each
+// would cost more than the advice.
+//
+// Arguments, all optional:
+//
+//   --decisions FILE   a JSON decisions table passed to proofread as -decisions:
+//                      {"rules": {"<rule>": "deny" | "advise" | "off"}}. Keep it to
+//                      "rules": proofread refuses a "paths" glob that matches no file
+//                      argument, and a reply is read from stdin.
+//   --proofread PATH   the proofread binary, ahead of the environment and PATH
+//
+// Override:
+//
+//   __PROOFREAD_BIN   path to the binary, ahead of PATH
+//
+// NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
+// carries no verdict on any input.
+//
+// magus-guard-template: 21
+
+import "io";
+import "flags";
+import "proc";
+import "std";
+import "encoding/json";
+import "lib/hook" as hook;
+
+final DECISIONS_FLAG = "--decisions";
+final PROOFREAD_FLAG = "--proofread";
+
+// MAX_FINDINGS caps the findings handed back for one reply, in proofread's order.
+final MAX_FINDINGS = 5;
+
+final sourceLine = $":([0-9]+)$";
+
+fun warn(message: str) > void {
+    io\stderr.write("proofread-reply.buzz: {message}\n") catch void;
+}
+
+// Stop is what this hook reads of a Stop envelope: the reply, and whether the agent is
+// already continuing because a Stop hook handed it something.
+object Stop {
+    reply: str,
+    again: bool,
+}
+
+// Finding is one proofread finding; line counts from the reply's first line, 0 when the
+// finding has none.
+object Finding {
+    rule: str,
+    line: int = 0,
+    message: str,
+}
+
+// readStop reads the envelope. One it cannot read is a stop with no reply.
+fun readStop(input: str) > Stop {
+    final doc: {str: any} = json\parse(input) catch {<str: any>};
+    final reply: str = doc["last_assistant_message"] ?? "";
+    final again: bool = doc["stop_hook_active"] ?? false;
+    return Stop{ reply = reply, again = again };
+}
+
+// parseFindings reads proofread's JSON findings, whose source ends in `:<line>`. Output it
+// cannot read is no findings.
+fun parseFindings(stdout: str) > [Finding] {
+    final rows: [any] = json\parse(stdout) catch [<any>];
+    final found = mut [<Finding>];
+    foreach (r in rows) {
+        final source: str = r["source"] ?? "";
+        var line = 0;
+        final at = sourceLine.match(source);
+        if (at != null) {
+            line = std\parseInt(at![1]) ?? 0;
+        }
+        found.append(Finding{ rule = r["rule"] ?? "", line = line, message = r["message"] ?? "" });
+    }
+    return found;
+}
+
+// resolveBin is the --proofread path, else __PROOFREAD_BIN, else proofread on PATH; ""
+// when none is executable.
+fun resolveBin(flagged: str) > str {
+    var bin = flagged;
+    if (bin == "") { bin = hook\envOr("__PROOFREAD_BIN", fallback: ""); }
+    if (bin == "") { bin = proc\which("proofread") catch ""; }
+    if (bin == "" or !hook\isExecutable(bin)) { return ""; }
+    return bin;
+}
+
+// judge runs bin over reply, or finds nothing when it fails.
+fun judge(bin: str, decisions: str, reply: str) > [Finding] {
+    final argv = mut ["agent-reply", "-format", "json"];
+    if (decisions != "") {
+        argv.append("-decisions");
+        argv.append(decisions);
+    }
+    final run = proc\exec(bin, args: argv,
+        opts: {"stdin": reply, "quiet": true, "allow_failure": true}) catch null;
+    if (run == null or run!.code != 0) {
+        return [<Finding>];
+    }
+    return parseFindings(run!.stdout);
+}
+
+// advice renders found as the context handed back, or "" when found is empty.
+fun advice(found: [Finding]) > str {
+    if (found.len() == 0) {
+        return "";
+    }
+    final lines = mut ["proofread judged your last reply as agent-reply. These advise; the stop "
+        + "went through. Apply them in your next reply to the person, and do not repost this one."];
+    foreach (i, f in found) {
+        if (i == MAX_FINDINGS) {
+            lines.append("- and {found.len() - MAX_FINDINGS} more");
+            break;
+        }
+        var at = "";
+        if (f.line > 0) {
+            at = " (line {f.line})";
+        }
+        lines.append("- {f.rule}{at}: {f.message}");
+    }
+    return lines.join("\n");
+}
+
+// output is what the hook prints for stop, or "" for a reply made while continuing, an
+// empty reply, or one with nothing to advise.
+fun output(stop: Stop, judged: fun (reply: str) > [Finding]) > str {
+    if (stop.again or stop.reply.trim() == "") {
+        return "";
+    }
+    final text = advice(judged(stop.reply));
+    if (text == "") {
+        return "";
+    }
+    return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
+}
+
+fun main(args: [str]) > void {
+    final parsed = flags\parse(args, switches: [<str>], valued: [DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
+    if (parsed == null) { return; }
+    foreach (word in parsed!.unknown) {
+        warn("unsupported argument \"{word}\"; this hook accepts only {DECISIONS_FLAG} and {PROOFREAD_FLAG}. "
+            + "Fix the hook command in your host config.");
+    }
+    final decisions = parsed!.values[DECISIONS_FLAG] ?? "";
+
+    final stop = readStop(io\stdin.readAll() catch "");
+    if (stop.again) { return; }
+    final bin = resolveBin(parsed!.values[PROOFREAD_FLAG] ?? "");
+    if (bin == "") { return; }
+
+    final printed = output(stop, judged: fun (reply: str) > [Finding] => judge(bin, decisions: decisions, reply: reply));
+    if (printed != "") {
+        std\print(printed);
+    }
+}
+
+fun judging(found: [Finding]) > fun (reply: str) > [Finding] {
+    return fun (reply: str) > [Finding] => found;
+}
+
+final offer = Finding{ rule = "closing-offer", line = 3, message = "End on the result instead of 'Want me to'." };
+
+test "a Stop envelope gives the reply and whether the agent is continuing" {
+    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}");
+    std\assert(stop.reply == "Done." and stop.again, message: "{stop.reply} {stop.again}");
+    final empty = readStop("not json");
+    std\assert(empty.reply == "" and !empty.again, message: "unreadable input is an empty stop");
+}
+
+test "findings go back as Stop context, never as a decision" {
+    final printed = output(Stop{ reply = "Done.", again = false }, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    std\assert(doc["decision"] == null, message: "no decision blocks the stop: {printed}");
+    final hooked: {str: any} = doc["hookSpecificOutput"] ?? {<str: any>};
+    std\assert(hooked["hookEventName"] == "Stop", message: printed);
+    final context: str = hooked["additionalContext"] ?? "";
+    std\assert(context.indexOf("- closing-offer (line 3): End on the result") != null, message: context);
+}
+
+test "a reply made while continuing is not judged, so the agent cannot loop" {
+    final printed = output(Stop{ reply = "Done.", again = true }, judged: judging([offer]));
+    std\assert(printed == "", message: printed);
+}
+
+test "nothing to advise prints nothing" {
+    std\assert(output(Stop{ reply = "Done.", again = false }, judged: judging([<Finding>])) == "",
+        message: "no findings");
+    std\assert(output(Stop{ reply = "  ", again = false }, judged: judging([offer])) == "", message: "no reply");
+}
+
+test "advice is capped at MAX_FINDINGS and counts the rest" {
+    final many = mut [<Finding>];
+    for (var i = 0; i < MAX_FINDINGS + 2; i = i + 1) {
+        many.append(offer);
+    }
+    final text = advice(many);
+    std\assert(text.split("\n").len() == MAX_FINDINGS + 2, message: text);
+    std\assert(text.endsWith("- and 2 more"), message: text);
+}
+
+test "proofread's findings are read with their line" {
+    final found = parseFindings("[\{\"source\":\"stdin:4\",\"rule\":\"bold-label\",\"message\":\"Open.\"}]");
+    std\assert(found.len() == 1 and found[0].rule == "bold-label" and found[0].line == 4, message: "{found.len()}");
+    std\assert(parseFindings("not json").len() == 0, message: "unreadable output is no findings");
+}
+
+test "a binary that is missing or fails finds nothing" {
+    std\assert(judge("/nonexistent/proofread", decisions: "", reply: "Done.").len() == 0, message: "missing binary");
+    std\assert(resolveBin("/nonexistent/proofread") == "", message: "a path that is not executable");
+}

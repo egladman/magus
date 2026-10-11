@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "terms": "deny",
+    "tense": "deny",
+    "dash": "deny",
+    "ascii": "deny",
+    "attribution": "deny",
+    "comment-block": "deny",
+    "comment-sentence": "deny",
+    "name-suffix": "deny",
+    "aside": "deny",
+    "docstub": "deny",
+    "terse-sentence": "deny",
+    "terse-paragraph": "deny",
+    "bare-rule": "deny",
+    "template": "deny"
+  }
+}

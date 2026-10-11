@@ -442,6 +442,37 @@ the three guard hooks. It is not a guard: it judges nothing, prints nothing, and
 exits 0 whatever happens. `magus session checkpoint --note "..."` writes the same
 record by hand, which is the form to reach for when you are the one stopping.
 
+## Judging the reply a turn ends with
+
+Add a second `Stop` entry for `proofread-reply.buzz`, which runs the
+`proofread` binary over the turn's last message and hands up to five findings back
+to the agent as context. It needs no magus workspace, only `proofread` on `PATH`, in
+`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `-- --decisions FILE` sets your
+own decisions. It never blocks the stop and prints nothing when proofread is missing
+or the agent is already continuing. [Check writing in a commit hook](../../proofread.md)
+covers the setup.
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+This repository dogfoods it as its own `Stop` entry beside the checkpoint, with its
+built `proofread` and the decisions in `hack/policy/proofread-decisions.json`.
+
 ## Handing a compacted session its state back
 
 Claude Code fires `SessionStart` when a session begins, when one is resumed, and

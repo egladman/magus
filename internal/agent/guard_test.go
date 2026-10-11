@@ -43,6 +43,8 @@ var hookTemplates = []string{
 	"magus-checkpoint.buzz",
 	"magus-rehydrate.buzz",
 	"magus-session.buzz",
+	// Advises on the reply a turn ends with and never denies, so it too declares no coverage.
+	"proofread-reply.buzz",
 	"codex-hooks.json",
 	"cursor-hook.buzz",
 	"opencode-plugin.ts",
@@ -90,6 +92,9 @@ var hookConfigExemptions = map[string]map[string]string{
 		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
 			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
 			"checkout root on PATH for later shell commands",
+		"proofread-reply": "Stop reads back no additionalContext, and its output schema " +
+			"(testdata/hosts/codex/stop.command.output.schema.json) refuses any key but continue, decision, " +
+			"reason, stopReason, suppressOutput and systemMessage, so the findings have no way to reach the agent",
 	},
 }
 

@@ -21,6 +21,7 @@ export final TEMPLATE_PAGES = {
     "magus-checkpoint.buzz": "guard-templates.md",
     "magus-rehydrate.buzz": "guard-templates.md",
     "magus-session.buzz": "guard-templates.md",
+    "proofread-reply.buzz": "guard-templates.md",
     "codex-hooks.json": "codex.md",
     "cursor-hook.buzz": "cursor.md",
     "opencode-plugin.ts": "opencode.md",

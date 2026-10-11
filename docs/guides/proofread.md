@@ -193,3 +193,43 @@ commit subjects join clauses with one by rule. One measurement changes a decisio
 your change descriptions use "I" at 10 or more per 1000 words and "will" at 2 or more,
 `tense` advises rather than denies on them, since writing about your own change in the
 first person is how you write.
+
+## 9. Judge a coding agent's replies
+
+`proofread agent-reply` judges what a coding agent writes back to you: a reply that opens
+on the result, names what changed, and ends without an offer. The template
+`proofread-reply.buzz`, in `docs/guides/integrations/agents/` of the magus repository, runs it
+from your host's stop event and hands the findings back to the agent as context. It
+only advises: it never blocks a stop, prints nothing when proofread is missing, and
+judges nothing while the agent is already continuing, so it cannot loop.
+
+1. Install proofread as in step 1, and copy
+   `proofread-reply.buzz` into your repository.
+2. Wire it to the stop event. In Claude Code, add a `Stop` entry to
+   `.claude/settings.json`:
+
+   ```json
+   {
+     "hooks": {
+       "Stop": [
+         {
+           "hooks": [
+             {
+               "type": "command",
+               "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz",
+               "timeout": 10
+             }
+           ]
+         }
+       ]
+     }
+   }
+   ```
+
+3. Point the hook at your binary when it is not on `PATH`: set `__PROOFREAD_BIN`, or
+   append `-- --proofread PATH` to the command.
+4. Choose your own decisions. Write a JSON file of `{"rules": {"<rule>": "deny"}}`
+   and append `--decisions FILE` after `--`. Keep it to `rules`: a reply is read from
+   stdin, and proofread refuses a `paths` glob that matches no file argument.
+5. End a turn and read the next one. The agent sees at most five findings, each with
+   its line in the reply it just wrote.

@@ -38,6 +38,10 @@ final RULES: {str: str} = {
     "template": "deny",
 };
 
+// DECISIONS_FILE is RULES as the JSON file .claude/settings.json hands the proofread-reply
+// hook, which runs where this module cannot be imported. A test holds the two equal.
+final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
+
 // PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that
 // stops matching any file in the tree fails this file's test, so the list only shrinks.
 final PATHS: {str: {str: str}} = {
@@ -104,6 +108,16 @@ test "the decisions file is the table as JSON" {
     std\assert(read["rules"]?["tense"] == "deny", message: "{read}");
     std\assert(read["paths"]?["blog/**"]?["tense"] == "off", message: "{read}");
     fs\remove(file) catch void;
+}
+
+test "the checked-in decisions file for the Stop hook holds RULES" {
+    final read: {str: any} = json\parse(fs\readFile(DECISIONS_FILE) catch "\{}") catch {<str: any>};
+    final rules: {str: any} = read["rules"] ?? {<str: any>};
+    std\assert(read.len() == 1, message: "{DECISIONS_FILE} holds rules alone: a reply is read from stdin, which no path glob matches");
+    std\assert(rules.len() == RULES.len(), message: "{DECISIONS_FILE} lists {rules.len()} rules, RULES {RULES.len()}");
+    foreach (rule, decision in RULES) {
+        std\assert(rules[rule] == decision, message: "{DECISIONS_FILE}: {rule} is not {decision}");
+    }
 }
 
 test "an outside judge's finding takes this repository's decision" {

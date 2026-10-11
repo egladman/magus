@@ -196,6 +196,15 @@ records and never opens.
 magus needs no release to learn about your host. `--agent-name` is an opaque
 label you choose, exactly as on the guard hook.
 
+## Judging the reply a turn ends with
+
+Wire whatever event fires when an agent finishes a turn to `proofread-reply.buzz`.
+It reads `last_assistant_message` and `stop_hook_active` from the envelope, runs
+`proofread agent-reply`, and prints up to five findings as `additionalContext`
+under `hookSpecificOutput`. It prints no decision and exits 0, so a host cannot
+read it as a verdict. A host that spells the fields differently needs its own
+adapter; see [Check writing in a commit hook](../../proofread.md).
+
 ## Handing a session its state back
 
 If your host has an event for "a session started" or "the history was
