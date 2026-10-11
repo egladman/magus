@@ -9,7 +9,7 @@ import (
 	"go/importer"
 	"go/parser"
 	"go/token"
-	"go/types"
+	gotypes "go/types"
 	"io"
 	"os"
 	"os/exec"
@@ -22,17 +22,13 @@ import (
 	json "github.com/egladman/magus/internal/json"
 )
 
-// publicGoPackages is the one list of packages whose exported Go API is locked. A
-// package marked optional is skipped while it does not exist in the tree.
-var publicGoPackages = []struct {
-	path     string
-	optional bool
-}{
-	{path: "github.com/egladman/magus"},
-	{path: "github.com/egladman/magus/types"},
-	{path: "github.com/egladman/magus/libs/testkit"},
-	{path: "github.com/egladman/magus/libs/testkit/fakespell", optional: true},
-	{path: "github.com/egladman/magus/types/gen/mocks"},
+// publicGoPackages is the one list of packages whose exported Go API is locked.
+var publicGoPackages = []string{
+	"github.com/egladman/magus",
+	"github.com/egladman/magus/types",
+	"github.com/egladman/magus/libs/testkit",
+	"github.com/egladman/magus/libs/testkit/fakespell",
+	"github.com/egladman/magus/types/gen/mocks",
 }
 
 // runGoAPI writes the exported Go API of the public packages as a sorted .lock, in
@@ -71,13 +67,9 @@ type listedPackage struct {
 // from the compiler's export data so the whole dependency tree is not re-checked.
 // The files are those of the host platform, so an exported declaration behind a
 // platform build tag would make the lock differ per machine.
-func loadGoPackages(dir string) ([]*types.Package, error) {
-	paths := make([]string, len(publicGoPackages))
-	for i, p := range publicGoPackages {
-		paths[i] = p.path
-	}
+func loadGoPackages(dir string) ([]*gotypes.Package, error) {
 	cmd := exec.Command("go", append([]string{"list", "-e", "-export", "-deps",
-		"-json=ImportPath,Dir,GoFiles,Export,DepOnly,Error"}, paths...)...)
+		"-json=ImportPath,Dir,GoFiles,Export,DepOnly,Error"}, publicGoPackages...)...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -110,41 +102,36 @@ func loadGoPackages(dir string) ([]*types.Package, error) {
 		return os.Open(file)
 	})
 
-	var pkgs []*types.Package
+	var pkgs []*gotypes.Package
 	for _, want := range publicGoPackages {
-		p, ok := listed[want.path]
+		p, ok := listed[want]
 		if !ok || p.Error != nil || len(p.GoFiles) == 0 {
-			if want.optional {
-				continue
-			}
 			reason := "not listed"
 			if ok && p.Error != nil {
 				reason = p.Error.Err
 			} else if ok {
 				reason = "no Go files"
 			}
-			return nil, fmt.Errorf("public package %s: %s", want.path, reason)
+			return nil, fmt.Errorf("public package %s: %s", want, reason)
 		}
 		files := make([]*ast.File, 0, len(p.GoFiles))
 		for _, name := range p.GoFiles {
 			f, err := parser.ParseFile(fset, filepath.Join(p.Dir, name), nil, parser.SkipObjectResolution)
 			if err != nil {
-				return nil, fmt.Errorf("parse %s: %w", want.path, err)
+				return nil, fmt.Errorf("parse %s: %w", want, err)
 			}
 			files = append(files, f)
 		}
-		conf := types.Config{Importer: imp}
-		pkg, err := conf.Check(want.path, fset, files, nil)
+		conf := gotypes.Config{Importer: imp}
+		pkg, err := conf.Check(want, fset, files, nil)
 		if err != nil {
-			return nil, fmt.Errorf("type-check %s: %w", want.path, err)
+			return nil, fmt.Errorf("type-check %s: %w", want, err)
 		}
 		pkgs = append(pkgs, pkg)
 	}
 	return pkgs, nil
 }
 
-// goAPILine is one lock line. id is the sort key: the package path, then the
-// symbol, then the member, so a type is followed by its fields and methods.
 // renderGoAPI returns the sorted lock lines for pkgs. An alias to a type that no
 // package in pkgs declares is expanded with that type's fields and methods, since
 // otherwise the lock would pin the alias but not what a caller can do with it.
@@ -152,7 +139,7 @@ func loadGoPackages(dir string) ([]*types.Package, error) {
 // A line is the symbol path, a space, then the declaration. The space sorts below
 // every character a path holds, so a type is followed by its members and the plain
 // byte order the lockfiles-are-sorted lint demands is also the reading order.
-func renderGoAPI(pkgs []*types.Package) []string {
+func renderGoAPI(pkgs []*gotypes.Package) []string {
 	public := map[string]bool{}
 	for _, p := range pkgs {
 		public[p.Path()] = true
@@ -166,28 +153,36 @@ func renderGoAPI(pkgs []*types.Package) []string {
 	return lines
 }
 
+// goAPIRenderer renders one package's exported declarations as lock lines. public
+// holds the path of every locked package: a type from any other package is
+// expanded in place, since nothing else pins it.
 type goAPIRenderer struct {
-	pkg    *types.Package
+	pkg    *gotypes.Package
 	public map[string]bool
 }
 
 // qualify spells a type from the package being rendered bare and every other
 // package by its full import path, which is unambiguous where a name is not.
-func (r goAPIRenderer) qualify(p *types.Package) string {
+func (r goAPIRenderer) qualify(p *gotypes.Package) string {
 	if p == r.pkg {
 		return ""
 	}
 	return p.Path()
 }
 
-func (r goAPIRenderer) typeString(t types.Type) string {
-	return types.TypeString(t, r.qualify)
+// typeString spells t with qualify, the form the lock pins.
+func (r goAPIRenderer) typeString(t gotypes.Type) string {
+	return gotypes.TypeString(t, r.qualify)
 }
 
-func (r goAPIRenderer) line(id, format string, args ...any) string {
+// lockLine joins a sort key to its declaration text: the symbol path, then each
+// member beneath it.
+func lockLine(id, format string, args ...any) string {
 	return id + " " + fmt.Sprintf(format, args...)
 }
 
+// declarations lists a line for every exported constant, variable, function and
+// type in the package, in scope order.
 func (r goAPIRenderer) declarations() []string {
 	var lines []string
 	scope := r.pkg.Scope()
@@ -198,52 +193,54 @@ func (r goAPIRenderer) declarations() []string {
 		}
 		id := r.pkg.Path() + "." + name
 		switch o := obj.(type) {
-		case *types.Const:
-			lines = append(lines, r.line(id, "const %s = %s", r.typeString(o.Type()), o.Val().ExactString()))
-		case *types.Var:
-			lines = append(lines, r.line(id, "var %s", r.typeString(o.Type())))
-		case *types.Func:
-			lines = append(lines, r.line(id, "%s", r.typeString(o.Type())))
-		case *types.TypeName:
+		case *gotypes.Const:
+			lines = append(lines, lockLine(id, "const %s = %s", r.typeString(o.Type()), o.Val().ExactString()))
+		case *gotypes.Var:
+			lines = append(lines, lockLine(id, "var %s", r.typeString(o.Type())))
+		case *gotypes.Func:
+			lines = append(lines, lockLine(id, "%s", r.typeString(o.Type())))
+		case *gotypes.TypeName:
 			lines = append(lines, r.typeDeclaration(id, o)...)
 		}
 	}
 	return lines
 }
 
-func (r goAPIRenderer) typeDeclaration(id string, tn *types.TypeName) []string {
-	if alias, ok := tn.Type().(*types.Alias); ok {
-		head := r.line(id, "type%s = %s", r.typeParams(alias.TypeParams()), r.typeString(alias.Rhs()))
+// typeDeclaration returns the head line of tn followed by its members. An alias
+// to a type declared outside the locked packages carries that type's members too.
+func (r goAPIRenderer) typeDeclaration(id string, tn *gotypes.TypeName) []string {
+	if alias, ok := tn.Type().(*gotypes.Alias); ok {
+		head := lockLine(id, "type%s = %s", r.typeParams(alias.TypeParams()), r.typeString(alias.Rhs()))
 		lines := []string{head}
-		if named, ok := types.Unalias(alias).(*types.Named); ok && named.Obj().Pkg() != nil && !r.public[named.Obj().Pkg().Path()] {
+		if named, ok := gotypes.Unalias(alias).(*gotypes.Named); ok && named.Obj().Pkg() != nil && !r.public[named.Obj().Pkg().Path()] {
 			lines = append(lines, r.members(id, named)...)
 		}
 		return lines
 	}
-	named, ok := tn.Type().(*types.Named)
+	named, ok := tn.Type().(*gotypes.Named)
 	if !ok {
 		return nil
 	}
 	var kind string
 	switch u := named.Underlying().(type) {
-	case *types.Struct:
+	case *gotypes.Struct:
 		kind = "struct"
-	case *types.Interface:
+	case *gotypes.Interface:
 		kind = "interface"
 	default:
 		kind = r.typeString(u)
 	}
-	head := r.line(id, "type%s %s", r.typeParams(named.TypeParams()), kind)
+	head := lockLine(id, "type%s %s", r.typeParams(named.TypeParams()), kind)
 	return append([]string{head}, r.members(id, named)...)
 }
 
 // members lists the exported fields, embedded types and methods of named under id.
 // Methods come from the method set of *named, so promoted ones are included and a
 // value-receiver method is told apart from a pointer-receiver one.
-func (r goAPIRenderer) members(id string, named *types.Named) []string {
+func (r goAPIRenderer) members(id string, named *gotypes.Named) []string {
 	var lines []string
 	switch u := named.Underlying().(type) {
-	case *types.Struct:
+	case *gotypes.Struct:
 		for i := range u.NumFields() {
 			f := u.Field(i)
 			if !f.Exported() {
@@ -257,27 +254,27 @@ func (r goAPIRenderer) members(id string, named *types.Named) []string {
 			if tag := u.Tag(i); tag != "" {
 				text += " " + strconv.Quote(tag)
 			}
-			lines = append(lines, r.line(id+"."+f.Name(), "%s", text))
+			lines = append(lines, lockLine(id+"."+f.Name(), "%s", text))
 		}
-	case *types.Interface:
+	case *gotypes.Interface:
 		for i := range u.NumExplicitMethods() {
 			m := u.ExplicitMethod(i)
 			if m.Exported() {
-				lines = append(lines, r.line(id+"."+m.Name(), "imethod %s", r.typeString(m.Type())))
+				lines = append(lines, lockLine(id+"."+m.Name(), "imethod %s", r.typeString(m.Type())))
 			}
 		}
 		for i := range u.NumEmbeddeds() {
-			lines = append(lines, r.line(id+".embeds", "%s", r.typeString(u.EmbeddedType(i))))
+			lines = append(lines, lockLine(id+".embeds", "%s", r.typeString(u.EmbeddedType(i))))
 		}
 		return lines
 	}
-	if types.IsInterface(named) {
+	if gotypes.IsInterface(named) {
 		return lines
 	}
-	ptrSet := types.NewMethodSet(types.NewPointer(named))
-	valSet := types.NewMethodSet(named)
+	ptrSet := gotypes.NewMethodSet(gotypes.NewPointer(named))
+	valSet := gotypes.NewMethodSet(named)
 	for i := range ptrSet.Len() {
-		fn, ok := ptrSet.At(i).Obj().(*types.Func)
+		fn, ok := ptrSet.At(i).Obj().(*gotypes.Func)
 		if !ok || !fn.Exported() {
 			continue
 		}
@@ -285,12 +282,14 @@ func (r goAPIRenderer) members(id string, named *types.Named) []string {
 		if valSet.Lookup(fn.Pkg(), fn.Name()) == nil {
 			kind = "method(ptr)"
 		}
-		lines = append(lines, r.line(id+"."+fn.Name(), "%s %s", kind, r.typeString(fn.Type())))
+		lines = append(lines, lockLine(id+"."+fn.Name(), "%s %s", kind, r.typeString(fn.Type())))
 	}
 	return lines
 }
 
-func (r goAPIRenderer) typeParams(list *types.TypeParamList) string {
+// typeParams spells a type parameter list as "[K comparable, V any]", or "" for
+// a type with none.
+func (r goAPIRenderer) typeParams(list *gotypes.TypeParamList) string {
 	if list.Len() == 0 {
 		return ""
 	}

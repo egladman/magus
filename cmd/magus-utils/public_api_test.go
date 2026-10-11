@@ -314,9 +314,9 @@ func F() {}
 
 func TestPublicGoPackagesNamesDistinctPackages(t *testing.T) {
 	seen := map[string]bool{}
-	for _, p := range publicGoPackages {
-		assert.False(t, seen[p.path], "%s is listed twice", p.path)
-		seen[p.path] = true
+	for _, path := range publicGoPackages {
+		assert.False(t, seen[path], "%s is listed twice", path)
+		seen[path] = true
 	}
 	assert.True(t, seen["github.com/egladman/magus"], "the root package is the SDK")
 }
@@ -352,13 +352,10 @@ func TestGoAPILockCoversEveryPublicPackage(t *testing.T) {
 
 	require.NotEmpty(t, lines)
 	assert.True(t, slices.IsSorted(lines), "the lock must stay in byte order")
-	for _, p := range publicGoPackages {
-		if p.optional {
-			continue
-		}
+	for _, path := range publicGoPackages {
 		found := slices.ContainsFunc(lines, func(l string) bool {
-			return strings.HasPrefix(l, p.path+".")
+			return strings.HasPrefix(l, path+".")
 		})
-		assert.True(t, found, "no declaration of %s reached the lock", p.path)
+		assert.True(t, found, "no declaration of %s reached the lock", path)
 	}
 }
