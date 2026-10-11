@@ -49,7 +49,7 @@ func TestLastRealDurationIsTheNewestRealRun(t *testing.T) {
 
 func TestLastRealDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	dir := t.TempDir()
-	results := make([]TargetResult, lastRunScan+1)
+	results := make([]TargetResult, maxInvocationFiles+1)
 	results[0] = TargetResult{Target: "go-test", Project: ".", Outcome: OutcomePass, DurationMs: 60_000}
 	for i := 1; i < len(results); i++ {
 		results[i] = TargetResult{Target: "lint", Project: ".", Outcome: OutcomePass, DurationMs: 1_000}
@@ -57,5 +57,5 @@ func TestLastRealDurationReadsOnlyTheNewestFiles(t *testing.T) {
 	recordResults(t, dir, results...)
 
 	_, ok := LastRealDuration(dir, ".", "go-test")
-	assert.False(t, ok, "a run older than the newest %d files is not read", lastRunScan)
+	assert.False(t, ok, "a run older than the newest %d files is not read", maxInvocationFiles)
 }

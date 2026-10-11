@@ -13,9 +13,9 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// lastRunScan bounds LastRealDuration to the newest invocation files: it runs on a hook's
-// path, and a store holds thousands.
-const lastRunScan = 300
+// maxInvocationFiles bounds LastRealDuration to the newest invocation files: it runs on
+// a hook's path with a deadline, each file is read whole, and a store holds thousands.
+const maxInvocationFiles = 100
 
 // invocationPrefix starts every id journal.NewInvocationID mints, the only ids a target
 // result is filed under. Its base36 millisecond stamp sorts by name in time order.
@@ -38,14 +38,15 @@ func LastRealDuration(dir, project, target string) (time.Duration, bool) {
 	}
 	slices.Sort(names)
 	project, target = path.Clean(cmp.Or(project, ".")), baseTarget(target)
-	for i := len(names) - 1; i >= 0 && i >= len(names)-lastRunScan; i-- {
-		records, _, _, _ := readFile(filepath.Join(dir, names[i]))
-		for j := len(records) - 1; j >= 0; j-- {
-			if records[j].Kind != KindTargetResult {
+	newest := names[max(0, len(names)-maxInvocationFiles):]
+	for _, name := range slices.Backward(newest) {
+		records, _, _, _ := readFile(filepath.Join(dir, name))
+		for _, rec := range slices.Backward(records) {
+			if rec.Kind != KindTargetResult {
 				continue
 			}
 			var r TargetResult
-			if json.Unmarshal(records[j].Payload, &r) != nil {
+			if json.Unmarshal(rec.Payload, &r) != nil {
 				continue
 			}
 			if r.Replayed || r.DiagnosticCode != "" || r.DurationMs <= 0 ||
