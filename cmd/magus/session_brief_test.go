@@ -136,7 +136,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// directory left to write it into): a WorkspaceRegistry records the wiring the
 	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
 	// it the way a real spell's harness_config would.
-	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
+	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
 		if id != "brief-host" {
 			return agent.HarnessDescriptor{}, "", false, nil
 		}
@@ -155,7 +155,7 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 			}},
 		}, "spell:brief-host", true, nil
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
 	reg := magus.NewWorkspaceRegistry()
 	reg.AddHarness("brief-host")
 	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))

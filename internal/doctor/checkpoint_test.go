@@ -52,8 +52,8 @@ const doctorHarnessDescriptorJSON = `{
 // restored, since no doctor test relies on a PRIOR test's registration surviving.
 func writeDoctorHarness(t *testing.T, root string) {
 	t.Helper()
-	agent.RegisterHarnessSpellLoader(agentTestHarnessSpell("test-host", doctorHarnessDescriptorJSON))
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
+	previous := agent.RegisterHarnessSpellLoader(agentTestHarnessSpell("test-host", doctorHarnessDescriptorJSON))
+	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
 	// VerifyHarness now actually runs the wired command (see internal/agent's
 	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every
