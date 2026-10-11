@@ -1,5 +1,5 @@
 // sealed-read (deny): a shell line that reads, lists, copies or searches the sealed
-//   proofread sets under $XDG_CACHE_HOME/proofread-calibration/sealed (~/.cache when
+//   proofread sets under $XDG_CACHE_HOME/proofread/calibration/sealed (~/.cache when
 //   XDG_CACHE_HOME is unset or relative). The labels beside it stay open.
 namespace agentpolicy\sealed;
 
@@ -16,9 +16,10 @@ final sealedDenial = "the sealed proofread set stays sealed until its round is s
 
 final nameChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-";
 
-// calibrationDir is the directory below the cache home that holds the labels and the sealed
-// sets; sealed is the part of it a tuner may not read.
-final calibrationDir = "proofread-calibration";
+// proofreadDir is proofread's directory below the cache home; calibrationDir holds the
+// labels and the sealed sets, and sealed is the part of it a tuner may not read.
+final proofreadDir = "proofread";
+final calibrationDir = "proofread/calibration";
 
 // Roots are the two environment facts that place the sealed directory: HOME, and
 // XDG_CACHE_HOME as the shell has it, which may be empty or relative.
@@ -74,7 +75,7 @@ fun namesSealed(programs: [helpers\Program], line: str, roots: Roots) > bool {
         if (globsSealed(t, parent: parent)) {
             return true;
         }
-        if (t.indexOf(calibrationDir) != null) {
+        if (namesPath(t, needle: calibrationDir)) {
             inCalibration = true;
         }
         if (t.split("/").indexOf("sealed") != null) {
@@ -88,7 +89,7 @@ fun namesSealed(programs: [helpers\Program], line: str, roots: Roots) > bool {
         return false;
     }
     foreach (t in tokens) {
-        if (t == parent or t == cache) {
+        if (t == parent or t == cache + "/" + proofreadDir or t == cache) {
             return true;
         }
     }
@@ -149,7 +150,7 @@ fun namesPath(text: str, needle: str) > bool {
 }
 
 // globsSealed reports whether a pattern word under the calibration directory has a
-// component that matches "sealed", as in proofread-calibration/sea*/x.
+// component that matches "sealed", as in proofread/calibration/sea*/x.
 fun globsSealed(token: str, parent: str) > bool {
     if (!token.startsWith(parent + "/")) {
         return false;
@@ -164,7 +165,7 @@ fun globsSealed(token: str, parent: str) > bool {
 final searchers = ["rg", "ag", "ack", "fd", "find", "tree", "cp", "rsync", "tar", "ditto", "zip"];
 
 // searchesRecursively reports whether a program on the line walks the directories it is
-// handed, so naming the cache home or the calibration directory reaches the sealed sets.
+// handed, so naming the cache home or proofread's directory in it reaches the sealed sets.
 fun searchesRecursively(programs: [helpers\Program]) > bool {
     foreach (p in programs) {
         if (searchers.indexOf(p.name) != null) {
@@ -230,24 +231,24 @@ final ada = Roots{ home = "/Users/ada", xdg = "" };
 final adaXdg = Roots{ home = "/Users/ada", xdg = "/var/cache/ada" };
 
 test "the sealed directory is the XDG cache home's, and an unset or relative one means ~/.cache" {
-    std\assert(sealedDir(ada) == "/Users/ada/.cache/proofread-calibration/sealed", message: "unset");
-    std\assert(sealedDir(Roots{ home = "/Users/ada", xdg = "cache" }) == "/Users/ada/.cache/proofread-calibration/sealed", message: "relative");
-    std\assert(sealedDir(adaXdg) == "/var/cache/ada/proofread-calibration/sealed", message: "absolute");
-    std\assert(sealedDir(Roots{ home = "/Users/ada", xdg = "/var/cache/ada/" }) == "/var/cache/ada/proofread-calibration/sealed", message: "trailing slash");
+    std\assert(sealedDir(ada) == "/Users/ada/.cache/proofread/calibration/sealed", message: "unset");
+    std\assert(sealedDir(Roots{ home = "/Users/ada", xdg = "cache" }) == "/Users/ada/.cache/proofread/calibration/sealed", message: "relative");
+    std\assert(sealedDir(adaXdg) == "/var/cache/ada/proofread/calibration/sealed", message: "absolute");
+    std\assert(sealedDir(Roots{ home = "/Users/ada", xdg = "/var/cache/ada/" }) == "/var/cache/ada/proofread/calibration/sealed", message: "trailing slash");
 }
 
 test "every spelling of the sealed directory is denied, naming the sealing and the open labels" {
     foreach (line in [
-        "cat /Users/ada/.cache/proofread-calibration/sealed/round5/cases.txtar",
-        "cat ~/.cache/proofread-calibration/sealed/round5/cases.txtar",
-        "cat $HOME/.cache/proofread-calibration/sealed/round5/cases.txtar",
-        "cat $\{HOME\}/.cache/proofread-calibration/sealed/round5/cases.txtar",
-        "cat $XDG_CACHE_HOME/proofread-calibration/sealed/round5/cases.txtar",
-        "cat $\{XDG_CACHE_HOME\}/proofread-calibration/sealed/round5/cases.txtar",
-        "cat \"$XDG_CACHE_HOME/proofread-calibration/sealed/round5/cases.txtar\"",
-        "cat /Users/ada/.cache//proofread-calibration/./sealed/round5/cases.txtar",
-        "cat /Users/ada/.cache/proofread-calibration/labels/../sealed/round5/cases.txtar",
-        "cat ~/.cache/proofread-calibration/sealed/",
+        "cat /Users/ada/.cache/proofread/calibration/sealed/round5/cases.txtar",
+        "cat ~/.cache/proofread/calibration/sealed/round5/cases.txtar",
+        "cat $HOME/.cache/proofread/calibration/sealed/round5/cases.txtar",
+        "cat $\{HOME\}/.cache/proofread/calibration/sealed/round5/cases.txtar",
+        "cat $XDG_CACHE_HOME/proofread/calibration/sealed/round5/cases.txtar",
+        "cat $\{XDG_CACHE_HOME\}/proofread/calibration/sealed/round5/cases.txtar",
+        "cat \"$XDG_CACHE_HOME/proofread/calibration/sealed/round5/cases.txtar\"",
+        "cat /Users/ada/.cache//proofread/./calibration/sealed/round5/cases.txtar",
+        "cat /Users/ada/.cache/proofread/calibration/labels/../sealed/round5/cases.txtar",
+        "cat ~/.cache/proofread/calibration/sealed/",
     ]) {
         final v = judged(line, argvs: [["cat", "x"]], roots: ada);
         std\assert(v.decision == "deny", message: line);
@@ -257,21 +258,21 @@ test "every spelling of the sealed directory is denied, naming the sealing and t
 }
 
 test "an absolute XDG_CACHE_HOME moves the directory, and the default spelling stays denied" {
-    std\assert(judged("cat /var/cache/ada/proofread-calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the XDG path");
-    std\assert(judged("cat $XDG_CACHE_HOME/proofread-calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the variable");
-    std\assert(judged("cat ~/.cache/proofread-calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the literal tail");
+    std\assert(judged("cat /var/cache/ada/proofread/calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the XDG path");
+    std\assert(judged("cat $XDG_CACHE_HOME/proofread/calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the variable");
+    std\assert(judged("cat ~/.cache/proofread/calibration/sealed/a", argvs: [["cat", "x"]], roots: adaXdg).decision == "deny", message: "the literal tail");
 }
 
 test "a read, list, copy and search of the sealed directory are all denied" {
     foreach (argv in [
-        ["ls", "-la", "~/.cache/proofread-calibration/sealed"],
-        ["head", "-n", "5", "~/.cache/proofread-calibration/sealed/round5/cases.txtar"],
-        ["cp", "-r", "~/.cache/proofread-calibration/sealed", "/tmp/x"],
-        ["rg", "never", "~/.cache/proofread-calibration/sealed"],
-        ["grep", "-rn", "never", "~/.cache/proofread-calibration/sealed"],
-        ["find", "~/.cache/proofread-calibration/sealed", "-name", "*.txtar"],
-        ["sed", "-n", "1,20p", "~/.cache/proofread-calibration/sealed/a"],
-        ["tar", "cf", "/tmp/s.tar", "~/.cache/proofread-calibration/sealed"],
+        ["ls", "-la", "~/.cache/proofread/calibration/sealed"],
+        ["head", "-n", "5", "~/.cache/proofread/calibration/sealed/round5/cases.txtar"],
+        ["cp", "-r", "~/.cache/proofread/calibration/sealed", "/tmp/x"],
+        ["rg", "never", "~/.cache/proofread/calibration/sealed"],
+        ["grep", "-rn", "never", "~/.cache/proofread/calibration/sealed"],
+        ["find", "~/.cache/proofread/calibration/sealed", "-name", "*.txtar"],
+        ["sed", "-n", "1,20p", "~/.cache/proofread/calibration/sealed/a"],
+        ["tar", "cf", "/tmp/s.tar", "~/.cache/proofread/calibration/sealed"],
     ]) {
         final v = judged(argv.join(" "), argvs: [argv], roots: ada);
         std\assert(v.decision == "deny", message: argv.join(" "));
@@ -280,13 +281,13 @@ test "a read, list, copy and search of the sealed directory are all denied" {
 
 test "a command that reaches the directory through an interpreter, a redirect or a cd is denied" {
     foreach (line in [
-        "bash -c 'cat ~/.cache/proofread-calibration/sealed/a'",
-        "python3 -c \"print(open('/Users/ada/.cache/proofread-calibration/sealed/a').read())\"",
-        "cat < ~/.cache/proofread-calibration/sealed/a",
-        "cd ~/.cache/proofread-calibration && cat sealed/a",
-        "cd ~/.cache/proofread-calibration/sealed && ls",
-        "cat ~/.cache/proofread-calibration/\{labels,sealed\}/round5/a",
-        "git commit -m \"$(cat ~/.cache/proofread-calibration/sealed/a)\"",
+        "bash -c 'cat ~/.cache/proofread/calibration/sealed/a'",
+        "python3 -c \"print(open('/Users/ada/.cache/proofread/calibration/sealed/a').read())\"",
+        "cat < ~/.cache/proofread/calibration/sealed/a",
+        "cd ~/.cache/proofread/calibration && cat sealed/a",
+        "cd ~/.cache/proofread/calibration/sealed && ls",
+        "cat ~/.cache/proofread/calibration/\{labels,sealed\}/round5/a",
+        "git commit -m \"$(cat ~/.cache/proofread/calibration/sealed/a)\"",
     ]) {
         final v = judged(line, argvs: [["sh"]], roots: ada);
         std\assert(v.decision == "deny", message: line);
@@ -295,29 +296,32 @@ test "a command that reaches the directory through an interpreter, a redirect or
 
 test "a pattern that matches the sealed name is denied" {
     foreach (line in [
-        "cat ~/.cache/proofread-calibration/sea*/round5/a",
-        "cat ~/.cache/proofread-calibration/*/round5/a",
-        "cat ~/.cache/proofread-calibration/s?aled/a",
-        "cat ~/.cache/proofread-calibration/[s]ealed/a",
+        "cat ~/.cache/proofread/calibration/sea*/round5/a",
+        "cat ~/.cache/proofread/calibration/*/round5/a",
+        "cat ~/.cache/proofread/calibration/s?aled/a",
+        "cat ~/.cache/proofread/calibration/[s]ealed/a",
     ]) {
         std\assert(judged(line, argvs: [["cat", "x"]], roots: ada).decision == "deny", message: line);
     }
-    std\assert(judged("cat ~/.cache/proofread-calibration/lab*/round4/scores.json", argvs: [["cat", "x"]], roots: ada).decision == "allow", message: "a pattern that cannot match sealed");
+    std\assert(judged("cat ~/.cache/proofread/calibration/lab*/round4/scores.json", argvs: [["cat", "x"]], roots: ada).decision == "allow", message: "a pattern that cannot match sealed");
 }
 
-test "a recursive search from the calibration directory or the cache home is denied; a plain listing is not" {
+test "a recursive search from a directory above the sealed one is denied; a plain listing is not" {
     foreach (argv in [
-        ["rg", "never", "~/.cache/proofread-calibration"],
-        ["grep", "-r", "never", "~/.cache/proofread-calibration/"],
+        ["rg", "never", "~/.cache/proofread/calibration"],
+        ["rg", "never", "~/.cache/proofread"],
+        ["grep", "-r", "never", "~/.cache/proofread/calibration/"],
         ["find", "~/.cache", "-name", "*.txtar"],
-        ["cp", "-r", "~/.cache/proofread-calibration", "/tmp/c"],
+        ["cp", "-r", "~/.cache/proofread/calibration", "/tmp/c"],
     ]) {
         std\assert(judged(argv.join(" "), argvs: [argv], roots: ada).decision == "deny", message: argv.join(" "));
     }
     foreach (argv in [
-        ["ls", "~/.cache/proofread-calibration"],
+        ["ls", "~/.cache/proofread/calibration"],
         ["ls", "-l", "~/.cache"],
-        ["grep", "never", "~/.cache/proofread-calibration/labels/round4/scores.json"],
+        ["ls", "~/.cache/proofread"],
+        ["rg", "never", "~/.cache/proofread/other"],
+        ["grep", "never", "~/.cache/proofread/calibration/labels/round4/scores.json"],
     ]) {
         std\assert(judged(argv.join(" "), argvs: [argv], roots: ada).decision == "allow", message: argv.join(" "));
     }
@@ -325,12 +329,12 @@ test "a recursive search from the calibration directory or the cache home is den
 
 test "the labels directory, a sibling that only starts with sealed and unrelated reads stay silent" {
     foreach (line in [
-        "ls ~/.cache/proofread-calibration/labels",
-        "cat $XDG_CACHE_HOME/proofread-calibration/labels/round4/scores.json",
-        "rg never ~/.cache/proofread-calibration/labels",
-        "cat ~/.cache/proofread-calibration/sealed-old/a",
-        "cat ~/.cache/proofread-calibration/sealed.json",
-        "cat /var/cache/ada/proofread-calibration/labels/a",
+        "ls ~/.cache/proofread/calibration/labels",
+        "cat $XDG_CACHE_HOME/proofread/calibration/labels/round4/scores.json",
+        "rg never ~/.cache/proofread/calibration/labels",
+        "cat ~/.cache/proofread/calibration/sealed-old/a",
+        "cat ~/.cache/proofread/calibration/sealed.json",
+        "cat /var/cache/ada/proofread/calibration/labels/a",
         "git switch -c sealed-holdout proofread",
         "cat libs/conventions/proofread/testdata/cases/claim.txtar",
         "ls ~/.cache/other/sealed",
@@ -340,10 +344,10 @@ test "the labels directory, a sibling that only starts with sealed and unrelated
 }
 
 test "a message or an echo that only names the directory is allowed; a substitution or another program is not" {
-    final commit = helpers\vcsRequest([["git", "commit", "-m", "stop reading ~/.cache/proofread-calibration/sealed"]]);
-    std\assert(decideSealed(commit, line: "git commit -m \"stop reading ~/.cache/proofread-calibration/sealed\"", roots: ada).decision == "allow", message: "commit message");
-    std\assert(judged("echo ~/.cache/proofread-calibration/sealed", argvs: [["echo", "x"]], roots: ada).decision == "allow", message: "echo");
-    std\assert(judged("echo $(cat ~/.cache/proofread-calibration/sealed/a)", argvs: [["echo", "x"]], roots: ada).decision == "deny", message: "substitution");
-    std\assert(judged("echo ~/.cache/proofread-calibration/sealed && cat ~/.cache/proofread-calibration/sealed/a", argvs: [["echo", "x"], ["cat", "x"]], roots: ada).decision == "deny", message: "echo then cat");
-    std\assert(decideSealed([<helpers\Program>], line: "cat ~/.cache/proofread-calibration/sealed/a", roots: ada).decision == "deny", message: "a line that did not parse");
+    final commit = helpers\vcsRequest([["git", "commit", "-m", "stop reading ~/.cache/proofread/calibration/sealed"]]);
+    std\assert(decideSealed(commit, line: "git commit -m \"stop reading ~/.cache/proofread/calibration/sealed\"", roots: ada).decision == "allow", message: "commit message");
+    std\assert(judged("echo ~/.cache/proofread/calibration/sealed", argvs: [["echo", "x"]], roots: ada).decision == "allow", message: "echo");
+    std\assert(judged("echo $(cat ~/.cache/proofread/calibration/sealed/a)", argvs: [["echo", "x"]], roots: ada).decision == "deny", message: "substitution");
+    std\assert(judged("echo ~/.cache/proofread/calibration/sealed && cat ~/.cache/proofread/calibration/sealed/a", argvs: [["echo", "x"], ["cat", "x"]], roots: ada).decision == "deny", message: "echo then cat");
+    std\assert(decideSealed([<helpers\Program>], line: "cat ~/.cache/proofread/calibration/sealed/a", roots: ada).decision == "deny", message: "a line that did not parse");
 }

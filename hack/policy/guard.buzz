@@ -63,7 +63,7 @@
 //   host-terminals (deny): creating or reading a directory named terminals. A host
 //     session folder is not a run; magus status reads the lock.
 //   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread
-//     sets under $XDG_CACHE_HOME/proofread-calibration/sealed, however it spells the path.
+//     sets under $XDG_CACHE_HOME/proofread/calibration/sealed, however it spells the path.
 //     The labels beside them stay open.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
