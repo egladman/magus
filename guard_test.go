@@ -3,7 +3,6 @@ package magus
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -56,23 +56,11 @@ func TestPendingTouchesLoad(t *testing.T) {
 // it. An edit, and a commit of that edit, both change the fingerprint, so the
 // sentinel is dropped and git answers again.
 func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
-	root := t.TempDir()
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	if out, err := exec.Command("git", "-C", root, "init", "-b", "main").CombinedOutput(); err != nil {
-		t.Skipf("git init: %v\n%s", err, out)
-	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
-	file := filepath.Join(root, "policy.buzz")
-	require.NoError(t, os.WriteFile(file, []byte("fun judge() > void {}\n"), 0o644))
-	git("add", "policy.buzz")
-	git("commit", "-q", "-m", "init")
+	repo := testkit.NewRepo(t, map[string]string{"policy.buzz": "fun judge() > void {}\n"})
+	root := repo.Root()
+	git := func(args ...string) { repo.Git(args...) }
+	file := repo.Path("policy.buzz")
 
 	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
 	require.NoError(t, err)
@@ -117,30 +105,17 @@ func TestPendingReusesAStatusWhenNothingChanged(t *testing.T) {
 	assert.Empty(t, got, "a commit of that edit is clean, which HEAD has to say because the file bytes did not change again")
 }
 
-// gitPolicy is a committed repository at root holding files, and the approval
-// authority over it.
-func gitPolicy(t *testing.T, root string, files map[string]string) (headPolicy, func(...string)) {
+// gitPolicy is a committed repository holding files, and the approval authority over
+// it. git runs a command in the repository.
+func gitPolicy(t *testing.T, files map[string]string) (root string, h headPolicy, git func(...string)) {
 	t.Helper()
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	if out, err := exec.Command("git", "-C", root, "init", "-b", "main").CombinedOutput(); err != nil {
-		t.Skipf("git init: %v\n%s", err, out)
-	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
-	for name, body := range files {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-		git("add", name)
-	}
-	git("commit", "-q", "-m", "init")
+	repo := testkit.NewRepo(t, files)
+	root = repo.Root()
+	git = func(args ...string) { repo.Git(args...) }
 	res, err := vcs.Resolve(t.Context(), root, "", types.VCSOptions{})
 	require.NoError(t, err)
 	require.NotNil(t, res.VCS)
-	return headPolicy{
+	return root, headPolicy{
 		workspace: root,
 		driver:    res.VCS,
 		repoRoot:  func(ctx context.Context) (string, error) { return res.VCS.Root(ctx, root) },
@@ -204,8 +179,7 @@ func TestPendingRecordsOnlyTheStateStatusSaw(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			h, git := gitPolicy(t, root, map[string]string{"policy.buzz": "strict\n"})
+			root, h, git := gitPolicy(t, map[string]string{"policy.buzz": "strict\n"})
 			file := filepath.Join(root, "policy.buzz")
 			tc.setup(t, file, git)
 			scope := []string{file}
@@ -234,8 +208,7 @@ func TestPendingRecordsOnlyTheStateStatusSaw(t *testing.T) {
 // names.
 func TestPendingRecordsEachScopeInTheConfiguredCacheDir(t *testing.T) {
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	root := t.TempDir()
-	h, _ := gitPolicy(t, root, map[string]string{
+	root, h, _ := gitPolicy(t, map[string]string{
 		"magus.yaml": "cache:\n  dir: elsewhere\n",
 		"a.buzz":     "a\n",
 		"b.buzz":     "b\n",
@@ -261,8 +234,7 @@ func TestPendingRecordsEachScopeInTheConfiguredCacheDir(t *testing.T) {
 // A workspace nested in a repository has no marker of its own, and its
 // checkout id is read from the repository above it.
 func TestCheckoutIDReadsTheRepositoryAboveANestedWorkspace(t *testing.T) {
-	root := t.TempDir()
-	h, _ := gitPolicy(t, root, map[string]string{"sub/magusfile.buzz": "x\n"})
+	root, h, _ := gitPolicy(t, map[string]string{"sub/magusfile.buzz": "x\n"})
 	top, ok := checkoutID(h.driver, root)
 	require.True(t, ok)
 	nested, ok := checkoutID(h.driver, filepath.Join(root, "sub"))
@@ -299,8 +271,7 @@ func (d unbatchedDriver) ReadFileAt(ctx context.Context, root, rev, rel string) 
 // tree's pending answer does not cover is read from disk. A batched authority
 // reads every path through the batch, since its pending answer may be scoped.
 func TestApprovedReaderReadsCleanFilesFromDiskWithoutABatch(t *testing.T) {
-	root := t.TempDir()
-	h, _ := gitPolicy(t, root, map[string]string{"clean.buzz": "clean\n", "edited.buzz": "committed\n"})
+	root, h, _ := gitPolicy(t, map[string]string{"clean.buzz": "clean\n", "edited.buzz": "committed\n"})
 	clean := filepath.Join(root, "clean.buzz")
 	edited := filepath.Join(root, "edited.buzz")
 	require.NoError(t, os.WriteFile(edited, []byte("loosened\n"), 0o644))

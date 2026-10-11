@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	spellpkg "github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -28,7 +29,6 @@ import (
 	"maps"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -431,44 +431,21 @@ func normalizeTimes(in map[string]time.Time) map[string]time.Time {
 	return out
 }
 
-// gitRun runs one git command in dir, fataling on error. Skips the test if git is
-// unavailable so CI without git does not fail spuriously.
-func gitRun(t *testing.T, dir string, args ...string) {
+func writeCommit(t *testing.T, repo *testkit.Repo, file, content string) {
 	t.Helper()
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
-}
-
-func writeCommit(t *testing.T, dir, file, content string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644))
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-q", "-m", "c")
-}
-
-func gitHeadFull(t *testing.T, dir string) string {
-	t.Helper()
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	require.NoError(t, err)
-	return strings.TrimSpace(string(out))
+	repo.Commit("c", map[string]string{file: content})
 }
 
 // TestLoadKnowledgeVCSHistory drives the whole opt-in path against a real repo (routed
 // through the VCS abstraction): per-file commit counts, most-recent-commit, and, locking
 // in the core.quotePath fix, a non-ASCII filename that must come through raw to match.
 func TestLoadKnowledgeVCSHistory(t *testing.T) {
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "one\n")  // a: commit 1
-	writeCommit(t, root, "b.buzz", "one\n")  // b: commit 1
-	writeCommit(t, root, "a.buzz", "two\n")  // a: commit 2 (most recent for a)
-	writeCommit(t, root, "café.buzz", "u\n") // non-ASCII path
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	writeCommit(t, repo, "a.buzz", "one\n")  // a: commit 1
+	writeCommit(t, repo, "b.buzz", "one\n")  // b: commit 1
+	writeCommit(t, repo, "a.buzz", "two\n")  // a: commit 2 (most recent for a)
+	writeCommit(t, repo, "café.buzz", "u\n") // non-ASCII path
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	entries := loadKnowledgeVCS(context.Background(), cfg, root, slog.Default())
@@ -481,23 +458,22 @@ func TestLoadKnowledgeVCSHistory(t *testing.T) {
 		last[e.Path] = e.LastCommit
 		assert.NotEmpty(t, e.LastCommit, "every entry has a last commit")
 		assert.False(t, e.LastModified.IsZero(), "every entry has an author time")
-		assert.Equal(t, "t", e.LastAuthor, "the last commit's author is captured (GIT_AUTHOR_NAME)")
+		assert.Equal(t, "magus test", e.LastAuthor, "the last commit's author is captured (user.name)")
 	}
 	assert.Equal(t, 2, byPath["a.buzz"], "a.buzz was touched by two commits")
 	assert.Equal(t, 1, byPath["b.buzz"], "b.buzz was touched by one commit")
 	assert.Contains(t, byPath, "café.buzz", "non-ASCII path comes through raw (quotePath=false), not git-quoted")
 
 	// a.buzz's recorded last commit is the most recent one (HEAD), abbreviated.
-	head := gitHeadFull(t, root)
+	head := repo.Head()
 	assert.True(t, strings.HasPrefix(head, last["café.buzz"]), "last commit is an abbreviation of HEAD")
 }
 
 func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 	// Disabled: no scan, nil result, even in a git repo.
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "x\n")
-	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, root, slog.Default()))
+	repo := testkit.NewRepo(t, nil)
+	writeCommit(t, repo, "a.buzz", "x\n")
+	assert.Nil(t, loadKnowledgeVCS(context.Background(), config.Config{}, repo.Root(), slog.Default()))
 
 	// Enabled but not a git repo: best-effort nil, no error.
 	enabled := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
@@ -515,12 +491,11 @@ func TestLoadKnowledgeVCSDisabledAndNonGit(t *testing.T) {
 // first rather than merely asserting the first is right.
 func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build(args: [str]) > void {}\n"), 0o644))
-	writeCommit(t, root, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
-	writeCommit(t, root, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	repo.Magusfile("export fun build(args: [str]) > void {}\n")
+	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void {}\n")
+	writeCommit(t, repo, "pkg/a.buzz", "export fun a(args: [str]) > void { }\n")
 
 	ws, err := Inspect(ctx, root)
 	require.NoError(t, err)
@@ -554,12 +529,12 @@ func TestBuildKnowledgeGraphChurnIsStableAcrossBuilds(t *testing.T) {
 // higher than the 0.41s walk it saves.
 func TestLoadKnowledgeVCSCached(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
 	// The cache dir sits OUTSIDE the fixture repo: this test commits between calls, and a
 	// cache written under root would be swept into the very history it is caching.
 	cacheDir := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "x\n")
+	writeCommit(t, repo, "a.buzz", "x\n")
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
@@ -569,7 +544,7 @@ func TestLoadKnowledgeVCSCached(t *testing.T) {
 	assert.Equal(t, first, loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default()), "a hit returns the scan verbatim")
 
 	// A new commit is new history, so the key moves and the walk re-runs.
-	writeCommit(t, root, "b.buzz", "y\n")
+	writeCommit(t, repo, "b.buzz", "y\n")
 	moved := loadKnowledgeVCSCached(ctx, cfg, root, cacheDir, false, slog.Default())
 	assert.NotEqual(t, first, moved, "a moved HEAD is a different history")
 	assert.Len(t, moved, 2)
@@ -597,10 +572,10 @@ func TestLoadKnowledgeVCSCached(t *testing.T) {
 // history must not persist "no history" as a fact about it.
 func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
 	cacheDir := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "x\n")
+	writeCommit(t, repo, "a.buzz", "x\n")
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
 	no := false
@@ -622,11 +597,9 @@ func TestLoadKnowledgeVCSCachedWritesNothingWhenReadOnly(t *testing.T) {
 // is a subdir of the git root, ChangesByCommit's VCS-root-relative paths are re-rooted to
 // workspace-relative so they line up with file-node Sources.
 func TestLoadKnowledgeVCSNestedWorkspace(t *testing.T) {
-	repo := t.TempDir()
-	gitRun(t, repo, "init", "-q")
+	repo := testkit.NewRepo(t, nil)
 	writeCommit(t, repo, "other.buzz", "root\n") // outside the sub-workspace
-	sub := filepath.Join(repo, "sub", "proj")
-	require.NoError(t, os.MkdirAll(sub, 0o755))
+	sub := repo.Path("sub", "proj")
 	writeCommit(t, repo, "sub/proj/app.buzz", "nested\n")
 
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
@@ -734,9 +707,9 @@ func TestSymbolOccurrencesReadsAGoodIndex(t *testing.T) {
 // through the cache's own front door.
 func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 	ctx := context.Background()
-	root, cacheDir := t.TempDir(), t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "a.buzz", "x\n")
+	repo := testkit.NewRepo(t, nil)
+	root, cacheDir := repo.Root(), t.TempDir()
+	writeCommit(t, repo, "a.buzz", "x\n")
 	cfg := config.Config{Knowledge: config.Knowledge{VCS: config.KnowledgeVCSConfig{Enabled: true}}}
 	path := filepath.Join(cacheDir, "knowledge", "inputs", "vcs.json")
 
@@ -746,7 +719,7 @@ func TestVCSHistoryFormatKeysTheCache(t *testing.T) {
 
 	// A file in the PREVIOUS shape, written under the previous format's key.
 	prev := sha256.New()
-	fmt.Fprintf(prev, "f%d\x00%s\x00%d\x00", vcsHistoryFormat-1, gitHeadFull(t, root), vcsDefaultMaxCommits)
+	fmt.Fprintf(prev, "f%d\x00%s\x00%d\x00", vcsHistoryFormat-1, repo.Head(), vcsDefaultMaxCommits)
 	stale := fmt.Sprintf(`{"fingerprint":%q,"entries":[{"path":"a.buzz","last_unix":1700000000}]}`,
 		hex.EncodeToString(prev.Sum(nil)))
 	require.NoError(t, os.WriteFile(path, []byte(stale), 0o644))
@@ -912,9 +885,9 @@ func TestLoadKnowledgePackagesReadsEveryEcosystem(t *testing.T) {
 // of no other. A class that missed a move would be served stale from the store.
 func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 	ctx := context.Background()
-	root := t.TempDir()
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
 	cacheDir := filepath.Join(t.TempDir(), "cache")
-	gitRun(t, root, "init", "-q")
 	// Every write is backdated past the racy window, so a stamp computed a moment later
 	// does not change merely because a file aged out of it between two computations.
 	settled := time.Now().Add(-time.Hour)
@@ -926,8 +899,8 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		require.NoError(t, os.Chtimes(path, settled, settled))
 	}
 	write(filepath.Join(root, "pkg", "a", "a.go"), "package a\n")
-	gitRun(t, root, "add", "-A")
-	gitRun(t, root, "commit", "-q", "-m", "c")
+	repo.Git("add", "-A")
+	repo.Git("commit", "-q", "-m", "c")
 
 	projects, spells := goWorkspace("pkg/a")
 	cfg := config.Config{
@@ -957,8 +930,8 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 		{"a source edit", func() { write(filepath.Join(root, "pkg", "a", "a.go"), "package a // edited\n") }, tree},
 		{"a new file", func() { write(filepath.Join(root, "pkg", "a", "b.go"), "package a\n") }, tree},
 		{"a HEAD move", func() {
-			gitRun(t, root, "add", "-A")
-			gitRun(t, root, "commit", "-q", "-m", "c2")
+			repo.Git("add", "-A")
+			repo.Git("commit", "-q", "-m", "c2")
 		}, tree},
 		{"a new SCIP index", func() {
 			path := goIndexPath(cacheDir, filepath.Join(root, "pkg", "a"))

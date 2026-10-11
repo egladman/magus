@@ -93,6 +93,17 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	}, hotspots)
 }
 
+// gitRun is not a testkit.Repo: the commits here need their own author and committer
+// identity and dates, and the workspace directory is named for what the test asserts.
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+}
+
 func commitInsightFiles(t *testing.T, dir, author, when string, files map[string]string) {
 	t.Helper()
 	for path, body := range files {
