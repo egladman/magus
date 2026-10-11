@@ -273,6 +273,68 @@ func TestJudgeTextSkipsWhatAPlatformWrote(t *testing.T) {
 	}
 }
 
+// The prompts and pasted summaries a platform writes into a pull request, and
+// a template's category checkbox; only lines 2, 5, 15 and 39 are the author's.
+const pullRequestWithAgentText = "fix: keep the key stable\n" +
+	"The key simply sorts its inputs.\n" +
+	"\n" +
+	"- [ ] Public API: Breaking change (it simply renames the key)\n" +
+	"- [ ] Docs: simply update the guide (after the merge)\n" +
+	"\n" +
+	"[Copilot summary]\n" +
+	"This pull request simply sorts the key. [[1]](diffhunk://#diff-1a)\n" +
+	"\n" +
+	"* It simply hashes the inputs. [[2]](diffhunk://#diff-2b)\n" +
+	"\n" +
+	"These changes simply keep the key stable.\n" +
+	"\n" +
+	"## Testing\n" +
+	"The tests simply pass.\n" +
+	"\n" +
+	"<!-- ELLIPSIS_HIDDEN -->\n" +
+	"\n" +
+	"> [!IMPORTANT]\n" +
+	"> Simply sorts the key.\n" +
+	">\n" +
+	"> <sup>This description was created by </sup>[<img alt=\"Ellipsis\" src=\"https://img.shields.io/badge/x\">](https://ellipsis.dev)\n" +
+	"\n" +
+	"<!-- ELLIPSIS_HIDDEN -->\n" +
+	"\n" +
+	"<!-- START COPILOT CODING AGENT SUFFIX -->\n" +
+	"\n" +
+	"<details>\n" +
+	"\n" +
+	"<summary>Original prompt</summary>\n" +
+	"\n" +
+	"> <issue_title>The key simply drifts</issue_title>\n" +
+	"> <issue_description>It simply drifts.</issue_description>\n" +
+	"\n" +
+	"</details>\n" +
+	"*This pull request was created as a result of the following prompt from Copilot chat.*\n" +
+	"> Simply keep the key stable.\n" +
+	"\n" +
+	"Fixes #12, which simply drifted."
+
+func TestJudgeTextSkipsAPromptOrSummaryAPlatformQuoted(t *testing.T) {
+	got := ruleLines(JudgeText(pullRequestWithAgentText, KindChangeDescription, houseOn), RuleFiller)
+
+	if want := []string{"filler:2", "filler:5", "filler:15", "filler:39"}; !slices.Equal(got, want) {
+		t.Errorf("findings: got %q, want %q", got, want)
+	}
+}
+
+// A marker with nothing of its platform's under it blanks no author text.
+func TestJudgeTextKeepsWhatFollowsAMarkerWithNoPlatformText(t *testing.T) {
+	text := "fix: keep the key stable\nThe key sorts its inputs.\n\n" +
+		"[Copilot summary]\nIt simply sorts the key.\n\n" +
+		"<!-- START COPILOT CODING AGENT SUFFIX -->\n\nIt simply hashes.\n\n" +
+		"*Created from a prompt.*\n> It simply drifts."
+
+	if got, want := ruleLines(JudgeText(text, KindChangeDescription, houseOn), RuleFiller), []string{"filler:5", "filler:9", "filler:12"}; !slices.Equal(got, want) {
+		t.Errorf("findings: got %q, want %q", got, want)
+	}
+}
+
 func TestCopilotTipMatchesUnderAnyProductName(t *testing.T) {
 	for _, line := range []string{
 		"\U0001F4A1 You can make Copilot smarter by setting up custom instructions, customizing its development environment.",

@@ -11,8 +11,8 @@ import (
 // it. Front matter, code (fenced, indented and in backticks), tables, HTML
 // comments and tags, link targets and URLs are not prose and are never judged.
 // Neither is what a platform wrote into a Markdown text: a coding agent's or
-// a review bot's footer and summary, and a checkbox a template left for its
-// author to tick.
+// a review bot's footer and summary, the prompt a coding agent quotes, and a
+// checkbox a template left for its author to tick.
 // Findings come in [Rules] order, then in the order their text appears, each
 // with its line in text.
 //
@@ -115,7 +115,31 @@ var botBlocks = []struct{ open, close *regexp.Regexp }{
 	{regexp.MustCompile(`<!--\s*Reviewable:start\s*-->`), regexp.MustCompile(`<!--\s*Reviewable:end\s*-->`)},
 	{regexp.MustCompile(`<!--\s*CURSOR_SUMMARY\s*-->`), regexp.MustCompile(`<!--\s*/CURSOR_SUMMARY\s*-->`)},
 	{regexp.MustCompile(`<!--\s*start pr-codex\s*-->`), regexp.MustCompile(`<!--\s*end pr-codex\s*-->`)},
+	// Ellipsis opens and closes its summary with the same comment.
+	{regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`), regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`)},
 }
+
+var (
+	// agentSuffix is the comment Copilot's coding agent writes before what it
+	// appends to a pull request it opens, the prompt it was given among them.
+	agentSuffix = regexp.MustCompile(`<!--\s*START COPILOT CODING AGENT SUFFIX\s*-->`)
+	// promptSummary opens the collapsed block holding that prompt.
+	promptSummary = regexp.MustCompile(`^\s*(?:<details>\s*)?<summary>\s*Original prompt\s*</summary>\s*$`)
+	// chatPrompt is the italic line above the quoted prompt of a pull request
+	// opened from Copilot chat.
+	chatPrompt = regexp.MustCompile(`^\s*[*_]This pull request was created as a result of the following prompt ` +
+		`from Copilot chat\.?[*_]\s*$`)
+	// summaryLabel opens a summary pasted from Copilot's pull request summary,
+	// whose sentences cite the diff as [[1]](diffhunk://...).
+	summaryLabel = regexp.MustCompile(`^\s*\[Copilot summary\]\s*$`)
+	diffhunkLink = regexp.MustCompile(`\[\[\d+\]\]\(diffhunk://`)
+	// templateCategory is an open task item a template lists as one choice
+	// of a category ("- [ ] Public API: Breaking change (...)"): a capitalized
+	// label, a capitalized option and a parenthetical ending the line. An
+	// author's own to-do reads as a sentence after its label, in lower case.
+	templateCategory = regexp.MustCompile(`^\s*[-*+]\s+\[ \]\s*[A-Z][\w-]*(?: [\w-]+){0,3}: ` +
+		`[A-Z][\w-]*(?: [\w-]+){0,3} \([^()]*\)\s*$`)
+)
 
 // blankBoilerplate returns raw with what a platform wrote blanked, one entry
 // per line so a finding keeps its line: the author did not write it and
@@ -126,12 +150,19 @@ func blankBoilerplate(raw []string) []string {
 
 	for _, b := range botBlocks {
 		for i := 0; i < len(lines); i++ {
-			if !b.open.MatchString(lines[i]) {
+			loc := b.open.FindStringIndex(lines[i])
+			if loc == nil {
 				continue
 			}
 
 			for j := i; j < len(lines); j++ {
-				if b.close.MatchString(lines[j]) {
+				// A pair whose open and close are one comment closes after it.
+				after := lines[j]
+				if j == i {
+					after = after[loc[1]:]
+				}
+
+				if b.close.MatchString(after) {
 					clear(lines[i : j+1])
 					i = j
 
@@ -147,12 +178,122 @@ func blankBoilerplate(raw []string) []string {
 			lines[i] = ""
 		case strings.Contains(lines[i], copilotFirewall) && inQuote(lines[i]):
 			i = blankQuote(lines, i)
-		case templateTask.MatchString(lines[i]):
+		case templateTask.MatchString(lines[i]), templateCategory.MatchString(lines[i]):
 			i = blankItem(lines, i)
+		case agentSuffix.MatchString(lines[i]):
+			i = blankOriginalPrompt(lines, i)
+		case chatPrompt.MatchString(lines[i]):
+			lines[i] = ""
+			if j := nextFilled(lines, i+1); j < len(lines) && inQuote(lines[j]) {
+				i = blankQuote(lines, j)
+			}
+		case summaryLabel.MatchString(lines[i]):
+			i = blankPastedSummary(lines, i)
 		}
 	}
 
 	return lines
+}
+
+// nextFilled is the first line from at on that is not blank, or len(lines).
+func nextFilled(lines []string, at int) int {
+	for at < len(lines) && strings.TrimSpace(lines[at]) == "" {
+		at++
+	}
+
+	return at
+}
+
+// blankOriginalPrompt blanks the coding agent's suffix comment at line at
+// and, when the collapsed original prompt follows it, every line through the
+// </details> that closes the block. It returns the last line it blanked.
+func blankOriginalPrompt(lines []string, at int) int {
+	lines[at] = ""
+
+	open := nextFilled(lines, at+1)
+	if open < len(lines) && strings.TrimSpace(lines[open]) == "<details>" {
+		open = nextFilled(lines, open+1)
+	}
+
+	if open >= len(lines) || !promptSummary.MatchString(lines[open]) {
+		return at
+	}
+
+	// The prompt quotes an issue, which may hold a <details> block of its
+	// own; only an unquoted tag belongs to the agent's block.
+	depth := 1
+
+	for j := open + 1; j < len(lines); j++ {
+		if inQuote(lines[j]) {
+			continue
+		}
+
+		depth += strings.Count(lines[j], "<details>") - strings.Count(lines[j], "</details>")
+		if depth <= 0 {
+			clear(lines[at : j+1])
+
+			return j
+		}
+	}
+
+	return at
+}
+
+// blankPastedSummary blanks the pasted Copilot summary its label at line at
+// opens: every block through the paragraph after the last one citing a diff
+// hunk, stopping at a heading, a thematic break or a comment. A label with no
+// citation under it is blanked alone. It returns the last line it blanked.
+func blankPastedSummary(lines []string, at int) int {
+	last := -1
+
+	for j := at + 1; j < len(lines); j++ {
+		body := strings.TrimLeft(lines[j], " \t")
+		if headingMarker(body) > 0 || thematicBreak.MatchString(lines[j]) || strings.HasPrefix(body, "<!--") {
+			break
+		}
+
+		if diffhunkLink.MatchString(lines[j]) {
+			last = j
+		}
+	}
+
+	if last < 0 {
+		lines[at] = ""
+
+		return at
+	}
+
+	end := endOfBlock(lines, last)
+	if next := nextFilled(lines, end+1); next < len(lines) && plainParagraph(lines[next]) {
+		end = endOfBlock(lines, next)
+	}
+
+	clear(lines[at : end+1])
+
+	return end
+}
+
+// plainParagraph reports whether line opens a paragraph: no heading, list
+// item, quote, comment or break.
+func plainParagraph(line string) bool {
+	body := strings.TrimLeft(line, " \t")
+
+	return headingMarker(body) == 0 && listMarker(body) == 0 && !inQuote(body) &&
+		!strings.HasPrefix(body, "<") && !thematicBreak.MatchString(line)
+}
+
+// endOfBlock is the last line of the paragraph or list item holding line at.
+func endOfBlock(lines []string, at int) int {
+	for at+1 < len(lines) {
+		body := strings.TrimLeft(lines[at+1], " \t")
+		if body == "" || listMarker(body) > 0 || headingMarker(body) > 0 {
+			break
+		}
+
+		at++
+	}
+
+	return at
 }
 
 func inQuote(line string) bool { return strings.HasPrefix(strings.TrimLeft(line, " "), ">") }
