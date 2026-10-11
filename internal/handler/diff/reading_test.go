@@ -18,7 +18,7 @@ import (
 
 // githubReview is a workspace whose branch lives on github.com, which is what the reading
 // command is built for.
-type githubReview struct{ fakeReview }
+type githubReview struct{ cleanBranchReview }
 
 func (githubReview) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Branch: "feat/x", Remote: "git@github.com:acme/acme.git"}
@@ -27,7 +27,7 @@ func (githubReview) ReviewOrigin(context.Context) types.ReviewOrigin {
 // withReviewTarget registers a provider that answers the review lookup with target.
 func withReviewTarget(t *testing.T, target map[string]any) {
 	t.Helper()
-	name := register.Spell(t, "fake-reading-review",
+	name := register.Spell(t, "reading-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target == spells.FindReviewContract {
 				return target, nil
@@ -82,7 +82,7 @@ func TestReadingOffClearsTheMark(t *testing.T) {
 // guessed one.
 func TestReadingOnAnotherForgeMarksWithoutACommand(t *testing.T) {
 	withReviewTarget(t, map[string]any{"id": "482", "repo": "acme/acme"})
-	h, store := readingHandler(t, fakeReview{})
+	h, store := readingHandler(t, cleanBranchReview{})
 
 	w := post(t, h, `{"op":"reading","on":true}`)
 
