@@ -240,3 +240,27 @@ func TestRecordedRefMatchesOnlyRefShapedPrefixes(t *testing.T) {
 		assert.Equal(t, c.want, recordedRefMatches(c.recorded, c.ref), "recorded %q, ref %q", c.recorded, c.ref)
 	}
 }
+
+// An imported record's failed_need and failed_need_ref survive the read when real; a
+// forged pair is made harmless (the target neutralized, the ref dropped unless minted)
+// and the record is still read, and an oversized target is refused by the descriptor check.
+func TestOutputImportReadsTheFailedNeed(t *testing.T) {
+	got, err := readRecords(outputRecordLine(t, func(r map[string]any) {
+		r["failed_need"] = "lint-go"
+		r["failed_need_ref"] = "out0123456789ab"
+	}))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, [2]string{"lint-go", "out0123456789ab"}, [2]string{got[0].FailedNeed, got[0].FailedNeedRef})
+
+	got, err = readRecords(outputRecordLine(t, func(r map[string]any) {
+		r["failed_need"] = "lint\x1b]0;t\x07"
+		r["failed_need_ref"] = "x; rm -rf ~"
+	}))
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, [2]string{"lint<U+001B>]0;t<U+0007>", ""}, [2]string{got[0].FailedNeed, got[0].FailedNeedRef})
+
+	_, err = readRecords(outputRecordLine(t, func(r map[string]any) { r["failed_need"] = strings.Repeat("n", 513) }))
+	assert.ErrorContains(t, err, "line 1: failed_need: longer than")
+}

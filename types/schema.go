@@ -121,6 +121,7 @@ var StoredOutputSchema = SchemaLedger{
 	Name:    "output-record",
 	Type:    reflect.TypeFor[StoredOutput](),
 	Version: StoredOutputSchemaVersion,
+	Added:   map[string]int{"failed_need": 1, "failed_need_ref": 1},
 }
 
 // SchemaLedgers are every ledger the conventions test holds to the contract.

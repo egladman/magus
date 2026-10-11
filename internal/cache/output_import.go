@@ -99,6 +99,9 @@ func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 	if d.Inv != "" && !LooksLikeInvocationID(d.Inv) {
 		return fmt.Errorf("inv %q is not an invocation id", d.Inv)
 	}
+	if d.FailedNeedRef != "" && !IsMintedRef(d.FailedNeedRef) {
+		return fmt.Errorf("failed_need_ref %q is not a ref", d.FailedNeedRef)
+	}
 	if d.Revision != "" && !revisionPattern.MatchString(d.Revision) {
 		return fmt.Errorf("revision %q is not a hex revision", d.Revision)
 	}
@@ -117,7 +120,7 @@ func CheckImportedDescriptor(d OutputDescriptor, classes []ClassDigest) error {
 		return errors.New("project is empty")
 	}
 	names := []struct{ name, value string }{
-		{"project", d.Project}, {"target", d.Target}, {"spell", d.Spell}, {"magus_version", d.MagusVersion},
+		{"project", d.Project}, {"target", d.Target}, {"failed_need", d.FailedNeed}, {"spell", d.Spell}, {"magus_version", d.MagusVersion},
 	}
 	for _, a := range d.ExtraArgs {
 		names = append(names, struct{ name, value string }{"extra_args", a})

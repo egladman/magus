@@ -7,8 +7,6 @@
     "error": "string",
     "extra_args": "[]string",
     "failed": "bool",
-    "failed_need": "string",
-    "failed_need_ref": "string",
     "inv": "string",
     "key": "string",
     "key_version": "int",
