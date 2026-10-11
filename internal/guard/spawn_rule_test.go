@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	_ "github.com/egladman/magus/internal/interp/bindings"
@@ -964,6 +965,26 @@ func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
 	changed := row
 	changed.CheckoutRoot = ""
 	assert.NotEqual(t, agentBaseRefusedKind(row, at.workspace), agentBaseRefusedKind(changed, at.workspace), "a changed row is tried again")
+}
+
+// A registration that fails for a reason that passes, here a cancelled wait for a store
+// lock another process holds, is tried again on the next call: remembering it would refuse
+// the worker's writes for as long as the row stands.
+func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
+	row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+	ctx, _ := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+	path, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Path()
+	require.NoError(t, err)
+
+	lapsed, cancel := context.WithCancel(ctx)
+	cancel()
+	require.NoError(t, file.WithLock(ctx, path+".lock", 0, func() error {
+		assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		return nil
+	}))
+	assert.True(t, registerAgentBase(ctx, deps, at, row.ID), "the lapsed try is not remembered as a refusal")
 }
 
 // A checkout's current revision is read once per judgment, however many rules compare

@@ -614,12 +614,25 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 			return false
 		}
 		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base); err != nil {
-			refusals.MarkFired(refused)
+			if heldElsewhere(row, at.workspace) {
+				refusals.MarkFired(refused)
+			}
 			return false
 		}
 		return true
 	}
 	return false
+}
+
+// heldElsewhere reports the one refusal of Store.Exec that holds until the row changes:
+// another checkout holds the running job. The test is the store's own, strings and all.
+// Any other failure, a cancelled deadline, lock contention or I/O, may pass on the next
+// call, so it is never remembered.
+//
+// TODO: branch on a typed holder-conflict error once internal/job exports one.
+func heldElsewhere(row types.Job, workspace string) bool {
+	here, err := filepath.Abs(workspace)
+	return err == nil && row.State == types.StateRunning && row.CheckoutRoot != "" && row.CheckoutRoot != here
 }
 
 // agentBaseRefusals keys the registrations the job store refused, for every caller alike.
