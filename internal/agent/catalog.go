@@ -357,7 +357,10 @@ import (
 //
 // 118: magus-change-summary drops its `--prompt` section, because magus diff no longer has
 // that flag.
-const SkillVersion = 118
+//
+// 119: magus-multi-agent tells a worker to run its check in the foreground with a timeout
+// that covers it and never end its turn while a run is pending.
+const SkillVersion = 119
 
 const skillLicense = "GPL-3.0-or-later"
 
