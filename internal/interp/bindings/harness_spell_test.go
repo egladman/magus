@@ -96,39 +96,43 @@ func TestHarnessSpellWithoutTheAgentsOpGetsNoAgents(t *testing.T) {
 	assert.Equal(t, "magus-scout", offered[0].(map[string]any)["name"])
 }
 
-// TestDecodeHarnessAgents pins that a spell's harness_agents list reaches the descriptor
-// field for field.
-func TestDecodeHarnessAgents(t *testing.T) {
-	t.Run("path and content decode", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		require.NoError(t, decodeHarnessAgents([]any{
-			map[string]any{"path": ".cursor/agents/a.md", "content": "body\n"},
-		}, &d))
-		assert.Equal(t, []agent.HarnessAgentFile{{Path: ".cursor/agents/a.md", Content: "body\n"}}, d.Agents)
-	})
+func TestDecodeHarnessJSONReadsAListFieldForField(t *testing.T) {
+	var d agent.HarnessDescriptor
 
-	t.Run("anything but a list is refused", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessAgents(map[string]any{"path": "a.md"}, &d))
-		assert.Empty(t, d.Agents)
-	})
+	require.NoError(t, decodeHarnessJSON([]any{
+		map[string]any{"path": ".cursor/agents/a.md", "content": "body\n"},
+	}, &d.Agents))
+
+	assert.Equal(t, []agent.HarnessAgentFile{{Path: ".cursor/agents/a.md", Content: "body\n"}}, d.Agents)
+}
+
+func TestDecodeHarnessJSONRefusesAMapForAListField(t *testing.T) {
+	var d agent.HarnessDescriptor
+
+	assert.Error(t, decodeHarnessJSON(map[string]any{"path": "a.md"}, &d.Agents))
+	assert.Empty(t, d.Agents)
 }
 
 // TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
 // command past its timeout, and that every other shipped harness declares no limits.
 func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
-	assert.Equal(t, &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000}, loadShippedHarness(t, "claude-code").Limits)
+	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000}, loadShippedHarness(t, "claude-code").Limits)
 	for _, id := range []string{"codex", "cursor", "opencode"} {
-		assert.Nil(t, loadShippedHarness(t, id).Limits, id)
+		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
 	}
 }
 
-func TestDecodeHarnessLimits(t *testing.T) {
+func TestDecodeHarnessJSONReadsAMapField(t *testing.T) {
 	var d agent.HarnessDescriptor
-	require.NoError(t, decodeHarnessLimits(map[string]any{"foreground_default_ms": int64(1000), "foreground_max_ms": 2000.0}, &d))
-	assert.Equal(t, &agent.HarnessLimits{ForegroundDefaultMs: 1000, ForegroundMaxMs: 2000}, d.Limits)
 
-	var refused agent.HarnessDescriptor
-	assert.Error(t, decodeHarnessLimits([]any{}, &refused), "anything but a map is refused")
-	assert.Nil(t, refused.Limits)
+	require.NoError(t, decodeHarnessJSON(map[string]any{"foreground_default_ms": int64(1000), "foreground_max_ms": 2000.0}, &d.Limits))
+
+	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 1000, ForegroundMaxMs: 2000}, d.Limits)
+}
+
+func TestDecodeHarnessJSONRefusesAListForAMapField(t *testing.T) {
+	var d agent.HarnessDescriptor
+
+	assert.Error(t, decodeHarnessJSON([]any{}, &d.Limits))
+	assert.Zero(t, d.Limits)
 }
