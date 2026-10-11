@@ -174,6 +174,7 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 	AppendAgentCommand(t.Context(), dir, AgentCommand{
 		Tool: "Bash", Command: "ls", Decision: "pass",
 		Binary: "/work/tree/magus", BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2", Cwd: "/work/tree/console",
+		Phases: []Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
 	})
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "pwd", Decision: "pass"})
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
@@ -208,9 +209,11 @@ func TestAppendAgentCommand_RecordsTheJudgingBinaryAndCwd(t *testing.T) {
 		Binary:        "/work/tree/magus",
 		BinaryVersion: "v0.5.0-rc.3-62-gcb43888d2",
 		Cwd:           "/work/tree/console",
+		Phases:        []Phase{{Name: "load_rules", ElapsedMs: 812, BudgetMs: 6500}, {Name: "approved_rule", ElapsedMs: 2100, BudgetMs: 2100, Lapsed: true}},
 	}), judged)
 	require.Empty(t, unknown.Binary)
 	require.Empty(t, unknown.Cwd)
+	require.Empty(t, unknown.Phases)
 	require.Equal(t, stamped(t, spawns[0], Event{
 		Kind:          KindAgentSpawn,
 		Origin:        types.Origin{EntryPoint: types.EntryPointHook},
