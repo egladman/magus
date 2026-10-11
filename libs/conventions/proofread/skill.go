@@ -54,7 +54,14 @@ func judgeSkillSource(text string, o options) []Finding {
 
 	var found []Finding
 
-	seen := map[Finding]bool{}
+	type key struct {
+		rule           Rule
+		message, match string
+		line           int
+		decision       Decision
+	}
+
+	seen := map[key]bool{}
 	judged := append(judgeForm(forms[0], KindAgentInstructions, o), judgeForm(forms[1], KindReference, o)...)
 
 	for _, f := range judgeForm(forms[1], KindAgentInstructions, o) {
@@ -63,10 +70,13 @@ func judgeSkillSource(text string, o options) []Finding {
 		}
 	}
 
+	source := input{source: strings.Split(text, "\n")}
+
 	for _, f := range judged {
-		if !seen[f] {
-			seen[f] = true
-			found = append(found, f)
+		k := key{f.Rule, f.Message, f.Match, f.Line, f.Decision}
+		if !seen[k] {
+			seen[k] = true
+			found = append(found, source.locate(f))
 		}
 	}
 
@@ -91,6 +101,10 @@ func judgeForm(form skillForm, kind Kind, o options) []Finding {
 		if l := found[i].Line; l > 0 && l <= len(form.lines) {
 			found[i].Line = form.lines[l-1]
 		}
+
+		// The columns were found in the rendered form; the caller places
+		// the finding in the source again.
+		found[i].Column, found[i].EndLine, found[i].EndColumn = 0, 0, 0
 	}
 
 	return found

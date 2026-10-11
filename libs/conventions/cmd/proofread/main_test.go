@@ -19,6 +19,13 @@ const (
 
 // row is the finding proofread writes for rule, its code and page read from
 // the catalog.
+// at places f's match on line from column to just before end.
+func (f finding) at(line, column, end int) finding {
+	f.Line, f.Column, f.EndLine, f.EndColumn = line, column, line, end
+
+	return f
+}
+
 func row(node, source, kind string, rule proofread.Rule, decision proofread.Decision, message, match string) finding {
 	f := finding{
 		Node: node, Source: source, Kind: kind, Rule: string(rule), Decision: string(decision),
@@ -171,8 +178,8 @@ func TestRunJudgesReferenceFilesInArgumentOrder(t *testing.T) {
 
 	want := rows(t,
 		row(b, b+":1", "reference", proofread.RuleReplyVoice, proofread.DecisionDeny,
-			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**"),
-		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply"),
+			"Drop the bold label '**Cache:**': write the item as a sentence that opens with its subject.", "**Cache:**").at(1, 3, 13),
+		row(a, a+":3", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(3, 4, 10),
 	)
 
 	assertArgs(t, []string{"reference", b, a}, "", want)
@@ -182,7 +189,7 @@ func TestRunJudgesATemplateAtItsSourceLine(t *testing.T) {
 	path := writeFile(t, t.TempDir(), "SKILL.md", "# Skill\n\n{{if .Full}}One.\n\nTwo.\n{{end}}\nRun it in order to replay.\n")
 
 	want := rows(t, row(path, path+":7", "agent-instructions-template", proofread.RuleWordy, proofread.DecisionDeny,
-		"Write 'to', not 'in order to'.", "in order to"))
+		"Write 'to', not 'in order to'.", "in order to").at(7, 8, 19))
 
 	assertArgs(t, []string{"agent-instructions-template", path}, "", want)
 }
@@ -192,7 +199,7 @@ func TestRunJudgesAGuideOnTheGuideRules(t *testing.T) {
 
 	want := rows(t, row(path, path+":3", "guide", proofread.RuleSecondPerson, proofread.DecisionDeny,
 		"Address the reader as you, not 'we': a guide speaks to the person following it, "+
-			"and names magus or the project where it means them.", "we"))
+			"and names magus or the project where it means them.", "we").at(3, 6, 8))
 
 	assertArgs(t, []string{"guide", path}, "", want)
 }
@@ -202,7 +209,7 @@ func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 		proofread.DecisionDeny, "It opens with a heading: open the description with what a reader can now do "+
 			"or no longer has to do, then how the work came up and why it mattered, then the changes, as in 'The first "+
 			"query after an edit answers from a graph that is already current. Until now the graph rebuilt inline on that "+
-			"query.'", "## Summary"))
+			"query.'", "## Summary").at(2, 1, 11))
 
 	assertArgs(t, []string{"change-description"}, "fix: pin the key\n## Summary\n", want)
 }
@@ -210,7 +217,7 @@ func TestRunJudgesAChangeDescriptionFromStdin(t *testing.T) {
 func TestRunJudgesAReviewReplyFromStdin(t *testing.T) {
 	want := rows(t, row("review-reply", "review-reply:1", "review-reply", proofread.RuleReplyOpener, proofread.DecisionDeny,
 		"Drop 'No,' and open with the fact and its evidence, as in 'This needs a lock: the map is "+
-			"written from two goroutines.'", "No,"))
+			"written from two goroutines.'", "No,").at(1, 1, 4))
 
 	assertArgs(t, []string{"review-reply"}, "No, the map is shared by the two workers.", want)
 }
@@ -255,7 +262,7 @@ func TestRunAppliesPathDecisionsToTheFilesTheyMatch(t *testing.T) {
 		`"`+filepath.ToSlash(dir)+`/**":{"filler":"deny"},`+
 		`"`+filepath.ToSlash(dir)+`/blog/*.md":{"filler":"off"}}}`)
 
-	want := rows(t, row(page, page+":1", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply"))
+	want := rows(t, row(page, page+":1", "reference", proofread.RuleFiller, proofread.DecisionDeny, fillerSimply, "simply").at(1, 4, 10))
 
 	assertArgs(t, []string{"reference", "-decisions", decisions, post, page}, "", want)
 }

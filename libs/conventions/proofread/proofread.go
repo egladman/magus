@@ -122,6 +122,22 @@ const (
 	// Markdown, held to the message rules alone: a verdict, one next command,
 	// and a ref for the rationale.
 	KindMessage Kind = "message"
+	// KindCommitMessage is a commit message: a subject line, then an optional
+	// body after a blank line, read in a one-line log long after the change.
+	KindCommitMessage Kind = "commit-message"
+	// KindCLIHelp is a command's or a flag's help text, plain text a reader
+	// scans in a terminal while deciding what to type.
+	KindCLIHelp Kind = "cli-help"
+	// KindIssue is an issue: a title on the first line, then a Markdown body
+	// written to the people who will pick it up.
+	KindIssue Kind = "issue"
+	// KindReleaseNotes is a release's notes: Markdown a user reads to decide
+	// whether to upgrade and what changes for them when they do.
+	KindReleaseNotes Kind = "release-notes"
+	// KindChangelog is a changelog in the Keep a Changelog shape, or one
+	// fragment of it: entries under Added, Changed, Deprecated, Removed, Fixed
+	// and Security, each saying what changed for the person using it.
+	KindChangelog Kind = "changelog"
 )
 
 // Decision is what a finding costs the caller that reads it, in the words a
@@ -182,7 +198,8 @@ func (c check) defaultDecision(kind Kind) Decision {
 // in. A doc keeps the rules it was always judged by: the rules written for
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
-var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, []check{templateCheck})
+var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
+	issueChecks, densityChecks, reviewChecks, suppressChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},
@@ -284,6 +301,14 @@ type Finding struct {
 	// Code is the rule's PRF code, and URL the page that documents it.
 	Code diagnostics.Code
 	URL  string
+	// Column is the 1-based byte column Match starts at on Line, and EndLine
+	// and EndColumn the position just past its last byte, all 0 when Match is
+	// "" or could not be found on Line as written.
+	Column, EndLine, EndColumn int
+	// Replacements are the texts Match may be replaced with, best first. Only
+	// a rule that substitutes a word or a phrase offers one: a rewrite of a
+	// tone or claim finding would change what the writer meant.
+	Replacements []string
 }
 
 // Option tunes one [Judge] or [JudgeText] call.
@@ -347,7 +372,7 @@ func Judge(s Symbol, opts ...Option) []Finding {
 	})
 
 	for i := range out {
-		out[i].Line = 0
+		out[i].Line, out[i].Column, out[i].EndLine, out[i].EndColumn = 0, 0, 0, 0
 	}
 
 	return out
@@ -369,11 +394,28 @@ func run(in input) []Finding {
 		slices.SortStableFunc(found, func(a, b Finding) int { return a.Line - b.Line })
 
 		for _, f := range found {
-			out = append(out, in.opts.settle(c, f, d))
+			out = append(out, in.locate(in.opts.settle(c, f, d)))
 		}
 	}
 
-	return out
+	return in.suppress(out)
+}
+
+// locate gives f the columns its Match spans on its line as written. A Match
+// that occurs twice on its line is placed at the first occurrence.
+func (in input) locate(f Finding) Finding {
+	if f.Match == "" || f.Line < 1 || f.Line > len(in.source) {
+		return f
+	}
+
+	at := strings.Index(in.source[f.Line-1], f.Match)
+	if at < 0 {
+		return f
+	}
+
+	f.Column, f.EndLine, f.EndColumn = at+1, f.Line, at+1+len(f.Match)
+
+	return f
 }
 
 // decide returns the decision c's findings on kind carry, or [DecisionOff]

@@ -1,6 +1,7 @@
 package proofread
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/egladman/magus/libs/diagnostics"
@@ -70,8 +71,20 @@ type ruleText struct {
 // tone, PRF3xxx claims and hedges, PRF4xxx generated-writing tells, PRF5xxx
 // house style, PRF6xxx doc comments, PRF7xxx agent instructions, PRF8xxx
 // review replies and PRF9xxx messages a program prints. A code is never
-// reused: a retired rule keeps its number out of circulation.
-var ruleTexts = map[Rule]ruleText{
+// reused: a retired rule keeps its number out of circulation. Each family
+// file keeps its own rules' texts beside their checks.
+var ruleTexts = mergeTexts(coreTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts)
+
+func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
+	out := map[Rule]ruleText{}
+	for _, t := range tables {
+		maps.Copy(out, t)
+	}
+
+	return out
+}
+
+var coreTexts = map[Rule]ruleText{
 	RuleLeadContext: {
 		code:    "PRF1001",
 		catches: "a change description that does not open with a paragraph naming what a reader can now do",

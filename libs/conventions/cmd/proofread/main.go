@@ -71,6 +71,13 @@ type finding struct {
 	Message  string `json:"message"`
 	Match    string `json:"match"`
 	URL      string `json:"url"`
+	// Line, Column, EndLine and EndColumn place Match in its file, 1-based,
+	// the end just past it; each is omitted when it is not known.
+	Line         int      `json:"line,omitempty"`
+	Column       int      `json:"column,omitempty"`
+	EndLine      int      `json:"end_line,omitempty"`
+	EndColumn    int      `json:"end_column,omitempty"`
+	Replacements []string `json:"replacements,omitempty"`
 }
 
 func main() {
@@ -95,7 +102,13 @@ var subcommands = []subcommand{
 	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
 	{"review-reply", proofread.KindReviewReply, "", "judge a review comment or a reply on stdin"},
 	{"message", proofread.KindMessage, "", "judge one message a program prints, on stdin"},
+	{"commit-message", proofread.KindCommitMessage, "", "judge a commit message on stdin, its subject on the first line"},
+	{"cli-help", proofread.KindCLIHelp, "", "judge a command's or a flag's help text on stdin"},
+	{"issue", proofread.KindIssue, "", "judge an issue on stdin, its title on the first line"},
+	{"release-notes", proofread.KindReleaseNotes, "FILE...", "judge the notes a release ships with"},
+	{"changelog", proofread.KindChangelog, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
 	{"rules", "", "", "write every rule as the docs render it, as JSON"},
+	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
 }
 
@@ -134,6 +147,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runRules(rest, stdout, stderr)
 	case "explain":
 		return runExplain(rest, stdout, stderr)
+	case "calibrate":
+		return runCalibrate(rest, stdin, stdout, stderr)
 	}
 
 	for _, s := range subcommands {
@@ -159,9 +174,17 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
+	format := fs.String("format", "json", "write findings as `json`, sarif or rdjson")
+	baselinePath := fs.String("baseline", "", "report only findings past the counts this baseline `file` holds")
+	prune := fs.Bool("prune", false, "with -baseline, rewrite the file to the counts this run found")
+	metrics := fs.Bool("metrics", false, "write each text's readability metrics instead of its findings")
 
 	if err := fs.Parse(args); err != nil {
 		return 1
+	}
+
+	if *metrics {
+		return runMetrics(kind, fs.Args(), stdin, stdout, stderr)
 	}
 
 	t, err := readTable(*decisionsPath, kind, stdin, fs.Args())
@@ -181,8 +204,13 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 		return failure(stderr, err)
 	}
 
-	if err := json.NewEncoder(stdout).Encode(out); err != nil {
-		return failure(stderr, fmt.Errorf("write findings: %w", err))
+	out, err = applyBaseline(*baselinePath, *prune, out)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	if err := writeFindings(stdout, *format, out); err != nil {
+		return failure(stderr, err)
 	}
 
 	return 0
@@ -240,7 +268,8 @@ func writeExplanation(w io.Writer, doc proofread.RuleDoc) {
 // rather than from stdin.
 func readsFiles(kind proofread.Kind) bool {
 	switch kind {
-	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentInstructions, proofread.KindAgentInstructionsTemplate:
+	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentInstructions, proofread.KindAgentInstructionsTemplate,
+		proofread.KindReleaseNotes, proofread.KindChangelog:
 		return true
 	default:
 		return false
@@ -279,6 +308,12 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 	return out, nil
 }
 
+// stdinKinds are the kinds judged as one text read from stdin.
+var stdinKinds = []proofread.Kind{
+	proofread.KindChangeDescription, proofread.KindReviewReply, proofread.KindMessage,
+	proofread.KindCommitMessage, proofread.KindCLIHelp, proofread.KindIssue,
+}
+
 func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {
 	switch {
 	case kind == proofread.KindDocComment:
@@ -289,7 +324,7 @@ func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts [
 		return judgeSymbols(stdin, append(opts, proofread.WithDecisions(t.rules)))
 	case readsFiles(kind):
 		return judgeFiles(paths, kind, t, opts)
-	case kind == proofread.KindChangeDescription || kind == proofread.KindReviewReply || kind == proofread.KindMessage:
+	case slices.Contains(stdinKinds, kind):
 		if len(paths) > 0 {
 			return nil, fmt.Errorf("a %s is read from stdin, not from a path", kind)
 		}
@@ -335,6 +370,7 @@ func toFinding(node, source string, kind proofread.Kind, f proofread.Finding) fi
 	return finding{
 		Node: node, Source: source, Kind: string(kind), Rule: string(f.Rule), Code: string(f.Code),
 		Decision: string(f.Decision), Message: f.Message, Match: f.Match, URL: f.URL,
+		Line: f.Line, Column: f.Column, EndLine: f.EndLine, EndColumn: f.EndColumn, Replacements: f.Replacements,
 	}
 }
 

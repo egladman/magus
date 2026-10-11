@@ -42,12 +42,17 @@ func houseDecisions(d Decision) map[Rule]Decision {
 
 // assertFindings reads a want with no Decision as [DecisionDeny], so a case
 // names a decision only where it advises, and fills in each want's code and
-// page from its rule.
+// page from its rule. A want with no Column checks no position, so a case
+// pins a span only where the span is what it tests.
 func assertFindings(t *testing.T, got, want []Finding) {
 	t.Helper()
 
-	want = slices.Clone(want)
+	got, want = slices.Clone(got), slices.Clone(want)
 	for i := range want {
+		if want[i].Column == 0 && i < len(got) {
+			got[i].Column, got[i].EndLine, got[i].EndColumn = 0, 0, 0
+		}
+
 		if want[i].Decision == "" {
 			want[i].Decision = DecisionDeny
 		}
@@ -79,12 +84,27 @@ func TestRulesListsEveryRuleInReportOrder(t *testing.T) {
 		RuleLeadContext, RuleReplyVoice, RuleTense, RuleHedge, RuleAttribution,
 		RuleTerseSentence, RuleTerseParagraph, RuleWordy, RuleBareRule,
 		RuleSecondPerson, RuleStepVerb, RuleCondescension,
-	}, ruleNames(toneChecks), ruleNames(slopChecks), []Rule{
-		RuleMessageLength, RuleMessageRationale, RuleMessageCommands, RuleMessageTag, RuleTemplate,
-	})
+	}, ruleNames(toneChecks), ruleNames(slopChecks), ruleNames(messageChecks), ruleNames(commitChecks),
+		ruleNames(helpChecks), ruleNames(issueChecks), ruleNames(densityChecks), ruleNames(reviewChecks),
+		ruleNames(suppressChecks), []Rule{RuleTemplate})
 
 	if got := Rules(); !reflect.DeepEqual(got, want) {
 		t.Errorf("Rules() = %q, want %q", got, want)
+	}
+}
+
+func TestFindingsCarryTheColumnsOfTheirMatch(t *testing.T) {
+	const text = "# Title\n\nRead it prior to a run.\n"
+
+	assertFindings(t, JudgeText(text, KindReference, WithOnly(RuleWordy)), []Finding{{
+		Rule: RuleWordy, Message: "Write 'before', not 'prior to'.", Match: "prior to",
+		Line: 3, Column: 9, EndLine: 3, EndColumn: 17,
+	}})
+
+	for _, f := range Judge(Symbol{Name: "Run", Doc: "Run reads it prior to a run."}, WithOnly(RuleWordy)) {
+		if f.Line != 0 || f.Column != 0 || f.EndLine != 0 || f.EndColumn != 0 {
+			t.Errorf("a doc comment's finding has a position in no file: %+v", f)
+		}
 	}
 }
 
