@@ -1402,7 +1402,12 @@ type freezeRecord struct {
 	Purpose          string         `json:"purpose,omitempty"`
 	RuleCommit       string         `json:"rule_commit"`
 	RulePaths        []string       `json:"rule_paths"`
+	// ProofreadVersion is build info and informative only: a cached build
+	// output keeps the stamp of the checkout that built it. ProofreadSHA256 and
+	// RuleCommit identify the sampler. Records frozen before the field existed
+	// lack it.
 	ProofreadVersion string         `json:"proofread_version"`
+	ProofreadSHA256  string         `json:"proofread_sha256,omitempty"`
 	SamplerSeed      int64          `json:"sampler_seed"`
 	Rules            []string       `json:"rules"`
 	Gates            gates          `json:"gates"`
@@ -1507,9 +1512,15 @@ func freeze(dir, guidelinePath, purpose string, g gates) (*freezeRecord, error) 
 		}
 	}
 
+	binarySum, err := executableSHA256()
+	if err != nil {
+		return nil, err
+	}
+
 	rec := &freezeRecord{
 		Round: counts.Round, Frozen: time.Now().UTC().Format(time.DateOnly), Purpose: purpose, RuleCommit: head,
-		RulePaths: rulePathspecs, ProofreadVersion: proofreadVersion(), SamplerSeed: counts.Seed, Rules: counts.Rules,
+		RulePaths: rulePathspecs, ProofreadVersion: proofreadVersion(), ProofreadSHA256: binarySum,
+		SamplerSeed: counts.Seed, Rules: counts.Rules,
 		Gates: g, Guideline: &digest{Path: guidelinePath, SHA256: sha256Hex(guideline)}, Sources: counts.Sources,
 		Exclude: counts.Exclude, ShortOfMin: short,
 		VoidIf: "any rule file changes after rule_commit before the round is scored, or the guideline changes after the freeze",
@@ -2062,6 +2073,23 @@ func proofreadVersion() string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+// executableSHA256 is the digest of the running binary. Build info alone does
+// not name the sampler, since a cached build output restores a binary another
+// checkout built.
+func executableSHA256() (string, error) {
+	path, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("find the running proofread binary: %w", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("hash the running proofread binary: %w", err)
+	}
+
+	return sha256Hex(data), nil
 }
 
 func sha256Hex(data []byte) string {

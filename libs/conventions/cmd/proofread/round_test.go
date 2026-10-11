@@ -546,6 +546,15 @@ func TestRoundFreezeSealsTheRuleCommit(t *testing.T) {
 		t.Fatalf("freeze = %+v", fr)
 	}
 
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if fr.ProofreadSHA256 != sha256Hex(mustRead(t, self)) {
+		t.Errorf("proofread_sha256 = %q, want the digest of the running binary", fr.ProofreadSHA256)
+	}
+
 	var rows []any
 	for _, c := range readCandidates(t, dir) {
 		rows = append(rows, labelRow{ID: c.ID, Label: "CORRECT"})
