@@ -1102,14 +1102,14 @@ func jobFork(ctx context.Context, root string, args []string) error {
 			stored.ID, orDash(string(stored.State)), len(stored.WritePaths),
 			hint.DescribeJob.With(stored.ID), hint.JobExec.With(stored.ID))
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
-		job.RenderRegenerated(os.Stdout, notes.Regenerated)
-		job.RenderUnrunGates(os.Stdout, notes.Unrun)
-		job.RenderForegroundOverrun(os.Stdout, notes.Overrun)
+		job.RenderRegenerated(os.Stdout, notes.RegeneratedOutside)
+		job.RenderUnrunGates(os.Stdout, notes.UnrunGates)
+		job.RenderForegroundOverrun(os.Stdout, notes.ForegroundOverrun)
 		pointAtConsole(ctx, stored.ID)
 		return nil
 	default:
 		notes := jobNotes(ctx, root, []types.Job{stored})[stored.ID]
-		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.Regenerated, UnrunGates: notes.Unrun, ForegroundOverrun: notes.Overrun})
+		return emitFormatted(opts, forkOutput{Job: stored, RegeneratedOutside: notes.RegeneratedOutside, UnrunGates: notes.UnrunGates, ForegroundOverrun: notes.ForegroundOverrun})
 	}
 }
 
@@ -1825,12 +1825,12 @@ func leaseBoundary(ctx context.Context, root string, row types.Job, leases []typ
 	derived := generatedBoundary(m, affected.Affected, row.WritePaths)
 	derived = append(derived, leasedBoundary(row, leases)...)
 	derived = append(derived, sharedBoundary(m, affected.Seed)...)
-	notes := loadNotes(ctx, m, row)
+	notes := collectNotes(ctx, m, row)
 	return job.TermsFacts{
 		Projects:           affected.Affected,
 		DerivedDenyPaths:   derived,
-		RegeneratedOutside: notes.Regenerated,
-		UnrunGates:         notes.Unrun,
+		RegeneratedOutside: notes.RegeneratedOutside,
+		UnrunGates:         notes.UnrunGates,
 		Affinity:           leaseAffinity(ctx, m, affected.Seed),
 	}
 }
@@ -2377,7 +2377,7 @@ func jobApply(ctx context.Context, root string, args []string) error {
 	}
 	report := applyReport{DryRun: globalCfg.DryRun}
 	for _, a := range applied {
-		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].Regenerated, UnrunGates: notes[a.Next.ID].Unrun})
+		report.Jobs = append(report.Jobs, applyEntry{Job: a.Next, Created: a.Created, Changed: a.Changed, RegeneratedOutside: notes[a.Next.ID].RegeneratedOutside, UnrunGates: notes[a.Next.ID].UnrunGates})
 	}
 	return emitFormatted(opts, report)
 }
@@ -2418,8 +2418,8 @@ func printJobApply(out io.Writer, applied []job.Applied, notes map[string]rowNot
 				fmt.Fprintf(out, "  %s\n", specChange(field, a.Prev, a.Next))
 			}
 		}
-		job.RenderRegenerated(out, notes[a.Next.ID].Regenerated)
-		job.RenderUnrunGates(out, notes[a.Next.ID].Unrun)
+		job.RenderRegenerated(out, notes[a.Next.ID].RegeneratedOutside)
+		job.RenderUnrunGates(out, notes[a.Next.ID].UnrunGates)
 	}
 	if dryRun {
 		fmt.Fprintln(out, "dry run: nothing written; rerun without --dry-run to write it")

@@ -567,7 +567,7 @@ func TestJobForkNotesACheckTooLongForTheForeground(t *testing.T) {
 		Display:       agent.HarnessDisplay{Name: "Limit host"},
 		Skills:        agent.HarnessSkills{Form: agent.FormShort},
 		Config:        agent.HarnessConfig{Path: "hooks.json"},
-		Limits:        &agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
+		Limits:        agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000},
 	})
 	for _, tt := range []struct {
 		name, magusfile, want string

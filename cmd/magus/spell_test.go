@@ -111,8 +111,8 @@ func (r *spellRegistry) serve(w http.ResponseWriter, req *http.Request) {
 }
 
 // spellRepo commits a spell at spells/x in a fresh git repository with a fixed commit
-// time and an ssh remote, returning the repository, the spell directory and the commit.
-func spellRepo(t *testing.T) (repo, dir, head string) {
+// time and an ssh remote, returning the repository root, the spell directory and the commit.
+func spellRepo(t *testing.T) (root, dir, head string) {
 	t.Helper()
 	r := testkit.NewRepo(t, nil)
 	r.WriteTree(map[string]string{
