@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/agenttest"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -398,19 +399,13 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 // spell would.
 func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
-	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "status-test" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            "status-test",
-			Display:       agent.HarnessDisplay{Name: "Status test"},
-			Skills:        agent.HarnessSkills{Paths: []string{skillsDir}, Form: agent.FormFull},
-			Config:        agent.HarnessConfig{Path: ".status-test/config.json"},
-		}, "spell:status-test", true, nil
+	agenttest.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "status-test",
+		Display:       agent.HarnessDisplay{Name: "Status test"},
+		Skills:        agent.HarnessSkills{Paths: []string{skillsDir}, Form: agent.FormFull},
+		Config:        agent.HarnessConfig{Path: ".status-test/config.json"},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
 }
 
 // TestCheckSkillStatusesIgnoresForeignAgentsMD proves an AGENTS.md without our

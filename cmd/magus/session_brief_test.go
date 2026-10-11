@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/agenttest"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
@@ -136,26 +137,20 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	// directory left to write it into): a WorkspaceRegistry records the wiring the
 	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
 	// it the way a real spell's harness_config would.
-	previous := agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "brief-host" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            "brief-host",
-			Display:       agent.HarnessDisplay{Name: "Brief Host"},
-			Config:        agent.HarnessConfig{Path: "host/hooks.json"},
-			Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
-			ManagedEntries: []agent.HarnessEntries{{
-				Path: []string{"hooks", "before"},
-				Entries: []map[string]any{{
-					"match":    "run",
-					"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
-				}},
+	agenttest.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "brief-host",
+		Display:       agent.HarnessDisplay{Name: "Brief Host"},
+		Config:        agent.HarnessConfig{Path: "host/hooks.json"},
+		Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
+		ManagedEntries: []agent.HarnessEntries{{
+			Path: []string{"hooks", "before"},
+			Entries: []map[string]any{{
+				"match":    "run",
+				"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
 			}},
-		}, "spell:brief-host", true, nil
+		}},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
 	reg := magus.NewWorkspaceRegistry()
 	reg.AddHarness("brief-host")
 	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))

@@ -8,27 +8,12 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/agent/agenttest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// agentTestHarnessSpell decodes body (the same descriptor JSON shape a
-// harnesses/<id>.json compat file used to carry) and returns a HarnessSpellLoader
-// that answers only for id, standing in for a real harness spell in a test.
-func agentTestHarnessSpell(id, body string) agent.HarnessSpellLoader {
-	var d agent.HarnessDescriptor
-	if err := json.Unmarshal([]byte(body), &d); err != nil {
-		panic(err) // fixture bodies are constants; a decode failure is a test bug
-	}
-	return func(_ context.Context, wantID string) (agent.HarnessDescriptor, string, bool, error) {
-		if wantID != id {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return d, "spell:" + id, true, nil
-	}
-}
 
 // doctorHarnessDescriptorJSON is the "test-host" fixture body, in the same shape a
 // harnesses/test-host.json compat file used to carry.
@@ -48,12 +33,12 @@ const doctorHarnessDescriptorJSON = `{
 // harnesses/*.json compat directory left to scan) and stages the guard stub and
 // fake ./magus every caller of it needs. Callers must pass "test-host" as one of
 // the wired ids the check under test resolves against; nothing discovers it
-// automatically any more. The registration is reset to nil on cleanup rather than
-// restored, since no doctor test relies on a PRIOR test's registration surviving.
+// automatically any more.
 func writeDoctorHarness(t *testing.T, root string) {
 	t.Helper()
-	previous := agent.RegisterHarnessSpellLoader(agentTestHarnessSpell("test-host", doctorHarnessDescriptorJSON))
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(previous) })
+	var descriptor agent.HarnessDescriptor
+	require.NoError(t, json.Unmarshal([]byte(doctorHarnessDescriptorJSON), &descriptor))
+	agenttest.WireHarness(t, descriptor)
 	// VerifyHarness now actually runs the wired command (see internal/agent's
 	// harness_probe.go), rather than trusting that "sh magus-command-stand-in.sh" is
 	// present in the config. This stub is what makes it answer for real: every
