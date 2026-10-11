@@ -94,7 +94,7 @@ func sessionUsage() {
 	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent magus")
-	fmt.Fprintln(os.Stderr, "invocations did in this checkout (--all: every worktree of this repository),")
+	fmt.Fprintln(os.Stderr, "invocations did in this checkout (--all: every checkout of this repository),")
 	fmt.Fprintln(os.Stderr, "each with the host session it ran in when a host delivered one; `session show` reports one host")
 	fmt.Fprintln(os.Stderr, "session in full, `session attention` lists the blocks agents raised, and")
 	fmt.Fprintln(os.Stderr, "`session dispose` closes one - nothing closes a request automatically.")
@@ -111,7 +111,7 @@ func sessionUsage() {
 }
 
 // invocationList shows what recent magus invocations did in this checkout, or in every
-// worktree of the repository with --all.
+// checkout of the repository with --all.
 func invocationList(ctx context.Context, root string, args []string) error {
 	var limit int
 	var since string
@@ -153,7 +153,7 @@ func invocationList(ctx context.Context, root string, args []string) error {
 	}
 	summaries := sessions.Summarize(fold)
 	if !all {
-		summaries = invocationsIn(summaries, root)
+		summaries = invocationsInCheckout(summaries, root)
 	}
 	summaries = invocationsSince(summaries, cutoff)
 	if limit > 0 && len(summaries) > limit {
@@ -207,7 +207,7 @@ func renderInvocationsText(ctx context.Context, root string, summaries []session
 		// An empty store is the normal state before any run, so this says how facts
 		// get there rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no invocations recorded yet in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "magus records one as soon as a `"+hint.Run.String()+"` finishes a target in any worktree of this repository")
+		fmt.Fprintln(os.Stdout, "magus records one as soon as a `"+hint.Run.String()+"` finishes a target in any checkout of this repository")
 		return nil
 	}
 
@@ -437,21 +437,22 @@ func parseSince(raw string) (time.Time, error) {
 	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
-// invocationsIn keeps the invocations that ran in the checkout at root. The store is keyed
-// by repository, so every worktree writes to it; an invocation with no recorded Workspace
-// predates the field and stays, because dropping it would hide history rather than scope it.
-func invocationsIn(summaries []sessions.Summary, root string) []sessions.Summary {
-	want := realPath(root)
+// invocationsInCheckout keeps the invocations that ran in the checkout at root. The store
+// is keyed by repository, so every checkout writes to it.
+func invocationsInCheckout(summaries []sessions.Summary, root string) []sessions.Summary {
+	want := resolvedPath(root)
 	resolved := map[string]string{}
 	out := make([]sessions.Summary, 0, len(summaries))
 	for _, s := range summaries {
+		// compat(until: no stored invocation lacks a Workspace): one recorded before the
+		// field existed stays, because dropping it would hide history rather than scope it.
 		if s.Workspace == "" {
 			out = append(out, s)
 			continue
 		}
 		got, ok := resolved[s.Workspace]
 		if !ok {
-			got = realPath(s.Workspace)
+			got = resolvedPath(s.Workspace)
 			resolved[s.Workspace] = got
 		}
 		if got == want {
@@ -461,9 +462,9 @@ func invocationsIn(summaries []sessions.Summary, root string) []sessions.Summary
 	return out
 }
 
-// realPath is p with symlinks resolved, so a checkout reached through /tmp and through
+// resolvedPath is p with symlinks resolved, so a checkout reached through /tmp and through
 // /private/tmp compares equal. A path that no longer exists keeps its cleaned spelling.
-func realPath(p string) string {
+func resolvedPath(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
 	}

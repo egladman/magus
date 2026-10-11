@@ -422,7 +422,7 @@ func lastRunFailures(root string) []briefFailure {
 	if err != nil {
 		return nil
 	}
-	for _, s := range invocationsIn(sessions.Summarize(fold), root) {
+	for _, s := range invocationsInCheckout(sessions.Summarize(fold), root) {
 		if len(s.Targets) == 0 {
 			continue
 		}

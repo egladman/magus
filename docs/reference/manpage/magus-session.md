@@ -42,7 +42,7 @@ without a server, a network, or a shared branch. It is append-only and never
 rewritten; a line left half-written by a killed process is skipped and counted
 rather than failing the read.
 
-The listing shows this checkout's invocations; --all widens it to every worktree
+The listing shows this checkout's invocations; --all widens it to every checkout
 of the repository. It takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each invocation's last fact, not its first, so a long one that is still

@@ -255,7 +255,7 @@ func TestInvocationsSinceWithNoCutoffKeepsEverything(t *testing.T) {
 	assert.Equal(t, all, invocationsSince(all, time.Time{}))
 }
 
-func TestInvocationsInKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
+func TestInvocationsInCheckoutKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
 	t.Parallel()
 
 	here, elsewhere := t.TempDir(), t.TempDir()
@@ -264,7 +264,7 @@ func TestInvocationsInKeepsThisCheckoutAndFactsWithNoWorkspace(t *testing.T) {
 		{Invocation: "elsewhere", Workspace: elsewhere},
 		{Invocation: "legacy"},
 	}
-	got := invocationsIn(all, here)
+	got := invocationsInCheckout(all, here)
 	require.Len(t, got, 2)
 	assert.Equal(t, "here", got[0].Invocation)
 	assert.Equal(t, "legacy", got[1].Invocation, "a fact written before the workspace was recorded cannot be placed, so it stays")
