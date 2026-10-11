@@ -11,6 +11,7 @@ namespace agentpolicy\host;
 import "std";
 import "magus";
 import "./hack/policy/helpers" as helpers;
+import "./hack/policy/verdict" as verdict;
 
 final captureDenial = "reading a run log or task capture by cat or by a range drops its ref; read it whole: `magus query output <ref>`.\n"
     + "A failure prints `output: out<hex>` on the line under `cause:`, and that ref is the whole log. "
@@ -180,19 +181,34 @@ fun slashed(path: str) > str {
     return path.replace("\\", with: "/");
 }
 
+// judged is decideHost with every denial held to the verdict shape.
+fun judged(programs: [helpers\Program]) > GuardVerdict {
+    final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
+    return verdict\checked(decideHost(programs), label: label);
+}
+
+// shaped is writePath with a denial held to the verdict shape.
+fun shaped(path: str) > str {
+    final denial = writePath(path);
+    if (denial != "") {
+        verdict\assertVerdict(denial, label: path);
+    }
+    return denial;
+}
+
 test "a recursive search of the log directory is denied" {
     foreach (argv in [
         ["rg", "needle", ".magus/logs"],
         ["grep", "-r", "needle", ".magus/logs/"],
         ["find", "/tmp/repo/.magus/logs", "-name", "*.log"],
     ]) {
-        std\assert(decideHost(helpers\request([argv])).decision == "deny", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == "deny", message: argv.join(" "));
     }
 }
 
 test "a Windows path to a capture or a terminals directory is denied" {
-    std\assert(writePath("C:\\repo\\.magus\\logs\\abc.log") != "", message: "log");
-    std\assert(writePath("C:\\repo\\terminals\\x.txt") != "", message: "terminals");
+    std\assert(shaped("C:\\repo\\.magus\\logs\\abc.log") != "", message: "log");
+    std\assert(shaped("C:\\repo\\terminals\\x.txt") != "", message: "terminals");
 }
 
 test "a range read, a grep and a cat of a run log are denied, naming query output" {
@@ -203,7 +219,7 @@ test "a range read, a grep and a cat of a run log are denied, naming query outpu
         ["grep", "cause:", "tasks/266090.output"],
         ["head", "-n", "15", ".magus/logs/abc.log"],
     ]) {
-        final v = decideHost(helpers\request([argv]));
+        final v = judged(helpers\request([argv]));
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("magus query output") != null, message: "names the ref read");
     }
@@ -219,7 +235,7 @@ test "a search whose pattern mentions a log, and a read of source, stay silent" 
         ["head", "-n", "20", "README.md"],
         ["magus", "status"],
     ]) {
-        std\assert(decideHost(helpers\request([argv])).decision == "allow", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == "allow", message: argv.join(" "));
     }
 }
 
@@ -233,7 +249,7 @@ test "creating or reading a terminals directory is denied, naming magus status" 
         ["head", "-n", "10", "terminals/266091.txt"],
         ["find", "/Users/eli/.cursor/projects/magus/terminals", "-name", "*.txt"],
     ]) {
-        final v = decideHost(helpers\request([argv]));
+        final v = judged(helpers\request([argv]));
         std\assert(v.decision == "deny", message: argv.join(" "));
         std\assert(v.reason.indexOf("magus status") != null, message: "names the lock");
     }
@@ -248,13 +264,13 @@ test "a directory that is not named terminals, and a search for the word, stay s
         ["find", ".", "-name", "*.sh"],
         ["cat", "internal/term.go"],
     ]) {
-        std\assert(decideHost(helpers\request([argv])).decision == "allow", message: argv.join(" "));
+        std\assert(judged(helpers\request([argv])).decision == "allow", message: argv.join(" "));
     }
 }
 
 test "a write into a terminals directory or a run log is denied; source is not" {
-    std\assert(writePath("terminals/266091.txt").indexOf("magus status") != null, message: "a new session file");
-    std\assert(writePath(".magus/logs/abc.log").indexOf("magus query output") != null, message: "a log");
-    std\assert(writePath("internal/guard/shell.go") == "", message: "source");
-    std\assert(writePath("internal/term.go") == "", message: "a name that only starts the same way");
+    std\assert(shaped("terminals/266091.txt").indexOf("magus status") != null, message: "a new session file");
+    std\assert(shaped(".magus/logs/abc.log").indexOf("magus query output") != null, message: "a log");
+    std\assert(shaped("internal/guard/shell.go") == "", message: "source");
+    std\assert(shaped("internal/term.go") == "", message: "a name that only starts the same way");
 }
