@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Text answering a chat the reader never saw.
 -- hit/change-description --
 I hope this helps! Let me know if you want me to expand.
@@ -30,3 +31,98 @@ Dear Maintainers: the page opens a letter.
 -- pass/change-description --
 - Pins the key.
 - Documents the `Dear X:` salutation the template used.
+-- hit/change-description --
+Would you like me to provide a robust awk snippet that only updates the version for the matching extension?
+Let me know if you'd like:
+- **Your repository, your rules**: Feel free to modify, reject, or request changes; all feedback is welcome
+-- hit/commit-message --
+I likely won't look at this again for a week or so, so please feel free to merge for me.
+-- fp/review-reply --
+You're absolutely right. I removed the redundant `len()` calls from the tests.
+You're absolutely right. The literal check should apply to both the pattern and options arguments.
+You're absolutely right: I've updated the test to use the array-of-maps type, which exercises the fixed function.
+You're absolutely right: that cross-platform check was incorrect.
+You're absolutely right. If the root cause is cache synchronization timing, the exists check would suffer the same race.
+You're absolutely right: using only 4 bytes creates unacceptable collision risk.
+You're absolutely right! Simplified the implementation by removing the explicit clear call.
+You're absolutely right! I've removed the redundant build options that the properties file already sets.
+Great question, but this documentation is not true and it is AI hallucinating
+You're absolutely right! Fixed the generator to analyze both structs instead of hardcoding field names.
+You're absolutely right. I've reverted the unintentional change to the SDK version.
+You're absolutely right: the start and end settings were incorrect, so I've fixed them.
+You're absolutely right. I've moved the error detection from the test case into the tool itself.
+You're absolutely right about the automatic environment prefix being problematic.
+You're absolutely right: the behavior is now correct:
+You're absolutely right! I've reverted the accidental changes to the third-party script.
+You're absolutely right. The current code assumes every volume of that file system is a dev drive.
+You're absolutely right. The code generation hardcodes `string` casting when it should use the column type.
+You're absolutely right: a separate component for the preview is not ideal, since it could diverge from the original.
+Great question; I was hoping to use this to move to an async-first approach. What do you think?
+You're absolutely right: those tests were circular since the attribute uses the helper internally.
+I'm sorry I just saw your comment.
+-- fp/change-description whole --
+fix: let focused APIs opt out of the inference
+
+> It's possible that'll lead to other warts, though, so if this is too niche, feel free to close.
+-- fp/change-description whole --
+feat: add an interface for the monitor
+
+> Currently we have to create an adapter just to mock it. I'm happy to help implement it if required.</issue_description>
+-- fp/change-description whole --
+ci: update submodules on checkout
+
+> Certainly! Here's a concise instruction for changing the CI checkout step to update submodules:
+-- fp/change-description whole --
+feat: support excluded methods in the logger config
+
+> Let me know if I could create a PR to add this support.</issue_description>
+-- fp/change-description whole --
+feat: add a theme switcher
+
+> Feel free to comment with additional suggestions or open a PR implementing this feature.</issue_description>
+-- fp/change-description whole --
+feat: add a guide brush
+
+> Please let me know if u need more info or pictures to explain what I mean.
+-- fp/change-description whole --
+docs: point to the in-repo install script
+
+<comment_new><body>
+I don't think we can support an install script owned elsewhere. Feel free to try the script in this repo instead</body></comment_new>
+-- fp/change-description whole --
+fix: keep the query editor focused
+
+> <comment_new><body>
+> Feel free to work on it</body></comment_new>
+-- fp/change-description whole --
+fix: expose the type as an enum again
+
+> <comment_new><body>
+> Hi, you're right that it's exposed as a type now (not an enum)
+-- fp/change-description whole --
+feat: support the next automation release
+
+> <comment_new><body>
+> We plan to add support in an upcoming release. If you have time, feel free to contribute a PR.
+-- fp/change-description whole --
+fix: close stale issues
+
+<comment_new><body>
+As there is no activity on this issue for a long time, we are closing it.
+Feel free to raise a new issue or reopen this if you need more help.
+</body></comment_new>
+-- fp/change-description whole --
+docs: explain the z-axis calculation
+
+> <issue_description>Dear Developers,
+>
+> First, I want to thank you for the package.
+-- fp/change-description whole --
+fix: restore the default image
+
+> Just let me know if you need further info for troubleshooting.
+-- fp/change-description whole --
+feat: add the settings page
+
+> <comment_new><body>
+> Definitely! Feel free to get started and ask questions as needed 👍</body></comment_new>

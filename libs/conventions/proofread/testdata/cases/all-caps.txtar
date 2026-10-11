@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Words in capitals for emphasis in a review reply.
 -- hit/review-reply --
 Do NOT merge this.
@@ -7,3 +8,49 @@ The REST API returns JSON over HTTP.
 Pin the AWS SDK version.
 Set `NOT_NULL` on the column.
 Read MAX_RETRIES first.
+-- hit/review-reply --
+If these parameters were NOT ignored, this comment would fail or appear in the wrong location.
+CRITICAL - ALWAYS run lints and tests before committing, including ALL the linters the library uses.
+This loop fetches ALL closed pull requests for each contributor separately, which will likely hit rate limits.
+- Assert that worker code is NOT included in `/out/entry.js`
+There is currently NO function selectable, no menu visible in the app.
+If and ONLY IF this is not possible, use dynamic dispatch to achieve it.
+- Log message does NOT include "with capabilities:" when no capabilities are provided
+This is changed in the code should NOT be const
+we need to run `bundle install` AND `bundle exec pod install`
+Only if users ask to keep images or networks do we NOT delete the data directory.
+do NOT use `createTool` where previously using `tool`
+We always want to fetch ALL
+Since this exception was NOT reported, this code path was not being hit.
+DO NOT ADJUST TESTS TO YOUR HALF-BAKED IMPLEMENTATIONS!
+- the GPU package should NOT be a test dependency!
+It should verify that toggled calendars are NOT in the selected array.
+Based on the socket mount configuration, the container runtime will NOT use the default socket unless the variable is set.
+**Resource Waste**: Running only one driver's tests in a job that spins up both database services AND the graph store is inefficient.
+THIS IS A STRING.
+do NOT change the quote to single quotes
+The method should log a warning when the version IS malformed, but it returns early when the version IS well-formed.
+The current decoder collects ALL data before decoding.
+Any `{` or `}` that is **NOT** part of an interpolation must be doubled:
+We MUST change directories when running the clean install command.
+**Low precision data types**: These DO support round-tripping because the parser and printer use the same field.
+-- fp/review-reply --
+- **Emphasized safe output**: Added a "CRITICAL" requirement stating the agent MUST use the report tool for findings
+The `activated` output already uses AND logic to combine membership and stop-time checks.
+I do not like how ALL CAPS PROJECT-FILE screams at me. Could you look for alternatives used elsewhere?
+Now includes native files when the file exists AND (the architecture is 'msil' OR it matches the platform).
+Keep the original message, and drop the IT Admin reference. That's very informal
+The filter functions currently use AND logic (`.every()`) for multiple selections.
+The flag is used conditionally in the build file: when NOT DEFINED it enables the superbuild.
+The check should properly test that TV mode is enabled AND there is mouse movement.
+[nitpick] Like the previous comment, the 'NEVER CANCEL' language is too absolute.
+Now the function only removes 'cls' when it's the first parameter AND it's a type object.
+The `activated` output already uses conjunction (AND) when both membership and stop-time checks exist.
+Now the workflow will only run when the label is present AND the PR is not in draft status.
+ - The architecture is the platform architecture (e.g. x86, x64, arm64) AND the runtime identifier starts with `win-`.
+-- fp/review-reply whole --
+The native files should be included when:
+
+The file exists
+AND
+One of the following is true:

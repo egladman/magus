@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 An agent reply whose items or paragraphs open with a bold label.
 -- hit/agent-reply --
 - **Cache:** the key now sorts its inputs.
@@ -18,3 +19,44 @@ The key is **stable** across workers.
 ## Still open
 
 The Linux run has not finished.
+-- hit/agent-reply --
+**Still in progress this session (I finish these before you look):**
+- **Unpushed:** one commit, the links fix that makes the graph regenerate the same way on CI and locally.
+- **Reading order:** the plain diff now groups the hunks into a reading order, with no flag:
+**And the piece that makes your approach fit:** the report step already receives the CI result, so it knows whether the shards passed.
+- **Starting point:** an earlier decision record already chose a container runtime client.
+**Installed skills, grouped by task (16):**
+**What I'd do:**
+- **What it watches:** the whole run, not a single target.
+**Current ~63.2% → 70% needs about 7 points. Focus here, in order:**
+**What remains is yours:**
+- **Build tools and their JSON output:** several build systems and their event streams.
+- **One classifier:** the risk package works out a tier from each path's class.
+**What stays a judgment call:**
+**Trust model (your "use main's generator"):**
+**Also caught:** changelog drift; another project generates it, so regenerating the root alone leaves it stale.
+**The underlying reason:** in-process members read the workspace already open on the context.
+**Two more things that would have sunk my earlier proposal anyway:**
+**Correctness (the two that broke the linter):**
+- **Skills:** the delegation skill now starts every spawn at the cheapest tier.
+- **No flags at all:** goals live only in the fork record, which is what agents write anyway.
+- **In the first PR:** one worker renames the checker's old type to `Kind`.
+**What went:**
+- **From my shell:** the guard blocks it, and I won't route around that.
+**In parallel (read-only workers, no locks):**
+**Final state:** `go test ./...` green, both generates green, docs render green.
+- **Producer:** the script finds the commit's CI run and writes records to stdout.
+**The shared-checkout fix:** fixed and pushed.
+- **text check:** does the merge conflict?
+- **The lifecycle PR:** its conflicts are resolved and its changelog entry is corrected.
+**Its criteria:** land every queued change as a green PR and finish the blog revision.
+- **What changed:** the changelog now renders from fragments.
+**What's happening mechanically:**
+**Steps:**
+- **session-load**: the local graph overlay that folds agent reads and writes onto file nodes.
+**Branch:** `refine-secrets`.
+**A bug the move exposed:** the header no longer fit.
+**Open pull requests, none on auto-merge:**
+**Done and verified (this pass):**
+- **Cause:** a race my refactor of the client calls introduced.
+**What the first pass covers:**

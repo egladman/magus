@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A sentence announcing that it restates the text.
 -- hit/reference --
 In conclusion, the key sorts its inputs.
@@ -10,3 +11,6 @@ All in all, the key sorts.
 A summary of the flags follows.
 The conclusion of the run is a verdict.
 Overall, the lint passes.
+-- hit/review-reply --
+In summary, the unload hook lets you preserve user progress or clean up at the right moment.
+In summary, moving the scroll behavior to `<pre>` makes your code blocks more accessible.

@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A phrase with a shorter equivalent.
 -- hit/reference --
 Sort the inputs in order to make the key stable.
@@ -18,3 +19,89 @@ The fact is recorded in the journal.
 Run walks the tiers in order for lookups and stores.
 Read the CA at the moment it was written.
 Write "to", not "in order to".
+-- hit/agent-reply --
+Nobody has solved that, and the reason is that solving it requires being the orchestration layer.
+The reason is that **retiring the old mode depends on promotion working**, and promotion is ten minutes old.
+The reason is that most of those functions were already hit by other packages' tests.
+Hoisting that into the plan would duplicate the expensive half in order to speed up the cheap half.
+The tool does one thing: it keeps a precise model of the repo in order to run work correctly and cache it.
+My recommendation is don't pin certificates, and the reason is that the tool already has a stronger check.
+If you want to ask your codebase questions in English, this is not that, and the reason is that the answer would not be the same twice.
+It reads as a wordmark, and the reason is that a solid silhouette at text weight behaves like a heavy glyph.
+Local enforcement gets called out by name, and the reason is that a hook that blocks is a hook people disable.
+Never the value, which is not resolved at declaration and must not be resolved in order to log it.
+A trial merge computes those three versions in order to find the conflict at all, so reporting them is free.
+You don't need `vcs add` to exist in order to keep an agent from clobbering another agent's work.
+**On `runTarget` vs `runBody`:** keep `body`, and the reason is that the function runs two different kinds of thing.
+-- hit/change-description --
+When checked, this removes the need for contractors to sign the agreement in order to submit invoices.
+Prior to 5.39.0, awaiting an async function inside a constant worked without issue.
+- validate the batch layout so advantages are computed on the full batch prior to microbatch splits
+-- hit/commit-message --
+Prior to this, self-hosted instances would default to the lowest tier.
+In order to satisfy the audit we need to remove the branch protection bypass
+Add test to make sure that we are suppressing secret resources in the manifest.
+For the purpose of this test it doesn't matter which key is used.
+This change also addresses a number of issues revealed by the newer runners:
+fix: Add mock_response parameter in order to be able to mock responses.
+perf: added pagination for sessions in order to improve performance on large projects
+In order to reduce the need for shared stubs, we build them per test.
+Execute getClipboardContents() once in order to obtain user permission
+Via [0], we can make sure that we wrap the generated type in an empty struct.
+See #123 for a first pass at this prior to this change.
+fix naming in order to avoid conflicts with other vars
+It also includes a number of code cleanup changes across the component, including:
+-- fp/agent-reply --
+Near the top there's a line **App ID:** followed by a number of about 6 to 7 digits.
+-- fp/change-description --
+This adds derivatives of the covariance matrix with respect to parameters in `get_moments`.
+-- fp/change-description whole --
+fix: report the savings
+
+<issue_description>
+What should we do in order to calculate the savings?
+</issue_description>
+-- fp/change-description whole --
+fix: point the links at the docs service
+
+> Update these links to their correct URL and make sure that it uses the docs link service.
+-- fp/change-description whole --
+docs: fix a typo
+
+### Legal Boilerplate
+
+Look, I get it. The company behind this project is gonna need some rights from me in order to utilize my contributions in this here PR.
+-- fp/change-description whole --
+fix: show mail attachments
+
+<issue_description>
+But if we open the file in the mail client, it shows the attachment and we are able to view it.
+</issue_description>
+-- fp/change-description whole --
+feat: copy resource values
+
+<issue_description>
+There is some work to be done in order to identify which values make sense to copy.
+</issue_description>
+-- fp/change-description whole --
+chore: bump the parser
+
+## Checklist
+
+Before we can merge this PR, please make sure that all the following items have been checked off.
+-- fp/change-description whole --
+test: run against the preview runtime
+
+<comment_new><body>
+If it didn't open with preview, could you make sure that is not the case?
+</body></comment_new>
+-- fp/change-description whole --
+feat: add a robots file
+
+### Legal Boilerplate
+
+Look, I get it. The company that runs this project is gonna need some rights from me in order to utilize my contributions.
+-- fp/change-description whole --
+docs: explain the contraction macros
+
+> In particular, I would like to make sure that there are docstrings for `@planar` and `@plansor`.

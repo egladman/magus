@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A commit subject over 100 bytes; a trailing forge " (#N)" is not counted.
 -- hit/commit-message --
 fix: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -5,3 +6,44 @@ fix: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 fix: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 fix: drop forwarded args at a cross-project dependency (#546)
 fix: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (#546)
+-- hit/commit-message --
+raise the docs base font to 17px; enlarge the small icon buttons to 34px tap targets; make the search input taller
+Complete comprehensive doc comments for the app bar, keyboard display, file picker and image tools components
+fix the visited color on the playground button; replace the wipe-and-rebuild of gen/ with tracked pruning of stale files
+document the concurrency model: the in-run scheduler versus the cross-process workspace lock; link it from the index
+add a subtle launch-the-demo pill to the launcher's corner; it opens every pane in demo mode for a visitor with no daemon
+rebuild the playground wasm; compile the playground command with the small compiler; drop the bracket strip; regenerate
+LangModel // Refactor the suggestion cleanup to support both context-specific and global candidate removal at once
+Fix typos: unkonwnBookTitle → unknownBookTitle, upateHighlight → updateHighlight, higlightContent → highlightContent
+make doctor binary (ok or fail); drop --strict and the half-built --fix; remove the unimplemented -o wide output format
+rename enterSharedModeIfNeeded to adoptDaemonOrigin so it names origin adoption and not the read-only share side effect
+document daemon transports, the health endpoint, and cluster probes; add a readme architecture diagram; refresh the docs
+feat: Полная интеграция с конструктором сайтов - автоматические бонусы и списание
+Final implementation attempt for aliased character access - documented the complete analysis in the debug notes file
+move the embedded release-signing key behind an exported PubKey; self-update no longer owns the embed and tools can share it
+Add unit tests for failure scenarios: circular dependencies, step execution failures, and dependency failures in the runner
+give secondary-checkout detection parity across backends; each one matches its own signature; drop the git-only check
+launcher: drop the redundant Open item from the card menu (the card body already opens a tab); fill the pane to full height
+Move ConstructorInitializerTests to the ConstructorProviders directory and refactor them to use the custom code view model
+port upstream's testing Tester as import "testing"; adapt the three generic asserts to the interpreter's erased generics
+add the console's own tiny reactive view layer: a Signal interface, signal(), bind() and scope(); rebuild the tab strip on it
+Rename IPublishingActivityProgressReporter to IPublishingActivityReporter and add the derived type attribute to the model
+doc: address review feedback - use real test names, clarify timeout and retry behavior, remove unimplemented environment field
+Address reviewer feedback: remove the lint rule overrides so the package uses the default shared lint config behavior
+generate a query-first graph routing section into the index: retrieval verbs plus per-kind and per-project entry points
+Add UseAutoincrement extension method for TestPropertyBuilder and move the autoincrement convention tests to a new class
+Fix the doc analyzer to validate @function tags against the registered exports, fix a parsing bug, and improve the API docs
+add a shared service dev loop that serves both gen trees, and give the http server module a validated options object
+Fix update propagation in run_app_blocked_peers_solution.rs by retrieving the current state before applying the updates
+reformat hand-written docs under the pinned formatter version; the committed bytes had drifted, de-indenting list continuations
+Complete comprehensive testing framework with selector tests, integration tests, documentation and CI configuration files
+Add product management and ranking features: search and scan buttons, sorting by score, nutrition score and eco score
+route the docs content and changelog generators through the go-run op instead of raw exec; regenerate the affected docs
+correct the diagnostics docs: imports execute and it mutates session state; document 1-based positions; sort the keywords
+add * wildcards to the query grammar: a value or free-text term containing * matches by glob across kind, project and id
+I need to first use the `think` tool to review and understand what's happening in this PR before generating a commit message.
+Connect filter to rejection mechanisms like the precondition helper - implement PreconditionFailure after max attempts
+scope the image-source badge hosts to the home page only; tighten the graph page image-source to same-origin; regenerate site
+Update moduleResolution to esnext in all tsconfig.esm.json files and fix the type errors in the generator package build
+[Bot] Regenerated @ 3f9c2a7e1b4d5c6a8e9f0a1b2c3d4e5f6a7b8c9d 2025-09-30T12:00:00Z from the upstream definitions branch
+新增项目架构与文档分析报告，详细描述了项目的整体架构、核心模块职责及现有文档情况。

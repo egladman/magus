@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A commit subject that opens in the past tense, the third person or a gerund.
 -- hit/commit-message --
 feat(proofread): adds a vale spell
@@ -8,3 +9,45 @@ feat: add an opt-in claude-code-mod harness and a harness_settings op (#577)
 address the review
 -- pass/commit-message whole --
 Revert "feat: added x"
+-- hit/commit-message --
+fixed conflicts and adapted definition
+Fixes
+removing some unrelated changes
+Renamed LICENSE.adoc
+changed the instruction to comment on the PR instead of opening an issue
+Fixed tests
+Updates get
+Fixed format test logging
+making the database client a dev dependency
+Enabling tests in preview branch (#964)
+Made the thinking state read Listening...
+Using the download binaries target instead
+fixes.
+fixes
+Updates flag key
+Removing comments
+Renamed script
+docs: adds changelog entry for the http part extension
+updated the textual and logical definition
+Adds simple token policy to packages/games (#3127)
+Updates
+fixed not applying glitch, requires better work on filling the forms.
+Added customization docs to the client readme
+Adds more unit tests
+Updated html structure to accommodate new style
+updated the definition to make it clearer
+Fixes #5126
+added initial implementation for using a webroot
+fixed menu
+adds support to run tool from a container
+chore: removing numbers from titles
+Updates the scan config `config.yaml`
+updates
+-- fp/commit-message --
+Changes from background composer bc-725113d3
+Changes before error encountered
+Changes made by Agent
+updates from another suggestion
+feat: changes for new canvas
+Fixes for selectpanel
+Changes from background composer bc-94ed054e

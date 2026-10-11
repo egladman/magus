@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A recommendation stated as fact with no reason.
 -- hit/review-reply --
 This should be a map.
@@ -7,3 +8,48 @@ This should be a map: lookups dominate.
 This must be locked because two goroutines write it.
 I'd say this should be a map.
 Should this be a map?
+-- hit/review-reply --
+We don't need to add `./` for paths starting with `../`.
+We should actually move a lot of this logic into the interaction service (not this PR).
+This resource should be excluded from the manifest using ExcludeFromManifest.
+Generally, errors should be reported using `BuildReport`.
+we should update here instead
+install should use ID parameter but uninstall shouldn't
+All the other collections here should default to the main collection for cases where only the main collection is specified
+no need to do that
+-- fp/review-reply --
+This relative path should be converted to an absolute URL to match the SDK guidelines named in the description.
+Users don't need to fill these two parameters. It's managed by the operator.
+With omitempty removed, interval must always be present.
+Odd that the formatter is not included, but just downloading the 18.x release should be good enough I guess.
+- Line 396 references `UnauthorizedError` but should reference `Unauthorized` (defined at line 830)
+**Avoid ExpectedMessage in integration Should -Throw**
+Literal `%` or `_` characters are read as wildcards and cause unintended matches. The input should be sanitized.
+They are used in a separate file and should not be defined here.
+Create a new public command to get an instance, it should have two parameter sets, one with a name and another with an object from the pipeline.
+In a workspace, you should install at the repo root before building filtered packages to ensure the graph is correctly linked.
+- Clicking directly on thumbs without dragging (should not move)
+I don't think we need the expression at all anymore and instead the resource should just store the URL string directly and use that to add the endpoint.
+The overflow checking should be handled in the library itself rather than in the test file. Test files should focus on valid inputs and error conditions.
+The artifact naming pattern should be documented more clearly. Specifically, clarify whether the name refers to the workflow file name or its display name.
+The file appears to have been correctly generated and doesn't need to be reverted.
+I'm fairly certain these images need to be provisioned. Ah, it looks like one exists already.
+For a cell we should not expose all columns. A cell always belongs to exactly one column.
+This case is still broken; the diff puts the errors in the type parameter list. This bug must be different than the other one you just fixed.
+The note should use the short product name for later mentions, according to the documentation guidelines.
+I didn't find any migrations that change the key column types. You'll need to add an alter step for each table's `id` field.
+The error from `fs.Sub` is silently discarded. Per the guidelines we must handle errors.
+The fix would need to update the archive code to handle the new deflate behavior.
+This creates a maintenance burden where changes need to be made in both places.
+The magic number 80px should be documented or extracted to a variable to explain what spacing it represents.
+(I will admit that the 'must be of string type' error isn't great, though. It clearly accepts booleans.)
+Based on the type definition, you'll need to ensure the `stage` property matches the expected type.
+Revert all changes you made to the internal SDK, those are auto generated and should not be touched.
+For consistency and correctness, `pred_predictors` should be used here instead of `test_data`.
+We need to be able to verify these string changes have the impact we intend.
+-- fp/review-reply whole --
+The translation files should be updated with the update target rather than by hand. These hand-added entries have the wrong state.
+-- fp/review-reply whole --
+These should default to zero and positive infinity. Then you avoid the extra ">= 0" check on each one in the setter.
+-- fp/review-reply whole --
+The indentation level should match the step name above it. The 'if' condition should be indented at the same level as 'uses', not at the level of the step name.

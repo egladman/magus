@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Throat-clearing, filler adverbs and selling words.
 -- hit/doc-comment --
 Note that the cache keys a run on what it reads.
@@ -60,3 +61,52 @@ It names the very commit.
 The `deeply` flag is a literal name.
 At this size the cache holds 4 entries.
 Hash the inputs, truncate to 12 bytes.
+-- hit/agent-reply --
+[notes.md](notes.md) carries the branch state, what landed, and, more importantly, what the four reviews found.
+So a cross-language invoke is just a namespace you don't own yet.
+No response needed; that's just the live-update subscription re-arming after the republish.
+The pages host already serves a fresh copy with an open CORS header, so `gen/*.json` can simply be untracked.
+-- hit/change-description --
+- Integration with the existing CI pipeline (works seamlessly ✅)
+Comprehensive verification confirms all specified patterns have been completely removed:
+This improves consistency across the project and leverages stricter compiler settings for better code quality.
+This adds missing coverage for the testing package, implementing comprehensive tests for all assertion functions.
+- [x] Add comprehensive test coverage in test_cpp.cpp
+Added comprehensive test coverage:
+-- hit/commit-message --
+- Add comprehensive test cases for new URL formats
+- Added comprehensive test coverage for this scenario
+Add comprehensive cherry-pick operation summary documentation
+Leverage the shared tile factory so the tiles get the new styling from one edit.
+Add comprehensive documentation for dynamic test pooling mode
+So static export invalidation is not broken; the shard was simply never rebuilt.
+- Leverages the fixed indicator stream from phase 3
+The custom-rendered pieces stay as the escape hatch, deeply restyled with the native tokens.
+- Add comprehensive test coverage with 29 test cases
+drop the 'shell' name and concept - it is just the console.
+-- hit/reference --
+Outside a workspace they are simply ignored.
+-- hit/review-reply --
+Added a comprehensive unit test that covers concurrent access during certificate rotation.
+Just throw an error if it's not a valid configuration.
+The new text simply states "any fees" without this distinction.
+**Add comprehensive encryption edge case testing.**
+Since we already have the aggregate key, let's just feature gate the entire struct definition
+Added comprehensive tests for the fill-in method covering basic usage and failure cases.
+This is simply programmatically changing the style of the view.
+let's just sync both always?
+I don't think that's very realistic.
+This test is basically the same as the one above it so we don't really need it.
+-- fp/agent-reply --
+Under your misconfiguration rule it should either really bind or fail. Which one do you want?
+The unattributed local tier is heavily used. Just not the notes-flavoured one.
+-- fp/commit-message --
+* drop the filler simply from three comments
+* excuse every ancestor claim; test the ancestry ctx runs really carry
+-- fp/guide --
+The flag defaults to the host's instruction file and prints only when that file is really there.
+-- fp/reference --
+*Just this binary, no server I/O*
+-- fp/review-reply --
+Consider using a more comprehensive comparison or simplify the expected results to the fields being validated.
+Either merge the rows or, if both privileges really coexist, clarify when each one applies.

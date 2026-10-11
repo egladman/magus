@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A commit subject that ends in a period.
 -- hit/commit-message --
 Fix the port.
@@ -5,3 +6,44 @@ Fix the port.
 wait for the daemon...
 bump go to 1.25
 rename magus.lock to magus.sum
+-- hit/commit-message --
+Refactor the integration tests by removing the service start and stop commands and using null assignment for command execution.
+Implement a `data` macro in `stdlib/optional-parens.kl`.
+🐳 chore: Rename project from registry-proxy-rs to proxy.
+Make the transform listener methods default.
+Fixed build errors.
+eth: Add dynamic speed/duplex configuration via polling.
+Pin the vector client.
+Update E2E tests for Spanish support by changing the switcher button text and improving the check for language options.
+Updates after initial review.
+Even more deterministic.
+Exclude agent instructions from change detection.
+fix.
+Update the headset OS configuration in CI to version 2.5, ensuring compatibility with the latest platform specifications.
+Added a run screenshot and updated another.
+Use defaults for the import sorter.
+feat(test): add fluent JobExecutor assertion.
+Undo wrong commit.
+Fix.
+Clean up some references to service discovery. Remove unnecessary references.
+Pass hook-use when pushing stacks.
+Make sure we won't delete references that any `HEAD` points to.
+feat: Add `oid::is_empty_tree()` and `oid::is_empty_blob()`.
+I have added the `from_days` and `from_hours` constructors to `src/duration/python.rs`.
+(fix) fixes in exchange, market and user stream files.
+Update the SDK and fix the implementation.
+Apply the reviewer's suggestion.
+Risc builds don't work.
+The test fails because the recipients command shows that the secret is encrypted for the wrong key.
+Remove hide command.
+Fix using the specified model. The UI would reset the var on changes, and the adapter wasn't using the passed value.
+Refactor `updateDownloadBadges` to be thread-safe and fix race condition.
+chore: Refactor the non_space filter to space.rs, using new_filter_not in the FFI.
+Fix whitepace.
+Fixed test cases.
+Изменен десериализатор, добавлены тесты покрытия.
+Specify baseline root as directory, not manifest path.
+Make the tests of the example code closer to the actual example code.
+Remove unused tool_calls handling in the chat completion method for cleaner code.
+Fixed wrong package.
+Simple package config change works.

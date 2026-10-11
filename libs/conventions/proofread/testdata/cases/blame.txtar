@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A person or past work named as the subject of a fault.
 -- hit/change-description --
 - The author should have pinned the key.
@@ -29,3 +30,70 @@ The two functions match, but they should have different behaviour, as the interf
 Ignore the warning when they failed to load.
 The iframe is lazy loading, so it needs a placeholder.
 We could reuse the generated types without going too crazy.
+-- hit/change-description --
+The assistant went pretty crazy here.
+-- hit/commit-message --
+It's crazy that developers still put up with these language quirks
+This is the result of a crazy amount of spaghetti-code tracing
+stupid bot
+:bug: fix the stupid build plugin downgrade
+rm insane test
+crazy stuff
+-- hit/review-reply --
+You should have added the schema parse calls in the command action functions
+This logic is incorrect in the general case; per the spec I linked in the issue (and that you failed to actually go read), the rules are different.
+This is sloppy.
+Thanks for fixing up the majority of the crazy.
+you should have started from the test instead of adjusting tests to your half-baked implementation
+I've fixed up the worst of the crazy, but I have no idea if it works on a real bucket.
+I'm replacing sloppy working directory detection with this injected context object as I go.
+this is stupid...
+Please generalize this rule of not doing stupid and repetitive pipelines into a rule I could paste into the instructions file.
+-- fp/agent-reply --
+Not crazy at all, and the work that just landed makes it measurable.
+Both fixtures show it: one regenerated because its type moved, and a script someone forgot to `chmod`.
+Not crazy: it was overlapping the trigger by **14px**, measured.
+It is not crazy; it is how a shell already works.
+It's approved but not built, not rejected. Calling it "decided" was sloppy phrasing on my part.
+Without the build entries, the panel's lazy import fails in a built console.
+The claim is factually wrong, but only because those boundaries were scoped to bytes, not because anyone was careless.
+That was careless in a shared checkout; I should have worked on a copy, as I did the second time.
+The host says "closed" for both, and those are opposite outcomes to whoever wrote the review.
+The standard library has precedent for it, so it's idiomatic rather than sloppy.
+-- fp/change-description --
+State persistence in the node is lazy: changes are committed to memory and only periodically flushed to disk.
+This removes the pressure from cached field values that existed in the old version's lazy decoding approach
+-- fp/commit-message --
+The docs now reflect how the algorithm handles the bundler's lazy population pattern.
+docs: clarify monorepo task loading is lazy, not eager
+4. Documented the bundler's lazy population of the root bundle fields
+This is in case we encounter some really crazy article with millions of links.
+-- fp/review-reply --
+This should be 'You should have received a copy of the license along with the program.' to match the project name.
+The docs already give the scaffolding commands, and worst case if they forgot to change it they'd just run the commands by hand.
+Moved the computation to be lazy in the emitter, so the interpreter pays nothing.
+-- fp/change-description whole --
+fix: clarify the login step
+
+> Many users stop at this step because they think the login failed.
+> Also remove the stupid text from the page bottom
+-- fp/change-description whole --
+docs: include the project file in the tutorial
+
+> My second slip was not saving from the editor. (Cant fix stupid, but I noticed when I saw the greeting.)
+-- fp/change-description whole --
+fix: restore the spec version
+
+<comment_new><body>
+I think you should return it to the spec version that implemented this whole crazy construction.
+</body></comment_new>
+-- fp/change-description whole --
+feat: keep a local-only setting
+
+> My only workaround is to commit a stupid "DON'T PUSH" setting and remove it before every push.
+-- fp/change-description whole --
+feat: accept webp uploads
+
+<comment_new><body>
+Did i make any stupid mistakes in this upload controller?
+</body></comment_new>

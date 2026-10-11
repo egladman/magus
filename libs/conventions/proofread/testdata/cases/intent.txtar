@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A motive given to a tool or a person.
 -- hit/change-description --
 - magus guessed where it ran.
@@ -8,3 +9,61 @@ The parser refuses to understand tabs.
 - An older build refuses to overwrite a newer stamp.
 -- pass/review-reply --
 The cause lies in the lock.
+-- hit/agent-reply --
+The honest pair is **`deps-resolve`** and **`deps-upgrade`**, where `upgrade` stops being a lie because it's now contrasted with something.
+A generator can't tell you its environment is lying, and a drift gate that compares local to local can't either.
+Platform-only files stay at zero until something can run them, and the target says so rather than pretending.
+`channel` has to be actively set to `source` to avoid lying, and forgetting means a local build claims to be a release.
+The unsigned cache is already handled, in that CI no longer pretends otherwise.
+-- hit/change-description --
+- **Semantic HTML**: Proper `<button>` elements instead of anchors pretending to be buttons
+-- hit/commit-message --
+because "40 files left" is a lie when thirty of them are files a target rewrote.
+-- hit/review-reply --
+Clean up properly and don't pretend it doesn't matter.
+Lies.
+This is interesting because it is basically a lie right now.
+-- fp/agent-reply --
+`envDefault` doesn't read the environment; the caller does. The name lies. That one's mine, written an hour ago.
+That one's on me. My first command guessed the client ID through a call that can't see private apps.
+If the inventory turns up more than the two you mentioned (output refs and error codes are my guesses), that strengthens the case.
+It made the review contract lie. A spell returning `"482"` decoded to `0`, which renders as "no pull request for this branch".
+I'm not scaling the goal down; I'm refusing to pretend eight tranches fit in one commit.
+**What the other tool genuinely wins, and we should not pretend otherwise:** CI and local parity.
+-- fp/change-description --
+- scan all cached index files when a problem ID isn't on the guessed page
+Users of the command are mostly looking for an identifier and don't care about the technical aspects.
+- propagate guessed map types when indexing
+- Edge cases (user pretending to be bot)
+Users see inconsistent behavior between lying the phone flat and holding it upright.
+- log guessed device from queue and validation result
+-- fp/commit-message --
+Create new-lies-argue.md
+Pretend that test ports are created by the network service
+Merge pull request #10 from someone/supprimer-code-lie-a-conteneur
+Create metal-lies-kneel.md
+  - Skip salary checks if user doesn't care about salary
+-- fp/review-reply --
+i don't care, but it should be spelled with a capital H
+We don't care about this invariant
+We don't care about the old loader anymore, period; we disabled it two releases ago.
+Remove comments like this. We don't care when it was removed.
+we don't care if the task itself is sealed; we care only if it derives from a vendor-owned task.
+since we don't care about windows support for now, why not just use os.path.join and remove the helper?
+As a style preference, I don't care much for headings without at least an introduction sentence.
+- Common runtime flags: --force (-f), --pretend (-p), --quiet (-q), --skip (-s).
+The test suite I added should help identify where the real issue lies.
+- b) Where the complexity lies
+-- fp/change-description whole --
+fix: keep the cube level
+
+> <comment_new><body>
+> > What I want is the position of screenshot 1 (that's when it's lying on my table) when you hold the phone.
+-- fp/change-description whole --
+feat: track recoil state
+
+> - The node tracks the heat level to know where in the spray pattern the weapon currently lies.
+-- fp/change-description whole --
+fix: hover on end tags
+
+> We can solve this by detecting that we're on an end tag, and pretend we're on the start tag instead.</issue_description>

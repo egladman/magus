@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Words that presume the reader finds a step easy or obvious.
 -- hit/guide --
 It is easy: easily done.
@@ -22,3 +23,67 @@ The doc clearly meant to cite a code.
 It is easy.
 -- pass/change-description --
 - It is easy to miss, so a simple check runs; please open an issue.
+-- hit/agent-reply --
+- `redpen`: everyone knows the red pen, but it reads harsh.
+-- hit/change-description --
+This is obviously not correct; we only want the bot not to publish, but we'd like to keep the test.
+Obviously there could be an endless list of these files, but I would add this one and stop there.
+-- hit/review-reply --
+If the previous code throws an error, this line should never be reached, of course.
+We obviously can't add to the existing collection, but you can seed the new one with its contents.
+Of course there is always a more manual way.
+**nitpick**: Comment merely restates what setting z_level = 0 obviously does
+**nitpick**: Comment merely restates what the following if/else block obviously does
+The author obviously felt it important to publish the scale factors before.
+Fixing this is of course out of scope for this PR, but I hope you can explain the decision.
+**nitpick**: Comment merely restates what the following if conditions obviously do
+It would use normal namespaces rather than file-scoped namespaces, obviously.
+This file must not be checked in to the repo obviously.
+Clearly not, since the lending logic is separate in each branch.
+-- fp/change-description --
+- Clearly emphasizes the production-ready features: statistics and confidence intervals
+- Clearly marks direct connections as development-only
+- Clearly separates fetch operations from other activities
+- Clearly distinguish between occupied and available beds
+- Clearly marked as advanced functions that bypass higher-level abstractions
+- Clearly categorizes implemented and missing interfaces
+-- fp/commit-message --
+1. Clearly states what was changed
+- Clearly indicate that the interface may change in the future
+- Clearly identifies the remaining path mapping issue
+- Clearly documents current limitations
+- Clearly indicate the paid files are omitted from the open-source distribution
+- Clearly separate chart ingress from manual ingress options
+- Clearly identify breaking changes
+-- fp/review-reply --
+- Clearly document that the server does **not** support streaming responses.
+I was surprised the `std::string(name)` syntax works (obviously I didn't intend to write it this way), and it's a good fix.
+Updated the instruction to proceed with snapshot updates unless changes are obviously incorrect.
+(Of course, I can do this when I get back to the other issue if you think it's needed.)
+I was using an automated spelling helper and it obviously goofed the spacing.
+Not critical of course.
+Of course, makes perfect sense.
+-- fp/change-description whole --
+fix: convert the minimum date explicitly
+
+> Obviously it's not something that we are the first to discover.
+-- fp/change-description whole --
+fix: stop predictive text in multiline fields
+
+> Of course the same is happening with a multiline text component.
+-- fp/change-description whole --
+fix: dispose the client safely
+
+> Clearly, I should be able to address that through thread synchronization.
+-- fp/change-description whole --
+fix: trim spaces in renamed identifiers
+
+> It adds that space everywhere the identifier is used, and obviously also where it's defined.
+-- fp/change-description whole --
+feat: add theme roles for front matter
+
+<agent_instructions>Of course we don't assign literal colors to these things, but each gets a different role.</agent_instructions>
+-- fp/change-description whole --
+feat: run the test framework natively
+
+<comment_new><body>Obviously we want to support running it natively, but this will take some time.</body></comment_new>

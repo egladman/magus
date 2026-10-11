@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A reply that opens by contradicting.
 -- hit/review-reply --
 No, the map is shared.
@@ -6,3 +7,84 @@ Wrong, it races.
 -- pass/review-reply --
 Actually, it races.
 No lock guards the map.
+-- hit/review-reply --
+As I mentioned in the issue, do not change these statements; revert this change.
+No, pinning is not needed.
+Again, filter, not scenario
+No, you also failed to add a new test case to verify that change.
+No, we need the `MaximumDeflateSize - totalCharsRead` calculation to prevent buffer overflow.
+No, don't do this.
+No, it should be:
+Again, hard coded names like `Value` aren't guaranteed.
+As I said, at least I would mention why users should pick one or the other.
+No, you use the Transaction object; check the docs.
+No, this doesn't print the masterwork stat.
+No, the name passed to `startSpan()` is not changed by the tracing library.
+No, you didn't.
+No, this is not fixed.
+Wrong, you should keep using `v-model` like before
+No, the removal is correct; `cond` isn't used anywhere.
+-- fp/review-reply --
+2. **Wrong indentation**: The `postMessage` line wasn't properly indented
+3. **Wrong event**: Uses `event="change"` instead of `event="itemSelect"`
+Wrong cancel URL; should be DELETE /v1/crawl/{id}.
+Wrong authors
+## Wrong name for an argument in a call
+**Wrong config key for pager; defaults never apply when the user sets it.**
+**Wrong import path for the skeleton component (v3).**
+Again, it's just nitpicking here, you can ignore this if you want to
+## Wrong name for an argument in a class instantiation
+No, this wasn't intentional, good catch.
+**Wrong schema sub-path; will crash at runtime**
+-- fp/review-reply whole --
+> Is the front matter parameter needed?
+
+No, the front matter parameter was not needed. I removed it from the method signature.
+-- fp/review-reply whole --
+> Is this fixed?
+
+No, it's not. I have a fix that I'll push shortly.
+-- fp/review-reply whole --
+> Do we still need this dependency?
+
+No, removed in the next commit. The API package comes in transitively.
+-- fp/review-reply whole --
+> Is this parameter still used?
+
+No, the parameter was not needed. Removed it and updated the caller.
+-- fp/review-reply whole --
+> Does the host require a body when marking a pull request ready?
+
+No, a body is not required when marking a pull request ready for review.
+-- fp/review-reply whole --
+> Was the original id ever shown?
+
+No, the original id was never displayed. Removed it.
+-- fp/review-reply whole --
+> Is this version change important for the PR?
+
+No, this change is not important for the PR; it was unintentional.
+-- fp/review-reply whole --
+> Did you add new images?
+
+No, all the images were taken from existing images in the repo.
+-- fp/review-reply whole --
+> Should these use the assertion library?
+
+No, for these simple boolean assertions the basic asserts are more appropriate.
+-- fp/review-reply whole --
+> Do we need to vendor the lock file?
+
+No, we don't need to vendor it. The upstream repository already includes the lock file.
+-- fp/review-reply whole --
+> Is this dependency used?
+
+No, the `prost-types` dependency was not used in the service package. I've removed it.
+-- fp/review-reply whole --
+> Is it the publish job or the build job?
+
+No, I think you are correct, it is the publish job.
+-- fp/review-reply whole --
+> If the lookup returns null then the identifier should be unbound, right?
+
+No, that means it's a pointer to the string contents.

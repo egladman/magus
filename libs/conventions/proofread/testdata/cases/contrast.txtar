@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A claim made by denying its opposite.
 -- hit/change-description --
 - It is not just a cache; it is the ledger.
@@ -18,3 +19,89 @@ It is not just a cache; it is the ledger.
 Not every key is stable.
 The sandbox is not a container; the guard page says why.
 The rule refuses "it is not just X; it is Y".
+-- hit/agent-reply --
+**The rule:** any escape hatch an agent can type is not an authorization, it's a bypass.
+The part worth copying isn't the mechanism, it's the discipline: **a named marker, one registry, and an expiry**.
+It is not a missing feature, it is two features that never talk to each other.
+The 10% wrong rate isn't a model-quality problem to wait out; it's the case that disposition is judgment.
+Not because it's hard, but because it changes what the tool is during a run.
+So the typed route isn't just a convention, it's enforced.
+-- hit/change-description --
+This is not by design; it's a bug.
+-- hit/commit-message --
+The semver question is not whether a symbol's text changed, it is who can observe the change.
+- This means the dashboard port isn't hardcoded to 8000 by default, it's whatever compose binds to.
+-- hit/guide --
+These are not a capability split; they are the daemon's own work.
+So the type system is not absent, it is on the **inside**: only the boundary is untyped.
+-- hit/reference --
+This is not an exotic mistake. It is the default outcome.
+It is not a break in the promise, it is the absence of a promise.
+**The distinction that matters is not pull request versus main, it is verification versus trust.**
+The child environment is not inherited; it is **rebuilt from an allowlist**.
+What protects a secret is not its type, it is its **provenance**.
+The backend is not an op at all; it is a separate contract the core invokes by name.
+Those are not refusals, they are the normal path.
+The reason it earns that is not that something happened; it is that **somebody is waiting on it**.
+Registering a value for redaction is not protection; it is tidying.
+This is not a style preference; it is a self-contradiction between the op's kind and its output.
+-- fp/agent-reply --
+The instrumented gate proved it in a single run: no counts moved, no sections changed, just the catalog fingerprint.
+-- fp/change-description --
+- Fixed the constructor call (`fileloc` is not a constructor parameter, it's set as an attribute)
+It considers moves that merge not only within a layer but also across layers.
+-- fp/commit-message --
+- Ensure the query field is not only non-empty but also free of whitespace.
+If the `alias` is not provided, it is derived from the base name of the path.
+-- fp/reference --
+If the intended owner is not in that list, it is not a project yet.
+-- fp/agent-reply whole --
+You proposed joining the run history into the graph. The graph already has targets and edges; it lacks the runtime facts. So it isn't a join, it's an attribute enrichment, and it belongs on the daemon.
+-- fp/agent-reply whole --
+I put the command under `session` on an assumption: that the record belongs to a session. But a checkpoint is about the work. A person running it isn't describing their session, they're describing where the code is.
+-- fp/agent-reply whole --
+The guard flagged the revert, since reverting a generated file is usually wrong. Here it isn't, because the benchmark file isn't regenerated from the tree, it's measured, and the measurement is stale.
+-- fp/agent-reply whole --
+You suggested restarting the daemon whenever a build differs. You run many worktrees against one daemon, so they would thrash. The mismatch isn't a fault condition in your setup, it's the steady state.
+-- fp/agent-reply whole --
+You said comments should not survive a restart. That reasoning is right for an agent's suggestions and wrong for your drafts. A self-review comment isn't chatter about a live conversation; it's a draft that must survive until you publish.
+-- fp/change-description whole --
+docs: describe the branch field
+
+> - currentBranch: A construction can not only be repeated by several concatenations but also be repeated on several branches.
+-- fp/change-description whole --
+perf: cover the empty array case
+
+<comment_new><body>
+Assuming it is not common, it is probably not a big deal one way or another.
+</body></comment_new>
+-- fp/change-description whole --
+docs: add a guide to doc comments
+
+> Documenting the code not only helps others, but also often reveals unclear parts of the design.
+-- fp/change-description whole --
+docs: review the reference pages
+
+> The objective is to ensure the documentation is not only technically accurate, but also clear and coherent.
+-- fp/change-description whole --
+fix: read the platform as an object
+
+> With the new desktop release, `Platform` is not a string, it is now an object.
+-- fp/change-description whole --
+feat: rotate the app logs
+
+<comment_new><body>
+Log management is not a function of the app, it is a function of the admin.
+</body></comment_new>
+-- fp/change-description whole --
+fix: fit category images in their boxes
+
+<issue_description>
+They are not fitting into the boxes and overlay other information. It's difficult to explain, so I attached an image.
+</issue_description>
+-- fp/change-description whole --
+feat: send logs over a channel
+
+<issue_description>
+So we need not only a better way to transport log messages, but also a logger with a better API.
+</issue_description>

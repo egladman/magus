@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A judgment in place of the behavior.
 -- hit/change-description --
 - The cache was broken and the parser is a mess.
@@ -8,3 +9,67 @@ That retry is hacky.
 -- pass/change-description --
 - Answered from the wrong checkout; a bad plan and a broken test fail.
 - Runs garbage collection after the build.
+-- hit/commit-message --
+(Map rendering in `main` is broken)
+Remove horrible prefix-stripping function and fix parameter mapping in the bindings
+- Replace hacky _policy_depth attribute with thread-local storage
+code cleanup after the assistant made a mess
+-- hit/review-reply --
+there's a hacky thing in the trainer for train_step but not in general, no.
+This is wrong
+I've refactored the solution to use a shared script instead of ugly inline bash.
+-- fp/change-description --
+- Ran existing tests to ensure nothing was broken
+It's crucial to verify that no legitimate use cases are broken by the new validation.
+When using filters, pagination was broken because the total count returned the items on the current page instead of all filtered items.
+The agent spawning was broken because it still used the REST endpoint that was removed in the socket transition.
+At the moment we process benchmarks in a random order. This is bad, because we wait on them in order.
+-- fp/commit-message --
+Solver tests: the dense solver test properly marked as broken
+No readiness probe, since the startup signal varies by framework and guessing one would be wrong more often than right.
+Mark mass matrix test as broken - functionality may be broken in the solver's 7.4 release
+Partial tests printed success even when both implementations failed, which could mask bugs where both are broken in the same way.
+Upstream rejects the same source in the same words, so the rule was right and the sample was wrong.
+pin PKG_CONFIG so the windows build resolves its libraries instead of grabbing the bundled perl's broken pkg-config
+History was broken because each readline thread created a new editor without access to previous commands.
+The format has no adoption (zero files in the examples) and the test has been broken for nearly 2 years.
+Only the failure is early; the remainder is untouched work, not garbage, so the tail is spliced back on.
+-- fp/review-reply --
+Capture `currentTarget` before the async boundary to prevent issues with pooled or garbage-collected events.
+The link to the module documentation is broken. The file moved, so the relative path needs to be updated.
+The section on sandbox environments is wrong. The sandbox directory is almost completely irrelevant.
+Let's not mess around with the candidate too much. Instead, update the loop where a slot is ensured.
+Those configurations collapse into one price source, and the crossover result is wrong whenever the two averages use different fields.
+This warning message is over 200 characters and should be broken into multiple lines for readability.
+this version will be wrong until it is tagged. need to tag it first in this workflow
+This is wrong: hosted tools don't always have a name:
+The callback handling logic is broken for unauthenticated users. The new code routes every callback request to the authenticated handler before checking status.
+Leaving that catch block completely empty seems wrong; since this should trigger an error, shouldn't we assert that we got here?
+**Undefined `$repo` causes the prepare script path to be wrong.**
+That would remove the need to edit a system file and mess with the broker service.
+If the firewall daemon fails to start, the container keeps running but the firewall integration will be broken.
+The next bar reuses stale values from the prior run, so returns and every downstream metric are wrong.
+this link looks wrong
+-- fp/change-description whole --
+fix: let the scroll view take focus
+
+> <comment_new><body>
+> A reviewer commented "Most scrollbars do not get focus when you tab. -- This seems wrong?
+> You should be able to scroll using the keyboard."</body></comment_new>
+-- fp/change-description whole --
+docs: mention renderer differences
+
+> <issue_description>### What's wrong? ❗
+>
+> The documentation is outdated, because it does not mention the renderer differences.
+-- fp/change-description whole --
+perf: speed up the bloom effect
+
+<issue_description>
+The bloom setup tries to implement a wide range effect. However the performance of this implementation is bad (10x long range blur).
+</issue_description>
+-- fp/change-description whole --
+docs: fix a footnote in the manual
+
+> <issue_description>**What is wrong with the docs?**
+> The footnote in the build tool section is misformatted.

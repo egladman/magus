@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A run of question or exclamation marks in a review reply.
 -- hit/review-reply --
 Is this locked??
@@ -6,3 +7,45 @@ Nice catch!!!
 -- pass/review-reply --
 Is this locked?
 Use `a ?? b` here.
+-- hit/review-reply --
+Thanks for noticing!!
+You didn't implement the case without a neighbor list independently!!!
+like, maybe the value in the comment that says text.secondary?!
+I guess this has to stay in the repo root?!
+ah, you're right!!
+Remove these lines, doesn't make sense?!?
+Awesome!!
+This test also failed. You didn't test whether it works before committing!!!
+WHY NOT JUST err????
+This is not really necessary, is it??
+???
+Too good to be true!!!
+Thanks!!
+This third-party file should not be committed!!
+I'd assume the bot added the assertion so that it increases the GREEN things on the printouts?!
+不要用这种写法!!!要兼容旧版本
+Definitely not correct, unless I am wrong??
+-- fp/review-reply --
+Suggest: var data = rows.Skip(start).Take(count ?? int.MaxValue).ToList();
+The remaining tests focus on escaped quantifiers (\*+, \??), nested repetitions and lookarounds.
+getClient() uses env.NEW_API_KEY ?? env.OLD_API_KEY, but the guard only checks the old key.
+Consider capturing the start time in a local constant instead of using (startTime ?? Date.now()) in the interval.
+Consider using nullish coalescing (??) instead, to fall back only when the value is null or undefined.
+Done. Removed the ?? fallback operators from all callers in the next commit.
+Coalesce before encoding: use encodeURIComponent(title ?? '') so empty titles serialize as an empty string.
+**Fix count fallbacks: use nullish coalescing (??), not logical OR (||).**
+The null coalescing operator (??) is a newer shell feature that conflicts with the old-version requirement in this document.
+Using || will replace a legitimate 0 with metadata values. Switch to ?? to preserve 0.
+normalize headers with a fallback like const headers = request?.headers ?? {}; then call the session API
+Keep the accessible name: use ariaListLabel ?? label for the <legend>, so groups without a visible label still get a name.
+Wrap the nullish coalescing expression in the else branch to clarify precedence: ': (countries ?? [...])'.
+This line uses the null coalescing operator (??), which is not available in the older shell version.
+public IReadOnlyList<IFilter> Filters { get; } = filters ?? Array.Empty<IFilter>();
+leave !!REPLACE_WITH_LATEST_VERSION!! as it is replaced at build time with the correct version.
+Done. Changed the type lookup to return the default type and removed the ?? fallback operators from all callers.
+It would be clearer to add a comment explaining that the null coalescing operator (??) is a newer shell feature shown here.
+Please assign the expression to a const, e.g., 'const seen = record[id] ?? new Set();', to ensure correct behavior.
+style: Double negation check (!!hit.entries) is redundant with the length check.
+Let the pool scale with the host: e.g., const max = Math.min(8, (os.availableParallelism?.() ?? 4));
+**Normalize and dedupe the output list; use ?? and enforce stable order.**
+**suggestion:** Prefer nullish coalescing (??) over || for numeric defaults

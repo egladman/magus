@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 An agent reply that opens with praise or agreement.
 -- hit/agent-reply --
 Great question: the key sorts its inputs.
@@ -10,3 +11,44 @@ The key sorts its inputs, so two workers agree.
 Right after the rebase, the gate passed.
 The reviewer wrote "you're right" and closed the thread.
 The rename is pushed. You're right that the old flag still needs a notice.
+-- hit/agent-reply --
+You're completely right, and I've torn out the preview page hack.
+You're right: goals and gates are one concept under two names.
+You were right that something is wrong, but the sandbox is not it.
+You were right, and it was worse than a local test failure.
+Agreed.
+Good question, and I was wrong about it.
+Got it.
+Understood, a single final design built in one pass.
+Good catch; that reframes the fix from "make the test stricter" to "the verdict type was incomplete."
+Got it, simplified.
+You were right to push back, though not where you expected.
+You were right to make me defend each one.
+You were right and I was wrong to hold it back.
+Good question to push on; checking it corrected me.
+Good question, but the premise doesn't hold here.
+You're right, and the counts show it: **14 directory walks, 1 graph lookup.**
+You were right to doubt me.
+You're right, and it's your own rule: inform, don't veto.
+You were right to make me check.
+Agreed, and I've added it to the scout's brief and recorded it in the plan.
+You were right, and the evidence was blunter than my argument: the two helpers were **byte-identical**.
+You were right to push; I'd stopped at 65/77 on assumptions rather than measurements.
+You're right.
+You were right: it's callable, I just hadn't found which one wasn't.
+You were right to push, and my question was the wrong one.
+You are right that it should not be possible, and the run's facts say it was an engine bug.
+You were right, and the root cause was structural, not cosmetic.
+You're right that it smells, and I found proof instead of just agreeing.
+You're right, and I can say why better than "it feels off."
+You're right that the commit does too much, though the worst problem is a different one.
+You were right.
+You're right, and the fix matters because it moves where the next boundary goes.
+Good idea, and most of the groundwork is already there.
+You're right. The key was stale.
+Great question, and there's a lot of prior art for filtering a big set from the CLI.
+You're right that the parts exist, and I checked each one instead of assuming.
+You're right. I dropped that case.
+You're right, and my framing was wrong: the playground command drives the docs page.
+You're right. That flag is unused.
+You are right on both counts, and the tool has the vocabulary for it but not the enforcement.

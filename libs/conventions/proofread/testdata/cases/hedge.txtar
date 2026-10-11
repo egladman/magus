@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A softener qualifying a claim.
 -- hit/reference --
 The flag may help a slow runner.
@@ -20,3 +21,75 @@ Nothing else may make it on your behalf.
 ## Known limits
 
 It probably holds.
+-- hit/agent-reply --
+So whether the patches are safe depends on the flag, and that is probably the crux of your doubt.
+So the declaration was probably right, and the advice to lower it comes from an under-measurement.
+The other tool fixed it in its own session, so it probably is.
+**Why the lock is probably not needed once writes are atomic:**
+- The reconcile-versus-advance split probably isn't worth encoding.
+- Nothing is committed; this spans three packages, so it probably wants splitting into separate commits.
+- One hidden cost you probably don't know about: the guard's path mode loads every build file on each edit.
+- Pin-site discovery is the biggest new code and probably wants to be a spell concern, not a hardcoded list.
+Probably worth declaring the app's assets the same way.
+The current status bar is arguably the better occupant, since it carries live state.
+It saves another row, is a standard terminal idiom, and is arguably more correct.
+-- hit/commit-message --
+This update aims to improve audio handling across platforms.
+These changes aim to streamline the testing process.
+These changes aim to enhance code clarity across the settings module.
+These changes aim to improve the streaming docs.
+* update the vector store, which seems to have issues with upsert
+These changes aim to keep the configuration consistent.
+These changes aim to improve the clarity of the package's exports.
+The file is all natural language, so a symlink to it would probably work.
+The changes aim to make the content richer and easier to follow.
+These changes aim to clarify the upcoming tasks.
+This will hopefully make the retry cheaper.
+These tests aim to enhance the reliability of the tracker.
+-- fp/agent-reply --
+The plan argues the op level is probably right but says to settle it before writing any code.
+That contradiction is probably how this slipped through.
+- With the copied config, the version manager instead tries to look up versions with no token and gets a 403.
+-- fp/change-description --
+When a new contributor opens a pull request, the action tries to:
+The update command tries to reference a row before it is inserted.
+Retry logic tries to get the script from the local container using `get_script(hash)`.
+When `app run` tries to create local settings, the method walks up the directory tree.
+The front end then tries to build a link from the account name, but none is returned.
+- [ ] Identify the root cause: the `classify` method tries to call `.klass` on polymorphic reflections.
+-- fp/commit-message --
+- Addresses feedback: 'probably makes sense instead to fail the check'
+-- fp/change-description whole --
+fix: correct the settings link
+
+## Checklist
+
+- [x] I've adhered to the style guide ([these lint rules](docs/style.md) might help!)
+-- fp/change-description whole --
+fix: restore the unselected icon color
+
+<agent_instructions>It seems like something changed in the new OS release to set the unselected icon color.</agent_instructions>
+-- fp/change-description whole --
+test: cover the empty upload
+
+> It seems like **no tests ran**.
+-- fp/change-description whole --
+refactor: share the IO test data
+
+<comment_new><body>
+All the IO tests should probably derive from one base class to share test data.
+</body></comment_new>
+-- fp/change-description whole --
+fix: ignore vertical tab in whitespace mode
+
+<issue_description>
+This should probably be true and match other engines, since the vertical tab should be ignored as whitespace.
+</issue_description>
+-- fp/change-description whole --
+docs: fill in thin API comments
+
+> USER INTENT: The user aims to improve the API comments by finding the thin ones and proposing edits.
+-- fp/change-description whole --
+fix: correct the graph height
+
+<issue_description>It seems to calculate the height well, but every time it is about 6% off.</issue_description>

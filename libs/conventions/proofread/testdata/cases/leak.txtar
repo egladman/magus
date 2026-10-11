@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Residue of a tool or a template.
 -- hit/change-description --
 - Pins the key.【4:0†source】
@@ -23,3 +24,54 @@ The list is built in [todo.go:42](cmd/todo.go#L42).
 -- pass/change-description --
 - Keeps the 【bug】 prefix the issue template adds to titles.
 - Marks search matches with lenticular brackets, as in 【match】.
+-- hit/change-description --
+- Introduced shared sanitization helpers for the add, edit and delete flows.【F:src/add/add.php†L3-L167】
+**Expected improvement for warm queries:** TBD (depends on the benchmark investigation)
+- harden the onboarding loader to trust invite context only when membership is verified【F:app/routes/onboarding.tsx†L58-L366】
+- Removed raw superglobal usage in the backend controllers.【F:src/edit/edit.php†L1-L240】
+:contentReference[oaicite:0]{index=0}
+### Latest Enhancement (Commit: TBD)
+- introduce a reusable select-with-other form control and use it in onboarding【F:app/components/select.tsx†L1-L145】
+TBD
+See the setup notes :contentReference[oaicite:0]{index=0}
+-- hit/commit-message --
+【F:build/poc.just†L7-L127】
+* Documented all build entry points and targets in the review doc.【F:docs/build-review.md†L1-L85】
+【F:docs/build-poc.md†L31-L36】【F:docs/build-review.md†L64-L116】
+* Added a proof-of-concept driver for workspace checks and CI.【F:build/poc.just†L1-L136】
+Bump the parser to 0.43.2 (TBD).
+* Captured recommendations to consolidate tooling in the same review document.【F:docs/build-review.md†L86-L104】
+* Added a proof-of-concept driver invoked via `just poc`.【F:justfile†L1-L2】
+docs: rename Unreleased section to v1.2.1 (TBD) per PR feedback
+-- hit/review-reply --
+Fixed the null check. (commit: TBD)
+Renamed the field as suggested. (commit: TBD)
+Moved the helper into the shared package. Commit TBD.
+Dropped the unused import. (commit: TBD)
+Changes in commit TBD.
+rename to ## v1.2.1 (TBD)
+Updated the docs. Commit: TBD
+Fixed in commit [TBD].
+Added the retry. (commit: TBD after push)
+Commit: TBD (in progress)
+Switched to the shared client. (commit: TBD)
+Removed the debug log. (commit: TBD)
+-- fp/change-description --
+- ✅ **Input Data Format**: Confirmed TBD format with empty `{}` files as specified
+- [x] Removed all TBD sections (Dictionary section)
+-- fp/commit-message --
+Simplify configuration example and remove TBD sections per review feedback
+- Update CHANGELOG PR number from TBD to the real pull request
+Clean up CHANGELOG.md - consolidate duplicate sections and fix broken TBD links
+Update CHANGELOG.md date from TBD to the current date (2025-06-04)
+-- fp/review-reply --
+The reference 【685528†L1-L66】 appears to be an internal identifier that won't mean anything to readers.
+TBD on where the dividing line is here, but I think it still makes sense to keep these in the repo.
+For older versions, you will need to manually [describe argument types](#defining-argument-types) in your SQL files.
+Remove all sections that are TBD. We don't want them anymore
+-- fp/change-description whole --
+fix: scope the sessions to a request
+
+> It should probably use request-scoped sessions each time?
+>
+> TBD further investigation to narrow down which library causes it.

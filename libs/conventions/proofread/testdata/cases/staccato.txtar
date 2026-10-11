@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A run of short sentences.
 -- hit/reference --
 It had no preference for symmetry. No aesthetic prior. No nostalgia for human taste.
@@ -12,3 +13,102 @@ It reads the key. It sorts it. Then the hash runs over the sorted bytes in one p
 Speed matters here, so the key sorts its inputs before hashing them, and the replay hits.
 ## Fast. Small. Stable.
 **3. List.** See what a repository holds.
+-- hit/change-description --
+**Ready for review!** This PR lays the foundation. Next PR will complete implementation.
+Test. Let's see what CI says. AI wrote this
+**No configuration needed. No environment variables. The SDK just works.**
+**Status**: All circular dependencies resolved. 42 entry points created. 7 building successfully. Fixing remaining import paths.
+**That's it.** One line change. Will fix all 5 failures instantly.
+No breaking changes. Backward compatible. Production-ready.
+-- fp/change-description --
+**Authors:** A. Lee (Org One), B. Kim (Org Two), C. Diaz (Org One)
+<ul><li>Add tests for nonce recovery.<br> <li> Add tests for server errors.<br> <li> Add drain scenario tests.<br> <li> Minor handler cleanup.</ul>
+Introduce empty media.news schema. Includes catalog.yaml entry with sample_data. Link to the agent run: https://app.example.com/sessions/f5415dbc
+None. This is a purely additive feature. Existing workflows remain unchanged.
+**Ready for local development and testing! See docs/TESTING.md for testing procedures. 🚀**
+-- fp/reference --
+Package `app.tool.v1`, defined in `proto/app/tool/v1/tool.proto`. Source: [tool.proto:146](../../proto/tool.proto). Part of the [server API](../../index.md).
+Package `app.viewer.v1`, defined in `proto/app/viewer/v1/viewer.proto`. Source: [viewer.proto:148](../../proto/viewer.proto). Part of the [server API](../../index.md).
+Package `app.token.v1`, defined in `proto/app/token/v1/token.proto`. Source: [token.proto:25](../../proto/token.proto). Part of the [server API](../../index.md).
+Package `app.graph.v1`, defined in `proto/app/graph/v1/graph.proto`. Source: [graph.proto:63](../../proto/graph.proto). Part of the [server API](../../index.md).
+Package `app.status.v1`, defined in `proto/app/status/v1/status.proto`. Source: [status.proto:245](../../proto/status.proto). Part of the [server API](../../index.md).
+Package `app.metrics.v1`, defined in `proto/app/metrics/v1/metrics.proto`. Source: [metrics.proto:17](../../proto/metrics.proto). Part of the [server API](../../index.md).
+Package `app.job.v1`, defined in `proto/app/job/v1/job.proto`. Source: [job.proto:23](../../proto/job.proto). Part of the [server API](../../index.md).
+Package `app.notes.v1`, defined in `proto/app/notes/v1/notes.proto`. Source: [notes.proto:32](../../proto/notes.proto). Part of the [server API](../../index.md).
+Package `app.insight.v1`, defined in `proto/app/insight/v1/insight.proto`. Source: [insight.proto:26](../../proto/insight.proto). Part of the [server API](../../index.md).
+Package `app.activity.v1`, defined in `proto/app/activity/v1/activity.proto`. Source: [activity.proto:175](../../proto/activity.proto). Part of the [server API](../../index.md).
+-- fp/change-description whole --
+docs: add plotting examples
+
+<h4>4. Interactive Examples</h4>
+<ul>
+<li>Include notebook snippets.</li>
+<li>Use small datasets.</li>
+<li>Link to notebooks.</li>
+</ul>
+-- fp/change-description whole --
+feat: add the chat sample
+
+Updates :
+
+Uses ENDPOINT + API_PATH + DEPLOYMENT_NAME to form the full URL.
+Authenticates with either API_KEY or DefaultCredential.
+Streaming sample: Streams tokens via completeStream(...) and prints them as they arrive.
+Logs key steps and errors via ClientLogger.
+-- fp/change-description whole --
+build: bundle the client
+
+src/index.ts → dist/index.cjs.js...
+(!) "this" has been rewritten to "undefined"
+https://example.com/troubleshooting/#error-this-is-undefined
+../../deps/.store/api@1.9.0/deps/api/build/esm/metrics/NoopMeter.js
+14:  * limitations under the License.
+15:  */
+-- fp/change-description whole --
+feat: add a plan command
+
+Happy to adjust further. Just say the word.
+User: /plan hi
+-- fp/change-description whole --
+feat: switch the atlas
+
+## Reference
+Lee, A., Kim, B. C., Diaz, D. L. (2011). Average atlases for pediatric studies. *Journal*, 54(1), 313-327.
+-- fp/change-description whole --
+docs: fix typos
+
+> $ ./typos .
+> Warning: "capabiltiies" should be "capabilities".
+> Warning: "blcoked" should be "blocked".
+-- fp/change-description whole --
+docs: document the release flow
+
+<comments>
+<comment_new><body>
+This is a great suggestion. I love this. Thanks for documenting this! I'll ping you when it is ready.</body></comment_new>
+-- fp/change-description whole --
+fix: register the HTTP client factory
+
+## Risk
+
+Low. Only adding a service registration. New experimental feature.
+-- fp/change-description whole --
+docs: fix a theme typo
+
+> Warning: "existant" should be "existent".
+> Warning: "existant" should be "existent".
+> Warning: "existant" should be "existent".
+-- fp/change-description whole --
+Support both content.config.* and src/content/config.* patterns for content collections
+-- fp/change-description whole --
+[WIP] Adding appearance property (Ex. appearance="fill"). For material theme
+-- fp/change-description whole --
+fix: cancel drag on right-click
+
+> **Expected behavior**
+> Drag-n-drop process cancelled. Nothing appears on the canvas. No context menu shown
+-- fp/change-description whole --
+feat: update the atlas
+
+> <issue_description>
+> > Lee, A., Kim, B. C., Diaz, D. L. (2011). Average atlases. *Journal*, 54(1), 313-327.

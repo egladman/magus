@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A short command in a review reply that gives no reason.
 -- hit/review-reply --
 Fix this.
@@ -10,3 +11,47 @@ Move the retry into the client with the backoff it already has.
 Use `sync.Once`.
 Fix is in the next commit.
 Could we drop this?
+-- hit/review-reply --
+Don't update this file.
+do not change this file
+Remove empty line
+remove comment
+remove monorepo cofiguration section
+Remove these line breaks.
+Revert this change.
+Remove this test.
+Please remove the line(s)
+Delete file from PR.
+remove this empty line
+Don't add meaningless comments.
+Fix this
+-- fp/review-reply --
+Remove this option. It should be on always
+Remove. This is specified in the root package
+The docstring names the singular table but the table name is plural. Update for consistency.
+Delete `is_first_block_with_chunk_of_version` from the context. Do not leave any new lines. Pull the branch before proceeding.
+The edit handlers are replaced by the unified rate-change flow. Delete these commented methods.
+Duplicate documentation. There's already a summary above, and more is added below. Remove the duplicate documentation.
+Good catch! I've updated the function to use the same pattern that all other objects (tables, sources, views, etc.) use.
+The client call has an extra closing parenthesis. Please fix the extra parenthesis.
+The repository URL should end with '.git' according to the SDK guidelines. Change to 'https://example.com/sdk.git'
+This calculation is now covered by the totals helper. Delete the commented-out version.
+There is a duplicate 'the' in the phrase 'where the the query is refused'. Please remove one instance.
+Don't make it a timestamp. make it a model-friendly value like dd-mm-yyyy and then convert it in the function
+make it frozen set
+The method already has documentation above, but more summary tags are added below. Remove the duplicate documentation.
+The method already has documentation above, but another summary tag is added below. Remove the duplicate documentation.
+AI-generated content by the review action may be incorrect. Use reactions to eval.
+Duplicate documentation tags. There are two summary tags for the same method. Remove the duplicate tags.
+There's trailing whitespace after the closing brace on line 70. Please remove the extra spaces.
+The spaces between package names are full-width spaces instead of regular ones. This will cause the install command to fail. Replace with regular spaces.
+This line is duplicated on line 334. Remove the duplicate assertion.
+change this to appsettings
+Extra period at the end of the alt-text. Remove one period.
+The route method already has documentation above, but another summary tag is added below. Remove the duplicate documentation.
+The file should end with exactly one blank line per the style guidelines. Remove the extra blank line.
+The capability key should be the singular "diagnostic" per the spec. Rename this field accordingly.
+Inspect isn't related to variables at all like that. remove
+-- fp/review-reply whole --
+`BableTraceFile` There is a typo in this variable, it should be `BabelTraceFile`.
+Please fix it

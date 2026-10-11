@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A claim of done, fixed, verified or passing with no command, output ref, file or link beside it.
 -- hit/agent-reply --
 Done. The branch is ready for review.
@@ -15,3 +16,49 @@ The gate passes once the queue lands.
 Is the work done?
 The work done so far is in the plan.
 Fixed, see [the run](https://example.com/run/1).
+-- hit/agent-reply --
+Every bug the six reviews found in this branch's own work is fixed and verified.
+**The mascot**: fixed and verified on the rendered page.
+Done. This turn's work:
+**Verified working** from a build file:
+**What the review removed, all confirmed by running it:**
+Fixed by bounding the window to what the terminal can show, holding back two rows.
+Done and pushed.
+The chain as it stands, verified:
+The hook's tests pass now.
+Done: **61 commits, 670 tests green.**
+Lint and build are green; 62 paths changed.
+The tree right now: builds clean, full Go suite green, both leaks closed with regression tests.
+Its tests pass; docs regeneration and lint wait on disk space.
+**Docs site: done and verified in-browser:**
+Fixed, and the root cause was my own earlier change.
+Fixed in both layers.
+- **My local gate is green** on the same tree, which fits: the local gate uses the pinned toolchain.
+Done.
+The docs ci is green on this branch.
+The spells bug is fixed and pinned by a test.
+The codec tests pass under both settings.
+What has landed since the last update, each with its tests green:
+Done: the container runtime is a real built-in now:
+Root lint, rule lint and docs lint pass, and generated output is current.
+The CLI part is landed and verified.
+Both landed in one commit: full Go suite green, all three spell wards passing.
+There is something, it works on all three platforms, and the tool already has most of it.
+The drift fix worked: that gate is green now:
+Done.
+Fixed:
+Build, tests and lint green; pushed.
+Done and verified.
+I verified the main ones against the code instead of taking them on trust:
+That leaves **15 commits** on the branch, all verified.
+-- fp/agent-reply --
+After these land and the new lint findings are fixed, I'll gate it again.
+The naming pass verified your instinct and caught a regression I added an hour ago.
+Output: findings ranked, each with a file and line and a verdict of confirmed or plausible.
+I'll push as soon as the gate passes. It's still going.
+-- fp/agent-reply whole --
+- **The design doc is done:**
+  - It recommends a global `--platform linux` flag, relayed through a container spell.
+-- fp/agent-reply whole --
+**How it works:**
+- **Across calls:** it fires once per session when the same target runs on two sets of projects within ten minutes.

@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A heading in an agent reply under 300 words.
 -- hit/agent-reply whole --
 ## Status
@@ -24,3 +25,44 @@ The old flag name is still read and prints a notice naming the new one, because 
 ## What is left
 
 The Linux run of the full suite has not finished, and the docs site has not been rendered with the new reference page. Both are queued behind the merge of the parent branch, which holds the generator change the page depends on. Nothing in this branch blocks on them, but the pull request should wait for the Linux run before it merges.
+-- hit/agent-reply --
+## The branch, since you asked
+## The landing page
+## The final design
+## What it took, and what it found
+## Two things I fixed while in there
+## What went wrong
+## The record work is done, and it caught something that would have shipped broken
+## Generics, finished as you suggested
+## What the failure actually is
+## What I changed
+## What landed
+## The rule to remember
+## The gap in enforcement
+## The old label is gone, and so is printing it every time
+## 2. CLI scenarios, measured and then demoted
+## Final state
+## The real untyped boundary
+## On the process module: it doesn't exist
+## The node check was never really blocking
+## What the rebase took
+## Your naming point still holds
+## The review paid for itself
+## Two things to know before pushing
+## One check disproved something I'd written
+## On the package manager point
+## Main had already fixed the codec bug, and better
+## The gap you asked about is real and larger than I thought
+## What changed
+## Where it stands
+## Finished and checked
+## The affected-versus-run gap, made concrete
+## Where parity stands
+## Resolved: the writer was unused by design, not neglect
+## What it turned out to be
+## What the session landed on main
+## One thing got better on the way
+## Where the testing advice landed
+## One thing to know before merging
+## But first: the rename turned up something that changes the picture
+## This round: strings as sequences

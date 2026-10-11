@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 A title-cased heading.
 -- hit/reference --
 ## Strategic Negotiations And Global Partnerships
@@ -10,3 +11,7 @@ A title-cased heading.
 ## Run the Buzz formatter
 ## The `Magus Run` Command
 Handling Stale Cache Entries
+-- fp/reference whole --
+### S3, MinIO, Spaces, Wasabi Cloud
+
+Any store that speaks the bucket protocol works.

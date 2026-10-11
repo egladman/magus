@@ -1,3 +1,4 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
 Softeners stacked on one claim, or an apology first.
 -- hit/review-reply --
 Maybe this could possibly need a lock.
@@ -5,3 +6,45 @@ Sorry if this is dumb, but the map races.
 -- pass/review-reply --
 This might need a lock.
 Sorry for the delay.
+-- hit/review-reply --
+Perhaps when going through the completions, that could be the spot where a check is done for a fully qualified tag?
+The decrypt operation could throw specific errors that might leak information about the key.
+The commit message could be problematic if the description contains quotes that could break the here-string.
+So I thought maybe we could use this interface itself as the generic interface.
+A fixed 5-second interval might be too aggressive and could overload the server.
+NIT: you could ask the assistant to not use emojis in logs maybe
+The test library has a try mechanism that could clean this up a bit.
+However, some of the checks might be overly strict and warn on safe patterns, which could lead to alert fatigue.
+[nitpick] The bounds-checked conversion could be simplified by a helper, as the pattern is repeated and the logic is somewhat complex.
+Sorry, interface can't be serializable.
+While the stub might handle enabling a default feature set, this discrepancy could be confusing for contributors.
+It looks like we could possibly use `cp` from the standard promises module here and elsewhere.
+- People complained the body was unprofessional; they might again assume the prod response matches dev, so we might point out this is dev only?
+The current filtering logic is a bit dense and could be hard to understand at a glance.
+We could probably allow the consumer to set this tag name, or just make the name better.
+This probably could be more explicit and just be `value.Length >= 2` to check for the prefix.
+I'm not sure how the SDKs do it, but some pseudo-code with the same approach would probably be more useful.
+Consider naming the issues users might encounter (e.g., 'could result in query failures').
+While this might be intentional (failed payments might not always have an amount), consider:
+Using the `Tables` type might make the code a bit simpler.
+I think it could potentially be confusing to new readers; I'll document why we do it this way.
+And probably tracing with counters could be about other metrics too, not just performance.
+I think we could change it to
+Could you please find the shared test configs (probably in the shared package) and replace the browser variable there?
+It might be beneficial to add this hint back for users who might be struggling with file permissions.
+This inconsistent behavior could confuse API consumers who might expect this data to always be available.
+The change starts with a comma expression, which might be unintentional and could lead to readability issues.
+Consider logging a warning when parsing fails, as this could indicate an issue that might affect message delivery.
+The logic for trimming whitespace from the fragment is a bit complex and could be made more efficient.
+could you do it any way so that I could see the error message and find a workaround?
+The path conversion logic assumes patterns that might not always exist, which could lead to incorrect paths.
+Clobbering the existing variable could be problematic: it might not be obvious to a user that the old shortcuts stop working.
+It might be a typographical error and should probably be corrected to 't.dirty();'.
+I think it can be a bit confusing with all the comments.
+If the strings could potentially become non-unique, this keying strategy could lead to reconciliation issues.
+Perhaps out of scope for this PR, but it is a bit confusing that the test classification applies to other places.
+-- fp/review-reply --
+Sorry, I had to try!
+64-64: could not parse as YAML: yaml: line 64: could not find expected ':'
+As a result, in-flight messages may be aborted, offsets might not be committed, and duplicate processing could occur on restart.
+Could you clarify what kind of line markers you'd like to see for multiline strings?
