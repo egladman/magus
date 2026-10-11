@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/types"
 )
@@ -459,13 +460,13 @@ func (v gitVCS) recoverMergeBase(ctx context.Context, dir, base string) string {
 		// stalls the run behind timeouts.
 		if err := gitFetchQuiet(ctx, dir, baseFlag, remote, refspec); err != nil {
 			slog.DebugContext(ctx, "cannot deepen: fetching the base ref failed",
-				slog.String("base", base), slog.String("error", err.Error()))
+				slog.String("base", base), attr.Error(err))
 			return ""
 		}
 		baseIsHere = true
 		if err := gitFetchQuiet(ctx, dir, fmt.Sprintf("--deepen=%d", depth), remote); err != nil {
 			slog.DebugContext(ctx, "cannot deepen: extending HEAD's own history failed",
-				slog.String("base", base), slog.String("error", err.Error()))
+				slog.String("base", base), attr.Error(err))
 			return ""
 		}
 		if mergeBase, err := gitOutput(ctx, dir, gitOpts{}, "merge-base", base, "HEAD"); err == nil {
@@ -536,7 +537,7 @@ func (v gitVCS) Bisect(ctx context.Context, dir string, opts types.BisectOptions
 	defer func() { _ = bisectStep(gitExec(context.WithoutCancel(ctx), dir, gitOpts{}, "bisect", "reset")) }()
 
 	if err := bisectStep(gitUserCommand(ctx, dir, "bisect", "run", "sh", "-c", opts.TestCmd)); err != nil {
-		slog.WarnContext(ctx, "git bisect run exited with error", slog.String("err", err.Error()))
+		slog.WarnContext(ctx, "git bisect run exited with error", attr.Error(err))
 	}
 
 	sha, err := v.culprit(ctx, dir)

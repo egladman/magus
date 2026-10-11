@@ -340,7 +340,7 @@ func (s *server) handle(conn net.Conn) {
 		f, err := r.read()
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				s.opts.log.DebugContext(s.ctx, "connection ended", slog.Int("pid", h.PID), slog.String("error", err.Error()))
+				s.opts.log.DebugContext(s.ctx, "connection ended", slog.Int("pid", h.PID), attr.Error(err))
 			}
 			break
 		}
