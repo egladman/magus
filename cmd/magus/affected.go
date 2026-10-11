@@ -183,7 +183,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 			streamOpts = append(streamOpts, magus.WithStreamExtraArgs(extraArgs))
 		}
 		return m.Stream(streamCtx, os.Stdin, target, func(err error) {
-			slog.ErrorContext(streamCtx, "affected --stdin", slog.String("error", err.Error()))
+			slog.ErrorContext(streamCtx, "affected --stdin", attr.Error(err))
 		}, streamOpts...)
 	}
 

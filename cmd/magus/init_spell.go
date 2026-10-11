@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/internal/log/attr"
 )
 
 // spellHandleRe validates a spell handle: a letter followed by letters, digits,
@@ -61,7 +62,7 @@ func initSpellCmd(ctx context.Context, args []string) error {
 	if err := os.WriteFile(path, []byte(spellScaffold(name)), 0o644); err != nil {
 		return fmt.Errorf("init spell: write %s: %w", path, err)
 	}
-	slog.InfoContext(ctx, "init spell: wrote spell", slog.String("path", path))
+	slog.With(attr.Component("init spell")).InfoContext(ctx, "wrote spell", slog.String("path", path))
 	printInitSpellNextSteps(ctx, name, pkgDir, path)
 	return nil
 }

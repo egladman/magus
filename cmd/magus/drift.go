@@ -291,7 +291,7 @@ func checkDriftForCommit(
 			// probe must not hide a real generated-output finding and must not fail
 			// the job. It is logged by the caller if this bubbles up, but here it just
 			// means the formatting class stays silent for this run.
-			slog.With(attr.Component("check-drift")).WarnContext(ctx, "gofmt probe failed", slog.String("error", gerr.Error()))
+			slog.With(attr.Component("check-drift")).WarnContext(ctx, "gofmt probe failed", attr.Error(gerr))
 		} else {
 			finding.unformatted = unformatted
 		}

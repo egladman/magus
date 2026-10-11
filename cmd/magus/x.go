@@ -397,7 +397,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 		switch live, _, kerr := m.ComputeTargetKey(ctx, d.Project, parsed.Name, parsed.Charms); {
 		case kerr != nil:
 			// Best-effort: a key that will not compute is not a reason to refuse the run.
-			slog.DebugContext(ctx, "magus x: could not compute the local key", slog.String("error", kerr.Error()))
+			slog.With(attr.Component("x")).DebugContext(ctx, "could not compute the local key", attr.Error(kerr))
 		case live == d.Key:
 			sink.EmitNotice(ctx, slog.LevelInfo, "", fmt.Sprintf(
 				"ref %s reproduces exactly here: same cache key, so this replays the recorded run", ref))
