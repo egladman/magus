@@ -1,0 +1,478 @@
+// Cost: none; reads and writes one file.
+//
+// Lists a file's merge conflict hunks, and resolves the ones you choose as ours, theirs,
+// both, base (diff3 conflicts only) or the text of a file you wrote. It prints the diff it
+// would make and writes only with --apply.
+//
+//	magus buzz hack/dev/resolve-conflicts.buzz -- --file <path>
+//	magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> --take 1=ours --take 2=both --text 3=<file> [--apply]
+//
+// A script that opens the file for writing before it has computed the result truncates it
+// when the computation raises; that is how a merge once left internal/agent/catalog.go at
+// zero bytes. This computes the whole result first, refuses an empty one or one with
+// markers the choices did not account for, and swaps it in with a same-directory rename.
+namespace resolveconflicts;
+
+import "diff";
+import "flags";
+import "fs";
+import "std";
+
+import "assert";
+
+final USAGE = "usage: magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> [--take <n|all>=ours|theirs|both|base]... [--text <n>=<file>]... [--apply]";
+final HELP = "cost: none; reads and writes one file\n{USAGE}";
+
+final SIDES = ["ours", "theirs", "both", "base"];
+
+export object Hunk {
+    index: int,
+    // line is the 1-based line of the hunk's <<<<<<< marker.
+    line: int,
+    oursLabel: str,
+    theirsLabel: str,
+    ours: [str],
+    // base is null for a conflict written without diff3's ||||||| section.
+    base: [str]?,
+    baseLabel: str = "",
+    theirs: [str],
+}
+
+// Conflicted is a file split at its hunks: plain[i] precedes hunks[i], and the last entry
+// of plain follows the last hunk, so plain always holds one more entry than hunks.
+export object Conflicted {
+    plain: [[str]],
+    hunks: [Hunk],
+}
+
+// Choice is what one hunk resolves to: side is ours, theirs, both, base or text, and text
+// holds the replacement lines for text.
+export object Choice {
+    side: str,
+    text: [str] = [<str>],
+}
+
+// markerOf names the conflict marker line opens, or "" for an ordinary line. git writes a
+// marker as seven characters, then a space and a label or the end of the line.
+export fun markerOf(line: str) > str {
+    if (line.len() < 7) {
+        return "";
+    }
+    final head = line.sub(0, len: 7);
+    if (line.len() > 7 and line.sub(7, len: 1) != " ") {
+        return "";
+    }
+    if (head == "<<<<<<<") {
+        return "start";
+    }
+    if (head == "|||||||") {
+        return "base";
+    }
+    if (head == "=======" and line.len() == 7) {
+        return "split";
+    }
+    if (head == ">>>>>>>") {
+        return "end";
+    }
+    return "";
+}
+
+fun label(line: str) > str {
+    return if (line.len() > 8) line.sub(8) else "";
+}
+
+// parse splits text into its plain runs and conflict hunks. It raises on a marker out of
+// order or a hunk left open, since resolving half of a malformed conflict guesses at the rest.
+export fun parse(text: str) > Conflicted !> str {
+    final lines = text.split("\n");
+    final plain = mut [<[str]>];
+    final hunks = mut [<Hunk>];
+    var run = mut [<str>];
+    var state = "plain";
+    var start = 0;
+    var oursLabel = "";
+    var ours = mut [<str>];
+    var base = mut [<str>];
+    var hasBase = false;
+    var baseLabel = "";
+    var theirs = mut [<str>];
+    foreach (i, line in lines) {
+        final marker = markerOf(line);
+        if (state == "plain") {
+            if (marker == "start") {
+                state = "ours";
+                start = i + 1;
+                oursLabel = label(line);
+                ours = mut [<str>];
+                base = mut [<str>];
+                hasBase = false;
+                theirs = mut [<str>];
+            } else if (marker != "") {
+                throw "line {i + 1}: a {marker} marker outside any conflict";
+            } else {
+                run.append(line);
+            }
+        } else if (marker == "start") {
+            throw "line {i + 1}: a conflict opens inside the conflict at line {start}";
+        } else if (state == "ours" and marker == "base") {
+            state = "base";
+            hasBase = true;
+            baseLabel = label(line);
+        } else if ((state == "ours" or state == "base") and marker == "split") {
+            state = "theirs";
+        } else if (state == "theirs" and marker == "end") {
+            plain.append(run);
+            run = mut [<str>];
+            hunks.append(Hunk{ index = hunks.len() + 1, line = start, oursLabel = oursLabel, theirsLabel = label(line),
+                ours = ours, base = if (hasBase) base else null, baseLabel = baseLabel, theirs = theirs });
+            state = "plain";
+        } else if (marker != "") {
+            throw "line {i + 1}: a {marker} marker out of order in the conflict at line {start}";
+        } else if (state == "ours") {
+            ours.append(line);
+        } else if (state == "base") {
+            base.append(line);
+        } else {
+            theirs.append(line);
+        }
+    }
+    if (state != "plain") {
+        throw "the conflict at line {start} never closes";
+    }
+    plain.append(run);
+    return Conflicted{ plain = plain, hunks = hunks };
+}
+
+// chosen is the lines hunk h resolves to under c.
+fun chosen(h: Hunk, c: Choice) > [str] !> str {
+    if (c.side == "ours") {
+        return h.ours;
+    }
+    if (c.side == "theirs") {
+        return h.theirs;
+    }
+    if (c.side == "both") {
+        final both = mut [<str>];
+        foreach (l in h.ours) {
+            both.append(l);
+        }
+        foreach (l in h.theirs) {
+            both.append(l);
+        }
+        return both;
+    }
+    if (c.side == "base") {
+        if (h.base -> base) {
+            return base;
+        }
+        throw "hunk {h.index} has no base section; merge with conflictstyle diff3 to get one";
+    }
+    if (c.side == "text") {
+        return c.text;
+    }
+    throw "hunk {h.index}: unknown choice {c.side}";
+}
+
+// render writes the hunk back as git wrote it, for a hunk no choice names.
+fun render(h: Hunk) > [str] {
+    final marked = mut ["<<<<<<< {h.oursLabel}".trim()];
+    foreach (l in h.ours) {
+        marked.append(l);
+    }
+    if (h.base -> base) {
+        marked.append("||||||| {h.baseLabel}".trim());
+        foreach (l in base) {
+            marked.append(l);
+        }
+    }
+    marked.append("=======");
+    foreach (l in h.theirs) {
+        marked.append(l);
+    }
+    marked.append(">>>>>>> {h.theirsLabel}".trim());
+    return marked;
+}
+
+// settle is the file's whole text with each chosen hunk replaced. It raises on a choice
+// for a hunk the file does not have, an empty result, and a result whose markers are not
+// exactly the hunks left unchosen: a side or a replacement text that itself carries marker
+// lines would otherwise read as resolved and be staged.
+export fun settle(c: Conflicted, choices: {int: Choice}) > str !> str {
+    foreach (n, _ in choices) {
+        if (n < 1 or n > c.hunks.len()) {
+            throw "there is no hunk {n}; the file has {c.hunks.len()}";
+        }
+    }
+    final result = mut [<str>];
+    var open = 0;
+    foreach (i, h in c.hunks) {
+        foreach (l in c.plain[i]) {
+            result.append(l);
+        }
+        if (choices[h.index] -> choice) {
+            foreach (l in chosen(h, c: choice)) {
+                result.append(l);
+            }
+        } else {
+            open = open + 1;
+            foreach (l in render(h)) {
+                result.append(l);
+            }
+        }
+    }
+    foreach (l in c.plain[c.hunks.len()]) {
+        result.append(l);
+    }
+    final text = result.join("\n");
+    if (text.trim() == "") {
+        throw "the result is empty; nothing was written";
+    }
+    final left = parse(text) catch Conflicted{ plain = [<[str]>], hunks = [<Hunk>] };
+    if (left.plain.len() == 0 or left.hunks.len() != open) {
+        throw "the result carries conflict markers beyond the {open} hunk(s) left unchosen; a chosen side or text holds marker lines";
+    }
+    return text;
+}
+
+// parseChoices reads --take <n|all>=<side> and --text <n>=<file> into one choice per hunk.
+// A later --take or --text for the same hunk replaces the earlier one.
+export fun parseChoices(takes: [str], texts: [str], hunks: int) > {int: Choice} !> any {
+    final picked = mut {<int: Choice>};
+    foreach (t in takes) {
+        final eq = t.indexOf("=");
+        if (eq == null) {
+            throw "--take {t}: want <n>=<side>";
+        }
+        final which = t.sub(0, len: eq!);
+        final side = t.sub(eq! + 1);
+        if (SIDES.indexOf(side) == null) {
+            throw "--take {t}: the side is one of {SIDES.join(", ")}";
+        }
+        if (which == "all") {
+            for (var n = 1; n <= hunks; n = n + 1) {
+                picked[n] = Choice{ side = side };
+            }
+            continue;
+        }
+        final n = std\parseInt(which);
+        if (n == null) {
+            throw "--take {t}: {which} is not a hunk number";
+        }
+        picked[n!] = Choice{ side = side };
+    }
+    foreach (t in texts) {
+        final eq = t.indexOf("=");
+        if (eq == null) {
+            throw "--text {t}: want <n>=<file>";
+        }
+        final n = std\parseInt(t.sub(0, len: eq!));
+        if (n == null) {
+            throw "--text {t}: {t.sub(0, len: eq!)} is not a hunk number";
+        }
+        var body = fs\readFile(t.sub(eq! + 1));
+        if (body.endsWith("\n")) {
+            body = body.sub(0, len: body.len() - 1);
+        }
+        picked[n!] = Choice{ side = "text", text = body.split("\n") };
+    }
+    return picked;
+}
+
+// listing is the report for a file no choice was given for.
+export fun listing(file: str, c: Conflicted) > [str] {
+    final lines = mut ["read-only: {c.hunks.len()} conflict hunk(s) in {file}; choose with --take <n>=ours|theirs|both|base or --text <n>=<file>"];
+    foreach (h in c.hunks) {
+        final base = if (h.base != null) ", base {h.base!.len()} line(s)" else "";
+        lines.append("hunk {h.index} at line {h.line}: ours ({h.oursLabel}) {h.ours.len()} line(s), theirs ({h.theirsLabel}) {h.theirs.len()} line(s){base}");
+        foreach (l in h.ours) {
+            lines.append("  < {l}");
+        }
+        if (h.base -> b) {
+            foreach (l in b) {
+                lines.append("  | {l}");
+            }
+        }
+        foreach (l in h.theirs) {
+            lines.append("  > {l}");
+        }
+    }
+    return lines;
+}
+
+// writeKeepingMode swaps content in for file through a temp file and a rename in file's own
+// directory, then restores the permission bits the temp file did not carry.
+fun writeKeepingMode(file: str, content: str) > void !> any {
+    final mode = fs\stat(file).mode;
+    fs\writeFileAtomic(file, content: content);
+    if (fs\stat(file).mode != mode) {
+        fs\chmod(file, mode: mode);
+    }
+}
+
+export fun main(args: [str]) > void !> any {
+    final parsed = flags\parse(args, switches: ["--apply", "--help"], valued: ["--file"], repeated: ["--take", "--text"]);
+    if (parsed.values["--help"] != null) {
+        std\print(HELP);
+        return;
+    }
+    if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
+        throw "resolve-conflicts: unknown {parsed.unknown.join(" ")}{parsed.positionals.join(" ")}\n{USAGE}";
+    }
+    final file = parsed.values["--file"] ?? "";
+    if (file == "") {
+        throw "resolve-conflicts: --file is required\n{USAGE}";
+    }
+    final before = fs\readFile(file);
+    var c = Conflicted{ plain = [<[str]>], hunks = [<Hunk>] };
+    try {
+        c = parse(before);
+    } catch (e: str) {
+        throw "resolve-conflicts: {file}: {e}";
+    }
+    if (c.hunks.len() == 0) {
+        throw "resolve-conflicts: {file} holds no conflict markers";
+    }
+    final takes = parsed.lists["--take"] ?? [<str>];
+    final texts = parsed.lists["--text"] ?? [<str>];
+    if (takes.len() == 0 and texts.len() == 0) {
+        foreach (line in listing(file, c: c)) {
+            std\print(line);
+        }
+        return;
+    }
+    final choices = parseChoices(takes, texts: texts, hunks: c.hunks.len());
+    var after = "";
+    try {
+        after = settle(c, choices: choices);
+    } catch (e: str) {
+        throw "resolve-conflicts: {file}: {e}";
+    }
+    final left = c.hunks.len() - choices.len();
+    final patch = diff\unified(before, b: after, from_label: file, to_label: "{file} resolved");
+    if (parsed.values["--apply"] == null) {
+        std\print("dry run: nothing changed; pass --apply to write");
+    } else {
+        writeKeepingMode(file, content: after);
+        final next = if (left == 0) "; stage it with `git add {file}`" else "; {left} hunk(s) left";
+        std\print("resolved {choices.len()} of {c.hunks.len()} hunk(s) in {file}{next}");
+    }
+    std\print(patch);
+}
+
+final TWO_SIDED = "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>>> feature\nmiddle\n<<<<<<< HEAD\nours two\n=======\ntheirs two\n>>>>>>> feature\nend\n";
+
+final DIFF3 = "a\n<<<<<<< HEAD\nmine\n||||||| merged common ancestors\nold\n=======\nyours\n>>>>>>> topic\nz\n";
+
+fun raised(text: str, choices: {int: Choice}) > str {
+    try {
+        settle(parse(text), choices: choices);
+    } catch (e: str) {
+        return e;
+    }
+    return "";
+}
+
+fun parseRaised(text: str) > str {
+    try {
+        parse(text);
+    } catch (e: str) {
+        return e;
+    }
+    return "";
+}
+
+test "parse finds each hunk, its sides and its labels" {
+    final c = parse(TWO_SIDED);
+    assert\equal(c.hunks.len(), want: 2, message: "hunks");
+    assert\equal(c.plain.len(), want: 3, message: "plain runs");
+    assert\equal(c.hunks[0].line, want: 2, message: "first hunk line");
+    assert\equal(c.hunks[0].oursLabel, want: "HEAD", message: "ours label");
+    assert\equal(c.hunks[1].theirsLabel, want: "feature", message: "theirs label");
+    assert\equal(c.hunks[1].ours, want: ["ours two"], message: "ours");
+    assert\equal(c.hunks[0].base == null, want: true, message: "no base without diff3");
+}
+
+test "parse reads a diff3 base" {
+    final c = parse(DIFF3);
+    if (c.hunks[0].base -> base) {
+        assert\equal(base, want: ["old"], message: "base lines");
+    } else {
+        std\assert(false, message: "a diff3 hunk carries its base");
+    }
+}
+
+test "every hunk resolved leaves no markers and keeps the trailing newline" {
+    final got = settle(parse(TWO_SIDED), choices: {1: Choice{ side = "ours" }, 2: Choice{ side = "both" }});
+    assert\equal(got, want: "package x\nours one\nmiddle\nours two\ntheirs two\nend\n", message: "result");
+}
+
+test "a hunk left unchosen is written back as git wrote it" {
+    final got = settle(parse(TWO_SIDED), choices: {2: Choice{ side = "theirs" }});
+    assert\equal(got, want: "package x\n<<<<<<< HEAD\nours one\n=======\ntheirs one\n>>>>>>> feature\nmiddle\ntheirs two\nend\n", message: "partial");
+}
+
+test "base and replacement text resolve a diff3 hunk" {
+    assert\equal(settle(parse(DIFF3), choices: {1: Choice{ side = "base" }}), want: "a\nold\nz\n", message: "base");
+    assert\equal(settle(parse(DIFF3), choices: {1: Choice{ side = "text", text = ["new", "lines"] }}), want: "a\nnew\nlines\nz\n", message: "text");
+}
+
+test "an unchosen diff3 hunk keeps its base label" {
+    assert\equal(settle(parse(DIFF3), choices: {<int: Choice>}), want: DIFF3, message: "round trip");
+}
+
+test "base is refused for a hunk without one" {
+    assert\equal(raised(TWO_SIDED, choices: {1: Choice{ side = "base" }}), want: "hunk 1 has no base section; merge with conflictstyle diff3 to get one", message: "no base");
+}
+
+test "an empty result is refused" {
+    final only = "<<<<<<< HEAD\n=======\n>>>>>>> x";
+    assert\equal(raised(only, choices: {1: Choice{ side = "ours" }}), want: "the result is empty; nothing was written", message: "empty");
+}
+
+test "a replacement that carries markers is refused" {
+    final text = ["<<<<<<< HEAD", "x", "=======", "y", ">>>>>>> z"];
+    final got = raised(TWO_SIDED, choices: {1: Choice{ side = "text", text = text }, 2: Choice{ side = "ours" }});
+    assert\equal(got.startsWith("the result carries conflict markers beyond the 0 hunk(s)"), want: true, message: got);
+    assert\equal(raised(TWO_SIDED, choices: {1: Choice{ side = "text", text = ["======="] }, 2: Choice{ side = "ours" }}) != "", want: true, message: "a stray split marker");
+}
+
+test "a choice for a hunk the file lacks is refused" {
+    assert\equal(raised(TWO_SIDED, choices: {3: Choice{ side = "ours" }}), want: "there is no hunk 3; the file has 2", message: "range");
+}
+
+test "malformed conflicts are refused rather than guessed at" {
+    assert\equal(parseRaised("a\n<<<<<<< HEAD\nb\n"), want: "the conflict at line 2 never closes", message: "open");
+    assert\equal(parseRaised("a\n=======\nb\n"), want: "line 2: a split marker outside any conflict", message: "stray");
+    assert\equal(parseRaised("<<<<<<< HEAD\n<<<<<<< HEAD\n"), want: "line 2: a conflict opens inside the conflict at line 1", message: "nested");
+    assert\equal(parseRaised("<<<<<<< HEAD\na\n>>>>>>> x\n"), want: "line 3: a end marker out of order in the conflict at line 1", message: "order");
+}
+
+test "a marker needs seven characters and a space or the end of the line" {
+    assert\equal(markerOf("<<<<<<< HEAD"), want: "start", message: "labelled");
+    assert\equal(markerOf("<<<<<<<"), want: "start", message: "bare");
+    assert\equal(markerOf("<<<<<<<<"), want: "", message: "eight");
+    assert\equal(markerOf("======= x"), want: "", message: "split takes no label");
+    assert\equal(markerOf("x = 1"), want: "", message: "code");
+}
+
+test "--take all and --text choose per hunk" {
+    final dir = fs\tempDir("resolve-conflicts");
+    final body = fs\join(dir, name: "body.txt");
+    fs\writeFile(body, content: "replaced\n");
+    final choices = parseChoices(["all=theirs"], texts: ["2={body}"], hunks: 2);
+    assert\equal(choices[1]?.side ?? "", want: "theirs", message: "all");
+    assert\equal(choices[2]?.text ?? [<str>], want: ["replaced"], message: "text from a file");
+    fs\removeAll(dir);
+}
+
+test "an applied resolution swaps the file and keeps its mode" {
+    final dir = fs\tempDir("resolve-conflicts");
+    final file = fs\join(dir, name: "run.sh");
+    fs\writeFile(file, content: TWO_SIDED);
+    fs\chmod(file, mode: 0755);
+    writeKeepingMode(file, content: settle(parse(TWO_SIDED), choices: {1: Choice{ side = "theirs" }, 2: Choice{ side = "theirs" }}));
+    assert\equal(fs\readFile(file), want: "package x\ntheirs one\nmiddle\ntheirs two\nend\n", message: "content");
+    assert\equal(fs\stat(file).mode, want: 0755, message: "mode");
+    assert\equal(fs\listDir(dir).len(), want: 1, message: "no temp file left behind");
+    fs\removeAll(dir);
+}

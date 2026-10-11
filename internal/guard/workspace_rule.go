@@ -301,10 +301,15 @@ func sideName(seam functionSeam, side string) string {
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
 // could not, "" when none failed. A set of failures is told in full the first time it fires
 // in a session and as one line naming what applied on every repeat, so the reader never
-// takes a call for judged by a rule that was skipped.
-func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFailure, answered []string) string {
+// takes a call for judged by a rule that was skipped. A non-empty lead opens both forms:
+// it names a cause the reader has to act on, such as a policy file holding conflict
+// markers, and a repeat that dropped it would leave the guard degraded with no word why.
+func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFailure, answered []string, lead string) string {
 	if len(failures) == 0 {
 		return ""
+	}
+	if lead != "" {
+		lead += "\n\n"
 	}
 	applied := []string{"the built-in rules"}
 	for _, by := range answered {
@@ -312,6 +317,7 @@ func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFai
 	}
 	summary := "Only " + strings.Join(applied, " and ") + " applied to this " + string(seam) + "."
 	var full strings.Builder
+	full.WriteString(lead)
 	h := sha256.New()
 	for _, f := range failures {
 		full.WriteString("The " + sideName(seam, f.Side) + " judged nothing: " + f.Error + "\n\n")
@@ -319,7 +325,7 @@ func ruleFailureNote(gate hint.Gate, seam functionSeam, failures []trail.RuleFai
 	}
 	full.WriteString(summary)
 	kind := hint.MarkerKind(string(ruleFailedKind(seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
-	return gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(seam)+" rule is still failing, as told earlier in this session.")
+	return gate.OnceOrBrief(kind, full.String(), lead+summary+" A workspace "+string(seam)+" rule is still failing, as told earlier in this session.")
 }
 
 // ruleFailedKind names the notice that a seam's workspace rule judged nothing.
