@@ -3,6 +3,7 @@ package testkit
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,6 +33,35 @@ func TestWorkspaceWriteCreatesParents(t *testing.T) {
 	body, err := os.ReadFile(abs)
 	require.NoError(t, err)
 	assert.Equal(t, "body", string(body))
+}
+
+// TestNewWorkspaceRootIsResolved: on macOS t.TempDir is under /var, a symlink, and
+// the paths magus reports are the resolved ones.
+func TestNewWorkspaceRootIsResolved(t *testing.T) {
+	w := NewWorkspace(t)
+	resolved, err := filepath.EvalSymlinks(w.Root())
+	require.NoError(t, err)
+	assert.Equal(t, resolved, w.Root())
+}
+
+// TestWorkspaceExecutable checks the mode rather than running the file, which on macOS
+// meets the first-exec stall its doc describes. Rewriting a plain file covers the case
+// where WriteFile keeps the old mode.
+func TestWorkspaceExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no executable bit")
+	}
+	w := NewWorkspace(t)
+	w.Write("bin/magus", "old")
+	abs := w.Executable("bin/magus", "#!/bin/sh\necho stand-in\n")
+
+	assert.Equal(t, w.Path("bin/magus"), abs)
+	info, err := os.Stat(abs)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o755), info.Mode().Perm())
+	body, err := os.ReadFile(abs)
+	require.NoError(t, err)
+	assert.Equal(t, "#!/bin/sh\necho stand-in\n", string(body))
 }
 
 func TestWorkspaceMagusfile(t *testing.T) {
