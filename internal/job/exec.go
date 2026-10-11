@@ -151,6 +151,13 @@ func compareBase(checkpoint, reported string) types.JobBaseVerdict {
 	}
 }
 
+// SameRevision reports whether a and b name one revision, either abbreviating the other.
+// Two empty revisions name nothing, so they are not the same.
+func SameRevision(a, b string) bool {
+	a, b = strings.TrimSpace(a), strings.TrimSpace(b)
+	return a != "" && b != "" && (strings.HasPrefix(a, b) || strings.HasPrefix(b, a))
+}
+
 // BaseAdvice is what the registering worker is told: what the verdict means in
 // terms of the two tokens it compared, and what to do next.
 //

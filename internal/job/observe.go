@@ -43,7 +43,11 @@ func CheckpointObserver(root string, symbols SymbolReader) Observer {
 		if checkpointRevision(row.Checkpoint) != "" {
 			driver, unresolved = resolveDriver(ctx, tree)
 		}
-		seen := changedSince(ctx, driver, unresolved, tree, row.Checkpoint)
+		base, named := diffBase(ctx, driver, tree, row)
+		seen := changedSince(ctx, driver, unresolved, tree, base)
+		if seen.ChangedFrom != "" {
+			seen.ChangedFrom = named
+		}
 		seen.Present, seen.PresentKnown = presentIn(tree, row)
 		seen.Symbols, seen.SymbolsKnown = readSymbols(ctx, row, symbols)
 		// Workspace only, as for every rule that acts: a default in one person's global
@@ -88,6 +92,32 @@ func resolveDriver(ctx context.Context, root string) (types.VCSDriver, string) {
 func checkpointRevision(checkpoint string) string {
 	revision, _ := types.ParseCheckpointToken(checkpoint)
 	return revision
+}
+
+// diffBase is the revision a holder's diff is read from, and that revision as a reader is
+// shown it: the merge base of the holder's HEAD and its checkpoint, else the revision the
+// holder reported, else the checkpoint. A checkpoint the holder's branch never had would
+// otherwise read every commit between the two as the holder's work. A base other than
+// the checkpoint is named beside it, so a worker that branched from the wrong one shows.
+func diffBase(ctx context.Context, driver types.VCSDriver, tree string, row types.Job) (revision, named string) {
+	checkpoint := checkpointRevision(row.Checkpoint)
+	if checkpoint == "" || driver == nil {
+		return checkpoint, checkpoint
+	}
+	if head, err := driver.FindCommit(ctx, tree, ""); err == nil && head.ID != "" {
+		base, ok, err := driver.MergeBase(ctx, tree, head.ID, checkpoint)
+		switch {
+		case err != nil || !ok:
+		case SameRevision(base, checkpoint):
+			return checkpoint, checkpoint
+		default:
+			return base, fmt.Sprintf("%s (the merge base of the holder's HEAD %s and its checkpoint %s)", base, head.ID, checkpoint)
+		}
+	}
+	if reported := checkpointRevision(row.ReportedBase); reported != "" && !SameRevision(reported, checkpoint) {
+		return reported, fmt.Sprintf("%s (the base its holder reported, not its checkpoint %s)", reported, checkpoint)
+	}
+	return checkpoint, checkpoint
 }
 
 // changedSince asks driver what differs from the checkpoint's revision, and which
@@ -229,7 +259,8 @@ func readFootprint(ctx context.Context, driver types.VCSDriver, rows []types.Job
 	if dir == "" {
 		return footprint{reason: fmt.Sprintf("no checkout of this repository has taken %s", id)}
 	}
-	seen := changedSince(ctx, driver, "", dir, revision)
+	base, _ := diffBase(ctx, driver, dir, rows[i])
+	seen := changedSince(ctx, driver, "", dir, base)
 	return footprint{regions: seen.Regions, known: seen.RegionsKnown, reason: seen.RegionsReason}
 }
 

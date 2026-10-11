@@ -364,6 +364,24 @@ func TestStoreExecByItsBoundHolderStartsTheJob(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got.State)
 }
 
+func TestSameRevision(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"07e1c163ea67b4d6", "07e1c16", true},
+		{"07e1c16", "07e1c163ea67b4d6", true},
+		{"07e1c16", " 07e1c16\n", true},
+		{"07e1c16", "24114cc", false},
+		{"07e1c16", "", false},
+		{"", "", false},
+	} {
+		assert.Equal(t, tc.want, SameRevision(tc.a, tc.b), "%q %q", tc.a, tc.b)
+	}
+}
+
 func TestCompareBase(t *testing.T) {
 	t.Parallel()
 
