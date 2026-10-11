@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-"I hope this helps" and "great question" answer a chat the reader never saw. Zero hits over the docs pages, changelog fragments and merged pull requests; the letter patterns ("Dear", "I am writing to") judge only a change description, which is never a letter.
+"I hope this helps" and "great question" answer a chat the reader never saw. Zero hits over the docs pages, changelog fragments and merged pull requests; the letter patterns ("Dear", "I am writing to") judge only a change description, which is never a letter. Measured 2026-10-10 before a fix: 88.9% precision on its cases (8 of 9), firing on 0.3% of human review comments (1.2% of their replies), 4.2% of bot replies and 0.1% of AIDev pull requests; 29 of 30 human review-comment firings read were a person answering in the thread ("You're right, ...", "feel free to", "great catch"). A review reply's reader saw the chat, so there an agreement, an invitation, an offer and an answer's opener are left alone; "you're absolutely right", "great question", "I hope this helps" and the disclaimers still count. After: 100% on its cases; firing rates measured at merge.
 
 ## Default decision
 

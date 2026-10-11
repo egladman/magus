@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Text loses its tone on the way to a reader, who fills the gap with intent the writer never had. "Whoever wrote this forgot to" reads as an accusation; "the rename left the old key" states the same fact. It measured no false positive over the last 200 merged pull requests, so it denies. The first person is left alone, since owning a fault reads as candor.
+Text loses its tone on the way to a reader, who fills the gap with intent the writer never had. "Whoever wrote this forgot to" reads as an accusation; "the rename left the old key" states the same fact. The first person is left alone, since owning a fault reads as candor. Measured 2026-10-10 before a fix: 85.7% precision on its cases (6 of 7), firing on 0.1% of human AIDev review comments and on 1 magus commit body; of 70 firings read, 30 were wrong. So "should have" counts only before a past participle ("you should have a tests file" is possession, "they should have been kept" a thing), "they" only when it forgot or neglected to, and a contempt word is exempt inside a name ("crazy-max", "dumb-init"), capitalized mid-sentence ("Keep It Simple, Stupid"), as "go too crazy", and as "lazy loading". After: 100% on its cases; firing rates measured at merge.
 
 ## Default decision
 

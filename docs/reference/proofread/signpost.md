@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A signpost delays the point it promises. It had zero hits in 261 docs pages, 665 changelog fragments and 200 merged pull requests, so it denies at no cost.
+A signpost delays the point it promises. It had zero hits in 261 docs pages, 665 changelog fragments and 200 merged pull requests. Measured 2026-10-10 before a fix: 85.7% precision on its cases (6 of 7), firing on 0.2% of AIDev pull requests and 0.1% of review comments; of 30 review-comment firings read, 23 were wrong: 6 "What if" real questions and 17 "Here's how/what/why ...:" lines captioning the code or list below. So "What if" counts only as "What if I told you", and "Here's" only before the thing, why it matters, or what it means. After: 100% on its cases; firing rates measured at merge.
 
 ## Default decision
 

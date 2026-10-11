@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-The words carry nothing the sentence needs. Written text takes a wider list ("actually", "robust") than doc comments, which keep the narrow one until a sweep clears the wider; the senses that carry meaning ("just" as merely, "very" as the same one) are exempt.
+The words carry nothing the sentence needs. Written text takes a wider list ("actually", "robust") than doc comments, which keep the narrow one until a sweep clears the wider; the senses that carry meaning ("just" as merely, "very" as the same one) are exempt. Measured 2026-10-10 before a fix: 70.6% precision on its cases (12 of 17), firing on 21.8% of AIDev pull requests, 4.7% of human review comments (6.7% of their replies), 3.8% of AIDev commits and 5.5% of magus commit bodies; 18 of 45 firings read in human replies were wrong. Lowercase "actually" stated a contrast ("what the cache actually did", "wait for it to actually exit") in 10 of 11 human replies and about 22 of 25 agent pull request bodies, so only the opener "Actually," counts. Also exempt: a word hyphenated into a compound ("all-powerful"), "very" grading a size or position ("a very long path"), "just" after a negation other than a copula ("don't just"), before a literal or as recency ("Just pushed"), "more robust", and "This function" outside a doc comment, where it points at code. After: 100% on its cases; firing rates measured at merge.
 
 ## Default decision
 

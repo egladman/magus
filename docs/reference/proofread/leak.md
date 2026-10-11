@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-`oaicite`, `[cite: 1]` and `[insert ...]` are unambiguous: no reader is served by them. They show up where text was pasted from a chat, so the rule judges doc comments too.
+`oaicite`, `[cite: 1]` and `[insert ...]` are unambiguous: no reader is served by them. They show up where text was pasted from a chat, so the rule judges doc comments too. Measured 2026-10-10: 100% precision on its cases (6 of 6), but agent replies' link text naming a file and line (`[describe.go:668]`) read as a `[describe ...]` placeholder, and of 71 AIDev pull request candidates many lenticular-bracket hits were CJK punctuation around a label. A placeholder word now ends at a space, a colon or the bracket, and a lenticular pair counts only around a dagger. Firing rates after are measured at merge.
 
 ## Default decision
 
