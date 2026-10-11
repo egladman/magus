@@ -924,3 +924,227 @@ func TestJobPruneRefusesABoundWorker(t *testing.T) {
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, types.StateExited, jobStates(t, loc)["w"])
 }
+
+// rootEvidenceJob is a job its holder exited with the runs in holderRuns, in a checkout
+// whose changed files the waiter's checkout (loc.Root) holds the same copy of.
+type rootEvidenceJob struct {
+	loc          Location
+	holder, root string
+	row          types.Job
+	result       types.JobResult
+}
+
+var (
+	failedRun   = types.JobAttempt{Found: true, Ref: "holder", Project: ".", Target: "go-test", Spell: "go", Failed: true, TimestampMs: 9_999_999_999_999}
+	passedHere  = types.JobAttempt{Found: true, Ref: "here", Project: ".", Target: "go-test", Spell: "go", TimestampMs: 9_999_999_999_999}
+	otherChecks = types.JobAttempt{Found: true, Ref: "here", Project: ".", Target: "go-vet", Spell: "go", TimestampMs: 9_999_999_999_999}
+)
+
+func exitedWithRuns(t *testing.T, row types.Job, result types.JobResult, holderRuns map[string]types.JobAttempt) rootEvidenceJob {
+	t.Helper()
+	holder, root := t.TempDir(), t.TempDir()
+	for _, changed := range result.ChangedPaths {
+		for _, dir := range []string{holder, root} {
+			p := filepath.Join(dir, filepath.FromSlash(changed))
+			require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
+			require.NoError(t, os.WriteFile(p, []byte("package a\n"), 0o644))
+		}
+	}
+	row.CheckoutRoot = holder
+	loc := tmpLoc(t, root)
+	seed(t, NewStore(loc), row)
+	_, err := Exit(t.Context(), boundStore(loc, row.ID), row.ID, &result, func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return holderRuns[ref], nil
+	})
+	require.NoError(t, err)
+	return rootEvidenceJob{loc: loc, holder: holder, root: root, row: row, result: result}
+}
+
+// waitWithEvidence waits as the root, resolving refs in the root's own output store.
+func (j rootEvidenceJob) waitWithEvidence(t *testing.T, here map[string]types.JobAttempt, refs map[string]string) (types.JobStatus, error) {
+	t.Helper()
+	return Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, func(_ context.Context, ref string) (types.JobAttempt, error) {
+		return here[ref], nil
+	}, observeClaim(j.result), WithRootEvidence(refs))
+}
+
+func (j rootEvidenceJob) stored(t *testing.T) types.Job {
+	t.Helper()
+	rows, err := NewStore(j.loc).List()
+	require.NoError(t, err)
+	i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == j.row.ID })
+	require.GreaterOrEqual(t, i, 0)
+	return rows[i]
+}
+
+func failedPrimary(t *testing.T) rootEvidenceJob {
+	t.Helper()
+	return exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+}
+
+func TestWaitTakesRootEvidenceForAGoalTheHolderFailed(t *testing.T) {
+	t.Parallel()
+
+	j := failedPrimary(t)
+	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{types.PrimaryGoalID: "here"})
+	require.NoError(t, err)
+	require.True(t, status.Verified, status.Violations)
+
+	row := j.stored(t)
+	assert.Equal(t, types.StatePass, row.State)
+	require.NotNil(t, row.Attempt)
+	assert.True(t, row.Attempt.Failed, "the holder's own attempt stays beside the root's")
+	require.NotNil(t, row.Result)
+	assert.Equal(t, "a1b2c3d4", row.Result.Validation.OutputRef)
+	require.NotNil(t, row.RootEvidence)
+	assert.Equal(t, j.root, row.RootEvidence.Checkout)
+	assert.NotZero(t, row.RootEvidence.At)
+	assert.Equal(t, []types.GateStatus{{ID: types.PrimaryGoalID, Verified: true, OutputRef: "here"}}, row.RootEvidence.Gates)
+}
+
+func TestWaitTakesRootEvidenceForOneNamedGoalOnly(t *testing.T) {
+	t.Parallel()
+
+	attempts := map[string]types.JobAttempt{}
+	for _, snapshot := range goalAttempts() {
+		attempts[snapshot.Attempt.Ref] = snapshot.Attempt
+	}
+	attempts["unit-ref"] = failedRun
+	docs := attempts["docs-ref"]
+	docs.TimestampMs = 9_999_999_999_999
+	attempts["docs-ref"] = docs
+	j := exitedWithRuns(t, goalRow(), goalResult(), attempts)
+
+	status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": passedHere}, map[string]string{"unit": "here"})
+	require.NoError(t, err)
+	require.True(t, status.Verified, status.Violations)
+
+	row := j.stored(t)
+	require.NotNil(t, row.RootEvidence)
+	assert.Equal(t, []types.GateStatus{{ID: "unit", Verified: true, OutputRef: "here"}}, row.RootEvidence.Gates, "docs passed on the holder's evidence and took none")
+	assert.Equal(t, "unit-ref", row.Result.GateEvidence[0].OutputRef)
+	assert.True(t, row.GateAttempts[0].Attempt.Failed)
+}
+
+func TestWaitRootEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
+	t.Parallel()
+
+	j := failedPrimary(t)
+	j.loc.Outputs = func(root string) AttemptResolver {
+		return func(context.Context, string) (types.JobAttempt, error) { return passedHere, nil }
+	}
+	_, err := j.waitWithEvidence(t, nil, map[string]string{types.PrimaryGoalID: "here"})
+	require.ErrorContains(t, err, `output ref "here" names no run this checkout recorded`)
+	assert.Equal(t, types.StateExited, j.stored(t).State)
+}
+
+func TestWaitRootEvidenceStillHasToVerify(t *testing.T) {
+	t.Parallel()
+
+	failedHere := passedHere
+	failedHere.Failed = true
+	for name, run := range map[string]types.JobAttempt{
+		"a failed run":           failedHere,
+		"a run of another check": otherChecks,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			j := failedPrimary(t)
+			status, err := j.waitWithEvidence(t, map[string]types.JobAttempt{"here": run}, map[string]string{types.PrimaryGoalID: "here"})
+			require.NoError(t, err)
+			assert.False(t, status.Verified)
+			row := j.stored(t)
+			assert.Equal(t, types.StateExited, row.State)
+			assert.Nil(t, row.RootEvidence)
+		})
+	}
+}
+
+func TestWaitRootEvidenceRefusals(t *testing.T) {
+	t.Parallel()
+
+	here := map[string]types.JobAttempt{"here": passedHere}
+	tests := map[string]struct {
+		job  func(t *testing.T) rootEvidenceJob
+		refs map[string]string
+		want string
+	}{
+		"a goal the job does not hold": {
+			job: failedPrimary, refs: map[string]string{"nope": "here"}, want: `holds no goal "nope"`,
+		},
+		"a goal that is not a check": {
+			job: func(t *testing.T) rootEvidenceJob {
+				row := acceptRow()
+				row.Goals = []types.Goal{{ID: "api", Kind: types.GoalKindPaths, Paths: []string{"internal/ledger"}}}
+				return exitedWithRuns(t, row, passingResult(), map[string]types.JobAttempt{"a1b2c3d4": failedRun})
+			},
+			refs: map[string]string{"api": "here"}, want: `goal "api" is a paths goal`,
+		},
+		"a goal the holder's evidence already passes": {
+			job: func(t *testing.T) rootEvidenceJob {
+				ok := passingRun
+				ok.TimestampMs = 9_999_999_999_999
+				return exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": ok})
+			},
+			refs: map[string]string{types.PrimaryGoalID: "here"}, want: "already passes on the holder's own evidence",
+		},
+		"a changed path that differs": {
+			job: func(t *testing.T) rootEvidenceJob {
+				j := failedPrimary(t)
+				require.NoError(t, os.WriteFile(filepath.Join(j.root, "cmd", "magus", "ledger.go"), []byte("package b\n"), 0o644))
+				return j
+			},
+			refs: map[string]string{types.PrimaryGoalID: "here"}, want: "1 differ between",
+		},
+		"a changed path missing from the root": {
+			job: func(t *testing.T) rootEvidenceJob {
+				j := failedPrimary(t)
+				require.NoError(t, os.Remove(filepath.Join(j.root, "cmd", "magus", "ledger.go")))
+				return j
+			},
+			refs: map[string]string{types.PrimaryGoalID: "here"}, want: "cmd/magus/ledger.go",
+		},
+		"a holder checkout that is gone": {
+			job: func(t *testing.T) rootEvidenceJob {
+				j := failedPrimary(t)
+				require.NoError(t, os.RemoveAll(j.holder))
+				return j
+			},
+			refs: map[string]string{types.PrimaryGoalID: "here"}, want: "is not there to compare against",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			j := tc.job(t)
+			_, err := j.waitWithEvidence(t, here, tc.refs)
+			require.ErrorContains(t, err, tc.want)
+			row := j.stored(t)
+			assert.Equal(t, types.StateExited, row.State)
+			assert.Nil(t, row.RootEvidence)
+		})
+	}
+}
+
+func TestWaitRootEvidenceNeedsTheFiledResult(t *testing.T) {
+	t.Parallel()
+
+	j := failedPrimary(t)
+	supplied := j.result
+	_, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, &supplied, func(context.Context, string) (types.JobAttempt, error) {
+		return passedHere, nil
+	}, observeClaim(supplied), WithRootEvidence(map[string]string{types.PrimaryGoalID: "here"}))
+	require.ErrorContains(t, err, "starts from the result filed with the job")
+}
+
+func TestWaitRootEvidenceFollowsWhoMayVerify(t *testing.T) {
+	t.Parallel()
+
+	j := failedPrimary(t)
+	_, err := Wait(t.Context(), boundStore(j.loc, j.row.ID), j.row.ID, nil, func(context.Context, string) (types.JobAttempt, error) {
+		return passedHere, nil
+	}, observeClaim(j.result), WithRootEvidence(map[string]string{types.PrimaryGoalID: "here"}))
+	require.ErrorContains(t, err, "a holder does not verify its own work")
+}
