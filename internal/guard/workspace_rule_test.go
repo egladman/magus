@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
@@ -47,11 +48,10 @@ func recordLoadedPolicy(t *testing.T, cacheDir string) {
 	require.FileExists(t, filepath.Join(cacheDir, policyMarkerFile))
 }
 
-// staleDeny is the deny for call while a binary that cannot load the tree judges it, in a
-// checkout of root with no ./magus of its own.
-func staleDeny(call unloadedCall, root string) string {
-	return staleBinaryReason(call, causeStale, failureLines(staleFailures), false, root)
-}
+// staleElsewhereSay is the verdict a stale-binary deny opens with outside a checkout of
+// magus, where the binary judging is a PATH install.
+const staleElsewhereSay = "the magus judging this is older than this workspace and cannot load its guard policy; " +
+	"install a magus that loads this workspace with `magus self update`."
 
 // With a recorded rule set and neither side loading, the calls the policy exists to judge
 // are denied with the fix, decided by the guard itself.
@@ -73,13 +73,8 @@ func TestLoadFailureDeniesGatedVerbs(t *testing.T) {
 			recordLoadedPolicy(t, cacheDir)
 
 			v := Judge(ctx, unloadedDeps(), Request{Input: tc.line, Host: "claude-code", Session: "s1"})
-			assert.Equal(t, Verdict{
-				SchemaVersion: agent.GuardSchemaVersion,
-				Decision:      "deny",
-				Reason: staleDeny(unloadedCall{seam: seamCommand, verb: tc.verb, what: tc.verb, changes: true},
-					hookLocation(ctx, Dependencies{}).workspace),
-				Rule: workspaceCommandRule,
-			}, v)
+			stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay)
+			assert.Contains(t, stored, "\n"+tc.verb+" changes state, and the guard policy that would judge it is not running:")
 
 			commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 			require.Len(t, commands, 1)
@@ -108,20 +103,18 @@ func TestLoadFailureDenyNamesTheRebuildInMagusOwnCheckout(t *testing.T) {
 	root := ownCheckout(t, ctx, true)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	assert.Equal(t, Verdict{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
-		Reason: "magus workspace: `git push` is denied: the magus judging it cannot load this workspace, so its guard policy is not running. " +
-			"That magus is older than the tree.\n" +
-			"  worktree: the magusfile failed to load: " + errStaleLoad.Error() + "\n" +
-			"  approved: the rule could not be resolved: approved magusfile: " + errStaleLoad.Error() + "\n" +
-			"Edits, spawns, pushes and commands that change state wait until a binary loads the tree; reads, `git status` and the fix still run.\n" +
-			"Rebuild it: `./magus run go-build .`. " +
-			"If that cannot load the tree either, move it aside and bootstrap, one command at a time: `mv magus magus.old`, " +
-			"`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.",
-		Rule: workspaceCommandRule,
-	}, v)
-	assert.Equal(t, staleBinaryReason(unloadedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root), v.Reason)
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleOwnSay)
+	assert.Equal(t, staleOwnSay+"\n"+
+		"`git push` changes state, and the guard policy that would judge it is not running:\n"+
+		"  worktree: the magusfile failed to load: "+errStaleLoad.Error()+"\n"+
+		"  approved: the rule could not be resolved: approved magusfile: "+errStaleLoad.Error()+"\n"+
+		"Edits, spawns, pushes and commands that change state wait until a magus loads the tree. "+
+		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.\n"+
+		"If the rebuild cannot load the tree either, move the binary aside and bootstrap, one command at a time: `mv magus magus.old`, "+
+		"then `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`. If the error names a magusfile line instead, fix that line.\n"+
+		"see: "+ruleDocsBase+"stale-binary/", stored)
+	d := staleBinaryDenial(unloadedCall{seam: seamCommand, what: "`git push`"}, causeStale, failureLines(staleFailures), true, root)
+	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"stale-binary/", stored)
 }
 
 // A checkout with no ./magus is bootstrapped, not rebuilt: there is nothing to move aside.
@@ -131,22 +124,22 @@ func TestLoadFailureDenyNamesTheBootstrapWhereThereIsNoBinary(t *testing.T) {
 	ownCheckout(t, ctx, false)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	require.Equal(t, "deny", v.Decision)
-	assert.Contains(t, v.Reason, "This checkout has no ./magus. Bootstrap one: `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`.")
-	assert.NotContains(t, v.Reason, "mv magus magus.old")
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, "the magus judging this is older than this workspace and cannot load its guard policy; "+
+		"bootstrap ./magus with `GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`.")
+	assert.NotContains(t, stored, "mv magus magus.old")
 }
 
-// A leased worker is never told to build: the orchestrator places one binary per base.
-func TestLoadFailureDenyNamesTheOrchestratorForALeasedWorker(t *testing.T) {
+// A leased worker is never told to build: the main session places one binary per base.
+func TestLoadFailureDenyNamesTheMainSessionForALeasedWorker(t *testing.T) {
 	ctx, _ := fleetFixture(t, fleetLeases()[0])
-	recordLoadedPolicy(t, hookLocation(ctx, Dependencies{}).cacheDir)
+	cacheDir := hookLocation(ctx, Dependencies{}).cacheDir
+	recordLoadedPolicy(t, cacheDir)
 	ownCheckout(t, ctx, true)
 
 	v := Judge(ctx, unloadedDeps(), Request{Input: "git push", Host: "claude-code", Session: "s1", Lease: "lease-a"})
-	require.Equal(t, "deny", v.Decision)
-	assert.Contains(t, v.Reason, "ask it to run `magus buzz hack/dev/bootstrap-worktree.buzz -- --job lease-a`")
-	assert.NotContains(t, v.Reason, "go-build")
-	assert.NotContains(t, v.Reason, "Rebuild it")
+	stored := shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleWorkerSay)
+	assert.Contains(t, stored, workerPlacementAt)
+	assert.NotContains(t, stored, "go-build")
 }
 
 // An error in the magusfile that no newer binary would fix, in a checkout that has its
@@ -163,11 +156,11 @@ func TestLoadFailureOfATypoDeniesOnlyGatedVerbs(t *testing.T) {
 	deps := unloadedDepsFor(typo)
 
 	push := Judge(ctx, deps, Request{Input: "git push", Host: "claude-code", Session: "s1"})
-	want := verdictWithRule("deny", workspaceCommandRule)
-	want.Reason = unloadedReason(unloadedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
-	push.Lease, push.LeaseFrom = "", ""
-	assert.Equal(t, want, push)
-	assert.Contains(t, push.Reason, "The likeliest cause is a ./magus older than the tree. Rebuild it: `./magus run go-build .`.")
+	stored := shortDeny(t, cacheDir, push, denyRulePolicyUnloaded,
+		"`git push` waits for this workspace's guard policy to load; rebuild ./magus with `./magus run go-build .`.")
+	d := unloadedDenial(unloadedCall{seam: seamCommand, verb: "`git push`"}, failures, true, true)
+	assert.Equal(t, d.full()+"\nsee: "+ruleDocsBase+"policy-unloaded/", stored)
+	assert.Contains(t, stored, "\nThe likeliest cause is a ./magus older than the tree.\n")
 
 	other := Judge(ctx, deps, Request{Input: "ls -la", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(other))
@@ -257,14 +250,13 @@ func TestLoadFailureDeniesASpawn(t *testing.T) {
 	ctx, cacheDir := spawnFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 
+	// The spawn seam words no deny short, so the whole verdict shows, verdict first.
 	v := Judge(ctx, unloadedDeps(), Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, Verdict{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
-		Reason: staleDeny(unloadedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
-			hookLocation(ctx, Dependencies{}).workspace),
-		Rule: workspaceSpawnRule,
-	}, v)
+	want := verdictWithRule("deny", string(denyRuleStaleBinary))
+	want.Reason = staleBinaryDenial(unloadedCall{seam: seamSpawn, verb: "a subagent spawn", what: "a subagent spawn", changes: true},
+		causeStale, failureLines(staleFailures), false, hookLocation(ctx, Dependencies{}).workspace).full()
+	assert.Equal(t, want, v)
+	assert.True(t, strings.HasPrefix(v.Reason, staleElsewhereSay+"\n"), v.Reason)
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByBuiltin, spawns[0].DecidedBy)
@@ -280,12 +272,7 @@ func TestLoadFailureDeniesAWrite(t *testing.T) {
 	ctx, root, cacheDir := writeFixture(t)
 	recordLoadedPolicy(t, cacheDir)
 	v := Judge(ctx, unloadedDeps(), Request{Input: filepath.Join(root, "CHANGELOG.md"), IsPath: true, Host: "claude-code", Session: "s1"})
-	assert.Equal(t, Verdict{
-		SchemaVersion: agent.GuardSchemaVersion,
-		Decision:      "deny",
-		Reason:        staleDeny(unloadedCall{seam: seamWrite, what: "this file write", changes: true}, root),
-		Rule:          workspaceWriteRule,
-	}, v)
+	assert.Contains(t, shortDeny(t, cacheDir, v, denyRuleStaleBinary, staleElsewhereSay), "\nthis file write changes state")
 }
 
 // A load failure no newer binary fixes leaves the write on the built-in rules, with the note.

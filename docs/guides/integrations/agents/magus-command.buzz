@@ -92,8 +92,8 @@
 // guard that exits silently never runs and nothing says so, and an unguarded
 // session you know about beats one you do not. That is the case where no magus exists
 // to ask. A magus that runs but cannot load the tree (older than it, or a checkout with
-// no ./magus) is judged by that magus itself, which denies every write until a
-// binary loads the tree.
+// no ./magus) is judged by that magus itself, which denies every call that changes
+// state until a binary loads the tree.
 //
 // NOTHING here may raise. Claude Code reads a non-zero hook exit other than 2 as a
 // non-blocking error and runs the call anyway, and exit 2 BLOCKS with stderr as the

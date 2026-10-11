@@ -113,16 +113,19 @@ func worktreeWithoutBinary(root string) (types.Check, bool) {
 	if info, err := os.Lstat(filepath.Join(root, ".git")); err != nil || info.IsDir() {
 		return types.Check{}, false
 	}
-	details := []string{"the orchestrator builds one ./magus per base in the root checkout and places a copy here"}
+	details := []string{
+		"its guard hooks judge with the magus on PATH, which may not load this tree",
+		"the main session builds one ./magus per base and places a copy here",
+	}
 	if info, err := os.Stat(filepath.Join(root, "cmd", "magus")); err == nil && info.IsDir() {
 		details = append(details,
-			"place it: magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id>",
+			"place it: <main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>",
 			"on your own: build one with "+hint.Run.With("build", ".")+", or bootstrap it with the command the guard prints")
 	}
 	return types.Check{
 		Name:    guardBinaryCheck,
 		Status:  types.CheckFail,
-		Message: "this worktree has no ./magus, so its guard hooks judge with the magus on PATH, which may not load this tree",
+		Message: "this worktree has no ./magus",
 		Details: details,
 	}, true
 }

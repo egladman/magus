@@ -263,7 +263,7 @@ type ownBuildOutcome struct {
 	recovery         bool
 	recoveryAdvisory ShellVerdict
 	// lease is the lease the call acts under, "" for the orchestrator or a person. A
-	// worker never builds the binary: there is one per base, and the orchestrator places it.
+	// worker never builds the binary: there is one per base, and the main session places it.
 	lease string
 }
 
@@ -272,7 +272,8 @@ func (o *ownBuildOutcome) apply(v ShellVerdict) ShellVerdict {
 	switch {
 	case o.lease != "" && (o.recovery || o.bootstrap || o.link || !o.hasBinary):
 		// Replaces every pass-through and every "get one with" below: each names a build.
-		v.Deny += "\n" + binaryRemedy(true, o.hasBinary, o.lease)
+		v.Why = binaryRemedy(true, o.hasBinary, o.lease).why + "\n" + denial{Say: v.Deny, Why: v.Why}.full()
+		v.Deny = workerBuildVerdict(o.lease)
 		v.Next, v.Lead = nil, ""
 		return v
 	case o.recovery:

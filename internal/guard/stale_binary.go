@@ -2,6 +2,7 @@ package guard
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path"
 	"slices"
@@ -23,6 +24,16 @@ const (
 	// causeNoBinary is a load failure in a checkout that holds no ./magus, so whatever
 	// judges the call is a magus installed somewhere else.
 	causeNoBinary = "no-binary"
+)
+
+// The rules denyUnloaded refuses under, while no side of the workspace's guard policy loads.
+const (
+	// denyRuleStaleBinary refuses every call that changes state while the binary judging
+	// it cannot load the tree.
+	denyRuleStaleBinary denyRuleName = "stale-binary"
+	// denyRulePolicyUnloaded refuses a gated verb while the policy that registered its
+	// seam's rule does not load.
+	denyRulePolicyUnloaded denyRuleName = "policy-unloaded"
 )
 
 // guardRuleCall is what a magusfile writes to register a guard rule. A textual probe for it
@@ -67,6 +78,17 @@ func declaresGuardRule(root string) bool {
 // cannot see into. A line it cannot prove read-only is not one, so a stale binary errs
 // toward refusing.
 func readOnlyLine(command string, d Dialect) bool {
+	return lineWithin(command, d, magusReadOnly)
+}
+
+// scoutLine is readOnlyLine for a read-only scout, which may also record its work.
+func scoutLine(command string, d Dialect) bool {
+	return lineWithin(command, d, func(args []string) bool { return magusReadOnly(args) || scoutRecord(args) })
+}
+
+// lineWithin reports a line that changes nothing beyond the magus invocations magusAllowed
+// passes.
+func lineWithin(command string, d Dialect, magusAllowed func(args []string) bool) bool {
 	f, err := parseFile(command, d)
 	if err != nil {
 		return false
@@ -89,7 +111,7 @@ func readOnlyLine(command string, d Dialect) bool {
 			}
 			words := literalWords(n.Args)
 			for _, inv := range peelWrappers(words, d) {
-				if !readOnlyInvocation(inv, dynamicArgs(n)) {
+				if !readOnlyInvocation(inv, dynamicArgs(n), magusAllowed) {
 					ok = false
 				}
 			}
@@ -147,7 +169,8 @@ var readOnlyPrograms = map[string]bool{
 
 // readOnlyInvocation reports one program run that changes nothing. dynamic is whether an
 // argument is computed, which rules out the programs whose flags decide whether they write.
-func readOnlyInvocation(c hint.Invocation, dynamic bool) bool {
+// magusAllowed judges a magus invocation.
+func readOnlyInvocation(c hint.Invocation, dynamic bool, magusAllowed func(args []string) bool) bool {
 	switch name := c.Name; {
 	case readOnlyPrograms[name]:
 		return true
@@ -169,7 +192,7 @@ func readOnlyInvocation(c hint.Invocation, dynamic bool) bool {
 	case name == "gh":
 		return ghReadOnly(c.Args)
 	case name == "magus":
-		return magusReadOnly(c.Args)
+		return magusAllowed(c.Args)
 	}
 	return false
 }
@@ -242,7 +265,8 @@ func ghReadOnly(args []string) bool {
 // magusReadVerbs are the magus verbs that answer a question and write nothing shared.
 var magusReadVerbs = []string{"version", "ls", "describe", "query", "status", "explain", "refs", "path", "doctor"}
 
-// magusReadOnly reports a magus invocation that reads. Asking for help always does.
+// magusReadOnly reports a magus invocation that reads. Asking for help always does, and so
+// does `affected --explain`, which says why each project is affected and runs nothing.
 func magusReadOnly(args []string) bool {
 	if magusHelpRequest(args) || magusFlag(args, "dry-run") {
 		return true
@@ -251,12 +275,32 @@ func magusReadOnly(args []string) bool {
 		return false
 	}
 	words := magusSubcommandWords(args)
-	return len(words) > 0 && slices.Contains(magusReadVerbs, words[0])
+	switch {
+	case len(words) == 0:
+		return false
+	case words[0] == "affected":
+		return magusFlag(args, "explain")
+	}
+	return slices.Contains(magusReadVerbs, words[0])
+}
+
+// scoutRecord reports a magus invocation a read-only scout records its work with: `job
+// exec` and `job exit` write only its own row, and `buzz --record` its probe's recording.
+// A scout cannot finish without them, and a stale binary must not strand it.
+func scoutRecord(args []string) bool {
+	words := magusSubcommandWords(args)
+	switch {
+	case len(words) >= 2 && words[0] == "job":
+		return words[1] == "exec" || words[1] == "exit"
+	case len(words) >= 1 && words[0] == "buzz":
+		return magusFlag(args, "record")
+	}
+	return false
 }
 
 // recoveryLine reports the line that gets a binary able to load this tree: the rebuild, or
 // the move-aside and bootstrap it falls back to. Each stands alone on its line. A leased
-// worker has none: there is one binary per base, the orchestrator places it, and a worker
+// worker has none: there is one binary per base, the main session places it, and a worker
 // building a second is the thing the deny exists to prevent.
 func recoveryLine(command string, d Dialect, lease string) bool {
 	if lease != "" {
@@ -285,8 +329,9 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 }
 
 // commandCall describes a shell line to denyUnloaded. A line is a change unless it proves
-// read-only or is the fix; the verb it names is the gated one, if any.
-func commandCall(in commandRuleInput) unloadedCall {
+// read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
+// may also record its work, which reads its row from the job store.
+func commandCall(ctx context.Context, in commandRuleInput, at location) unloadedCall {
 	call := unloadedCall{seam: seamCommand, what: "this command", lease: in.lease}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
@@ -296,45 +341,82 @@ func commandCall(in commandRuleInput) unloadedCall {
 		call.what = "this call to the magus " + in.mcpTool + " tool"
 	}
 	call.changes = !in.readOnly && !readOnlyLine(in.command, in.dialect) && !recoveryLine(in.command, in.dialect, in.lease)
+	if call.changes && in.lease != "" && scoutLine(in.command, in.dialect) {
+		_, row := actingRole(ctx, at, in.lease)
+		call.changes = !row.ReadOnly
+	}
 	return call
 }
 
-// staleBinaryReason is the deny for a call that changes state while the binary judging it
-// cannot load the tree's guard policy.
-func staleBinaryReason(call unloadedCall, cause string, failures []string, own bool, root string) string {
-	var b strings.Builder
-	b.WriteString("magus workspace: " + call.what + " is denied: the magus judging it cannot load this workspace, so its guard policy is not running.")
-	switch cause {
-	case causeStale:
-		b.WriteString(" That magus is older than the tree.")
-	case causeNoBinary:
-		b.WriteString(" This checkout has no ./magus, and the magus that answered cannot load its magusfile.")
+// staleBinaryDenial is the deny for a call that changes state while the binary judging it
+// cannot load the tree's guard policy: the cause and the likeliest fix inline, the call,
+// the failures and the fallbacks behind the ref.
+func staleBinaryDenial(call unloadedCall, cause string, failures []string, own bool, root string) denial {
+	hasBinary := hasMagusBinary(root)
+	fix := binaryRemedy(own, hasBinary, call.lease)
+	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
+	switch {
+	case cause == causeNoBinary:
+		problem = "this checkout has no ./magus to load its guard policy"
+	case own && hasBinary:
+		problem = "./magus is older than this workspace and cannot load its guard policy"
 	}
+	var why strings.Builder
+	why.WriteString(call.what + " changes state, and the guard policy that would judge it is not running:")
 	for _, f := range failures {
-		b.WriteString("\n  " + f)
+		why.WriteString("\n  " + f)
 	}
-	b.WriteString("\nEdits, spawns, pushes and commands that change state wait until a binary loads the tree; reads, `git status` and the fix still run.\n")
-	b.WriteString(binaryRemedy(own, hasMagusBinary(root), call.lease))
-	return b.String()
+	why.WriteString("\nEdits, spawns, pushes and commands that change state wait until a magus loads the tree. " +
+		"Reads, `git status` and the fix still run, and so do a read-only scout's `magus job exec`, `magus job exit` and `magus buzz --record`.")
+	if fix.why != "" {
+		why.WriteString("\n" + fix.why)
+	}
+	return denial{Say: problem + "; " + fix.say + ".", Why: why.String()}
 }
 
-// binaryRemedy is the one fix for a binary that cannot load the tree, by who is asking. A
-// leased worker is never told to build: there is one binary per base, and the orchestrator
-// builds it in the root and places a copy in each worker checkout.
-func binaryRemedy(own, hasBinary bool, lease string) string {
+// binaryFix is the fix for a binary that cannot load the tree: say is the likeliest one,
+// carrying at most one command, and why the rationale and the fallbacks.
+type binaryFix struct{ say, why string }
+
+// binaryRemedy is the fix for a binary that cannot load the tree, by who is asking. A
+// leased worker is never told to build: there is one binary per base, and the main
+// session builds it and places a copy in each worker checkout.
+func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 	switch {
 	case lease != "" && own:
-		return "The binary is the orchestrator's to place, one per base, so a worker never builds one: ask it to run " +
-			"`magus buzz hack/dev/bootstrap-worktree.buzz -- --job " + lease + "`, then retry."
+		return binaryFix{
+			say: "ask the main session to place a ./magus that loads this workspace",
+			why: "There is one binary per base, so a worker never builds one. The main session places it: `" + placementCommand(lease) + "`.",
+		}
 	case lease != "":
-		return "The magus on this machine is not a worker's to replace: ask the orchestrator, or the person who runs it, to install one that loads this workspace."
+		return binaryFix{
+			say: "ask the main session to install a magus that loads this workspace",
+			why: "The magus on this machine is not a worker's to replace.",
+		}
 	case own && hasBinary:
-		return "Rebuild it: `./magus run go-build .`. If that cannot load the tree either, move it aside and bootstrap, " +
-			"one command at a time: `mv magus magus.old`, `" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line."
+		return binaryFix{
+			say: "rebuild ./magus with " + ownRebuild,
+			why: "If the rebuild cannot load the tree either, move the binary aside and bootstrap, one command at a time: " +
+				"`mv magus magus.old`, then `" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+		}
 	case own:
-		return "This checkout has no ./magus. Bootstrap one: `" + bootstrapCommand + "`."
+		return binaryFix{say: "bootstrap ./magus with `" + bootstrapCommand + "`"}
 	}
-	return "Install a magus that loads this workspace (`magus self update`), or fix the line the error names; `magus doctor` names the failure."
+	return binaryFix{
+		say: "install a magus that loads this workspace with `magus self update`",
+		why: "If the error names a magusfile line instead, fix that line; `magus doctor` names the failure.",
+	}
+}
+
+// placementCommand is how the main session places ./magus in a worker's checkout.
+func placementCommand(lease string) string {
+	return "<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job " + lease + " --from <main checkout>"
+}
+
+// workerBuildVerdict is the verdict for a worker building magus: the main session places
+// it, so the worker reads the command it asks the main session to run.
+func workerBuildVerdict(lease string) string {
+	return "a worker never builds magus; the main session places it: `" + placementCommand(lease) + "`."
 }
 
 // soleCall is the line's call when it is one command and nothing else: no pipe, chain,

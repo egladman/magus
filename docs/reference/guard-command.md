@@ -110,21 +110,25 @@ built-ins says little. If it is older than the tree (the magusfile calls a name 
 build predates) or the checkout holds no `./magus`, and the magusfile visibly registers
 a guard rule, the guard denies every call that changes state: file edits, subagent
 spawns, pushes, the magus verbs that write shared state, shell commands it cannot show
-are read-only, and the magus MCP tools that write (`client`, and `diff` with any `op`
-other than `state`). Reads still run, as do `git status` and the fix itself, so the
-session can repair what denied it. The deny names the cause and the one command to run.
+are read-only, and the magus MCP tools that write (`client`, and `diff` with an `op`
+other than `state` or `thread`). Reads still run, as do `git status` and the fix itself,
+so the session can repair what denied it. A read-only scout's lease may still run
+`magus job exec`, `magus job exit` and `magus buzz --record`. The deny is filed under the
+`stale-binary` rule: it prints the cause and the one likeliest command, and the fallbacks
+sit behind its `full verdict:` ref.
 
 The remedy depends on who is asking:
 
-- The orchestrator or a person rebuilds with `./magus run go-build .`. Where that
+- The main session or a person rebuilds with `./magus run go-build .`. Where that
   binary cannot load the tree either, or the checkout holds none, they bootstrap with
-  the command the deny prints.
-- A worker holding a lease never builds a binary. There is one per base: the
-  orchestrator builds it in the root and places a copy in the worker's checkout with
+  the command the full verdict names.
+- A worker holding a lease never builds a binary. There is one per base: the main
+  session builds it in the root and places a copy in the worker's checkout with
   `hack/dev/bootstrap-worktree.buzz`, so the deny tells the worker to ask for that.
 
 A failure that is not a stale binary, such as a typo in a magusfile, still denies only the
-calls a previously loaded policy gated, and still names the failing line.
+calls a previously loaded policy gated, under the `policy-unloaded` rule, and still names
+the failing line.
 
 Two cases still fail open. A magus too old to run `magus shell` at all never produces a
 verdict, so the host's hook reports its own error and the call goes ahead; `magus doctor`
