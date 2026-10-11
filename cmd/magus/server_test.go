@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -244,8 +245,9 @@ func TestDetachedCmdReExecsTheGivenPathWithoutResolvingIt(t *testing.T) {
 // TestDetachedCmdIgnoresPATH proves the resolution is absent rather than merely succeeding:
 // a name that also exists on PATH must not be picked up in place of the path given.
 func TestDetachedCmdIgnoresPATH(t *testing.T) {
-	decoy := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(decoy, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	decoyWS := testkit.NewWorkspace(t)
+	decoyWS.Executable("magus", "#!/bin/sh\n")
+	decoy := decoyWS.Root()
 	t.Setenv("PATH", decoy)
 
 	want := filepath.Join(t.TempDir(), "magus")

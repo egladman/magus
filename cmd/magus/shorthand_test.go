@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,9 +37,9 @@ func TestInstallShorthandIsIdempotent(t *testing.T) {
 }
 
 func TestInstallShorthandRefusesToClobberWithoutForce(t *testing.T) {
-	dir := t.TempDir()
-	occupied := filepath.Join(dir, shorthandFileName())
-	require.NoError(t, os.WriteFile(occupied, []byte("not magus"), 0o755))
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	occupied := w.Executable(shorthandFileName(), "not magus")
 
 	assert.ErrorContains(t, installShorthandCmd([]string{"--dir", dir}), "already exists")
 	content, err := os.ReadFile(occupied)

@@ -125,14 +125,15 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	// The guard-wiring section runs the stand-in written below, which answers at
 	// once; the shipped probe deadline would measure only how loaded the machine is.
 	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
 	// An empty magusfile marks the directory as a workspace root.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# rules\n"), 0o644))
+	w.Magusfile("")
+	w.Write("AGENTS.md", "# rules\n")
 	// "brief-host" is wired as a harness spell (no harnesses/*.json compat
 	// directory left to write it into): a WorkspaceRegistry records the wiring the
 	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
@@ -155,14 +156,13 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	reg.AddHarness("brief-host")
 	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`), 0o644))
+	w.Write("host/hooks.json",
+		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
 	// VerifyHarness actually runs the wired command (internal/agent's
 	// harness_probe.go) instead of trusting its mere presence in the config, so
 	// the brief's guard-wiring section needs something real behind it: a stand-in
 	// for magus running the command glue, answering as a working guard would.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	w.Executable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

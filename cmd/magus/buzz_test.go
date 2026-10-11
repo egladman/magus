@@ -809,8 +809,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
 		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
 	}
-	bin := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(bin, []byte(glueTemplateEcho), 0o755))
+	bin := testkit.NewWorkspace(t).Executable("magus", glueTemplateEcho)
 	record := filepath.Join(dir, "renders-ask")
 	t.Setenv("__MAGUS_BIN", bin)
 	t.Setenv("RENDERS_ASK_RECORD", record)
