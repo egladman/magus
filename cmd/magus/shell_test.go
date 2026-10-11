@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/job/jobtest"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
@@ -52,51 +53,10 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both, the workspace root, and the resolved cache dir.
-// Mirrors internal/guard's own fleetFixture through the exported guard.WithLocation
-// seam, since this package cannot reach the unexported hookActivityLocationKey it
-// uses directly.
 func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
-	// The ledger now lives in the per-repository state directory, and the guard resolves
-	// it with no seam a test can reach, so the environment is what keeps this off the
-	// developer's own ledger.
-	testkit.Isolate(t)
-	root, cacheDir = t.TempDir(), t.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
-	for _, u := range leases {
-		_, err := store.Update(t.Context(), u.ID, func(cur *types.Job) { *cur = u })
-		require.NoError(t, err)
-	}
+	root, cacheDir = jobtest.Ledger(t, leases...)
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
-}
-
-// fleetLeases mirrors internal/guard's own fleetLeases, unexported there: two live
-// workers with disjoint write paths, one of them declaring a denied subtree inside its
-// own.
-func fleetLeases() []types.Job {
-	return []types.Job{
-		{
-			ID:           "lease-a",
-			Criteria:     "own the ledger store\nacceptance: List stays cheap",
-			WritePaths:   []string{"internal/ledger/**"},
-			State:        types.StateRunning,
-			Checkpoint:   "rev-a",
-			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
-			Registered:   1,
-		},
-		{
-			ID:           "lease-b",
-			Criteria:     "grade writes in the guard",
-			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
-			DenyPaths:    []string{"cmd/magus/gen/**"},
-			State:        types.StateDeclared,
-			Checkpoint:   "rev-a",
-			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
-			Registered:   1,
-		},
-	}
 }
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
@@ -1383,7 +1343,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 // flag reaches the rule, a denial exits with the blocking status, and the flag outranks
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
-	ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
+	ctx, root, cacheDir := fleetFixture(t, jobtest.FleetLeases()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1499,7 +1459,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
 			t.Setenv(trail.EnvBaggage, "")
-			ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
+			ctx, root, cacheDir := fleetFixture(t, jobtest.FleetLeases()...)
 			if tc.setup != nil {
 				tc.setup(t, ctx, cacheDir, root)
 			}
@@ -1514,7 +1474,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
 		global = globalFlags{}
 		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		ctx, _, _ := fleetFixture(t, jobtest.FleetLeases()...)
 		var out bytes.Buffer
 		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
 		assert.NotContains(t, out.String(), "leave the host harness alone")
@@ -1523,7 +1483,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	t.Run("verify is a read", func(t *testing.T) {
 		global = globalFlags{}
 		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		ctx, _, _ := fleetFixture(t, jobtest.FleetLeases()...)
 		var out bytes.Buffer
 		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
 		assert.NotContains(t, out.String(), "leave the host harness alone")
