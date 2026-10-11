@@ -22,7 +22,16 @@
 // house style runs only where it names it. -only takes comma-separated rule
 // names. A rule, a decision or a glob proofread cannot use is an error.
 // -thread-length N tells the reply rules how many replies the author already
-// posted in the thread. The flags follow the kind.
+// posted in the thread. -voice FILE judges with a voice file, which runs the
+// voice-drift rule and may hold tense to advice on a change description. The
+// flags follow the kind.
+//
+// voice build measures the author's own texts into a voice file: each FILE is
+// one text of -kind, stdin holds texts separated by NUL bytes, and -field reads
+// JSON lines instead, each text in that field and its kind in -kind-field. It
+// writes to -o, by default $XDG_CONFIG_HOME/proofread/voice.json
+// (~/.config/proofread/voice.json when unset), and refuses a default path
+// inside a git work tree.
 //
 // commit-message reads the message from stdin, or from the file its argument
 // names, as a VCS hook passes it: lines starting with "#" and the scissors line
@@ -142,6 +151,7 @@ var subcommands = []subcommand{
 	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
 	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
+	{"voice", "", "build [FILE...]", "measure your own texts into the voice file -voice reads"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
@@ -158,6 +168,7 @@ func usage() string {
 	b.WriteString("  -decisions FILE    read the decisions table from FILE, or - for stdin\n")
 	b.WriteString("  -only RULES        judge by these comma-separated rules alone\n")
 	b.WriteString("  -thread-length N   the count of replies the author already posted in the thread\n")
+	b.WriteString("  -voice FILE        judge with the voice file proofread voice build wrote\n")
 	b.WriteString("  -format FORMAT     write findings as json (default), sarif, rdjson or text\n")
 	b.WriteString("  -fail-on DECISION  exit 1 when a finding at or above deny, advise or never remains (default never)\n")
 	b.WriteString("  -record            keep this run's findings on this machine, to count what later runs fix\n")
@@ -195,6 +206,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runCalibrate(rest, stdin, stdout, stderr)
 	case "stats":
 		return runStats(rest, stdout, stderr)
+	case "voice":
+		return runVoice(rest, stdin, stderr)
 	}
 
 	for _, s := range subcommands {
@@ -237,6 +250,7 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	decisionsPath := fs.String("decisions", "", "read the decisions table from this `file`, or - for stdin")
 	only := fs.String("only", "", "judge by these comma-separated `rules` alone")
 	threadLength := fs.Int("thread-length", 0, "the `count` of replies the author already posted in the thread")
+	voicePath := fs.String("voice", "", "judge with the voice `file` proofread voice build wrote")
 	format := fs.String("format", "json", "write findings as `json`, sarif, rdjson or text")
 	failOn := fs.String("fail-on", "never", "exit 1 when a finding at or above this `decision` remains: deny, advise or never")
 	record := fs.Bool("record", false, "keep this run's findings on this machine to count what later runs fix")
@@ -271,6 +285,15 @@ func runKind(kind proofread.Kind, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	opts := []proofread.Option{proofread.WithOnly(onlyRules...), proofread.WithThreadLength(*threadLength)}
+
+	if *voicePath != "" {
+		v, err := readVoiceFile(*voicePath)
+		if err != nil {
+			return failure(stderr, err)
+		}
+
+		opts = append(opts, proofread.WithVoice(v))
+	}
 
 	out, err := judge(kind, fs.Args(), stdin, t, opts)
 	if err != nil {

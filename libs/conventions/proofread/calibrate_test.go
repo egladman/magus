@@ -87,11 +87,39 @@ func TestLoadCasesJudgesAChangeDescriptionLineUnderALead(t *testing.T) {
 	}
 }
 
+func TestLoadCasesJudgesAFileUnderItsAuthorSections(t *testing.T) {
+	var authored strings.Builder
+	for i := range MinVoiceTexts {
+		fmt.Fprintf(&authored, "I think case %d works. Let's merge it.\n", i)
+	}
+
+	fsys := fstest.MapFS{
+		"voice-drift.txtar": {Data: []byte("-- author/review-reply --\n" + authored.String() +
+			"-- author/review-reply whole --\nIt's fine.\nShip it.\n-- pass/review-reply --\nI think it works.\n")},
+		"filler.txtar": {Data: []byte("-- hit/reference --\nIt simply works.\n")},
+	}
+
+	got, err := LoadCases(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != 2 || got[0].Voice != nil {
+		t.Fatalf("cases = %+v, want the filler case with no voice and one voice-drift case", got)
+	}
+
+	if v := got[1].Voice; v == nil || v.Kinds[KindReviewReply].Texts != MinVoiceTexts+1 || got[1].Text != "I think it works." {
+		t.Errorf("voice-drift case = %+v, want one judged under a voice of %d replies", got[1], MinVoiceTexts+1)
+	}
+}
+
 func TestLoadCasesRefusesAFileItCannotRead(t *testing.T) {
 	cases := map[string]struct{ name, data, want string }{
-		"no such rule":      {"nope.txtar", "", `nope.txtar: no rule is named "nope"`},
-		"no label":          {"filler.txtar", "-- reference --\nx\n", `filler.txtar:1: section "reference" needs a <label>/<kind> header`},
-		"an unknown label":  {"filler.txtar", "c\n-- miss/reference --\nx\n", `filler.txtar:2: label "miss" is none of hit, pass, fp or fn`},
+		"no such rule":     {"nope.txtar", "", `nope.txtar: no rule is named "nope"`},
+		"no label":         {"filler.txtar", "-- reference --\nx\n", `filler.txtar:1: section "reference" needs a <label>/<kind> header`},
+		"an unknown label": {"filler.txtar", "c\n-- miss/reference --\nx\n", `filler.txtar:2: label "miss" is none of hit, pass, fp, fn or author`},
+		"an author kind with no voice": {"filler.txtar", "-- author/reference --\nx\n",
+			"filler.txtar: the author sections: a voice measures change-description, review-reply, commit-message and issue, not reference"},
 		"a kind not judged": {"filler.txtar", "-- hit/message --\nx\n", `filler.txtar:1: rule filler does not judge kind "message"`},
 		"an unknown attr":   {"filler.txtar", "-- hit/reference loud --\nx\n", `filler.txtar:1: unknown attribute "loud"`},
 		"a bad thread":      {"long-thread.txtar", "-- hit/review-reply thread=x --\nx\n", `long-thread.txtar:1: thread="x" is not a count`},

@@ -50,6 +50,9 @@ type Case struct {
 	// ThreadLength is the count of replies the author already posted, for a
 	// review-reply case.
 	ThreadLength int
+	// Voice is what the case file's author sections measure, or nil when it
+	// has none.
+	Voice *Voice
 }
 
 //go:embed testdata/cases/*.txtar
@@ -84,6 +87,12 @@ const caseLead = "fix(cache): keep the key stable\n" +
 // is judged as a bullet under a fixed title and opening paragraph; a whole one
 // as written. name, owner and callable describe a doc-comment case's symbol,
 // and thread sets a review-reply case's thread length.
+//
+// A section labeled author holds no case. Its texts, one per non-blank line or
+// the whole section, are one author's own writing of its kind: every author
+// section of a file builds one [Voice] (see [BuildVoice]), and every case in
+// the file is judged with it. A file with no author section judges with no
+// voice.
 //
 // A file named for no rule, a header it cannot read, or a kind the rule does
 // not judge is an error naming the file and line.
@@ -125,6 +134,8 @@ func parseCases(name string, data []byte) ([]Case, error) {
 
 	var out []Case
 
+	authored := map[Kind][]string{}
+
 	for _, f := range archive.Files {
 		header := line
 		line++
@@ -138,6 +149,14 @@ func parseCases(name string, data []byte) ([]Case, error) {
 		body := string(f.Data)
 
 		switch {
+		case proto.Label == labelAuthor && whole:
+			authored[proto.Kind] = append(authored[proto.Kind], body)
+		case proto.Label == labelAuthor:
+			for text := range strings.SplitSeq(body, "\n") {
+				if strings.TrimSpace(text) != "" {
+					authored[proto.Kind] = append(authored[proto.Kind], text)
+				}
+			}
 		case whole:
 			proto.Line, proto.Text = line, strings.TrimSuffix(body, "\n")
 			out = append(out, proto)
@@ -161,6 +180,19 @@ func parseCases(name string, data []byte) ([]Case, error) {
 		line += strings.Count(body, "\n")
 	}
 
+	if len(authored) == 0 {
+		return out, nil
+	}
+
+	voice, err := BuildVoice(authored)
+	if err != nil {
+		return nil, fmt.Errorf("%s: the author sections: %w", name, err)
+	}
+
+	for i := range out {
+		out[i].Voice = voice
+	}
+
 	return out, nil
 }
 
@@ -178,9 +210,9 @@ func parseHeader(header string, c check) (Case, bool, error) {
 	out := Case{Label: Label(label), Kind: Kind(kind)}
 
 	switch out.Label {
-	case LabelHit, LabelPass, LabelFalsePositive, LabelFalseNegative:
+	case LabelHit, LabelPass, LabelFalsePositive, LabelFalseNegative, labelAuthor:
 	default:
-		return Case{}, false, fmt.Errorf("label %q is none of hit, pass, fp or fn", label)
+		return Case{}, false, fmt.Errorf("label %q is none of hit, pass, fp, fn or author", label)
 	}
 
 	if !slices.Contains(c.on, out.Kind) {
@@ -228,10 +260,10 @@ func ruleCheck(rule Rule) (check, bool) {
 
 // Fires reports whether the case's rule reports its text, judged with every
 // rule at its default decision and the case's rule turned on where it is house
-// style. The other rules run because a rule leaves a span to another that
-// reports it.
+// style, under the case's voice when it has one. The other rules run because a
+// rule leaves a span to another that reports it.
 func (c Case) Fires() bool {
-	opts := []Option{WithThreadLength(c.ThreadLength)}
+	opts := []Option{WithThreadLength(c.ThreadLength), WithVoice(c.Voice)}
 
 	if ch, ok := ruleCheck(c.Rule); ok && ch.defaultDecision(c.Kind) == DecisionOff {
 		opts = append(opts, WithDecisions(map[Rule]Decision{c.Rule: DecisionDeny}))

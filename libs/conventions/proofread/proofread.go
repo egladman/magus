@@ -218,7 +218,7 @@ func (c check) defaultDecision(kind Kind) Decision {
 // Markdown and pull requests would hold every doc comment in the tree to
 // them at once, with no sweep behind it.
 var checks = slices.Concat(coreChecks, toneChecks, slopChecks, messageChecks, commitChecks, helpChecks,
-	issueChecks, densityChecks, reviewChecks, suppressChecks, agentReplyChecks, toolChecks, []check{templateCheck})
+	issueChecks, densityChecks, reviewChecks, suppressChecks, agentReplyChecks, toolChecks, voiceChecks, []check{templateCheck})
 
 var messageChecks = []check{
 	{rule: RuleMessageLength, on: message, judge: messageLength},
@@ -337,6 +337,7 @@ type options struct {
 	only         []Rule
 	decisions    map[Rule]Decision
 	threadLength int
+	voice        *Voice
 }
 
 // WithOnly judges by the named rules alone. A named rule that does not apply
@@ -348,7 +349,8 @@ func WithOnly(rules ...Rule) Option { return func(o *options) { o.only = append(
 // [DecisionDeny] runs it, house style included, with every finding carrying
 // that decision. A rule the table does not name keeps its default. A name
 // that is no rule matches nothing, so a caller reading a table from a user
-// checks the names against [Rules] first. Later calls add to the table.
+// checks the names against [Rules] first. Later calls add to the table. A
+// voice ([WithVoice]) may still turn a deny of tense into advice.
 func WithDecisions(table map[Rule]Decision) Option {
 	return func(o *options) {
 		if o.decisions == nil {
@@ -440,15 +442,21 @@ func (in input) locate(f Finding) Finding {
 // decide returns the decision c's findings on kind carry, or [DecisionOff]
 // when c does not run there.
 func (o options) decide(c check, kind Kind) Decision {
-	if !slices.Contains(c.on, kind) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) {
+	if !slices.Contains(c.on, kind) || (len(o.only) > 0 && !slices.Contains(o.only, c.rule)) ||
+		(c.rule == RuleVoiceDrift && o.voice == nil) {
 		return DecisionOff
 	}
 
-	if d, ok := o.decisions[c.rule]; ok {
-		return d
+	d, ok := o.decisions[c.rule]
+	if !ok {
+		d = c.defaultDecision(kind)
 	}
 
-	return c.defaultDecision(kind)
+	if d == DecisionDeny && o.voice.relaxes(c.rule, kind) {
+		return DecisionAdvise
+	}
+
+	return d
 }
 
 // reports reports whether c runs on the text in holds. A rule that leaves a

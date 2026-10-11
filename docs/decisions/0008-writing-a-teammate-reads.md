@@ -129,7 +129,9 @@ A caller denies on `deny`, tells `advise` once, and never sees `off`.
   `hack/policy/proofread.buzz`, a decisions table beside `hack/policy/builtins.buzz` and kept
   the same way: a reason beside every entry. A path-scoped entry (`blog/**`: a post keeps
   its author's voice) is an exemption with its reason, reported when it no longer matches.
-- **No profiles.** A named profile would be a second spelling of a decisions table.
+- **No profiles.** A named profile would be a second spelling of a decisions table. A
+  voice file is not one: it describes one author's measured style and sets no rule's
+  decision, except that it holds `tense` to advice on that author's change descriptions.
 - **Every rule is catalogued** like a guard rule, as `{name, code, decision, catches, why}`
   (`proofread rules`), and the docs render a page per rule from it. Each rule also has
   a code in its own `PRF` prefix through `libs/diagnostics`, the shared framework magus

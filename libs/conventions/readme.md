@@ -269,6 +269,30 @@ finding is stale; `suppression-unused` (PRF1090) reports both, at the
 suppression's own line. A suppression inside a fenced block or a backtick span is
 text, so a page can show the syntax.
 
+### Voice files
+
+A voice file records one author's measured style per kind: change descriptions,
+review replies, commit messages and issues. `proofread voice build -kind KIND
+[FILE...]` measures the author's own texts, one per file, NUL-separated on stdin,
+or as JSON lines with `-field` (and `-kind-field` for a kind per line), and
+writes the file to `-o`, by default `$XDG_CONFIG_HOME/proofread/voice.json`
+(`~/.config/proofread/voice.json` when unset). It refuses that default inside a
+git work tree. The file holds aggregates alone, per kind: the texts and words
+counted, the first-person and future-tense rates, and the p10, p50 and p90 of
+each feature: words, words per sentence, the longest paragraph's words, colons,
+parentheses and dashes per 100 words, code spans, contractions, headings and
+bold, the marker words its, every, one, with, all, and, the, and a commit
+subject's characters. It holds no text, no content word and no path. It never
+leaves the machine and is never committed. Spelling, casing and semicolons are
+not measured.
+
+`-voice FILE` on any kind runs `voice-drift` (PRF1040), an advise-only rule
+that reports a text once when two or more features measure outside the author's
+p10 to p90 range, naming each feature and its direction. A kind under 30 texts
+sets no range. A voice whose change descriptions use "I" at 10 or more per 1000
+words and "will" at 2 or more holds `tense` to advice on change descriptions,
+where a decisions table would deny it. The [proofread guide](https://eli.gladman.cc/magus/guides/proofread/) walks through building one.
+
 ### Rules
 
 | Rule                 | Code    | Kinds                                | Default                              | Reports                                                                          |

@@ -98,7 +98,7 @@ const (
 // reused: a retired rule keeps its number out of circulation. Each family
 // file keeps its own rules' texts beside their checks.
 var ruleTexts = mergeTexts(coreTexts, commitTexts, helpTexts, issueTexts, densityTexts, reviewTexts, suppressTexts,
-	agentReplyTexts, toolTexts)
+	agentReplyTexts, toolTexts, voiceTexts)
 
 func mergeTexts(tables ...map[Rule]ruleText) map[Rule]ruleText {
 	out := map[Rule]ruleText{}

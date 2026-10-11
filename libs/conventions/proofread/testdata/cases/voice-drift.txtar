@@ -1,0 +1,53 @@
+A reply measured against an invented author's own replies: short, first
+person, contracted, no markup. The author sections build the voice; every
+case below is judged with it.
+-- author/review-reply --
+I think this works. Let's merge it after the build.
+Good catch, I'll fix the typo in the docs.
+I don't think we need the retry here. It's already idempotent.
+Looks fine to me. Thanks for the quick turnaround.
+I'd keep the old name. It's what the CLI prints.
+We can drop this once the server is gone.
+I can't reproduce it on my machine. Can you share the log?
+That's fair. I'll split it into two commits.
+I'm not sure about the default. Let's ask in the thread.
+Fixed in the next commit.
+I think the test is flaky, not the code. It passed twice locally.
+We should probably cache this. It's called on every request.
+Nice, that's much easier to read.
+I'll move the helper into the package that uses it.
+Let's not block on this. I'll open a follow-up.
+I'd rather fail loudly here. A silent skip hides the bug.
+It's the same check as before, just earlier.
+I don't love the name but I can't think of a better one.
+Can we keep the flag? Some scripts still pass it.
+I think we're good. Merging after CI.
+That's on me, I forgot the lockfile.
+I'll add a test for the empty case.
+We've seen this before. It's the clock on the build host.
+I don't think it matters for now. It's a small list.
+I'll rebase and push again.
+Good point. I'll make it an error instead.
+I think it's fine to inline it. It's only used once.
+Let's keep the old behavior behind the flag for one release.
+I'm happy with this. Thanks for taking it on.
+I'd split the parser change out. It's easier to review alone.
+It's slower but it's correct. I'll measure it tomorrow.
+We don't need the mutex. Only one goroutine writes.
+-- pass/review-reply --
+I think this is right. Let's ship it.
+I'll fix the import order and push.
+That's fine. I'd keep the test though.
+I think this **works** now. Let's merge it after the build.
+-- hit/review-reply whole --
+**Summary:** The change updates the cache layer so that every key is computed with the sorted
+inputs, and the test suite now covers the path. **Details:** The handler (in the server package)
+reads all of the inputs, sorts them, and hashes the result: this ensures that one key is produced for
+each distinct set of inputs, with the ordering no longer affecting the outcome.
+-- hit/review-reply whole --
+## Changes
+
+The existing behavior is preserved for all of the other callers (the CLI, the daemon and the
+console), and the documentation reflects the new contract as well: every caller receives the same
+result regardless of the order in which the inputs arrive, which ensures that the cache remains
+consistent across all of the supported platforms and configurations.

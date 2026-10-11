@@ -146,3 +146,50 @@ Nothing leaves the machine. The counts live in `$XDG_STATE_HOME/proofread/outcom
 (`~/.local/state/proofread/outcomes.json` when the variable is unset), hold fingerprints
 and numbers but no message text, and proofread makes no network call. Delete the
 directory to start over.
+
+## 8. Judge drafts against your own voice
+
+A voice file records how you write each kind of text: how long your texts run, how
+long your sentences are, how much punctuation, code and formatting they carry, and how
+often you contract. With it, the `voice-drift` rule advises when a draft measures
+outside your own range on two or more of those features, so a draft written with an
+assistant still reads as yours. The file holds numbers alone: no text, no word you
+chose and no path. It never leaves your machine, and you never commit it.
+
+1. Collect texts you wrote by hand, at least 30 of each kind. Leave out anything an
+   assistant drafted, or the file measures the assistant.
+2. Build the file from your commit messages:
+
+   ```sh
+   git log --author="$(git config user.email)" --format=%B%x00 |
+     proofread voice build -kind commit-message
+   ```
+
+   Each text on stdin ends at a NUL byte. To measure files instead, pass one text per
+   file: `proofread voice build -kind review-reply reply1.md reply2.md`. For a forge
+   export, pass JSON lines with `-field body`, and `-kind-field kind` when each line
+   names its own kind.
+3. Read the summary on stderr. A kind under 30 texts keeps its counts, and
+   `voice-drift` does not judge it.
+4. Judge a draft with the file:
+
+   ```sh
+   proofread review-reply -voice ~/.config/proofread/voice.json -format text < draft.md
+   ```
+
+   A `voice-drift` finding names each feature that drifted, whether the draft runs
+   above or below your range, and the range itself. It is advice: rewrite the draft the
+   way you would have written it.
+
+`proofread voice build` writes to `$XDG_CONFIG_HOME/proofread/voice.json`
+(`~/.config/proofread/voice.json` when the variable is unset), readable by you alone.
+It refuses that default path when it falls inside a git work tree, such as a config
+directory kept in a dotfiles repository, since a commit there would publish the file.
+Name another path with `-o`.
+
+The file measures style, never spelling or casing, and it never suggests an error to
+make a draft look hand-typed. Semicolons are not measured, since this repository's
+commit subjects join clauses with one by rule. One measurement changes a decision: when
+your change descriptions use "I" at 10 or more per 1000 words and "will" at 2 or more,
+`tense` advises rather than denies on them, since writing about your own change in the
+first person is how you write.
