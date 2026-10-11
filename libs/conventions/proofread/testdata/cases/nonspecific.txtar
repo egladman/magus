@@ -71,5 +71,15 @@ the build keeps timing out. Try again to fix it.
 @agent something went wrong, please try again
 It failed again, fix it
 -- pass/review-reply whole --
+> This looks wrong to me.
+
+Moved the retry behind a backoff.
+-- pass/review-reply whole --
+> Each handler opens a pool of its own.
+
+Please fix this.
+-- pass/review-reply --
+You said 'it is wrong here' and I agree.
+-- pass/review-reply whole --
 <!-- This is an auto-generated reply by CodeRabbit -->
 Something went wrong, please try again.

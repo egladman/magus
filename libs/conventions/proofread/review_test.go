@@ -108,6 +108,24 @@ func TestNonspecificTakesAFindableSymptomAsTheReason(t *testing.T) {
 	})
 }
 
+// A block quote is the comment a reply answers, so it is the reply's referent
+// and none of its words are the writer's; a judgment in single quotes is
+// mentioned, not made.
+func TestNonspecificJudgesOnlyTheWritersOwnWords(t *testing.T) {
+	runTextCases(t, RuleNonspecific, []textCase{
+		{"a judgment in the quote", KindReviewReply,
+			"> This looks wrong to me.\n\nMoved the retry behind a backoff.", nil},
+		{"a request after the quote", KindReviewReply,
+			"> Each handler opens a pool of its own.\n\nPlease fix this.", nil},
+		{"a verdict on the quote", KindReviewReply, "> pinned the linter to the old release\n\nThat's weird.", nil},
+		{"an earlier reply quoted", KindReviewReply,
+			"On Monday the reviewer wrote:\n> fix it...\n\nDone, the lockfile came from the base branch.", nil},
+		{"words in single quotes", KindReviewReply, "You said 'it is wrong here' and I agree.", nil},
+		{"the same words unquoted", KindReviewReply, "You said it is wrong here and I agree.", []string{"1:wrong"}},
+		{"no quote at all", KindReviewReply, "Please fix this.", []string{"1:fix this"}},
+	})
+}
+
 func TestWhyOpenerReportsAQuestionAboutTheAuthorsChoice(t *testing.T) {
 	runTextCases(t, RuleWhyOpener, []textCase{
 		{"why did you", KindReviewReply, "Why did you add the lock?", []string{"1:Why did you"}},

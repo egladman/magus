@@ -13,7 +13,8 @@ const (
 	// asks for a change and names nothing to act on: no code, path, line,
 	// identifier, example or reason. A failure the reader can find ("tests are
 	// failing") is a reason. A reply [WithAnchored] marks sits on its line, and
-	// is not judged.
+	// one holding a block quote answers the quoted comment; neither is judged.
+	// Nor are words in single quotes.
 	RuleNonspecific Rule = "nonspecific"
 	// RuleWhyOpener reports a review reply sentence that opens by asking the
 	// author why they did something ("Why did you").
@@ -59,7 +60,11 @@ var reviewTexts = map[Rule]ruleText{
 			"round 5 measured 32.5% (13 of 40, lower bound 0.20); seven of its wrong firings named a failure " +
 			"the reader can find (\"tests are failing\", \"CI failed\", a command that times out), which is " +
 			"the reason for the change asked, so such a reply is left alone. A retry asked with nothing " +
-			"named (\"something went wrong, please try again\") is still reported.",
+			"named (\"something went wrong, please try again\") is still reported. Many of its other wrong " +
+			"firings judged words the writer quoted. A block quote is the comment the reply answers, its " +
+			"referent as an anchored reply's line is, so a reply holding one is left alone, and so is a " +
+			"judgment in single quotes. A reply CodeRabbit marks as its own auto-generated reply is not the " +
+			"author's.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",
@@ -202,11 +207,26 @@ func leadingWord(rest string) string {
 	return rest[:end]
 }
 
+// judged is the first judgment in text, one sentence, of the author's work:
+// not a mention in single quotes.
+func judged(text string) []int {
+	for _, at := range judgment.FindAllStringIndex(text, -1) {
+		if !singleQuoted(text, at[0]) {
+			return at
+		}
+	}
+
+	return nil
+}
+
 // nonspecific reports the first judgment in a top-level reply that names
 // nothing to act on. A judgment with a reason beside it in its sentence, or
-// one that names what it judges, is left alone.
+// one that names what it judges, is left alone, and so are the words the
+// writer quotes.
 func nonspecific(in input) []Finding {
-	if in.opts.anchored {
+	// A block quote is the comment the reply answers: its referent, as the
+	// line is an anchored reply's, and words the writer did not write.
+	if in.opts.anchored || slices.ContainsFunc(in.source, inQuote) {
 		return nil
 	}
 
@@ -224,7 +244,7 @@ func nonspecific(in input) []Finding {
 		for _, span := range sentenceBounds(para.text) {
 			text := para.text[span[0]:span[1]]
 
-			at := judgment.FindStringIndex(text)
+			at := judged(text)
 			if at == nil || reasonGiven.MatchString(text) || namesReferent(text, at) {
 				continue
 			}
