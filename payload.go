@@ -25,7 +25,7 @@ import (
 func (m *Magus) PayloadByRef(ref string) ([]byte, error) {
 	searched := []string{m.CacheDir()}
 	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok {
-		if dir, err := ResolveCacheDir(primary); err == nil && !slices.Contains(searched, dir) {
+		if dir, ok := peerCacheDir(primary); ok && !slices.Contains(searched, dir) {
 			searched = append(searched, dir)
 		}
 	}
@@ -63,6 +63,13 @@ func primaryCheckoutRoot(root string) (string, bool) {
 		return "", false
 	}
 	return filepath.Join(others[0], rel), true
+}
+
+// peerCacheDir is the cache dir another checkout's workspace at root would use; ok is false
+// when its config does not load, which leaves that checkout out of a search.
+func peerCacheDir(root string) (string, bool) {
+	dir, err := ResolveCacheDir(root)
+	return dir, err == nil
 }
 
 func hasGitDir(checkout string) bool {

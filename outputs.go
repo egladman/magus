@@ -7,15 +7,19 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -385,4 +389,109 @@ func decodeOutputRecord(raw []byte) (types.StoredOutput, error) {
 		return types.StoredOutput{}, err
 	}
 	return rec, nil
+}
+
+// refMiss is what a failed lookup learned about WHO has the ref: a ref lives in the output
+// store of the checkout that ran it, so another worktree of the repository reads it there.
+type refMiss struct {
+	holder    string   // newest other checkout the session store records as having run the ref
+	gone      bool     // holder is no longer on disk
+	consulted []string // other checkouts whose store was read and did not hold it
+}
+
+// notFound is the miss as the error `magus query` renders under MGS8001.
+func (r refMiss) notFound(ref string, stores ...string) *cache.RefNotFoundError {
+	e := &cache.RefNotFoundError{Ref: ref, Stores: stores, Holder: r.holder, HolderGone: r.gone}
+	for _, root := range r.consulted {
+		e.Stores = append(e.Stores, "checkout "+root)
+	}
+	return e
+}
+
+// apply folds the miss into an error another layer built, so the remote lookup's message
+// names the holder too.
+func (r refMiss) apply(e *cache.RefNotFoundError) {
+	e.Holder, e.HolderGone = r.holder, r.gone
+	if len(r.consulted) == 0 || len(e.Stores) == 0 {
+		return
+	}
+	stores := []string{e.Stores[0]}
+	for _, root := range r.consulted {
+		stores = append(stores, "checkout "+root)
+	}
+	e.Stores = append(stores, e.Stores[1:]...)
+}
+
+// recordedHolders lists the other checkouts the repo-wide session store records as having
+// run a ref starting with ref, newest first, then the primary checkout when this is a
+// linked worktree, for a run no fact recorded. Only checkouts that recorded the ref are
+// named, so a repository with hundreds of worktrees costs one store read, never a walk of
+// them.
+func (m *Magus) recordedHolders(ref string) (recorded []string, fallback string) {
+	ref = strings.ToLower(strings.TrimSpace(ref))
+	if ref == "" {
+		return nil, ""
+	}
+	if dir, err := sessions.Dir(m.ws.Root); err == nil {
+		if fold, err := sessions.ReadAll(dir); err == nil {
+			for _, s := range sessions.Summarize(fold) {
+				if s.Workspace == "" || s.Workspace == m.ws.Root || slices.Contains(recorded, s.Workspace) {
+					continue
+				}
+				if slices.ContainsFunc(s.Targets, func(t sessions.TargetResult) bool { return recordedRefMatches(t.Ref, ref) }) {
+					recorded = append(recorded, s.Workspace)
+				}
+			}
+		}
+	}
+	if primary, ok := primaryCheckoutRoot(m.ws.Root); ok && !slices.Contains(recorded, primary) {
+		fallback = primary
+	}
+	return recorded, fallback
+}
+
+// recordedRefMatches reports whether a fact's ref is the one a user's ref names: the user
+// may type a prefix of it, or an attempt id that extends it.
+func recordedRefMatches(recorded, ref string) bool {
+	return len(recorded) > len(cache.RefPrefix) && (strings.HasPrefix(recorded, ref) || strings.HasPrefix(ref, recorded))
+}
+
+// readHeld reads ref from the output store of each other checkout that may hold it, until
+// one does not miss. Callers try this checkout's own store first. notify says on stderr
+// which checkout answered; nothing is written back, so the holder's store is untouched.
+func readHeld[T any](ctx context.Context, m *Magus, ref string, notify bool, read func(*cache.OutputStore) (T, error)) (T, refMiss, error) {
+	var zero T
+	var miss refMiss
+	recorded, fallback := m.recordedHolders(ref)
+	if len(recorded) > 0 {
+		miss.holder = recorded[0]
+	}
+	candidates := recorded
+	if fallback != "" {
+		candidates = append(candidates, fallback)
+	}
+	for _, root := range candidates {
+		if _, err := os.Stat(root); err != nil {
+			miss.gone = miss.gone || root == miss.holder
+			continue
+		}
+		dir, ok := peerCacheDir(root)
+		if !ok || dir == m.CacheDir() {
+			continue // a shared cache dir already missed
+		}
+		v, err := read(cache.NewOutputStore(dir))
+		if errors.Is(err, fs.ErrNotExist) {
+			miss.consulted = append(miss.consulted, root)
+			continue
+		}
+		if err != nil {
+			return zero, miss, err
+		}
+		if notify {
+			slog.InfoContext(ctx, fmt.Sprintf("read %s from the output store of %s, another checkout of this repository", ref, root),
+				attr.Notice(""), attr.Component("magus"))
+		}
+		return v, miss, nil
+	}
+	return zero, miss, fs.ErrNotExist
 }

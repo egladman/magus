@@ -323,10 +323,24 @@ func (c *Cache) storeFetchedBundle(ctx context.Context, data []byte, b OutputBun
 type RefNotFoundError struct {
 	Ref    string
 	Stores []string
+	// Holder is the other checkout the session store says ran Ref, empty when none is
+	// recorded. A ref lives in the store of the checkout that ran it, so naming the
+	// holder is the whole remedy.
+	Holder string
+	// HolderGone reports that Holder is no longer on disk.
+	HolderGone bool
 }
 
 func (e *RefNotFoundError) Error() string {
-	return fmt.Sprintf("no stored output for ref %q, consulted %s", e.Ref, strings.Join(e.Stores, ", "))
+	msg := fmt.Sprintf("no stored output for ref %q, consulted %s", e.Ref, strings.Join(e.Stores, ", "))
+	switch {
+	case e.Holder == "":
+		return msg + fmt.Sprintf("; if another checkout ran it, read it there with `magus query output %s`", e.Ref)
+	case e.HolderGone:
+		return msg + fmt.Sprintf("; it was recorded by %s, which is no longer on disk; if that checkout is restored, `cd %s && magus query output %s` reads it", e.Holder, e.Holder, e.Ref)
+	default:
+		return msg + fmt.Sprintf("; it was recorded by %s; read it there with `cd %s && magus query output %s`", e.Holder, e.Holder, e.Ref)
+	}
 }
 
 // Is reports RefNotFoundError as fs.ErrNotExist, so existing not-found handling
