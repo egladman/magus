@@ -1,13 +1,13 @@
 ---
 title: "blame"
-description: "A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision."
+description: "An advisory by default: it explains, and blocks nothing, on a person or past work as the subject of a fault, and contempt for code or a decision."
 tags: [proofread, rules, blame, advise]
 aliases: [reference/prose/blame]
 ---
 
 # blame
 
-A deny rule by default: it refuses a person or past work as the subject of a fault, and contempt for code or a decision.
+An advisory by default: it explains, and blocks nothing, on a person or past work as the subject of a fault, and contempt for code or a decision.
 
 ## What it catches
 
@@ -28,11 +28,11 @@ The code is `PRF2001`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | off     |
-| `review-reply`       | off     |
-| `commit-message`     | off     |
-| `issue`              | off     |
-| `agent-reply`        | off     |
+| `change-description` | advise  |
+| `review-reply`       | advise  |
+| `commit-message`     | advise  |
+| `issue`              | advise  |
+| `agent-reply`        | advise  |
 
 ## Changing it
 

@@ -1,13 +1,13 @@
 ---
 title: "ing-tail"
-description: "An advisory by default: it explains, and blocks nothing, on a participle clause added to claim significance (\", highlighting the importance of\")."
+description: "A deny rule by default: it refuses a participle clause added to claim significance (\", highlighting the importance of\")."
 tags: [proofread, rules, ing-tail, advise]
 aliases: [reference/prose/ing-tail]
 ---
 
 # ing-tail
 
-An advisory by default: it explains, and blocks nothing, on a participle clause added to claim significance (", highlighting the importance of").
+A deny rule by default: it refuses a participle clause added to claim significance (", highlighting the importance of").
 
 ## What it catches
 
@@ -28,15 +28,15 @@ The code is `PRF4011`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `reference`          | advise  |
-| `guide`              | advise  |
-| `change-description` | advise  |
-| `agent-instructions` | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
-| `release-notes`      | advise  |
-| `changelog`          | advise  |
-| `agent-reply`        | advise  |
+| `reference`          | off     |
+| `guide`              | off     |
+| `change-description` | off     |
+| `agent-instructions` | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `release-notes`      | off     |
+| `changelog`          | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 

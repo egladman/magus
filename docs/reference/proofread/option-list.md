@@ -1,13 +1,13 @@
 ---
 title: "option-list"
-description: "An advisory by default: it explains, and blocks nothing, on an agent reply that lays out labeled options or alternatives."
+description: "A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives."
 tags: [proofread, rules, option-list, advise]
 aliases: [reference/prose/option-list]
 ---
 
 # option-list
 
-An advisory by default: it explains, and blocks nothing, on an agent reply that lays out labeled options or alternatives.
+A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8023`. The decision depends on the kind of text judged:
 
 | Kind          | Default |
 | ------------- | ------- |
-| `agent-reply` | advise  |
+| `agent-reply` | off     |
 
 ## Changing it
 

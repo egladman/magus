@@ -1,7 +1,7 @@
 ---
 title: "changelog-heading"
 description: "A deny rule by default: it refuses a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\"."
-tags: [proofread, rules, changelog-heading, deny]
+tags: [proofread, rules, changelog-heading, advise]
 aliases: [reference/prose/changelog-heading]
 ---
 
@@ -28,7 +28,7 @@ The code is `PRF1030`. The decision depends on the kind of text judged:
 
 | Kind        | Default |
 | ----------- | ------- |
-| `changelog` | deny    |
+| `changelog` | off     |
 
 ## Changing it
 
@@ -38,7 +38,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"changelog-heading": "advise"},
+  "rules": {"changelog-heading": "deny"},
   "paths": {"blog/**": {"changelog-heading": "off"}}
 }
 ```
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "changelog-heading", "code": "PRF1030", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-heading/"}
+{"rule": "changelog-heading", "code": "PRF1030", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-heading/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

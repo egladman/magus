@@ -1,13 +1,13 @@
 ---
 title: "absolute"
-description: "An advisory by default: it explains, and blocks nothing, on never, nobody or nothing as a claim about the past (\"has never fired\", \"nobody checked\")."
+description: "A deny rule by default: it refuses never, nobody or nothing as a claim about the past (\"has never fired\", \"nobody checked\")."
 tags: [proofread, rules, absolute, advise]
 aliases: [reference/prose/absolute]
 ---
 
 # absolute
 
-An advisory by default: it explains, and blocks nothing, on never, nobody or nothing as a claim about the past ("has never fired", "nobody checked").
+A deny rule by default: it refuses never, nobody or nothing as a claim about the past ("has never fired", "nobody checked").
 
 ## What it catches
 
@@ -28,10 +28,10 @@ The code is `PRF2003`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
-| `review-reply`       | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
+| `change-description` | off     |
+| `review-reply`       | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
 
 ## Changing it
 

@@ -1,13 +1,13 @@
 ---
 title: "claim"
-description: "An advisory by default: it explains, and blocks nothing, on a measurement, a comparison or a completion with no evidence in its sentence or bullet."
+description: "A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet."
 tags: [proofread, rules, claim, advise]
 aliases: [reference/prose/claim]
 ---
 
 # claim
 
-An advisory by default: it explains, and blocks nothing, on a measurement, a comparison or a completion with no evidence in its sentence or bullet.
+A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet.
 
 ## What it catches
 
@@ -28,11 +28,11 @@ The code is `PRF3001`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
-| `review-reply`       | advise  |
-| `commit-message`     | advise  |
-| `issue`              | advise  |
-| `agent-reply`        | advise  |
+| `change-description` | off     |
+| `review-reply`       | off     |
+| `commit-message`     | off     |
+| `issue`              | off     |
+| `agent-reply`        | off     |
 
 ## Changing it
 

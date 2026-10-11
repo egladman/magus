@@ -1,13 +1,13 @@
 ---
 title: "issue-repro"
-description: "An advisory by default: it explains, and blocks nothing, on a bug report with neither what happened against what was expected, nor steps to reproduce it."
+description: "A deny rule by default: it refuses a bug report with neither what happened against what was expected, nor steps to reproduce it."
 tags: [proofread, rules, issue-repro, advise]
 aliases: [reference/prose/issue-repro]
 ---
 
 # issue-repro
 
-An advisory by default: it explains, and blocks nothing, on a bug report with neither what happened against what was expected, nor steps to reproduce it.
+A deny rule by default: it refuses a bug report with neither what happened against what was expected, nor steps to reproduce it.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF1020`. The decision depends on the kind of text judged:
 
 | Kind    | Default |
 | ------- | ------- |
-| `issue` | advise  |
+| `issue` | off     |
 
 ## Changing it
 

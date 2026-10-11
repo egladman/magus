@@ -1,13 +1,13 @@
 ---
 title: "participles"
-description: "An advisory by default: it explains, and blocks nothing, on a text that hangs present participial clauses on its sentences at a generated-writing rate."
+description: "A deny rule by default: it refuses a text that hangs present participial clauses on its sentences at a generated-writing rate."
 tags: [proofread, rules, participles, advise]
 aliases: [reference/prose/participles]
 ---
 
 # participles
 
-An advisory by default: it explains, and blocks nothing, on a text that hangs present participial clauses on its sentences at a generated-writing rate.
+A deny rule by default: it refuses a text that hangs present participial clauses on its sentences at a generated-writing rate.
 
 ## What it catches
 
@@ -28,10 +28,10 @@ The code is `PRF4020`. The decision depends on the kind of text judged:
 
 | Kind                 | Default |
 | -------------------- | ------- |
-| `change-description` | advise  |
-| `reference`          | advise  |
-| `guide`              | advise  |
-| `issue`              | advise  |
+| `change-description` | off     |
+| `reference`          | off     |
+| `guide`              | off     |
+| `issue`              | off     |
 
 ## Changing it
 

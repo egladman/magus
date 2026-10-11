@@ -1,7 +1,7 @@
 ---
 title: "second-person"
 description: "A deny rule by default: it refuses we, us, our or ours in a guide, which speaks to the reader as you."
-tags: [proofread, rules, second-person, deny]
+tags: [proofread, rules, second-person, advise]
 aliases: [reference/prose/second-person]
 ---
 
@@ -28,7 +28,7 @@ The code is `PRF1003`. The decision depends on the kind of text judged:
 
 | Kind    | Default |
 | ------- | ------- |
-| `guide` | deny    |
+| `guide` | off     |
 
 ## Changing it
 
@@ -38,7 +38,7 @@ or for the files a glob matches. Proofread reads the table from the file its
 
 ```json
 {
-  "rules": {"second-person": "advise"},
+  "rules": {"second-person": "deny"},
   "paths": {"blog/**": {"second-person": "off"}}
 }
 ```
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "second-person", "code": "PRF1003", "decision": "deny", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
+{"rule": "second-person", "code": "PRF1003", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

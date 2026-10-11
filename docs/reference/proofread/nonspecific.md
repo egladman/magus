@@ -1,13 +1,13 @@
 ---
 title: "nonspecific"
-description: "An advisory by default: it explains, and blocks nothing, on a review reply that judges or asks for a change and names no code, path, line, example or reason."
+description: "A deny rule by default: it refuses a review reply that judges or asks for a change and names no code, path, line, example or reason."
 tags: [proofread, rules, nonspecific, advise]
 aliases: [reference/prose/nonspecific]
 ---
 
 # nonspecific
 
-An advisory by default: it explains, and blocks nothing, on a review reply that judges or asks for a change and names no code, path, line, example or reason.
+A deny rule by default: it refuses a review reply that judges or asks for a change and names no code, path, line, example or reason.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8010`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 
