@@ -12,17 +12,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/internal/cache/gen/mocks"
 	"github.com/egladman/magus/types"
 )
 
 // spanNames mocks a Tracer that opens any span and returns the names it was asked for, in
 // order. Which spans open is a Contains assertion, so the mock expects no fixed set.
-func spanNames(t *testing.T) (*mocks.MockTracer, func() []string) {
+func spanNames(t *testing.T) (*MockTracer, func() []string) {
 	t.Helper()
 	var mu sync.Mutex
 	var names []string
-	tr := mocks.NewMockTracer(t)
+	tr := NewMockTracer(t)
 	tr.EXPECT().StartSpan(mock.Anything, mock.Anything).
 		RunAndReturn(func(ctx context.Context, name string) (context.Context, func(error)) {
 			mu.Lock()

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"github.com/egladman/magus/internal/handler/tool/gen/mocks"
 	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -306,14 +305,14 @@ func TestBoundsNilWhenUnconstrained(t *testing.T) {
 // the one lifecycle call; the project list is served by projectWorkspace.
 type lifecycleWS struct {
 	projectWorkspace
-	*mocks.MockLifecycleSource
+	*mockLifecycleSource
 }
 
 func newLifecycleWS(t *testing.T, project *types.Project) lifecycleWS {
 	t.Helper()
 	return lifecycleWS{
-		projectWorkspace:   projectWorkspace{projects: []*types.Project{project}},
-		MockLifecycleSource: mocks.NewMockLifecycleSource(t),
+		projectWorkspace:    projectWorkspace{projects: []*types.Project{project}},
+		mockLifecycleSource: newMockLifecycleSource(t),
 	}
 }
 

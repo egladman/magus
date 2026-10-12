@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/handler/mcp/gen/mocks"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -40,9 +39,9 @@ type patchTree struct {
 
 // source mocks the workspace over the tree. Every method is Maybe: a test asserts on the
 // calls it cares about with AssertNumberOfCalls.
-func (p *patchTree) source(t *testing.T) *mocks.MockWorkspaceSource {
+func (p *patchTree) source(t *testing.T) *mockWorkspaceSource {
 	t.Helper()
-	src := mocks.NewMockWorkspaceSource(t)
+	src := newMockWorkspaceSource(t)
 	diff := func(_ context.Context, paths []string) (types.Diff, error) {
 		files := make([]types.DiffFile, 0, len(paths))
 		for _, path := range paths {
@@ -284,7 +283,7 @@ func TestProjectionSummaryCarriesRecomputedThrough(t *testing.T) {
 	tree := &patchTree{patch: agentPatch}
 	tool := newDiffTool(t, tree)
 
-	tree.patch ="diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
+	tree.patch = "diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
 	resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": "summary"})
 	require.NoError(t, err)
 

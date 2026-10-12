@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/changeset"
-	"github.com/egladman/magus/internal/handler/diff/gen/mocks"
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
@@ -28,16 +27,16 @@ import (
 // test that asserts on the paths the handler passes through sets its own expectation
 // instead, so the scoping tests assert on the call rather than on a response that would
 // look identical either way.
-func answeringSource(t *testing.T, patch string, err error) *mocks.MockPatchSource {
+func answeringSource(t *testing.T, patch string, err error) *mockPatchSource {
 	t.Helper()
-	src := mocks.NewMockPatchSource(t)
+	src := newMockPatchSource(t)
 	src.EXPECT().WorkingDiff(mock.Anything, mock.Anything).Return(patch, err).Maybe()
 	return src
 }
 
 func TestDiffHandler_ReturnsPatch(t *testing.T) {
 	const patch = "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"
-	h := NewPatchHandler(answeringSource(t,patch, nil), nil)
+	h := NewPatchHandler(answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusOK {
@@ -63,7 +62,7 @@ func TestDiffHandler_ReturnsPatch(t *testing.T) {
 // a trailing newline for an empty diff.
 func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 	for _, patch := range []string{"", "\n", "  \n\t"} {
-		h := NewPatchHandler(answeringSource(t,patch, nil), nil)
+		h := NewPatchHandler(answeringSource(t, patch, nil), nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 		var out diffResponse
@@ -77,7 +76,7 @@ func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 }
 
 func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
-	src := mocks.NewMockPatchSource(t)
+	src := newMockPatchSource(t)
 	src.EXPECT().WorkingDiff(mock.Anything, []string{"a.go", "b.go"}).Return("", nil).Once()
 	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
@@ -87,7 +86,7 @@ func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
 // An empty `path=` must scope to NOTHING, not to the empty pathspec; every backend reads
 // that as the whole repository, which is the opposite of what the caller asked for.
 func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
-	src := mocks.NewMockPatchSource(t)
+	src := newMockPatchSource(t)
 	src.EXPECT().WorkingDiff(mock.Anything, []string{"real.go"}).Return("", nil).Once()
 	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
@@ -96,7 +95,7 @@ func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
 
 // The error names the server's workspace path, so it stays in the log.
 func TestDiffHandler_ErrorReturns500(t *testing.T) {
-	h := NewPatchHandler(answeringSource(t,"", errors.New("git -C /Users/dev/repo diff: boom")), nil)
+	h := NewPatchHandler(answeringSource(t, "", errors.New("git -C /Users/dev/repo diff: boom")), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -112,7 +111,7 @@ func TestDiffHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewPatchHandler(answeringSource(t,"", console.ErrNoWorkspace), nil)
+	h := NewPatchHandler(answeringSource(t, "", console.ErrNoWorkspace), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -128,7 +127,7 @@ func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
 func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "gone")
 	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
-	h := NewContextHandler(root, answeringSource(t,patch, nil), nil)
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -140,7 +139,7 @@ func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
 }
 
 func TestDiffHandler_RejectsNonGet(t *testing.T) {
-	h := NewPatchHandler(answeringSource(t,"", nil), nil)
+	h := NewPatchHandler(answeringSource(t, "", nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -154,7 +153,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
-	h := NewContextHandler(root, answeringSource(t,patch, nil), nil)
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3&radius=1", nil))
 	if w.Code != http.StatusOK {
@@ -169,7 +168,7 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 }
 
 func TestContextHandler_RejectsPathEscape(t *testing.T) {
-	h := NewContextHandler(t.TempDir(), answeringSource(t,"", nil), nil)
+	h := NewContextHandler(t.TempDir(), answeringSource(t, "", nil), nil)
 	for _, path := range []string{"../secret", ".."} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+path+"&start=1&end=1", nil))
@@ -190,7 +189,7 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 		}
 	}
 	const patch = "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"
-	h := NewContextHandler(root, answeringSource(t,patch, nil), nil)
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(patch)+"&start=1&end=1", nil))
 	if w.Code != http.StatusNotFound {
@@ -204,7 +203,7 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *testing.T) {
 	root := t.TempDir()
 	patch := "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"
-	src := mocks.NewMockPatchSource(t)
+	src := newMockPatchSource(t)
 	src.EXPECT().WorkingDiff(mock.Anything, mock.Anything).
 		RunAndReturn(func(context.Context, []string) (string, error) { return patch, nil }).Maybe()
 	h := NewContextHandler(root, src, nil)

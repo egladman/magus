@@ -31,7 +31,8 @@ diagnostic tells you. When a tool starts saying something, delete it here.
 ## Rules
 
 - New generated output goes in a `gen/` dir with no suffix. The existing
-  exceptions (`MAGUS.md`, docs reference pages, installed skills) are declared
+  exceptions (`MAGUS.md`, docs reference pages, installed skills, a package's own
+  `mocks_test.go`) are declared
   outputs; `magus describe file <path>` is the authority, not the directory. A
   method set is written by hand (see `types/enums.go`).
 - Language-level changes in `libs/gopherbuzz/` must match upstream Buzz behavior.

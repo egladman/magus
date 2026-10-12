@@ -2,10 +2,16 @@
 # Docs: https://vektra.github.io/mockery/. Run via `go tool mockery` (pinned in go.mod
 # tool block) - the mocks_generate magusfile target wires it into `magus run generate`.
 #
-# Mocks land in a gen/mocks/ subdir of the interface's own package (e.g. internal/dry ->
-# internal/dry/gen/mocks), alongside the repo's other generated trees. The dir already
-# scopes them as mocks, so the filename is just the interface's snake_case name
-# (spell_catalog.go), no redundant mock_ prefix.
+# Two places a mock lands, by who imports it:
+#
+#  - A mock other packages import lands in a gen/mocks/ subdir of the interface's own
+#    package (e.g. internal/queue/types -> internal/queue/types/gen/mocks), named for the
+#    interface in snake_case (verdict_source.go), no redundant mock_ prefix.
+#  - A mock only the interface's own package uses lands beside it in mocks_test.go, in
+#    that package: mockery's own default. It never imports the package, so the package's
+#    tests can use it without an import cycle, it never ships in a build, and an
+#    unexported interface needs no exported mock name. types does both for the two
+#    interfaces its own tests mock.
 #
 # Two reasons an interface belongs on this list, and the second is why the list is not
 # "tight" any more:
@@ -42,6 +48,12 @@ packages:
   github.com/egladman/magus/types:
     interfaces:
       Observer:
+        configs:
+          - {}
+          - &own-package
+            dir: "{{.InterfaceDir}}"
+            pkgname: "{{.SrcPackageName}}"
+            filename: mocks_test.go
       VCSDriver:
       MergeDriverInstaller:
       RefreshHookInstaller:
@@ -55,6 +67,9 @@ packages:
       RevisionExporter:
       MergeStarter:
       DepGraphRepository:
+        configs:
+          - {}
+          - *own-package
       WorkspaceReader:
       TargetExpander:
       AffectedComputer:
@@ -68,11 +83,12 @@ packages:
   github.com/egladman/magus/project/impact:
     interfaces:
       SymbolStore:
-  # Internal: our own tests only.
-  github.com/egladman/magus/internal/dry:
+  # Public: the Buzz host callback a std member invokes.
+  github.com/egladman/magus/std:
     interfaces:
-      SpellCatalog:
-  # Internal: the merge queue's contract, which the queue's own tests fake.
+      Callback:
+  # Internal, imported across packages: the merge queue's contract, the telemetry seam
+  # whose callers assert on the metric recorded, and the service runner.
   github.com/egladman/magus/internal/queue/types:
     interfaces:
       Provider:
@@ -80,41 +96,46 @@ packages:
       BuildFacts:
       VerdictSource:
       ArtifactLister:
-  # Internal: the telemetry seam, whose callers' tests assert on the metric recorded.
   github.com/egladman/magus/internal/observability:
     interfaces:
       Provider:
+  github.com/egladman/magus/internal/service:
+    interfaces:
+      Runner:
+  # Internal, used only by the package's own tests.
+  github.com/egladman/magus/internal/dry:
+    config: *own-package
+    interfaces:
+      SpellCatalog:
   github.com/egladman/magus/internal/sandbox:
+    config: *own-package
     interfaces:
       MetricsRecorder:
   github.com/egladman/magus/internal/cache:
+    config: *own-package
     interfaces:
       Tracer:
       RemoteBackend:
   github.com/egladman/magus/internal/ci:
+    config: *own-package
     interfaces:
       Forecaster:
-  github.com/egladman/magus/internal/service:
-    interfaces:
-      Runner:
-  # Public: the Buzz host callback a std member invokes.
-  github.com/egladman/magus/std:
-    interfaces:
-      Callback:
-  # Unexported seams of the Connect handlers. structname exports the mock type, which a
-  # test in the handler's own package can then use.
   github.com/egladman/magus/internal/handler/diff:
+    config: *own-package
     interfaces:
+      # mockery's own name for an unexported interface's mock is mockpatchSource.
       patchSource:
         config:
-          structname: MockPatchSource
+          structname: mockPatchSource
   github.com/egladman/magus/internal/handler/mcp:
+    config: *own-package
     interfaces:
       workspaceSource:
         config:
-          structname: MockWorkspaceSource
+          structname: mockWorkspaceSource
   github.com/egladman/magus/internal/handler/tool:
+    config: *own-package
     interfaces:
       lifecycleSource:
         config:
-          structname: MockLifecycleSource
+          structname: mockLifecycleSource

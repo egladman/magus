@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/internal/cache/gen/mocks"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -449,9 +448,9 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 
 // unreachableBackend mocks an active backend whose store never answers. The test adds the
 // GetArtifact expectation, since how often the store is asked is what it asserts.
-func unreachableBackend(t *testing.T) *mocks.MockRemoteBackend {
+func unreachableBackend(t *testing.T) *MockRemoteBackend {
 	t.Helper()
-	backend := mocks.NewMockRemoteBackend(t)
+	backend := NewMockRemoteBackend(t)
 	backend.EXPECT().Name().Return("unreachable").Maybe()
 	backend.EXPECT().Active(mock.Anything).Return(true).Maybe()
 	return backend

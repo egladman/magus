@@ -3,7 +3,6 @@ package ci
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/ci/gen/mocks"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -145,7 +144,7 @@ func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	projects := makeProjects("a", "b", "c", "d")
 	// Forecaster groups everything into one shard regardless of count. Build clamps the 8
 	// requested shards to the 4 projects before it asks.
-	f := mocks.NewMockForecaster(t)
+	f := NewMockForecaster(t)
 	f.EXPECT().Plan(projects, 4).Return([][]*types.Project{projects}).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
@@ -158,7 +157,7 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b")
 	// Misbehaving forecaster: returns empty for non-empty input.
-	f := mocks.NewMockForecaster(t)
+	f := NewMockForecaster(t)
 	f.EXPECT().Plan(projects, 2).Return(nil).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))

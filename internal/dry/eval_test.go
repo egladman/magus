@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/dry/gen/mocks"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -367,7 +366,7 @@ magus\project({ "spells": [acme] });
 
 export fun deploy(ctx: magus\Context, args: [str]) > void { acme["acme-ship"](); }
 `
-	cat := mocks.NewMockSpellCatalog(t)
+	cat := NewMockSpellCatalog(t)
 	cat.EXPECT().BuiltinOps().Return(map[string][]string{"acme": {"acme-ship"}})
 
 	r := Eval(context.Background(), src, WithCatalog(cat))

@@ -14,11 +14,10 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
-	"github.com/egladman/magus/internal/sandbox/gen/mocks"
 )
 
 func TestRecordLaunch(t *testing.T) {
-	rec := mocks.NewMockMetricsRecorder(t)
+	rec := NewMockMetricsRecorder(t)
 	// The last launch has no recorder on its ctx, so it records nothing.
 	mock.InOrder(
 		rec.EXPECT().RecordSandboxApply(mock.Anything, 0.01, "applied", "child").Once(),
@@ -33,7 +32,7 @@ func TestRecordLaunch(t *testing.T) {
 func TestChecksRecordAllowAndDeny(t *testing.T) {
 	dir := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
-	rec := mocks.NewMockMetricsRecorder(t)
+	rec := NewMockMetricsRecorder(t)
 	mock.InOrder(
 		rec.EXPECT().RecordSandboxCheck(mock.Anything, "read", "allow", "").Once(),
 		rec.EXPECT().RecordSandboxCheck(mock.Anything, "read", "deny", "").Once(),
@@ -52,7 +51,7 @@ func TestChecksWithoutARecorderStillCheck(t *testing.T) {
 }
 
 func TestRecordEnvDropped(t *testing.T) {
-	rec := mocks.NewMockMetricsRecorder(t)
+	rec := NewMockMetricsRecorder(t)
 	rec.EXPECT().RecordSandboxEnvDropped(mock.Anything, "", int64(2)).Once()
 	ctx := WithMetrics(context.Background(), rec)
 
