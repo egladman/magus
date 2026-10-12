@@ -125,11 +125,11 @@ get the same carve-out, first in `[merge-patterns]`.
 
 The declaration names encode ownership, not merely direction:
 
-| Declaration                      | File relationship                                                    | Cache and clean behavior                                                  |
-| -------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `ctx.readsFiles(...)`            | the target reads the named files                                     | hashes their current bytes into the cache key                             |
-| `ctx.writesFiles(...)`           | the target creates or replaces complete generated files              | snapshots and replays them; `magus clean` may remove them                 |
-| `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them |
+| Declaration                      | File relationship                                                    | Cache and clean behavior                                                                                                |
+| -------------------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `ctx.readsFiles(...)`            | the target reads the named files                                     | hashes their current bytes into the cache key                                                                           |
+| `ctx.writesFiles(...)`           | the target creates or replaces complete generated files              | snapshots and replays them; `magus clean` may remove them                                                               |
+| `ctx.modifiesExistingFiles(...)` | the files already exist and the target changes only part of each one | hashes their current bytes, but never snapshots, replays, or removes them; caches only a run that leaves them unchanged |
 
 That last case is for a hand-written page with a generated region between markers,
 or a manifest a tool rewrites in place. It is deliberately not an output Magus owns.
@@ -148,6 +148,12 @@ snapshot, because the bytes magus produced are only part of the file. It still f
 into the target's cache key exactly as an input does, so editing the prose _around_
 a generated region invalidates the target that maintains that region, which declaring
 the file as an output could not do (an output is excluded from its own source hash).
+
+Since a hit replays nothing, magus records an entry only for a run that leaves every
+modified file with the bytes its key was computed from. A run that changes one is not
+cached: a hit under the earlier bytes would skip the body and leave the file as it was.
+A formatter therefore caches from its first run that changes nothing, and a target
+that rewrites its file on every run never caches.
 
 Unlike reads and writes, a modification infers no ordering edge in either direction:
 "I edit one region of a file someone else authored" says nothing about build order.

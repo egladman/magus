@@ -1516,6 +1516,15 @@ func ObjectRegionChange(v types.RegionChange) vm.Value {
 	return out
 }
 
+func ObjectFileStat(v types.FileStat) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("added", vm.IntValue(int64(v.Added)))
+	out.MapSet("deleted", vm.IntValue(int64(v.Deleted)))
+	out.MapSet("binary", vm.BoolValue(v.Binary))
+	return out
+}
+
 func ObjectStatus(v types.Status) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("clean", vm.BoolValue(v.Clean))
@@ -3360,6 +3369,7 @@ func ObjectGuardVerdict(v types.GuardVerdict) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("decision", vm.StrValue(string(v.Decision)))
 	out.MapSet("reason", vm.StrValue(v.Reason))
+	out.MapSet("rule", vm.StrValue(v.Rule))
 	return out
 }
 

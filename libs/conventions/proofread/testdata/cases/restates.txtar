@@ -1,0 +1,21 @@
+A one-line stylesheet comment that only names the rule or declaration it sits on.
+-- hit/stylesheet whole --
+/* The divider. */
+.divider { align-self: stretch; }
+-- hit/stylesheet whole --
+.pane {
+  /* Border radius. */
+  border-radius: 0;
+}
+-- hit/stylesheet whole --
+/* Reset the padding. */
+.pane { padding: 0; }
+-- hit/stylesheet whole --
+/* No margin. */
+.pane { margin: 0; }
+-- pass/stylesheet whole --
+/* A fixed 2px: even the tiny tier turns a mark this small into a lozenge. */
+.dot { border-radius: 2px; }
+-- pass/stylesheet whole --
+/* The divider is a grid track, so it is the gap and a draggable hit box. */
+.divider { align-self: stretch; }

@@ -1,0 +1,16 @@
+A word this repository bans, in a stylesheet comment.
+-- hit/stylesheet whole --
+/* The story of this sheet is the review story. */
+.a { color: red; }
+-- hit/stylesheet whole --
+/* Each chapter has a lane for its corpus. */
+.b { color: blue; }
+-- hit/stylesheet whole --
+/* The agent surface is a new surface for the handoff. */
+.c { color: green; }
+-- pass/stylesheet whole --
+/* A verb is fine: the panel surfaces the error beside the field. */
+.panel { color: red; }
+-- pass/stylesheet whole --
+/* The words `lane` and "corpus" are mentioned here, not used. */
+.mention { color: blue; }

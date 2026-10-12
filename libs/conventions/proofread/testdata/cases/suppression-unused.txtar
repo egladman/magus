@@ -1,0 +1,24 @@
+A suppression comment with no reason, or one that matched no finding.
+-- hit/reference whole --
+# Page
+
+<!-- proofread off filler -->
+It simply works.
+-- hit/reference whole --
+# Page
+
+<!-- proofread off filler: the quote keeps the speaker's word -->
+It works.
+-- pass/reference whole --
+# Page
+
+<!-- proofread off buzzword-weak: the quote keeps the speaker's word -->
+It is crucial.
+-- pass/reference whole --
+# Page
+
+The syntax is `<!-- proofread off filler -->` before the line.
+-- pass/reference whole --
+# Page
+
+A doc comment writes "proofread:ignore filler REASON" to name the syntax.

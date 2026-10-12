@@ -184,8 +184,9 @@ Shorten by saying less, not by writing badly. Dropping articles and connectives 
 save bytes measurably hurts weaker models. Write plain sentences with ordinary
 punctuation in both arms.
 
-The prose judge holds what the short form shows to the terse lint rules. Its `skill-source`
-and `skill` kinds run in hack/lint/markdown-prose.buzz. They refuse:
+proofread holds what the short form shows to the terse lint rules. Its
+`agent-instructions-template` and `agent-instructions` kinds run in
+hack/lint/markdown-proofread.buzz. They refuse:
 
 - a sentence over 25 words;
 - a paragraph or list item over 60;

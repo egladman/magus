@@ -59,6 +59,15 @@ func RegisterVcs(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return ffi.ObjectSlice(ret0, ObjectRegionChange), nil
 	}))
+	m.MapSet("diffStat", vm.DirectValue("vcs.diffStat", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		base := ffi.Str(bzArgs, 0)
+		dir := ffi.Str(bzArgs, 1)
+		ret0, err := std.VcsDiffStat(ctx, base, dir)
+		if err != nil {
+			return vm.Null, ffi.Error(err)
+		}
+		return ffi.ObjectSlice(ret0, ObjectFileStat), nil
+	}))
 	m.MapSet("ref", vm.DirectValue("vcs.ref", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		dir := ffi.Str(bzArgs, 0)
 		ret0, err := std.VcsRef(ctx, dir)

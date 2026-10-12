@@ -1,0 +1,12 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A tool description whose first sentence opens on the tool itself, holds under 4 words or runs past 40.
+-- hit/tool-description --
+This tool runs a Buzz program and returns its value.
+Run things. Use it whenever you want to run things.
+-- pass/tool-description --
+Run a Buzz program against the magus client and return its value.
+Query the magus knowledge graph to find and relate entities.
+-- hit/tool-description --
+Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand.
+-- fp/tool-description --
+Audit the instructions an agent was given - the repo instruction file, installed skills, memory entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do.

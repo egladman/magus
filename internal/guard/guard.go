@@ -750,6 +750,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		policyDigest = recordPolicy(ctx, deps, location, false)
 	}
 	ctx = withJobStoreRows(ctx, location)
+	ctx = withOutputStore(ctx, location)
 	if req.PendingRow != nil {
 		ctx = withPendingRow(ctx, *req.PendingRow)
 		if req.Lease == "" {
@@ -1363,6 +1364,7 @@ func judgeShellLine(ctx context.Context, deps Dependencies, at location, callDir
 	v = deps.rankGraded(v, denyRuleSiblingCheckout, denySiblingCheckout(callDir, line, d), rankSiblingCheckout)
 	v = rankWorktreeRemove(v, deps.grade(denyWorktreeRemove(ctx, deps, at, callDir, line, d)))
 	v = deps.rankGraded(v, denyRuleInterpreterRewrite, denyInterpreterRewrite(at, line, d), rankInterpreterRewrite)
+	v = deps.rankGraded(v, denyRuleConflictRewrite, denyConflictRewrite(at, line, d), rankConflictRewrite)
 	v = deps.rankGraded(v, denyRuleCacheDirWrite, denyCacheDirCommand(at, line, d), rankCacheDirWrite)
 	return deps.rankGraded(v, denyRuleTokenState, denyTokenStateCommand(at, line, d), rankTokenState)
 }
@@ -1874,6 +1876,16 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	}
 	rows, err := listJobRows(job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}))
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
+}
+
+// withOutputStore lets magus\output in a workspace rule read the output store of the
+// checkout being judged, which a description citing its runs is held to. A rule has no
+// workspace on its context, and this pins the store alone.
+func withOutputStore(ctx context.Context, at location) context.Context {
+	if at.cacheDir == "" {
+		return ctx
+	}
+	return types.WithOutputCacheDir(ctx, at.cacheDir)
 }
 
 // withPendingRow pins the rows already read with row among them, replacing a stored row

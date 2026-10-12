@@ -1,0 +1,13 @@
+A curly mark, an ellipsis or an emoji.
+-- hit/reference --
+He said “the key is stable”.
+Pins the key … and hashes it.
+Launch phase 🚀: the key sorts.
+-- hit/change-description --
+- Pins the key’s inputs.
+-- hit/review-reply --
+Done ✅
+-- pass/reference --
+Quote the value with straight marks and write three dots as ...
+Use `“quoted”` in a code span.
+The arrow → stays: it has no plain spelling.

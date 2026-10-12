@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/conventions/internal/sourcetest"
-	"github.com/egladman/magus/libs/conventions/prose"
+	"github.com/egladman/magus/libs/conventions/proofread"
 	"golang.org/x/tools/go/analysis/analysistest"
 )
 
@@ -30,8 +30,8 @@ func TestAnalyzer(t *testing.T) {
 
 func TestAnalyzerReportsOnlyTheRulesNamedOutsideAllowedFiles(t *testing.T) {
 	opts := sources
-	opts.Rules = []prose.Rule{prose.RuleMessageRationale, prose.RuleMessageTag}
-	opts.Allow = []AllowEntry{{File: "quiet/*.go", Rule: prose.RuleMessageRationale, Reason: "staged"}}
+	opts.Rules = []proofread.Rule{proofread.RuleMessageRationale, proofread.RuleMessageTag}
+	opts.Allow = []AllowEntry{{File: "quiet/*.go", Rule: proofread.RuleMessageRationale, Reason: "staged"}}
 	opts.Hint = "see the runbook"
 	analyzer, err := New(opts)
 	if err != nil {
@@ -79,10 +79,10 @@ func TestNewRejectsBadConfig(t *testing.T) {
 		{"a negative argument", func(o *Options) { o.Calls = []Call{{Func: "diag.Errorf", Arg: -1}} }},
 		{"a field with no name", func(o *Options) { o.Fields = []Field{{Type: "guard.Verdict"}} }},
 		{"an empty prefix", func(o *Options) { o.Prefixes = []string{""} }},
-		{"a rule for another kind", func(o *Options) { o.Rules = []prose.Rule{prose.RuleFiller} }},
+		{"a rule for another kind", func(o *Options) { o.Rules = []proofread.Rule{proofread.RuleFiller} }},
 		{"an unreasoned allow", func(o *Options) { o.Allow = []AllowEntry{{File: "cli/*.go"}} }},
 		{"an allow for another kind's rule", func(o *Options) {
-			o.Allow = []AllowEntry{{File: "cli/*.go", Rule: prose.RuleHedge, Reason: "x"}}
+			o.Allow = []AllowEntry{{File: "cli/*.go", Rule: proofread.RuleHedge, Reason: "x"}}
 		}},
 		{"a malformed glob", func(o *Options) { o.Files = []string{"[bad"} }},
 	}

@@ -51,26 +51,26 @@ magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph
 ```
 
-| Kind       |     Size | List them                     | Anchors (most connected)                                                                                              |
-| ---------- | -------: | ----------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                                    |
-| target     |     100+ | `magus query kind=target`     | `lint-rules`, `content-generate`, `buzz-test`                                                                         |
-| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                            |
-| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                       |
-| tool       | built in | `magus query kind=tool`       |                                                                                                                       |
-| charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                                 |
-| module     | built in | `magus query kind=module`     |                                                                                                                       |
-| method     | built in | `magus query kind=method`     |                                                                                                                       |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3030`                                                                                       |
-| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/manpage/magus-doctor.md`, `docs/guides/integrations/agents/guard.md` |
-| dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `internal`                                                              |
-| file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                             |
-| function   |    2000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                         |
-| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                                  |
-| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                                |
-| package    |     100+ | `magus query kind=package`    | `@biomejs/biome`, `typescript`, `github.com/davecgh/go-spew`                                                          |
-| link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`                    |
-| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                             |
+| Kind       |     Size | List them                     | Anchors (most connected)                                                                                       |
+| ---------- | -------: | ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| project    |      10+ | `magus query kind=project`    | `magus`, `docs`, `docs/guides/integrations/agents`                                                             |
+| target     |     100+ | `magus query kind=target`     | `lint-rules`, `content-generate`, `buzz-test`                                                                  |
+| spell      | built in | `magus query kind=spell`      | `go`, `typescript`, `buzz`                                                                                     |
+| op         | built in | `magus query kind=op`         | `go-build`, `go-test`, `go-fmt`                                                                                |
+| tool       | built in | `magus query kind=tool`       |                                                                                                                |
+| charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                          |
+| module     | built in | `magus query kind=module`     |                                                                                                                |
+| method     | built in | `magus query kind=method`     |                                                                                                                |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3030`                                                                                |
+| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/proofread/index.md` |
+| dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                       |
+| file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                      |
+| function   |    2000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                  |
+| import     |     100+ | `magus query kind=import`     | `std`, `magus`, `fs`                                                                                           |
+| rationale  |        9 | `magus query kind=rationale`  | `TODO`, `TODO`, `TODO`                                                                                         |
+| package    |     100+ | `magus query kind=package`    | `@biomejs/biome`, `typescript`, `github.com/davecgh/go-spew`                                                   |
+| link       |      90+ | `magus query kind=link`       | `https://buzz-lang.dev/`, `https://eli.gladman.cc/magus/`, `https://eli.gladman.cc/magus/console/`             |
+| marker     |        3 | `magus query kind=marker`     | `magus:diagram server-http`, `magus:skills`, `magus:diagram server-share`                                      |
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
@@ -78,7 +78,7 @@ magus graph export -o json  # the whole graph
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                               |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
-| [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `judge-build`, `test`                          |
+| [libs/conventions](libs/conventions/MAGUS.md)                               |       8 | `magus query project=libs/conventions`                | `format`, `proofread-build`, `test`                      |
 | [libs/diagnostics](libs/diagnostics/MAGUS.md)                               |       7 | `magus query project=libs/diagnostics`                | `format`, `test`, `build`                                |
 | libs/figure                                                                 |       3 | `magus query project=libs/figure`                     | `ci`, `lint`, `test`                                     |
 | [libs/gopherbuzz](libs/gopherbuzz/MAGUS.md)                                 |      11 | `magus query project=libs/gopherbuzz`                 | `format`, `build`, `test`                                |
@@ -97,8 +97,8 @@ magus graph export -o json  # the whole graph
 | `security`               | Runs govulncheck and gates on dependency license terms.                                                                                                                                                                        |
 | `man-generate`           | Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock, both serialized from the internal/cli registry.                                                                                         |
 | `go-api-generate`        | Renders every exported declaration of the public Go packages (the list lives in cmd/magus-utils/public_api.go) into internal/cli/testdata/api-go.lock, beside the CLI's api.lock.                                              |
-| `pr-title`               | Fails a pull request title that is not a conventional commit subject, or whose description opens in the past tense or sells instead of saying what changed.                                                                    |
-| `pr-description`         | Fails a pull request whose title or description the prose judge in libs/conventions/prose finds a fault in, the judge the guard's pull-request-text rule runs, so the two cannot disagree.                                     |
+| `pr-title`               | Fails a pull request title that is not a conventional commit subject, or whose subject is not imperative or carries a selling word.                                                                                            |
+| `pr-description`         | Fails a pull request whose title or description the guard's pull-request-text rule would deny.                                                                                                                                 |
 | `pr-changelog`           | Fails a feat, fix, perf or breaking pull request that ships code without a changelog fragment under changes/unreleased/, and any malformed fragment.                                                                           |
 | `git-hooks-install`      | Installs a shim in git's hooks directory for every hack/git-hooks/<hook>.buzz.                                                                                                                                                 |
 | `git-hooks-remove`       | Deletes the shims git_hooks_install wrote, and no hook anything else wrote.                                                                                                                                                    |

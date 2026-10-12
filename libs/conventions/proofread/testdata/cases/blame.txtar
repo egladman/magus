@@ -1,0 +1,140 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
+A person or past work named as the subject of a fault.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
+-- hit/change-description --
+- The author should have pinned the key.
+- #341 forgot to regenerate the index.
+- The old names read as sloppy.
+-- hit/review-reply --
+You failed to run the suite.
+Whoever wrote this left the lock out.
+The retry was naive.
+You should have reverted these files instead of editing them.
+This is dumb, drop the condition.
+This is some crazy code.
+They forgot to bump the schema version.
+-- pass/change-description --
+- Tells the careful and the careless caller the same sentence.
+- Skips the lazy fetch a naive shallow clone makes.
+- The commit failed to apply, so the rebase stops.
+- Replaces crazy-max with github-script.
+- Swaps the supervisor for dumb-init and runs the install under TERM=dumb.
+- Adds a dumb base implementation that the adapter overrides.
+- Fails fast, following KISS (Keep It Simple, Stupid).
+- Keeps the rows that were dropped when they should have been preserved.
+- Shows the image as lazy-initialized until it scrolls into view.
+-- pass/review-reply --
+I should have pinned the key; we forgot to.
+You should have a tests file that exports the cases.
+You should have to press the key twice to exit.
+The two functions match, but they should have different behaviour, as the interface file says.
+Ignore the warning when they failed to load.
+The iframe is lazy loading, so it needs a placeholder.
+We could reuse the generated types without going too crazy.
+-- hit/change-description --
+The assistant went pretty crazy here.
+-- hit/commit-message --
+It's crazy that developers still put up with these language quirks
+This is the result of a crazy amount of spaghetti-code tracing
+stupid bot
+:bug: fix the stupid build plugin downgrade
+rm insane test
+crazy stuff
+-- hit/review-reply --
+You should have added the schema parse calls in the command action functions
+This logic is incorrect in the general case; per the spec I linked in the issue (and that you failed to actually go read), the rules are different.
+This is sloppy.
+Thanks for fixing up the majority of the crazy.
+you should have started from the test instead of adjusting tests to your half-baked implementation
+I've fixed up the worst of the crazy, but I have no idea if it works on a real bucket.
+I'm replacing sloppy working directory detection with this injected context object as I go.
+this is stupid...
+Please generalize this rule of not doing stupid and repetitive pipelines into a rule I could paste into the instructions file.
+-- fp/agent-reply --
+Both fixtures show it: one regenerated because its type moved, and a script someone forgot to `chmod`.
+-- fp/commit-message --
+This is in case we encounter some really crazy article with millions of links.
+-- pass/change-description whole --
+fix: clarify the login step
+
+> Many users stop at this step because they think the login failed.
+> Also remove the stupid text from the page bottom
+-- pass/change-description whole --
+docs: include the project file in the tutorial
+
+> My second slip was not saving from the editor. (Cant fix stupid, but I noticed when I saw the greeting.)
+-- pass/change-description whole --
+fix: restore the spec version
+
+<comment_new><body>
+I think you should return it to the spec version that implemented this whole crazy construction.
+</body></comment_new>
+-- pass/change-description whole --
+feat: keep a local-only setting
+
+> My only workaround is to commit a stupid "DON'T PUSH" setting and remove it before every push.
+-- pass/change-description whole --
+feat: accept webp uploads
+
+<comment_new><body>
+Did i make any stupid mistakes in this upload controller?
+</body></comment_new>
+-- pass/agent-reply --
+Not crazy at all, and the work that just landed makes it measurable.
+Not crazy: it was overlapping the trigger by **14px**, measured.
+It is not crazy; it is how a shell already works.
+It's approved but not built, not rejected. Calling it "decided" was sloppy phrasing on my part.
+Without the build entries, the panel's lazy import fails in a built console.
+The claim is factually wrong, but only because those boundaries were scoped to bytes, not because anyone was careless.
+That was careless in a shared checkout; I should have worked on a copy, as I did the second time.
+The host says "closed" for both, and those are opposite outcomes to whoever wrote the review.
+The standard library has precedent for it, so it's idiomatic rather than sloppy.
+-- pass/change-description --
+State persistence in the node is lazy: changes are committed to memory and only periodically flushed to disk.
+This removes the pressure from cached field values that existed in the old version's lazy decoding approach
+-- pass/commit-message --
+The docs now reflect how the algorithm handles the bundler's lazy population pattern.
+docs: clarify monorepo task loading is lazy, not eager
+4. Documented the bundler's lazy population of the root bundle fields
+-- pass/review-reply --
+This should be 'You should have received a copy of the license along with the program.' to match the project name.
+The docs already give the scaffolding commands, and worst case if they forgot to change it they'd just run the commands by hand.
+Moved the computation to be lazy in the emitter, so the interpreter pays nothing.
+-- hit/review-reply --
+i keep finding crazy bits like this; if we're going to use the assistant for anything we need to review the output super carefully.
+Nevertheless this a really, really stupid idea.
+this test is insanely complicated
+Yeah I fully expected crazy.
+You forgot to show the clear button at the top right of the text box.
+yeah i think globbing is good enough for me and we don't need to do crazy things like regexp detection..
+you forgot to finish this docstring
+you should have challenged me!
+`.` is sloppy.
+You failed to follow the existing list tests' pattern of comparing the whole result collections
+NEVER make sloppy checks like this, the tests should be strict
+This is insane overkill; you should be able to access the list directly.
+insane, closing
+It's kind of crazy the toolkit doesn't offer an `isCollapsed` function on the splitter.
+You forgot to delete these lines when you got rid of the `ipa` module.
+I think this comment is correct, it's a mistake - whoever wrote this probably mistook the second parameter to be the end of the substring - not the length.
+You forgot to remove this comment about `trim_output`.
+you forgot to add `icon_hold_action` and `icon_double_tap_action` here
+this is stupid
+You forgot to format your code.
+This still isn't working, you forgot to include the type definitions.
+You forgot to implement the IsValidVariableName method.
+Pretty insane tbh.
+revert this stupid change
+I think you forgot to call `job.start()`, right?
+stop adding crazy logic everywhere
+this is dumb.
+that's dumb.
+The assistant was doing some crazy stuff here around setting the current directory inside test cases.
+-- hit/commit-message --
+some components have braindead dependencies...
+undo stupid llm
+Do this a less stupid way
+-- fp/review-reply --
+I'm not crazy about these but they can be useful to observe how model generations change over training.
+This is perhaps overly defensive, but also not entirely crazy.
+I'm sure whoever wrote it was a really smart handsome guy who believed in making sure our code works great in every possible case

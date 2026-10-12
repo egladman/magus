@@ -1,0 +1,7 @@
+A word in a tool description that sells the tool rather than describes it.
+-- hit/tool-description --
+A powerful way to run a Buzz program.
+Delve into the workspace graph.
+-- pass/tool-description --
+Run `powerful` targets.
+Run a Buzz program and return its value.

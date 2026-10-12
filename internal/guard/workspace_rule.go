@@ -342,12 +342,19 @@ func gatedCalls(seam functionSeam) string {
 // decided names the side of. Strengthen only: a deny replaces whatever stood, an advise
 // fills a pass or is added to a built-in advice, and an allow changes nothing. An advise
 // on a built-in ask is dropped, as every notice is on an ask. A deny denyUnloaded made is
-// filed under its own built-in rule rather than rule, with its next left unserved for the
-// caller's shapeDeny to grade.
-func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, rule string) (Verdict, string) {
+// filed under its own built-in rule, with its next left unserved for the caller's shapeDeny
+// to grade.
+//
+// seamRule is what an unnamed answer reports under; a named one reports as
+// workspace:<name>, the id magus\guard.shell rules already carry.
+func applyWorkspaceAnswer(verdict Verdict, decided string, asked rulesAnswer, seamRule string) (Verdict, string) {
 	answer := asked.answer
-	if asked.rule != "" {
+	rule := seamRule
+	switch {
+	case asked.rule != "":
 		rule = string(asked.rule)
+	case answer.Rule != "":
+		rule = workspaceShellPrefix + answer.Rule
 	}
 	switch {
 	case answer.Decision == types.GuardDeny:
@@ -401,17 +408,24 @@ type ruleFailureReport struct {
 	// judging builds the line naming the magus that judged the call. It is read only when a
 	// rule failed, since it stats the checkout.
 	judging func() string
+	// lead names a failure outside either policy copy, which must be repeated while a rule
+	// is degraded so the reader knows how to repair it.
+	lead string
 }
 
 // ruleFailureNote tells the reader which rules judged this call when any workspace rule
 // could not, "" when none failed. A set of failures is told in full the first time it fires
 // in a session (every time when a phase ran out of time) and as one line naming what
-// applied on every repeat, so the reader never
-// takes a call for judged by a rule that was skipped. The judging binary's line is part of
-// the full telling only: the repeat stays one line.
+// applied on every repeat, so the reader never takes a call for judged by a rule that was
+// skipped. The judging binary's line is part of the full telling only: the repeat stays one
+// line. A non-empty lead opens both forms, since it names a cause the reader must act on.
 func ruleFailureNote(r ruleFailureReport) string {
 	if len(r.failures) == 0 {
 		return ""
+	}
+	lead := r.lead
+	if lead != "" {
+		lead += "\n\n"
 	}
 	applied := []string{"the built-in rules"}
 	for _, by := range r.answered {
@@ -419,6 +433,7 @@ func ruleFailureNote(r ruleFailureReport) string {
 	}
 	summary := "Only " + strings.Join(applied, " and ") + " applied to this " + string(r.seam) + "."
 	var full strings.Builder
+	full.WriteString(lead)
 	h := sha256.New()
 	for _, f := range r.failures {
 		full.WriteString("The " + sideName(r.seam, f.Side) + " judged nothing: " + f.Error + "\n\n")
@@ -434,7 +449,7 @@ func ruleFailureNote(r ruleFailureReport) string {
 		return full.String()
 	}
 	kind := hint.MarkerKind(string(ruleFailedKind(r.seam)) + "-" + hex.EncodeToString(h.Sum(nil)[:8]))
-	return r.gate.OnceOrBrief(kind, full.String(), summary+" A workspace "+string(r.seam)+" rule is still failing, as told earlier in this session.")
+	return r.gate.OnceOrBrief(kind, full.String(), lead+summary+" A workspace "+string(r.seam)+" rule is still failing, as told earlier in this session.")
 }
 
 // judgingBinary is what is known about the magus that judged a call, told by String.

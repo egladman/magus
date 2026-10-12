@@ -1,5 +1,7 @@
 package types
 
+import "context"
+
 // OutputRecord is one target run's captured log, the value magus\output returns.
 type OutputRecord struct {
 	Ref        string `json:"ref"         yaml:"ref"`
@@ -8,6 +10,22 @@ type OutputRecord struct {
 	Failed     bool   `json:"failed"      yaml:"failed"`
 	DurationMs int64  `json:"duration_ms" yaml:"duration_ms"`
 	Output     string `json:"output"      yaml:"output"`
+}
+
+type outputCacheDirKey struct{}
+
+// WithOutputCacheDir pins the cache directory whose output store magus\output reads when
+// ctx carries no workspace. The guard pins the checkout it judges, so a guard rule can
+// look up the runs a command cites without gaining any other workspace member.
+func WithOutputCacheDir(ctx context.Context, cacheDir string) context.Context {
+	return context.WithValue(ctx, outputCacheDirKey{}, cacheDir)
+}
+
+// OutputCacheDirFromContext returns the cache directory WithOutputCacheDir pinned, "" when
+// none is.
+func OutputCacheDirFromContext(ctx context.Context) string {
+	dir, _ := ctx.Value(outputCacheDirKey{}).(string)
+	return dir
 }
 
 // StoredOutputSchemaVersion is the newest [StoredOutput] schema this build writes and

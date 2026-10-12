@@ -2,7 +2,7 @@
 // repository owner's comment budget: a block over its budget is advised, one over twice
 // its budget or above the package clause is denied. A write to a stylesheet that adds a
 // comment is judged the same way: a comment over twice the largest budget is denied, and
-// one the prose judge of libs/conventions reports is advised. The first write of a session
+// one proofread (libs/conventions) reports is advised. The first write of a session
 // that adds comments to any other code file is advised to audit them against the comment
 // rule. The guard answers before the write lands, so the advice arrives with the write.
 namespace agentpolicy\comments;
@@ -14,7 +14,8 @@ import "magus";
 import "encoding/json";
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
-import "./libs/conventions/judge_docs" as judgeDocs;
+import "./libs/conventions/proofread" as proofread;
+import "./hack/policy/proofread" as decisions;
 
 final commentAdvice = "This write adds code comments. Audit each one: keep only the comments that say "
     + "what the code cannot, which is why it is written this way, a constraint or invariant it relies "
@@ -320,23 +321,26 @@ export fun decideGo(path: str, before: str, after: str) > GuardVerdict {
     return magus\guard.advise(houseStyle + "\n\n" + advised.join("\n") + "\n\n" + remedy);
 }
 
-// CssFinding is one finding of the prose judge over a stylesheet.
+// CssFinding is one finding of proofread over a stylesheet.
 export object CssFinding {
     rule: str,
     line: int,
     message: str,
 }
 
-// cssJudgeRunner returns a judge that runs the built libs/conventions/cmd/judge-docs with
-// -kind css over a stylesheet's text. A judge that is missing, stale or did not run returns
-// null: the write then meets the generic advice rather than a block on a tool it cannot run.
+// cssJudgeRunner returns a judge that runs the built libs/conventions/cmd/proofread as
+// `proofread stylesheet` over a stylesheet's text, under this repository's decisions table,
+// which turns the house comment rules on. A judge that is missing, stale or did not run
+// returns null: the write then meets the generic advice rather than a block on a tool it
+// cannot run.
 export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
-    final dir = workspace + "/libs/conventions";
+    final dir = workspace + "/" + proofread\home;
     return fun (css: str) > [CssFinding]? {
-        if (judgeDocs\whyStale(dir) != "") {
+        if (proofread\whyStale(dir) != "") {
             return null;
         }
-        final run = proc\exec("{dir}/{judgeDocs\binary}", args: ["-kind", "css"],
+        final run = proc\exec("{dir}/{proofread\binary}",
+            args: ["stylesheet", "-decisions", workspace + "/" + decisions\DECISIONS_FILE],
             opts: {"stdin": css, "quiet": true, "allow_failure": true}) catch null;
         if (run == null or run!.code != 0) {
             return null;
@@ -345,7 +349,7 @@ export fun cssJudgeRunner(workspace: str) > fun (css: str) > [CssFinding]? {
     };
 }
 
-// parseCssFindings reads judge-docs's findings, whose source is `stdin:<line>`.
+// parseCssFindings reads proofread's findings, whose source is `stdin:<line>`.
 export fun parseCssFindings(stdout: str) > [CssFinding] {
     final rows: [any] = json\parse(stdout) catch [<any>];
     final found = mut [<CssFinding>];
@@ -407,7 +411,7 @@ export fun longestAddedCssComment(before: str, after: str) > int {
 }
 
 // decideCss judges a write to a stylesheet that adds a comment as a Go write is judged: a
-// comment over twice the largest budget is refused, and a comment the prose judge reports,
+// comment over twice the largest budget is refused, and a comment proofread reports,
 // on a line the write added, is advised with what it says. A write the judge cannot read,
 // or finds nothing in, meets the once-per-session advice.
 export fun decideCss(path: str, before: str, after: str, once: fun (key: str) > bool, judge: fun (css: str) > [CssFinding]?) > GuardVerdict {
@@ -634,7 +638,7 @@ fun cssComment(n: int) > str {
     return "/*" + lines.join("\n") + " */\n";
 }
 
-test "a stylesheet write is judged by the prose judge on the lines it adds" {
+test "a stylesheet write is judged by proofread on the lines it adds" {
     final after = ".a \{ color: red; }\n\n/* Simply put. */\n.b \{ color: blue; }\n";
     final v = decideWrite("/w/console/src/a.css", before: "", after: after, once: spent(), judge: judgeSays("filler", line: 3));
     std\assert(v.decision == "advise", message: v.decision);

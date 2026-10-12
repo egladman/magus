@@ -1,0 +1,53 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+The project's voice in a guide, where the reader is the one acting.
+
+Moved 2026-10-11, was: hit. Eli decided a guide may say "Let's" (a tutorial):
+  Let's add a target.
+
+Retired 2026-10-11, was: fp. Each text came from a page that is not a guide,
+judged as one, and the rule judges guides alone. Source page, then the text:
+  libs/gopherbuzz/docs/ffi.md: separates a C ABI we can keep memory-safe from one that can crash the host.
+  benchmarks/large-monorepo/README.md: We never fork upstream and we patch nothing in its tree.
+  docs/doctrine.md: we operate; [Scope names them](scope.md#where-the-claim-is-strained).
+  blog/2026-08-04-how-i-use-ai-tooling.md: our own registry's limits at the time.
+  blog/2026-09-01-the-best-code-is-still-no-code.md: Neither one lands on the person who added it, which is most of why we keep adding.
+  docs/decisions/0006-the-person-drives-review.md: Agents write code far faster than we can review it, and we are now the bottleneck.
+  docs/scope.md: we control, and it commits a project with no revenue to keeping an aggregator
+  testdata/hosts/SOURCES.md: these means either magus drifted or our transcription is stale, and the `url` is where to settle it.
+  docs/concepts/terminal.md: That is not a bug we
+  CONTRIBUTING.md: against, in our own tree.
+  blog/2026-08-18-i-think-our-tools-are-the-problem.md: The complaint underneath all of them is that our developer tools have slipped.
+  console/README.md: `ui.css`: the base layer plus the per-component sheets we render.
+  docs/concepts/cache.md: signed trust model on top; this page is the substrate it references, so we describe
+  docs/decisions/0006-the-person-drives-review.md (variant): Agents write code faster than we can review it, and review has become the bottleneck that does not scale.
+  benchmarks/large-monorepo/README.md (variant): We never fork upstream, and we patch nothing in its tree.
+  console/README.md (before #69): we render (Button, Tabs, Card). The bundler inlines them into
+  blog/2026-09-01-the-best-code-is-still-no-code.md (variant): It almost never lands on the person who wrote it, and that is most of why we
+-- hit/guide --
+A codec per host would cost us upkeep.
+We keep our cache; the cost is ours.
+We added a flag.
+-- pass/guide --
+Set the locale to en-US.
+Let's add a target.
+Pass `--ours`, or the side git calls "ours".
+Add a target, then run it.
+-- hit/guide --
+We document this order; we don't enforce it.
+rejected, what a constraint is, what bit us and is not visible in the code that
+We document this order, and we don't enforce it.
+-- fp/guide --
+A failure against one of these is ours.
+Nowhere in the codebase do we hardcode one coding agent, or
+evidence we have: a language with close to no training data produces better
+Because it is ours and not upstream's, it is ours to keep whole.
+-- pass/guide --
+(`magus ...`), never this process's `./magus`: the reader's checkout is not ours.
+[I think our tools are the problem](blog/tools-are-the-problem.md).
+trade: you keep a little wiring in the repo, and we do not force every checkout
+issue first so we can talk it through before you spend an evening on it.
+## Verify our claims: don't take our word for it
+You can apply the test without trusting us.
+# I think our tools are the problem
+Then I fed them in, and we went back and forth over it.
+I think we got lazy over the last ten or fifteen years and started

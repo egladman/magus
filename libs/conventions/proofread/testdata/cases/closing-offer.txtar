@@ -1,0 +1,63 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+An agent reply whose last paragraph offers more work or asks leave to go on.
+-- hit/agent-reply --
+The key sorts now. Want me to open the pull request?
+Both fixes are on the branch. Should I push?
+The gate passed. Let me know if you want the docs regenerated too.
+If you'd like, I can also rename the flag.
+Say the word and I'll rebase.
+I can split the commit if you want.
+-- hit/agent-reply whole --
+The rename is pushed, and the old flag is still read.
+
+Would you like me to drop the old flag in a follow-up?
+-- pass/agent-reply --
+The key sorts now, and the pull request is open as #12.
+The branch needs a name before the push, since the guard refuses a `feat/` prefix.
+The style guide asks that "Want me to" be cut from replies.
+-- pass/agent-reply whole --
+Want me to keep the old flag? I kept it, since two callers read it.
+
+The rename is pushed.
+-- hit/agent-reply --
+Would you like me to create this as a follow-up task, or should I implement it now?
+Let me know if any further adjustments are needed.
+Should I proceed with this approach?
+Should I update the existing tests to match the new behavior, or would you prefer a feature flag to keep backwards compatibility?
+Should I revert this change?
+Would you like me to open a separate task for the backend team to handle the migration, or should they coordinate that separately?
+Should I explore an even more compact format than markdown for better tokenization?
+Should I add logic to detect the enforcement setting so the safe area calculations hold in both modes?
+Or should I extend the existing vacuum class to show these features only for the newer models?
+Should I implement this approach?
+Should I investigate the allocator's memory handling during this temporary object creation, or is there a specific area you'd recommend focusing on?
+Should I fix the regex compiler and the conditional expression handling the same way?
+Would you like me to try a different approach to verify the changes, or would you prefer to test the build locally?
+Would you like me to add `ip_version` to the metric names to make it queryable in your database?
+Would you like me to attempt any specific warning, or proceed with comment styling and docs standardization?
+Would you like me to continue migrating more, or is this enough to demonstrate the approach?
+Should I start there, or would you prefer a different priority order?
+Would you like me to implement this checkbox approach instead of the current "Select All" behavior?
+Would you like me to continue on the remaining direct uses of the old HTTP client in the other test files?
+Would you like me to enhance any of these SQL test files?
+Would you like me to create a separate issue to track the backend changes needed for permanent embed URLs?
+Let me know if any adjustments are needed!
+Should I continue with T003 or would you like me to address T005 differently?
+Would you like me to proceed with bringing the branch up to date, or do you need to handle the rebase manually?
+Would you like me to implement these tests?
+Would you like me to address those as well, or should we tackle them in a separate change given the scope?
+Let me know if you'd like me to verify any other terminology!
+Would you like me to implement any of these suggestions?
+Would you like me to take one of these approaches?
+Should I implement this approach instead?
+Should I go ahead with this change, or would you prefer to draft the approach first given your native-module use case?
+Would you like me to address all the review comments systematically, or would you prefer a different approach given the scope?
+**Should I implement this change?** The logic simplification is compelling, and the trade-offs seem manageable.
+Let me know if you'd prefer a more focused set of test cases.
+Should I continue migrating the remaining formatter tests now, or is this a good stopping point?
+Let me know if you need any clarification or help with implementing these suggestions!
+Happy to adjust the approach if you have a different preference for handling the agent framework!
+-- fp/agent-reply --
+Happy to have them squashed during merge.
+Would you like me to implement this? If so, which paid translation service should I integrate with?
+Would you like me to proceed with option 3 (close this change and open a new one with the commits)?

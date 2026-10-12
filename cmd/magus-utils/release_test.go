@@ -747,6 +747,9 @@ func TestPlatformFromNameReadsBothVariantSpellings(t *testing.T) {
 		{"magus_v0.3.0_darwin_arm64-static.tar.gz", "v0.3.0", "darwin/arm64"},
 		{"magus_v0.3.0_darwin_arm64.tar.gz", "v0.3.0", "darwin/arm64"},
 		{"magus_v0.2.0_linux_amd64-cgo.tar.gz", "v0.2.0", "linux/amd64"},
+		// Every tool a release ships names its platform the same way.
+		{"proofread_v0.6.0_linux_amd64_static.tar.gz", "v0.6.0", "linux/amd64"},
+		{"proofread_v0.6.0_windows_amd64_static.tar.gz", "v0.6.0", "windows/amd64"},
 		{"SHA256SUMS", "v0.3.0", ""},
 	} {
 		if got := platformFromName(tc.name, tc.version); got != tc.want {

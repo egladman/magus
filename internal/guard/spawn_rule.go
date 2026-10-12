@@ -26,7 +26,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceSpawnRule is the Verdict.Rule a magus\guard.spawn answer carries, in the
+// workspaceSpawnRule is the Verdict.Rule an unnamed magus\guard.spawn answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceSpawnRule = workspaceShellPrefix + "spawn"
 
@@ -76,6 +76,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
+	ctx = withOutputStore(ctx, at)
 
 	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	decided := ""
@@ -150,6 +151,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			note := ruleFailureNote(ruleFailureReport{
 				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
 				judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+				lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 			})
 			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}

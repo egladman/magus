@@ -261,7 +261,7 @@ serves it, and nothing persists after the process exits.
 Most workspaces should not need a login step at all. Authenticate when the tool tells you
 to: run the build, let the push fail, log in, run it again. The re-run is cheap because
 everything before the push replays from cache, so being reactive costs a few seconds
-rather than a rebuild, and nobody has to know a convention exists in order to get it
+rather than a rebuild, and nobody has to know a convention exists to get it
 right.
 
 That works because the failure teaches the fix. A command op declares `hints`, so the
@@ -554,7 +554,7 @@ read, readable with `magus query invocation <id> --secrets`. The **activity trai
 made spendable.
 
 Both record the reference, the host and the header. Neither records the value: magus
-resolves nothing when you declare an endpoint, and resolving one in order to log it would
+resolves nothing when you declare an endpoint, and resolving one to log it would
 defeat the point.
 
 ### What an endpoint does not do
@@ -609,8 +609,8 @@ be greppable. If the count grows much past a handful, the boundary is in the wro
 ## Why a secret is a `str` and not its own type
 
 A reasonable instinct is that `magus\secret.read` should return a distinct `Secret` type
-so a credential cannot be mistaken for an ordinary string. It does not, and the reason is
-that the type would not be enforced where it matters.
+so a credential cannot be mistaken for an ordinary string. It does not, because
+the type would not be enforced where it matters.
 
 Buzz checks **function signatures**: `fun registries(ctx) > [Registry]` is a real
 constraint, and a wrong return type fails the build. It does not check **host call

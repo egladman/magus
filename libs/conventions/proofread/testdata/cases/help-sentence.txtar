@@ -1,0 +1,12 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A sentence of help text over 40 words.
+-- hit/cli-help --
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ends.
+-- pass/cli-help --
+Show the live cache key, the ref a run would print, and the inputs that changed since the last run of each target.
+word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word ends.
+-- hit/cli-help --
+Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, the blast radius for each write path, and where each goal stands against the evidence.
+Pack a spell directory's tracked files as an image artifact with provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the lock pins of the remote spells the config declares.
+It refuses a job whose write paths cover a file the workspace has to LOAD (any project's magusfile.buzz, its magus.yaml, or a spell source a magusfile imports) while another live job with write paths is bound to this checkout, because a half-saved one of those stops the workspace loading for every job here at once: give that job its own worktree.
+The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `--` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left

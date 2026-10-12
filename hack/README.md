@@ -23,8 +23,8 @@ magus buzz hack/dev/<script>.buzz -- --help
 A script's name starts with what running it does. `ls`, `show`, `count`, `diff`,
 `summarize` and `example` only read. `render` only prints. `time` runs what it names and
 reports how long, writing nothing in the tree. `check` replays calls through what the
-workspace wires and reports what was not refused, writing nothing in the tree. `rename`, `split`, `mark`, `prune` and
-`merge` print a plan and write only with `--apply`. `bootstrap` prepares the checkout it
+workspace wires and reports what was not refused, writing nothing in the tree. `rename`, `split`, `mark`, `prune`,
+`merge` and `resolve` print a plan and write only with `--apply`. `bootstrap` prepares the checkout it
 runs in, writing there and to its job's row only. `on-<where>` runs the command after it
 somewhere else. The first line a
 script prints says what it did, and the first line of `--help` says what it costs.
@@ -45,6 +45,7 @@ scripts are also reference to copy: read one before reaching for python, sed or 
 | `magus buzz hack/dev/merge-job-branches.buzz -- (--jobs <id,...> \| --branches <name,...> \| --stack <file\|->) [--base <rev>] [--into <branch>] [-o json] [--apply] [--verify]` | merges job branches, named branches or a split-into-branches stack in a temporary worktree, settling generated files by regenerating; dry run by default, never pushes | a temporary worktree and one merge per branch; `--apply` also regenerates once, `--verify` runs every merged job's checks |
 | `magus buzz hack/dev/prune-worktrees.buzz -- [--keep-recent <duration>] [--base <rev>] [--go-cache] [-o json] [--apply]` | plans which git worktrees and agent branches can go, largest first, with every reason a kept one stays; dry run by default | a git status and rev-list per worktree, one lsof, and a du per removable worktree |
 | `magus buzz hack/dev/prune-changelog-fragments.buzz -- [-o json] [--apply]` | plans which unreleased changelog fragments are superseded, obsolete or duplicate from the history of the lines their commits wrote; dry run by default | a git blame per changed path, then a nested magus diff of about 13s per duplicate candidate |
+| `magus buzz hack/dev/resolve-conflicts.buzz -- --file <path> [--take <n\|all>=ours\|theirs\|both\|base]... [--text <n>=<file>]... [--apply]` | lists a file's merge conflict hunks, or resolves the chosen ones and prints the diff; refuses an empty result or stray markers, writes through a same-directory rename, and only with `--apply` | none; reads and writes one file |
 | `magus buzz hack/dev/example-typed-results.buzz -- [--file <path>] [--query <terms>] [--symbol <name>]` | read-only: magus's results as typed Buzz values, where a shell pipes `-o json` into jq | needs the code index |
 | `magus buzz hack/dev/ls-uncommitted.buzz` | read-only: uncommitted files by owning project and declared role | grows with tree size |
 | `magus buzz hack/dev/ls-worktrees.buzz -- [--dirty]` | read-only: every worktree with its uncommitted files, unpushed commits and job | grows with the number of worktrees |

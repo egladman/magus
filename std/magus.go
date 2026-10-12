@@ -285,7 +285,7 @@ var Magus = Module{
 		},
 		{
 			Name: "output",
-			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context; raises MGS1022 outside one.",
+			Doc:  "One target run's captured output by its ref: {ref, project, target, failed, durationMs, output}. Annotate the result `> OutputRecord`. ref is an output ref (out1a2b3c) or a unique prefix of one. Raises on a value that is not a ref, a prefix that matches several, and a ref this checkout's output store does not hold: output lives in the checkout that ran the target. Read in-process from the workspace on the context, or inside a guard rule from the checkout the guard judges; raises MGS1022 outside both.",
 			Args: []Arg{
 				{Name: "ref", Type: TypeString},
 			},
@@ -572,16 +572,19 @@ var Magus = Module{
 					Extern:  true,
 				},
 				{
-					Name:    "advise",
-					Doc:     "The verdict a spawn, command or write rule returns to let the call through with text for the agent.",
-					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Name: "advise",
+					Doc: "The verdict a spawn, command or write rule returns to let the call through with text for the agent. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>.",
+					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},
 				{
-					Name:    "deny",
-					Doc:     "The verdict a spawn, command or write rule returns to block the call, with text saying why.",
-					Args:    []Arg{{Name: "text", Type: TypeString}},
+					Name: "deny",
+					Doc: "The verdict a spawn, command or write rule returns to block the call, with text saying why. " +
+						"opts.rule names the rule, kebab-case: the verdict then reports as workspace:<rule>, is stored, " +
+						"and a repeat in the same session shortens to its first line.",
+					Args:    []Arg{{Name: "text", Type: TypeString}, {Name: "opts", Type: TypeAnyMap, Optional: true}},
 					Returns: []Ret{{Type: TypeAnyMap, Object: "GuardVerdict"}},
 					Extern:  true,
 				},

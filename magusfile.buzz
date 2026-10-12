@@ -45,6 +45,7 @@ import "lcov";
 // Aliased: an unaliased import flat-merges its exports here, where magus reads
 // each exported fun as a target and rejects it (MGS1008).
 import "./hack/magusfile/releases" as releases;
+import "./libs/conventions/proofread" as proofread;
 import "./hack/magusfile/mockassert" as mockassert;
 import "spells/golang/gomod";
 
@@ -274,6 +275,12 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
             "-o", "magus",
             "./cmd/magus"],
     });
+    // macOS assesses a new executable on its first exec, which can outlast a hook's
+    // budget; run it here so no hook pays for that.
+    final said = proc\exec("./magus", ["version"], ".", {}).stdout;
+    if (!said.startsWith("magus ")) {
+        throw "go-build: the built ./magus did not answer `version` with a `magus ` line: {said}";
+    }
 }
 
 // host is what login authenticates against and repository is where a push goes;
@@ -664,8 +671,8 @@ fun pull_request_title(ctx: magus\Context, args: [str], target: str) > str !> an
     return event?.q("title").stringValue() ?? "";
 }
 
-// Fails a pull request title that is not a conventional commit subject, or whose
-// description opens in the past tense or sells instead of saying what changed.
+// Fails a pull request title that is not a conventional commit subject, or whose subject
+// is not imperative or carries a selling word.
 export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     final title = pull_request_title(ctx, args: args, target: "pr-title");
     final problems = mut [<str>];
@@ -683,32 +690,30 @@ export fun pr_title(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("pr-title: \"{title}\" is a conventional commit subject");
 }
 
-// Fails a pull request whose title or description the prose judge in libs/conventions/prose
-// finds a fault in, the judge the guard's pull-request-text rule runs, so the two cannot
-// disagree. Each area the branch touches that the description never names is asked about
-// as a warning, which fails nothing. --title and --body carry the text; the workflow, not
+// Fails a pull request whose title or description the guard's pull-request-text rule
+// would deny. It runs the same judgeText: proofread under this repository's
+// decisions table, the word budget the branch's diff earns and the title checks. Advice,
+// such as an area the branch touches that the description never names, is a warning,
+// which fails nothing. The output refs a description cites are not checked: this checkout
+// holds none of the author's runs. --title and --body carry the text; the workflow, not
 // this target, reads the event.
 export fun pr_description(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(conventions\judge_build);
+    ctx.needs(conventions\proofread_build);
     final parsed = flags\parse(args, switches: [<str>], valued: ["--title", "--body"], required: ["--title", "--body"]);
     if (parsed.unknown.len() > 0 or parsed.positionals.len() > 0) {
         throw "pr-description: unexpected arguments {args.join(" ")}; pass --title=<title> --body=<description>";
     }
-    final text = "{parsed.values["--title"] ?? ""}\n{parsed.values["--body"] ?? ""}";
-    final problems = mut [<str>];
-    final judge = descriptions\judgeRunner(".");
-    foreach (f in judge(text)) {
-        problems.append(descriptions\judgedProblem(f));
+    final text = descriptions\Text{ kind = "change-description", title = parsed.values["--title"] ?? "",
+        body = parsed.values["--body"] ?? "" };
+    final found = descriptions\judgeText(text, facts: fun () > descriptions\Facts => descriptions\branchDiff(".")(""),
+        judge: descriptions\judgeRunner("."), cited: descriptions\skipCited);
+    foreach (note in found.advice) {
+        magus\log.warn("pr-description: {note}");
     }
-    final changed = mut [<str>];
-    foreach (f in vcs\changedFiles(vcs\base())) { changed.append(f.value); }
-    foreach (question in descriptions\areaQuestions(descriptions\unnamedAreas(descriptions\areasOf(".", paths: changed), text: text))) {
-        magus\log.warn("pr-description: {question}");
+    if (found.denies.len() > 0) {
+        throw "pr-description: the description breaks the proofread rules (docs/conventions.md):\n  " + found.denies.join("\n  ");
     }
-    if (problems.len() > 0) {
-        throw "pr-description: the description breaks the prose rules (docs/conventions.md):\n  " + problems.join("\n  ");
-    }
-    magus\log.info("pr-description: the title and description pass the prose rules");
+    magus\log.info("pr-description: the title and description pass the proofread rules");
 }
 
 // Fails a feat, fix, perf or breaking pull request that ships code without a changelog
@@ -1106,17 +1111,19 @@ export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["run", "./cmd/magus-termcast", "shots"]);
 }
 
-// Must match release.yaml; verify_release_workflow checks the workflow against it.
-// An asset outside this glob never uploads.
-final RELEASE_ASSET_GLOB = "dist/magus_*.tar.gz";
-
 // The `on.push.tags` filter. `*` stops at "/", so a per-module tag publishes nothing.
 final RELEASE_TAG_REFSPEC = "v*";
 
 final RELEASE_WORKFLOW = ".github/workflows/release.yaml";
 
-fun release_asset_name(v: str, goos: str, goarch: str, suffix: str) > str {
-    return "magus_" + v + "_" + goos + "_" + goarch + suffix + ".tar.gz";
+// Every release archive in dist/, one releases\assetGlob per tool, sorted by path.
+fun release_archives() > [str] !> any {
+    final archives = mut [<str>];
+    foreach (tool in releases\TOOLS) {
+        foreach (p in fs\glob(releases\assetGlob(tool))) { archives.append(p.value); }
+    }
+    archives.sort(fun (a: str, b: str) > bool => a < b);
+    return archives;
 }
 
 // Maps an asset arch token to its GOARM level, or "" for arches without one. ARMv7
@@ -1133,12 +1140,12 @@ fun goarm_level(goos: str, goarch: str) > str {
 
 // Reads the module list from the shipped binary, not go.mod: the two variants link
 // different modules.
-fun write_notices(stage: str, binary: str) > void !> any {
+fun write_notices(stage: str, tool: str, binary: str) > void !> any {
     final modcache = proc\exec("go", ["env", "GOMODCACHE"], ".", {}).stdout.split(separator: "\n")[0];
     final listing = proc\exec("go", ["version", "-m", fs\join(stage, binary)], ".", {}).stdout;
 
     var body = "THIRD-PARTY NOTICES\n\n"
-        + "magus is licensed under the terms in the accompanying LICENSE file. It links the\n"
+        + tool + " is licensed under the terms in the accompanying LICENSE file. It links the\n"
         + "modules below, each under its own terms, reproduced here in full. This list is read\n"
         + "from the shipped binary, so it describes THIS artifact rather than the module graph\n"
         + "in general.\n\n";
@@ -1192,26 +1199,61 @@ fun escape_module_path(path: str) > str {
     return escaped;
 }
 
+// release_asset is tool's archive path in dist/, refused before any write when its upload
+// glob would miss it.
+fun release_asset(tool: str, v: str, goos: str, goarch: str, suffix: str) > str !> any {
+    final asset = fs\join("dist", releases\assetName(tool, version: v, goos: goos, goarch: goarch, suffix: suffix));
+    final glob = releases\assetGlob(tool);
+    // Against the upload glob, not the basename: a "/" in the version turns the name into
+    // a path the glob misses, and the build stays green.
+    if (!releases\matchesGlob(glob, releases\toSlash(asset))) {
+        throw "release-build: the asset would be `" + asset + "`, which `"
+            + glob + "` does not match, so the release upload would not find "
+            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
+            + "resolves.";
+    }
+    return asset;
+}
+
+fun exe_name(tool: str, goos: str) > str {
+    if (goos == "windows") { return tool + ".exe"; }
+    return tool;
+}
+
+// archive_release_stage puts the license texts, readme and BUILDINFO beside tool's binary
+// in stage, archives stage as asset, and writes the asset's digest beside it.
+fun archive_release_stage(stage: str, tool: str, binary: str, readme: str, asset: str, buildinfo: str) > void !> any {
+    // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
+    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
+    fs\copyFile(readme, fs\join(stage, "README.md"));
+    write_notices(stage, tool: tool, binary: binary);
+    fs\writeFile(fs\join(stage, "BUILDINFO"), buildinfo
+        + "\nRun `go version -m " + tool + "` for the full module list and build settings.\n");
+
+    archive\compress(stage, asset, {});
+    fs\removeAll(stage);
+
+    // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
+    final digest = crypto\sha256File(asset);
+    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+}
+
 fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool, suffix: str) > void !> any {
     // Before any write, so a refused platform leaves no trace.
     // armv6/armv7 are asset names; they fold to GOARCH=arm plus GOARM.
     final goarm = goarm_level(goos, goarch);
 
     final v = version();
-    final name = release_asset_name(v, goos, goarch, suffix);
-    final asset = fs\join("dist", name);
-    // Against the upload glob, not the basename: a "/" in the version turns the name into
-    // a path the glob misses, and the build stays green.
-    if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
-        throw "release-build: the asset would be `" + asset + "`, which `"
-            + RELEASE_ASSET_GLOB + "` does not match, so the release upload would not find "
-            + "it. Version `" + v + "` is what names it; check that HEAD's root release tag "
-            + "resolves.";
+    final asset = release_asset("magus", v: v, goos: goos, goarch: goarch, suffix: suffix);
+    // proofread links no C, so its static archive serves every host and a dynamic build
+    // would only duplicate it.
+    var proofreadAsset = "";
+    if (!cgo) {
+        proofreadAsset = release_asset("proofread", v: v, goos: goos, goarch: goarch, suffix: suffix);
     }
 
     fs\mkdirAll("dist");
-    var binary = "magus";
-    if (goos == "windows") { binary = "magus.exe"; }
+    final binary = exe_name("magus", goos: goos);
 
     final stage = fs\join("dist", goos + "-" + goarch + suffix);
     fs\mkdirAll(stage);
@@ -1242,30 +1284,31 @@ fun build_release_variant(ctx: magus\Context, goos: str, goarch: str, cgo: bool,
     build_args.append("./cmd/magus");
     go["go-build"](ctx.withEnv(env), {"args": build_args});
 
-    // GPL-3.0 section 4 and the dependencies' licenses require their texts beside the binary.
-    fs\copyFile("LICENSE", fs\join(stage, "LICENSE"));
-    fs\copyFile("README.md", fs\join(stage, "README.md"));
-    write_notices(stage, binary);
-
     // Readable when a dynamic build cannot start for want of a library.
     var variant = "static";
     if (cgo) { variant = "dynamic"; }
     var platform = goos + "/" + goarch;
     if (goarm != "") { platform = platform + " (GOARM=" + goarm + ")"; }
-    fs\writeFile(fs\join(stage, "BUILDINFO"),
-        "magus " + v + "\n"
+    final info = " " + v + "\n"
         + "commit:   " + commit() + "\n"
         + "built:    " + build_date() + "\n"
         + "platform: " + platform + "\n"
-        + "variant:  " + variant + "\n"
-        + "\nRun `go version -m magus` for the full module list and build settings.\n");
+        + "variant:  " + variant + "\n";
+    archive_release_stage(stage, tool: "magus", binary: binary, readme: "README.md", asset: asset,
+        buildinfo: "magus" + info);
 
-    archive\compress(stage, asset, {});
-    fs\removeAll(stage);
-
-    // sha256File returns hex; crypto.hash returns raw bytes `sha256sum -c` cannot read.
-    final digest = crypto\sha256File(asset);
-    fs\writeFile(asset + ".sha256", digest + "  " + fs\basename(asset) + "\n");
+    if (proofreadAsset == "") { return; }
+    final pbinary = exe_name("proofread", goos: goos);
+    final pstage = fs\join("dist", "proofread-" + goos + "-" + goarch + suffix);
+    fs\mkdirAll(pstage);
+    // -C runs the build inside proofread's own module, whose go.mod carries the replace
+    // directives `go install` refuses, so -o climbs back out to dist/. The flags are
+    // proofread-build's: proofread stamps no version, which BUILDINFO records instead.
+    final up = proofread\home.split("/").map(fun (i: int, s: str) > str => "..").join("/");
+    go["go-build"](ctx.withEnv(env), {"args": ["-C", proofread\home, "-trimpath",
+        "-o", up + "/" + releases\toSlash(fs\join(pstage, pbinary)), "./" + proofread\command]});
+    archive_release_stage(pstage, tool: "proofread", binary: pbinary,
+        readme: fs\join(proofread\home, "readme.md"), asset: proofreadAsset, buildinfo: "proofread" + info);
 }
 
 fun release_target_platform(goos: str, goarch: str) > [str] !> any {
@@ -1388,8 +1431,8 @@ fun download_release(tag: str) > void !> any {
         problems.append("SHA256SUMS or its signature is missing");
     } else {
         final have = mut {<str: str>};
-        foreach (p in fs\glob(RELEASE_ASSET_GLOB)) {
-            have[fs\basename(p.value)] = crypto\sha256File(p.value);
+        foreach (a in release_archives()) {
+            have[fs\basename(a)] = crypto\sha256File(a);
         }
         problems = releases\sumsProblems(tag, sums: fs\readFile(sumsPath), have: have).cloneMutable();
     }
@@ -1413,12 +1456,15 @@ export fun release_publish(ctx: magus\Context, args: [str]) > void !> any {
         download_release(tag);
         return;
     }
-    final archives = mut [<str>];
-    foreach (p in fs\glob(RELEASE_ASSET_GLOB)) { archives.append(p.value); }
+    final archives = release_archives();
     if (archives.len() == 0) {
-        throw "release-publish: nothing matches {RELEASE_ASSET_GLOB}; the release-build jobs leave the archives there";
+        throw "release-publish: dist/ holds no release archive; the release-build jobs leave them there";
     }
-    archives.sort(fun (a: str, b: str) > bool => a < b);
+    final missing = releases\missingStaticTools(archives.map(fun (i: int, a: str) > str => fs\basename(a)));
+    if (missing.len() > 0) {
+        throw "release-publish: every static platform ships each of " + releases\TOOLS.join(", ")
+            + ", and dist/ lacks " + missing.join(", ") + "; check release.yaml's upload paths";
+    }
     final sums = mut [<str>];
     foreach (a in archives) { sums.append(fs\readFile(a + ".sha256")); }
     fs\writeFile(fs\join("dist", "SHA256SUMS"), content: sums.join(""));
@@ -1581,9 +1627,9 @@ fun local_branches() > [str] !> any {
     return names;
 }
 
-// The tag trigger does not derive from RELEASE_TAG_REFSPEC, so only this notices one side
-// edited alone. The upload glob needs no such check: release-publish uploads by
-// RELEASE_ASSET_GLOB itself.
+// Neither the tag trigger nor the build jobs' upload paths derive from RELEASE_TAG_REFSPEC
+// and releases\assetGlob, so only this notices one side edited alone. release-publish
+// globs dist/ by releases\assetGlob itself, but sees only what the build jobs uploaded.
 fun verify_release_workflow() > [Verdict] !> any {
     if (!fs\exists(RELEASE_WORKFLOW)) {
         return [failed("workflow", RELEASE_WORKFLOW + " is missing, so the tag trigger cannot be confirmed")];
@@ -1596,6 +1642,19 @@ fun verify_release_workflow() > [Verdict] !> any {
     } else {
         checks.append(passed("workflow tag trigger", "`" + RELEASE_TAG_REFSPEC + "` is what "
             + RELEASE_WORKFLOW + " triggers on"));
+    }
+    final uploads = body.split("actions/upload-artifact@").len() - 1;
+    var unlisted = mut [<str>];
+    foreach (tool in releases\TOOLS) {
+        if (body.split(releases\assetGlob(tool)).len() - 1 < uploads) { unlisted.append(releases\assetGlob(tool)); }
+    }
+    if (unlisted.len() > 0) {
+        checks.append(failed("workflow upload paths", "not every one of the " + "{uploads}"
+            + " upload-artifact steps in " + RELEASE_WORKFLOW + " lists " + unlisted.join(", ")
+            + ", so the release would publish without those archives"));
+    } else {
+        checks.append(passed("workflow upload paths", "every upload-artifact step in "
+            + RELEASE_WORKFLOW + " lists each tool's archives"));
     }
     return checks;
 }
@@ -1639,24 +1698,26 @@ fun release_checks(wouldBeTags: [str], rootVersion: str) > [Verdict] !> any {
             + ", and refuses when that carries a separator"));
     } else {
         var offenders = mut [<str>];
-        foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
-                       ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
-            foreach (suffix in ["_static", ""]) {
-                // toSlash: fs\join uses the rehearsing machine's separator.
-                final asset = fs\join("dist", release_asset_name(root, p[0], p[1], suffix));
-                if (!releases\matchesGlob(RELEASE_ASSET_GLOB, releases\toSlash(asset))) {
-                    offenders.append(asset);
+        foreach (tool in releases\TOOLS) {
+            foreach (p in [["linux", "amd64"], ["linux", "arm64"], ["darwin", "amd64"],
+                           ["darwin", "arm64"], ["windows", "amd64"], ["windows", "arm64"]]) {
+                foreach (suffix in ["_static", ""]) {
+                    // toSlash: fs\join uses the rehearsing machine's separator.
+                    final asset = fs\join("dist", releases\assetName(tool, version: root, goos: p[0], goarch: p[1], suffix: suffix));
+                    if (!releases\matchesGlob(releases\assetGlob(tool), releases\toSlash(asset))) {
+                        offenders.append(asset);
+                    }
                 }
             }
         }
         if (offenders.len() > 0) {
             checks.append(failed("asset names", "HEAD would stamp version `" + root + "`, naming assets "
-                + "like `" + offenders[0] + "` that `" + RELEASE_ASSET_GLOB + "` cannot match. The "
+                + "like `" + offenders[0] + "` that its tool's upload glob cannot match. The "
                 + "build would be green and the release would publish nothing. " + "{offenders.len()}"
                 + " of the assets release.yaml builds are affected."));
         } else {
-            checks.append(passed("asset names", "version `" + root + "` names assets `"
-                + RELEASE_ASSET_GLOB + "` matches on every platform release.yaml builds"));
+            checks.append(passed("asset names", "version `" + root + "` names assets each tool's "
+                + "upload glob matches on every platform release.yaml builds"));
         }
     }
 
@@ -1961,8 +2022,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles("console/src/styles/base/tokens.css", "console/src/apps/graph/graph.css",
                    "console/src/apps/graph/main.ts", "console/src/apps/graph/shapes.ts");
     ctx.readsFiles("MAGUS.md");
-    // The guard's pull-request-text test runs the judge judge-build links.
-    ctx.needs(format, buzz_test, conventions\judge_build);
+    // The guard's pull-request-text test runs the binary proofread-build links.
+    ctx.needs(format, buzz_test, conventions\proofread_build);
     // Explicit args replace go-test's `./...` default and the `-- -run` passthrough, hence
     // `args`. cmd/magus runs without -race: its TestScripts re-exec the raced binary hundreds
     // of times, and the engine's concurrency lives in the raced packages.
@@ -2085,12 +2146,13 @@ export fun coverage_render(ctx: magus\Context, args: [str]) > void !> any {
 // embedded engine, and holds their merged line coverage above a floor. Not the buzz
 // spell's buzz-test op: that forks upstream `buzz` and would sweep in every magusfile.
 export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
+    // hack/lint/run.buzz's tests run the binary proofread-build links.
+    ctx.needs(conventions\proofread_build);
     ctx.readsFiles("spells/**/*.buzz", "docs/lib/*.buzz", "std/lib/*.buzz", "hack/dev/*.buzz", "hack/remote/*.buzz", "hack/bench/*.buzz",
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
-    // hack/lint/run.buzz's tests run the judge, which a fresh worktree has not built.
-    ctx.needs(conventions\judge_build);
+    // proofread_build above links the binary that hack/lint/run.buzz invokes.
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 
@@ -2188,8 +2250,8 @@ export fun install_linter(ctx: magus\Context, args: [str]) > void !> any {
 // each rule is hack/lint/<rule>.buzz, and hack/lint/run.buzz reports drift between their
 // reads and this footprint. A tree glob stops at a nested project, hence the named paths.
 export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
-    // The prose rules run the linked judge-docs rather than compile it.
-    ctx.needs(format, conventions\judge_build);
+    // The proofread rules run the linked proofread rather than compile it.
+    ctx.needs(format, conventions\proofread_build);
     ctx.readsFiles("hack/lint/*.buzz",
                    "spells/**/*.buzz", "internal/queue/provider/*.buzz", "hack/**/*.buzz",
                    "hack/README.md",
@@ -2200,6 +2262,8 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "**/magusfile.buzz", "console/magusfile.buzz", "docs/magusfile.buzz",
                    "docs/guides/integrations/agents/magusfile.buzz",
                    "libs/conventions/magusfile.buzz",
+                   // proofread's staleness check hashes the labeled cases the binary embeds.
+                   "libs/conventions/proofread/testdata/cases/*.txtar",
                    "libs/diagnostics/magusfile.buzz",
                    "libs/figure/magusfile.buzz", "libs/gopherbuzz/magusfile.buzz",
                    "libs/testlayout/magusfile.buzz", "libs/textsearch/magusfile.buzz",
@@ -2245,7 +2309,7 @@ export fun lint_rules(ctx: magus\Context, args: [str]) > void !> any {
                    "proto/**/*.yaml",
                    "**/*.yml", "libs/testlayout/**/*.yml",
                    "proto/**/*.proto", "**/*.txtar");
-    // code-follows-mined-precedents and symbol-docs-follow-prose-rules fail on a stale symbol
+    // code-follows-mined-precedents and symbol-docs-follow-proofread-rules fail on a stale symbol
     // index. magus\precedents freshens every index here, under this run's lock, so the rules
     // run below find them current; read from that child process instead, a rebuild would be
     // refused the lock (MGS3007).

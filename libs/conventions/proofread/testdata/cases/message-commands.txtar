@@ -1,0 +1,9 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A printed message naming more than one next command.
+-- hit/message --
+run `magus graph build`, then `magus refs X`
+-- pass/message --
+stale graph: run `magus graph build`
+`go.mod` is stale in `libs/x`: run `magus run tidy .`
+-- fp/message --
+spell %q at %s has the name of the embedded spell %s; declare `spells: {%s: {path: <dir>}}` in magus.yaml to replace it (`magus spell pull %s <dir>` writes a copy to start from), or rename it

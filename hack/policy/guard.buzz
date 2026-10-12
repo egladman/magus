@@ -48,12 +48,13 @@
 //     or describe, that carries an attribution or a body, or whose subject breaks the form
 //     its branch takes: the conventional subject hack/magusfile/commits.buzz defines on the base
 //     branch, one lowercase imperative line anywhere else.
-//   pull-request-text (deny): a `gh pr create|edit` title or description the prose judge
-//     in libs/conventions/prose finds a fault in (no lead naming the goal, a heading, reply
-//     voice, tense, a hedge, filler, credit to a tool), one that runs past the word budget
-//     its diff earns, or a title the pr-title check would fail. Prose outside the
-//     lead-and-bullets shape, and an area the diff touches that the description never
-//     names, are advised once per pull request.
+//   pull-request-text (deny, named): a pull request title, description or review reply,
+//     posted by any forge command its table lists, with a finding proofread in
+//     libs/conventions/proofread decides deny under hack/policy/proofread.buzz, a description past
+//     the word budget its diff earns after the lead, or a title the pr-title check would
+//     fail. Advise findings, prose outside the lead, bullets and headed sections, and an
+//     area the diff touches that the description never names are advised once per pull
+//     request.
 //   code-comments (write): a Go comment block the write adds over the owner's budget is
 //     advised, over twice it or above the package clause denied; the first write of a
 //     session adding comments to any code file is advised once.
@@ -61,6 +62,9 @@
 //     capture. The compiled rule only advises a filter of those files.
 //   host-terminals (deny): creating or reading a directory named terminals. A host
 //     session folder is not a run; magus status reads the lock.
+//   sealed-read (deny): a line that reads, lists, copies or searches the sealed proofread
+//     sets under $XDG_CACHE_HOME/proofread/calibration/sealed, however it spells the path.
+//     The labels beside them stay open.
 //
 // Each rule lives beside its tests in the file named for what it guards: gh.buzz (the first
 // six), cadence.buzz (the gate and the push), branches.buzz (push-authority and
@@ -68,7 +72,7 @@
 // go-into-checkout, with worker-builds-magus run first), builds.buzz (what counts as compiling
 // magus, and both build rules), stale.buzz, spawn.buzz (brief-builds-magus runs there),
 // commits.buzz, pull_requests.buzz,
-// comments.buzz and host.buzz (a run log, and a directory named terminals).
+// comments.buzz, host.buzz (a run log, and a directory named terminals) and sealed.buzz.
 // helpers.buzz holds the argv parsing they share. Imports are root-relative because `magus buzz -t` resolves an entry
 // file's imports against the working directory, not the file. An alias the root magusfile
 // already binds (github, changelog) shadows the one here, so these avoid them.
@@ -89,12 +93,17 @@ import "./hack/policy/commits" as subjects;
 import "./hack/policy/pull_requests" as pullRequests;
 import "./hack/policy/comments" as comments;
 import "./hack/policy/host" as host;
+import "./hack/policy/sealed" as sealed;
 import "./hack/policy/branches" as branches;
 import "./hack/magusfile/commits" as conventional;
 
 // judge is the command rule the root magusfile registers.
 export fun judge(req: CommandRequest) > GuardVerdict {
     final programs = parsePrograms(req);
+    final held = sealed\decideSealed(programs, line: req.command, roots: sealed\rootsFromEnv());
+    if (held.decision != "allow") {
+        return held;
+    }
     var lease = "";
     if (req.lease != null) {
         lease = req.lease!.id;
@@ -312,9 +321,9 @@ export fun judgeWrite(req: WriteRequest) > GuardVerdict !> any {
 // advisories, then the branch name advisories. baseBranch is the checkout's branch when it
 // is the base branch, "" otherwise; line is the shell line as sent, files the description
 // files it names, diff reads the branch's diff for a description's budget, judge runs
-// the prose judge over a pull request's title and description, and reads gives the host
-// rule a task capture's text and whether the workspace holds a ./magus.
-export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
+// proofread over a pull request's text of a kind, and reads gives the host rule a task
+// capture's text and whether the workspace holds a ./magus.
+export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout: cadence\Checkout?, baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool, publishing: Publishing, reads: host\Reads) > GuardVerdict {
     final hostVerdict = host\decideHost(programs, reads: reads);
     if (hostVerdict.decision != "allow") {
         return hostVerdict;
@@ -341,7 +350,7 @@ export fun decide(programs: [helpers\Program], caller: cadence\Caller, checkout:
 
 // decideText is decide's gh and text rules: the gh denials, the commit and pull request text
 // denials, the gh advisories, then the pull request text advisories.
-fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
+fun decideText(programs: [helpers\Program], baseBranch: str, line: str, files: {str: str}, diff: fun (base: str) > pullRequests\Facts, judge: fun (text: str, kind: str) > [pullRequests\Judged], once: fun (key: str) > bool) > GuardVerdict {
     final github = gh\decideGitHub(programs, once: once, line: line);
     if (github.decision == "deny") {
         return github;
@@ -377,7 +386,7 @@ test "a commit and a pull request text denied together open with one verdict" {
     final diff = fun (base: str) > pullRequests\Facts {
         return pullRequests\unknownFacts();
     };
-    final judge = fun (text: str) > [pullRequests\Judged] {
+    final judge = fun (text: str, kind: str) > [pullRequests\Judged] {
         return [<pullRequests\Judged>];
     };
     final once = fun (key: str) > bool {
@@ -410,6 +419,20 @@ test "a push is refused to a subagent the host names, under no lease and unseen 
     final leased = branches\decideAuthority(parsePrograms(worker), caller: requestPusher(worker));
     std\assert(leased.decision == "deny", message: "a leased worker");
     std\assert(leased.reason.indexOf("lease guard-caller-identity") != null, message: leased.reason);
+}
+
+test "the line judge refuses the sealed directory before any other rule, and leaves the labels open" {
+    final dir = sealed\sealedDir(sealed\rootsFromEnv());
+    final read = CommandRequest{ command = "cat {dir}/round5/cases.txtar",
+        commands = [CommandInvocation{ program = "cat", args = ["{dir}/round5/cases.txtar"] }] };
+    final refused = judge(read);
+    std\assert(refused.decision == "deny", message: "a cat of the sealed directory");
+    verdict\assertVerdict(refused.reason, label: "a cat of the sealed directory");
+    std\assert(refused.reason.indexOf("sealed until its round is scored") != null, message: refused.reason);
+
+    final open = CommandRequest{ command = "cat {dir}/../labels/round4/scores.json",
+        commands = [CommandInvocation{ program = "cat", args = ["{dir}/../labels/round4/scores.json"] }] };
+    std\assert(judge(open).decision == "allow", message: "the labels directory");
 }
 
 test "the main session's cat of a task capture outside the workspace is denied naming the capture's ref" {

@@ -1,0 +1,63 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A removal or replacement that names nothing the old code was for.
+-- hit/change-description --
+- Replaces the per-process cache with a shared one.
+- Drop the inert console skip from the generate passes.
+-- fp/change-description --
+- Drop the orphaned page for a command that no longer exists.
+-- hit/change-description whole --
+refactor(memory): remove the memory store
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs.
+
+- Moves notes.
+-- pass/change-description --
+- Replaces the per-process cache, which suited one worker, with a shared one.
+- Sorts the inputs.
+-- pass/change-description whole --
+refactor: remove the memory store
+A cached replay missed whenever two workers raced on the key, so the cache key now sorts its inputs.
+
+The store was built for one session at a time.
+-- hit/change-description --
+- Drop references to the standalone evaluations binary from the image, entrypoint script, and docs.
+Remove role repetition in rendered goals and projects
+Remove the bundle-size badge from the README
+- remove the separate language workflow and fold its steps into the main CI file
+- replace utility colours in the parameter renderer with theme tokens
+- remove globals where possible and clean up `any` usage
+- replace the verbose agent guide with a concise reference covering build commands and code style
+Remove leading plus sign validation from version deserialization
+Remove the unused webhook route and related code
+Replace the dependency macro with direct target linking
+Replace fixed rate limiting with an adaptive algorithm that adjusts to the API's rate limits.
+- drop the VM golden comparison
+Replace the custom container image with its hardened variant in the workflow
+- remove unused runtime helper
+Replace unreliable magic links with a unified tabbed sign-in screen
+Remove the performance optimization infrastructure and add focused parsing benchmarks
+- replace the startup bullet list with a rendered session panel that compacts key status details
+- Replace the `any` type with a generic type parameter for the resolver
+- remove duplicate import in solver log test
+Remove the redefined finish reason type
+- remove local example images so the branch can be merged without binaries
+- remove duplicate logo images
+Removes the `axis` parameter from matrix functions and enforces fixed dimension conventions for clarity and consistency.
+Remove max height constraints from sticky notes to fix content truncation
+- drop the `_div` helper and use `quotient` for integer division
+- Replace the hardcoded node type check with the `isActionNode` utility
+Replaces the encoded access token in the import map example with a new token for repository access.
+- remove the hardcoded power generation so a user-defined `pow10` is invoked
+Delete the type name helpers file from the shared metadata sources
+Replace the icon font with SVG icons
+Replace the terminal parser with a newer emulator library
+Remove the binary encoding dependency from the query library
+- supersedes #31
+-- hit/change-description whole --
+feat: remove the async hooks polyfill, use the native runtime implementation
+-- fp/change-description --
+> - Replace the desktop UI projects and views with cross-platform equivalents so the app builds and runs everywhere.
+- Removes only the specific reaction clicked, never affects other users' reactions
+5. Drops the old `id` column, whose values step 4 copied, and makes `version_id` the primary key
+• Replaces the previous placeholder setup sections with detailed, multi-step setup guides for both app flows.
+Remove the typed-language compile step
+- remove diff markers before translating

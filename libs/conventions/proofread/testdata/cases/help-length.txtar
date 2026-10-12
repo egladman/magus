@@ -1,0 +1,18 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+Help text over 240 runes.
+-- hit/cli-help --
+ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé
+-- pass/cli-help --
+Short for --explain
+éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé
+-- hit/cli-help --
+Upsert each record's spec, the way an apply command reads a manifest: criteria, write, deny and read paths, check, goals, model, depends_on, parent and timeout. The record is the whole spec, so a spec field it leaves out is cleared, except an omitted checkpoint or timeout.
+The base's own regeneration `command` and its arguments, run with no shell and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
+Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, and where each goal stands graded against the evidence magus holds now for this job.
+End, as no_return with an end_reason, every job the store can show nobody is working: exited and never collected, overdue, orphaned by an ancestor that ended, or declared and never taken past jobs.stale_after. Each ended job prints with its reason.
+Declare one job: what its holder is handed, where it may write, and the one check it runs. It refuses a job whose write paths cover a file the workspace has to LOAD while another live job with write paths is bound to this checkout: give that job its own worktree.
+Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated detection, emitting only when two projects' output snapshots confirm a shared write. replay: re-runs cacheable projects to hash outputs for non-determinism.
+Let hooks read magus's remote cache from the CI host's cache service through a loopback proxy that forwards lookups upstream with the runner's token and refuses every write; hooks get a stand-in token and remote writes off. Refused without the runner's credentials
+Pack a spell directory's tracked files as an image artifact with provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the lock pins of the remote spells the config declares.
+Remove ONE job from the plan, leaving every other row alone. This is not how a job ends: `magus job exit` records what happened and leaves the row, while rm is for a row that should never have been written. A row that already ended is refused unless --force.
+Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace

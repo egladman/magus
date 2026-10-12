@@ -174,6 +174,16 @@ func TestCheckDefinitions(t *testing.T) {
 	}, sites)
 }
 
+// A definition's source carries the comment block directly above it, where the symbol
+// states its contract and names the test that pins it; a blank line ends the block.
+func TestCheckDefinitionsIncludesTheDocComment(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("a.go", "package a\n\n// unrelated\n\n// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}\n")
+	sites := []types.KnowledgeDefinitionSite{{File: "a.go", StartLine: 7, Status: types.DefinitionUnverified}}
+	checkDefinitions(w.Root(), "F", sites, nil, true)
+	assert.Equal(t, "// F splits a letter from a digit.\n// TestF pins it.\nfunc F() {}", sites[0].Source)
+}
+
 func TestEmitDefinitionsText(t *testing.T) {
 	out := types.KnowledgeDefinitionsOutput{
 		Symbol: "symbol:a F().", Label: "F",

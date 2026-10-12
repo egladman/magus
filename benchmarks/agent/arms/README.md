@@ -46,8 +46,7 @@ the repo prose, is what the arms differ by.
 Neither arm registers an MCP server, and neither runs a persistent daemon. The
 full arm is skills + hooks + routing index; MCP is a v2 switch.
 
-The reason is that MCP registration is user-scoped rather than in-repo, so it is
-not a property of the worktree a provisioning script owns, and its cost lands as
+MCP registration is user-scoped rather than in-repo, so it is not a property of the worktree a provisioning script owns, and its cost lands as
 tool SCHEMAS in the system prompt, which transcripts never show. Measuring it
 honestly needs the invisible-floor estimate the metrics extractor does not have
 yet. Holding it at zero for both arms keeps the paired deltas clean.

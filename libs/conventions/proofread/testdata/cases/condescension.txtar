@@ -1,0 +1,127 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
+Words that presume the reader finds a step easy or obvious.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
+-- hit/guide --
+It is easy: easily done.
+A simple target builds it.
+Then you just run `magus init`.
+Please wait.
+-- hit/reference --
+Of course the key is sorted, as everyone knows.
+-- hit/agent-instructions --
+Clearly, the key is sorted. Obviously it holds.
+-- hit/review-reply --
+This obviously needs a lock.
+-- pass/guide --
+It extracts just the binary you just downloaded, not just the hunks.
+The rule refuses "easy".
+-- pass/guide whole --
+The order is easy to get
+wrong, and you cannot easily audit it.
+-- pass/reference --
+Two names looked obviously correct, and none is obviously the mistake.
+The doc clearly meant to cite a code.
+It is easy.
+-- pass/change-description --
+- It is easy to miss, so a simple check runs; please open an issue.
+-- hit/agent-reply --
+- `redpen`: everyone knows the red pen, but it reads harsh.
+-- hit/change-description --
+This is obviously not correct; we only want the bot not to publish, but we'd like to keep the test.
+Obviously there could be an endless list of these files, but I would add this one and stop there.
+-- hit/review-reply --
+If the previous code throws an error, this line should never be reached, of course.
+We obviously can't add to the existing collection, but you can seed the new one with its contents.
+Of course there is always a more manual way.
+**nitpick**: Comment merely restates what setting z_level = 0 obviously does
+**nitpick**: Comment merely restates what the following if/else block obviously does
+The author obviously felt it important to publish the scale factors before.
+Fixing this is of course out of scope for this PR, but I hope you can explain the decision.
+**nitpick**: Comment merely restates what the following if conditions obviously do
+It would use normal namespaces rather than file-scoped namespaces, obviously.
+This file must not be checked in to the repo obviously.
+Clearly not, since the lending logic is separate in each branch.
+-- fp/review-reply --
+Updated the instruction to proceed with snapshot updates unless changes are obviously incorrect.
+Not critical of course.
+-- pass/change-description whole --
+fix: convert the minimum date explicitly
+
+> Obviously it's not something that we are the first to discover.
+-- pass/change-description whole --
+fix: stop predictive text in multiline fields
+
+> Of course the same is happening with a multiline text component.
+-- pass/change-description whole --
+fix: dispose the client safely
+
+> Clearly, I should be able to address that through thread synchronization.
+-- pass/change-description whole --
+fix: trim spaces in renamed identifiers
+
+> It adds that space everywhere the identifier is used, and obviously also where it's defined.
+-- pass/change-description whole --
+feat: add theme roles for front matter
+
+<agent_instructions>Of course we don't assign literal colors to these things, but each gets a different role.</agent_instructions>
+-- pass/change-description whole --
+feat: run the test framework natively
+
+<comment_new><body>Obviously we want to support running it natively, but this will take some time.</body></comment_new>
+-- pass/change-description --
+- Clearly emphasizes the production-ready features: statistics and confidence intervals
+- Clearly marks direct connections as development-only
+- Clearly separates fetch operations from other activities
+- Clearly distinguish between occupied and available beds
+- Clearly marked as advanced functions that bypass higher-level abstractions
+- Clearly categorizes implemented and missing interfaces
+-- pass/commit-message --
+1. Clearly states what was changed
+- Clearly indicate that the interface may change in the future
+- Clearly identifies the remaining path mapping issue
+- Clearly documents current limitations
+- Clearly indicate the paid files are omitted from the open-source distribution
+- Clearly separate chart ingress from manual ingress options
+- Clearly identify breaking changes
+-- pass/review-reply --
+- Clearly document that the server does **not** support streaming responses.
+I was surprised the `std::string(name)` syntax works (obviously I didn't intend to write it this way), and it's a good fix.
+(Of course, I can do this when I get back to the other issue if you think it's needed.)
+I was using an automated spelling helper and it obviously goofed the spacing.
+Of course, makes perfect sense.
+-- hit/review-reply --
+Oh right, I was thinking we need to implement this as a listener that updates a flow, but just directly updating a flow from here works as well of course.
+Revert this change, we want the newer runtime, of course.
+And obviously used build time values, not run time values.
+Of course we can start simple (use a simple dictionary of rule names to environments) and build up as the specific requirements arise.
+Sure there's obviously bloat here from the LLM.
+Missing invariant, please, this contract obviously needs to behave like a transparent proxy for end-users
+Clearly, if we parse it into exp_val, then exp_val is between -999 and 9999.
+In this case we'd want to take the first line though, of course.
+Of course if the size is exposed as a user settable thing then this might be an exception that needs to be handled.
+obviously, this source file never had a syntax error or we would have noticed :-)
+please update the implementation to reject any `mode` that's not either `644` or `755` (of course, still allow dynamic files where it's unset).
+Obviously there's something that allows this to happen.
+Obviously the changes could be reverted, but they seem like a potential headache for maintainers...
+this test is literally useless because *of course* the code that was written specifically for this test passes the test.
+This of course doesn't work, since you can't place a Uri in a Text property.
+keep the plotting as it was here but of course changed for the case that we have one case (one algorithm) here only
+-- hit/change-description --
+Besides of course automated tests passing, I:
+Obviously there could be an endless list of these types of files, but I would argue we add this in addition to the editor rules and stop there.
+- **Regex pattern**: The phone validation uses a comprehensive regex that attempts to balance flexibility (accepting common formats) with validation (rejecting obviously invalid inputs).
+The corrected dates now show logical chronological progression (anniversary in 2012, order in 2013) instead of the obviously incorrect years (1012, 2103).
+-- fp/change-description --
+- Maintained chronological order of course updates
+-- fp/change-description whole --
+test: add the test vectors
+
+**User**: I want you to implement the test vectors completely. They won't pass of course but they should be fully there.
+
+**Assistant**: [Implemented complete test vectors]
+-- fp/guide --
+Neither is a mistake anyone makes out of carelessness. They are what the tooling made easy, and the failure modes are the boring ones: a variable you forgot to unset, a file you meant to delete.
+3. **Clearly and demonstrably better.** A claim of better needs an artifact someone else can check.
+It is written down because the reasoning is easier to reuse than to rediscover, because two of these names looked obviously correct right up until someone checked what they meant elsewhere.
+-- fp/guide whole --
+The lint holds every page to its rules: no word tells the reader a step is easy (`condescension`: `easy`, `simple`, `obviously`, `of course`, `clearly`, `please`, and `just` before a verb).

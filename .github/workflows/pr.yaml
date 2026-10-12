@@ -65,7 +65,7 @@ jobs:
       # The text arrives through env and the joined flag form, so the shell never parses it
       # and a description opening with `-` stays a value. Runs even when the title failed,
       # so one push reports every check.
-      - name: Title and description follow the prose rules
+      - name: Title and description follow the proofread rules
         if: ${{ !cancelled() }}
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}

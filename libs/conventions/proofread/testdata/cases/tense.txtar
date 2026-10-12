@@ -1,0 +1,14 @@
+A claim in the future tense or a first-person account of a change.
+-- hit/reference --
+magus will not select a version.
+It won't retry, and it'll fail.
+We added a flag, and I have moved the cache.
+-- hit/change-description --
+- I think my cap holds.
+- Our fix pins the key.
+-- pass/reference --
+Rebuild at will.
+We believe a warning is a bug. Our users run it in CI.
+-- pass/change-description --
+- We believe the cap holds.
+- Moves the I/O off the loop.

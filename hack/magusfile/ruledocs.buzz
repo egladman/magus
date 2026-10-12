@@ -3,6 +3,7 @@ namespace ruledocs;
 import "magus";
 import "fs";
 import "std";
+import "encoding/json";
 
 // quote is Go's %q for the frontmatter's double-quoted scalars: a description carrying
 // a colon is a YAML mapping unless quoted, and every one of these does.
@@ -126,6 +127,8 @@ export fun renderIndex(rules: [magus\Rule]) > str {
         + "`magus\\guard.builtins`.\n\n"
         + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
         + "name is the entry below. `magus describe rules` prints the same list.\n\n"
+        + "Rules for written text, such as pull request descriptions and docs, are the\n"
+        + "[proofread rules](../proofread/index.md).\n\n"
         + table("Denies by default", rules: denies)
         + table("Advises by default", rules: advisories);
     // One final newline, not the last table's two, which the formatter would trim.
@@ -156,6 +159,308 @@ export fun write(dir: str, rules: [magus\Rule]) > void !> any {
         keep[r.name + ".md"] = true;
     }
     writeIfChanged(fs\join(dir, "index.md"), body: renderIndex(rules));
+    foreach (name in fs\listDir(dir)) {
+        final path = fs\join(dir, name);
+        if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
+        fs\remove(path);
+    }
+}
+
+// ProofreadRule is one entry of `proofread rules`, proofread's rule list.
+// decisions maps each kind in kinds to the default decision on that kind, and
+// dimension is one of PROOFREAD_DIMENSIONS.
+export object ProofreadRule {
+    name: str,
+    code: str,
+    kinds: [str],
+    decisions: {str: str},
+    house: bool,
+    dimension: str,
+    catches: str,
+    why: str,
+}
+
+// PROOFREAD_DIMENSIONS is each dimension a rule is counted on, in the order
+// proofread ranks findings, with what a finding on it costs the reader.
+final PROOFREAD_DIMENSIONS = [
+    ["evidence", "a claim says more or less than what was shown"],
+    ["stance", "the text reads as a verdict on a person, or as addressed to someone else"],
+    ["structure", "the reader has to reconstruct the order or the purpose"],
+    ["economy", "words that carry nothing"],
+    ["conventions", "a house or genre convention is broken"],
+];
+
+fun dimensionCost(dimension: str) > str? {
+    foreach (d in PROOFREAD_DIMENSIONS) {
+        if (d[0] == dimension) { return d[1]; }
+    }
+    return null;
+}
+
+// proofreadRules reads the JSON `proofread rules` writes. A catalog that is empty or
+// not a rule list raises: proofread moved, not the rules. So does a rule whose
+// dimension no page can explain.
+export fun proofreadRules(raw: str) > [ProofreadRule] !> any {
+    final entries: [any] = json\parse(raw);
+    if (entries.len() == 0) {
+        throw "the proofread rule catalog is empty; proofread stopped listing its rules";
+    }
+    final rules = mut [<ProofreadRule>];
+    foreach (e in entries) {
+        final kinds: [str] = e["kinds"];
+        final decisions: {str: str} = e["decisions"];
+        final house: bool = e["house"];
+        final name: str = e["name"];
+        final code: str = e["code"];
+        final dimension: str = e["dimension"] ?? "";
+        final catches: str = e["catches"];
+        final why: str = e["why"];
+        if (dimensionCost(dimension) == null) {
+            throw "proofread rule {name} has dimension \"{dimension}\", which is none of evidence, stance, structure, economy or conventions";
+        }
+        rules.append(ProofreadRule{
+            name = name, code = code, kinds = kinds, decisions = decisions, house = house,
+            dimension = dimension, catches = catches, why = why,
+        });
+    }
+    return rules;
+}
+
+fun kindLabel(kind: str) > str {
+    return "`" + kind + "`";
+}
+
+// proofreadTier is the decision a rule is filed under: house rules ship off, and a rule that
+// denies anywhere is a deny rule.
+fun proofreadTier(r: ProofreadRule) > str {
+    if (r.house) { return "off"; }
+    foreach (kind in r.kinds) {
+        if (r.decisions[kind] == "deny") { return "deny"; }
+    }
+    return "advise";
+}
+
+fun kindsWith(r: ProofreadRule, decision: str) > [str] {
+    final found = mut [<str>];
+    foreach (kind in r.kinds) {
+        if (r.decisions[kind] == decision) { found.append(kindLabel(kind)); }
+    }
+    return found;
+}
+
+fun joinAnd(items: [str]) > str {
+    if (items.len() <= 1) { return items.join(""); }
+    if (items.len() == 2) { return items[0] + " and " + items[1]; }
+    return items.sub(0, len: items.len() - 1).join(", ") + ", and " + items[items.len() - 1];
+}
+
+// proofreadDescribe is the one sentence a proofread page and its frontmatter share.
+fun proofreadDescribe(r: ProofreadRule) > str {
+    final denies = kindsWith(r, decision: "deny");
+    final advises = kindsWith(r, decision: "advise");
+    if (r.house) {
+        return "A house-style rule, off until a decisions table turns it on: it reports " + r.catches + ".";
+    }
+    if (advises.len() == 0) {
+        return "A deny rule by default: it refuses " + r.catches + ".";
+    }
+    if (denies.len() == 0) {
+        return "An advisory by default: it explains, and blocks nothing, on " + r.catches + ".";
+    }
+    return "A rule that denies on " + joinAnd(denies) + " and advises on " + joinAnd(advises)
+        + " by default: it reports " + r.catches + ".";
+}
+
+// proofreadOther is a decision the rule does not already take on its first kind, so the
+// override example always shows a change.
+fun proofreadOther(r: ProofreadRule) > str {
+    final current = r.decisions[r.kinds[0]];
+    foreach (d in ["deny", "advise", "off"]) {
+        if (d != current) { return d; }
+    }
+    return "off";
+}
+
+// proofreadDecisionTable is the per-kind defaults, columns padded the way the docs formatter
+// aligns them.
+fun proofreadDecisionTable(r: ProofreadRule) > str {
+    var kindWidth = "Kind".len();
+    var decisionWidth = "Default".len();
+    foreach (kind in r.kinds) {
+        if (kindLabel(kind).len() > kindWidth) { kindWidth = kindLabel(kind).len(); }
+        if (r.decisions[kind].len() > decisionWidth) { decisionWidth = r.decisions[kind].len(); }
+    }
+    final rows = mut ["| " + pad("Kind", width: kindWidth) + " | " + pad("Default", width: decisionWidth) + " |\n",
+        "| " + "-".repeat(kindWidth) + " | " + "-".repeat(decisionWidth) + " |\n"];
+    foreach (kind in r.kinds) {
+        rows.append("| " + pad(kindLabel(kind), width: kindWidth) + " | "
+            + pad(r.decisions[kind], width: decisionWidth) + " |\n");
+    }
+    return rows.join("");
+}
+
+// proofreadURL is where a finding links: the page this file renders.
+fun proofreadURL(r: ProofreadRule) > str {
+    return "https://eli.gladman.cc/magus/reference/proofread/" + r.name + "/";
+}
+
+// renderProofreadRule is one proofread rule's page. It aliases the page's old URL under
+// reference/prose.
+// compat(until: the docs host's request log shows no hit under /reference/prose/ for a release):
+// findings and pages written before the rename link there.
+export fun renderProofreadRule(r: ProofreadRule) > str {
+    // The title is the name alone: the docs lint holds a proofread page's H1 to its title.
+    var page = "---\ntitle: " + quote(r.name) + "\n"
+        + "description: " + quote(proofreadDescribe(r)) + "\n"
+        + "tags: [proofread, rules, " + r.name + ", " + proofreadTier(r) + "]\n"
+        + "aliases: [reference/prose/" + r.name + "]\n---\n\n"
+        + "# " + r.name + "\n\n"
+        + proofreadDescribe(r) + "\n\n"
+        + "## What it catches\n\n"
+        + upperFirst(r.catches) + ".\n\n"
+        + "## Dimension\n\n"
+        + "`" + r.dimension + "`: " + (dimensionCost(r.dimension) ?? "") + ". A finding is counted on\n"
+        + "the dimension of its rule, the cost it names to the reader.\n\n";
+    if (r.why != "") {
+        page = page + "## Why\n\n" + r.why + "\n\n";
+    }
+    page = page + "## Default decision\n\n"
+        + "The code is `" + r.code + "`. The decision depends on the kind of text judged:\n\n"
+        + proofreadDecisionTable(r) + "\n";
+    if (r.house) {
+        page = page + "House style ships `off`: the rule encodes one repository's conventions, not\n"
+            + "a rule of plain writing. A repository turns it on in its decisions table.\n\n";
+    }
+    return page + "## Changing it\n\n"
+        + "A decisions table sets this rule to `deny`, `advise` or `off`, for everything judged\n"
+        + "or for the files a glob matches. Proofread reads the table from the file its\n"
+        + "`-decisions` flag names:\n\n"
+        + "```json\n"
+        + "\{\n"
+        + "  \"rules\": \{\"" + r.name + "\": \"" + proofreadOther(r) + "\"},\n"
+        + "  \"paths\": \{\"blog/**\": \{\"" + r.name + "\": \"off\"}}\n"
+        + "}\n"
+        + "```\n\n"
+        + "`rules` applies to every file. A glob in `paths` applies to the files it matches, and the\n"
+        + "last match wins. A rule set to `off` never reports.\n\n"
+        + "## Seeing it\n\n"
+        + "A finding names the rule, its code and the decision that applies, and links here:\n\n"
+        + "```json\n"
+        + "\{\"rule\": \"" + r.name + "\", \"code\": \"" + r.code + "\", \"decision\": \""
+        + (if (r.house) "deny" else proofreadTier(r)) + "\", \"url\": \"" + proofreadURL(r) + "\"}\n"
+        + "```\n\n"
+        + "`proofread rules` prints this entry with every other rule's.\n\n"
+        + "## See also\n\n"
+        + "- [All proofread rules](index.md) - every rule, grouped by what it checks\n"
+        + "- [Writing rules](../../conventions.md#writing-rules) - how the rules apply to this repository's pages and pull requests\n"
+        + "- [The findings contract](https://github.com/egladman/magus/blob/main/libs/conventions/README.md#findings) - the fields every finding carries\n";
+}
+
+// proofreadFamilies is the heading of each PRF family, keyed by the digit after the prefix.
+final PROOFREAD_FAMILIES = [
+    ["1", "Shape"], ["2", "Tone"], ["3", "Claims and hedges"], ["4", "Generated-writing tells"],
+    ["5", "House style"], ["6", "Doc comments"], ["7", "Agent instructions"], ["8", "Review replies"],
+    ["9", "Messages a program prints"],
+];
+
+fun proofreadDefault(r: ProofreadRule) > str {
+    final first = r.decisions[r.kinds[0]];
+    foreach (kind in r.kinds) {
+        if (r.decisions[kind] != first) { return "varies by kind"; }
+    }
+    if (r.house) { return "off (house)"; }
+    return first;
+}
+
+fun proofreadTable(heading: str, rules: [ProofreadRule]) > str {
+    final names = mut [<str>];
+    final defaults = mut [<str>];
+    final catches = mut [<str>];
+    var nameWidth = "Rule".len();
+    var codeWidth = "Code".len();
+    var dimensionWidth = "Dimension".len();
+    var defaultWidth = "Default".len();
+    var catchWidth = "Catches".len();
+    foreach (r in rules) {
+        final name = "[" + r.name + "](" + r.name + ".md)";
+        final cell = r.catches.replace("|", with: "\\|");
+        names.append(name);
+        defaults.append(proofreadDefault(r));
+        catches.append(cell);
+        if (name.len() > nameWidth) { nameWidth = name.len(); }
+        if (r.code.len() > codeWidth) { codeWidth = r.code.len(); }
+        if (r.dimension.len() > dimensionWidth) { dimensionWidth = r.dimension.len(); }
+        if (proofreadDefault(r).len() > defaultWidth) { defaultWidth = proofreadDefault(r).len(); }
+        if (cell.len() > catchWidth) { catchWidth = cell.len(); }
+    }
+    final rows = mut [<str>];
+    foreach (i, r in rules) {
+        rows.append("| " + pad(names[i], width: nameWidth) + " | " + pad(r.code, width: codeWidth)
+            + " | " + pad(r.dimension, width: dimensionWidth)
+            + " | " + pad(defaults[i], width: defaultWidth) + " | " + pad(catches[i], width: catchWidth) + " |\n");
+    }
+    return "## " + heading + "\n\n"
+        + "| " + pad("Rule", width: nameWidth) + " | " + pad("Code", width: codeWidth)
+        + " | " + pad("Dimension", width: dimensionWidth)
+        + " | " + pad("Default", width: defaultWidth) + " | " + pad("Catches", width: catchWidth) + " |\n"
+        + "| " + "-".repeat(nameWidth) + " | " + "-".repeat(codeWidth) + " | " + "-".repeat(dimensionWidth)
+        + " | " + "-".repeat(defaultWidth) + " | " + "-".repeat(catchWidth) + " |\n"
+        + rows.join("")
+        + "\n";
+}
+
+// renderProofreadIndex is the whole catalog as one table per PRF family, in code order.
+export fun renderProofreadIndex(rules: [ProofreadRule]) > str {
+    final ordered = rules.cloneMutable();
+    ordered.sort(fun (left: ProofreadRule, right: ProofreadRule) > bool => left.code < right.code);
+    final head = "---\ntitle: \"Proofread rules\"\n"
+        + "description: \"Every rule proofread applies to written text: what each one catches, the decision it takes by default on each kind of text, and its code.\"\n"
+        + "tags: [proofread, rules, reference]\n"
+        + "aliases: [reference/prose]\n---\n\n"
+        + "# Proofread rules\n\n"
+        + "What proofread checks in the text a person or an agent writes. Each rule has a\n"
+        + "default decision on each kind of text: a **deny** is refused by the caller, an\n"
+        + "**advise** is reported once and lets the text through, and an **off** rule, house\n"
+        + "style, reports nothing until a repository turns it on. A decisions table changes any\n"
+        + "of them.\n\n"
+        + "A finding carries the rule's name and its `PRF` code, and links to the rule's page\n"
+        + "here. The first digit of a code is its family. `proofread rules` prints the\n"
+        + "same list as JSON.\n\n"
+        + "Each rule also has a dimension, the cost its findings name to the reader:\n\n";
+    final dimensions = mut [<str>];
+    foreach (d in PROOFREAD_DIMENSIONS) {
+        dimensions.append("- **" + d[0] + "**: " + d[1] + "\n");
+    }
+    final tables = mut [<str>];
+    tables.append(dimensions.join("") + "\n");
+    foreach (family in PROOFREAD_FAMILIES) {
+        final members = mut [<ProofreadRule>];
+        foreach (r in ordered) {
+            if (r.code.sub(3, len: 1) == family[0]) { members.append(r); }
+        }
+        if (members.len() > 0) {
+            tables.append(proofreadTable(family[1], rules: members));
+        }
+    }
+    var page = head + tables.join("");
+    while (page.endsWith("\n")) {
+        page = page.sub(0, len: page.len() - 1);
+    }
+    return page + "\n";
+}
+
+// writeProofread renders one page per proofread rule plus index.md into dir, with the pruning
+// write does: a renamed rule would otherwise leave a page describing a rule no finding
+// names. raw is `proofread rules`, so a page cannot exist under a name no finding reports.
+export fun writeProofread(dir: str, raw: str) > void !> any {
+    final rules = proofreadRules(raw);
+    fs\mkdirAll(dir);
+    final keep = mut {"index.md": true};
+    foreach (r in rules) {
+        writeIfChanged(fs\join(dir, r.name + ".md"), body: renderProofreadRule(r));
+        keep[r.name + ".md"] = true;
+    }
+    writeIfChanged(fs\join(dir, "index.md"), body: renderProofreadIndex(rules));
     foreach (name in fs\listDir(dir)) {
         final path = fs\join(dir, name);
         if ((keep[name] ?? false) or !name.endsWith(".md") or fs\isDir(path)) { continue; }
@@ -272,6 +577,9 @@ test "the index pads both tables and ends in one newline" {
         + "Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that\n"
         + "name is the entry below. `magus describe rules` prints the same list.\n"
         + "\n"
+        + "Rules for written text, such as pull request descriptions and docs, are the\n"
+        + "[proofread rules](../proofread/index.md).\n"
+        + "\n"
         + "## Denies by default\n"
         + "\n"
         + "| Rule                        | Catches                 |\n"
@@ -285,4 +593,70 @@ test "the index pads both tables and ends in one newline" {
         + "| [raw-pipe](raw-pipe.md) | `a \\| b` piped \"raw\" |\n";
     final got = renderIndex([pipeRule(), sleepRule()]);
     std\assert(got == want, message: got);
+}
+
+fun proofreadCatalog() > str {
+    return `[{"name":"blame","code":"PRF2001","kinds":["change-description","review-reply"],"decisions":{"change-description":"deny","review-reply":"deny"},"house":false,"dimension":"stance","catches":"a person as the subject of a fault","why":"The fault is in the code."},`
+        + `{"name":"verdict","code":"PRF2002","kinds":["change-description","review-reply"],"decisions":{"change-description":"advise","review-reply":"deny"},"house":false,"dimension":"stance","catches":"a judgment word","why":""},`
+        + `{"name":"dash","code":"PRF5002","kinds":["reference"],"decisions":{"reference":"off"},"house":true,"dimension":"conventions","catches":"an em dash","why":""}]`;
+}
+
+test "a proofread rule page names its code, per-kind defaults and override" {
+    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final page = renderProofreadRule(rules[1]);
+    std\assert(page.startsWith("---\ntitle: \"verdict\"\n"
+        + "description: \"A rule that denies on `review-reply` and advises on `change-description` by default: it reports a judgment word.\"\n"
+        + "tags: [proofread, rules, verdict, deny]\n"
+        + "aliases: [reference/prose/verdict]\n---\n"), message: page);
+    std\assert(page.indexOf("| `change-description` | advise  |") != null, message: page);
+    std\assert(page.indexOf("\"rules\": \{\"verdict\": \"deny\"}") != null, message: page);
+    std\assert(page.indexOf("\"url\": \"https://eli.gladman.cc/magus/reference/proofread/verdict/\"") != null, message: page);
+    std\assert(page.indexOf("## Dimension\n\n`stance`: the text reads as a verdict on a person, or as addressed to someone else.") != null, message: page);
+}
+
+test "a proofread rule with no known dimension raises" {
+    final unknown = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"dimension":"tone","catches":"x","why":""}]`;
+    final missing = `[{"name":"blame","code":"PRF2001","kinds":["reference"],"decisions":{"reference":"deny"},"house":false,"catches":"x","why":""}]`;
+    foreach (raw in [unknown, missing]) {
+        var message = "";
+        try {
+            proofreadRules(raw);
+        } catch (err: str) {
+            message = err;
+        }
+        std\assert(message.startsWith("proofread rule blame has dimension"), message: "got: " + message);
+    }
+}
+
+test "a house rule says it ships off" {
+    final rules = proofreadRules(proofreadCatalog()) catch [<ProofreadRule>];
+    final page = renderProofreadRule(rules[2]);
+    std\assert(page.indexOf("A house-style rule, off until a decisions table turns it on") != null, message: page);
+    std\assert(page.indexOf("House style ships `off`") != null, message: page);
+}
+
+test "the proofread index groups rules by family and pads the tables" {
+    final page = renderProofreadIndex(proofreadRules(proofreadCatalog()) catch [<ProofreadRule>]);
+    final want = "## Tone\n\n"
+        + "| Rule                  | Code    | Dimension | Default        | Catches                            |\n"
+        + "| --------------------- | ------- | --------- | -------------- | ---------------------------------- |\n"
+        + "| [blame](blame.md)     | PRF2001 | stance    | deny           | a person as the subject of a fault |\n"
+        + "| [verdict](verdict.md) | PRF2002 | stance    | varies by kind | a judgment word                    |\n"
+        + "\n"
+        + "## House style\n\n"
+        + "| Rule            | Code    | Dimension   | Default     | Catches    |\n"
+        + "| --------------- | ------- | ----------- | ----------- | ---------- |\n"
+        + "| [dash](dash.md) | PRF5002 | conventions | off (house) | an em dash |\n";
+    std\assert(page.endsWith(want), message: page);
+    std\assert(page.indexOf("- **evidence**: a claim says more or less than what was shown\n") != null, message: page);
+}
+
+test "an empty proofread catalog raises" {
+    var raised = false;
+    try {
+        proofreadRules("[]");
+    } catch (err: str) {
+        raised = true;
+    }
+    std\assert(raised, message: "an empty catalog must raise");
 }

@@ -1,0 +1,10 @@
+A skill sentence over 25 words.
+-- hit/agent-instructions --
+Run the graph build before you query the store, since a stale index answers from the old commit and every result it prints then points at lines that moved away.
+word word word word word word word word word word word word word word word word word word word word word word word word word word
+-- pass/agent-instructions --
+Run the graph build before you query the store.
+word word word word word word word word word word word word word word word word word word word word word word word word.
+-- pass/agent-instructions whole --
+- word word word word word word word word word word word word word word word word word word word.
+- word word word word word word word word word word word word word word word word word word word.

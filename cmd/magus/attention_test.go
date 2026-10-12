@@ -28,6 +28,7 @@ import (
 // (TestAttentionDisposeRefusesWithoutATerminal) overrides this back.
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	withInteractiveTTY(t)
@@ -422,6 +423,7 @@ func TestFileAttentionSkipsWhenThereIsNoRepository(t *testing.T) {
 }
 
 func TestNotifyOpensARequestThatAttentionLists(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	root := attentionTestRoot(t)
 
 	var out bytes.Buffer
@@ -491,6 +493,7 @@ func TestAttentionSourceLabelsTheProducer(t *testing.T) {
 // an empty queue is the good state and must not read as a fault.
 func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 	root := attentionTestRoot(t)
+	t.Cleanup(snapshotGlobals())
 
 	global.quiet = true
 	out := captureStdout(t, func() {

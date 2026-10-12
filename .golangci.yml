@@ -94,7 +94,7 @@ linters:
     # linter of its own so the //nolint:testlayout an import cycle earns cannot
     # silence it, and hack/lint/testlayout-pairing-has-no-exemptions.buzz refuses
     # any directive or exclusion that would. testlayout reports a test file outside
-    # its package and a _unix file name. The reasoning is in libs/testlayout/readme.md.
+    # its package and a _unix file name. The reasoning is in libs/testlayout/README.md.
     #
     # These only exist in .magus/custom-gcl. The stock golangci-lint on PATH
     # cannot read this config while the lines below are present - it exits with
@@ -117,6 +117,7 @@ linters:
     - testisolation
     - providerio
     - fieldwise
+    - globalrestore
     - diagmsg
     - errmsg
     - stderrprint
@@ -201,10 +202,10 @@ linters:
           module: github.com/egladman/magus
           # Generated output, and the packages that embed documentation checked
           # elsewhere. Each must name a directory holding Go files; the go tool
-          # never builds dot directories or testdata, so they need no entry. The
-          # prose judge is skipped too: its attribution rule names the tools whose
+          # never builds dot directories or testdata, so they need no entry.
+          # proofread is skipped too: its attribution rule names the tools whose
           # credit it refuses, which is this repository's policy, not magus naming a host.
-          skip-dirs: [gen, docs, schema, prose]
+          skip-dirs: [gen, docs, schema, proofread]
           hosts: [claude, opencode, codex, aider, windsurf]
           # Cursor is a terminal position and a pagination token far more often
           # than the host, so only the shapes that mean the host are matched: the
@@ -272,6 +273,10 @@ linters:
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Deny}
             - {type: github.com/egladman/magus/internal/guard.ShellVerdict, field: Lead}
             - {type: github.com/egladman/magus/types.RuleDoc, field: Catches}
+            - {type: github.com/egladman/magus/internal/guard.denial, field: Say}
+            - {type: github.com/egladman/magus/internal/guard.Verdict, field: Reason}
+            - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Why}
+            - {type: github.com/egladman/magus/internal/hint.Suggestion, field: Hedge}
           prefixes: ["magus workspace:"]
           # A log record names what logged it with a component attribute
           # (internal/logattr), never a tag in its text. The allow list below
@@ -468,6 +473,7 @@ linters:
             - libproc   # the Darwin API
             - vmstat    # the Darwin tool
             - jobserver # GNU make's name for the token protocol internal/proc/run implements
+            - changelog # Keep a Changelog's own word for the file proofread's changelog kind judges
 
       nameoutput:
         type: module
@@ -565,6 +571,18 @@ linters:
         original-url: github.com/egladman/magus/libs/conventions
         settings:
           report-partial: true
+
+      # Commands read global and globalCfg as flag defaults, so a test that sets one and
+      # leaves it changes whichever test a narrowed -run puts next.
+      globalrestore:
+        type: module
+        description: requires a test that assigns the command-line globals to restore them
+        original-url: github.com/egladman/magus/libs/conventions
+        settings:
+          module: github.com/egladman/magus
+          package: github.com/egladman/magus/cmd/magus
+          vars: [global, globalCfg]
+          hint: add t.Cleanup(snapshotGlobals()) at the top of the test
 
     testifylint:
       disable-all: true

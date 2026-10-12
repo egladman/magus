@@ -1,0 +1,59 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A trailing participle claiming significance.
+-- hit/reference --
+The cache stores blobs, highlighting the importance of the key.
+The key sorts, emphasizing the design.
+-- hit/change-description --
+- Sorts the inputs, showcasing the new hasher.
+-- pass/reference --
+The key sorts its inputs, then hashes them.
+The sorter is reflecting the input order back to the caller in a test.
+Hash the inputs, ensuring the lock is released.
+-- hit/agent-reply --
+- I updated the agent guide to reference the new debug logging page, highlighting this new debugging capability.
+-- hit/change-description --
+The article covers both beginners and advanced users, emphasizing that existing cluster tooling keeps working with the new framework.
+These resources were defined in the resource files but never referenced in any code, contributing to unnecessary bloat.
+The API service held several functions that were no longer used, contributing to code bloat and maintenance overhead.
+* Provided a workflow for context engineering, showcasing improved prompt guidance and development success rates.
+- User Intent Evolution: The user clarified their requirements progressively, emphasizing the importance of not altering documentation of the removed setting.
+This PR marks the buffer list indicator complete, contributing to the overall streaming indicators progress (now at 68% completion).
+The rocket emoji suits the project's mission as a workflow optimizer, symbolizing improvement, optimization, and forward progress.
+The template demonstrates the fan-out/fan-in pattern, showcasing how to orchestrate parallel activities and aggregate their results.
+-- hit/commit-message --
+These changes improve the reliability and maintainability of the UI components, contributing to a better user experience.
+Added new guidelines to the engineering principles document, emphasizing the importance of verifying assumptions and minimizing diffs.
+These additions ensure the state machine behaves as expected, contributing to better observability for stream health issues.
+- Introduced examples of the procedural API for conversation analysis, highlighting its flexibility and benefits.
+- Updated the README to give a clearer overview of the example, highlighting its core features and simplifying the language.
+- Updated the basic usage tutorial with a procedural API example, showcasing its usage and advantages.
+-- pass/agent-reply --
+Added **Parallel Operations** as the top efficiency guideline, emphasizing simultaneous tool use with specific examples.
+- I created two example files to demonstrate table versioning, showcasing blue/green migration scenarios with different engines and schemas.
+- I updated every reference to the server config properties in the end-to-end tests to the new camelCase names, reflecting the changes in the constants file.
+- I moved the import of the browser check helper to the new utils path, reflecting the new location of the utility file.
+All examples now match the output format of the current tests, reflecting the enhanced string comparison with context windowing and control character display.
+-- fp/change-description --
+**Documentation**: Recommend the make target over the direct script, emphasizing that it runs the tests first
+Strengthened the instruction to add the "fixed" label to issues a change addresses, emphasizing this as the preferred approach over auto-closing.
+-- pass/change-description --
+> Please write a README for the group that introduces it, highlighting its mission, key projects, and objectives.
+- `editor/view` - the editor view, line numbers, highlighting, drawing
+- surface agenda warnings in the meeting view, highlighting missing prerequisites such as the chair role
+* The default expressor received a new prompt template for private chats, emphasizing concise, direct, and polite replies.
+Updated the type definition to make the field required, reflecting the actual usage:
+After: the diff is updated before each test run, reflecting all current changes
+URLs that used `taskRunId` now use `runId`, reflecting the updated parameter name in public routes.
+**Updated test expectations** to check for the column type error instead of the cell error, reflecting the correct early detection of type mismatches.
+These changes improve the user experience by providing better links, highlighting the logs feature, and ordering the next steps more logically.
+> Adds a blog post for the June update, highlighting pricing changes, new features, and a customer spotlight.
+This PR updates the docs to drop the old toolkit version, reflecting that its support has been removed.
+> - Removes the platform exclusion from the test directive, reflecting that the test now passes there with the fix.
+• Expands the API gotchas, emphasizing token types, webhook security, and integration nuances.
+**Repository Overview**: A guide to the 44-package repository structure, highlighting key packages like the command interface and the persistent host.
+-- fp/commit-message --
+Added a test script to check audio encoding support on the desktop host, highlighting the limits of the system recorder with that format.
+-- pass/commit-message --
+- Add new examples for two adapters, showcasing real-time chat and mobile applications.
+- Update the TODO file for the pull implementation, emphasizing streaming database queries and the transport refactor.
+This commit adds an example script for the API library, showcasing custom validators, token authentication, custom middleware, and CORS support.

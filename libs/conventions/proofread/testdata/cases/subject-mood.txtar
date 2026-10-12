@@ -1,0 +1,96 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
+A commit subject that opens in the past tense, the third person or a gerund.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
+-- hit/commit-message --
+feat(proofread): adds a vale spell
+Fixed the port
+fix!: making the key stable
+-- pass/commit-message --
+feat: add an opt-in claude-code-mod harness and a harness_settings op (#577)
+address the review
+-- pass/commit-message whole --
+Revert "feat: added x"
+-- hit/commit-message --
+fixed conflicts and adapted definition
+Fixes
+removing some unrelated changes
+Renamed LICENSE.adoc
+changed the instruction to comment on the PR instead of opening an issue
+Fixed tests
+Updates get
+Fixed format test logging
+making the database client a dev dependency
+Enabling tests in preview branch (#964)
+Made the thinking state read Listening...
+Using the download binaries target instead
+fixes.
+fixes
+Updates flag key
+Removing comments
+Renamed script
+docs: adds changelog entry for the http part extension
+updated the textual and logical definition
+Adds simple token policy to packages/games (#3127)
+Updates
+fixed not applying glitch, requires better work on filling the forms.
+Added customization docs to the client readme
+Adds more unit tests
+Updated html structure to accommodate new style
+updated the definition to make it clearer
+Fixes #5126
+added initial implementation for using a webroot
+fixed menu
+adds support to run tool from a container
+chore: removing numbers from titles
+Updates the scan config `config.yaml`
+updates
+-- pass/commit-message --
+Changes from background composer bc-725113d3
+Changes before error encountered
+Changes made by Agent
+updates from another suggestion
+feat: changes for new canvas
+Fixes for selectpanel
+Changes from background composer bc-94ed054e
+-- hit/commit-message --
+chore: updated default prompts
+Changed the hormone to a general protein
+Adds logging
+fixing sizing of barcode preview on asset and kit page, updating some errors
+Updated SDK test classes to extend the proxy test base instead of the base
+fixed syntax
+Fixed FakeDriver build failures
+Adding gif
+Fixes import
+adding the required styles
+Added the citation id.
+Fixed compilation failures due to merge with a related branch
+fixing the generated code
+Fixed ToolRequired and forceTool API processing
+Removed duplicated label for a cell type
+Updated scoring data 2025-02-23
+fixed some issues in the synth but still hangs after starting
+chore: updating to use a style helper instead of inline styles
+chore: adds sanitation to namespace parameter value
+improved with auto-installation of the assistant
+adding the tracing client
+Fixed issues with initial implementation
+Removed some redundant tests
+making sure rebase only includes files that are needed
+added config option to configure a webroot for the ui
+Moved the binaries directory to a new location
+updated new test to lower case
+Updated the test to send messages to the stub and back
+adding notes from meeting
+Fixed test issues
+Updated the spec dependencies to latest versions, verified build and format
+chore: removes summary property from references that do not support it
+Added debugging information
+Updates test
+Fixed conflicts by removing the link to the issue and the author line.
+fixing file paths for knowledge source
+updating DIRECTORY.md
+-- fp/commit-message --
+Fixes prior to testing
+fix: changes done by the assistant
+fix: refactoring improvements and fixes from systematic code cleanup

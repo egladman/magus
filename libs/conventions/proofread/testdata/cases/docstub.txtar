@@ -1,0 +1,23 @@
+A one-line doc that only repeats its symbol's name. Each section is one symbol.
+-- hit/doc-comment name=Client --
+Client is a Client.
+-- hit/doc-comment name=NewClient callable --
+NewClient creates a new Client.
+-- hit/doc-comment name=DefaultTimeout --
+DefaultTimeout is the default timeout.
+-- hit/doc-comment name=ApplyEnv callable --
+ApplyEnv
+-- hit/doc-comment name=Close owner=PoolRegistry callable --
+Close closes every Pool in the registry.
+-- pass/doc-comment name=NewServer callable --
+NewServer validates the config and does not dial.
+-- pass/doc-comment name=String owner=Client callable --
+String implements fmt.Stringer.
+-- pass/doc-comment name=Client --
+Client is an http.Client.
+-- pass/doc-comment name=OpBXor --
+^
+-- pass/doc-comment name=Options whole --
+Options is a Options.
+
+The second paragraph is the contract, so the first line is scaffolding.

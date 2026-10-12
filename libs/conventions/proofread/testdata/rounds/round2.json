@@ -1,0 +1,1827 @@
+{
+ "round": 2,
+ "date": "2026-10-11",
+ "frozen": false,
+ "spent": true,
+ "spent_because": "its texts and labels were shown to a tuner",
+ "purpose": "diagnostic: rules round 1 could not feed, and rules revised after it; not frozen, and its labels then tuned the rules, so the set is spent",
+ "rule_commit": "unrecorded",
+ "seed": "unrecorded",
+ "sampler": "per rule up to 40 firings round-robin across sources, excluding round 1's texts; the seed was not recorded",
+ "candidate_ids": "dNNNN",
+ "candidates": 707,
+ "sources": {
+  "agent-catalog": {
+   "texts": 16,
+   "sha256": "unrecorded"
+  },
+  "aidev-agent-comment": {
+   "texts": 34651,
+   "sha256": "unrecorded"
+  },
+  "aidev-commit": {
+   "texts": 220882,
+   "sha256": "unrecorded"
+  },
+  "aidev-pr": {
+   "texts": 71104,
+   "sha256": "unrecorded"
+  },
+  "aidev-pr-as-issue": {
+   "texts": 2932,
+   "sha256": "unrecorded"
+  },
+  "aidev-review-bot": {
+   "texts": 42076,
+   "sha256": "unrecorded"
+  },
+  "aidev-review-user": {
+   "texts": 39639,
+   "sha256": "unrecorded"
+  },
+  "changelog-fragment": {
+   "texts": 682,
+   "sha256": "unrecorded"
+  },
+  "changelog-history": {
+   "texts": 1695,
+   "sha256": "unrecorded"
+  },
+  "changelog-page": {
+   "texts": 1,
+   "sha256": "unrecorded"
+  },
+  "cli-registry": {
+   "texts": 479,
+   "sha256": "unrecorded"
+  },
+  "diagnostic-errorf": {
+   "texts": 178,
+   "sha256": "unrecorded"
+  },
+  "docs-guide": {
+   "texts": 49,
+   "sha256": "unrecorded"
+  },
+  "docs-reference": {
+   "texts": 422,
+   "sha256": "unrecorded"
+  },
+  "git-commit": {
+   "texts": 1811,
+   "sha256": "unrecorded"
+  },
+  "guard-denial": {
+   "texts": 56,
+   "sha256": "unrecorded"
+  },
+  "mcp-registry": {
+   "texts": 6,
+   "sha256": "unrecorded"
+  },
+  "release-manifest": {
+   "texts": 8,
+   "sha256": "unrecorded"
+  },
+  "repo-markdown-as-guide": {
+   "texts": 570,
+   "sha256": "unrecorded"
+  },
+  "skill-frontmatter": {
+   "texts": 4,
+   "sha256": "unrecorded"
+  }
+ },
+ "agreement_then": "accepted at alpha >= 0.667, or raw agreement >= 0.90 over 20 or more items, or 5 or fewer items all agreed; overall alpha 0.8139",
+ "scored_with": "proofread calibrate round score -replay under the default gates; the round had no gates of its own in this shape, so these outcomes promoted nothing",
+ "advise_passed": [
+  "closing-offer",
+  "credit",
+  "long-thread"
+ ],
+ "deny_passed": [],
+ "promoted": [],
+ "caveats": [
+  "not frozen: these gate outcomes are diagnostic and promoted nothing"
+ ],
+ "rules": {
+  "absolute": {
+   "code": "PRF2003",
+   "counts": {
+    "taken": 40,
+    "seen": 779,
+    "excluded": "unrecorded",
+    "fresh": 645,
+    "by_source_seen": {
+     "aidev-commit": 87,
+     "aidev-review-bot": 254,
+     "aidev-review-user": 38,
+     "aidev-pr": 350,
+     "git-commit": 50
+    },
+    "by_source_taken": {
+     "aidev-review-user": 8,
+     "aidev-commit": 8,
+     "aidev-review-bot": 8,
+     "git-commit": 8,
+     "aidev-pr": 8
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 4,
+    "precision": 0.1,
+    "wilson_lb": 0.0396,
+    "disagreements": 3,
+    "raw_agreement": 0.925,
+    "alpha": 0.368,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-commit": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-pr": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-bot": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-user": {
+      "n": 8,
+      "correct": 4,
+      "precision": 0.5,
+      "wilson_lb": 0.2152,
+      "disagreements": 3,
+      "raw_agreement": 0.625,
+      "alpha": 0.1818,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "git-commit": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "buzzword": {
+   "code": "PRF4006",
+   "counts": {
+    "taken": 40,
+    "seen": 103,
+    "excluded": "unrecorded",
+    "fresh": 56,
+    "by_source_seen": {
+     "aidev-commit": 11,
+     "aidev-review-user": 11,
+     "aidev-review-bot": 1,
+     "aidev-pr": 48,
+     "aidev-agent-comment": 32
+    },
+    "by_source_taken": {
+     "aidev-pr": 20,
+     "aidev-agent-comment": 20
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 26,
+    "precision": 0.65,
+    "wilson_lb": 0.4951,
+    "disagreements": 8,
+    "raw_agreement": 0.8,
+    "alpha": 0.5959,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 20,
+      "correct": 11,
+      "precision": 0.55,
+      "wilson_lb": 0.3421,
+      "disagreements": 2,
+      "raw_agreement": 0.9,
+      "alpha": 0.805,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-pr": {
+      "n": 20,
+      "correct": 15,
+      "precision": 0.75,
+      "wilson_lb": 0.5313,
+      "disagreements": 6,
+      "raw_agreement": 0.7,
+      "alpha": 0.3571,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-agent-comment",
+     "n": 20,
+     "wilson_lb": 0.3421,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "buzzword-weak": {
+   "code": "PRF4007",
+   "counts": {
+    "taken": 40,
+    "seen": 24259,
+    "excluded": "unrecorded",
+    "fresh": 19416,
+    "by_source_seen": {
+     "aidev-commit": 4991,
+     "aidev-review-bot": 1041,
+     "aidev-review-user": 106,
+     "aidev-pr": 15460,
+     "release-manifest": 1,
+     "changelog-page": 1,
+     "docs-reference": 3,
+     "docs-guide": 2,
+     "git-commit": 2,
+     "changelog-history": 543,
+     "aidev-agent-comment": 2109
+    },
+    "by_source_taken": {
+     "aidev-review-user": 8,
+     "changelog-page": 1,
+     "aidev-pr": 8,
+     "aidev-review-bot": 8,
+     "release-manifest": 1,
+     "aidev-commit": 7,
+     "aidev-agent-comment": 7
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 10,
+    "precision": 0.25,
+    "wilson_lb": 0.1419,
+    "disagreements": 6,
+    "raw_agreement": 0.85,
+    "alpha": 0.6473,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 7,
+      "correct": 1,
+      "precision": 0.1429,
+      "wilson_lb": 0.0257,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-commit": {
+      "n": 7,
+      "correct": 6,
+      "precision": 0.8571,
+      "wilson_lb": 0.4869,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-pr": {
+      "n": 8,
+      "correct": 2,
+      "precision": 0.25,
+      "wilson_lb": 0.0715,
+      "disagreements": 1,
+      "raw_agreement": 0.875,
+      "alpha": 0.6154,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-review-bot": {
+      "n": 8,
+      "correct": 1,
+      "precision": 0.125,
+      "wilson_lb": 0.0224,
+      "disagreements": 2,
+      "raw_agreement": 0.75,
+      "alpha": 0.375,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-review-user": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 3,
+      "raw_agreement": 0.625,
+      "alpha": -0.1538,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "changelog-page": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "release-manifest": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "changelog-entry": {
+   "code": "PRF1032",
+   "counts": {
+    "taken": 0,
+    "seen": 0,
+    "excluded": "unrecorded",
+    "fresh": 0,
+    "by_source_seen": {},
+    "by_source_taken": {}
+   },
+   "score": {
+    "n": 0,
+    "correct": 0,
+    "precision": null,
+    "wilson_lb": null,
+    "disagreements": 0,
+    "raw_agreement": null,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {},
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "changelog-group": {
+   "code": "PRF1031",
+   "counts": {
+    "taken": 1,
+    "seen": 971,
+    "excluded": "unrecorded",
+    "fresh": 2,
+    "by_source_seen": {
+     "changelog-page": 2,
+     "changelog-history": 969
+    },
+    "by_source_taken": {
+     "changelog-page": 1
+    }
+   },
+   "score": {
+    "n": 1,
+    "correct": 1,
+    "precision": 1,
+    "wilson_lb": 0.2065,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "changelog-page": {
+      "n": 1,
+      "correct": 1,
+      "precision": 1,
+      "wilson_lb": 0.2065,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "changelog-heading": {
+   "code": "PRF1030",
+   "counts": {
+    "taken": 8,
+    "seen": 3139,
+    "excluded": "unrecorded",
+    "fresh": 14,
+    "by_source_seen": {
+     "changelog-page": 8,
+     "changelog-history": 3131
+    },
+    "by_source_taken": {
+     "changelog-page": 8
+    }
+   },
+   "score": {
+    "n": 8,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "changelog-page": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "claim": {
+   "code": "PRF3001",
+   "counts": {
+    "taken": 40,
+    "seen": 25667,
+    "excluded": "unrecorded",
+    "fresh": 19283,
+    "by_source_seen": {
+     "aidev-commit": 5140,
+     "aidev-review-user": 222,
+     "aidev-review-bot": 1077,
+     "aidev-pr": 15930,
+     "git-commit": 40,
+     "aidev-agent-comment": 3258
+    },
+    "by_source_taken": {
+     "aidev-pr": 7,
+     "aidev-review-bot": 7,
+     "aidev-agent-comment": 7,
+     "git-commit": 7,
+     "aidev-review-user": 6,
+     "aidev-commit": 6
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 18,
+    "precision": 0.45,
+    "wilson_lb": 0.3071,
+    "disagreements": 2,
+    "raw_agreement": 0.95,
+    "alpha": 0.9003,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 7,
+      "correct": 5,
+      "precision": 0.7143,
+      "wilson_lb": 0.3589,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-commit": {
+      "n": 6,
+      "correct": 5,
+      "precision": 0.8333,
+      "wilson_lb": 0.4365,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-pr": {
+      "n": 7,
+      "correct": 5,
+      "precision": 0.7143,
+      "wilson_lb": 0.3589,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-bot": {
+      "n": 7,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 1,
+      "raw_agreement": 0.8571,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-review-user": {
+      "n": 6,
+      "correct": 1,
+      "precision": 0.1667,
+      "wilson_lb": 0.0301,
+      "disagreements": 1,
+      "raw_agreement": 0.8333,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "git-commit": {
+      "n": 7,
+      "correct": 2,
+      "precision": 0.2857,
+      "wilson_lb": 0.0822,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "closing-offer": {
+   "code": "PRF8021",
+   "counts": {
+    "taken": 40,
+    "seen": 167,
+    "excluded": "unrecorded",
+    "fresh": 166,
+    "by_source_seen": {
+     "aidev-agent-comment": 167
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 37,
+    "precision": 0.925,
+    "wilson_lb": 0.8014,
+    "disagreements": 2,
+    "raw_agreement": 0.95,
+    "alpha": 0.6441,
+    "precision_gate": true,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 40,
+      "correct": 37,
+      "precision": 0.925,
+      "wilson_lb": 0.8014,
+      "disagreements": 2,
+      "raw_agreement": 0.95,
+      "alpha": 0.6441,
+      "precision_gate": true,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-agent-comment",
+     "n": 40,
+     "wilson_lb": 0.8014,
+     "pass": true
+    },
+    "advise_gate": true
+   }
+  },
+  "credit": {
+   "code": "PRF2005",
+   "counts": {
+    "taken": 40,
+    "seen": 5443,
+    "excluded": "unrecorded",
+    "fresh": 5293,
+    "by_source_seen": {
+     "aidev-pr": 5443
+    },
+    "by_source_taken": {
+     "aidev-pr": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 34,
+    "precision": 0.85,
+    "wilson_lb": 0.7093,
+    "disagreements": 3,
+    "raw_agreement": 0.925,
+    "alpha": 0.6291,
+    "precision_gate": true,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-pr": {
+      "n": 40,
+      "correct": 34,
+      "precision": 0.85,
+      "wilson_lb": 0.7093,
+      "disagreements": 3,
+      "raw_agreement": 0.925,
+      "alpha": 0.6291,
+      "precision_gate": true,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 40,
+     "wilson_lb": 0.7093,
+     "pass": true
+    },
+    "advise_gate": true
+   }
+  },
+  "help-length": {
+   "code": "PRF9011",
+   "counts": {
+    "taken": 10,
+    "seen": 10,
+    "excluded": "unrecorded",
+    "fresh": 10,
+    "by_source_seen": {
+     "cli-registry": 10
+    },
+    "by_source_taken": {
+     "cli-registry": 10
+    }
+   },
+   "score": {
+    "n": 10,
+    "correct": 10,
+    "precision": 1,
+    "wilson_lb": 0.7225,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "cli-registry": {
+      "n": 10,
+      "correct": 10,
+      "precision": 1,
+      "wilson_lb": 0.7225,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "cli-registry",
+     "n": 10,
+     "wilson_lb": 0.7225,
+     "pass": true
+    },
+    "advise_gate": false
+   }
+  },
+  "help-sentence": {
+   "code": "PRF9010",
+   "counts": {
+    "taken": 4,
+    "seen": 4,
+    "excluded": "unrecorded",
+    "fresh": 4,
+    "by_source_seen": {
+     "cli-registry": 4
+    },
+    "by_source_taken": {
+     "cli-registry": 4
+    }
+   },
+   "score": {
+    "n": 4,
+    "correct": 4,
+    "precision": 1,
+    "wilson_lb": 0.5101,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "cli-registry": {
+      "n": 4,
+      "correct": 4,
+      "precision": 1,
+      "wilson_lb": 0.5101,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "ing-tail": {
+   "code": "PRF4011",
+   "counts": {
+    "taken": 40,
+    "seen": 135,
+    "excluded": "unrecorded",
+    "fresh": 89,
+    "by_source_seen": {
+     "aidev-commit": 31,
+     "aidev-pr": 98,
+     "aidev-agent-comment": 6
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 6,
+     "aidev-pr": 24,
+     "aidev-commit": 10
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 15,
+    "precision": 0.375,
+    "wilson_lb": 0.2422,
+    "disagreements": 4,
+    "raw_agreement": 0.9,
+    "alpha": 0.798,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 6,
+      "correct": 1,
+      "precision": 0.1667,
+      "wilson_lb": 0.0301,
+      "disagreements": 2,
+      "raw_agreement": 0.6667,
+      "alpha": 0.3125,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-commit": {
+      "n": 10,
+      "correct": 6,
+      "precision": 0.6,
+      "wilson_lb": 0.3127,
+      "disagreements": 2,
+      "raw_agreement": 0.8,
+      "alpha": 0.5476,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-pr": {
+      "n": 24,
+      "correct": 8,
+      "precision": 0.3333,
+      "wilson_lb": 0.1797,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 24,
+     "wilson_lb": 0.1797,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "issue-repro": {
+   "code": "PRF1020",
+   "counts": {
+    "taken": 40,
+    "seen": 865,
+    "excluded": "unrecorded",
+    "fresh": 858,
+    "by_source_seen": {
+     "aidev-pr-as-issue": 865
+    },
+    "by_source_taken": {
+     "aidev-pr-as-issue": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 9,
+    "precision": 0.225,
+    "wilson_lb": 0.1232,
+    "disagreements": 1,
+    "raw_agreement": 0.975,
+    "alpha": 0.9262,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-pr-as-issue": {
+      "n": 40,
+      "correct": 9,
+      "precision": 0.225,
+      "wilson_lb": 0.1232,
+      "disagreements": 1,
+      "raw_agreement": 0.975,
+      "alpha": 0.9262,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr-as-issue",
+     "n": 40,
+     "wilson_lb": 0.1232,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "lead-context": {
+   "code": "PRF1001",
+   "counts": {
+    "taken": 40,
+    "seen": 63359,
+    "excluded": "unrecorded",
+    "fresh": 21205,
+    "by_source_seen": {
+     "aidev-pr": 63359
+    },
+    "by_source_taken": {
+     "aidev-pr": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 28,
+    "precision": 0.7,
+    "wilson_lb": 0.5457,
+    "disagreements": 8,
+    "raw_agreement": 0.8,
+    "alpha": 0.5499,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-pr": {
+      "n": 40,
+      "correct": 28,
+      "precision": 0.7,
+      "wilson_lb": 0.5457,
+      "disagreements": 8,
+      "raw_agreement": 0.8,
+      "alpha": 0.5499,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 40,
+     "wilson_lb": 0.5457,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "long-thread": {
+   "code": "PRF8004",
+   "counts": {
+    "taken": 40,
+    "seen": 169,
+    "excluded": "unrecorded",
+    "fresh": 168,
+    "by_source_seen": {
+     "aidev-review-user": 104,
+     "aidev-review-bot": 65
+    },
+    "by_source_taken": {
+     "aidev-review-bot": 20,
+     "aidev-review-user": 20
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 40,
+    "precision": 1,
+    "wilson_lb": 0.9124,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": true,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-review-bot": {
+      "n": 20,
+      "correct": 20,
+      "precision": 1,
+      "wilson_lb": 0.8389,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-user": {
+      "n": 20,
+      "correct": 20,
+      "precision": 1,
+      "wilson_lb": 0.8389,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-review-bot",
+     "n": 20,
+     "wilson_lb": 0.8389,
+     "pass": true
+    },
+    "advise_gate": true
+   }
+  },
+  "message-commands": {
+   "code": "PRF9003",
+   "counts": {
+    "taken": 1,
+    "seen": 1,
+    "excluded": "unrecorded",
+    "fresh": 1,
+    "by_source_seen": {
+     "diagnostic-errorf": 1
+    },
+    "by_source_taken": {
+     "diagnostic-errorf": 1
+    }
+   },
+   "score": {
+    "n": 1,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "diagnostic-errorf": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "message-length": {
+   "code": "PRF9001",
+   "counts": {
+    "taken": 25,
+    "seen": 25,
+    "excluded": "unrecorded",
+    "fresh": 25,
+    "by_source_seen": {
+     "diagnostic-errorf": 25
+    },
+    "by_source_taken": {
+     "diagnostic-errorf": 25
+    }
+   },
+   "score": {
+    "n": 25,
+    "correct": 25,
+    "precision": 1,
+    "wilson_lb": 0.8668,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "diagnostic-errorf": {
+      "n": 25,
+      "correct": 25,
+      "precision": 1,
+      "wilson_lb": 0.8668,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "diagnostic-errorf",
+     "n": 25,
+     "wilson_lb": 0.8668,
+     "pass": true
+    },
+    "advise_gate": false
+   }
+  },
+  "message-rationale": {
+   "code": "PRF9002",
+   "counts": {
+    "taken": 17,
+    "seen": 17,
+    "excluded": "unrecorded",
+    "fresh": 17,
+    "by_source_seen": {
+     "diagnostic-errorf": 17
+    },
+    "by_source_taken": {
+     "diagnostic-errorf": 17
+    }
+   },
+   "score": {
+    "n": 17,
+    "correct": 7,
+    "precision": 0.4118,
+    "wilson_lb": 0.2161,
+    "disagreements": 8,
+    "raw_agreement": 0.5294,
+    "alpha": 0,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "diagnostic-errorf": {
+      "n": 17,
+      "correct": 7,
+      "precision": 0.4118,
+      "wilson_lb": 0.2161,
+      "disagreements": 8,
+      "raw_agreement": 0.5294,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "diagnostic-errorf",
+     "n": 17,
+     "wilson_lb": 0.2161,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "message-tag": {
+   "code": "PRF9004",
+   "counts": {
+    "taken": 10,
+    "seen": 10,
+    "excluded": "unrecorded",
+    "fresh": 10,
+    "by_source_seen": {
+     "diagnostic-errorf": 10
+    },
+    "by_source_taken": {
+     "diagnostic-errorf": 10
+    }
+   },
+   "score": {
+    "n": 10,
+    "correct": 10,
+    "precision": 1,
+    "wilson_lb": 0.7225,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "diagnostic-errorf": {
+      "n": 10,
+      "correct": 10,
+      "precision": 1,
+      "wilson_lb": 0.7225,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "diagnostic-errorf",
+     "n": 10,
+     "wilson_lb": 0.7225,
+     "pass": true
+    },
+    "advise_gate": false
+   }
+  },
+  "nominalizations": {
+   "code": "PRF4021",
+   "counts": {
+    "taken": 40,
+    "seen": 15308,
+    "excluded": "unrecorded",
+    "fresh": 15244,
+    "by_source_seen": {
+     "aidev-pr": 15297,
+     "docs-reference": 11
+    },
+    "by_source_taken": {
+     "aidev-pr": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 27,
+    "precision": 0.675,
+    "wilson_lb": 0.5202,
+    "disagreements": 10,
+    "raw_agreement": 0.75,
+    "alpha": 0.4733,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-pr": {
+      "n": 40,
+      "correct": 27,
+      "precision": 0.675,
+      "wilson_lb": 0.5202,
+      "disagreements": 10,
+      "raw_agreement": 0.75,
+      "alpha": 0.4733,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 40,
+     "wilson_lb": 0.5202,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "nonspecific": {
+   "code": "PRF8010",
+   "counts": {
+    "taken": 40,
+    "seen": 1222,
+    "excluded": "unrecorded",
+    "fresh": 996,
+    "by_source_seen": {
+     "aidev-review-user": 1157,
+     "aidev-review-bot": 65
+    },
+    "by_source_taken": {
+     "aidev-review-bot": 20,
+     "aidev-review-user": 20
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 2,
+    "raw_agreement": 0.95,
+    "alpha": -0.0128,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-review-bot": {
+      "n": 20,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 1,
+      "raw_agreement": 0.95,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-user": {
+      "n": 20,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 1,
+      "raw_agreement": 0.95,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-review-bot",
+     "n": 20,
+     "wilson_lb": 0,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "option-list": {
+   "code": "PRF8023",
+   "counts": {
+    "taken": 40,
+    "seen": 47,
+    "excluded": "unrecorded",
+    "fresh": 43,
+    "by_source_seen": {
+     "aidev-agent-comment": 47
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 27,
+    "precision": 0.675,
+    "wilson_lb": 0.5202,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": 1,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 40,
+      "correct": 27,
+      "precision": 0.675,
+      "wilson_lb": 0.5202,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-agent-comment",
+     "n": 40,
+     "wilson_lb": 0.5202,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "participles": {
+   "code": "PRF4020",
+   "counts": {
+    "taken": 40,
+    "seen": 6164,
+    "excluded": "unrecorded",
+    "fresh": 6117,
+    "by_source_seen": {
+     "aidev-pr": 6145,
+     "docs-reference": 18,
+     "docs-guide": 1
+    },
+    "by_source_taken": {
+     "aidev-pr": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 32,
+    "precision": 0.8,
+    "wilson_lb": 0.6524,
+    "disagreements": 3,
+    "raw_agreement": 0.925,
+    "alpha": 0.7569,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-pr": {
+      "n": 40,
+      "correct": 32,
+      "precision": 0.8,
+      "wilson_lb": 0.6524,
+      "disagreements": 3,
+      "raw_agreement": 0.925,
+      "alpha": 0.7569,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 40,
+     "wilson_lb": 0.6524,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "second-person": {
+   "code": "PRF1003",
+   "counts": {
+    "taken": 33,
+    "seen": 93,
+    "excluded": "unrecorded",
+    "fresh": 33,
+    "by_source_seen": {
+     "repo-markdown-as-guide": 93
+    },
+    "by_source_taken": {
+     "repo-markdown-as-guide": 33
+    }
+   },
+   "score": {
+    "n": 33,
+    "correct": 3,
+    "precision": 0.0909,
+    "wilson_lb": 0.0314,
+    "disagreements": 3,
+    "raw_agreement": 0.9091,
+    "alpha": -0.0317,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "repo-markdown-as-guide": {
+      "n": 33,
+      "correct": 3,
+      "precision": 0.0909,
+      "wilson_lb": 0.0314,
+      "disagreements": 3,
+      "raw_agreement": 0.9091,
+      "alpha": -0.0317,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "repo-markdown-as-guide",
+     "n": 33,
+     "wilson_lb": 0.0314,
+     "pass": false
+    },
+    "advise_gate": false
+   }
+  },
+  "signpost": {
+   "code": "PRF4003",
+   "counts": {
+    "taken": 2,
+    "seen": 98,
+    "excluded": "unrecorded",
+    "fresh": 2,
+    "by_source_seen": {
+     "aidev-commit": 2,
+     "aidev-review-user": 10,
+     "aidev-pr": 84,
+     "aidev-agent-comment": 2
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 2
+    }
+   },
+   "score": {
+    "n": 2,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 2,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "step-verb": {
+   "code": "PRF1004",
+   "counts": {
+    "taken": 5,
+    "seen": 7,
+    "excluded": "unrecorded",
+    "fresh": 5,
+    "by_source_seen": {
+     "repo-markdown-as-guide": 7
+    },
+    "by_source_taken": {
+     "repo-markdown-as-guide": 5
+    }
+   },
+   "score": {
+    "n": 5,
+    "correct": 2,
+    "precision": 0.4,
+    "wilson_lb": 0.1176,
+    "disagreements": 1,
+    "raw_agreement": 0.8,
+    "alpha": 0.64,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "repo-markdown-as-guide": {
+      "n": 5,
+      "correct": 2,
+      "precision": 0.4,
+      "wilson_lb": 0.1176,
+      "disagreements": 1,
+      "raw_agreement": 0.8,
+      "alpha": 0.64,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "suppression-unused": {
+   "code": "PRF1090",
+   "counts": {
+    "taken": 0,
+    "seen": 0,
+    "excluded": "unrecorded",
+    "fresh": 0,
+    "by_source_seen": {},
+    "by_source_taken": {}
+   },
+   "score": {
+    "n": 0,
+    "correct": 0,
+    "precision": null,
+    "wilson_lb": null,
+    "disagreements": 0,
+    "raw_agreement": null,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {},
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "tool-boundary": {
+   "code": "PRF9021",
+   "counts": {
+    "taken": 4,
+    "seen": 4,
+    "excluded": "unrecorded",
+    "fresh": 4,
+    "by_source_seen": {
+     "mcp-registry": 1,
+     "skill-frontmatter": 1,
+     "agent-catalog": 2
+    },
+    "by_source_taken": {
+     "mcp-registry": 1,
+     "skill-frontmatter": 1,
+     "agent-catalog": 2
+    }
+   },
+   "score": {
+    "n": 4,
+    "correct": 3,
+    "precision": 0.75,
+    "wilson_lb": 0.3006,
+    "disagreements": 1,
+    "raw_agreement": 0.75,
+    "alpha": 0.5333,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "agent-catalog": {
+      "n": 2,
+      "correct": 2,
+      "precision": 1,
+      "wilson_lb": 0.3424,
+      "disagreements": 1,
+      "raw_agreement": 0.5,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "mcp-registry": {
+      "n": 1,
+      "correct": 1,
+      "precision": 1,
+      "wilson_lb": 0.2065,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "skill-frontmatter": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "tool-lead": {
+   "code": "PRF9020",
+   "counts": {
+    "taken": 2,
+    "seen": 2,
+    "excluded": "unrecorded",
+    "fresh": 2,
+    "by_source_seen": {
+     "agent-catalog": 2
+    },
+    "by_source_taken": {
+     "agent-catalog": 2
+    }
+   },
+   "score": {
+    "n": 2,
+    "correct": 1,
+    "precision": 0.5,
+    "wilson_lb": 0.0945,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": 1,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "agent-catalog": {
+      "n": 2,
+      "correct": 1,
+      "precision": 0.5,
+      "wilson_lb": 0.0945,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "tool-length": {
+   "code": "PRF9022",
+   "counts": {
+    "taken": 2,
+    "seen": 2,
+    "excluded": "unrecorded",
+    "fresh": 2,
+    "by_source_seen": {
+     "mcp-registry": 2
+    },
+    "by_source_taken": {
+     "mcp-registry": 2
+    }
+   },
+   "score": {
+    "n": 2,
+    "correct": 2,
+    "precision": 1,
+    "wilson_lb": 0.3424,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "mcp-registry": {
+      "n": 2,
+      "correct": 2,
+      "precision": 1,
+      "wilson_lb": 0.3424,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "tool-selling": {
+   "code": "PRF9023",
+   "counts": {
+    "taken": 0,
+    "seen": 0,
+    "excluded": "unrecorded",
+    "fresh": 0,
+    "by_source_seen": {},
+    "by_source_taken": {}
+   },
+   "score": {
+    "n": 0,
+    "correct": 0,
+    "precision": null,
+    "wilson_lb": null,
+    "disagreements": 0,
+    "raw_agreement": null,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {},
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "vague": {
+   "code": "PRF4008",
+   "counts": {
+    "taken": 1,
+    "seen": 2,
+    "excluded": "unrecorded",
+    "fresh": 1,
+    "by_source_seen": {
+     "aidev-pr": 1,
+     "aidev-agent-comment": 1
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 1
+    }
+   },
+   "score": {
+    "n": 1,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "voice-drift": {
+   "code": "PRF1040",
+   "counts": {
+    "taken": 0,
+    "seen": 0,
+    "excluded": "unrecorded",
+    "fresh": 0,
+    "by_source_seen": {},
+    "by_source_taken": {}
+   },
+   "score": {
+    "n": 0,
+    "correct": 0,
+    "precision": null,
+    "wilson_lb": null,
+    "disagreements": 0,
+    "raw_agreement": null,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {},
+    "worst_source": null,
+    "advise_gate": false
+   }
+  },
+  "why-opener": {
+   "code": "PRF8011",
+   "counts": {
+    "taken": 22,
+    "seen": 66,
+    "excluded": "unrecorded",
+    "fresh": 22,
+    "by_source_seen": {
+     "aidev-review-user": 66
+    },
+    "by_source_taken": {
+     "aidev-review-user": 22
+    }
+   },
+   "score": {
+    "n": 22,
+    "correct": 22,
+    "precision": 1,
+    "wilson_lb": 0.8513,
+    "disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-review-user": {
+      "n": 22,
+      "correct": 22,
+      "precision": 1,
+      "wilson_lb": 0.8513,
+      "disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": {
+     "source": "aidev-review-user",
+     "n": 22,
+     "wilson_lb": 0.8513,
+     "pass": true
+    },
+    "advise_gate": false
+   }
+  }
+ },
+ "data": "$XDG_CACHE_HOME/proofread/calibration/labels/round2/"
+}

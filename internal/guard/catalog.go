@@ -88,6 +88,12 @@ var denyRuleDocs = []types.RuleDoc{
 			"The editor tool reads the file first and reports what it changed, which is the same edit with a record of itself. " +
 			"It fires on the WRITE, not the interpreter: a one-liner that computes something, prints it, or creates a file the tree does not carry is untouched, and so is anything under a scratch path. " +
 			"Only a write's destination counts: the path an `open(..., 'w')`, a pathlib or `writeFile` writer, an in-place flag or an awk redirect names, a variable read through its assignment. A tracked path the program carries as data, in a list it prints to stdout or a report it writes to scratch, is not one. A destination spelled from no literal at all, such as argv, is read as the interpreter's operands."},
+	{Name: string(denyRuleConflictRewrite),
+		Catches: "an inline interpreter rewriting a file that holds merge conflict markers",
+		Why: "A script that opens a file for writing truncates it there, so one that raises before it writes leaves the file empty, and mid-merge the working copy is the only copy of the half-resolved file. " +
+			"It denies by default because the policy that would raise interpreter-rewrite to deny is often what fails to load mid-merge, its own files conflicted too. " +
+			"It fires on two shapes: a write whose destination, read the way interpreter-rewrite reads one, is a file in the workspace holding conflict markers; and a write whose destination cannot be read at all, from a program that names such a file or carries a conflict marker itself, which is resolving hunks by script. " +
+			"A destination under a scratch path, a new file, and a program that only reads are untouched. Your editor tool reads the file first and reports what it changed; where the workspace carries a script that resolves hunks, the verdict names it."},
 	{Name: string(denySpawnUnbriefed),
 		Catches: "a subagent spawned before the multi-agent skill loaded",
 		Why: "Four decisions a spawn cannot be corrected for later are made before the child starts: which worktree it is cut from, which lease grades its writes, which model it runs, and that git stays with the orchestrator. The magus-multi-agent skill carries all four. " +

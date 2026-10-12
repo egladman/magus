@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/vcs"
 )
 
-// workspaceWriteRule is the Verdict.Rule a magus\guard.write answer carries.
+// workspaceWriteRule is the Verdict.Rule an unnamed magus\guard.write answer carries.
 const workspaceWriteRule = workspaceShellPrefix + "write"
 
 // advisoryWriteRuleFailed names the notice that a workspace write rule judged nothing.
@@ -104,6 +104,7 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamWrite, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
 		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, lease) },
+		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
 	if spared {
 		note = lapseSparedNote(*asked.lapse) + "\n\n" + note

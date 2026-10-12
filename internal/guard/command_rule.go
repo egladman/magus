@@ -16,7 +16,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// workspaceCommandRule is the Verdict.Rule a magus\guard.command answer carries, in the
+// workspaceCommandRule is the Verdict.Rule an unnamed magus\guard.command answer carries, in the
 // namespace workspace shell rules already use so a reader can tell it from a built-in.
 const workspaceCommandRule = workspaceShellPrefix + "command"
 
@@ -104,6 +104,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	note := ruleFailureNote(ruleFailureReport{
 		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
 		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
+		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
 	})
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }

@@ -2,6 +2,8 @@ package guard
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"slices"
 	"strings"
 
@@ -30,9 +32,10 @@ const ruleDocsBase = "https://eli.gladman.cc/magus/reference/rules/"
 const verdictRefPrefix = "grd"
 
 // denyMarker keys a rule's first firing in the advisory gate. Prefixed so a deny can never
-// share a marker with an advisory kind of the same name.
+// share a marker with an advisory kind of the same name. A workspace rule's colon becomes
+// a dash, since the kind is a filename component and Windows refuses a colon in one.
 func denyMarker(rule string) hint.MarkerKind {
-	return hint.MarkerKind("deny-" + rule)
+	return hint.MarkerKind("deny-" + strings.ReplaceAll(rule, ":", "-"))
 }
 
 // denial is a refusal in the two parts a rule words it in.
@@ -72,8 +75,10 @@ func verdictParts(reason, why string) denial {
 //
 // reason and why are the rule's verdict and rationale (see verdictParts). note is the
 // nothing-ran line for the command, shown when the verdict did not already carry it. An
-// advisory rule, or one the catalog does not list, keeps its whole reason inline: it has
-// no page to cite and no one-line summary to repeat.
+// advisory rule, or one neither the catalog lists nor a workspace named, keeps its whole
+// reason inline: it has no page to cite and no one-line summary to repeat. A named
+// workspace rule (workspace:<name>) has no generated page either, so its whole reason is
+// the verdict, and its repeat summarizes it by the reason's first line.
 //
 // Every failure speaks in full. A firing that cannot store the verdict it points at would
 // cite a ref that resolves to nothing, and a long reason beats a dead end. A preview, the
@@ -86,17 +91,22 @@ func verdictParts(reason, why string) denial {
 func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note string, remedy []hint.Next, preview bool) (shown, ref string, served []hint.Next) {
 	// The tier, not the compiled default: a recoverable rule a workspace sets to deny
 	// refuses with its page and remedy like any other deny.
-	doc, ok := Rule(rule)
-	if !ok || advisoryRule()[rule] {
+	doc, catalogued := Rule(rule)
+	if (!catalogued && !namedWorkspaceRule(rule)) || advisoryRule()[rule] {
 		return denial{Say: reason, Why: why}.full(), "", nil
 	}
-	d := verdictParts(reason, why)
+	// A catalogued rule's Catches summarizes every denial it makes. A named workspace rule
+	// has no such line and its reasons differ call to call, so only the same reason
+	// repeating is a repeat: a different denial from the same rule speaks in full.
+	d, see, catches, marker := denial{Say: reason, Why: why}, "", firstLine(reason), denyMarker(rule+"-"+reasonDigest(reason))
+	if catalogued {
+		d, see, catches, marker = verdictParts(reason, why), "\nsee: "+ruleDocsBase+rule+"/", doc.Catches, denyMarker(rule)
+	}
 	// A rule that already carried the note shows it once, after the verdict.
 	if line := strings.TrimPrefix(note, "\n"); line != "" {
 		d.Say = strings.TrimSpace(strings.Replace(d.Say, line, "", 1))
 		d.Why = strings.TrimSpace(strings.Replace(d.Why, line, "", 1))
 	}
-	see := "\nsee: " + ruleDocsBase + rule + "/"
 	stored := d.Say + note
 	if d.Why != "" {
 		stored += "\n" + d.Why
@@ -109,7 +119,7 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	if preview {
 		return d.Say + note + command, "", remedy
 	}
-	first := !markers.MarkFired(denyMarker(rule))
+	first := !markers.MarkFired(marker)
 	ref, _ = trail.WriteBlob(ctx, markers.CacheDir(), verdictRefPrefix, []byte(stored))
 	if ref == "" {
 		hint.AppendServedNext(markers.CacheDir(), remedy)
@@ -119,9 +129,29 @@ func shapeDeny(ctx context.Context, markers hint.Gate, rule, reason, why, note s
 	hint.AppendServedNext(markers.CacheDir(), append(slices.Clone(remedy), next))
 	lead := d.Say
 	if !first {
-		lead = "denied again [" + rule + "]: " + doc.Catches
+		lead = "denied again [" + rule + "]: " + catches
 	}
 	return lead + note + command + "\nfull verdict: " + next.Run, ref, remedy
+}
+
+// namedWorkspaceRule reports whether rule is a workspace rule's own name rather than the
+// seam an unnamed magus\guard.command, write or spawn answer reports under.
+func namedWorkspaceRule(rule string) bool {
+	name, ok := strings.CutPrefix(rule, workspaceShellPrefix)
+	return ok && name != "" && rule != workspaceCommandRule && rule != workspaceWriteRule && rule != workspaceSpawnRule
+}
+
+// reasonDigest names a reason in a marker kind: short, filename-safe, and the same for
+// the same text.
+func reasonDigest(reason string) string {
+	sum := sha256.Sum256([]byte(reason))
+	return hex.EncodeToString(sum[:6])
+}
+
+// firstLine is s up to its first newline, trimmed.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(line)
 }
 
 // advice is an advisory in the two parts shapeAdvice words it in.

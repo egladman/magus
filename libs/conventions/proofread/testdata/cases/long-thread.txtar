@@ -1,0 +1,59 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+The fourth reply by one author in a thread.
+-- hit/review-reply thread=3 --
+The map is shared.
+-- hit/review-reply thread=7 --
+The map is shared.
+-- pass/review-reply thread=2 --
+The map is shared.
+-- pass/review-reply --
+The map is shared.
+-- hit/review-reply thread=3 --
+Fixed. Moved the setting into the shared test props file instead of each project.
+Ran the readme script for the site module; the example now appears.
+I think we would need to re-add the native packages to the package list and mark them hidden.
+already removed it, so we're good
+The code now raises an error when the retry limit is reached instead of returning a default.
+Can you verify the agent's change?
+I ended up writing a small image resize plugin of our own; could you take a look?
+Please do not commit the lint rule to this branch; put it on a separate branch from main.
+I appreciate this suggestion, but which queue does the pseudocode mean?
+Opened an issue for it.
+My keyword was 'here', as in this repo.
+Restored the browser-specific expectations with a conditional for its different error message.
+Any word on this? Other pipelines using those images set the rootfs variable, but not the sysroot one.
+This also goes together with keeping the implementation simple enough, and I'm working on that.
+I've removed the option to expose the service externally and kept the security fix in place.
+Removed the streaming base class and interface; they duplicated the existing buffer list.
+A relative path works only while the working directory is the repository root.
+Updated to use the existing theme system without adding new theme objects.
+Maybe instead we normalize the host path generally
+See the linked issue.
+You asked for the artifact coordinates; here they are.
+Fixed the default alignment for all indicators.
+Reverted the publishing context to the original synchronous call as requested.
+Fixed the linter configuration; the file now follows the version 2 format.
+Sorry, the user name is no longer displayed, I'll fix it.
+-- hit/review-reply thread=4 --
+If you agree with my comment above, we can tell the agent to follow those instructions.
+I've made this change, let me know.
+I may have misunderstood. Are you saying a prefix check on the path wouldn't be enough?
+Rolled back and removed the backward compatibility code for the old schema library.
+The current override works and all tests pass; the metadata rarely changes, so syncing it by hand is fine.
+-- hit/review-reply thread=5 --
+You're absolutely right. Removed the redundant max handling.
+Include a feature section for the linked change. Only include details that are user facing.
+-- hit/review-reply thread=6 --
+Thank you. Let's do that, then!
+Unless the package manager is more open to new behaviors
+You're correct, the max handling belongs to the common code. Removed our check.
+-- hit/review-reply thread=7 --
+You're correct. Removed the redundant max handling; the shared output config already covers it.
+-- hit/review-reply thread=8 --
+You're correct, the shared generation code handles the max field; I'll remove ours.
+-- hit/review-reply thread=9 --
+Removed the redundant max handling code.
+-- hit/review-reply thread=16 --
+Removed the redundant max handling; the shared validation covers it.
+-- hit/review-reply thread=17 --
+Removed the redundant max handling from the page config generation.

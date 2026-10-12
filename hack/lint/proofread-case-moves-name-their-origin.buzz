@@ -1,0 +1,256 @@
+namespace casemoves;
+
+import "assert";
+import "vcs";
+import "magus/lint";
+import "hack/lint/support" as support;
+
+// Text is one case: a line of a section, or the whole section, and the line it starts on.
+object Text {
+    value: str,
+    line: int,
+}
+
+// Section is one `-- header --` block of a case file.
+object Section {
+    header: str,
+    label: str,
+    texts: [Text],
+}
+
+export fun reads() > [str] {
+    return ["libs/conventions/proofread/testdata/cases/*.txtar"];
+}
+
+// check fails a case that sat in an fp section at the merge base and sits in a pass section
+// now, unless that section's header carries `was=fp:<round>:<id>`. A fixed false positive
+// moved into pass takes a firing out of the denominator, so the move says where it came from.
+export fun check(files: [Path]) > [Finding] !> any {
+    final base = mergeBase();
+    if (base == "") {
+        return [<Finding>];
+    }
+    final before = fun (p: str) > str? {
+        return fileAt(base, p: p);
+    };
+    return checkAgainst(files, before: before);
+}
+
+// checkAgainst reports each moved case of files, given the text each file had at the base.
+export fun checkAgainst(files: [Path], before: fun (p: str) > str?) > [Finding] !> any {
+    final found = mut [<Finding>];
+    foreach (f in files) {
+        final was = before(f.value);
+        if (was == null) {
+            continue;
+        }
+        foreach (moved in moves(was!, now: support\read(f))) {
+            found.append(Finding{ path = f.value, line = moved.line,
+                message = "this case was an fp at the merge base and is a pass now with no was= note: " + brief(moved.value),
+                fix = "Put `was=fp:<round>:<id>` on the section header, as in `-- pass/<kind> was=fp:round4:c17 --`, naming the round and case id the fp carried." });
+        }
+    }
+    return found;
+}
+
+// mergeBase is the commit the checked-out revision branched from, "" when there is no git
+// history to compare with: no VCS, or a base the clone does not hold.
+fun mergeBase() > str {
+    if (vcs\name() != "git") {
+        return "";
+    }
+    final base = vcs\base() catch "";
+    if (base == "") {
+        return "";
+    }
+    final found = vcs\cmd(["merge-base", "HEAD", base], opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (found == null or !found!.ok) {
+        return "";
+    }
+    return found!.stdout.trim();
+}
+
+// fileAt is the file as the base commit held it, null when it did not exist there.
+fun fileAt(base: str, p: str) > str? {
+    final shown = vcs\cmd(["show", "{base}:./{p}"], opts: {"quiet": true, "allow_failure": true}) catch null;
+    if (shown == null or !shown!.ok) {
+        return null;
+    }
+    return shown!.stdout;
+}
+
+// moves are the cases of now that sat in an fp section of was and sit in a pass section whose
+// header has no was: note.
+export fun moves(was: str, now: str) > [Text] {
+    final fixed = mut {<str: bool>};
+    foreach (s in sections(was)) {
+        if (s.label == "fp") {
+            foreach (t in s.texts) {
+                fixed[t.value] = true;
+            }
+        }
+    }
+    final found = mut [<Text>];
+    foreach (s in sections(now)) {
+        if (s.label != "pass" or hasNote(s.header)) {
+            continue;
+        }
+        foreach (t in s.texts) {
+            if (fixed[t.value] != null) {
+                found.append(t);
+            }
+        }
+    }
+    return found;
+}
+
+// hasNote reports whether a header carries the attribute `was=fp:<round>:<id>`.
+export fun hasNote(header: str) > bool {
+    foreach (w in fields(header)) {
+        if (w.startsWith("was=")) {
+            final parts = w.sub(4).split(":");
+            return parts.len() == 3 and parts[0] == "fp" and parts[1] != "" and parts[2] != "";
+        }
+    }
+    return false;
+}
+
+fun fields(header: str) > [str] {
+    final words = mut [<str>];
+    foreach (w in header.split(" ")) {
+        if (w != "") {
+            words.append(w);
+        }
+    }
+    return words;
+}
+
+// sections splits a txtar file at its `-- header --` lines. A section holds one case per
+// non-blank line, or one case in all when its header says whole, as LoadCases reads it.
+fun sections(src: str) > [Section] {
+    final found = mut [<Section>];
+    final lines = src.split("\n");
+    var header = "";
+    var open = false;
+    var first = 0;
+    var body = mut [<str>];
+    var n = 0;
+    while (n <= lines.len()) {
+        var marker = false;
+        if (n < lines.len()) {
+            final line = lines[n];
+            marker = line.len() > 6 and line.startsWith("-- ") and line.endsWith(" --");
+        }
+        if (marker or n == lines.len()) {
+            if (open) {
+                found.append(section(header, body: body, first: first));
+            }
+            if (n < lines.len()) {
+                header = lines[n].sub(3, len: lines[n].len() - 6).trim();
+                open = true;
+                first = n + 2;
+                body = mut [<str>];
+            }
+        } else if (open) {
+            body.append(lines[n]);
+        }
+        n = n + 1;
+    }
+    return found;
+}
+
+// first is the 1-based line of the section's first body line.
+fun section(header: str, body: [str], first: int) > Section {
+    final words = fields(header);
+    var label = "";
+    var whole = false;
+    if (words.len() > 0) {
+        label = words[0].split("/")[0];
+        whole = words.indexOf("whole") != null;
+    }
+    final texts = mut [<Text>];
+    if (whole) {
+        var end = body.len();
+        while (end > 0 and body[end - 1].trim() == "") {
+            end = end - 1;
+        }
+        if (end > 0) {
+            texts.append(Text{ value = body.sub(0, len: end).join("\n"), line = first });
+        }
+    } else {
+        var i = 0;
+        while (i < body.len()) {
+            if (body[i].trim() != "") {
+                texts.append(Text{ value = body[i], line = first + i });
+            }
+            i = i + 1;
+        }
+    }
+    return Section{ header = header, label = label, texts = texts };
+}
+
+fun brief(text: str) > str {
+    final one = text.split("\n")[0];
+    if (one.len() > 60) {
+        return one.sub(0, len: 60) + "...";
+    }
+    return one;
+}
+
+final baseFile = "Cases from a round.\n-- hit/change-description --\n- The queue never merged.\n"
+    + "-- fp/change-description --\n- The cache check never worked.\n- It never fired.\n"
+    + "-- fp/review-reply whole --\nNobody ran it.\nNothing checked it.\n"
+    + "-- pass/change-description --\n- Resolve never returns nil.\n";
+
+test "a case moved from fp to pass with no note is reported at its line" {
+    final now = "Cases from a round.\n-- hit/change-description --\n- The queue never merged.\n"
+        + "-- fp/change-description --\n- It never fired.\n"
+        + "-- fp/review-reply whole --\nNobody ran it.\nNothing checked it.\n"
+        + "-- pass/change-description --\n- Resolve never returns nil.\n- The cache check never worked.\n";
+    final got = moves(baseFile, now: now);
+    assert\equal(got.len(), want: 1, message: "one move");
+    assert\equal(got[0].value, want: "- The cache check never worked.", message: "which case");
+    assert\equal(got[0].line, want: 11, message: "its line in the new file");
+}
+
+test "a move whose section header carries was=fp, a round and an id passes" {
+    final now = "-- fp/change-description --\n- It never fired.\n"
+        + "-- pass/change-description was=fp:round4:c17 --\n- The cache check never worked.\n";
+    assert\equal(moves(baseFile, now: now).len(), want: 0, message: "noted");
+}
+
+test "a whole section moved without a note is one case, and an incomplete note does not count" {
+    final now = "-- pass/review-reply whole --\nNobody ran it.\nNothing checked it.\n";
+    assert\equal(moves(baseFile, now: now).len(), want: 1, message: "whole section");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=fp:round4 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "no id");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=hit:round4:c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 1, message: "not an fp");
+    assert\equal(moves(baseFile, now: "-- pass/review-reply whole was=fp:round4:c1 --\nNobody ran it.\nNothing checked it.\n").len(), want: 0, message: "whole, noted");
+}
+
+test "a text that stays fp, a new pass case and a hit moved to pass are not moves" {
+    final now = baseFile + "-- pass/change-description --\n- A brand new passing case.\n-- hit/change-description --\n- It never fired.\n";
+    assert\equal(moves(baseFile, now: now).len(), want: 0, message: "no fp text reached pass");
+}
+
+test "a file with no base copy has no moves, and a deleted fp is not a move" {
+    final files = support\fixture({"libs/conventions/proofread/testdata/cases/absolute.txtar": "-- pass/change-description --\n- It never fired.\n"});
+    final none = fun (p: str) > str? {
+        return null;
+    };
+    assert\equal(checkAgainst(files, before: none).len(), want: 0, message: "new file");
+    assert\equal(moves(baseFile, now: "-- pass/change-description --\n- Resolve never returns nil.\n").len(), want: 0, message: "dropped");
+}
+
+test "a finding names the file, the line and the note to add" {
+    final path = "libs/conventions/proofread/testdata/cases/absolute.txtar";
+    final files = support\fixture({path: "-- pass/change-description --\n- It never fired.\n"});
+    final before = fun (p: str) > str? {
+        return baseFile;
+    };
+    final got = checkAgainst(files, before: before);
+    assert\equal(got.len(), want: 1, message: "one finding");
+    assert\equal(got[0].path, want: path, message: "path");
+    assert\equal(got[0].line, want: 2, message: "line");
+    assert\equal(got[0].message, want: "this case was an fp at the merge base and is a pass now with no was= note: - It never fired.", message: "message");
+    assert\equal(got[0].fix.indexOf("was=fp:<round>:<id>") != null, want: true, message: "the fix shows the note");
+}

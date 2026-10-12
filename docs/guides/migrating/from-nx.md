@@ -48,7 +48,7 @@ are calls you can trace by reading top to bottom.
 
 **Explicit declarations, not plugin inference.** Nx plugins read your
 `package.json`/config files and infer targets, inputs, and dependencies for
-you, which is powerful, but the inference is only as good as the plugin's
+you, which saves writing them, but the inference is only as good as the plugin's
 understanding of your setup. magus caches exactly what you declare: a spell's
 `needs` and a project's `depends_on` are the whole story, and under-declaring
 an input is the one way to get a stale cache hit (see

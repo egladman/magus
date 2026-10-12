@@ -424,7 +424,7 @@ reads as a lie rather than an oversight.
 
 ### Told, never guessed
 
-magus does not guess where it runs in order to change what it does. It does not
+magus does not guess where it runs to change what it does. It does not
 read `CI`, `GITHUB_ACTIONS` or `GITLAB_CI`, probe for a container, or work out
 which agent host is calling, and then pick a default, a result, or which
 provider or feature is on. When a caller needs different behavior, the caller

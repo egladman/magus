@@ -1,0 +1,55 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+An agent reply that lays out labeled options or alternatives.
+-- hit/agent-reply --
+Two options: keep the flag or drop it.
+- **Option A**: keep the old flag.
+We could (a) rebase now or (b) wait for the queue.
+There are three ways forward here, all cheap.
+-- pass/agent-reply --
+I kept the old flag, since two callers still read it.
+The command takes two arguments and three flags.
+Option parsing moved into its own file.
+The `(a)` and `(b)` markers are the list style the page uses.
+-- hit/agent-reply --
+- **Option 1**: Direct execution with the new runtime: `run 01-llm-completion.cs`
+**Option 1: Repository Settings (Recommended)**
+- **Option A (preferred)**: Remove `include_fonts` from the config for now, add it when actually implemented
+**Option A**: Keep the current approach (timeit for multiple runs):
+**Option 1: Use descriptive suffixes**
+**Option 1**: Add a "Share Classes" column to the investors table that lists each investor's share classes
+**Option A**: Implement all 11 items sequentially with a commit for each (will take significant time)
+### Option 1: Schema Definition Consolidation (Non-Breaking)
+**Option 1: Grant specific tool access**
+**Option A (backward compatible):**
+There are two approaches to implementing support for the hosted model API:
+**Option 1 (Recommended):** Add labels to bypass the title validation
+**Option 1: Implement as part of this change**
+**Option 1: Make methods async (recommended)**
+To implement the reconnection properly, we have two options:
+I can think of a few approaches:
+**Option 1: Repository Settings (Administrators Only)**
+You have a few options to rebase this branch:
+## Option 1: Test on the embedded web view
+- **Option A**: Use `requestIdleCallback()` or `requestAnimationFrame()` to defer search until the browser is idle
+**Option A: Wrapper functions** (what I tried in 5b23648 - you said this was wrong):
+- **Option A**: Target the older framework with 99/305 tests passing
+**Option A**: Focus on the most valuable features first (auto-refresh, search, basic settings editing)?
+**Option A**: Extract to a shared utility in `helper/utils.js`:
+**Option 1: I can revert this change to a single fix**
+To give a proper English translation like the other changelog, I have a few options:
+However, there are a few approaches we could consider:
+-- fp/agent-reply --
+The updated test now tries three approaches with proper environment settings and should find the root cause of the missing header.
+-- pass/agent-reply --
+The dialog now shows three options: "Stash changes", "Discard changes", and "Don't show again".
+- An evaluation framework with test scenarios and metrics for comparing the three approaches (no instructions, reference only, full instructions)
+**The three options are:**
+The voice selection has grown from a simple checkbox to a system with three options:
+The new text clarifies that: (1) when one operand is integer and the other is floating-point, computation is performed in floating-point, and (2) when both operands are floating-point of different precisions, computation uses the higher precision.
+Option B completed successfully.
+The dialog now shows three options when orphaned bookmarks exist: "Delete label and bookmarks", "Delete label only", or "Cancel".
+**Match dropdown** with three options:
+I've built an evaluation framework to compare the three approaches you suggested.
+Try to define (1) one shader based template and (2) link it in the editor
+The context menu now includes all three options:
+I've addressed the main compatibility issues through two changes: (1) adding timeout prevention to the export function that doesn't interfere with tests, and (2) updating plugin metadata to mark compatibility.

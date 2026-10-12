@@ -1,0 +1,105 @@
+Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
+A claim with no evidence beside it.
+-- hit/change-description --
+- Fixes the flaky cache test.
+- Makes startup much faster.
+-- hit/review-reply --
+Startup drops from 410ms to 260ms.
+It passed 50 of 50 runs. The skills shrink 11 percent.
+Startup drops to 260ms. See `hack/bench/startup.buzz`.
+-- pass/change-description --
+- `TestCacheEvict` passed 50 of 50 runs with `-count=50`.
+- Fixes the flake #512 reported.
+- Startup drops to 260ms since 4762d2e2d.
+- Adds five nesting fixes
+-- pass/review-reply --
+Startup drops to 260ms ([run](https://example.com/run/1)).
+Startup drops to 260ms (grd875434f41d23c346).
+Not measured on Linux, where it may be faster.
+-- hit/agent-reply --
+- Ascending order validation prevents replay attacks and ensures deterministic verification
+- **Single file open**: Eliminates redundant file operations by handling encoding in one place
+My implementation is working correctly - I verified it fixes the NaN issue with negative bounds while keeping existing behavior.
+This prevents the flicker by ensuring users don't see the default tab content before switching to their preferred tab.
+This prevents the library template from processing invalid example directories while preserving the original directory structure.
+-- hit/change-description --
+This PR fixes the host's license detection by consolidating the license files:
+- **Search Performance**: 70-80% faster response times
+Fixes the issue where checking "Do not show this again" while closing a connection updated the wrong warning preference.
+**Regression Prevention**: Robust testing prevents future UI and API breakages
+- All 120 tests passing (100% pass rate)
+-- hit/commit-message whole --
+build: restyle the console
+
+Net bundle: +11.6KB gzipped against the first wave.
+-- hit/commit-message whole --
+fix: route the auth paths
+
+This fixes routing for the /auth and /auth/ endpoints.
+-- hit/commit-message whole --
+test: cover the parser
+
+- Maintains backward compatibility and 100% test coverage
+-- hit/commit-message whole --
+test: fix the spec run
+
+- Fixes spec failures by eliminating expected class definitions
+-- hit/commit-message whole --
+docs: trim the guide
+
+- Remove the 8-line comment guidelines section (10% size reduction)
+-- hit/commit-message whole --
+perf: hoist the sweep
+
+* hoist tool versions out of the ref sweep; the sweep drops from 35s to 1.4s
+-- hit/commit-message whole --
+fix: ignore the home config
+
+Fixes the issue where a config file in the home directory was found and used.
+-- hit/review-reply --
+The wrapped-JSON mode is more reliable with the local model server because it:
+-- pass/agent-reply --
+The 5x multiplier in the test env helper might be too conservative for the CI machines.
+- **Main file reduced**: 3452 → 3095 lines (357 lines, 10.3% reduction)
+-- fp/change-description --
+- Changes are backward compatible with 4KB page sizes
+-- pass/change-description --
+The rebase incorporates recent changes including menu-related fixes and ensures the branch is up to date.
+-- fp/commit-message whole --
+ci: size the runners
+
+* take every core and all but 512 MiB of memory in CI; drop the hosted four-core clamp
+-- pass/commit-message whole --
+test: re-measure the fixture
+
+* re-measure the fixture with the probe and key fixes in
+-- pass/commit-message whole --
+refactor: simplify the compare script
+
+- Simplify the video compare script: 620→213 lines (70% reduction)
+-- pass/commit-message whole --
+docs: hide the coverage chip
+
+Hide the coverage chip, because a 0% badge on unmeasured code is the fastest way to lose trust.
+-- fp/commit-message whole --
+bench: record the run
+
+The ns columns are inconclusive, because the baseline carried 103-121% variance.
+-- pass/commit-message whole --
+fix: wait on the report
+
+* wait for the stale-build report with a deadline instead of a fixed 60ms
+-- fp/review-reply --
+All shortcuts include bounds checking (duration limits, volume 0-100%, etc.).
+change the blocklist not to trigger on 10s peer exchange messages.
+This keeps metadata and state consistent and prevents drift.
+This eliminates the code duplication.
+The prefix guard prevents a plain version string from matching.
+-- pass/review-reply --
+These are separate functions to keep the generated code size smaller.
+I'm not sure if 16 bytes is sufficient for most keys.
+**Drop the fetch polyfill; the runtime has built-in fetch (less supply-chain surface, fewer bytes)**
+I've made partial fixes to the registration mechanism, but the core issue still needs to be resolved.
+But it adds another arbitrary limit of 40%, and hard-to-maintain magic numbers.
+- The comment says “first 12 bytes” and “remaining 12 bytes”; the code slices 10 and then the rest.
+I am 99% sure it actively does things beyond this.

@@ -14,6 +14,9 @@ show each rule's compiled default, and a workspace sets any of them with
 Every verdict names its rule in brackets (`deny [stage-all]: ...`), and that
 name is the entry below. `magus describe rules` prints the same list.
 
+Rules for written text, such as pull request descriptions and docs, are the
+[proofread rules](../proofread/index.md).
+
 ## Denies by default
 
 | Rule                                              | Catches                                                                                              |
@@ -22,6 +25,7 @@ name is the entry below. `magus describe rules` prints the same list.
 | [backtick-substitution](backtick-substitution.md) | a backtick command substitution, which inside double quotes runs a command                           |
 | [cache-dir-write](cache-dir-write.md)             | a write into this checkout's magus cache dir, which magus alone owns                                 |
 | [claimed-declaration](claimed-declaration.md)     | a leased edit landing in a declaration another live job claims (`run.go#executeStages`)              |
+| [conflict-rewrite](conflict-rewrite.md)           | an inline interpreter rewriting a file that holds merge conflict markers                             |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                        |
 | [focus-read](focus-read.md)                       | a read outside the paths a focus lease was given                                                     |
 | [hook-wiring-write](hook-wiring-write.md)         | a leased or agent-attributed write to the hook wiring the guard is installed by                      |

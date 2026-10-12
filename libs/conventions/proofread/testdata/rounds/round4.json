@@ -1,0 +1,561 @@
+{
+ "round": 4,
+ "date": "2026-10-11",
+ "frozen": true,
+ "spent": true,
+ "spent_because": "it decided a promotion, and participles cases now carry its texts",
+ "purpose": "confirmatory: rules tuned in proofread-fix3, frozen before labeling on texts that round never saw",
+ "rule_commit": "e0f9e5fdf77c5928b952017d4348566263e990e2",
+ "seed": 20261012,
+ "sampler": "exclude firings whose sentence or context appears in a rule's cases or in rounds 1 to 3; at most 2 firings of a rule per text; unique on context and sentence; shuffled per source with the seed and the rule, round-robin across sources up to 40, then shuffled with the seed",
+ "candidate_ids": "r4-NNNN",
+ "candidates": 178,
+ "sources": {
+  "aidev-agent-comment": {
+   "texts": 24487,
+   "sha256": "unrecorded"
+  },
+  "aidev-commit": {
+   "texts": 175306,
+   "sha256": "unrecorded"
+  },
+  "aidev-pr": {
+   "texts": 70905,
+   "sha256": "unrecorded"
+  },
+  "aidev-pr-as-issue": {
+   "texts": 3922,
+   "sha256": "unrecorded"
+  },
+  "aidev-review-bot": {
+   "texts": 39928,
+   "sha256": "unrecorded"
+  },
+  "aidev-review-user": {
+   "texts": 35097,
+   "sha256": "unrecorded"
+  },
+  "changelog-fragment": {
+   "texts": 696,
+   "sha256": "unrecorded"
+  },
+  "changelog-history": {
+   "texts": 1735,
+   "sha256": "unrecorded"
+  },
+  "changelog-page": {
+   "texts": 1,
+   "sha256": "unrecorded"
+  },
+  "docs-guide": {
+   "texts": 49,
+   "sha256": "unrecorded"
+  },
+  "docs-reference": {
+   "texts": 428,
+   "sha256": "unrecorded"
+  },
+  "git-commit": {
+   "texts": 1716,
+   "sha256": "unrecorded"
+  },
+  "repo-markdown-as-guide": {
+   "texts": 1226,
+   "sha256": "unrecorded"
+  }
+ },
+ "agreement_then": "at most 4 disagreements in 40 (scored as n/10), or alpha >= 0.80",
+ "scored_with": "proofread calibrate round score -replay under the default gates and the notes requirement; equal to the round's own scores.json in every count and rate, and in every gate but agreement_gate for absolute, issue-repro and participles (one disagreement each with no note) and advise_gate for participles; unnoted_ids lists the disagreements to annotate",
+ "gates": {
+  "advise": {
+   "wilson_z": 1.96,
+   "lower_bound": 0.7,
+   "min_firings": 30
+  },
+  "deny": "not reachable from one round: needs two frozen rounds on different sources, pooled to 60+ firings with at most 1 wrong",
+  "agreement": "at most 4 disagreements in 40, or Krippendorff alpha >= 0.80, a note on every disagreement",
+  "report": "per source; gate on the worst source"
+ },
+ "advise_passed": [],
+ "deny_passed": [],
+ "promoted": [],
+ "caveats": [
+  "participles passed advise on paper when the round was scored, before the agreement gate required a note on every disagreement; replayed with that requirement its agreement gate fails on one disagreement without a note",
+  "participles also did not name the clauses it counted, and a bot footer in most of its texts carried the rate over the cap in 10 of its correct labels, so it was not promoted"
+ ],
+ "rules": {
+  "absolute": {
+   "code": "PRF2003",
+   "counts": {
+    "taken": 40,
+    "seen": 221,
+    "excluded": 30,
+    "fresh": 180,
+    "by_source_seen": {
+     "aidev-pr": 116,
+     "aidev-review-bot": 34,
+     "aidev-review-user": 14,
+     "aidev-commit": 27,
+     "git-commit": 30
+    },
+    "by_source_taken": {
+     "git-commit": 9,
+     "aidev-commit": 8,
+     "aidev-review-bot": 8,
+     "aidev-review-user": 7,
+     "aidev-pr": 8
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 6,
+    "precision": 0.15,
+    "wilson_lb": 0.0706,
+    "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0022"
+    ],
+    "raw_agreement": 0.975,
+    "alpha": 0.9093,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-commit": {
+      "n": 8,
+      "correct": 2,
+      "precision": 0.25,
+      "wilson_lb": 0.0715,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-pr": {
+      "n": 8,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-bot": {
+      "n": 8,
+      "correct": 2,
+      "precision": 0.25,
+      "wilson_lb": 0.0715,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-user": {
+      "n": 7,
+      "correct": 2,
+      "precision": 0.2857,
+      "wilson_lb": 0.0822,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "git-commit": {
+      "n": 9,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0022"
+      ],
+      "raw_agreement": 0.8889,
+      "alpha": 0,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "changelog-heading": {
+   "code": "PRF1030",
+   "counts": {
+    "taken": 0,
+    "seen": 0,
+    "excluded": 0,
+    "fresh": 0,
+    "by_source_seen": {},
+    "by_source_taken": {}
+   },
+   "score": {
+    "n": 0,
+    "correct": 0,
+    "precision": null,
+    "wilson_lb": null,
+    "disagreements": 0,
+    "unnoted_disagreements": 0,
+    "raw_agreement": null,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {},
+    "worst_source": null,
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "claim": {
+   "code": "PRF3001",
+   "counts": {
+    "taken": 40,
+    "seen": 23944,
+    "excluded": 310,
+    "fresh": 17658,
+    "by_source_seen": {
+     "aidev-pr": 15098,
+     "aidev-review-user": 197,
+     "aidev-review-bot": 982,
+     "aidev-commit": 4759,
+     "aidev-agent-comment": 2873,
+     "git-commit": 35
+    },
+    "by_source_taken": {
+     "aidev-pr": 7,
+     "aidev-agent-comment": 7,
+     "git-commit": 7,
+     "aidev-review-bot": 7,
+     "aidev-review-user": 6,
+     "aidev-commit": 6
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 22,
+    "precision": 0.55,
+    "wilson_lb": 0.3983,
+    "disagreements": 5,
+    "unnoted_disagreements": 2,
+    "unnoted_ids": [
+     "r4-0063",
+     "r4-0095"
+    ],
+    "raw_agreement": 0.875,
+    "alpha": 0.7492,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 7,
+      "correct": 5,
+      "precision": 0.7143,
+      "wilson_lb": 0.3589,
+      "disagreements": 1,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 0.8571,
+      "alpha": 0.7111,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-commit": {
+      "n": 6,
+      "correct": 4,
+      "precision": 0.6667,
+      "wilson_lb": 0.3,
+      "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0063"
+      ],
+      "raw_agreement": 0.8333,
+      "alpha": 0.5926,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-pr": {
+      "n": 7,
+      "correct": 6,
+      "precision": 0.8571,
+      "wilson_lb": 0.4869,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "aidev-review-bot": {
+      "n": 7,
+      "correct": 2,
+      "precision": 0.2857,
+      "wilson_lb": 0.0822,
+      "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0095"
+      ],
+      "raw_agreement": 0.8571,
+      "alpha": 0.7111,
+      "precision_gate": false,
+      "agreement_gate": false
+     },
+     "aidev-review-user": {
+      "n": 6,
+      "correct": 1,
+      "precision": 0.1667,
+      "wilson_lb": 0.0301,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": 1,
+      "precision_gate": false,
+      "agreement_gate": true
+     },
+     "git-commit": {
+      "n": 7,
+      "correct": 4,
+      "precision": 0.5714,
+      "wilson_lb": 0.2505,
+      "disagreements": 2,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 0.7143,
+      "alpha": 0.4583,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "ing-tail": {
+   "code": "PRF4011",
+   "counts": {
+    "taken": 17,
+    "seen": 52,
+    "excluded": 34,
+    "fresh": 17,
+    "by_source_seen": {
+     "aidev-pr": 37,
+     "aidev-commit": 14,
+     "aidev-agent-comment": 1
+    },
+    "by_source_taken": {
+     "aidev-pr": 17
+    }
+   },
+   "score": {
+    "n": 17,
+    "correct": 3,
+    "precision": 0.1765,
+    "wilson_lb": 0.0619,
+    "disagreements": 2,
+    "unnoted_disagreements": 2,
+    "unnoted_ids": [
+     "r4-0015",
+     "r4-0077"
+    ],
+    "raw_agreement": 0.8824,
+    "alpha": 0.6827,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-pr": {
+      "n": 17,
+      "correct": 3,
+      "precision": 0.1765,
+      "wilson_lb": 0.0619,
+      "disagreements": 2,
+      "unnoted_disagreements": 2,
+      "unnoted_ids": [
+       "r4-0015",
+       "r4-0077"
+      ],
+      "raw_agreement": 0.8824,
+      "alpha": 0.6827,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 17,
+     "wilson_lb": 0.0619,
+     "pass": false
+    },
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "issue-repro": {
+   "code": "PRF1020",
+   "counts": {
+    "taken": 40,
+    "seen": 269,
+    "excluded": 11,
+    "fresh": 257,
+    "by_source_seen": {
+     "aidev-pr-as-issue": 269
+    },
+    "by_source_taken": {
+     "aidev-pr-as-issue": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 26,
+    "precision": 0.65,
+    "wilson_lb": 0.4951,
+    "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0108"
+    ],
+    "raw_agreement": 0.975,
+    "alpha": 0.9448,
+    "precision_gate": false,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-pr-as-issue": {
+      "n": 40,
+      "correct": 26,
+      "precision": 0.65,
+      "wilson_lb": 0.4951,
+      "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0108"
+      ],
+      "raw_agreement": 0.975,
+      "alpha": 0.9448,
+      "precision_gate": false,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr-as-issue",
+     "n": 40,
+     "wilson_lb": 0.4951,
+     "pass": false
+    },
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "option-list": {
+   "code": "PRF8023",
+   "counts": {
+    "taken": 1,
+    "seen": 33,
+    "excluded": 28,
+    "fresh": 1,
+    "by_source_seen": {
+     "aidev-agent-comment": 33
+    },
+    "by_source_taken": {
+     "aidev-agent-comment": 1
+    }
+   },
+   "score": {
+    "n": 1,
+    "correct": 0,
+    "precision": 0,
+    "wilson_lb": 0,
+    "disagreements": 0,
+    "unnoted_disagreements": 0,
+    "raw_agreement": 1,
+    "alpha": null,
+    "precision_gate": false,
+    "agreement_gate": true,
+    "by_source": {
+     "aidev-agent-comment": {
+      "n": 1,
+      "correct": 0,
+      "precision": 0,
+      "wilson_lb": 0,
+      "disagreements": 0,
+      "unnoted_disagreements": 0,
+      "raw_agreement": 1,
+      "alpha": null,
+      "precision_gate": false,
+      "agreement_gate": true
+     }
+    },
+    "worst_source": null,
+    "advise_gate": false,
+    "spot_check": []
+   }
+  },
+  "participles": {
+   "code": "PRF4020",
+   "counts": {
+    "taken": 40,
+    "seen": 5987,
+    "excluded": 99,
+    "fresh": 5852,
+    "by_source_seen": {
+     "aidev-pr": 5968,
+     "docs-guide": 1,
+     "docs-reference": 18
+    },
+    "by_source_taken": {
+     "aidev-pr": 40
+    }
+   },
+   "score": {
+    "n": 40,
+    "correct": 36,
+    "precision": 0.9,
+    "wilson_lb": 0.7695,
+    "disagreements": 1,
+    "unnoted_disagreements": 1,
+    "unnoted_ids": [
+     "r4-0140"
+    ],
+    "raw_agreement": 0.975,
+    "alpha": 0.8454,
+    "precision_gate": true,
+    "agreement_gate": false,
+    "by_source": {
+     "aidev-pr": {
+      "n": 40,
+      "correct": 36,
+      "precision": 0.9,
+      "wilson_lb": 0.7695,
+      "disagreements": 1,
+      "unnoted_disagreements": 1,
+      "unnoted_ids": [
+       "r4-0140"
+      ],
+      "raw_agreement": 0.975,
+      "alpha": 0.8454,
+      "precision_gate": true,
+      "agreement_gate": false
+     }
+    },
+    "worst_source": {
+     "source": "aidev-pr",
+     "n": 40,
+     "wilson_lb": 0.7695,
+     "pass": true
+    },
+    "advise_gate": false,
+    "spot_check": []
+   }
+  }
+ },
+ "data": "$XDG_CACHE_HOME/proofread/calibration/labels/round4/"
+}

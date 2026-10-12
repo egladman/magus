@@ -1,5 +1,5 @@
 // Package diagmsg judges the messages a program prints to whoever runs it,
-// by the [prose.KindMessage] rules: a verdict, one next command, and a ref for
+// by the [proofread.KindMessage] rules: a verdict, one next command, and a ref for
 // the rationale, never a paragraph.
 //
 // A message is found where it is built: the argument a configured function
@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/libs/conventions/internal/source"
-	"github.com/egladman/magus/libs/conventions/prose"
+	"github.com/egladman/magus/libs/conventions/proofread"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/types/typeutil"
 )
@@ -42,7 +42,7 @@ type Options struct {
 	// file is never held: its messages are fixtures.
 	Files source.Globs `json:"files"`
 
-	// MaxRunes caps a message's length; 0 is [prose.MessageRunes].
+	// MaxRunes caps a message's length; 0 is [proofread.MessageRunes].
 	MaxRunes int `json:"max-runes"`
 
 	// Calls are the functions whose argument is a message.
@@ -57,14 +57,14 @@ type Options struct {
 
 	// Slog judges the message of every log/slog call, the package's Debug,
 	// Info, Warn and Error functions, their Context forms, and the same methods
-	// on a *slog.Logger, by [prose.RuleMessageTag] alone: a record names what
+	// on a *slog.Logger, by [proofread.RuleMessageTag] alone: a record names what
 	// logged it with an attribute, never a tag in its text. [Options.Allow]
 	// never exempts one, so a file staged for its other messages cannot hide a
 	// tagged log line.
 	Slog bool `json:"slog"`
 
 	// Rules are the rules reported. Empty reports every message rule.
-	Rules []prose.Rule `json:"rules"`
+	Rules []proofread.Rule `json:"rules"`
 
 	// Allow exempts a file from one rule, or from every rule when Rule is
 	// empty. It never exempts a log/slog message; see [Options.Slog].
@@ -104,7 +104,7 @@ type AllowEntry struct {
 	File string `json:"file"`
 
 	// Rule is the one rule exempted, or empty for all of them.
-	Rule prose.Rule `json:"rule"`
+	Rule proofread.Rule `json:"rule"`
 
 	// Reason says why the file is exempt.
 	Reason string `json:"reason"`
@@ -133,7 +133,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if slices.Contains(opts.Prefixes, "") {
 		return nil, errors.New("diagmsg: an empty prefix would mark every string")
 	}
-	messageRules := prose.KindRules(prose.KindMessage)
+	messageRules := proofread.KindRules(proofread.KindMessage)
 	for _, r := range opts.Rules {
 		if !slices.Contains(messageRules, r) {
 			return nil, fmt.Errorf("diagmsg: rule %q is not one of %q", r, messageRules)
@@ -165,7 +165,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	}
 	return &analysis.Analyzer{
 		Name: "diagmsg",
-		Doc:  "judge the messages a program prints by the prose message rules",
+		Doc:  "judge the messages a program prints by the proofread message rules",
 		Run:  func(pass *analysis.Pass) (any, error) { return nil, run(pass, opts) },
 	}, nil
 }
@@ -403,10 +403,10 @@ func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 		return
 	}
 	j.seen[pos] = true
-	findings := prose.JudgeMessage(text, j.opts.MaxRunes)
+	findings := proofread.JudgeMessage(text, j.opts.MaxRunes)
 	if tag := j.phraseTag(text); tag != "" {
-		findings = append(findings, prose.Finding{
-			Rule:    prose.RuleMessageTag,
+		findings = append(findings, proofread.Finding{
+			Rule:    proofread.RuleMessageTag,
 			Message: fmt.Sprintf("Drop the leading '%s' tag: open with the verdict.", tag),
 			Match:   tag,
 			Line:    1,
@@ -416,7 +416,7 @@ func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 		if len(j.opts.Rules) > 0 && !slices.Contains(j.opts.Rules, f.Rule) {
 			continue
 		}
-		if (slogMessage && f.Rule != prose.RuleMessageTag) || (!slogMessage && j.allowed(f.Rule)) {
+		if (slogMessage && f.Rule != proofread.RuleMessageTag) || (!slogMessage && j.allowed(f.Rule)) {
 			continue
 		}
 		j.pass.Report(analysis.Diagnostic{
@@ -428,7 +428,7 @@ func (j *judge) report(text string, pos token.Pos, slogMessage bool) {
 }
 
 // phraseTagPattern matches two or three lowercase words and a colon opening a
-// message, such as "diff session: " or "server check-drift: ". The prose
+// message, such as "diff session: " or "server check-drift: ". The proofread
 // rule has the one-word form.
 var phraseTagPattern = regexp.MustCompile(`^\s*([a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*){1,2}): `)
 
@@ -466,7 +466,7 @@ func (j *judge) phraseTag(text string) string {
 	return m[1] + ":"
 }
 
-func (j *judge) allowed(rule prose.Rule) bool {
+func (j *judge) allowed(rule proofread.Rule) bool {
 	for _, a := range j.opts.Allow {
 		if (a.Rule == "" || a.Rule == rule) && source.Globs([]string{a.File}).Match(j.rel) {
 			return true

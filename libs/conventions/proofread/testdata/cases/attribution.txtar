@@ -1,0 +1,22 @@
+Credit to a tool or an agent, or an account of how the work was produced.
+-- hit/change-description --
+Generated with [Claude Code](https://claude.com/claude-code)
+- Pins the key. 🤖
+- Claude found the race.
+- The agent found the race.
+- Measured in this session.
+-- hit/reference --
+Co-Authored-By: someone
+This page was written with an AI assistant.
+As we saw earlier in this conversation, it fails.
+The cap settled after several iterations.
+-- hit/review-reply --
+Claude found the race in the map writes.
+The agent found it while testing.
+-- pass/reference --
+Every state was written by an agent. The agent found nothing. File imports are unavailable in this session.
+-- pass/change-description --
+- Wires the Claude Code hooks under `.claude/` and spells/harness/claude-code.
+- Hands the subagent its prompt through the hook.
+-- pass/review-reply --
+The claude-code harness reads it from the Claude Code hooks.

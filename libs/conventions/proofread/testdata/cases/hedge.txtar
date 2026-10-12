@@ -1,0 +1,153 @@
+Cases from labeling round 2026-10-10 (two labelers, adjudicated).
+A softener qualifying a claim.
+Cases from labeling round 3 (2026-10-11, validation, two labelers, adjudicated).
+-- hit/reference --
+The flag may help a slow runner.
+It aims to be fast and is arguably simpler.
+You should probably pin it.
+This could potentially fix the flake.
+Not tested on Linux. It probably holds.
+-- hit/change-description --
+- This might fix the flake.
+- The key can conceivably collide.
+-- pass/reference --
+A workspace may declare its own spells.
+The value may be empty.
+A wait that might still end is never refused.
+Nothing else may make it on your behalf.
+-- pass/change-description --
+- Not measured on Linux, where it might help.
+- Untested on Windows; probably fine.
+-- pass/reference whole --
+## Known limits
+
+It probably holds.
+-- hit/agent-reply --
+So whether the patches are safe depends on the flag, and that is probably the crux of your doubt.
+So the declaration was probably right, and the advice to lower it comes from an under-measurement.
+The other tool fixed it in its own session, so it probably is.
+**Why the lock is probably not needed once writes are atomic:**
+- The reconcile-versus-advance split probably isn't worth encoding.
+- Nothing is committed; this spans three packages, so it probably wants splitting into separate commits.
+- One hidden cost you probably don't know about: the guard's path mode loads every build file on each edit.
+- Pin-site discovery is the biggest new code and probably wants to be a spell concern, not a hardcoded list.
+Probably worth declaring the app's assets the same way.
+The current status bar is arguably the better occupant, since it carries live state.
+It saves another row, is a standard terminal idiom, and is arguably more correct.
+-- hit/commit-message --
+This update aims to improve audio handling across platforms.
+These changes aim to streamline the testing process.
+These changes aim to enhance code clarity across the settings module.
+These changes aim to improve the streaming docs.
+* update the vector store, which seems to have issues with upsert
+These changes aim to keep the configuration consistent.
+These changes aim to improve the clarity of the package's exports.
+The file is all natural language, so a symlink to it would probably work.
+The changes aim to make the content richer and easier to follow.
+These changes aim to clarify the upcoming tasks.
+This will hopefully make the retry cheaper.
+These tests aim to enhance the reliability of the tracker.
+-- fp/agent-reply --
+That contradiction is probably how this slipped through.
+-- fp/change-description whole --
+fix: correct the settings link
+
+## Checklist
+
+- [x] I've adhered to the style guide ([these lint rules](docs/style.md) might help!)
+-- pass/change-description whole --
+fix: restore the unselected icon color
+
+<agent_instructions>It seems like something changed in the new OS release to set the unselected icon color.</agent_instructions>
+-- pass/change-description whole --
+test: cover the empty upload
+
+> It seems like **no tests ran**.
+-- pass/change-description whole --
+refactor: share the IO test data
+
+<comment_new><body>
+All the IO tests should probably derive from one base class to share test data.
+</body></comment_new>
+-- pass/change-description whole --
+fix: ignore vertical tab in whitespace mode
+
+<issue_description>
+This should probably be true and match other engines, since the vertical tab should be ignored as whitespace.
+</issue_description>
+-- pass/change-description whole --
+docs: fill in thin API comments
+
+> USER INTENT: The user aims to improve the API comments by finding the thin ones and proposing edits.
+-- pass/change-description whole --
+fix: correct the graph height
+
+<issue_description>It seems to calculate the height well, but every time it is about 6% off.</issue_description>
+-- pass/agent-reply --
+The plan argues the op level is probably right but says to settle it before writing any code.
+- With the copied config, the version manager instead tries to look up versions with no token and gets a 403.
+-- pass/change-description --
+When a new contributor opens a pull request, the action tries to:
+The update command tries to reference a row before it is inserted.
+Retry logic tries to get the script from the local container using `get_script(hash)`.
+When `app run` tries to create local settings, the method walks up the directory tree.
+The front end then tries to build a link from the account name, but none is returned.
+- [ ] Identify the root cause: the `classify` method tries to call `.klass` on polymorphic reflections.
+-- pass/commit-message --
+- Addresses feedback: 'probably makes sense instead to fail the check'
+-- hit/commit-message --
+This method should probably be moved to the library as a high level version of get_sessions()
+These changes aim to resolve issues like unexpected gaps appearing during
+These changes aim to enhance the maintainability of the codebase by removing unnecessary dependencies.
+These changes aim to enhance the CI process by ensuring integration tests for the sync provider are executed, improving overall test coverage.
+- This change aims to enhance the functionality and flexibility of the test context setup.
+test: fix hopefully
+- All changes aim to enhance the robustness and reliability of runbook operations.
+These changes aim to enhance the maintainability and clarity of the sync backend implementation, aligning with recent updates in the RPC handling logic.
+These changes aim to strengthen the validation logic for species settings and enhance the reliability of the testing framework.
+This update aims to enhance the clarity of the documentation, making it easier for users to follow the content related to container orchestrators.
+These changes aim to enhance the testing setup for synchronization features and ensure proper configuration for the test environment.
+This enhancement aims to streamline response handling and improve testability within the API framework.
+These changes aim to
+These changes aim to improve the efficiency and reliability of species settings tests, ensuring that edge cases are properly handled and that tests run more quickly.
+These changes aim to standardize the endpoint naming and improve clarity in the sync provider implementation.
+Hopefully fix for the settings classes
+These changes aim to optimize memory management and synchronization in species tracking, ensuring better performance and reliability.
+These changes aim to improve clarity and maintainability of the documentation and changelog in relation to the recent updates in the sync backend.
+These changes aim to enhance the reliability of species settings management and streamline the testing process for better maintainability.
+These additions aim to improve code modularity, enhance
+-- hit/change-description --
+This PR aims to implement auto-focus functionality for the target name field when users click the edit button on goal targets.
+This update aims to enhance the clarity of the documentation, making it easier for users to follow the content related to container orchestrators.
+- **Division by zero**: Zero chunk sizes could potentially cause crashes in chunk calculations
+The rule aims to improve code readability and consistency across the frontend codebase by standardizing how dynamic class names are handled.
+This aims to eliminate repetitive, anxiety-inducing, and promotional content.
+This PR fixes issue #123 where knowledge added to agents doesn't seem to be effective, while knowledge in task descriptions works.
+Secondary sessions would only look at timeline events for prompts, missing potentially valuable problem statement context that could improve the session's understanding of the user's intent.
+This change aims to provide clearer guidance on integrating monitoring within scheduled pipelines, ensuring users can effectively manage alerts.
+This update aims to ensure our codebase consistently meets `lint -- -D warnings` and minimizes unnecessary string allocations.
+This change aims to guide developers towards a more object-oriented structure for new features and improvements.
+- **Before**: Attackers could potentially access files outside cache directories
+-- fp/change-description --
+- `pkg lint` *(fails: This package doesn't seem to be present in your lockfile)*
+- `pkg build` *(fails: package doesn't seem to be present in lockfile)*
+- Any other important info that could help to test that PR
+TASK DESCRIPTION: The user aims to modify the `product.json` file using a method that minimizes diffs and preserves the original formatting.
+USER INTENT: The user aims to implement a new "hello world" command in their project.
+USER INTENT: The user aims to create a simple "Hello World" extension.
+-- fp/change-description whole --
+docs: interpolate the product name
+
+**Potential negative side effects:**
+- The preprocessor runs on all markdown content, so any unintended `{{}}` patterns in documentation could be affected
+- Global string replacement could theoretically impact code examples that contain these patterns
+-- fp/change-description whole --
+feat: use the public field type
+
+**User**: You seem to have avoided using `from_bytes_unchecked` for all these little field element constants. This is a mistake.
+
+**Assistant**: [Fixed to use the public field type]
+-- fp/change-description whole --
+fix: block side-by-side installs of the preview
+
+User: I tested the pipeline build and all of my requirements seem to have been met (fuller testing tomorrow) aside from one weird case.
