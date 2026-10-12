@@ -61,8 +61,8 @@ magus graph export -o json  # the whole graph
 | charm      |      10+ | `magus query kind=charm`      | `cd`, `rw`, `mutable`                                                                                          |
 | module     | built in | `magus query kind=module`     |                                                                                                                |
 | method     | built in | `magus query kind=method`     |                                                                                                                |
-| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS3030`, `MGS1021`                                                                                |
-| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/manpage/magus-doctor.md`, `docs/reference/rules/index.md`, `docs/reference/proofread/index.md` |
+| diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3030`                                                                                |
+| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/manpage/magus-doctor.md`, `docs/reference/proofread/index.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                       |
 | file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                      |
 | function   |    2000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                  |
@@ -74,7 +74,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      58 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      59 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                               |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       9 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -85,7 +85,7 @@ magus graph export -o json  # the whole graph
 | [libs/scipbuzz](libs/scipbuzz/MAGUS.md)                                     |       8 | `magus query project=libs/scipbuzz`                   | `format`, `test`, `build`                                |
 | [libs/testlayout](libs/testlayout/MAGUS.md)                                 |       7 | `magus query project=libs/testlayout`                 | `format`, `test`, `build`                                |
 | [libs/textsearch](libs/textsearch/MAGUS.md)                                 |       6 | `magus query project=libs/textsearch`                 | `lint`, `test`, `install`                                |
-| [proto](proto/MAGUS.md)                                                     |       4 | `magus query project=proto`                           | `generate`, `ci`, `lint`                                 |
+| [proto](proto/MAGUS.md)                                                     |       5 | `magus query project=proto`                           | `generate`, `ci`, `format`                               |
 
 ## Project: magus
 
@@ -96,6 +96,7 @@ magus graph export -o json  # the whole graph
 | `image-scan`             | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.                                                                                                                                              |
 | `security`               | Runs govulncheck and gates on dependency license terms.                                                                                                                                                                        |
 | `man-generate`           | Renders the roff man pages into manpage/ and refreshes internal/cli/testdata/api.lock, both serialized from the internal/cli registry.                                                                                         |
+| `go-api-generate`        | Renders every exported declaration of the public Go packages (the list lives in cmd/magus-utils/public_api.go) into internal/cli/testdata/api-go.lock, beside the CLI's api.lock.                                              |
 | `pr-title`               | Fails a pull request title that is not a conventional commit subject, or whose subject is not imperative or carries a selling word.                                                                                            |
 | `pr-description`         | Fails a pull request whose title or description the guard's pull-request-text rule would deny.                                                                                                                                 |
 | `pr-changelog`           | Fails a feat, fix, perf or breaking pull request that ships code without a changelog fragment under changes/unreleased/, and any malformed fragment.                                                                           |
@@ -107,7 +108,7 @@ magus graph export -o json  # the whole graph
 | `mcp-tools-generate`     | Regenerates the MCP tool catalog (internal/handler/mcp/gen/registry.go) from the same std descriptors bindings_generate reads.                                                                                                 |
 | `job-generate`           | Regenerates the published job schemas (internal/job/gen/*.schema.json) from the structs that decode a job declaration and a holder's result.                                                                                   |
 | `spells-generate`        | Regenerates the Buzz value-type mirrors (internal/spell/gen/types) and the per-module host declarations (internal/spell/gen/decls).                                                                                            |
-| `mocks-generate`         | Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.                                                                                                                     |
+| `mocks-generate`         | Regenerates the testify mocks (mockery, driven by .mockery.yaml): into the interface's gen/mocks when other packages import the mock, beside it in mocks_test.go otherwise.                                                    |
 | `config-generate`        | Regenerates the CLI config-flag plumbing from internal/config/config.go.                                                                                                                                                       |
 | `spell-publish`          | Publishes every spell the binary ships as an OCI artifact under GHCR_SPELLS, tagged with the release version, write-once: a spell whose repository already carries the tag is kept unless the run is mutable.                  |
 | `spell-lock`             | Owns magus.lock.                                                                                                                                                                                                               |

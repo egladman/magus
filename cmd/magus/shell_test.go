@@ -1582,6 +1582,7 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 // The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
 // same run in the foreground passes, and the foreground limits parse as milliseconds.
 func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
 	root, cacheDir := t.TempDir(), t.TempDir()
@@ -1982,6 +1983,7 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 // compiled, so the hook after it loads warm: a cold cache costs one hook its time, never
 // every hook after it.
 func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
 	cache := t.TempDir()
@@ -2022,6 +2024,7 @@ func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
 // version control and answers no rule, which the guard takes for a lapse rather than for
 // "none" (askWorkspaceRules).
 func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
 	testkit.Isolate(t)
 	cache := t.TempDir()

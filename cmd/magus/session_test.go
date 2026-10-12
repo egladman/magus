@@ -287,6 +287,7 @@ func recordSessionIn(t *testing.T, root, workspace, inv string) {
 // The store is the repository's, shared by every worktree, so a bare `magus session` read
 // every checkout's invocations and a person could not tell which one was theirs.
 func TestSessionsListsThisCheckoutUnlessAll(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := t.TempDir()

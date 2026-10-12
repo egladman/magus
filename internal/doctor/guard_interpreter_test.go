@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -94,16 +93,6 @@ func TestCheckGuardBinaryFailsWhenTheHookInterpreterPrintsNoVersion(t *testing.T
 	assert.Equal(t, types.CheckFail, got.Status)
 	assert.Contains(t, got.Message, "did not answer `version`")
 	assert.Contains(t, got.Message, bin)
-}
-
-// writeInterpreter writes a stand-in hook interpreter and execs it once, outside any probe
-// budget. macOS assesses an executable on its first exec: at a load average of 40 that
-// took 1 to 17s against 6 to 38ms for the next exec of the same file, so a budget timed
-// from the first exec measured the assessment.
-func writeInterpreter(t *testing.T, path, script string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(path, []byte(script), 0o755))
-	_ = exec.CommandContext(t.Context(), path, "version").Run()
 }
 
 // onPath puts an executable magus on PATH and nothing else, so a case can state which

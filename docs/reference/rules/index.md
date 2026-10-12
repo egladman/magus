@@ -34,7 +34,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                      |
 | [lease-rebind](lease-rebind.md)                   | a leased worker rewriting who it is or what its own job row says                                     |
 | [lease-undeclared](lease-undeclared.md)           | a call graded under a lease id the job store has no row for, or a binding it tombstoned              |
-| [lease-vcs](lease-vcs.md)                         | a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout     |
+| [lease-vcs](lease-vcs.md)                         | a worker lease mutating version control, or committing outside its own branch and checkout           |
 | [lease-write](lease-write.md)                     | a leased write outside its write paths, or into a path it was denied or another lease owns           |
 | [merge-side-checkout](merge-side-checkout.md)     | a checkout of one merge side over a conflicted file, which discards the merge                        |
 | [notes-author](notes-author.md)                   | an agent authoring a human's note, whose only provenance is who wrote it                             |
@@ -45,6 +45,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store            |
 | [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
 | [whole-tree](whole-tree.md)                       | a whole-tree VCS reset, checkout, restore or clean, which cannot be undone                           |
+| [worker-background-run](worker-background-run.md) | a bound worker running a magus target in the background                                              |
 | [worker-check-only](worker-check-only.md)         | a bound worker running a target other than its row's check or one writing its write paths            |
 | [worktree-remove](worktree-remove.md)             | removing a worktree magus cannot prove holds nothing that would be lost                              |
 
@@ -58,6 +59,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [buzz-unbriefed](buzz-unbriefed.md)                     | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill  |
 | [capture-filter](capture-filter.md)                     | a filter over a run capture or log, which cuts the failure block apart                             |
 | [chained-run](chained-run.md)                           | magus runs sequenced with `&&` or `;`, which a pipe of the same stages runs ordered and fail-fast  |
+| [check-timeout](check-timeout.md)                       | a bound worker's magus run whose timeout is shorter than the target's last real run allows for     |
 | [checkpoint-state](checkpoint-state.md)                 | a command reaching for a tree's identity, which a revision alone cannot give                       |
 | [dependency-install](dependency-install.md)             | a raw package install that the cached install target already runs                                  |
 | [dependency-update](dependency-update.md)               | a raw dependency update outside a target's update charm                                            |
@@ -70,6 +72,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [graph-pipe](graph-pipe.md)                             | a read-only graph verb piped into a text filter, when magus projects the record itself             |
 | [graph-stale](graph-stale.md)                           | a graph read, or a graph-backed deny, while the graph describes another tree                       |
 | [grep-reader](grep-reader.md)                           | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body   |
+| [guard-unfinished](guard-unfinished.md)                 | earlier guard checks that never finished, so no rule judged their calls                            |
 | [hook-wiring](hook-wiring.md)                           | a write to the host wiring that decides whether these rules run at all                             |
 | [installed-skill](installed-skill.md)                   | a write to an installed skill copy, which re-installing discards                                   |
 | [instruction-write](instruction-write.md)               | a write to a cross-host instruction file, which every session loads whole                          |

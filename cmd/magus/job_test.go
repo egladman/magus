@@ -443,6 +443,7 @@ func execFixture(t *testing.T, rows ...types.Job) (root, cacheDir string) {
 // execRepoFixture is execFixture over a git repository holding the same magus.yaml.
 func execRepoFixture(t *testing.T, rows ...types.Job) (repo *testkit.Repo, cacheDir string) {
 	t.Helper()
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	repo = testkit.NewRepo(t, map[string]string{"magus.yaml": ""})
@@ -632,6 +633,7 @@ func TestJobExitResolvesARefInTheJobsCheckout(t *testing.T) {
 // checkout `magus query output` falls back to, so a resolver that searched other checkouts
 // would find the holder's own passing run there and certify it as the waiter's.
 func TestJobWaitEvidenceResolvesOnlyInTheWaitersCheckout(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	holder := testkit.NewRepo(t, map[string]string{"magus.yaml": "", "a.go": "package a\n"})
@@ -1080,6 +1082,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // that turns on the worker role denies it, the same line from the orchestrator would pass,
 // and the refusal names the target that compiles without linking the binary.
 func TestJobForkRefusesACheckTheGuardDeniesItsWorker(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyWorkerBuildRule, "run.go": "package run\n"}).Root()
@@ -1129,6 +1132,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // "elsewhere" directory, so a grade that took the process cwd for the call's directory
 // would deny the check.
 func TestGradeCheckJudgesFromTheWorkspaceNotTheWorkingDirectory(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
@@ -1180,6 +1184,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // its first grade must apply to the next. The edit tightens the rules: an edit that only
 // relaxed them would be held back by the approved sources and prove nothing.
 func TestCheckGraderReadsAnEditedRuleAgain(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyBuildFromElsewhereRule, "run.go": "package run\n"}).Root()
@@ -1228,6 +1233,7 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 // A deny that holds for the compiling check too is about the binary or the workspace, so
 // the fork is not refused over it and says the check was not graded.
 func TestJobForkIsNotRefusedByADenyThatHoldsForEveryCommand(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
 	testkit.Isolate(t)
 	global = globalFlags{}
 	root := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEveryWorkerRule, "run.go": "package run\n"}).Root()

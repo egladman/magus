@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 88)
+	assert.Len(t, got, 89)
 	assert.Equal(t, map[string]Decision{
 		"read-navigation": Advise,
 		"brief-command":   Advise,
