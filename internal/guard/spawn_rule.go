@@ -223,9 +223,12 @@ func agentSeenKind(agentID string) hint.MarkerKind {
 	return agentMarkerKind("agent-seen-", agentID)
 }
 
+// spawnedAgentPrefix starts the kind of every spawn record.
+const spawnedAgentPrefix hint.MarkerKind = "agent-spawned-"
+
 // spawnedAgentKind names the marker recording what a subagent was spawned as.
 func spawnedAgentKind(agentID string) hint.MarkerKind {
-	return agentMarkerKind("agent-spawned-", agentID)
+	return agentMarkerKind(string(spawnedAgentPrefix), agentID)
 }
 
 func agentMarkerKind(prefix, agentID string) hint.MarkerKind {
@@ -359,26 +362,49 @@ func mayHandOut(rows []types.Job, spawner, job string) bool {
 // carries the parent in its id. A title in any other form, or naming a job the store does
 // not hold live, names none.
 func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, bool) {
-	fields := strings.Fields(title)
-	if len(fields) != 2 || at.cacheDir == "" {
-		return types.Job{}, false
-	}
-	slash := strings.LastIndex(fields[0], "/")
-	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
+	if at.cacheDir == "" {
 		return types.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return types.Job{}, false
 	}
+	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
+	return spawnTitleRow(live, title)
+}
+
+// spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
+// tried as spawnTitleJob tries them, whatever the row's state.
+func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
+	fields := strings.Fields(title)
+	if len(fields) != 2 {
+		return types.Job{}, false
+	}
+	slash := strings.LastIndex(fields[0], "/")
+	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
+		return types.Job{}, false
+	}
 	for _, id := range []string{fields[1], fields[0][:slash] + "/" + fields[1]} {
-		for _, row := range rows {
-			if row.ID == id && row.State.Live() {
-				return row, true
-			}
+		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+			return rows[i], true
 		}
 	}
 	return types.Job{}, false
+}
+
+// spawnedJob reports whether one of the spawn records in facts attributed a worker to job:
+// its title names that row of rows, and its spawner could hand the job out.
+func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
+	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
+		rec, ok := readSpawnedRecord(facts, kind)
+		if !ok || rec.UntrustedJob != "" {
+			continue
+		}
+		if row, ok := spawnTitleRow(rows, rec.Description); ok && row.ID == job {
+			return true
+		}
+	}
+	return false
 }
 
 // caller is who this call comes from, as the job store keys a binding.
@@ -750,10 +776,17 @@ func lastContextTokens(path string) (int64, bool) {
 }
 
 func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {
-	if agentID == "" || facts.CacheDir() == "" {
+	if agentID == "" {
 		return spawnedAgent{}, false
 	}
-	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), spawnedAgentKind(agentID)))
+	return readSpawnedRecord(facts, spawnedAgentKind(agentID))
+}
+
+func readSpawnedRecord(facts hint.Gate, kind hint.MarkerKind) (spawnedAgent, bool) {
+	if facts.CacheDir() == "" {
+		return spawnedAgent{}, false
+	}
+	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
 	if err != nil {
 		return spawnedAgent{}, false
 	}

@@ -2357,6 +2357,8 @@ github.com/egladman/magus/types.KnowledgeVCS.LastCommit field string "json:\"las
 github.com/egladman/magus/types.KnowledgeVCS.LastModified field time.Time "json:\"last_modified\""
 github.com/egladman/magus/types.KnowledgeVCS.Path field string "json:\"path\""
 github.com/egladman/magus/types.KnowledgeVerdict type string
+github.com/egladman/magus/types.LandingReporter type interface
+github.com/egladman/magus/types.LandingReporter.UnlandedPaths imethod func(ctx context.Context, dir string, rev string, into string) ([]string, error)
 github.com/egladman/magus/types.Layer type struct
 github.com/egladman/magus/types.Layer.Declared field []string "json:\"declared\" yaml:\"declared\""
 github.com/egladman/magus/types.Layer.Dirs field []Dir "json:\"dirs\" yaml:\"dirs\""
