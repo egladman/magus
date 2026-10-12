@@ -3,6 +3,7 @@ package ci
 import (
 	"testing"
 
+	"github.com/egladman/magus/internal/ci/gen/mocks"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -139,30 +140,16 @@ func assertIDWidth(t *testing.T, maxShards, wantWidth int) {
 	}
 }
 
-// fixedPartitionForecaster is a ci.Forecaster that always returns a fixed
-// partition. Used to verify Build delegates correctly when the
-// forecaster option is set.
-type fixedPartitionForecaster struct {
-	calls    int
-	maxSeen  int
-	override [][]*types.Project
-}
-
-func (s *fixedPartitionForecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
-	s.calls++
-	s.maxSeen = maxShards
-	return s.override
-}
-
 func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b", "c", "d")
-	// Forecaster groups everything into one shard regardless of count.
-	f := &fixedPartitionForecaster{override: [][]*types.Project{projects}}
+	// Forecaster groups everything into one shard regardless of count. Build clamps the 8
+	// requested shards to the 4 projects before it asks.
+	f := mocks.NewMockForecaster(t)
+	f.EXPECT().Plan(projects, 4).Return([][]*types.Project{projects}).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)
-	assert.Equal(t, 1, f.calls)
 	require.Len(t, plan.Shards, 1)
 	assert.Len(t, plan.Shards[0].Projects, 4)
 }
@@ -171,7 +158,8 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b")
 	// Misbehaving forecaster: returns empty for non-empty input.
-	f := &fixedPartitionForecaster{override: nil}
+	f := mocks.NewMockForecaster(t)
+	f.EXPECT().Plan(projects, 2).Return(nil).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)

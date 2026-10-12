@@ -15,8 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/cache/gen/mocks"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -445,41 +447,38 @@ func TestSpellCacheRemoteSaveAndRestore(t *testing.T) {
 	})
 }
 
-// unreachableBackend answers every GetArtifact with err and counts the calls.
-type unreachableBackend struct {
-	err   error
-	calls int
-}
-
-func (b *unreachableBackend) Name() string                { return "unreachable" }
-func (b *unreachableBackend) Active(context.Context) bool { return true }
-func (b *unreachableBackend) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
-	b.calls++
-	return nil, b.err
-}
-func (b *unreachableBackend) PutArtifact(context.Context, string, string, io.Reader) error {
-	return errors.ErrUnsupported
-}
-func (b *unreachableBackend) HasArtifact(context.Context, string, string) (bool, error) {
-	return false, errors.ErrUnsupported
+// unreachableBackend mocks an active backend whose store never answers. The test adds the
+// GetArtifact expectation, since how often the store is asked is what it asserts.
+func unreachableBackend(t *testing.T) *mocks.MockRemoteBackend {
+	t.Helper()
+	backend := mocks.NewMockRemoteBackend(t)
+	backend.EXPECT().Name().Return("unreachable").Maybe()
+	backend.EXPECT().Active(mock.Anything).Return(true).Maybe()
+	return backend
 }
 
 func TestSpellCacheRestoreBuildsColdWhenTheStoreCannotAnswer(t *testing.T) {
 	pub, _ := genKeypair(t)
-	backend := &unreachableBackend{err: errors.New(`http.download: Get "https://blob.example.com/x": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)}
+	backend := unreachableBackend(t)
+	// An older key would wait out the same timeout against the same store, so it asks once.
+	backend.EXPECT().GetArtifact(mock.Anything, spellCacheNamespace, mock.Anything).
+		Return(nil, errors.New(`http.download: Get "https://blob.example.com/x": context deadline exceeded (Client.Timeout exceeded while awaiting headers)`)).
+		Once()
 	_, c := openSigned(t, backend, nil, [][]byte{pub})
 
 	got, err := c.restoreSpellCache(t.Context(), testSpellCacheKey(), destRoots(t), time.Now())
 	require.NoError(t, err, "a store that cannot answer builds cold rather than failing the run")
 	assert.Equal(t, SpellCacheResult{}, got, "nothing restored and nothing refused")
-	assert.Equal(t, 1, backend.calls, "an older key would wait out the same timeout against the same store")
 }
 
 func TestSpellCacheRestoreStopsWhenTheCallerCancels(t *testing.T) {
 	pub, _ := genKeypair(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, c := openSigned(t, &unreachableBackend{err: errors.New("request canceled")}, nil, [][]byte{pub})
+	backend := unreachableBackend(t)
+	backend.EXPECT().GetArtifact(mock.Anything, spellCacheNamespace, mock.Anything).
+		Return(nil, errors.New("request canceled")).Maybe()
+	_, c := openSigned(t, backend, nil, [][]byte{pub})
 
 	_, err := c.restoreSpellCache(ctx, testSpellCacheKey(), destRoots(t), time.Now())
 	require.ErrorIs(t, err, context.Canceled, "a cancelled run stops rather than building cold")

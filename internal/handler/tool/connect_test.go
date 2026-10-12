@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/egladman/magus/internal/handler/tool/gen/mocks"
 	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -300,17 +302,19 @@ func TestBoundsNilWhenUnconstrained(t *testing.T) {
 	assert.Equal(t, "25", b.Below)
 }
 
-// lifecycleWS is a workspace that answers its lifecycle provider from a function, counting
-// how often it was asked.
+// lifecycleWS is a workspace whose lifecycle provider is a mock. The mock is embedded for
+// the one lifecycle call; the project list is served by projectWorkspace.
 type lifecycleWS struct {
 	projectWorkspace
-	calls  *int
-	answer func() (types.LifecycleStatus, []spells.Lifecycle, error)
+	*mocks.MockLifecycleSource
 }
 
-func (w lifecycleWS) Lifecycles(context.Context, ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error) {
-	*w.calls++
-	return w.answer()
+func newLifecycleWS(t *testing.T, project *types.Project) lifecycleWS {
+	t.Helper()
+	return lifecycleWS{
+		projectWorkspace:   projectWorkspace{projects: []*types.Project{project}},
+		MockLifecycleSource: mocks.NewMockLifecycleSource(t),
+	}
 }
 
 func goProject(version string) *types.Project {
@@ -328,14 +332,12 @@ var liveGo = types.LifecycleStatus{
 }
 
 func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
-	calls := 0
-	s := NewService(lifecycleWS{
-		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.25.3 darwin/arm64")}},
-		calls:            &calls,
-		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
-			return liveGo, []spells.Lifecycle{{Key: "go", Cycles: []spells.ReleaseCycle{{Cycle: "1.25", EOL: "2026-08-19"}}}}, nil
-		},
-	})
+	ws := newLifecycleWS(t, goProject("go version go1.25.3 darwin/arm64"))
+	// A live answer is reused; a dashboard refresh is not a fetch.
+	ws.EXPECT().Lifecycles(mock.Anything, mock.Anything).
+		Return(liveGo, []spells.Lifecycle{{Key: "go", Cycles: []spells.ReleaseCycle{{Cycle: "1.25", EOL: "2026-08-19"}}}}, nil).
+		Once()
+	s := NewService(ws)
 
 	msg := list(t, s, "")
 	row := msg.Projects[0].Tools[0]
@@ -349,19 +351,16 @@ func TestListToolsCarriesTheLifecycleColumns(t *testing.T) {
 	assert.Equal(t, "2026-09-24T07:44:41Z", msg.Lifecycle.AsOf.AsTime().Format(time.RFC3339))
 
 	list(t, s, "")
-	assert.Equal(t, 1, calls, "a live answer is reused; a dashboard refresh is not a fetch")
 }
 
 // An answer that did not arrive is reused only briefly, so a host that comes back is seen.
 func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
-	calls := 0
-	s := NewService(lifecycleWS{
-		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
-		calls:            &calls,
-		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
-			return types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleUnreached, Detail: "no route to host"}, nil, nil
-		},
-	})
+	ws := newLifecycleWS(t, goProject("go version go1.26.6 darwin/arm64"))
+	// Asked on both listings: the unreached answer is not reused.
+	ws.EXPECT().Lifecycles(mock.Anything, mock.Anything).
+		Return(types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleUnreached, Detail: "no route to host"}, nil, nil).
+		Times(2)
+	s := NewService(ws)
 	s.ttl = 0
 
 	msg := list(t, s, "")
@@ -369,18 +368,14 @@ func TestListToolsReasksAnUnreachedProviderSooner(t *testing.T) {
 	assert.Equal(t, "no route to host", msg.Lifecycle.Detail)
 	assert.Equal(t, toolv1.Support_SUPPORT_UNKNOWN, msg.Projects[0].Tools[0].Support)
 	list(t, s, "")
-	assert.Equal(t, 2, calls)
 }
 
 func TestListToolsSurfacesAMalformedAnswer(t *testing.T) {
-	calls := 0
-	s := NewService(lifecycleWS{
-		projectWorkspace: projectWorkspace{projects: []*types.Project{goProject("go version go1.26.6 darwin/arm64")}},
-		calls:            &calls,
-		answer: func() (types.LifecycleStatus, []spells.Lifecycle, error) {
-			return types.LifecycleStatus{}, nil, errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is ""`)
-		},
-	})
+	ws := newLifecycleWS(t, goProject("go version go1.26.6 darwin/arm64"))
+	ws.EXPECT().Lifecycles(mock.Anything, mock.Anything).
+		Return(types.LifecycleStatus{}, nil, errors.New(`spell "endoflife-date": list_lifecycles key "go": field "asOf" is ""`)).
+		Once()
+	s := NewService(ws)
 	_, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))

@@ -9,62 +9,41 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/internal/sandbox/gen/mocks"
 )
 
-// capturingRecorder captures the binding-layer sandbox metric calls. It satisfies
-// MetricsRecorder, which the live observability.Provider also satisfies structurally.
-type capturingRecorder struct {
-	checks   []checkCall
-	dropped  []droppedCall
-	launches []string
-}
-
-type checkCall struct{ access, decision, project string }
-type droppedCall struct {
-	project string
-	n       int64
-}
-
-func (r *capturingRecorder) RecordSandboxCheck(_ context.Context, access, decision, project string) {
-	r.checks = append(r.checks, checkCall{access, decision, project})
-}
-
-func (r *capturingRecorder) RecordSandboxEnvDropped(_ context.Context, project string, n int64) {
-	r.dropped = append(r.dropped, droppedCall{project, n})
-}
-
-func (r *capturingRecorder) RecordSandboxApply(_ context.Context, _ float64, outcome, scope string) {
-	r.launches = append(r.launches, scope+"/"+outcome)
-}
-
 func TestRecordLaunch(t *testing.T) {
-	rec := &capturingRecorder{}
+	rec := mocks.NewMockMetricsRecorder(t)
+	// The last launch has no recorder on its ctx, so it records nothing.
+	mock.InOrder(
+		rec.EXPECT().RecordSandboxApply(mock.Anything, 0.01, "applied", "child").Once(),
+		rec.EXPECT().RecordSandboxApply(mock.Anything, 0.0, "unsupported", "child").Once(),
+	)
 	ctx := WithMetrics(context.Background(), rec)
 	RecordLaunch(ctx, 0.01, "applied")
 	RecordLaunch(ctx, 0, "unsupported")
 	RecordLaunch(context.Background(), 0, "applied")
-	assert.Equal(t, []string{"child/applied", "child/unsupported"}, rec.launches)
 }
 
 func TestChecksRecordAllowAndDeny(t *testing.T) {
 	dir := filesystem.ResolveRulePath(t.TempDir())
 	policy := &Policy{FS: filesystem.Ruleset{Rules: []filesystem.Rule{{Path: dir, Read: true}}}}
-	rec := &capturingRecorder{}
+	rec := mocks.NewMockMetricsRecorder(t)
+	mock.InOrder(
+		rec.EXPECT().RecordSandboxCheck(mock.Anything, "read", "allow", "").Once(),
+		rec.EXPECT().RecordSandboxCheck(mock.Anything, "read", "deny", "").Once(),
+		rec.EXPECT().RecordSandboxCheck(mock.Anything, "exec", "deny", "").Once(),
+	)
 	ctx := WithMetrics(context.Background(), rec)
 
 	require.NoError(t, policy.CheckRead(ctx, filepath.Join(dir, "f")))
 	assert.Error(t, policy.CheckRead(ctx, "/definitely/not/allowed/f"))
 	assert.Error(t, policy.CheckExec(ctx, filepath.Join(dir, "f")))
-
-	assert.Equal(t, []checkCall{
-		{access: "read", decision: "allow"},
-		{access: "read", decision: "deny"},
-		{access: "exec", decision: "deny"},
-	}, rec.checks)
 }
 
 func TestChecksWithoutARecorderStillCheck(t *testing.T) {
@@ -73,15 +52,14 @@ func TestChecksWithoutARecorderStillCheck(t *testing.T) {
 }
 
 func TestRecordEnvDropped(t *testing.T) {
-	rec := &capturingRecorder{}
+	rec := mocks.NewMockMetricsRecorder(t)
+	rec.EXPECT().RecordSandboxEnvDropped(mock.Anything, "", int64(2)).Once()
 	ctx := WithMetrics(context.Background(), rec)
 
 	RecordEnvDropped(ctx, &Policy{EnvDropped: []string{"AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN"}}, "go")
-	assert.Equal(t, []droppedCall{{n: 2}}, rec.dropped)
 
-	rec.dropped = nil
+	// Nothing dropped, nothing recorded: the one expected call is spent, so a second fails.
 	RecordEnvDropped(ctx, &Policy{}, "go")
-	assert.Empty(t, rec.dropped, "nothing dropped, nothing recorded")
 }
 
 // logged runs fn with the default logger captured at info level.

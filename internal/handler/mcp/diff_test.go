@@ -2,14 +2,15 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/changeset"
+	"github.com/egladman/magus/internal/handler/mcp/gen/mocks"
 	"github.com/egladman/magus/internal/interp/bindings"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/testkit/register"
@@ -28,46 +29,51 @@ const agentPatch = `diff --git a/a.go b/a.go
 +added
 `
 
-// onePatchWorkspace stands in for the workspace: it serves one patch and one annotated changeset.
-type onePatchWorkspace struct {
+// patchTree is the tree the mocked workspace serves: one patch and one annotated changeset.
+// A test moves the tree by setting patch after the tool is built.
+type patchTree struct {
 	patch string
-	calls int
 	// branch is the review's branch. Empty, no provider is consulted and the tool reports no
 	// threads, which is the ordinary state of most workspaces and what most tests exercise around.
 	branch string
 }
 
-func (f *onePatchWorkspace) WorkingDiff(context.Context, []string) (string, error) {
-	return f.patch, nil
-}
-
-func (f *onePatchWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
-	return types.ReviewOrigin{Branch: f.branch}
-}
-
-func (f *onePatchWorkspace) Diff(_ context.Context, paths []string) (types.Diff, error) {
-	f.calls++
-	files := make([]types.DiffFile, 0, len(paths))
-	for _, p := range paths {
-		files = append(files, types.DiffFile{Path: p, Role: types.DiffRoleSource})
+// source mocks the workspace over the tree. Every method is Maybe: a test asserts on the
+// calls it cares about with AssertNumberOfCalls.
+func (p *patchTree) source(t *testing.T) *mocks.MockWorkspaceSource {
+	t.Helper()
+	src := mocks.NewMockWorkspaceSource(t)
+	diff := func(_ context.Context, paths []string) (types.Diff, error) {
+		files := make([]types.DiffFile, 0, len(paths))
+		for _, path := range paths {
+			files = append(files, types.DiffFile{Path: path, Role: types.DiffRoleSource})
+		}
+		return types.Diff{Base: "working", Files: files}, nil
 	}
-	return types.Diff{Base: "working", Files: files}, nil
+	src.EXPECT().WorkingDiff(mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, []string) (string, error) { return p.patch, nil }).Maybe()
+	src.EXPECT().ReviewOrigin(mock.Anything).
+		RunAndReturn(func(context.Context) types.ReviewOrigin { return types.ReviewOrigin{Branch: p.branch} }).Maybe()
+	src.EXPECT().Diff(mock.Anything, mock.Anything).RunAndReturn(diff).Maybe()
+	// op=thread must set SkipOrder: a thread record reads the code around one thread and must
+	// never pay for the reading order of the whole changeset. Any other options fail the test.
+	src.EXPECT().DiffWith(mock.Anything, mock.Anything, mock.MatchedBy(func(o types.DiffOptions) bool { return o.SkipOrder })).
+		RunAndReturn(func(ctx context.Context, paths []string, _ types.DiffOptions) (types.Diff, error) {
+			return diff(ctx, paths)
+		}).Maybe()
+	return src
 }
 
-// DiffWith serves op=thread, which must set SkipOrder: a thread record reads the code around one
-// thread and must never pay for the reading order of the whole changeset.
-func (f *onePatchWorkspace) DiffWith(ctx context.Context, paths []string, opts types.DiffOptions) (types.Diff, error) {
-	if !opts.SkipOrder {
-		return types.Diff{}, errors.New("the thread asked for the reading order")
-	}
-	return f.Diff(ctx, paths)
+func newDiffTool(t *testing.T, tree *patchTree) *diffTool {
+	t.Helper()
+	return diffToolOver(t, tree.patch, tree.source(t))
 }
 
-func newDiffTool(t *testing.T, src *onePatchWorkspace) *diffTool {
+func diffToolOver(t *testing.T, patch string, src workspaceSource) *diffTool {
 	t.Helper()
 	store := changeset.NewStore(t.TempDir())
 	// The human's act: a console fetch is what creates the session an agent may join.
-	store.Attach("/w", "working", types.Diff{Base: "working"}, changeset.PatchDigest(src.patch))
+	store.Attach("/w", "working", types.Diff{Base: "working"}, changeset.PatchDigest(patch))
 	return &diffTool{sessions: store, workspaceRoot: "/w", src: src}
 }
 
@@ -79,7 +85,7 @@ func invoke(t *testing.T, tool *diffTool, params map[string]any) (spells.InvokeR
 // What makes every other capability usable: comment and suggest take a 0-based hunk index,
 // and an op=state that did not show one would leave the coordinate to be guessed.
 func TestStateCarriesThePatchAndItsHunks(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	resp, err := invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
@@ -99,29 +105,30 @@ func TestStateCarriesThePatchAndItsHunks(t *testing.T) {
 // An agent cannot see the tree, so a session frozen at whatever a browser last attached is
 // served to exactly the party least able to notice.
 func TestStateRecomputesWhenTheTreeHasMoved(t *testing.T) {
-	src := &onePatchWorkspace{patch: agentPatch}
-	tool := newDiffTool(t, src)
+	tree := &patchTree{patch: agentPatch}
+	src := tree.source(t)
+	tool := diffToolOver(t, tree.patch, src)
 
 	// Same tree: replayed, not recomputed.
 	resp, err := invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
 	assert.False(t, resp.Data.(diffState).Recomputed)
-	assert.Zero(t, src.calls)
+	src.AssertNumberOfCalls(t, "Diff", 0)
 
 	// The tree moves underneath the held session.
-	src.patch = "diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
+	tree.patch = "diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
 	resp, err = invoke(t, tool, map[string]any{"op": "state"})
 	require.NoError(t, err)
 
 	st := resp.Data.(diffState)
 	assert.True(t, st.Recomputed, "the changeset is recomputed rather than replayed")
-	assert.Equal(t, 1, src.calls)
+	src.AssertNumberOfCalls(t, "Diff", 1)
 	require.Len(t, st.Diff.Files, 1)
 	assert.Equal(t, "b.go", st.Diff.Files[0].Path, "the session now describes the current tree")
 }
 
 func TestCommentRefusesACoordinateTheChangesetDoesNotHave(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	// A file with no changes at all, the exact mistake a stale session invited.
 	_, err := invoke(t, tool, map[string]any{
@@ -147,7 +154,7 @@ func TestCommentRefusesACoordinateTheChangesetDoesNotHave(t *testing.T) {
 }
 
 func TestSuggestValidatesTheSameCoordinate(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	_, err := invoke(t, tool, map[string]any{
 		"op": "suggest", "path": "a.go", "hunk": float64(9), "reason": "worth a look",
@@ -159,7 +166,7 @@ func TestSuggestValidatesTheSameCoordinate(t *testing.T) {
 // The identity boundary is the claim that survived a hostile persona test; it must keep doing
 // so now that comments carry an agent label.
 func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	resp, err := invoke(t, tool, map[string]any{
 		"op": "comment", "path": "a.go", "body": "hi",
@@ -188,7 +195,7 @@ func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
 // sends "full" must see byte-identical output to what op=state has always returned: the
 // serialized session, patch, and hunks, with nothing narrowed.
 func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	// Built the same way op=state has always built its answer, independent of
 	// projectDiffState, the reference every case below is pinned against.
@@ -219,7 +226,7 @@ func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
 // (since a projection struct simply has no field for what it does not) absence of
 // everything else, checked on the serialized wire rather than trusted from the Go type alone.
 func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	// Force one recompute so the annotated changeset actually carries a file: the fixture's
 	// initial Attach carries an empty Diff, and Counts.Files would be a misleading 0 otherwise.
@@ -274,10 +281,10 @@ func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
 // The summary projection keeps Recomputed (the one bit that says an answer was freshly
 // computed rather than replayed) even though it drops everything else state adds.
 func TestProjectionSummaryCarriesRecomputedThrough(t *testing.T) {
-	src := &onePatchWorkspace{patch: agentPatch}
-	tool := newDiffTool(t, src)
+	tree := &patchTree{patch: agentPatch}
+	tool := newDiffTool(t, tree)
 
-	src.patch = "diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
+	tree.patch ="diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
 	resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": "summary"})
 	require.NoError(t, err)
 
@@ -288,7 +295,7 @@ func TestProjectionSummaryCarriesRecomputedThrough(t *testing.T) {
 }
 
 func TestProjectionRejectsAnUnknownValue(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "bogus"})
 	require.Error(t, err)
@@ -300,7 +307,7 @@ func TestProjectionRejectsAnUnknownValue(t *testing.T) {
 // projectDiffState only shapes op=state by design: a writing op keeps returning the full
 // session no matter what this parameter is set to.
 func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch})
 
 	resp, err := invoke(t, tool, map[string]any{
 		"op": "comment", "path": "a.go", "body": "hi", "projection": "summary",
@@ -330,7 +337,7 @@ func TestNoAgentReachableOpSpeaksToAPerson(t *testing.T) {
 	withReviewThreads(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(1), "author": "priya", "body": "why?"},
 	})
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	for _, op := range []string{"reply", "publish", "approve", "viewed", "read", "mark", "ack", "seen", "cursor", "reading"} {
 		_, err := invoke(t, tool, map[string]any{"op": op, "id": "t1", "thread": "t1", "body": "on it"})
@@ -397,7 +404,7 @@ var reviewThreads = []any{
 // is not the session: none of the session's bodies come with it.
 func TestThreadOpReturnsTheThreadRecordAndNoSession(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t2"})
 	require.NoError(t, err)
@@ -433,8 +440,8 @@ func TestThreadOpReturnsTheThreadRecordAndNoSession(t *testing.T) {
 // op=thread only reads, so it answers before any session is open, as the console's route does.
 func TestThreadOpNeedsNoSession(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	src := &onePatchWorkspace{patch: agentPatch, branch: "feat/x"}
-	tool := &diffTool{sessions: changeset.NewStore(t.TempDir()), workspaceRoot: "/w", src: src}
+	tree := &patchTree{patch: agentPatch, branch: "feat/x"}
+	tool := &diffTool{sessions: changeset.NewStore(t.TempDir()), workspaceRoot: "/w", src: tree.source(t)}
 
 	resp, err := invoke(t, tool, map[string]any{"op": "thread", "thread": "t1"})
 	require.NoError(t, err)
@@ -444,7 +451,7 @@ func TestThreadOpNeedsNoSession(t *testing.T) {
 
 func TestThreadOpRefusesWhatNamesNoThread(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	_, err := invoke(t, tool, map[string]any{"op": "thread"})
 	require.Error(t, err)
@@ -458,7 +465,7 @@ func TestThreadOpRefusesWhatNamesNoThread(t *testing.T) {
 // projection narrows the session and nothing else: one thread is op=thread's.
 func TestProjectionThreadIsNotAProjection(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "thread", "thread": "t1"})
 	require.Error(t, err)
@@ -469,7 +476,7 @@ func TestProjectionThreadIsNotAProjection(t *testing.T) {
 // thread, a second one replaces the first, and the session shows it to the person.
 func TestOutlineIsHeldForThePersonKeyedByTheThreadId(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	_, err := invoke(t, tool, map[string]any{
 		"op": "outline", "thread": "t2", "topics": []any{"is the cache write racy?", "who calls Put"},
@@ -492,7 +499,7 @@ func TestOutlineIsHeldForThePersonKeyedByTheThreadId(t *testing.T) {
 
 func TestOutlineRefusesWhatIsNotAPointer(t *testing.T) {
 	withReviewThreads(t, reviewThreads)
-	tool := newDiffTool(t, &onePatchWorkspace{patch: agentPatch, branch: "feat/x"})
+	tool := newDiffTool(t, &patchTree{patch: agentPatch, branch: "feat/x"})
 
 	cases := map[string]map[string]any{
 		"no thread":                {"op": "outline", "topics": []any{"a"}},

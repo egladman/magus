@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -270,21 +272,6 @@ func TestReportImportError(t *testing.T) {
 	require.NoError(t, sink.take(), "take drains the sink")
 }
 
-// stepProbe records the policy a target body's ctx carries; TimeCall hands it the
-// ctx the body runs under.
-type stepProbe struct {
-	observability.Provider
-	policies []*sandbox.Policy
-}
-
-func (p *stepProbe) Enabled() bool { return true }
-
-func (p *stepProbe) RecordBuzzExec(ctx context.Context, _ float64, _, _ string) {
-	p.policies = append(p.policies, sandbox.PolicyFromContext(ctx))
-}
-
-func (p *stepProbe) RecordBuzzJITRun(context.Context) {}
-
 // A ctx.needs child never passes through runTarget, so its body must scope its own
 // step: here ci is the caller, as when ci composes test, and only test declares the
 // grant, as the root magusfile's test declares /proc.
@@ -321,7 +308,17 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 
-	rec := &stepProbe{}
+	// TimeCall hands the provider the ctx a target body runs under, so the policy that ctx
+	// carries is captured from each RecordBuzzExec.
+	var policies []*sandbox.Policy
+	rec := mocks.NewMockProvider(t)
+	rec.EXPECT().Enabled().Return(true).Maybe()
+	rec.EXPECT().RecordBuzzJITRun(mock.Anything).Maybe()
+	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(ctx context.Context, _ float64, _, _ string) {
+			policies = append(policies, sandbox.PolicyFromContext(ctx))
+		}).
+		Times(2)
 	ctx := observability.WithProvider(types.WithWorkspace(sandbox.WithPolicy(t.Context(), base), ws), rec)
 	parent := withDeclaredStep(ctx, root, "ci")
 	_, err = load.Targets["test"](parent, nil)
@@ -329,9 +326,9 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	_, err = load.Targets["ci"](parent, nil)
 	require.NoError(t, err)
 
-	require.Len(t, rec.policies, 2)
-	require.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
-	assert.Error(t, rec.policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
+	require.Len(t, policies, 2)
+	require.NoError(t, policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
+	assert.Error(t, policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
 	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
 }
 
