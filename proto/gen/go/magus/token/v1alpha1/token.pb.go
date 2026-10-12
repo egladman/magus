@@ -536,7 +536,7 @@ var File_magus_token_v1alpha1_token_proto protoreflect.FileDescriptor
 
 const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"\n" +
-	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xa2\x01\n" +
+	" magus/token/v1alpha1/token.proto\x12\x14magus.token.v1alpha1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa2\x01\n" +
 	"\x05Grant\x123\n" +
 	"\x06tokens\x18\x01 \x01(\x0e2\x1b.magus.token.v1alpha1.LevelR\x06tokens\x12-\n" +
 	"\x03mcp\x18\x02 \x01(\x0e2\x1b.magus.token.v1alpha1.LevelR\x03mcp\x125\n" +

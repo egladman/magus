@@ -13,71 +13,15 @@ import (
 	"time"
 )
 
-// fakeWS is a minimal types.WorkspaceRepository for audit tests. Only
-// All() is exercised; the other methods panic so a test misuse fails
-// loud instead of silently.
-type fakeWS struct {
+// listedProjectsWorkspace is a types.WorkspaceRepository that lists the projects it
+// was given. Only All is exercised; the embedded nil interface panics on any other
+// method, so a test that reaches past it fails loud.
+type listedProjectsWorkspace struct {
+	types.WorkspaceRepository
 	projects []*types.Project
 }
 
-// Compile-time proof the mock implements the full interface, so widening
-// WorkspaceRepository (as DescribeCharms did) fails to build here immediately
-// rather than in a downstream test's argument position.
-var _ types.WorkspaceRepository = (*fakeWS)(nil)
-
-func (f *fakeWS) All() []*types.Project        { return f.projects }
-func (f *fakeWS) Root() string                 { panic("not used") }
-func (f *fakeWS) Get(string) *types.Project    { panic("not used") }
-func (f *fakeWS) Graph() (*types.Graph, error) { panic("not used") }
-func (f *fakeWS) VCSOptions() types.VCSOptions { panic("not used") }
-func (f *fakeWS) Where(string) (*types.Project, bool) {
-	panic("not used")
-}
-
-func (f *fakeWS) ExpandPath(types.Target) ([]types.Target, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) ExpandCwd(types.Target) ([]types.Target, bool, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) ExpandAffected(context.Context, string, string) ([]types.Target, string, bool, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) Affected(context.Context, string) (*types.AffectedResult, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) AffectedFromPaths(context.Context, []string) (*types.AffectedResult, error) {
-	panic("not used")
-}
-func (f *fakeWS) ListCharms(context.Context) ([]types.CharmEntry, error) {
-	panic("not used")
-}
-func (f *fakeWS) ListTargets(context.Context) ([]types.TargetEntry, error) { panic("not used") }
-func (f *fakeWS) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
-	panic("not used")
-}
-func (f *fakeWS) ListProjects(context.Context) (types.ProjectsOutput, error) {
-	panic("not used")
-}
-func (f *fakeWS) Workspace(context.Context, types.WorkspaceConfig) (types.WorkspaceEntry, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) EvaluateTarget(context.Context, types.Target) ([]types.EvaluatedTarget, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) EvaluateProjects(context.Context) (types.EvaluatedProjectsOutput, error) {
-	panic("not used")
-}
-
-func (f *fakeWS) ClassifyFiles(context.Context, []string) ([]types.FileEntry, error) {
-	panic("not used")
-}
+func (w *listedProjectsWorkspace) All() []*types.Project { return w.projects }
 
 // writeFile creates path with content and an explicit mtime so tests
 // don't race with the filesystem's clock resolution.
@@ -137,7 +81,7 @@ func TestBeginSkipsWithoutWorkspace(t *testing.T) {
 }
 
 func TestBeginSkipsWithoutDescendants(t *testing.T) {
-	ws := &fakeWS{projects: []*types.Project{{Path: "api", Dir: "/tmp/api"}}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{{Path: "api", Dir: "/tmp/api"}}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	a := Begin(ctx, &types.Project{Path: "api", Dir: "/tmp/api"}, true)
 	assert.Nil(t, a, "Begin without descendants should return nil")
@@ -147,7 +91,7 @@ func TestBeginSkipsActiveDispatchDescendant(t *testing.T) {
 	tmp := t.TempDir()
 	parent := &types.Project{Path: "api", Dir: filepath.Join(tmp, "api")}
 	child := &types.Project{Path: "api/docs", Dir: filepath.Join(tmp, "api", "docs")}
-	ws := &fakeWS{projects: []*types.Project{parent, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	dispatch := &types.ActiveDispatch{}
 	dispatch.Mark("api")
@@ -168,7 +112,7 @@ func TestFinishWarnsOnDescendantWrite(t *testing.T) {
 
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ws := &fakeWS{projects: []*types.Project{parent, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	// Active dispatch holds only the parent — child writes here are violations.
 	onlyParent := &types.ActiveDispatch{}
@@ -200,7 +144,7 @@ func TestFinishSilentOnNoChanges(t *testing.T) {
 
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ws := &fakeWS{projects: []*types.Project{parent, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
@@ -221,7 +165,7 @@ func TestRootProjectTreatsAllOthersAsDescendants(t *testing.T) {
 	require.NoError(t, os.MkdirAll(childDir, 0o755), "mkdir")
 	root := &types.Project{Path: ".", Dir: rootDir}
 	child := &types.Project{Path: "api", Dir: childDir}
-	ws := &fakeWS{projects: []*types.Project{root, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{root, child}}
 
 	descs := listDescendants(ws, root, nil)
 	require.Len(t, descs, 1, "root project should see api as descendant; got %v", descs)
@@ -248,7 +192,7 @@ func TestNestedDescendantAttribution(t *testing.T) {
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	inner := &types.Project{Path: "api/docs", Dir: innerDir}
 	leaf := &types.Project{Path: "api/docs/v2", Dir: leafDir}
-	ws := &fakeWS{projects: []*types.Project{parent, inner, leaf}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, inner, leaf}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
@@ -280,7 +224,7 @@ func TestReportCapsLargeFileLists(t *testing.T) {
 
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ws := &fakeWS{projects: []*types.Project{parent, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, child}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	ctx = types.WithActiveDispatch(ctx, func() *types.ActiveDispatch { d := &types.ActiveDispatch{}; d.Mark("api"); return d }())
 
@@ -312,7 +256,7 @@ func TestWalkHonoursContextCancellation(t *testing.T) {
 // registered descendants. Must allocate as little as possible and never
 // touch the filesystem.
 func BenchmarkBeginNoDescendants(b *testing.B) {
-	ws := &fakeWS{projects: []*types.Project{{Path: "api", Dir: "/tmp/api"}}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{{Path: "api", Dir: "/tmp/api"}}}
 	ctx := types.WithWorkspace(context.Background(), ws)
 	p := &types.Project{Path: "api", Dir: "/tmp/api"}
 	b.ReportAllocs()
@@ -392,7 +336,7 @@ func TestMarkedMidRunIsNotAViolation(t *testing.T) {
 
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ws := &fakeWS{projects: []*types.Project{parent, child}}
+	ws := &listedProjectsWorkspace{projects: []*types.Project{parent, child}}
 
 	dispatch := &types.ActiveDispatch{}
 	ctx := types.WithWorkspace(context.Background(), ws)
@@ -428,7 +372,7 @@ func TestFinishNamesTheTargetWhoseOutputMatches(t *testing.T) {
 		"mocks-generate": {{Glob: "**/gen/mocks/*.go"}},
 	}}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ctx := types.WithWorkspace(context.Background(), &fakeWS{projects: []*types.Project{parent, child}})
+	ctx := types.WithWorkspace(context.Background(), &listedProjectsWorkspace{projects: []*types.Project{parent, child}})
 
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a)
@@ -474,7 +418,7 @@ func TestFinishCatchesAReplacementThatKeepsMtimeAndSize(t *testing.T) {
 
 	parent := &types.Project{Path: "api", Dir: parentDir}
 	child := &types.Project{Path: "api/docs", Dir: childDir}
-	ctx := types.WithWorkspace(context.Background(), &fakeWS{projects: []*types.Project{parent, child}})
+	ctx := types.WithWorkspace(context.Background(), &listedProjectsWorkspace{projects: []*types.Project{parent, child}})
 
 	a := Begin(ctx, parent, true)
 	require.NotNil(t, a)
@@ -500,7 +444,7 @@ func auditTree(t *testing.T, names ...string) (*types.Project, context.Context) 
 		writeFile(t, filepath.Join(dir, "src", "guide.md"), "# guide", time.Unix(1_700_000_000, 0))
 		projects = append(projects, &types.Project{Path: "api/" + name, Dir: dir})
 	}
-	return parent, types.WithWorkspace(t.Context(), &fakeWS{projects: projects})
+	return parent, types.WithWorkspace(t.Context(), &listedProjectsWorkspace{projects: projects})
 }
 
 // crossed renders the MGS3001 error Finish returns for api's lint target and desc.

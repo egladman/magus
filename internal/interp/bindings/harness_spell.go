@@ -3,6 +3,7 @@ package bindings
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/egladman/magus/internal/agent"
@@ -75,7 +76,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	} else if promptsResp.Data != nil {
-		if err := decodeHarnessPrompts(promptsResp.Data, &d); err != nil {
+		if err := decodeHarnessJSON(promptsResp.Data, &d.Prompts); err != nil {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessPromptsContract, err)
 		}
 	}
@@ -89,7 +90,7 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
 		}
 	} else if agentsResp.Data != nil {
-		if err := decodeHarnessAgents(agentsResp.Data, &d); err != nil {
+		if err := decodeHarnessJSON(agentsResp.Data, &d.Agents); err != nil {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessAgentsContract, err)
 		}
 	}
@@ -99,50 +100,44 @@ func loadHarnessFromSpell(ctx context.Context, id string) (agent.HarnessDescript
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessSettingsContract, err)
 		}
 	} else if settingsResp.Data != nil {
-		if err := decodeHarnessSettings(settingsResp.Data, &d); err != nil {
+		if err := decodeHarnessJSON(settingsResp.Data, &d.Settings); err != nil {
 			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessSettingsContract, err)
+		}
+	}
+	limitsResp, err := drv.Invoke(ctx, spells.InvokeRequest{Target: spells.HarnessLimitsContract})
+	if err != nil {
+		if !isMissingHarnessOp(err) {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessLimitsContract, err)
+		}
+	} else if limitsResp.Data != nil {
+		if err := decodeHarnessJSON(limitsResp.Data, &d.Limits); err != nil {
+			return agent.HarnessDescriptor{}, "", false, fmt.Errorf("harness spell %q: %s: %w", id, spells.HarnessLimitsContract, err)
 		}
 	}
 	return d, "spell:" + id, true, nil
 }
 
-// decodeHarnessSettings reads the settings list through the descriptor's own JSON shape,
-// like prompts.
-func decodeHarnessSettings(data any, d *agent.HarnessDescriptor) error {
-	if _, ok := data.([]any); !ok {
-		return fmt.Errorf("want list, got %T", data)
+// decodeHarnessJSON reads a spell's return value into the descriptor field through the
+// field's own JSON shape, so a spell and a JSON descriptor cannot disagree about a key.
+// A slice field wants a list and any other a map; on error into is left as it was.
+func decodeHarnessJSON[T any](data any, into *T) error {
+	if reflect.TypeFor[T]().Kind() == reflect.Slice {
+		if _, ok := data.([]any); !ok {
+			return fmt.Errorf("want list, got %T", data)
+		}
+	} else if _, ok := data.(map[string]any); !ok {
+		return fmt.Errorf("want map, got %T", data)
 	}
 	raw, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, &d.Settings)
-}
-
-// decodeHarnessAgents reads the agents list through the descriptor's own JSON shape, like
-// prompts.
-func decodeHarnessAgents(data any, d *agent.HarnessDescriptor) error {
-	if _, ok := data.([]any); !ok {
-		return fmt.Errorf("want list, got %T", data)
-	}
-	raw, err := json.Marshal(data)
-	if err != nil {
+	var decoded T
+	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return err
 	}
-	return json.Unmarshal(raw, &d.Agents)
-}
-
-// decodeHarnessPrompts reads the prompts list through the descriptor's own JSON shape, so a
-// spell and a JSON descriptor cannot disagree about a field.
-func decodeHarnessPrompts(data any, d *agent.HarnessDescriptor) error {
-	if _, ok := data.([]any); !ok {
-		return fmt.Errorf("want list, got %T", data)
-	}
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(raw, &d.Prompts)
+	*into = decoded
+	return nil
 }
 
 func isMissingHarnessOp(err error) bool {

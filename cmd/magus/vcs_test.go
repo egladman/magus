@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -108,18 +109,17 @@ func TestSplitMaintained(t *testing.T) {
 // So: keep every path that exists; keep a path gone from disk but still tracked, since
 // that is how a deletion or rename gets recorded; drop only what is neither.
 func TestFilterStageable(t *testing.T) {
-	dir := initGitRepo(t)
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
 
 	// tracked.txt is committed, then deleted from disk without `git rm`, the "old half
 	// of a rename" case: gone from disk, still tracked.
-	trackedPath := filepath.Join(dir, "tracked.txt")
-	require.NoError(t, os.WriteFile(trackedPath, []byte("x"), 0o644))
-	runGit(t, dir, "add", "tracked.txt")
-	runGit(t, dir, "commit", "-m", "seed")
+	trackedPath := repo.Write("tracked.txt", "x")
+	repo.Commit("seed", nil)
 	require.NoError(t, os.Remove(trackedPath))
 
 	// present.txt exists on disk and was never committed: the ordinary new-file case.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
+	repo.Write("present.txt", "y")
 
 	// stale.txt is a declared output that never existed on disk and was never tracked,
 	// e.g. libs/diag/MAGUS.md after libs/diag was renamed to libs/diagnostics. This is
@@ -156,17 +156,16 @@ func TestFilterStageableNonGit(t *testing.T) {
 //
 // where every one of the first three paths was silently left unstaged.
 func TestStagePathsSurvivesStalePath(t *testing.T) {
-	dir := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "present.txt"), []byte("y"), 0o644))
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
+	repo.Write("present.txt", "y")
 
 	staged, dropped, err := stagePaths(context.Background(), dir, resolveGitDriver(t, dir), []string{"present.txt", "stale.txt"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"present.txt"}, staged)
 	assert.Equal(t, []string{"stale.txt"}, dropped, "the stale path is reported, not silently discarded")
 
-	out, err := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only").Output()
-	require.NoError(t, err)
-	assert.Equal(t, "present.txt\n", string(out),
+	assert.Equal(t, "present.txt", repo.Git("diff", "--cached", "--name-only"),
 		"present.txt must be staged even though stale.txt was handed to the same call")
 }
 
@@ -247,32 +246,14 @@ func TestMergeDriverRelPath(t *testing.T) {
 	})
 
 	t.Run("hg passes an absolute path, made workspace-relative", func(t *testing.T) {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("magus.project({})\n"), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Magusfile("magus.project({})\n")
+		root := w.Root()
 
 		got, err := mergeDriverRelPath(root, filepath.Join(root, "gen", "catalog.md"))
 		require.NoError(t, err)
 		assert.Equal(t, "gen/catalog.md", got)
 	})
-}
-
-// initGitRepo creates a temp git repo with an identity, so a commit can be made in it.
-// Skip-on-missing-git follows TestParseBisectCulprit.
-func initGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "test")
-	return dir
-}
-
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-	require.NoErrorf(t, err, "git %v: %s", args, out)
 }
 
 // TestSplitExplainedOutputsCountsCommittedSources pins the fix for a false positive that
@@ -341,4 +322,17 @@ func TestCheckpointLineCarriesThePreservedHandle(t *testing.T) {
 
 	cp.Preserved = "e5e5e5e5"
 	assert.Equal(t, "abc123 main dirty d1d1 preserved e5e5e5e5", checkpointLine(cp))
+}
+
+// A settle hook never rebuilds ./magus, so when the merge outran the binary the failure has
+// to name the command that does; any other load failure keeps the plain wording.
+func TestSettleLoadFailureNamesTheBootstrapForAStaleBinary(t *testing.T) {
+	stale := types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, `unknown built-in rule "architecture-unbriefed"`)
+	got := settleLoadFailure(stale)
+	assert.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus, "the cause stays in the chain")
+	assert.Contains(t, got.Error(), "older than the merged tree")
+	assert.Contains(t, got.Error(), "`GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .`")
+
+	plain := settleLoadFailure(errors.New("magusfile: syntax error"))
+	assert.Equal(t, "the workspace did not load, so nothing regenerated: magusfile: syntax error", plain.Error())
 }

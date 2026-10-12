@@ -12,21 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// observerStub records the TargetEnd notifications it receives.
-type observerStub struct {
+// targetEndObserver records the TargetEnd notifications it receives.
+type targetEndObserver struct {
 	mu   sync.Mutex
 	ends map[string]error
 }
 
-func newObserverStub() *observerStub { return &observerStub{ends: map[string]error{}} }
+func newTargetEndObserver() *targetEndObserver { return &targetEndObserver{ends: map[string]error{}} }
 
-func (o *observerStub) TargetEnd(_ context.Context, name string, _ time.Duration, err error) {
+func (o *targetEndObserver) TargetEnd(_ context.Context, name string, _ time.Duration, err error) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.ends[name] = err
 }
 
-func (o *observerStub) snapshot() map[string]error {
+func (o *targetEndObserver) snapshot() map[string]error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	out := make(map[string]error, len(o.ends))
@@ -58,7 +58,7 @@ func TestPoolObserverFiresPerTarget(t *testing.T) {
 	p := observerTestPool(t)
 	defer func() { _ = p.Close() }()
 
-	obs := newObserverStub()
+	obs := newTargetEndObserver()
 	ctx := WithObserver(WithTargetRuns(context.Background(), NewTargetRuns()), obs)
 
 	require.NoError(t, p.Dispatch(ctx, []string{"ok"}, nil))
@@ -105,7 +105,7 @@ func (o *countingObserver) count() int {
 
 // --- PoolObserver ---
 
-type poolObserverStub struct {
+type recordingPoolObserver struct {
 	mu       sync.Mutex
 	acquires []bool // reused flag per acquire
 	warms    int
@@ -113,20 +113,20 @@ type poolObserverStub struct {
 	lastIdle int
 }
 
-func (o *poolObserverStub) SessionAcquire(_ context.Context, reused bool, idle int) {
+func (o *recordingPoolObserver) SessionAcquire(_ context.Context, reused bool, idle int) {
 	o.mu.Lock()
 	o.acquires = append(o.acquires, reused)
 	o.lastIdle = idle
 	o.mu.Unlock()
 }
 
-func (o *poolObserverStub) SessionWarm(_ context.Context, _ time.Duration, _ error) {
+func (o *recordingPoolObserver) SessionWarm(_ context.Context, _ time.Duration, _ error) {
 	o.mu.Lock()
 	o.warms++
 	o.mu.Unlock()
 }
 
-func (o *poolObserverStub) SessionRelease(_ context.Context, evicted bool, idle int) {
+func (o *recordingPoolObserver) SessionRelease(_ context.Context, evicted bool, idle int) {
 	o.mu.Lock()
 	o.releases = append(o.releases, evicted)
 	o.lastIdle = idle
@@ -140,7 +140,7 @@ func TestPoolObserverColdThenReuse(t *testing.T) {
 	p := observerTestPool(t)
 	defer func() { _ = p.Close() }()
 
-	obs := &poolObserverStub{}
+	obs := &recordingPoolObserver{}
 	// No memo: each Dispatch must actually run "ok" (a shared memo would dedupe the
 	// second call and skip its checkout, hiding the reuse we want to observe).
 	ctx := WithPoolObserver(context.Background(), obs)
@@ -169,7 +169,7 @@ func TestPoolObserverUnsetNoop(t *testing.T) {
 
 // --- CompileObserver ---
 
-type compileObserverStub struct {
+type recordingCompileObserver struct {
 	phases  []vmPhaseRecord
 	imports []importRecord
 }
@@ -185,11 +185,11 @@ type importRecord struct {
 	err     error
 }
 
-func (o *compileObserverStub) Phase(phase CompilePhase, _ time.Duration, err error) {
+func (o *recordingCompileObserver) Phase(phase CompilePhase, _ time.Duration, err error) {
 	o.phases = append(o.phases, vmPhaseRecord{phase: phase, err: err})
 }
 
-func (o *compileObserverStub) Import(path string, outcome ImportOutcome, _ time.Duration, err error) {
+func (o *recordingCompileObserver) Import(path string, outcome ImportOutcome, _ time.Duration, err error) {
 	o.imports = append(o.imports, importRecord{path: path, outcome: outcome, err: err})
 }
 
@@ -200,7 +200,7 @@ func TestCompileObserverPhases(t *testing.T) {
 	s := NewSession(ctx, WithEmbedded())
 	defer func() { _ = s.Close() }()
 
-	obs := &compileObserverStub{}
+	obs := &recordingCompileObserver{}
 	s.SetCompileObserver(obs)
 
 	require.NoError(t, s.Exec(ctx, `var x = 1 + 2;`))
@@ -220,7 +220,7 @@ func TestCompileObserverImportNative(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	s.SetNativeModule("widget", vmpackage.NewMap())
-	obs := &compileObserverStub{}
+	obs := &recordingCompileObserver{}
 	s.SetCompileObserver(obs)
 
 	require.NoError(t, s.Exec(ctx, `import "widget";`))
@@ -262,7 +262,7 @@ func TestFaultHookCaughtHostError(t *testing.T) {
 
 // --- WrapDirect ---
 
-type directObserverStub struct {
+type recordingDirectObserver struct {
 	calls []directRecord
 }
 
@@ -271,7 +271,7 @@ type directRecord struct {
 	err  error
 }
 
-func (o *directObserverStub) DirectCall(name string, _ time.Duration, err error) {
+func (o *recordingDirectObserver) DirectCall(name string, _ time.Duration, err error) {
 	o.calls = append(o.calls, directRecord{name: name, err: err})
 }
 
@@ -282,7 +282,7 @@ func TestWrapDirectRecords(t *testing.T) {
 	s := NewSession(ctx, WithEmbedded())
 	defer func() { _ = s.Close() }()
 
-	obs := &directObserverStub{}
+	obs := &recordingDirectObserver{}
 	inner := func(context.Context, []vmpackage.Value) (vmpackage.Value, error) {
 		return vmpackage.IntValue(7), nil
 	}

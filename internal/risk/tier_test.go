@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeProver answers from fixed tables, so the tier rules are exercised without a
+// tableProver answers from fixed tables, so the tier rules are exercised without a
 // toolchain.
-type fakeProver struct {
+type tableProver struct {
 	equivalent bool
 	hits       map[string]PackageHit
 	unplaced   map[string]string
@@ -23,11 +23,11 @@ type fakeProver struct {
 	err     error
 }
 
-func (f fakeProver) Equivalent(string, string, string) (bool, string) {
+func (f tableProver) Equivalent(string, string, string) (bool, string) {
 	return f.equivalent, "same syntax tree"
 }
 
-func (f fakeProver) Place(context.Context, string, []string) (Placement, error) {
+func (f tableProver) Place(context.Context, string, []string) (Placement, error) {
 	if f.err != nil {
 		return Placement{}, f.err
 	}
@@ -139,15 +139,15 @@ func TestAssessTierRules(t *testing.T) {
 	hit := PackageHit{Package: "fx/a", Module: ".", Why: "Go package fx/a"}
 	outcomes := map[string]func(path string) map[string]Prover{
 		"no prover":  func(string) map[string]Prover { return nil },
-		"equivalent": func(string) map[string]Prover { return map[string]Prover{".go": fakeProver{equivalent: true}} },
+		"equivalent": func(string) map[string]Prover { return map[string]Prover{".go": tableProver{equivalent: true}} },
 		"placed": func(p string) map[string]Prover {
-			return map[string]Prover{".go": fakeProver{hits: map[string]PackageHit{p: hit}}}
+			return map[string]Prover{".go": tableProver{hits: map[string]PackageHit{p: hit}}}
 		},
 		"unplaced": func(p string) map[string]Prover {
-			return map[string]Prover{".go": fakeProver{unplaced: map[string]string{p: "generator code"}}}
+			return map[string]Prover{".go": tableProver{unplaced: map[string]string{p: "generator code"}}}
 		},
 		"prover fails": func(string) map[string]Prover {
-			return map[string]Prover{".go": fakeProver{err: errors.New("go list: exit 1")}}
+			return map[string]Prover{".go": tableProver{err: errors.New("go list: exit 1")}}
 		},
 	}
 	cases := []struct {
@@ -246,7 +246,7 @@ func TestAssessReaderGates(t *testing.T) {
 	assert.Equal(t, []string{"magus run lint . site --no-default-charms", "magus run render site --no-default-charms"}, gateLines(withComment),
 		"lint already runs x-generate, so only the reader lint does not reach is added")
 
-	placed := fakeProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}}}
+	placed := tableProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}}}
 	withGo := Assess(context.Background(), in(map[string]Prover{".go": placed}, guide, Classified{Path: "a/a.go", Class: ClassCode}))
 	assert.Equal(t, []string{"magus run lint . --no-default-charms", "magus run build . --no-default-charms",
 		"magus run test . --no-default-charms (go::go-test narrowed to fx/a)", "magus run ci site --no-default-charms"}, gateLines(withGo),
@@ -270,7 +270,7 @@ func TestAssessCommentOnlyAReaderDeclares(t *testing.T) {
 // TestAssessProseTheTestTargetReads: a prose path the narrowable test target itself
 // declares needs that target whole.
 func TestAssessProseTheTestTargetReads(t *testing.T) {
-	placed := fakeProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}}}
+	placed := tableProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}}}
 	in := fixtureInputs(map[string]Prover{".go": placed},
 		Classified{Path: "CHANGELOG.md", Class: ClassProse, Why: "prose"}, Classified{Path: "a/a.go", Class: ClassCode})
 	in.Claims[0].Claims = append(in.Claims[0].Claims, types.FileClaim{Project: ".", Target: "test", Role: "source", Glob: "CHANGELOG.md"})
@@ -310,7 +310,7 @@ func gateLines(rep types.RiskReport) []string {
 // prose by class, and inheriting a verdict over it skipped the tests that read it.
 func TestAssessEmbeddedProse(t *testing.T) {
 	skill := "internal/agent/skills/run/SKILL.md"
-	prover := fakeProver{hits: map[string]PackageHit{skill: {Package: "fx/skills", Module: ".", Why: "embedded by Go package fx/skills (go:embed)"}},
+	prover := tableProver{hits: map[string]PackageHit{skill: {Package: "fx/skills", Module: ".", Why: "embedded by Go package fx/skills (go:embed)"}},
 		closure: map[string][]string{"fx/skills": {"fx/agent"}}}
 	rep := Assess(context.Background(), fixtureInputs(map[string]Prover{".go": prover},
 		Classified{Path: skill, Class: ClassProse, Why: `matches "**/*.md" (built-in default)`}))
@@ -365,7 +365,7 @@ func TestAssessGeneratedOutput(t *testing.T) {
 // TestAssessCodeEquivalenceNeedsBothSides: a path the base cannot supply is never
 // proven equivalent, whatever the prover would have said.
 func TestAssessCodeEquivalenceNeedsBothSides(t *testing.T) {
-	in := fixtureInputs(map[string]Prover{".go": fakeProver{equivalent: true}}, Classified{Path: "a/a.go", Class: ClassCode})
+	in := fixtureInputs(map[string]Prover{".go": tableProver{equivalent: true}}, Classified{Path: "a/a.go", Class: ClassCode})
 	in.Read = func(context.Context, string) (string, string, error) { return "", "", errors.New("absent at base") }
 	assert.Equal(t, types.RiskFull, Assess(context.Background(), in).Tier)
 	in.Read = nil
@@ -387,7 +387,7 @@ func TestAssessGates(t *testing.T) {
 		in.Affected = []string{".", "docs", "site"}
 		return in
 	}
-	placed := fakeProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}},
+	placed := tableProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: ".", Why: "Go package fx/a"}},
 		closure: map[string][]string{"fx/a": {"fx/b"}}}
 
 	tests := []struct {
@@ -424,7 +424,7 @@ func TestAssessGates(t *testing.T) {
 		},
 		{
 			name: "a module no project is rooted at is full",
-			in: fixtureInputs(map[string]Prover{".go": fakeProver{hits: map[string]PackageHit{"libs/x/x.go": {Package: "fx/x", Module: "libs/x"}}}},
+			in: fixtureInputs(map[string]Prover{".go": tableProver{hits: map[string]PackageHit{"libs/x/x.go": {Package: "fx/x", Module: "libs/x"}}}},
 				Classified{Path: "libs/x/x.go", Class: ClassCode}),
 			tier: types.RiskFull,
 			gate: []string{"magus run ci . --no-default-charms"},
@@ -448,7 +448,7 @@ func TestAssessGates(t *testing.T) {
 // TestAssessScopedWithoutANarrowableTest: a project whose test target runs no op the
 // prover narrows runs the invoked target whole, and says why.
 func TestAssessScopedWithoutANarrowableTest(t *testing.T) {
-	in := fixtureInputs(map[string]Prover{".go": fakeProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: "."}}}},
+	in := fixtureInputs(map[string]Prover{".go": tableProver{hits: map[string]PackageHit{"a/a.go": {Package: "fx/a", Module: "."}}}},
 		Classified{Path: "a/a.go", Class: ClassCode})
 	in.Projects[0].TargetSpellOps = nil
 	rep := Assess(context.Background(), in)

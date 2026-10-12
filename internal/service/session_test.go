@@ -13,15 +13,15 @@ import (
 func TestSessionAcquireReportsOwnership(t *testing.T) {
 	tests := []struct {
 		name         string
-		runner       *fakeRunner
+		runner       *countingRunner
 		broker       func(context.Context, string, spells.Service) (bool, error)
 		wantOwned    bool
 		wantBrokered bool
 	}{
-		{"in-process start", &fakeRunner{}, nil, true, false},
-		{"in-process adopt", &fakeRunner{adopt: true}, nil, false, false},
-		{"broker started it", &fakeRunner{}, func(context.Context, string, spells.Service) (bool, error) { return true, nil }, true, true},
-		{"broker adopted it", &fakeRunner{}, func(context.Context, string, spells.Service) (bool, error) { return false, nil }, false, true},
+		{"in-process start", &countingRunner{}, nil, true, false},
+		{"in-process adopt", &countingRunner{adopt: true}, nil, false, false},
+		{"broker started it", &countingRunner{}, func(context.Context, string, spells.Service) (bool, error) { return true, nil }, true, true},
+		{"broker adopted it", &countingRunner{}, func(context.Context, string, spells.Service) (bool, error) { return false, nil }, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestSessionAcquireReportsOwnership(t *testing.T) {
 // release for a brokered key, and the session no longer holds it at ReleaseAll.
 func TestSessionReleaseDropsOneReference(t *testing.T) {
 	var released []string
-	sess := NewSession(New(&fakeRunner{}, time.Hour),
+	sess := NewSession(New(&countingRunner{}, time.Hour),
 		func(context.Context, string, spells.Service) (bool, error) { return true, nil },
 		func(_ context.Context, key string) { released = append(released, key) },
 	)
@@ -54,7 +54,7 @@ func TestSessionReleaseDropsOneReference(t *testing.T) {
 // TestScopeReleasesWhatAScriptHeld pins the end of a script: whatever it acquired and
 // did not release is released by the scope, and an in-process service it owns stops.
 func TestScopeReleasesWhatAScriptHeld(t *testing.T) {
-	f := &fakeRunner{}
+	f := &countingRunner{}
 	ctx, sc := WithScope(context.Background())
 	require.Same(t, sc, ScopeFrom(ctx))
 

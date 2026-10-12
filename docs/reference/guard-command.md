@@ -91,10 +91,32 @@ already spoke and is added to one that did, and nothing it returns lifts a built
 deny. On a command magus itself served as a `next`, its advice stands down and its deny
 still holds.
 
-A rule that raises, runs past three seconds, or returns something other than a verdict
-judges nothing: the built-ins apply alone and the agent is told once per session that
-the workspace rule failed. Registering twice, from a project's magusfile, or with a
-non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+A rule that raises or returns something other than a verdict judges nothing: the
+built-ins apply alone and the agent is told once per session that the workspace rule
+failed. Registering twice, from a project's magusfile, or with a non-function stops the
+workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+
+A hook judgment answers within seven seconds of the hook starting, inside the host's
+own hook timeout. Loading the rules, resolving the committed rule, calling it, and
+calling the working tree's rule share that deadline: each phase gets its share of what
+is left, so one that answers early leaves its time to the ones after it. A phase that
+runs out denies a command that changes state, since letting it through would run it
+unjudged, and lets a read through with a note naming the phase and its budget. A check
+with no host waiting on it, such as `magus job fork` grading a check before the worker
+exists, gets two minutes instead, and one that runs out is denied as not graded.
+
+A write to a file the guard loads, such as the root magusfile, goes through with a note
+when its judgment runs out of time and no policy change is pending, or the committed rule
+answered: refusing it would leave a slow committed rule with no way to be fixed. With an
+uncommitted policy change and no answer from the committed rule, it is denied like any
+other write.
+
+A hook the host stops waiting for leaves a mark, made before the rules load, and the
+session's next judgment reports how many of its checks never finished
+([`guard-unfinished`](rules/guard-unfinished.md)). The host stopped waiting when the hook
+process it started is gone, or when the judgment ran past the hook timeout the host's
+harness declares in `harness_limits`. A host whose harness declares none is not taken to
+have given up on a slow judgment. A workspace cannot set that notice.
 
 When a file the root magusfile's load read differs from the checked-out commit, the rule
 runs from both the working tree and the committed sources, files it imports included,

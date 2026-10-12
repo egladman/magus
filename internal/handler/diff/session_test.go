@@ -15,29 +15,28 @@ import (
 	"github.com/egladman/magus/internal/interp/bindings"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
-type fakePatchSource struct {
-	patch string
-	err   error
-	// gotPaths records what the handler passed through, so the scoping tests assert on the
-	// call rather than on a response that would look identical either way.
-	gotPaths []string
-}
-
-func (f *fakePatchSource) WorkingDiff(_ context.Context, paths []string) (string, error) {
-	f.gotPaths = paths
-	return f.patch, f.err
+// answeringSource mocks a patchSource that answers any WorkingDiff with patch and err. A
+// test that asserts on the paths the handler passes through sets its own expectation
+// instead, so the scoping tests assert on the call rather than on a response that would
+// look identical either way.
+func answeringSource(t *testing.T, patch string, err error) *mockPatchSource {
+	t.Helper()
+	src := newMockPatchSource(t)
+	src.EXPECT().WorkingDiff(mock.Anything, mock.Anything).Return(patch, err).Maybe()
+	return src
 }
 
 func TestDiffHandler_ReturnsPatch(t *testing.T) {
-	src := &fakePatchSource{patch: "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"}
-	h := NewPatchHandler(src, nil)
+	const patch = "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"
+	h := NewPatchHandler(answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusOK {
@@ -47,8 +46,8 @@ func TestDiffHandler_ReturnsPatch(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
-	if out.Patch != src.patch {
-		t.Errorf("patch not passed through verbatim:\ngot  %q\nwant %q", out.Patch, src.patch)
+	if out.Patch != patch {
+		t.Errorf("patch not passed through verbatim:\ngot  %q\nwant %q", out.Patch, patch)
 	}
 	if out.Clean {
 		t.Error("a non-empty patch must not report clean")
@@ -63,7 +62,7 @@ func TestDiffHandler_ReturnsPatch(t *testing.T) {
 // a trailing newline for an empty diff.
 func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 	for _, patch := range []string{"", "\n", "  \n\t"} {
-		h := NewPatchHandler(&fakePatchSource{patch: patch}, nil)
+		h := NewPatchHandler(answeringSource(t, patch, nil), nil)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 		var out diffResponse
@@ -77,30 +76,26 @@ func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 }
 
 func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
-	src := &fakePatchSource{}
+	src := newMockPatchSource(t)
+	src.EXPECT().WorkingDiff(mock.Anything, []string{"a.go", "b.go"}).Return("", nil).Once()
 	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch?path=a.go&path=b.go", nil))
-	if len(src.gotPaths) != 2 || src.gotPaths[0] != "a.go" || src.gotPaths[1] != "b.go" {
-		t.Errorf("want [a.go b.go], got %q", src.gotPaths)
-	}
 }
 
 // An empty `path=` must scope to NOTHING, not to the empty pathspec; every backend reads
 // that as the whole repository, which is the opposite of what the caller asked for.
 func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
-	src := &fakePatchSource{}
+	src := newMockPatchSource(t)
+	src.EXPECT().WorkingDiff(mock.Anything, []string{"real.go"}).Return("", nil).Once()
 	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch?path=&path=+&path=real.go", nil))
-	if len(src.gotPaths) != 1 || src.gotPaths[0] != "real.go" {
-		t.Errorf("want only [real.go], got %q", src.gotPaths)
-	}
 }
 
 // The error names the server's workspace path, so it stays in the log.
 func TestDiffHandler_ErrorReturns500(t *testing.T) {
-	h := NewPatchHandler(&fakePatchSource{err: errors.New("git -C /Users/dev/repo diff: boom")}, nil)
+	h := NewPatchHandler(answeringSource(t, "", errors.New("git -C /Users/dev/repo diff: boom")), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -116,7 +111,7 @@ func TestDiffHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewPatchHandler(&fakePatchSource{err: console.ErrNoWorkspace}, nil)
+	h := NewPatchHandler(answeringSource(t, "", console.ErrNoWorkspace), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -131,10 +126,10 @@ func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
 // neither the path nor the error.
 func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "gone")
-	src := &fakePatchSource{patch: "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"}
-	h := NewContextHandler(root, src, nil)
+	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(src.patch)+"&start=3&end=3", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("want 503, got %d: %s", w.Code, w.Body.String())
 	}
@@ -144,7 +139,7 @@ func TestContextHandler_MissingRootReturns503WithoutThePath(t *testing.T) {
 }
 
 func TestDiffHandler_RejectsNonGet(t *testing.T) {
-	h := NewPatchHandler(&fakePatchSource{}, nil)
+	h := NewPatchHandler(answeringSource(t, "", nil), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -157,10 +152,10 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "source.go"), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	src := &fakePatchSource{patch: "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"}
-	h := NewContextHandler(root, src, nil)
+	const patch = "diff --git a/source.go b/source.go\n@@ -3 +3 @@\n-three\n+three\n"
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(src.patch)+"&start=3&end=3&radius=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=source.go&as_of="+changeset.PatchDigest(patch)+"&start=3&end=3&radius=1", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -168,12 +163,12 @@ func TestContextHandler_ReturnsBoundedWorkingTreeLines(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
-	want := contextResponse{Path: "source.go", AsOf: changeset.PatchDigest(src.patch), Start: 2, Lines: []string{"two", "three", "four"}}
+	want := contextResponse{Path: "source.go", AsOf: changeset.PatchDigest(patch), Start: 2, Lines: []string{"two", "three", "four"}}
 	require.Equal(t, want, out)
 }
 
 func TestContextHandler_RejectsPathEscape(t *testing.T) {
-	h := NewContextHandler(t.TempDir(), &fakePatchSource{}, nil)
+	h := NewContextHandler(t.TempDir(), answeringSource(t, "", nil), nil)
 	for _, path := range []string{"../secret", ".."} {
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+path+"&start=1&end=1", nil))
@@ -193,10 +188,10 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	src := &fakePatchSource{patch: "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"}
-	h := NewContextHandler(root, src, nil)
+	const patch = "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"
+	h := NewContextHandler(root, answeringSource(t, patch, nil), nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(src.patch)+"&start=1&end=1", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path=private.go&as_of="+changeset.PatchDigest(patch)+"&start=1&end=1", nil))
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d: %s", w.Code, w.Body.String())
 	}
@@ -208,7 +203,9 @@ func TestContextHandler_RejectsPathsOutsideTheReviewedSnapshot(t *testing.T) {
 func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *testing.T) {
 	root := t.TempDir()
 	patch := "diff --git a/reviewed.go b/reviewed.go\n@@ -1 +1 @@\n-old\n+new\n"
-	src := &fakePatchSource{patch: patch}
+	src := newMockPatchSource(t)
+	src.EXPECT().WorkingDiff(mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, []string) (string, error) { return patch, nil }).Maybe()
 	h := NewContextHandler(root, src, nil)
 	for name, body := range map[string]string{
 		"reviewed.go": "package test\n",
@@ -240,9 +237,9 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 	} {
 		// Add each target to the patch before testing the filesystem contract; a file outside the
 		// snapshot must be rejected before it reveals whether it is a directory or a large file.
-		src.patch = "diff --git a/" + tc.name + " b/" + tc.name + "\n@@ -1 +1 @@\n-old\n+new\n"
+		patch = "diff --git a/" + tc.name + " b/" + tc.name + "\n@@ -1 +1 @@\n-old\n+new\n"
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+tc.name+"&as_of="+changeset.PatchDigest(src.patch)+"&start=1&end=1", nil))
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/context?path="+tc.name+"&as_of="+changeset.PatchDigest(patch)+"&start=1&end=1", nil))
 		if w.Code != tc.want {
 			t.Fatalf("%s: want %d, got %d: %s", tc.name, tc.want, w.Code, w.Body.String())
 		}
@@ -255,7 +252,7 @@ func TestContextHandler_RejectsStaleSnapshotAndNonRegularOrOversizedFiles(t *tes
 func TestReviewHandler_GetReadsAttachedReviewWithoutMutatingIt(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 
 	missing := httptest.NewRecorder()
 	h.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, "/api/v1/diff/session", nil))
@@ -296,7 +293,7 @@ func post(t *testing.T, h *ReviewHandler, body string) *httptest.ResponseRecorde
 func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "why"}, types.DiffAuthorUnattributed)
 
@@ -324,7 +321,7 @@ func TestPublishFailsLoudlyWithNoProvider(t *testing.T) {
 func TestPublishingNothingIsNotAnError(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
 	if w := post(t, h, `{"op":"publish"}`); w.Code != http.StatusOK {
@@ -338,7 +335,7 @@ func TestPublishingNothingIsNotAnError(t *testing.T) {
 func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "agent"}, types.DiffAuthorAgent)
 
@@ -348,22 +345,22 @@ func TestAnAgentCommentIsNotPublishable(t *testing.T) {
 	}
 }
 
-// fakeReview stands in for the workspace, which this package deliberately does not hold. It
+// cleanBranchReview stands in for the workspace, which this package deliberately does not hold. It
 // reports a branch and a clean tree, so no provider is consulted and no threads are placed.
-type fakeReview struct{}
+type cleanBranchReview struct{}
 
-func (fakeReview) ReviewOrigin(context.Context) types.ReviewOrigin {
+func (cleanBranchReview) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Branch: "feat/x"}
 }
 
-func (fakeReview) WorkingDiff(context.Context, []string) (string, error) { return "", nil }
+func (cleanBranchReview) WorkingDiff(context.Context, []string) (string, error) { return "", nil }
 
 // With no provider wired there is no review, and that is a 200 with a reason rather than an
 // error. Every "cannot review here" (no provider, no pull request, an unreachable host)
 // leaves the reader with the same options, and rendering any of them as a failure would
 // accuse them of something they did not do.
 func TestReviewLookupWithNoProviderIsNotAnError(t *testing.T) {
-	h := NewReviewLookupHandler(fakeReview{}, nil)
+	h := NewReviewLookupHandler(cleanBranchReview{}, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
@@ -409,7 +406,7 @@ func TestReviewLookupWithoutAWorkspace(t *testing.T) {
 func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
 	w := post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`)
@@ -427,7 +424,7 @@ func TestReplyFailsLoudlyWithNoProvider(t *testing.T) {
 func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
 	w := post(t, h, `{"op":"reply","id":"th1"}`)
@@ -447,7 +444,7 @@ func TestAnEmptyReplyIsRefusedBeforeTheHostIsAsked(t *testing.T) {
 // and reason travel together on one 200) rather than the decode itself, which is pinned in
 // internal/interp/bindings.
 func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
-	h := NewReviewLookupHandler(fakeReview{}, nil)
+	h := NewReviewLookupHandler(cleanBranchReview{}, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
@@ -463,15 +460,15 @@ func TestAReviewReadCarriesThreadsAndItsReasonTogether(t *testing.T) {
 	}
 }
 
-// fakeReviewPatch answers with a real patch, so thread placement can be exercised end to end
+// patchedReviewWorkspace answers with a real patch, so thread placement can be exercised end to end
 // through the route rather than only in internal/diff's own tests.
-type fakeReviewPatch struct{ patch string }
+type patchedReviewWorkspace struct{ patch string }
 
-func (f fakeReviewPatch) ReviewOrigin(context.Context) types.ReviewOrigin {
+func (f patchedReviewWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Branch: "feat/x"}
 }
 
-func (f fakeReviewPatch) WorkingDiff(context.Context, []string) (string, error) {
+func (f patchedReviewWorkspace) WorkingDiff(context.Context, []string) (string, error) {
 	return f.patch, nil
 }
 
@@ -479,7 +476,7 @@ func (f fakeReviewPatch) WorkingDiff(context.Context, []string) (string, error) 
 // Exercised here because the route is where the patch and the threads meet; internal/diff
 // tests the arithmetic, and this tests that the route feeds it the right patch.
 func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
-	h := NewReviewLookupHandler(fakeReviewPatch{patch: "diff --git a/a.go b/a.go\n" +
+	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n@@ -10,3 +10,3 @@\n ten\n-old\n+new\n"}, nil)
 
 	got := h.place(t.Context(), []types.ReviewComment{
@@ -497,7 +494,7 @@ func TestReviewRoutePlacesThreadsAgainstTheWorkingPatch(t *testing.T) {
 // An unreadable patch leaves every thread where it was rather than losing them: a remark shown
 // against its file is worth far more than one withheld because its line could not be resolved.
 func TestReviewRouteKeepsThreadsWhenThePatchCannotBeRead(t *testing.T) {
-	h := NewReviewLookupHandler(fakeReviewPatch{patch: ""}, nil)
+	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: ""}, nil)
 	in := []types.ReviewComment{{ID: "t1", Path: "a.go", Line: 11, Hunk: -1}}
 	assert.Equal(t, in, h.place(t.Context(), in))
 }
@@ -507,7 +504,7 @@ func TestReviewRouteKeepsThreadsWhenThePatchCannotBeRead(t *testing.T) {
 func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Body: "no line"}, types.DiffAuthorUnattributed)
 
@@ -524,13 +521,12 @@ func TestPublishRefusesWhenNoDraftCanBeAnchored(t *testing.T) {
 	}
 }
 
-// withReviewProvider registers a fake provider for the whole review path, so the handler's
+// withReviewProvider registers a canned provider for the whole review path, so the handler's
 // SUCCESS branches can be exercised. Without one, these routes could only ever be tested
 // failing, which left the reply and publish paths, where the real bugs were, uncovered.
 func withReviewProvider(t *testing.T, threads []any) {
 	t.Helper()
-	name := "fake-status-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "canned-status-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -542,7 +538,7 @@ func withReviewProvider(t *testing.T, threads []any) {
 			default: // publish
 				return map[string]any{}, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
@@ -554,7 +550,7 @@ func TestPublishMarksExactlyTheDraftsThatLeft(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
 	store.AddComment(root, types.DiffComment{Path: "b.go", Body: "no line"}, types.DiffAuthorUnattributed)
@@ -585,7 +581,7 @@ func TestPublishingWithEverythingAlreadySentIsNotAnError(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 4, Body: "anchored"}, types.DiffAuthorUnattributed)
 
@@ -600,7 +596,7 @@ func TestReplySucceedsWithNoSessionAttached(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
 	h := NewReviewHandler(ReviewOptions{
-		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: root,
+		Sessions: changeset.NewStore(""), Workspace: cleanBranchReview{}, Root: root,
 	}, nil)
 
 	w := post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`)
@@ -611,7 +607,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 	withReviewProvider(t, nil)
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 
 	require.Equal(t, http.StatusOK, post(t, h, `{"op":"reply","id":"th1","body":"agreed"}`).Code)
@@ -622,8 +618,7 @@ func TestReplySucceedsAndLeavesTheSessionAlone(t *testing.T) {
 // a reply need not find the root first, and it wins over ID when both arrive.
 func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 	var threads []string
-	name := "fake-reply-recorder-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "reply-recorder",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -634,14 +629,14 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 			default:
 				return nil, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 
 	root := t.TempDir()
 	h := NewReviewHandler(ReviewOptions{
-		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: root,
+		Sessions: changeset.NewStore(""), Workspace: cleanBranchReview{}, Root: root,
 	}, nil)
 
 	for _, body := range []string{
@@ -664,8 +659,7 @@ func TestReplyGoesIntoTheNamedConversation(t *testing.T) {
 // comment and answering a reply's own id would open nothing.
 func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 	var asked []string
-	name := "fake-reply-resolver-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "reply-resolver",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -682,12 +676,12 @@ func TestReplyToAReplyIdGoesToItsThread(t *testing.T) {
 			default:
 				return nil, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })
 	h := NewReviewHandler(ReviewOptions{
-		Sessions: changeset.NewStore(""), Workspace: fakeReview{}, Root: t.TempDir(),
+		Sessions: changeset.NewStore(""), Workspace: cleanBranchReview{}, Root: t.TempDir(),
 	}, nil)
 
 	for _, body := range []string{
@@ -710,7 +704,7 @@ func TestReviewRouteServesPlacedThreads(t *testing.T) {
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "author": "priya", "body": "why"},
 		map[string]any{"id": "t2", "path": "a.go", "line": float64(900), "author": "marcus", "body": "moved"},
 	})
-	h := NewReviewLookupHandler(fakeReviewPatch{patch: "diff --git a/a.go b/a.go\n" +
+	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: "diff --git a/a.go b/a.go\n" +
 		"--- a/a.go\n+++ b/a.go\n@@ -10,3 +10,3 @@\n ten\n-old\n+new\n"}, nil)
 
 	w := httptest.NewRecorder()
@@ -742,7 +736,7 @@ func TestReviewRouteCarriesAReasonBesideTheThreadsItCouldRead(t *testing.T) {
 		map[string]any{"id": "t1", "path": "a.go", "line": float64(11), "body": "readable"},
 		map[string]any{"id": "t2", "line": "not a number"},
 	})
-	h := NewReviewLookupHandler(fakeReviewPatch{patch: ""}, nil)
+	h := NewReviewLookupHandler(patchedReviewWorkspace{patch: ""}, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/review", nil))
@@ -778,7 +772,7 @@ func TestRemoteHostNamesTheDestination(t *testing.T) {
 func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	root := t.TempDir()
 	store := changeset.NewStore("")
-	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: fakeReview{}, Root: root}, nil)
+	h := NewReviewHandler(ReviewOptions{Sessions: store, Workspace: cleanBranchReview{}, Root: root}, nil)
 	store.Attach(root, "main", types.Diff{Base: "main"}, "a")
 	mine := store.AddComment(root, types.DiffComment{Path: "a.go", Line: 1, Body: "mine"}, types.DiffAuthorUnattributed)
 	store.AddComment(root, types.DiffComment{Path: "a.go", Line: 2, Body: "theirs"}, types.DiffAuthorAgent)
@@ -804,20 +798,20 @@ func TestDiscardRemovesOnlyAnUnsentHumanDraft(t *testing.T) {
 	assert.True(t, left["sent"], "a published remark cannot be unsaid by deleting it here")
 }
 
-// fakeBranchSource answers the branch lookup without a repository.
-type fakeBranchSource struct {
+// cannedBranches answers the branch lookup without a repository.
+type cannedBranches struct {
 	limit int
 	out   []types.BranchChange
 	err   error
 }
 
-func (f *fakeBranchSource) BranchChanges(_ context.Context, limit int) ([]types.BranchChange, error) {
+func (f *cannedBranches) BranchChanges(_ context.Context, limit int) ([]types.BranchChange, error) {
 	f.limit = limit
 	return f.out, f.err
 }
 
 func TestDiffBranchesServesTheOverlapAndPassesTheCap(t *testing.T) {
-	src := &fakeBranchSource{out: []types.BranchChange{{Ref: "theirs", Paths: []string{"a.go"}}}}
+	src := &cannedBranches{out: []types.BranchChange{{Ref: "theirs", Paths: []string{"a.go"}}}}
 	rec := httptest.NewRecorder()
 	NewBranchesHandler(src, nil).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
@@ -854,7 +848,7 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 	store := changeset.NewStore(t.TempDir())
 	store.Attach(root, "", types.Diff{}, "")
 
-	h := NewReviewLookupHandler(fakeReview{}, nil)
+	h := NewReviewLookupHandler(cleanBranchReview{}, nil)
 	h.Sessions, h.Root = store, root
 
 	// Twice, as a reader who refreshed would. Both answers must still say new.
@@ -882,7 +876,7 @@ func TestReviewLookupMarksNewWithoutConsumingTheWatermark(t *testing.T) {
 // as an empty list tells the reader the first when the truth is the second. The marker is only
 // worth having if its absence can be trusted.
 func TestDiffBranchesNamesTheBackendThatCannotAnswer(t *testing.T) {
-	src := &fakeBranchSource{err: fmt.Errorf("hg does not report branch changes: %w", types.ErrVCSUnsupported)}
+	src := &cannedBranches{err: fmt.Errorf("hg does not report branch changes: %w", types.ErrVCSUnsupported)}
 	rec := httptest.NewRecorder()
 	NewBranchesHandler(src, nil).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
@@ -899,7 +893,7 @@ func TestDiffBranchesNamesTheBackendThatCannotAnswer(t *testing.T) {
 // distinguishable from the other side too.
 func TestDiffBranchesLeavesUnsupportedEmptyWhenTheBackendAnswered(t *testing.T) {
 	rec := httptest.NewRecorder()
-	NewBranchesHandler(&fakeBranchSource{}, nil).
+	NewBranchesHandler(&cannedBranches{}, nil).
 		ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/diff/branches", nil))
 
 	var got diffBranchesResponse

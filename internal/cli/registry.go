@@ -1553,6 +1553,10 @@ not block every tool call.`,
 		{Name: "reports-skills", Kind: FlagBool, Doc: "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down"},
 		{Name: "renders-ask", Kind: FlagBool, Doc: "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny"},
 		{Name: "rewrites-input", Kind: FlagBool, Doc: "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed"},
+		{Name: "call-background", Kind: FlagBool, Doc: "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused"},
+		{Name: "call-timeout-ms", Kind: FlagInt, Doc: "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default"},
+		{Name: "foreground-default-ms", Kind: FlagInt, Doc: "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down"},
+		{Name: "foreground-max-ms", Kind: FlagInt, Doc: "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down"},
 	},
 	Examples: []Example{
 		{"Check one command", "magus shell 'go test ./...'"},
@@ -2018,7 +2022,8 @@ without a server, a network, or a shared branch. It is append-only and never
 rewritten; a line left half-written by a killed process is skipped and counted
 rather than failing the read.
 
-The listing takes --limit to bound by count and --since to bound by AGE, as a
+The listing shows this checkout's invocations; --all widens it to every checkout
+of the repository. It takes --limit to bound by count and --since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
 against each invocation's last fact, not its first, so a long one that is still
 working stays listed however long ago it began.
@@ -2035,6 +2040,7 @@ session-start event and hand the model state instead of prose.`,
 	Usage: "magus session [ls] [flags]",
 	Flags: []Flag{
 		{Name: "brief", Kind: FlagBool, Doc: "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)"},
+		{Name: "all", Kind: FlagBool, Doc: "List invocations from every checkout of this repository, not only this one"},
 		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many invocations (0 for all)"},
 		{Name: "since", Kind: FlagString, Doc: "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
 	},
@@ -2376,6 +2382,7 @@ them and magus describe job prints one job's terms.`,
 				{Name: "schema", Kind: FlagBool, Doc: "Print the JSON schema a result must satisfy, and exit"},
 				{Name: "stdin", Kind: FlagBool, Doc: "Read the result from stdin instead of from the job, for one that was never filed"},
 				{Name: "integration", Kind: FlagBool, Doc: "Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state"},
+				{Name: "evidence", Kind: FlagCustom, Doc: "Grade check goal `<goal>` against the run `<ref>` recorded in THIS checkout instead of the job's own; `check` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable"},
 			},
 		},
 		{

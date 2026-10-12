@@ -883,40 +883,24 @@ func jsonlRecords(ts *testscript.TestScript, neg bool, args []string) {
 // is a no-op and all cost is borne by Inspect + cache replay.
 func openBenchJSWorkspace(tb testing.TB, nProjects int) string {
 	tb.Helper()
-	root := tb.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module openbench\n"), 0o644); err != nil {
-		tb.Fatal(err)
-	}
+	w := testkit.NewWorkspace(tb)
+	w.Write("go.mod", "module openbench\n")
 	for i := 0; i < nProjects; i++ {
-		dir := filepath.Join(root, fmt.Sprintf("pkg-%03d", i))
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			tb.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"pkg"}`), 0o644); err != nil {
-			tb.Fatal(err)
-		}
+		w.Write(fmt.Sprintf("pkg-%03d/package.json", i), `{"name":"pkg"}`)
 	}
-	return root
+	return w.Root()
 }
 
 func openBenchWorkspace(tb testing.TB, numTargets int) string {
 	tb.Helper()
-	root := tb.TempDir()
-	proj := filepath.Join(root, "svc")
-	if err := os.MkdirAll(proj, 0o755); err != nil {
-		tb.Fatal(err)
-	}
+	w := testkit.NewWorkspace(tb)
 	var sb strings.Builder
 	for i := 0; i < numTargets; i++ {
 		fmt.Fprintf(&sb, "global function t_%d(args: {string}) end\n", i)
 	}
-	if err := os.WriteFile(filepath.Join(proj, "magusfile.tl"), []byte(sb.String()), 0o644); err != nil {
-		tb.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module openbench\n"), 0o644); err != nil {
-		tb.Fatal(err)
-	}
-	return root
+	w.Write("svc/magusfile.tl", sb.String())
+	w.Write("go.mod", "module openbench\n")
+	return w.Root()
 }
 
 // BenchmarkMagusOpenCold measures magus.Open on a fresh workspace each

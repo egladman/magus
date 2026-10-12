@@ -578,6 +578,38 @@ func TestReplayBlobRoundTrip(t *testing.T) {
 	}
 }
 
+// TestOutputMatchesRecordComparesOnlyTheExecutableBit: a remote entry written under another
+// umask records 0644 where this machine's file is 0664, and that must still verify, while
+// an executable file recorded as plain (or the reverse) must not.
+func TestOutputMatchesRecordComparesOnlyTheExecutableBit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no mode bits")
+	}
+	c := newBareCache(t)
+	abs := filepath.Join(t.TempDir(), "out.txt")
+	require.NoError(t, os.WriteFile(abs, []byte("payload"), 0o644))
+	rec, err := c.snapshotOne(abs, "out.txt")
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name         string
+		recorded, on os.FileMode
+		want         bool
+	}{
+		{"other umask", 0o644, 0o664, true},
+		{"restrictive umask", 0o644, 0o600, true},
+		{"executable both", 0o755, 0o775, true},
+		{"recorded executable", 0o755, 0o644, false},
+		{"file executable", 0o644, 0o755, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, os.Chmod(abs, tc.on))
+			rec.Mode = uint32(tc.recorded)
+			assert.Equal(t, tc.want, outputMatchesRecord(rec, abs, func(string) (string, error) { return rec.Blob, nil }))
+		})
+	}
+}
+
 // TestReplayOverwritesExisting verifies replay replaces a pre-existing file whose
 // bytes differ from the record, and leaves no staging file behind.
 func TestReplayOverwritesExisting(t *testing.T) {

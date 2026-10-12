@@ -8,6 +8,7 @@ import (
 
 	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,14 +123,9 @@ func TestSearchTranslationShowsTheQuery(t *testing.T) {
 // writeTree lays files out under a fresh root and returns it with symlinks resolved.
 func writeTree(t *testing.T, files map[string]string) string {
 	t.Helper()
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	for rel, body := range files {
-		p := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-	return root
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(files)
+	return w.Root()
 }
 
 func graphOf(ids map[string][]string) func(context.Context, string) ([]string, bool) {

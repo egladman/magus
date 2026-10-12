@@ -16,6 +16,7 @@ import "time";
 import "serialize";
 import "std";
 import "magus";
+import "vcs";
 // Used by the test blocks; advice_test runs this file.
 import "assert";
 
@@ -153,12 +154,12 @@ export fun input(name: str) > str !> any {
 export fun fetchBase(base: str, refspec: bool) > void !> str {
     if (collecting()) { return; }
     if (!refspec) {
-        proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+        vcs\cmd(["fetch", "--no-tags", "origin", base], opts: {"dir": "."});
         return;
     }
-    final fetched = proc\exec("git", args: ["fetch", "--no-tags", "origin",
-        "+refs/heads/" + base + ":refs/remotes/origin/" + base], dir: ".",
-        opts: {"allow_failure": true});
+    final fetched = vcs\cmd(["fetch", "--no-tags", "origin",
+        "+refs/heads/" + base + ":refs/remotes/origin/" + base],
+        opts: {"dir": ".", "allow_failure": true});
     if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
 }
 
@@ -181,8 +182,8 @@ export fun fetchBase(base: str, refspec: bool) > void !> str {
 // nothing for the three that parse a patch - a separate decision, per advisor.
 export fun diffRange(base: str, head: str) > str !> any {
     if (!collecting()) { return "origin/" + base + "..." + head; }
-    final merged = proc\exec("git", args: ["merge-base", "origin/" + base, head],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final merged = vcs\cmd(["merge-base", "origin/" + base, head],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true});
     // A base this clone cannot resolve is ordinary locally - nothing ever fetched it - and
     // the three-dot form is what to hand back, not an error. It then fails inside the
     // advisor's own git call exactly as it always has, every caller already tolerates that
@@ -253,8 +254,8 @@ export fun addedTargets(diff: str) > [str] {
 // target added. On those grounds a comment about NEW targets once listed `preflight`,
 // which predated the pull request. Only the base tree settles it.
 export fun declaredAtBase(name: str, base: str) > bool !> any {
-    final res = proc\exec("git", args: ["grep", "-q", "export fun " + name + "(",
-        "origin/" + base, "--", "*.buzz"], dir: ".", opts: {"allow_failure": true});
+    final res = vcs\cmd(["grep", "-q", "export fun " + name + "(",
+        "origin/" + base, "--", "*.buzz"], opts: {"dir": ".", "allow_failure": true});
     return res.ok;
 }
 

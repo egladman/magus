@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -16,6 +14,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/log/quiet"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/std"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -155,37 +154,32 @@ func TestApplyDisplayHonorsConfiguredLevel(t *testing.T) {
 // chain keeps both.
 func TestApplyDisplayQuietFiltersTheDisplayNotTheCapture(t *testing.T) {
 	silent := true
-	savedCfg, savedGlobal, savedLogger, savedStderr := globalCfg, global, slog.Default(), os.Stderr
+	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
 	t.Cleanup(func() {
 		globalCfg, global = savedCfg, savedGlobal
 		slog.SetDefault(savedLogger)
-		os.Stderr = savedStderr
 	})
-	display, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = display.Close() })
-	os.Stderr = display
 
 	globalCfg, global = config.Config{Log: config.Log{Format: "text", Silent: &silent}}, globalFlags{}
-	applyDisplay()
-
 	ctx := context.Background()
 	reasoned := slog.NewRecord(time.Now(), slog.LevelWarn, "index stale", 0)
 	reasoned.AddAttrs(attr.Why("stale symbols mislead"))
 	wait := slog.NewRecord(time.Now(), slog.LevelInfo, "waiting for the broker", 0)
 	wait.AddAttrs(attr.Elapsed(5 * time.Second))
 
+	// The display handler binds to os.Stderr when applyDisplay builds it.
 	capture := &journalRecordSink{}
-	for _, r := range []slog.Record{reasoned, wait} {
-		require.NoError(t, slog.Default().Handler().Handle(ctx, r))
-		require.NoError(t, journal.NewLogger(capture).Handler().Handle(ctx, r))
-	}
+	shown := testkit.CaptureStderr(t, func() {
+		applyDisplay()
+		for _, r := range []slog.Record{reasoned, wait} {
+			require.NoError(t, slog.Default().Handler().Handle(ctx, r))
+			require.NoError(t, journal.NewLogger(capture).Handler().Handle(ctx, r))
+		}
+	})
 
-	shown, err := os.ReadFile(display.Name())
-	require.NoError(t, err)
-	assert.Contains(t, string(shown), `msg="index stale"`)
-	assert.NotContains(t, string(shown), "why=")
-	assert.NotContains(t, string(shown), "waiting for the broker")
+	assert.Contains(t, shown, `msg="index stale"`)
+	assert.NotContains(t, shown, "why=")
+	assert.NotContains(t, shown, "waiting for the broker")
 
 	require.Len(t, capture.records, 2)
 	var kept []string
@@ -222,31 +216,25 @@ func TestApplyDisplayQuietLeavesJSONLNoticesWhole(t *testing.T) {
 
 // With no -q, -s or log.silent, a person sees a failure's reasoning and every wait note.
 func TestApplyDisplayDefaultKeepsTheReasoning(t *testing.T) {
-	savedCfg, savedGlobal, savedLogger, savedStderr := globalCfg, global, slog.Default(), os.Stderr
+	savedCfg, savedGlobal, savedLogger := globalCfg, global, slog.Default()
 	t.Cleanup(func() {
 		globalCfg, global = savedCfg, savedGlobal
 		slog.SetDefault(savedLogger)
-		os.Stderr = savedStderr
 	})
-	display, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = display.Close() })
-	os.Stderr = display
 
 	globalCfg, global = config.Config{Log: config.Log{Format: "text"}}, globalFlags{}
-	applyDisplay()
-
 	ctx := context.Background()
 	reasoned := slog.NewRecord(time.Now(), slog.LevelWarn, "index stale", 0)
 	reasoned.AddAttrs(attr.Why("stale symbols mislead"))
 	wait := slog.NewRecord(time.Now(), slog.LevelInfo, "waiting for the broker", 0)
 	wait.AddAttrs(attr.Elapsed(5 * time.Second))
-	for _, r := range []slog.Record{reasoned, wait} {
-		require.NoError(t, slog.Default().Handler().Handle(ctx, r))
-	}
+	shown := testkit.CaptureStderr(t, func() {
+		applyDisplay()
+		for _, r := range []slog.Record{reasoned, wait} {
+			require.NoError(t, slog.Default().Handler().Handle(ctx, r))
+		}
+	})
 
-	shown, err := os.ReadFile(display.Name())
-	require.NoError(t, err)
-	assert.Contains(t, string(shown), `why="stale symbols mislead"`)
-	assert.Contains(t, string(shown), "waiting for the broker")
+	assert.Contains(t, shown, `why="stale symbols mislead"`)
+	assert.Contains(t, shown, "waiting for the broker")
 }

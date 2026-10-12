@@ -149,7 +149,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 		}
 		owner := focus.Owner(rel)
 		if leaseID != "" {
-			return focusGrade{Decision: "deny", Rel: rel, Reason: denial{
+			return focusGrade{Decision: decisionDeny, Rel: rel, Reason: denial{
 				Say: fmt.Sprintf("magus workspace: %s belongs to project %s, outside the focus lease %s was given (%s); "+leaseActorClause("widen this focus"),
 					rel, owner, leaseID, strings.Join(focus.Seeds, ", ")),
 				Why: fmt.Sprintf("That focus is %s, plus what each declares depends_on. The declaration is the orchestrator's, recorded in this workspace's job store; magus is reading it back, not inventing a rule.\n"+
@@ -158,7 +158,7 @@ func focusVerdict(focus project.Focus, leaseID, root, dir string, paths []string
 			}.full()}
 		}
 		return focusGrade{
-			Decision: "advise",
+			Decision: decisionAdvise,
 			Rel:      rel,
 			Context: fmt.Sprintf("magus workspace: %s belongs to project %s, outside this session's focus (%s); `%s` shows what owns it.",
 				rel, owner, strings.Join(focus.Seeds, ", "), hint.DescribeFile.With(rel)),

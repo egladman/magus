@@ -32,7 +32,7 @@ func serveSessions(t *testing.T, events []sessions.LoadEvent) viewerv1alpha1conn
 	require.NoError(t, err)
 
 	mux := http.NewServeMux()
-	path, handler := viewerv1alpha1connect.NewViewerServiceHandler(NewService(&fakeOutputs{}, &fakeRuns{}, WithSessionRoot(root)))
+	path, handler := viewerv1alpha1connect.NewViewerServiceHandler(NewService(&storedOutputs{}, &storedRuns{}, WithSessionRoot(root)))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -124,11 +124,11 @@ func TestGetSessionActivityNoWrite(t *testing.T) {
 // TestGetSessionActivityRefusals pins the three refusals: an unwired server, a malformed id, and
 // a peer that is not loopback.
 func TestGetSessionActivityRefusals(t *testing.T) {
-	unwired := NewService(&fakeOutputs{}, &fakeRuns{})
+	unwired := NewService(&storedOutputs{}, &storedRuns{})
 	_, err := unwired.loadSessionActivity("127.0.0.1:5000", "sess", "a.go")
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 
-	wired := NewService(&fakeOutputs{}, &fakeRuns{}, WithSessionRoot(t.TempDir()))
+	wired := NewService(&storedOutputs{}, &storedRuns{}, WithSessionRoot(t.TempDir()))
 	_, err = wired.loadSessionActivity("127.0.0.1:5000", "../etc", "a.go")
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 

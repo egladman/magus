@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -63,15 +64,16 @@ func symbolNamed(t *testing.T, syms []types.KnowledgeSymbol, label string) types
 // function's symbol. A file no index covers keeps its function nodes, and an old function
 // ID still reaches refs through the symbol that replaced it.
 func TestSupersedeBuzzFunctionsLeavesOneNodePerFunction(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a.buzz", `import "b";
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("a.buzz", `import "b";
 export fun build() > void {
     // NOTE: build is tricky
     helper();
 }
 fun helper() > void {}
 `)
-	writeFile(t, root, "b.buzz", "export fun thing() > void {}\nfun other() > void { thing(); }\n")
+	ws.Write("b.buzz", "export fun thing() > void {}\nfun other() > void { thing(); }\n")
 
 	syms := buzzIndexSymbols(t, map[string][]buzzOcc{"a.buzz": {
 		{moniker: buzzFun("a.buzz", "build"), line: 1, def: true, endLine: 4},
@@ -120,8 +122,9 @@ fun helper() > void {}
 // scip-buzz records only as a forward definition, and a fun it placed nowhere. Retiring
 // either would delete the only node the function has.
 func TestSupersedeBuzzFunctionsKeepsAFunctionNoSymbolSupersedes(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a.buzz", "export fun build() > void { native(); }\nextern fun native() > void;\nfun unplaced() > void {}\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("a.buzz", "export fun build() > void { native(); }\nextern fun native() > void;\nfun unplaced() > void {}\n")
 
 	syms := buzzIndexSymbols(t, map[string][]buzzOcc{"a.buzz": {
 		{moniker: buzzFun("a.buzz", "build"), line: 0, def: true, endLine: 0},
@@ -169,8 +172,9 @@ func TestBuzzFunctionParsesTheGrammar(t *testing.T) {
 // Without a Buzz symbol in the graph (no index built, or the project binds no buzz spell)
 // the pass changes nothing.
 func TestSupersedeBuzzFunctionsWithoutABuzzIndexKeepsEverything(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a.buzz", "export fun build() > void { helper(); }\nfun helper() > void {}\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("a.buzz", "export fun build() > void { helper(); }\nfun helper() > void {}\n")
 	goSym := assembleSymbols(".", []types.KnowledgeSymbol{{
 		Key: "gomod example.com/a `example.com/a`/Build().", Moniker: "scip-go gomod example.com/a v1 `example.com/a`/Build().",
 		Label: "Build", Language: "go", Source: "a.go:1", Defs: []string{"a.go"},

@@ -1,11 +1,11 @@
 package doctor
 
 import (
-	"os"
 	"os/exec"
 	"testing"
 
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 	"github.com/stretchr/testify/assert"
@@ -15,11 +15,8 @@ import (
 // TestCheckOwedRegeneration: an empty record passes, and a recorded one fails naming
 // the run that settles it, so a stale generated file is visible before it is committed.
 func TestCheckOwedRegeneration(t *testing.T) {
-	root := t.TempDir()
-	if out, err := exec.Command("git", "-C", root, "init").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	r := &runner{ws: rootStubWorkspace{root: root}}
+	root := testkit.NewRepo(t, nil).Root()
+	r := &runner{ws: rootedWorkspace{root: root}}
 
 	assert.Equal(t, types.Check{Name: "owed-regeneration", Status: types.CheckOK,
 		Message: "no merge left a regeneration owed"}, r.checkOwedRegeneration())
@@ -42,33 +39,24 @@ func TestCheckOwedRegeneration(t *testing.T) {
 	}, r.checkOwedRegeneration())
 }
 
-// gitStubWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
-type gitStubWorkspace struct{ rootStubWorkspace }
+// rootedDetectingWorkspace resolves its VCS by detection, which registeredMergeDriver needs.
+type rootedDetectingWorkspace struct{ rootedWorkspace }
 
-func (gitStubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (rootedDetectingWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // A merge driver registered without the diff drivers fails the check naming each missing
 // piece and the command that rewires them; once installed, the same registration passes.
 // The driver is `true`, so the load probe succeeds and only the diff drivers are in question.
 func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	trueExe, err := exec.LookPath("true")
 	if err != nil {
 		t.Skip("no true executable")
 	}
-	root := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Skipf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
-	git("init", "-q")
-	register := func() { git("config", "merge.magus.driver", trueExe+" vcs merge-driver %O %A %B %L %P") }
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	register := func() { repo.Git("config", "merge.magus.driver", trueExe+" vcs merge-driver %O %A %B %L %P") }
 	register()
-	r := &runner{ws: gitStubWorkspace{rootStubWorkspace{root: root}}}
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
 
 	assert.Equal(t, types.Check{
 		Name:   "merge-driver-loads-workspace",
@@ -102,22 +90,13 @@ func TestCheckMergeDriverLoadsReportsMissingDiffDrivers(t *testing.T) {
 // A registered driver without its settle hooks fails naming each missing hook and the
 // command that writes them; installed, the same registration passes.
 func TestCheckSettleHooksReportsTheMissingOnes(t *testing.T) {
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	root := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Skipf("git %v failed: %v\n%s", args, err, out)
-		}
-	}
-	git("init", "-q")
-	r := &runner{ws: gitStubWorkspace{rootStubWorkspace{root: root}}}
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	r := &runner{ws: rootedDetectingWorkspace{rootedWorkspace{root: root}}}
 	assert.Equal(t, types.Check{Name: "settle-hooks", Status: types.CheckOK,
 		Message: "no merge driver is registered, so no hook is owed"}, r.checkSettleHooks())
 
-	git("config", "merge.magus.driver", "true vcs merge-driver %O %A %B %L %P")
+	repo.Git("config", "merge.magus.driver", "true vcs merge-driver %O %A %B %L %P")
 	assert.Equal(t, types.Check{
 		Name:    "settle-hooks",
 		Status:  types.CheckFail,

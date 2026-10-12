@@ -1,11 +1,10 @@
 package settle
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -50,17 +49,16 @@ func TestRebuiltProjectsFindsRoot(t *testing.T) {
 // FindOutputProducer. A hand file an output carves out is source, so it goes to a person
 // while the generated file beside it is kept and rebuilt.
 func TestPlanConflictsLeavesAnExcludedHandFileToAPerson(t *testing.T) {
-	root := t.TempDir()
-	magusfile := `import "magus";
+	ws := testkit.NewWorkspace(t)
+	ws.Magusfile(`import "magus";
 
 magus\project({})
 
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("gen/*.go", "!gen/runtime.go");
 }
-`
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-	m, err := magus.Open(t.Context(), root)
+`)
+	m, err := magus.Open(t.Context(), ws.Root())
 	require.NoError(t, err)
 	resolver := mocks.NewMockConflictResolver(t)
 	resolver.EXPECT().IgnoredPaths(mock.Anything, mock.Anything, mock.Anything).Return(map[string]bool{}, nil)

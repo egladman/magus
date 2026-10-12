@@ -62,7 +62,7 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
-	if verdict.Decision == "deny" {
+	if verdict.Decision == decisionDeny {
 		return verdict, workspaceRuleRecord{}
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
@@ -85,25 +85,27 @@ func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdi
 			return bind(rule), err
 		}
 	}
-	asked := askWorkspaceRules(ctx, seamCommand, deps.LoadFailure, resolve, bind(deps.CommandRule))
-	// Parsed again only when nothing loaded, so the pass path pays nothing. The unloaded
-	// deny names the failures itself.
-	denied := asked.unloaded && denyUnloaded(&asked, commandCall(ctx, in, at), at)
+	asked := askWorkspaceRules(ctx, seamCommand, deps, resolve, bind(deps.CommandRule))
+	denied := asked.denyShort(func() judgedCall { return commandCall(ctx, in, at) }, at)
 	if in.preauth != "" && asked.answer.Decision != types.GuardDeny {
 		return verdict, workspaceRuleRecord{failures: asked.failures}
 	}
 	decided := ""
-	if verdict.Decision != "pass" {
+	if verdict.Decision != decisionPass {
 		decided = decidedByBuiltin
 	}
 	verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceCommandRule)
 	if asked.by == "" {
 		decided = ""
 	}
-	if denied || asked.timedOut {
+	if denied {
 		return verdict, workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 	}
-	note := ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamCommand, asked.failures, asked.answered, loadFailureLead(deps.LoadFailure, at.workspace))
+	note := ruleFailureNote(ruleFailureReport{
+		gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamCommand, failures: asked.failures, answered: asked.answered, toldInFull: asked.lapse != nil,
+		judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, in.lease) },
+		lead:    loadFailureLead(deps.LoadFailure, at.workspace),
+	})
 	return applyRuleFailureNote(verdict, note, advisoryCommandRuleFailed), workspaceRuleRecord{decidedBy: decided, failures: asked.failures}
 }
 

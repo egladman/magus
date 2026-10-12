@@ -59,9 +59,6 @@ func firstPayload(t *testing.T, fold sessions.Fold, kind string) string {
 
 func TestWithInvocationJournalRecordsAffectedResults(t *testing.T) {
 	testkit.Isolate(t)
-	// Every TargetResult below carries the lease off the environment, so a developer or
-	// CI job that exported one would fail this test over its own baggage.
-	t.Setenv(trail.EnvBaggage, "")
 	root := t.TempDir()
 
 	handlers := withInvocationJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})

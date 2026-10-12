@@ -1,7 +1,7 @@
 {
   "name": "magus",
   "version": "0.1.0",
-  "description": "magus in Claude Code: health of the binary, guard and server; a pane of jobs, runs and agents; prompt-cache expiry and cost warnings",
+  "description": "magus in Claude Code: health of the binary, guard and server; a pane of jobs, runs and agents; prompt-cache expiry, price-step, subagent and budget cost gates",
   "types": "./types/index.d.ts",
   "userConfig": {
     "cacheGate": {
@@ -29,6 +29,45 @@
       "description": "auto uses what Claude Code reports or what the mod observes, assuming 5m until then.",
       "default": "auto",
       "options": ["auto", "5m", "1h"]
+    },
+    "priceStepGate": {
+      "type": "string",
+      "title": "Price step gate",
+      "description": "What happens when the context the next prompt re-sends is at or near a model's prompt-size price step, past which every request costs more: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
+      "default": "warn",
+      "options": ["off", "warn", "confirm"]
+    },
+    "priceStepMarginTokens": {
+      "type": "number",
+      "title": "Price step margin (tokens)",
+      "description": "Act on the price step gate this many tokens before the step, so there is room to run /compact.",
+      "default": 10000
+    },
+    "spawnGate": {
+      "type": "string",
+      "title": "Subagent cost gate",
+      "description": "What happens when a subagent would run on a model whose input rate is over the cap below: off, warn (a toast), or deny (refuses the spawn and names a cheaper route).",
+      "default": "warn",
+      "options": ["off", "warn", "deny"]
+    },
+    "spawnMaxInputUsdPerMTok": {
+      "type": "number",
+      "title": "Subagent input rate cap (USD per MTok)",
+      "description": "The most a subagent's model may charge per million input tokens before the gate acts. 2 is Sonnet's rate. 0 turns it off.",
+      "default": 2
+    },
+    "sessionBudgetUsd": {
+      "type": "number",
+      "title": "Session budget (USD)",
+      "description": "Act on the budget gate once the session's main and subagent spend passes this. 0 turns it off.",
+      "default": 0
+    },
+    "budgetGate": {
+      "type": "string",
+      "title": "Session budget gate",
+      "description": "What happens when you submit after the session's spend passed the budget: off, warn (a toast), or confirm (holds the prompt once; submit again to send).",
+      "default": "warn",
+      "options": ["off", "warn", "confirm"]
     },
     "subagentTokenBudget": {
       "type": "number",

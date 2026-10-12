@@ -1,21 +1,19 @@
 package interp
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // G505: a content fingerprint; see ContentID
 	"crypto/sha256"
-	"debug/elf"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -29,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/parsecache"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/readlog"
 	"github.com/egladman/magus/internal/sandbox"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
@@ -167,19 +166,194 @@ func RemovedAPICall(src string) (call, replacement string, ok bool) {
 	return "", "", false
 }
 
-// magusRooted reports whether e is the member path `magus.<path...>`, written with
+// magusRooted reports whether e is the member path `magus.<member...>`, written with
 // either separator: the dot and backslash forms are the same access, and a stale
 // magusfile predates the backslash spelling entirely.
-func magusRooted(e ast.Node, path []string) bool {
-	for i := len(path) - 1; i >= 0; i-- {
+func magusRooted(e ast.Node, member []string) bool {
+	for i := len(member) - 1; i >= 0; i-- {
 		me, isMember := e.(*ast.MemberExpr)
-		if !isMember || me.Name != path[i] {
+		if !isMember || me.Name != member[i] {
 			return false
 		}
 		e = me.Object
 	}
 	id, isIdent := e.(*ast.IdentExpr)
 	return isIdent && id.Name == "magus"
+}
+
+// binaryAnswers are the magus members whose answer comes from the running binary rather
+// than from the tree: the magus\describe namespace, and the members that fork a nested
+// magus (std's runMagus). A rule catalog or a rendered MAGUS.md changes when the binary
+// does, with no source the target could declare.
+func binaryAnswers() [][]string {
+	return [][]string{{"describe"}, {"cmd"}, {"run"}, {"doctor"}, {"clean"}, {"impact"}, {"attention"}, {"diff"}}
+}
+
+// BinaryAnswerTargets returns the normalized keys of the exported targets in src whose
+// body reaches a binaryAnswers member. The walk follows calls into the file's own helpers
+// and into functions of a Buzz module src imports ("../hack/magusfile/index"), resolved
+// against dirs in order as "<dir>/<path>.buzz" or "<dir>/magusfiles/<path>.buzz" and read
+// through read. A call it cannot follow counts as nothing, so it under-reports
+// the way every static footprint does. A parse failure yields nil.
+func BinaryAnswerTargets(src string, dirs []string, read func(path string) ([]byte, error)) map[string]bool {
+	prog, err := parsecache.Shared().ParseEmbedded(src)
+	if err != nil || prog == nil {
+		return nil
+	}
+	w := binaryAnswerWalk{
+		dirs: dirs, read: read,
+		modules: map[string]*buzzModule{}, memo: map[string]bool{}, visiting: map[string]bool{},
+	}
+	root := newBuzzModule("", prog)
+	out := map[string]bool{}
+	for name, fd := range root.funcs {
+		if fd.IsExported && w.reaches(root, name) {
+			out[types.Normalize(name)] = true
+		}
+	}
+	return out
+}
+
+type buzzModule struct {
+	path      string
+	namespace string // the module's `namespace` declaration, "" for none
+	funcs     map[string]*ast.FunDecl
+	imports   map[string]string // bound name -> import path
+	unaliased []string          // import paths bound without `as`, which also bind their namespace
+}
+
+func newBuzzModule(file string, prog *ast.Program) *buzzModule {
+	m := &buzzModule{path: file, funcs: map[string]*ast.FunDecl{}, imports: map[string]string{}}
+	for _, stmt := range prog.Stmts {
+		switch s := stmt.(type) {
+		case *ast.NamespaceStmt:
+			m.namespace = s.Name
+		case *ast.FunDecl:
+			m.funcs[s.Name] = s
+		case *ast.ImportStmt:
+			// A host module or spell resolves to no file and is dropped by load; a project
+			// import is a target edge, not a library.
+			if s.Path == "magus" || strings.HasPrefix(s.Path, "magus/") || strings.HasPrefix(s.Path, "project/") ||
+				s.Alias == "_" || len(s.Only) > 0 {
+				continue
+			}
+			if s.Alias != "" {
+				m.imports[s.Alias] = s.Path
+				continue
+			}
+			m.imports[path.Base(s.Path)] = s.Path
+			m.unaliased = append(m.unaliased, s.Path)
+		}
+	}
+	return m
+}
+
+type binaryAnswerWalk struct {
+	dirs     []string
+	read     func(path string) ([]byte, error)
+	modules  map[string]*buzzModule // by resolved file path; nil records a miss
+	memo     map[string]bool        // final answers, by module path + "\x00" + function
+	visiting map[string]bool        // the call stack, which breaks a recursion cycle
+	cut      bool                   // a cycle cut the current walk short, so a miss in it is provisional
+}
+
+// imported is the module m binds under name: an alias, the basename of an unaliased
+// import, or the namespace an unaliased import declares (gopherbuzz binds both, as
+// upstream Buzz binds the namespace).
+func (w *binaryAnswerWalk) imported(m *buzzModule, name string) *buzzModule {
+	if p, ok := m.imports[name]; ok {
+		if mod := w.load(p); mod != nil {
+			return mod
+		}
+	}
+	for _, p := range m.unaliased {
+		if mod := w.load(p); mod != nil && mod.namespace == name {
+			return mod
+		}
+	}
+	return nil
+}
+
+// load parses the module an import names, or returns nil when no dir holds it.
+func (w *binaryAnswerWalk) load(importPath string) *buzzModule {
+	for _, dir := range w.dirs {
+		for _, file := range []string{
+			filepath.Join(dir, filepath.FromSlash(importPath)+".buzz"),
+			filepath.Join(dir, "magusfiles", filepath.FromSlash(importPath)+".buzz"),
+		} {
+			file = filepath.Clean(file)
+			if m, seen := w.modules[file]; seen {
+				if m != nil {
+					return m
+				}
+				continue
+			}
+			data, err := w.read(file)
+			if err != nil {
+				w.modules[file] = nil
+				continue
+			}
+			prog, err := parsecache.Shared().ParseEmbedded(string(data))
+			if err != nil || prog == nil {
+				w.modules[file] = nil
+				continue
+			}
+			m := newBuzzModule(file, prog)
+			w.modules[file] = m
+			return m
+		}
+	}
+	return nil
+}
+
+// reaches reports whether fn in m reaches a binaryAnswers member.
+func (w *binaryAnswerWalk) reaches(m *buzzModule, fn string) bool {
+	key := m.path + "\x00" + fn
+	if v, ok := w.memo[key]; ok {
+		return v
+	}
+	if w.visiting[key] {
+		w.cut = true
+		return false
+	}
+	fd := m.funcs[fn]
+	if fd == nil || fd.Body == nil {
+		w.memo[key] = false
+		return false
+	}
+	w.visiting[key] = true
+	outerCut := w.cut
+	w.cut = false
+	found := false
+	ast.Inspect(fd.Body, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		switch e := n.(type) {
+		case *ast.MemberExpr:
+			found = slices.ContainsFunc(binaryAnswers(), func(member []string) bool { return magusRooted(e, member) })
+		case *ast.CallExpr:
+			switch callee := e.Callee.(type) {
+			case *ast.IdentExpr:
+				found = w.reaches(m, callee.Name)
+			case *ast.MemberExpr:
+				if name, isIdent := callee.Object.(*ast.IdentExpr); callee.Namespaced && isIdent {
+					if mod := w.imported(m, name.Name); mod != nil {
+						found = w.reaches(mod, callee.Name)
+					}
+				}
+			}
+		}
+		return !found
+	})
+	delete(w.visiting, key)
+	// A hit is final. A miss is final unless a cycle cut it short, and the outermost call
+	// of a walk has nothing left on the stack to cut it.
+	if found || !w.cut || len(w.visiting) == 0 {
+		w.memo[key] = found
+	}
+	w.cut = outerCut || (w.cut && !found)
+	return found
 }
 
 // removedAPIErr reports a magusfile still calling an API magus no longer binds.
@@ -231,6 +405,23 @@ func WithSourceReader(ctx context.Context, read func(path string) ([]byte, error
 func sourceReaderFrom(ctx context.Context) func(path string) ([]byte, error) {
 	read, _ := ctx.Value(sourceReaderCtxKey{}).(func(path string) ([]byte, error))
 	return read
+}
+
+type approvedReaderCtxKey struct{}
+
+// WithApprovedSourceReader is WithSourceReader for a reader that returns only what the
+// approval authority holds. A guard-rules load under it keeps its compiled chunks in a
+// store of their own, keyed by the bytes read returned, which no load of working-tree bytes
+// writes; see approvedBytecodeStore.
+func WithApprovedSourceReader(ctx context.Context, read func(path string) ([]byte, error)) context.Context {
+	return context.WithValue(WithSourceReader(ctx, read), approvedReaderCtxKey{}, true)
+}
+
+// approvedSources reports a load whose every source comes from an approved reader: one an
+// overlay entry cannot override.
+func approvedSources(ctx context.Context) bool {
+	approved, _ := ctx.Value(approvedReaderCtxKey{}).(bool)
+	return approved && ctx.Value(overlayCtxKey{}) == nil
 }
 
 // SourceFile is one file a magusfile load read, named by the ContentID of the bytes it
@@ -350,11 +541,29 @@ const staleStampAge = 24 * time.Hour
 // with a key kept in the user's state dir, and one that does not verify is
 // compiled over.
 //
-// Nil when the compiler cannot be identified or the cache or the key is
-// unavailable, and the load compiles every time.
+// Nil when the cache or the key is unavailable, and the load compiles every time.
 func guardBytecodeStore(root string) buzz.BytecodeStore {
+	return sealedBytecodeStoreUnder("buzz-bytecode", root)
+}
+
+// approvedBytecodeStore is guardBytecodeStore for a load of approved sources, under
+// buzz-bytecode-approved. A chunk's key is a digest of the source bytes the approved reader
+// returned, and every import it was compiled against is checked by digest through that
+// reader before it runs, so an entry is found only for content the approval authority holds
+// now. Working-tree loads never write here, and the seal covers the directory, so a chunk
+// compiled from working-tree bytes and moved in does not verify.
+func approvedBytecodeStore(root string) buzz.BytecodeStore {
+	return sealedBytecodeStoreUnder("buzz-bytecode-approved", root)
+}
+
+// sealedBytecodeStoreUnder is the sealed store for the workspace at root under the user
+// cache's magus/<name>/<compiler stamp>, nil when it is unavailable.
+func sealedBytecodeStoreUnder(name, root string) buzz.BytecodeStore {
+	if root == "" {
+		return nil
+	}
 	stamp := compilerStamp()
-	if root == "" || stamp == "" {
+	if stamp == "" {
 		return nil
 	}
 	base, err := config.UserCacheDir()
@@ -369,7 +578,7 @@ func guardBytecodeStore(root string) buzz.BytecodeStore {
 	if err != nil {
 		return nil
 	}
-	stamps := filepath.Join(base, "magus", "buzz-bytecode")
+	stamps := filepath.Join(base, "magus", name)
 	dir := filepath.Join(stamps, stamp)
 	now := time.Now()
 	if err := os.Chtimes(dir, now, now); errors.Is(err, fs.ErrNotExist) {
@@ -483,66 +692,15 @@ func pruneStamps(stamps, keep string, cutoff time.Time) {
 	}
 }
 
-// compilerStamp identifies the build that compiles a chunk, so a chunk is only
-// ever run by the compiler that wrote it. It is the executable's Go build ID,
-// which the toolchain derives from the build's inputs and output: a rebuild of
-// the same source matches (a fresh CI binary reuses the last run's chunks) and
-// any other build does not, dirty tree or not. Empty when the executable cannot
-// be read or carries no build ID.
-func compilerStamp() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	return readCompilerStamp(exe)
-}
-
-func readCompilerStamp(exe string) string {
-	id := goBuildID(exe)
-	if id == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(id))
-	return hex.EncodeToString(sum[:])[:16]
-}
-
-// goBuildID reads the build ID the Go linker writes at the start of the text
-// segment, which lies in the file's first 32 KiB (cmd/internal/buildid reads the
-// same window), or from ELF's .note.go.buildid when an external link moved text.
-func goBuildID(exe string) string {
-	f, err := os.Open(exe)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-	head := make([]byte, 32<<10)
-	n, _ := io.ReadFull(f, head)
-	const marker = "\xff Go build ID: \""
-	if i := bytes.Index(head[:n], []byte(marker)); i >= 0 {
-		rest := head[i+len(marker) : n]
-		if j := bytes.IndexByte(rest, '"'); j > 0 {
-			return string(rest[:j])
-		}
-	}
-	ef, err := elf.NewFile(f)
-	if err != nil {
-		return ""
-	}
-	note := ef.Section(".note.go.buildid")
-	if note == nil {
-		return ""
-	}
-	// namesz, descsz, type, then "Go\x00\x00" and the ID.
-	data, err := note.Data()
-	if err != nil || len(data) < 16 {
-		return ""
-	}
-	size := int(ef.ByteOrder.Uint32(data[4:8]))
-	if len(data) < 16+size {
-		return ""
-	}
-	return string(data[16 : 16+size])
-}
+// compilerStamp identifies the build that compiles a chunk, so a chunk is stored under
+// the build that wrote it: the Go build ID's digest, which a rebuild of the same source
+// shares (a fresh CI binary reuses the last run's chunks) and any other build does not.
+// "" where the build ID cannot be read: the bytecode cache is then off, because the only
+// other name is per file or per process, and each would leave a directory of chunks no
+// later process reuses.
+//
+// A var so a test can stand in for an executable with no build ID.
+var compilerStamp = proc.BinaryDigest
 
 // WithProjectPath stores the workspace-relative path of the project whose
 // magusfile is being parsed, so magus.project(fn) (the contextual form with no
@@ -1018,13 +1176,17 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		buzzSess.SetEntryFilter(guardRulesFilterID, guardRulesFilter)
 		// A hook loads these rules in a fresh process, and compiling them is the
 		// part of that load the source bytes do not have to repeat. Ordinary
-		// magusfile loads are left alone, and so is a load of approved sources:
-		// it exists to trust nothing but the bytes its reader returns.
-		if sourceReaderFrom(ctx) == nil {
+		// magusfile loads are left alone. A load of approved sources trusts nothing
+		// but the bytes its reader returns, so it gets a store only working-tree
+		// loads never write, and any other reader gets none.
+		switch {
+		case sourceReaderFrom(ctx) == nil:
 			store = guardBytecodeStore(src.Dir)
-			if store != nil {
-				buzzSess.SetBytecodeStore(store)
-			}
+		case approvedSources(ctx):
+			store = approvedBytecodeStore(src.Dir)
+		}
+		if store != nil {
+			buzzSess.SetBytecodeStore(store)
 		}
 	}
 

@@ -23,7 +23,6 @@ func snapshotOf(base string, at int64) Snapshot {
 }
 
 func TestSnapshotRoundTripsPerBaseAndTheNewestWins(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
 	_, ok, err := NewestSnapshot(root)
@@ -47,7 +46,6 @@ func TestSnapshotRoundTripsPerBaseAndTheNewestWins(t *testing.T) {
 }
 
 func TestSnapshotRefusesAnotherSchema(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	dir, err := snapshotDir(root)
 	require.NoError(t, err)
@@ -61,7 +59,6 @@ func TestSnapshotRefusesAnotherSchema(t *testing.T) {
 // A plan lands on its base's snapshot and nowhere else: without the changes there is
 // nothing for it to place.
 func TestSnapshotRecordPlan(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	plan := types.Plan{Base: "main", BaseCommit: head("base"), Depth: 1}
 
@@ -79,7 +76,6 @@ func TestSnapshotRecordPlan(t *testing.T) {
 }
 
 func TestSnapshotJoinInflight(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 	list := magustypes.JobList{Jobs: []magustypes.Job{{ID: "a", State: magustypes.StateRunning}}}
 

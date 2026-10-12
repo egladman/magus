@@ -1,13 +1,12 @@
 package knowledge
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,9 +16,9 @@ const normalizeNodeID = "file:console/magusfile.buzz"
 // directory: the root-anchored and backslash readings are gated on the path existing.
 func pathShapeGraph(t *testing.T) (*Graph, string) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "console"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("x"), 0o644))
+	ws := testkit.NewWorkspace(t)
+	ws.Write("console/magusfile.buzz", "x")
+	root := ws.Root()
 
 	g := NewGraph()
 	g.SetRoot(root)

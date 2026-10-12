@@ -6,14 +6,16 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFindMagusBzz(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n")
+	dir := w.Root()
 
 	src, err := Find(dir)
 	require.NoError(t, err)

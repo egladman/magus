@@ -423,11 +423,16 @@ func (c *Cache) exportArtifact(ctx context.Context, projectPath, hash string, w 
 //     readable manifest behind — the import fails and the build runs locally.
 //
 // Authenticity (that a trusted producer made this artifact) is the signature gate
-// below. wantProject and wantHash are the (project, key) the artifact was REQUESTED
+// below. req.project and req.hash are the (project, key) the artifact was REQUESTED
 // for: every path it writes is checked against them and parseManifest requires the
 // manifest to name them, so a signed artifact fetched for one key can never file
 // itself under another.
-func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProject, wantHash string) (*Manifest, error) {
+//
+// req.accept, when not nil, sees the manifest as soon as it arrives, still unauthenticated;
+// false abandons the import with errTierMiss before the blobs after it are written. It
+// can only turn an import away, never vouch for one: an accepted artifact still passes
+// every gate above.
+func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root string, req importRequest) (*Manifest, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("importArtifact: gzip: %w", err)
@@ -462,8 +467,8 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 	// These writes happen before the signature gate, so the cap must be pre-auth.
 	budget := c.importLimit()
 	members := 0
-	manifestRel := path.Join("manifests", flattenPath(wantProject), wantHash+".json")
-	logRel := path.Join("logs", flattenPath(wantProject), wantHash+".log")
+	manifestRel := path.Join("manifests", flattenPath(req.project), req.hash+".json")
+	logRel := path.Join("logs", flattenPath(req.project), req.hash+".log")
 
 	tr := tar.NewReader(gz)
 	for {
@@ -527,7 +532,14 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 			}
 			manifest = stagedMember{tmp: tmp, final: clean}
 			manifestBytes = buf.Bytes()
-		case rel == logRel || strings.HasPrefix(rel, path.Join("outputs", wantHash)+"/"):
+			if req.accept != nil {
+				// A manifest that does not parse fails below, after the signature gate,
+				// as it always has.
+				if early, err := c.parseManifest(manifestBytes, req.project, req.hash); err == nil && !req.accept(early) {
+					return nil, errTierMiss
+				}
+			}
+		case rel == logRel || strings.HasPrefix(rel, path.Join("outputs", req.hash)+"/"):
 			// The build log and the portable reference metadata files, both scoped to the entry
 			// being imported so an artifact cannot write over another key's records.
 			tmp, sum, err := stageCacheFile(tr, clean, "", &budget)
@@ -561,7 +573,7 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 		dropStagedExtras(extras)
 		extras = nil
 	}
-	m, err := c.parseManifest(manifestBytes, wantProject, wantHash)
+	m, err := c.parseManifest(manifestBytes, req.project, req.hash)
 	if err != nil {
 		return nil, fmt.Errorf("importArtifact: %w", err)
 	}
@@ -585,6 +597,14 @@ func (c *Cache) importArtifact(ctx context.Context, r io.Reader, root, wantProje
 	}
 	committed = true
 	return m, nil
+}
+
+// importRequest is the (project, key) an artifact was requested for, and the optional
+// early check on its manifest.
+type importRequest struct {
+	project string
+	hash    string
+	accept  func(*Manifest) bool
 }
 
 // stagedMember is an artifact file written to a temp path during the tar scan and

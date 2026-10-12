@@ -291,6 +291,32 @@ func TestHashKeyByteLayout(t *testing.T) {
 	assert.Equal(t, expected, got, "cache key byte layout changed (layout:\n%s)", want.String())
 }
 
+// The binary line is how a step that asks the binary for its answer keys on that binary.
+// It lands right after spellDefVersion, and a step without one hashes as
+// TestHashKeyByteLayout's does: no other key may move for it.
+func TestHashKeyWritesTheBinaryLineOnlyForABinaryAnswer(t *testing.T) {
+	c := &Cache{mtimes: newMtimeStore(t.TempDir(), nil)}
+	step := Step{ProjectPath: "docs", Target: "content-generate", SpellDefVersion: "v1", ToolVersions: []string{"go:1.25"}}
+
+	without, err := c.hashStep(t.Context(), &step)
+	require.NoError(t, err)
+	step.BinaryBuild = "0123456789abcdef"
+	got, err := c.hashStep(t.Context(), &step)
+	require.NoError(t, err)
+
+	layout := func(binary string) string {
+		var b bytes.Buffer
+		fmt.Fprintf(&b, "keyVersion:%d\n", KeyVersion)
+		b.WriteString("projectPath:docs\ntarget:content-generate\nspellDefVersion:v1\n")
+		b.WriteString(binary)
+		b.WriteString("tool:go:1.25\n")
+		sum := sha256.Sum256(b.Bytes())
+		return hex.EncodeToString(sum[:])
+	}
+	assert.Equal(t, layout(""), without, "an empty BinaryBuild writes no line")
+	assert.Equal(t, layout("binary:0123456789abcdef\n"), got)
+}
+
 // TestHashStepKeysExtraArgs locks in that args after `--` participate in the
 // cache key. Before this, a run with different args replayed the previous run's
 // result: the args changed what the target did but not what it hashed.

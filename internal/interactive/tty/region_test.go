@@ -24,11 +24,11 @@ func (*ttyBuf) Fd() uintptr { return 2 }
 
 // terminal returns a Probe describing a terminal of the given size.
 func terminal(width, height int) Probe {
-	return fakeProbe{isTTY: true, width: width, height: height}
+	return presetProbe{isTTY: true, width: width, height: height}
 }
 
 // notATerminal returns a Probe that reports every descriptor as a pipe.
-func notATerminal() Probe { return fakeProbe{} }
+func notATerminal() Probe { return presetProbe{} }
 
 func TestRegionDisabledWhenHeightIsZero(t *testing.T) {
 	t.Parallel()
@@ -78,7 +78,7 @@ func TestRegionDisabledWhenTerminalTooNarrow(t *testing.T) {
 func TestRegionDisabledWhenSizeQueryFails(t *testing.T) {
 	t.Parallel()
 	var buf ttyBuf
-	p := fakeProbe{isTTY: true, width: 80, height: 24, sizeErr: errors.New("ioctl failed")}
+	p := presetProbe{isTTY: true, width: 80, height: 24, sizeErr: errors.New("ioctl failed")}
 	r := newRegion(&buf, 5+borderRows, p)
 	assert.False(t, r.isEnabled(), "a failed size query must disable the region")
 

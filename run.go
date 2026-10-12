@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/log/attr"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/proc"
 	procrun "github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/internal/race"
 	"github.com/egladman/magus/internal/report"
@@ -474,6 +475,42 @@ func targetOutputGlobs(p *types.Project, target string) []types.Glob {
 	return out
 }
 
+// foreignOutputs is the globs other targets declare with ctx.writesFiles that overlap
+// outputs, target's inherited baseline: the part of the baseline this step must neither
+// record nor restore. A member of target's ctx.needs chain is left out: its writes land
+// inside this step's run, so this step's entry keeps recording and restoring them. A
+// chain walked only in part (a step in a project that does not resolve) carves out
+// nothing, since a member it missed would lose the writes this step's own run made.
+func (m *Magus) foreignOutputs(p *types.Project, target string, outputs []types.Glob) []types.Glob {
+	composed := map[types.TargetRef]bool{}
+	partial := false
+	lookup := func(path string) *types.Project {
+		q := m.Get(path)
+		partial = partial || q == nil
+		return q
+	}
+	if err := types.WalkChain(p, target, lookup, func(v types.ChainVisit) error {
+		composed[types.TargetRef{Project: v.Project.Path, Target: v.Target}] = true
+		return nil
+	}); err != nil || partial {
+		return nil
+	}
+	var out []types.Glob
+	for _, proj := range m.All() {
+		for name := range proj.TargetOutputs {
+			if composed[types.TargetRef{Project: proj.Path, Target: name}] {
+				continue
+			}
+			for _, g := range targetOutputGlobs(proj, name) {
+				if slices.ContainsFunc(outputs, func(o types.Glob) bool { return types.GlobsOverlap(o.Pattern, g.Pattern) }) {
+					out = append(out, g)
+				}
+			}
+		}
+	}
+	return types.CompactGlobs(out)
+}
+
 // buildStep assembles the cache.Step for running target on p.
 func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step := m.baseStep(p)
@@ -537,6 +574,11 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 		// snapshot should say so. Absent this, step.Outputs is the project/spell BASELINE,
 		// which a check-only target never produces; see OutputsDeclared.
 		step.OutputsDeclared = true
+		step.VerifyOutputs = m.driftGateTargets[types.TargetRef{Project: p.Path, Target: target}]
+	} else if len(step.Outputs) > 0 && slices.Contains(p.MagusfileTargets, target) {
+		// Only a magusfile target is carved: a spell op run on its own (buf::buf-generate)
+		// inherits the globs its spell says it provides, and may be the one writing them.
+		step.ForeignOutputs = m.foreignOutputs(p, target, step.Outputs)
 	}
 	sources := slices.Clone(step.Sources)
 	for _, s := range p.ResolvedSpells {
@@ -594,6 +636,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// ctx.observes: an external fact the answer depends on, keyed so the target stays
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
+	if m.binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: target}] {
+		step.BinaryBuild = proc.BinaryBuild()
+	}
 	updates := make([]types.Glob, 0, len(p.TargetUpdates[target]))
 	for _, ref := range p.TargetUpdates[target] {
 		updates = append(updates, ref.Rooted(p.Path))
@@ -757,7 +802,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 			if body := buzz.TargetRunsFromContext(memberCtx); body != nil {
 				body.MarkDone(r.runs.Passed(p.Path)...)
 			}
-			_, err := r.m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
+			res, err := r.m.cache.RunAside(memberCtx, member, func(workerCtx context.Context) error {
 				if !member.NoCache {
 					// A cacheable member is now the lexical cache boundary: its own needs
 					// calls remain inline on a miss and do not acquire extra entries.
@@ -765,7 +810,7 @@ func (r *composedRunner) interceptor(p *types.Project) targetInterceptorFunc {
 				}
 				return invoke(workerCtx)
 			}, r.cacheOpts...)
-			return err
+			return cache.WrapNeedFailure(err, cache.NeedMember{Target: name, Ref: res.Ref})
 		})
 	}
 }
@@ -872,6 +917,11 @@ func applyRunKeying(step *cache.Step, p *types.Project, toolVersions, observatio
 	ck := slices.Clone(charms)
 	slices.Sort(ck)
 	step.Charms = slices.Compact(ck)
+	// Under rw the gate writes its outputs rather than comparing them, so a hit restoring
+	// them over stale ones is the answer that run would give.
+	if slices.Contains(step.Charms, types.CharmReadWrite) {
+		step.VerifyOutputs = false
+	}
 }
 
 // outputWatchDirs are the base directories the race detector watches for one target: the

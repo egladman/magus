@@ -20,25 +20,25 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// fakePlanSource is a Source returning a canned target graph and status report, the two
+// cannedPlanSource is a Source returning a canned target graph and status report, the two
 // halves the handler joins.
-type fakePlanSource struct {
+type cannedPlanSource struct {
 	graph    types.TargetGraphOutput
 	graphErr error
 	report   types.StatusSnapshot
 }
 
-func (f fakePlanSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
+func (f cannedPlanSource) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	return f.graph, f.graphErr
 }
 
-func (f fakePlanSource) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
+func (f cannedPlanSource) StatusSnapshot(context.Context) types.StatusSnapshot { return f.report }
 
-// fakePlanOutputs is a planOutputs over a fixed descriptor list, newest first (the order the
+// cannedPlanOutputs is a planOutputs over a fixed descriptor list, newest first (the order the
 // real store returns).
-type fakePlanOutputs []cache.OutputDescriptor
+type cannedPlanOutputs []cache.OutputDescriptor
 
-func (f fakePlanOutputs) ListDescriptors() []cache.OutputDescriptor { return f }
+func (f cannedPlanOutputs) ListDescriptors() []cache.OutputDescriptor { return f }
 
 // planFixture is a two-project workspace exercising all three edge kinds: a same-project
 // dependency (ci -> build), a cross-project target import (app:build -> libs/api:test), and
@@ -104,7 +104,7 @@ func planEdgeSet(p planResponse) map[string]bool {
 // --- structure ---
 
 func TestPlanHandler_DerivesTheAnchorClosureFromTheTargetGraph(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	w, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
@@ -130,7 +130,7 @@ func TestPlanHandler_DerivesTheAnchorClosureFromTheTargetGraph(t *testing.T) {
 
 // from is the DEPENDENCY and to the DEPENDENT, in run order, for all three edge kinds.
 func TestPlanHandler_EdgesRunFromDependencyToDependent(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	edges := planEdgeSet(out)
 	// Two same-project dependencies, one cross-project target import, and the project-level
@@ -153,7 +153,7 @@ func TestPlanHandler_EdgesRunFromDependencyToDependent(t *testing.T) {
 // --- state join ---
 
 func TestPlanHandler_IdleIsTheDefaultState(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	for _, n := range out.Nodes {
 		if n.State != planStateIdle || n.Ref != "" {
@@ -166,12 +166,12 @@ func TestPlanHandler_IdleIsTheDefaultState(t *testing.T) {
 // The charm suffix on a repro target ("build:rw") must not break the join: with default
 // charms configured every local run carries one, so an exact match would find nothing.
 func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
-	outputs := fakePlanOutputs{ // newest first, as the store returns
+	outputs := cannedPlanOutputs{ // newest first, as the store returns
 		{Ref: "aa11", Project: "app", Target: "build:rw", Failed: true, TimestampMs: 300},
 		{Ref: "bb22", Project: "app", Target: "build", TimestampMs: 200},
 		{Ref: "cc33", Project: "libs/api", Target: "test", TimestampMs: 100},
 	}
-	h := NewHandler(fakePlanSource{graph: planFixture()}, outputs, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, outputs, "", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	byID := planStates(out)
 	if want, n := (planNode{ID: "app:build", Project: "app", Target: "build", State: planStateFail, Ref: "aa11"}), byID["app:build"]; want != n {
@@ -187,7 +187,7 @@ func TestPlanHandler_PassAndFailComeFromTheMostRecentOutput(t *testing.T) {
 
 // A node the server reports as running must not render as the green it was last time.
 func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Runs: []types.StatusRun{{
 			Inv: "inv1",
@@ -197,7 +197,7 @@ func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 			},
 		}}},
 	}
-	outputs := fakePlanOutputs{
+	outputs := cannedPlanOutputs{
 		{Ref: "bb22", Project: "app", Target: "build", TimestampMs: 200},
 		{Ref: "cc33", Project: "libs/api", Target: "test", TimestampMs: 100},
 	}
@@ -219,13 +219,13 @@ func TestPlanHandler_RunningWinsOverAStalePass(t *testing.T) {
 // A run the server did not adopt emits no journal events, so only the pool sees it. The
 // match is by target name alone, which lights every project's copy of that anchor.
 func TestPlanHandler_PoolEntryMarksTheInvokedTargetRunning(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "test"}, Workspace: "/w"},
 		}}},
 	}
-	h := NewHandler(src, fakePlanOutputs{}, "/w", nil)
+	h := NewHandler(src, cannedPlanOutputs{}, "/w", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	if n := planStates(out)["libs/api:test"]; n.State != planStateRunning {
 		t.Errorf("want running from the pool entry, got %+v", n)
@@ -233,13 +233,13 @@ func TestPlanHandler_PoolEntryMarksTheInvokedTargetRunning(t *testing.T) {
 }
 
 func TestPlanHandler_PoolEntryFromAnotherWorkspaceIsIgnored(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "test"}, Workspace: "/other"},
 		}}},
 	}
-	h := NewHandler(src, fakePlanOutputs{}, "/w", nil)
+	h := NewHandler(src, cannedPlanOutputs{}, "/w", nil)
 	_, out := getPlan(t, h, "/api/v1/plan?target=ci")
 	if n := planStates(out)["libs/api:test"]; n.State != planStateIdle {
 		t.Errorf("another workspace's run must not light this plan, got %+v", n)
@@ -249,72 +249,72 @@ func TestPlanHandler_PoolEntryFromAnotherWorkspaceIsIgnored(t *testing.T) {
 // --- anchor selection ---
 
 func TestPlanHandler_AnchorFollowsTheInFlightRun(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "build:rw", "app"}, Workspace: "/w", StartedAt: time.Unix(100, 0)},
 		}}},
 	}
-	outputs := fakePlanOutputs{{Ref: "cc33", Project: "libs/api", Target: "test", TimestampMs: 100}}
+	outputs := cannedPlanOutputs{{Ref: "cc33", Project: "libs/api", Target: "test", TimestampMs: 100}}
 	_, out := getPlan(t, NewHandler(src, outputs, "/w", nil), "/api/v1/plan")
 	wantAnchor(t, out, "build", planAnchorRunning, "charms stripped, running beats recent")
 }
 
 func TestPlanHandler_AnchorPrefersTheMostRecentlyStartedRun(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "build"}, Workspace: "/w", StartedAt: time.Unix(100, 0)},
 			{Args: []string{"affected", "ci"}, Workspace: "/w", StartedAt: time.Unix(200, 0)},
 		}}},
 	}
-	_, out := getPlan(t, NewHandler(src, fakePlanOutputs{}, "/w", nil), "/api/v1/plan")
+	_, out := getPlan(t, NewHandler(src, cannedPlanOutputs{}, "/w", nil), "/api/v1/plan")
 	wantAnchor(t, out, "ci", planAnchorRunning, "the newest start")
 }
 
 func TestPlanHandler_AnchorFallsBackToTheMostRecentOutput(t *testing.T) {
-	outputs := fakePlanOutputs{
+	outputs := cannedPlanOutputs{
 		{Ref: "aa11", Project: "libs/api", Target: "test:rw", TimestampMs: 300},
 		{Ref: "bb22", Project: "app", Target: "ci", TimestampMs: 200},
 	}
-	_, out := getPlan(t, NewHandler(fakePlanSource{graph: planFixture()}, outputs, "", nil), "/api/v1/plan")
+	_, out := getPlan(t, NewHandler(cannedPlanSource{graph: planFixture()}, outputs, "", nil), "/api/v1/plan")
 	wantAnchor(t, out, "test", planAnchorRecent, "the most recent output")
 }
 
 func TestPlanHandler_AnchorDefaultsToCI(t *testing.T) {
-	_, out := getPlan(t, NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil), "/api/v1/plan")
+	_, out := getPlan(t, NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil), "/api/v1/plan")
 	wantAnchor(t, out, planDefaultTarget, planAnchorDefault, "nothing has run")
 }
 
 // `magus x <ref>` is in the pool but is not a target, so it must not serve an empty plan
 // while a build is visibly in flight; the derived candidate falls through instead.
 func TestPlanHandler_UndefinedDerivedAnchorFallsThrough(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"x", "aa11"}, Workspace: "/w"},
 		}}},
 	}
-	outputs := fakePlanOutputs{{Ref: "bb22", Project: "app", Target: "build", TimestampMs: 200}}
+	outputs := cannedPlanOutputs{{Ref: "bb22", Project: "app", Target: "build", TimestampMs: 200}}
 	_, out := getPlan(t, NewHandler(src, outputs, "/w", nil), "/api/v1/plan")
 	wantAnchor(t, out, "build", planAnchorRecent, "the derived candidate falls through")
 }
 
 func TestPlanHandler_ExplicitTargetOverridesTheRunningOne(t *testing.T) {
-	src := fakePlanSource{
+	src := cannedPlanSource{
 		graph: planFixture(),
 		report: types.StatusSnapshot{Pool: &types.StatusOutput{RunningTargets: []types.StatusRunningTarget{
 			{Args: []string{"run", "build"}, Workspace: "/w"},
 		}}},
 	}
-	_, out := getPlan(t, NewHandler(src, fakePlanOutputs{}, "/w", nil), "/api/v1/plan?target=ci")
+	_, out := getPlan(t, NewHandler(src, cannedPlanOutputs{}, "/w", nil), "/api/v1/plan?target=ci")
 	wantAnchor(t, out, "ci", planAnchorExplicit, "the named target beats the running one")
 }
 
 // --- errors and empties ---
 
 func TestPlanHandler_UnknownExplicitTargetIs400(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	// A name no project declares, and one ParseTarget itself rejects (empty charm).
 	for _, target := range []string{"nope", "ci:"} {
 		w := httptest.NewRecorder()
@@ -334,7 +334,7 @@ func TestPlanHandler_UnknownExplicitTargetIs400(t *testing.T) {
 // An empty plan is a shape the console renders, so it must serialize as []: a null would
 // make every reader branch before it could iterate.
 func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: types.TargetGraphOutput{}}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: types.TargetGraphOutput{}}, cannedPlanOutputs{}, "", nil)
 	w, out := getPlan(t, h, "/api/v1/plan")
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200 for an empty workspace, got %d", w.Code)
@@ -349,7 +349,7 @@ func TestPlanHandler_EmptyPlanIsNeverNull(t *testing.T) {
 
 // The error names the server's workspace path, so it stays in the log.
 func TestPlanHandler_ErrorReturns500(t *testing.T) {
-	h := NewHandler(fakePlanSource{graphErr: errors.New("/Users/dev/repo/magusfile.buzz: extract boom")}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graphErr: errors.New("/Users/dev/repo/magusfile.buzz: extract boom")}, cannedPlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -365,7 +365,7 @@ func TestPlanHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestPlanHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewHandler(fakePlanSource{graphErr: console.ErrNoWorkspace}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graphErr: console.ErrNoWorkspace}, cannedPlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plan", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -377,7 +377,7 @@ func TestPlanHandler_NoWorkspaceReturns503(t *testing.T) {
 }
 
 func TestPlanHandler_MethodNotAllowed(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/plan", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -386,7 +386,7 @@ func TestPlanHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestPlanHandler_OptionsNoContent(t *testing.T) {
-	h := NewHandler(fakePlanSource{graph: planFixture()}, fakePlanOutputs{}, "", nil)
+	h := NewHandler(cannedPlanSource{graph: planFixture()}, cannedPlanOutputs{}, "", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/plan", nil))
 	if w.Code != http.StatusNoContent {

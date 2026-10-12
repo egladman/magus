@@ -72,13 +72,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			spawner, _ := resolveActingLease(who, at, req.Lease)
 			recordSpawnedAgent(ctx, at, facts, who, env, spawner)
 		}
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	}
 	digest := recordPolicy(ctx, deps, at, true)
 	ctx = withJobStoreRows(ctx, at)
 	ctx = withOutputStore(ctx, at)
 
-	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	verdict := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 	decided := ""
 	var failures []trail.RuleFailure
 	// The first built-in deny the workspace demoted, spoken once both built-ins have had
@@ -89,36 +89,39 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	verdictRef := ""
 	if env.IsSpawn {
 		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
-		if verdict.Decision == "deny" {
+		if verdict.Decision == decisionDeny {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
-				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 			}
 		}
-		if verdict = deps.gradeAdvice(verdict); verdict.Decision != "pass" {
+		if verdict = deps.gradeAdvice(verdict); verdict.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	// A continuation carries a brief as much as a spawn does, so both are graded.
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, denyBriefCommand(deps, env.Value)); refused {
-			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: v.Deny, Rule: v.RuleName()}
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description})); refused {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
+		} else if v.Context != "" && verdict.Decision == decisionPass {
+			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: v.Context, Rule: v.RuleName()}
+			decided = decidedByBuiltin
 		}
 	}
 	if held.v.demoted {
 		gate, whys := hint.NewGate(at.cacheDir, who.callerKey()), map[string]string{}
 		held.speak(gate, &verdict, whys)
-		if verdict.Decision == "advise" {
+		if verdict.Decision == decisionAdvise {
 			verdict.Context, verdictRef = shapeAdvice(ctx, gate, verdict.Rule, verdict.Context, whys, false)
 		}
-		if verdict.Decision != "pass" {
+		if verdict.Decision != decisionPass {
 			decided = decidedByBuiltin
 		}
 	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		spawnReq := spawnRequest(ctx, env, who, at, facts, req.Lease)
 		bind := func(rule workspace.SpawnRule) ruleCall {
 			if rule == nil {
@@ -133,25 +136,29 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 				return bind(rule), err
 			}
 		}
-		asked := askWorkspaceRules(ctx, seamSpawn, deps.LoadFailure, resolve, bind(deps.SpawnRule))
+		asked := askWorkspaceRules(ctx, seamSpawn, deps, resolve, bind(deps.SpawnRule))
 		failures = asked.failures
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
 		actingLease, _ := resolveActingLease(who, at, req.Lease)
-		call := unloadedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
+		call := judgedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
 		}
-		// The unloaded deny names the failures itself.
-		denied := asked.unloaded && denyUnloaded(&asked, call, at)
+		denied := asked.denyShort(func() judgedCall { return call }, at)
 		verdict, decided = applyWorkspaceAnswer(verdict, decided, asked, workspaceSpawnRule)
-		if !denied && !asked.timedOut {
-			verdict = applyRuleFailureNote(verdict, ruleFailureNote(hint.NewGate(at.cacheDir, who.callerKey()), seamSpawn, failures, asked.answered, loadFailureLead(deps.LoadFailure, at.workspace)), advisorySpawnRuleFailed)
+		if !denied {
+			note := ruleFailureNote(ruleFailureReport{
+				gate: hint.NewGate(at.cacheDir, who.callerKey()), seam: seamSpawn, failures: failures, answered: asked.answered, toldInFull: asked.lapse != nil,
+				judging: func() string { return judgingBinaryNote(deps, at, asked.loadFailure, actingLease) },
+				lead:    loadFailureLead(deps.LoadFailure, at.workspace),
+			})
+			verdict = applyRuleFailureNote(verdict, note, advisorySpawnRuleFailed)
 		}
 	}
 	// Worded as the command and write seams word theirs: the verdict, at most one next and
 	// the ref holding the rest. A rule the catalog does not list keeps its whole reason.
-	if verdict.Decision == "deny" && verdict.Rule != "" {
+	if verdict.Decision == decisionDeny && verdict.Rule != "" {
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, hint.NewGate(at.cacheDir, who.callerKey()), verdict.Rule, verdict.Reason, why, "", verdict.Next, false)
 	}
 	appendHookSpawn(ctx, deps, env, who, spawnVerdictRecord{
@@ -161,7 +168,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		target:       resolveAgentID(facts, env.Target),
 		ruleFailures: failures,
 	})
-	if verdict.Decision != "deny" {
+	if verdict.Decision != decisionDeny {
 		markAgentSeen(facts, env)
 	}
 	return verdict
@@ -173,15 +180,15 @@ func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at loc
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
 	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "advise", Context: shown, Rule: string(advisorySharedCheckout)}, ref
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
 	}
-	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}, ""
+	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
 }
 
 // spawnRequest normalizes one spawn or continuation for the workspace rule. Every field is
@@ -218,9 +225,12 @@ func agentSeenKind(agentID string) hint.MarkerKind {
 	return agentMarkerKind("agent-seen-", agentID)
 }
 
+// spawnedAgentPrefix starts the kind of every spawn record.
+const spawnedAgentPrefix hint.MarkerKind = "agent-spawned-"
+
 // spawnedAgentKind names the marker recording what a subagent was spawned as.
 func spawnedAgentKind(agentID string) hint.MarkerKind {
-	return agentMarkerKind("agent-spawned-", agentID)
+	return agentMarkerKind(string(spawnedAgentPrefix), agentID)
 }
 
 func agentMarkerKind(prefix, agentID string) hint.MarkerKind {
@@ -354,26 +364,49 @@ func mayHandOut(rows []types.Job, spawner, job string) bool {
 // carries the parent in its id. A title in any other form, or naming a job the store does
 // not hold live, names none.
 func spawnTitleJob(ctx context.Context, at location, title string) (types.Job, bool) {
-	fields := strings.Fields(title)
-	if len(fields) != 2 || at.cacheDir == "" {
-		return types.Job{}, false
-	}
-	slash := strings.LastIndex(fields[0], "/")
-	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
+	if at.cacheDir == "" {
 		return types.Job{}, false
 	}
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
 		return types.Job{}, false
 	}
+	live := slices.DeleteFunc(slices.Clone(rows), func(row types.Job) bool { return !row.State.Live() })
+	return spawnTitleRow(live, title)
+}
+
+// spawnTitleRow is the row of rows a spawn title in the `<parent>/<role> <job>` form names,
+// tried as spawnTitleJob tries them, whatever the row's state.
+func spawnTitleRow(rows []types.Job, title string) (types.Job, bool) {
+	fields := strings.Fields(title)
+	if len(fields) != 2 {
+		return types.Job{}, false
+	}
+	slash := strings.LastIndex(fields[0], "/")
+	if slash <= 0 || slash == len(fields[0])-1 || !types.ValidJobID(fields[1]) {
+		return types.Job{}, false
+	}
 	for _, id := range []string{fields[1], fields[0][:slash] + "/" + fields[1]} {
-		for _, row := range rows {
-			if row.ID == id && row.State.Live() {
-				return row, true
-			}
+		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+			return rows[i], true
 		}
 	}
 	return types.Job{}, false
+}
+
+// spawnedJob reports whether one of the spawn records in facts attributed a worker to job:
+// its title names that row of rows, and its spawner could hand the job out.
+func spawnedJob(facts hint.Gate, rows []types.Job, job string) bool {
+	for _, kind := range facts.Kinds(spawnedAgentPrefix) {
+		rec, ok := readSpawnedRecord(facts, kind)
+		if !ok || rec.UntrustedJob != "" {
+			continue
+		}
+		if row, ok := spawnTitleRow(rows, rec.Description); ok && row.ID == job {
+			return true
+		}
+	}
+	return false
 }
 
 // caller is who this call comes from, as the job store keys a binding.
@@ -555,13 +588,38 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 	}
 }
 
+// bindingUnlessEnded is b, or no binding when b names a job that ended in a verdict (pass,
+// fail or no_return), for the caller to release. A wait ends a job from its orchestrator's
+// session, so releaseOnEnd never sees the holder's call; the holder's own next call
+// releases it instead. An exited row still holds: a rejected wait sends the holder back to
+// the same paths.
+func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Binding {
+	if b.Job == "" || b.Gone {
+		return b
+	}
+	rows, err := leaseRows(ctx, at)
+	if err != nil {
+		return b
+	}
+	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == b.Job })
+	if i < 0 || !rows[i].State.Terminal() {
+		return b
+	}
+	return job.Binding{}
+}
+
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
-// job it was spawned for, as `magus job exec` would, when that job has reported none.
-// Reports whether it wrote, so the caller re-reads the rows it graded against.
+// job it was spawned for, as `magus job exec` would, when that job has reported none or
+// its recorded base is superseded (see [baseSuperseded]). Reports whether it wrote, so the
+// caller re-reads the rows it graded against.
 //
 // Done by the child's own call, not at spawn: the host picks the child's checkout, and
 // only the child's hooks run in it. Without it an attributed worker's first write is
 // refused for a missing exec the worker was never going to run.
+//
+// A registration the job store refuses (another checkout holds the job) is not tried again
+// until the row changes: every call would otherwise read the checkout's base again only to
+// be refused the same way.
 func registerAgentBase(ctx context.Context, deps Dependencies, at location, agentJob string) bool {
 	rows, err := leaseRows(ctx, at)
 	if err != nil {
@@ -571,17 +629,57 @@ func registerAgentBase(ctx context.Context, deps Dependencies, at location, agen
 		if row.ID != agentJob {
 			continue
 		}
-		if !row.State.Live() || row.Registered != 0 {
+		if !row.State.Live() || (row.Registered != 0 && !baseSuperseded(ctx, deps, at, row)) {
+			return false
+		}
+		refusals := hint.NewGate(at.cacheDir, agentBaseRefusals)
+		refused := agentBaseRefusedKind(row, at.workspace)
+		if refusals.AlreadyFired(refused) {
 			return false
 		}
 		base := deps.checkoutBase(ctx, at.workspace)
 		if base == "" {
 			return false
 		}
-		_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base)
-		return err == nil
+		if _, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Exec(ctx, agentJob, base); err != nil {
+			// Only a holder conflict lasts until the row changes. A cancelled deadline, lock
+			// contention or I/O may pass on the next call, so it is never remembered.
+			if errors.Is(err, job.ErrHeldElsewhere) {
+				refusals.MarkFired(refused)
+			}
+			return false
+		}
+		return true
 	}
 	return false
+}
+
+// agentBaseRefusals keys the registrations the job store refused, for every caller alike.
+const agentBaseRefusals = "guard/agent-base"
+
+// agentBaseRefusedKind names one refused registration: row as it stood, every field of it,
+// from the checkout at workspace.
+func agentBaseRefusedKind(row types.Job, workspace string) hint.MarkerKind {
+	body, _ := json.Marshal(row)
+	sum := sha256.Sum256(append(body, "\x00"+workspace...))
+	return hint.MarkerKind("agent-base-refused-" + hex.EncodeToString(sum[:8]))
+}
+
+// baseSuperseded reports a registered row whose recorded base diverged from its checkpoint
+// and whose checkout has since moved to another revision: an isolated worker registers on
+// its first call, at whatever its worktree was created on, and only then switches to the
+// branch it was handed.
+//
+// Only a diverged row is refreshed. Revisions are compared exactly, so re-registering a
+// worker that committed on its checkpoint would read its own commit as a divergence.
+// Revisions only, through the cheap seam: the dirty digest moves on every edit.
+func baseSuperseded(ctx context.Context, deps Dependencies, at location, row types.Job) bool {
+	if row.BaseVerdict != types.BaseDiverged {
+		return false
+	}
+	live := deps.revision(ctx, at.workspace, "")
+	reported, _ := types.ParseCheckpointToken(row.ReportedBase)
+	return live != "" && !job.SameRevision(live, reported)
 }
 
 // continueTarget is what magus recorded about the agent a continue addresses, by its id
@@ -680,10 +778,17 @@ func lastContextTokens(path string) (int64, bool) {
 }
 
 func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {
-	if agentID == "" || facts.CacheDir() == "" {
+	if agentID == "" {
 		return spawnedAgent{}, false
 	}
-	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), spawnedAgentKind(agentID)))
+	return readSpawnedRecord(facts, spawnedAgentKind(agentID))
+}
+
+func readSpawnedRecord(facts hint.Gate, kind hint.MarkerKind) (spawnedAgent, bool) {
+	if facts.CacheDir() == "" {
+		return spawnedAgent{}, false
+	}
+	body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
 	if err != nil {
 		return spawnedAgent{}, false
 	}
@@ -715,7 +820,7 @@ func writeAgentMarker(facts hint.Gate, kind hint.MarkerKind, body []byte) {
 // working tree's: it has no approved twin to be stricter than.
 func decidedBy(v Verdict) string {
 	switch {
-	case v.Decision == "pass" || v.Decision == "":
+	case v.Decision == decisionPass || v.Decision == "":
 		return ""
 	case strings.HasPrefix(v.Rule, workspaceShellPrefix):
 		return decidedByWorktree

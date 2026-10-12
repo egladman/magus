@@ -34,7 +34,7 @@
 // Cursor has also raced additional_context away before; env is the half that sticks.
 // Compaction still has no model-facing rehydrate event.
 //
-// magus-guard-template: 22
+// magus-guard-template: 23
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
@@ -501,7 +501,7 @@ fun main(args: [str]) > void {
         unnamed(eventName);
         return;
     }
-    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"));
+    final bin = hook\resolveBin(cwd: hook\field(event, dotPath: "cwd"), session: readSession(event), file: "cursor-hook.buzz");
     if (bin == "" or !hook\isExecutable(bin)) {
         if (hook\noticeOnce(readSession(event), family: "unavailable", file: "cursor-hook.buzz")) {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;

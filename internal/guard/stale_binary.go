@@ -298,8 +298,8 @@ func scoutRecord(args []string) bool {
 	return false
 }
 
-// recoveryLine reports the line that gets a binary able to load this tree: the rebuild, or
-// the move-aside and bootstrap it falls back to. Each stands alone on its line. A leased
+// recoveryLine reports the line that gets a binary able to load this tree: the rebuild, the
+// relink, or the bootstrap it falls back to. Each stands alone on its line. A leased
 // worker's only one is the placement of its base's binary: a worker building a second is
 // the thing the deny exists to prevent.
 func recoveryLine(command string, d Dialect, lease string) bool {
@@ -322,8 +322,6 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 		if r, ok := parseTargetRun(hint.Invocation{Name: "magus", Args: words[1:]}); ok {
 			return r.verb == "run" && targetName(r.target) == "go-build" && len(r.projects) <= 1 && (len(r.projects) == 0 || r.projects[0] == ".")
 		}
-	case prog == "mv" && len(call.Assigns) == 0:
-		return len(words) == 3 && words[1] == "magus" && words[2] == "magus.old"
 	}
 	return false
 }
@@ -331,8 +329,8 @@ func recoveryLine(command string, d Dialect, lease string) bool {
 // commandCall describes a shell line to denyUnloaded. A line is a change unless it proves
 // read-only or is the fix; the verb it names is the gated one, if any. A read-only scout
 // may also record its work, which reads its row from the job store.
-func commandCall(ctx context.Context, in commandRuleInput, at location) unloadedCall {
-	call := unloadedCall{seam: seamCommand, what: "this command", lease: in.lease}
+func commandCall(ctx context.Context, in commandRuleInput, at location) judgedCall {
+	call := judgedCall{seam: seamCommand, what: "this command", lease: in.lease}
 	if call.verb = gatedVerb(in.command, in.dialect); call.verb != "" {
 		call.what, call.changes = call.verb, true
 		return call
@@ -351,7 +349,7 @@ func commandCall(ctx context.Context, in commandRuleInput, at location) unloaded
 // staleBinaryDenial is the deny for a call that changes state while the binary judging it
 // cannot load the tree's guard policy: the cause and the likeliest fix inline, the call,
 // the failures and the fallbacks behind the ref.
-func staleBinaryDenial(call unloadedCall, cause string, failures []string, own bool, root string) denial {
+func staleBinaryDenial(call judgedCall, cause string, failures []string, own bool, root string) denial {
 	hasBinary := hasMagusBinary(root)
 	fix := binaryRemedy(own, hasBinary, call.lease)
 	problem := "the magus judging this is older than this workspace and cannot load its guard policy"
@@ -406,11 +404,11 @@ func binaryRemedy(own, hasBinary bool, lease string) binaryFix {
 	case own && hasBinary:
 		return binaryFix{
 			say: "rebuild ./magus with " + ownRebuild,
-			why: "If the rebuild cannot load the tree either, move the binary aside and bootstrap, one command at a time: " +
-				"`mv magus magus.old`, then `" + bootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
+			why: "If the rebuild cannot load the tree either, bootstrap over it, alone on its line: " +
+				"`" + ward.BootstrapCommand + "`. If the error names a magusfile line instead, fix that line.",
 		}
 	case own:
-		return binaryFix{say: "bootstrap ./magus with `" + bootstrapCommand + "`"}
+		return binaryFix{say: "bootstrap ./magus with `" + ward.BootstrapCommand + "`"}
 	}
 	return binaryFix{
 		say: "install a magus that loads this workspace with `magus self update`",

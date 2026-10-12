@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -338,6 +339,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 	// dependency on the WRITER, so the writer runs first and the owner's cache key is
 	// computed against the finished bytes.
 	var crossOut []crossOutput
+	binaryAnswerTargets := map[types.TargetRef]bool{}
+	driftGateTargets := map[types.TargetRef]bool{}
+	defer func() { m.binaryAnswerTargets, m.driftGateTargets = binaryAnswerTargets, driftGateTargets }()
 	for _, p := range m.ws.All() {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -347,6 +351,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 			continue
 		}
 		var extra []string
+		branchesOnRW := map[string]bool{}
 		for _, src := range srcs {
 			if src.Engine != "buzz" {
 				continue
@@ -358,6 +363,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					types.ProjectDisplayName(p.Path, p.Name, p.Dir), first.Name, first.Replacement, first.Line)
 			}
 			nodes := describe.Extract(source)
+			for name := range interp.BinaryAnswerTargets(source, []string{p.Dir, m.ws.Root}, confinedReader(m.ws.Root)) {
+				binaryAnswerTargets[types.TargetRef{Project: p.Path, Target: name}] = true
+			}
 			for _, n := range nodes {
 				for _, ref := range n.CrossDependencies {
 					r, rerr := file.ResolveImport(ref.Project, p.Path)
@@ -468,6 +476,9 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 							glob: types.Glob{Pattern: ref.Glob, Except: ref.Except}})
 					}
 				}
+				if slices.Contains(n.Charms, types.CharmReadWrite) {
+					branchesOnRW[n.Name] = true
+				}
 				if !slices.Contains(p.MagusfileTargets, n.Name) {
 					p.MagusfileTargets = append(p.MagusfileTargets, n.Name)
 				}
@@ -577,6 +588,14 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				}
 			}
 		}
+		// Run without rw, a target that declares outputs and branches on the rw charm is a
+		// drift gate: it compares its outputs instead of writing them. Decided once every
+		// source is read, so the outputs and the charm count wherever each was declared.
+		for name := range branchesOnRW {
+			if len(p.TargetOutputs[name]) > 0 {
+				driftGateTargets[types.TargetRef{Project: p.Path, Target: name}] = true
+			}
+		}
 		if len(extra) > 0 {
 			p.DependsOn = append(p.DependsOn, extra...)
 			slices.Sort(p.DependsOn)
@@ -645,6 +664,18 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		op.InboundOutputs[co.writer] = append(op.InboundOutputs[co.writer], co.glob)
 	}
 	return nil
+}
+
+// confinedReader reads a file under root and refuses any other, as the interpreter's
+// import confinement does (MGS1047), so a static read never opens what a load would not.
+// It does not reuse that confinement, which reports each refusal as a load error.
+func confinedReader(root string) func(path string) ([]byte, error) {
+	return func(path string) ([]byte, error) {
+		if rel, err := filepath.Rel(root, path); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil, fs.ErrNotExist
+		}
+		return os.ReadFile(path)
+	}
 }
 
 // crossOutput is one target's declaration that it writes into ANOTHER project's tree:

@@ -32,7 +32,8 @@ without a server, a network, or a shared branch. It is append\-only and never
 rewritten; a line left half\-written by a killed process is skipped and counted
 rather than failing the read.
 .PP
-The listing takes \-\-limit to bound by count and \-\-since to bound by AGE, as a
+The listing shows this checkout's invocations; \-\-all widens it to every checkout
+of the repository. It takes \-\-limit to bound by count and \-\-since to bound by AGE, as a
 duration back from now (2h, 45m, 168h) or an RFC3339 instant. \-\-since compares
 against each invocation's last fact, not its first, so a long one that is still
 working stays listed however long ago it began.
@@ -48,6 +49,9 @@ replaces a session's history with a summary can wire this to its
 session\-start event and hand the model state instead of prose.
 .SH OPTIONS
 .RS
+.TP
+\fB\-\-all\fR
+List invocations from every checkout of this repository, not only this one
 .TP
 \fB\-\-brief\fR
 Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (\-\-limit and \-\-since do not apply)

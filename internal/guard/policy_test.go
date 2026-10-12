@@ -138,6 +138,9 @@ func TestVerdictEventsCarryThePolicy(t *testing.T) {
 	e.Ts, e.Origin, e.Workspace, e.DurationMs = 0, types.Origin{}, "", 0
 	e.RequestRef, e.ResponseRef, e.RequestBytes, e.ResponseBytes = "", "", 0, 0
 	e.Preview, e.VerdictRef = "", ""
+	assert.NotEmpty(t, e.Cwd, "a bare command records the directory the judge ran in")
+	assert.NotEmpty(t, e.Phases)
+	e.Cwd, e.Phases = "", nil
 	assert.Equal(t, trail.Event{
 		Kind:         trail.KindAgentCommand,
 		Action:       "shell.command",
@@ -175,4 +178,21 @@ func TestPolicyRecordedRule(t *testing.T) {
 	// A load failure hands RecordPolicy no state, so the record stands.
 	recordPolicy(t.Context(), Dependencies{}, location{cacheDir: base}, true)
 	assert.True(t, recordedRule(base, seamCommand))
+}
+
+// A policy source is recognized through a symlinked spelling of the workspace, and a
+// relative write path is the calling directory's, not the workspace root's.
+func TestIsGuardSourceResolvesSymlinksAndTheCallDirectory(t *testing.T) {
+	root := t.TempDir()
+	real, err := filepath.EvalSymlinks(root)
+	require.NoError(t, err)
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(root, link))
+	at := location{workspace: link, dir: filepath.Join(link, "hack")}
+	deps := Dependencies{Policy: func() PolicyState { return PolicyState{Files: []string{"hack/policy/guard.buzz"}} }}
+
+	assert.True(t, isGuardSource(deps, at, filepath.Join(real, "magusfile.buzz")), "the root magusfile")
+	assert.True(t, isGuardSource(deps, at, filepath.Join(real, "hack", "policy", "guard.buzz")), "a source the load read")
+	assert.True(t, isGuardSource(deps, at, filepath.Join("policy", "guard.buzz")), "relative to the call's directory")
+	assert.False(t, isGuardSource(deps, at, filepath.Join("hack", "policy", "guard.buzz")), "not relative to the workspace root")
 }

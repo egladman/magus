@@ -63,7 +63,7 @@ export fun buzzEngineFigure() > figure\Figure !> any {
             why: "the generic engine interface and its buzz adapter; the magusfile engine drives the session directly")
         .except([magus\dir("internal/interp/mcpclient"), magus\dir("internal/interp/transform")],
             why: "the MCP client and transform workers run Buzz apart from the two hosts compared here")
-        .except([magus\dir("internal/dry/gen/mocks")], why: "generated test mocks")
+        .except([magus\dir("std/gen/mocks")], why: "generated test mocks")
         .except([
             magus\dir("std/encoding"),
             magus\dir("std/encoding/base64"),

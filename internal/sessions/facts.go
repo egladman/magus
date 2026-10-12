@@ -79,14 +79,15 @@ func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.writer = w
 	}
 	if err := h.writer.Append(KindTargetResult, TargetResult{
-		Target:     e.Target,
-		Project:    e.Project,
-		Outcome:    factOutcome(e.Status),
-		DurationMs: e.DurationMs,
-		Replayed:   e.Status == journal.StatusCached,
-		Ref:        e.Ref,
-		Lease:      h.start.Lease,
-		LeaseFrom:  h.start.LeaseFrom,
+		Target:         e.Target,
+		Project:        e.Project,
+		Outcome:        factOutcome(e.Status),
+		DurationMs:     e.DurationMs,
+		Replayed:       e.Status == journal.StatusCached,
+		Ref:            e.Ref,
+		DiagnosticCode: e.DiagnosticCode,
+		Lease:          h.start.Lease,
+		LeaseFrom:      h.start.LeaseFrom,
 	}); err != nil {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per

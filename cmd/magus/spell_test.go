@@ -25,6 +25,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -110,29 +111,25 @@ func (r *spellRegistry) serve(w http.ResponseWriter, req *http.Request) {
 }
 
 // spellRepo commits a spell at spells/x in a fresh git repository with a fixed commit
-// time and an ssh remote, returning the repository and the spell directory.
-func spellRepo(t *testing.T) (repo, dir string) {
+// time and an ssh remote, returning the repository root, the spell directory and the commit.
+func spellRepo(t *testing.T) (root, dir, head string) {
 	t.Helper()
-	repo = initGitRepo(t)
-	dir = filepath.Join(repo, "spells", "x")
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "lib"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "spell.buzz"), []byte("export fun mgs_getName() > str { return \"x\"; }\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib", "util.buzz"), []byte("fun util() > void {}\n"), 0o644))
+	r := testkit.NewRepo(t, nil)
+	r.WriteTree(map[string]string{
+		"spells/x/spell.buzz":    "export fun mgs_getName() > str { return \"x\"; }\n",
+		"spells/x/lib/util.buzz": "fun util() > void {}\n",
+	})
+	r.Git("remote", "add", "origin", "git@github.com:owner/repo.git")
+	r.Git("add", ".")
+	// Repo.Git runs git in an environment of its own, which has no way to pin the commit
+	// date that the layer's provenance records.
 	t.Setenv("GIT_COMMITTER_DATE", "2026-09-01T12:30:00-04:00")
 	t.Setenv("GIT_AUTHOR_DATE", "2026-09-01T12:30:00-04:00")
-	runGit(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	runGit(t, repo, "add", ".")
-	runGit(t, repo, "-c", "commit.gpgsign=false", "commit", "-m", "add spell")
+	out, err := exec.Command("git", "-C", r.Root(), "commit", "-m", "add spell").CombinedOutput()
+	require.NoError(t, err, "%s", out)
 	// Untracked, so it must not reach the layer.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".DS_Store"), []byte("finder"), 0o644))
-	return repo, dir
-}
-
-func gitHead(t *testing.T, repo string) string {
-	t.Helper()
-	out, err := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
-	require.NoError(t, err)
-	return strings.TrimSpace(string(out))
+	r.Write("spells/x/.DS_Store", "finder")
+	return r.Root(), r.Path("spells", "x"), r.Head()
 }
 
 // runSpell runs one `magus spell` invocation from a cold start and returns its stdout.
@@ -152,7 +149,7 @@ func runSpell(t *testing.T, root string, args ...string) string {
 func TestSpellBuildPushLsPull(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	reg := newSpellRegistry(t)
-	repo, dir := spellRepo(t)
+	repo, dir, head := spellRepo(t)
 	layerPath := filepath.Join(t.TempDir(), "spell.tar")
 
 	built := strings.TrimSpace(runSpell(t, repo, "build", dir, "--out", layerPath))
@@ -169,7 +166,7 @@ func TestSpellBuildPushLsPull(t *testing.T) {
 		Annotations: map[string]string{
 			ocispec.AnnotationTitle:    "x",
 			ocispec.AnnotationSource:   "https://github.com/owner/repo",
-			ocispec.AnnotationRevision: gitHead(t, repo),
+			ocispec.AnnotationRevision: head,
 			ocispec.AnnotationCreated:  "2026-09-01T16:30:00Z",
 		},
 	}, res)
@@ -231,7 +228,7 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	reg := newSpellRegistry(t)
-	repo, dir := spellRepo(t)
+	repo, dir, _ := spellRepo(t)
 	path := reg.host() + "/team/spells/x"
 	pinned := strings.TrimSpace(runSpell(t, repo, "push", dir, path+":v1"))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "magus.yaml"),
@@ -262,13 +259,12 @@ func TestSpellLockThenPullByImportPath(t *testing.T) {
 // directory: the same layer bytes, and the same manifest once the provenance is the
 // shipped one, which carries no revision or creation time.
 func TestSpellPullShippedMatchesBuild(t *testing.T) {
-	repo := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(repo, "magus.yaml"), nil, 0o644))
-	dir := filepath.Join(repo, "spells", "golang")
+	r := testkit.NewRepo(t, map[string]string{"magus.yaml": ""})
+	repo := r.Root()
+	dir := r.Path("spells", "golang")
 	require.NoError(t, os.CopyFS(dir, os.DirFS(filepath.Join("..", "..", "spells", "golang"))))
-	runGit(t, repo, "remote", "add", "origin", "https://github.com/egladman/magus.git")
-	runGit(t, repo, "add", ".")
-	runGit(t, repo, "-c", "commit.gpgsign=false", "commit", "-m", "the go spell")
+	r.Git("remote", "add", "origin", "https://github.com/egladman/magus.git")
+	r.Commit("the go spell", nil)
 
 	dst := filepath.Join(repo, "spells", "go")
 	pulled := strings.Split(strings.TrimSpace(runSpell(t, repo, "pull", "magus/spell/go", dst)), "\n")

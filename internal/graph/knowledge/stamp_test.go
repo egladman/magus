@@ -2,13 +2,16 @@ package knowledge
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,13 +191,9 @@ func TestMergeOverlayPutsSessionOnlyOnExistingNodes(t *testing.T) {
 }
 
 func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	write := ws.Write
 	write("docs/a.md", "# a\n")
 	write("lib/x.buzz", "fn x() > void {}\n")
 	base := WalkTree(root).Digest()
@@ -222,19 +221,9 @@ func TestTreeWalkDigestMovesWithTheFilesTheScansRead(t *testing.T) {
 
 // One walk serves every scan, and the first scan's ignore query answers for all of them.
 func TestTreeWalkScansShareOneWalkAndOneIgnoreQuery(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	root := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = root
-	require.NoError(t, cmd.Run())
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
+	write := r.Write
 	write(".gitignore", "dist/\n*.out.md\n")
 	write("README.md", "# readme\n")
 	write("notes.out.md", "# ignored\n")
@@ -273,4 +262,51 @@ func TestInputHashPathSeesAbsenceAndChange(t *testing.T) {
 	assert.NotEqual(t, absent, present)
 	require.NoError(t, os.WriteFile(p, []byte("[1]"), 0o644))
 	assert.NotEqual(t, present, sum())
+}
+
+// movedInfo reports an mtime of its own over a real file's other attributes.
+type movedInfo struct {
+	fs.FileInfo
+	mtime time.Time
+}
+
+func (i movedInfo) ModTime() time.Time { return i.mtime }
+
+// /dev/null serves as core.excludesFile, and every write anyone makes to it moves its
+// mtime, so a stamp over it moved whenever any process on the machine wrote there.
+func TestInputHashFoldsACharDeviceByItsKindAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the null device is not a file on Windows")
+	}
+	info, err := os.Stat(os.DevNull)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&fs.ModeCharDevice)
+	sum := func(mtime time.Time) string {
+		h := NewInputHash("t")
+		h.file(os.DevNull, movedInfo{FileInfo: info, mtime: mtime})
+		return h.Sum()
+	}
+	old := time.Now().Add(-time.Hour)
+	assert.Equal(t, sum(old), sum(old.Add(time.Minute)), "a write moves the device's mtime, not what reading it yields")
+	assert.Equal(t, sum(old), sum(time.Now()), "nor is a recent one read")
+}
+
+func TestInputHashFoldsAPipeByItsKindAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("named pipes are not files on Windows")
+	}
+	p := filepath.Join(t.TempDir(), "fifo")
+	// The mkfifo command rather than syscall.Mkfifo, which does not compile on Windows.
+	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", p).Run())
+	sum := func(mtime time.Time) string {
+		t.Helper()
+		require.NoError(t, os.Chtimes(p, mtime, mtime))
+		h := NewInputHash("t")
+		h.Path(p)
+		return h.Sum()
+	}
+	old := time.Now().Add(-time.Hour)
+	require.Equal(t, sum(old), sum(old.Add(time.Minute)), "a write moves a pipe's mtime, not what reading it yields")
+	// Opening the pipe would block here, with no writer ever coming.
+	assert.Equal(t, sum(old), sum(time.Now()), "nor is a recent one opened")
 }

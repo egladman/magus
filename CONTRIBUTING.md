@@ -83,20 +83,26 @@ ones, a new protobuf field takes a new number, a new flag joins the current set.
 If you find yourself changing what an existing name means, that is the thing the
 promise forbids, and the answer is a second name rather than a redefinition.
 
-**Three compatibility gates catch a break before review does**, one per public interface:
+**Four compatibility gates catch a break before review does**, one per public interface:
 
-| Interface      | Gate                                                                                                       |
-| -------------- | ---------------------------------------------------------------------------------------------------------- |
-| CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target |
-| protobuf       | `buf breaking`, composed into `lint`                                                                       |
-| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                               |
+| Interface      | Gate                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| CLI            | `internal/cli/testdata/api.lock`, a drift-gated snapshot of every subcommand, flag, config key, and target                                                   |
+| protobuf       | `buf breaking`, composed into `lint`                                                                                                                         |
+| magusfile keys | the `required_version` floor, plus doctor's check that the floor is accurate                                                                                 |
+| Go SDK         | `internal/cli/testdata/api-go.lock`, a drift-gated snapshot of every exported declaration of the root package, `types`, `libs/testkit` and `types/gen/mocks` |
 
 A diff to `api.lock` is the signal to read carefully: a line removed there is a
 removed part of the public interface. Regenerate it with `go generate ./internal/cli/...`
 after an intentional addition, and treat a deletion as a question rather than a
 regeneration.
 
-**A fourth public interface has no gate: `std/` host-module method names.** A whole-tree
+`api-go.lock` reads the same way, one line per function, type, field, method, constant and
+variable with its full signature, so a changed line is a changed signature for every program
+that imports magus. Regenerate it with `magus run go-api-generate .`. The package list lives in
+`publicGoPackages` in `cmd/magus-utils/public_api.go`; add a package there when it becomes public.
+
+**A fifth public interface has no gate: `std/` host-module method names.** A whole-tree
 review in August 2026 established this, and it is worth knowing before you touch a
 descriptor. `Method.Name` in a `std/` module is run through `std.CamelCase` and
 becomes the identifier every magusfile calls, so renaming it breaks them, and

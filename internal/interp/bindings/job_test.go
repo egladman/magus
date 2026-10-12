@@ -1,9 +1,6 @@
 package bindings
 
 import (
-	"os"
-	"os/exec"
-	"strings"
 	"testing"
 
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
@@ -68,19 +65,8 @@ export fun waitOnNoReturn() > void !> any {
 // before writing it: a made-up revision raises, a real abbreviated one is stored in full.
 func TestJobPutResolvesItsCheckpointThroughBuzzScript(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
-	git := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-		return strings.TrimSpace(string(out))
-	}
-	git("init", "-q")
-	git("commit", "-q", "--allow-empty", "-m", "seed")
-	head := git("rev-parse", "HEAD")
+	repo := testkit.NewRepo(t, nil)
+	root, head := repo.Root(), repo.Head()
 
 	workspace := &jobNamespaceWorkspace{cacheDir: t.TempDir(), root: root}
 	ctx := types.WithWorkspace(t.Context(), workspace)

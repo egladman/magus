@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,11 +30,11 @@ var scriptFixtures = map[string]string{
 
 func scriptDir(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	for name, body := range scriptFixtures {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755))
+		w.WriteExecutable(name, body)
 	}
-	return dir
+	return w.Root()
 }
 
 // TestGuardJudgesTheScriptALineRuns: the line is judged by the file it runs, with the
@@ -215,7 +216,7 @@ func TestGuardJudgesAScriptAsItIsWritten(t *testing.T) {
 // The command side reaches Judge through the envelope's cwd, which is where a relative
 // script path resolves.
 func TestJudgeReadsTheScriptAtTheEnvelopeCwd(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	dir := scriptDir(t)
 	ctx := context.WithValue(t.Context(), locationKey{}, location{cacheDir: t.TempDir(), workspace: dir})
 	envelope := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + dir + `","tool_input":{"command":"bash retry.sh"}}`

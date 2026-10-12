@@ -637,6 +637,21 @@ export fun man_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/cli/..."]);
 }
 
+// Renders every exported declaration of the public Go packages (the list lives in
+// cmd/magus-utils/public_api.go) into internal/cli/testdata/api-go.lock, beside the CLI's api.lock.
+export fun go_api_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // The packages are type-checked from source and the root embeds generated files, so
+    // every generator writing Go under internal/ or types/gen must finish first.
+    ctx.needs(spells_generate, job_generate, bindings_generate, langservice_generate,
+              mcp_tools_generate, config_generate, mocks_generate);
+    ctx.readsFiles("cmd/magus-utils/**/*.go", "*.go", "types/**/*.go", "libs/testkit/**/*.go",
+        "internal/**/*.go", "go.mod", "go.sum", "go.work", "go.work.sum",
+        "internal/spell/gen/types/*.buzz",
+        "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json");
+    ctx.writesFiles("internal/cli/testdata/api-go.lock");
+    proc\exec("go", ["run", "./cmd/magus-utils", "goapi", "-out", "internal/cli/testdata/api-go.lock"]);
+}
+
 fun pull_request_event(ctx: magus\Context, target: str) > serialize\Boxed? !> any {
     if (!ctx.hasCharm("gha")) { return null; }
     final path = os\env("GITHUB_EVENT_PATH") ?? "";
@@ -817,8 +832,8 @@ export fun spells_generate(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("go", ["generate", "./internal/spell/..."]);
 }
 
-// Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked
-// interface's gen/ subdir.
+// Regenerates the testify mocks (mockery, driven by .mockery.yaml): into the interface's
+// gen/mocks when other packages import the mock, beside it in mocks_test.go otherwise.
 export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     // mockery type-checks packages that import the bindings and config gen packages.
     ctx.needs(types_generate, spells_generate, job_generate, langservice_generate,
@@ -828,7 +843,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
         "internal/spell/gen/types/*.buzz",
         "internal/spell/gen/decls/*.buzz", "internal/job/gen/*.json",
         "internal/interp/bindings/gen/*.go", "internal/config/gen/*.go");
-    ctx.writesFiles("**/gen/mocks/*.go");
+    ctx.writesFiles("**/gen/mocks/*.go", "**/mocks_test.go");
     proc\exec("go", ["tool", "mockery"]);
     // mockery emits no interface assertions, so a stale mock would still compile.
     mockassert\write(mockassert\files(fs\readFile(".mockery.yaml")));
@@ -2137,6 +2152,8 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
         "hack/ci/*.buzz", "hack/magusfile/*.buzz", "hack/policy/*.buzz", "hack/lint/*.buzz", "hack/testdata/*", "changes/testdata/*", "docs/templates/changelog.mustache",
         "releases/*.yaml");
     ctx.writesFiles("coverage/buzz/*.lcov", "coverage/buzz/coverage.txt");
+    // hack/lint/run.buzz's tests run the judge, which a fresh worktree has not built.
+    ctx.needs(conventions\judge_build);
     fs\mkdirAll("coverage/buzz");
     final reports = mut [<str>];
 

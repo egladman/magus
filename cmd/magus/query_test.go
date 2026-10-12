@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -24,50 +22,34 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// captureStdout redirects os.Stdout for the duration of fn and returns what it wrote.
-// showOutputIdentity prints straight to os.Stdout (matching the rest of `magus query`'s
-// text-format rendering), so a real fd swap is the only way to observe it.
+// captureStdout is testkit.CaptureStdout. showOutputIdentity prints straight to
+// os.Stdout (matching the rest of `magus query`'s text-format rendering), so swapping
+// the variable is the only way to observe it.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	prev := os.Stdout
-	os.Stdout = w
-	fn()
-	os.Stdout = prev
-	require.NoError(t, w.Close())
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-	return buf.String()
+	return testkit.CaptureStdout(t, fn)
 }
 
-// captureStderr redirects os.Stderr for the duration of fn and returns what it wrote,
-// with the default logger's records rendered as plain lines into the same stream, so a
-// notice reads as it does on a terminal.
+// captureStderr is testkit.CaptureStderr with the default logger's records rendered as
+// plain lines into the same stream, so a notice reads as it does on a terminal.
 func captureStderr(t *testing.T, fn func()) string {
 	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	prev, prevLog := os.Stderr, slog.Default()
-	os.Stderr = w
-	slog.SetDefault(slog.New(cache.NewPlainHandler(w, slog.LevelInfo)))
-	fn()
-	slog.SetDefault(prevLog)
-	os.Stderr = prev
-	require.NoError(t, w.Close())
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, r)
-	require.NoError(t, err)
-	return buf.String()
+	return testkit.CaptureStderr(t, func() {
+		prev := slog.Default()
+		defer slog.SetDefault(prev)
+		slog.SetDefault(slog.New(cache.NewPlainHandler(os.Stderr, slog.LevelInfo)))
+		fn()
+	})
 }
 
 // TestSplitQueryNegations pins the shield that makes the grammar's documented
@@ -137,17 +119,14 @@ func TestReportRefLookupError_NoDoubledConsulted(t *testing.T) {
 // needs a live cache (ComputeTargetKey returns types.ErrNoCache on an Inspect workspace).
 func newQueryTestWorkspace(t *testing.T) *magus.Magus {
 	t.Helper()
-	const spellName = "zzz-query-ref-spell"
-	s := spells.NewSpell(spellName, spells.WithTargets("build"))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-query-ref-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	return m
@@ -171,7 +150,7 @@ func TestReportRefLookupError_MatchedRefSuggestsRunCommand(t *testing.T) {
 	require.NoError(t, err, "ComputeTargetKey")
 	ref := cache.PortableRef(key)
 
-	_, _, lookupErr := m.OutputByRef(ref)
+	_, _, lookupErr := m.OutputByRef(ctx, ref)
 	require.Error(t, lookupErr, "ref must not already be stored")
 
 	out := captureStderr(t, func() {
@@ -223,21 +202,15 @@ func TestQueryOutputReadsTrailPayloads(t *testing.T) {
 // silently when it still matches HEAD, and with a "recorded at X, you are on Y" line
 // once a later commit moves HEAD away from it.
 func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
-	dir := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(""), 0o644))
-	runGit(t, dir, "add", "magusfile.buzz")
-	runGit(t, dir, "commit", "-m", "seed")
-	firstRev := strings.TrimSpace(string(mustOutput(t, exec.Command("git", "-C", dir, "rev-parse", "HEAD"))))
+	repo := testkit.NewRepo(t, map[string]string{"magusfile.buzz": ""})
+	firstRev := repo.Head()
 
-	const spellName = "zzz-query-meta-revision-spell"
-	s := spells.NewSpell(spellName, spells.WithTargets("build"),
+	spellName := register.Spell(t, "zzz-query-meta-revision-spell", spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), dir, magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), repo.Root(), magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -256,10 +229,7 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 
 	// Move HEAD to a second commit without re-running the target: the stored
 	// descriptor still names firstRev, but the workspace is no longer there.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "other.txt"), []byte("x"), 0o644))
-	runGit(t, dir, "add", "other.txt")
-	runGit(t, dir, "commit", "-m", "second")
-	secondRev := strings.TrimSpace(string(mustOutput(t, exec.Command("git", "-C", dir, "rev-parse", "HEAD"))))
+	secondRev := repo.Commit("second", map[string]string{"other.txt": "x"})
 	require.NotEqual(t, firstRev, secondRev)
 
 	out = captureStdout(t, func() {
@@ -281,21 +251,18 @@ func TestShowOutputIdentity_RevisionRendering(t *testing.T) {
 // count above 16 if you change it: dropping to a "probably enough" number trades a
 // guarantee for a flake.
 func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
-	const spellName = "zzz-query-multi-spell"
 	targets := make([]string, 32)
 	for i := range targets {
 		targets[i] = fmt.Sprintf("build%02d", i)
 	}
-	s := spells.NewSpell(spellName, spells.WithTargets(targets...))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-query-multi-spell", spells.WithTargets(targets...))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	m, err := magus.Open(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	m, err := magus.Open(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
 	ctx := context.Background()
@@ -337,17 +304,14 @@ func TestPrintIdentifyRefSuggestion_MultipleMatches(t *testing.T) {
 // unconditional "share it with --publish" hint that follows every other path. A
 // best-effort suggestion must never partially render around an error it hit.
 func TestPrintIdentifyRefSuggestion_SkipsOnIdentifyRefError(t *testing.T) {
-	const spellName = "zzz-query-nocache-spell"
-	s := spells.NewSpell(spellName, spells.WithTargets("build"))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-query-nocache-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
 
 	reg := magus.NewWorkspaceRegistry()
 	reg.RegisterProject(".", magus.WithSpell(spellName))
-	ws, err := magus.Inspect(context.Background(), root, magus.WithWorkspaceRegistry(reg))
+	ws, err := magus.Inspect(context.Background(), w.Root(), magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Inspect")
 	m, ok := ws.(*magus.Magus)
 	require.True(t, ok, "magus.Inspect returns a *magus.Magus under types.WorkspaceRepository")
@@ -374,16 +338,13 @@ type graphReadFixture struct {
 
 func newGraphReadFixture(t *testing.T) graphReadFixture {
 	t.Helper()
-	root := t.TempDir()
-	for name, body := range map[string]string{
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(map[string]string{
 		"magusfile.buzz": "",
 		"docs/guide.md":  "# Guide\n\nHow searchVerdict decides.\n",
 		"pkg/verdict.go": "package pkg\n\nfunc SearchVerdict() {}\n",
-	} {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
-	return openGraphReadFixture(t, root)
+	})
+	return openGraphReadFixture(t, w.Root())
 }
 
 // openGraphReadFixture is graphReadFixture over the workspace at root.
@@ -669,22 +630,14 @@ func BenchmarkServerGraphReads(b *testing.B) {
 	}
 }
 
-// mustOutput runs cmd and fails the test on error, surfacing combined output.
-func mustOutput(t *testing.T, cmd *exec.Cmd) []byte {
-	t.Helper()
-	out, err := cmd.CombinedOutput()
-	require.NoErrorf(t, err, "%v: %s", cmd.Args, out)
-	return out
-}
-
 // The CLI half of the path-normalization mirror; the MCP half is
 // TestPathNormalizationIsSharedWithCLI in internal/handler/mcp. `magus query` hands the
 // raw terms to the graph and canonicalises nothing of its own, so the CLI and MCP
 // cannot resolve one pasted path to different nodes.
 func TestPathNormalizationIsSharedWithMCP(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "console"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "console", "magusfile.buzz"), []byte("x"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("console/magusfile.buzz", "x")
+	root := w.Root()
 
 	g := knowledge.NewGraph()
 	g.SetRoot(root)
@@ -700,4 +653,28 @@ func TestPathNormalizationIsSharedWithMCP(t *testing.T) {
 		require.Lenf(t, out.Matches, 1, "%q should resolve", q)
 		assert.Equal(t, "file:console/magusfile.buzz", out.Matches[0].ID)
 	}
+}
+
+// A failed target's result line has to name the project, the target and the ref that reads
+// its log: the reader of a failed gate has only this listing, and a result with no ref sent
+// them to a second command to find it.
+func TestQueryInvocationTextResultLinesCarryProjectTargetAndRef(t *testing.T) {
+	t.Cleanup(snapshotGlobals())
+	global = globalFlags{}
+	m := newQueryTestWorkspace(t)
+	ctx := withMagus(context.Background(), m)
+
+	runCtx, finish := m.BeginInvocation(ctx, journal.Command{Arguments: []string{"run", "lint"}, Trigger: journal.TriggerRun}, "v0.test")
+	id := journal.InvocationIDFromContext(runCtx)
+	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusFail, Project: "api", Target: "lint", Ref: "out9bddb214656e", Text: "exit status 1\nsecond line"})
+	journal.Emit(runCtx, journal.Event{Kind: journal.KindResult, Status: journal.StatusPass, Project: "web", Target: "build", Ref: "out0123456789ab"})
+	finish(errors.New("lint failed"))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, queryInvocation(ctx, "", id, false, OutputOptions{Format: FormatText}))
+	})
+
+	assert.Contains(t, out, "result    fail api lint out9bddb214656e exit status 1\n", "the first line of the text follows the ref")
+	assert.Contains(t, out, "result    pass web build out0123456789ab\n")
+	assert.NotContains(t, out, "second line")
 }

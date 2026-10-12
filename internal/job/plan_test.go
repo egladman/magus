@@ -10,6 +10,7 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,12 +137,12 @@ func TestRefuseAmbiguousSymbolsNamesEveryDefinition(t *testing.T) {
 	require.NoError(t, RefuseAmbiguousSymbols(t.Context(), gate("Declare"), nil))
 }
 
-type fakeSymbolGraph struct {
+type cannedSymbolGraph struct {
 	nodes []types.KnowledgeMatch
 	defs  map[string]string
 }
 
-func (g fakeSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
+func (g cannedSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	for _, n := range g.nodes {
 		if n.ID == ref || n.Label == ref {
 			return types.KnowledgeRefsOutput{Symbol: n.ID, Label: n.Label, Defs: []types.KnowledgeRefSite{{File: g.defs[n.ID]}}}, true
@@ -150,7 +151,7 @@ func (g fakeSymbolGraph) Refs(ref string) (types.KnowledgeRefsOutput, bool) {
 	return types.KnowledgeRefsOutput{}, false
 }
 
-func (g fakeSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
+func (g cannedSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 	var out []types.KnowledgeMatch
 	for _, n := range g.nodes {
 		if strings.Contains(n.Label, input) {
@@ -163,7 +164,7 @@ func (g fakeSymbolGraph) Resolve(input string, _ int) []types.KnowledgeMatch {
 func TestGraphSymbolsListsEveryDefinitionOfABareName(t *testing.T) {
 	t.Parallel()
 
-	g := fakeSymbolGraph{
+	g := cannedSymbolGraph{
 		nodes: []types.KnowledgeMatch{
 			{ID: "symbol:config/Validate().", Kind: types.KindSymbol, Label: "Validate"},
 			{ID: "symbol:types/Declaration#Validate().", Kind: types.KindSymbol, Label: "Validate"},
@@ -347,7 +348,7 @@ func TestForkMergeRefusesAnUngradableDenyPathAddedToARowThatExists(t *testing.T)
 	t.Parallel()
 
 	ctx := t.Context()
-	s := NewStore(tmpLoc(t, gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"})))
+	s := NewStore(tmpLoc(t, testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": "package run\n"}).Root()))
 	_, err := ForkMerge(ctx, s, "wave/job", func(u *types.Job) {
 		u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, []string{"run.go", "notes.txt"}
 	}, config.Jobs{}, nil)

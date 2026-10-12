@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeWorkspaceRepo satisfies WorkspaceRepository via an embedded nil interface;
+// identityOnlyRepo satisfies WorkspaceRepository via an embedded nil interface;
 // the context round-trip tests only need identity, never a method call.
-type fakeWorkspaceRepo struct{ WorkspaceRepository }
+type identityOnlyRepo struct{ WorkspaceRepository }
 
 // TestWorkspaceGraphObserver covers the mutable default observer: unset reads
 // nil, SetGraphObserver installs one, and nil clears it.
@@ -37,7 +37,7 @@ func TestWorkspaceContextHelpers(t *testing.T) {
 	assert.Nil(t, ActiveDispatchFromContext(context.Background()))
 	assert.Nil(t, GraphObserverFromContext(context.Background()))
 
-	repo := &fakeWorkspaceRepo{}
+	repo := &identityOnlyRepo{}
 	ctx := WithWorkspace(context.Background(), repo)
 	assert.Same(t, repo, WorkspaceFromContext(ctx))
 

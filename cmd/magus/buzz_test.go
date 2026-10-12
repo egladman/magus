@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/gopherbuzz"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
@@ -83,11 +84,10 @@ const buzzSandboxTarget = "/magus-buzz-sandbox-test/victim"
 // process singleton.
 func buzzSandboxWorkspace(t *testing.T, mode types.SandboxMode) (context.Context, *magus.Magus, string) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
-		fmt.Appendf(nil, "sandbox:\n  mode: %s\n", mode), 0o644))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	w.Write("magus.yaml", fmt.Sprintf("sandbox:\n  mode: %s\n", mode))
 
 	m, err := magus.Open(t.Context(), root)
 	require.NoError(t, err, "fixture workspace must open")
@@ -196,13 +196,10 @@ func countWorkspaceOpens(t *testing.T, open func(context.Context, string) (*magu
 // and the script path.
 func buzzLazyWorkspace(t *testing.T, script string) (string, string) {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\n\nmagus\\project({})\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("sandbox:\n  mode: off\n"), 0o644))
-	path := filepath.Join(root, "script.buzz")
-	require.NoError(t, os.WriteFile(path, []byte(script), 0o644))
-	return root, path
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\n\nmagus\\project({})\n")
+	w.Write("magus.yaml", "sandbox:\n  mode: off\n")
+	return w.Root(), w.Write("script.buzz", script)
 }
 
 func TestBuzzCmd_VanillaScriptDoesNotOpenTheWorkspace(t *testing.T) {
@@ -472,9 +469,9 @@ func TestBuzzScriptStageSkipsALeadingWorkDir(t *testing.T) {
 // --root names the checkout a script's vcs calls read. The process cwd here is the
 // magus checkout this test runs in, a different repository on a different ref.
 func TestBuzzCmd_RootSelectsTheVCS(t *testing.T) {
-	repo := initGitRepo(t)
-	runGit(t, repo, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "init")
-	runGit(t, repo, "switch", "-q", "-c", "split-target")
+	r := testkit.NewRepo(t, nil)
+	r.Git("switch", "-q", "-c", "split-target")
+	repo := r.Root()
 	script := filepath.Join(t.TempDir(), "ref.buzz")
 	require.NoError(t, os.WriteFile(script, []byte(
 		"import \"std\";\nimport \"vcs\";\n\nfun main(args: [str]) > void !> any {\n    std\\print(vcs\\ref());\n}\n"), 0o644))
@@ -612,11 +609,8 @@ func TestBuzzCheckFile_MagusTypesNeedTheModulesOwnImport(t *testing.T) {
 }
 
 func TestBuzzReachesMagus(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, src string) {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(src), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	dir, write := w.Root(), w.Write
 	write("plain.buzz", `import "std";`)
 	write("direct.buzz", `import "magus";`)
 	write("lib/deep.buzz", `import "magus/spell";`)
@@ -808,8 +802,7 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
 		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
 	}
-	bin := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(bin, []byte(glueTemplateEcho), 0o755))
+	bin := testkit.NewWorkspace(t).WriteExecutable("magus", glueTemplateEcho)
 	record := filepath.Join(dir, "renders-ask")
 	t.Setenv("__MAGUS_BIN", bin)
 	t.Setenv("RENDERS_ASK_RECORD", record)

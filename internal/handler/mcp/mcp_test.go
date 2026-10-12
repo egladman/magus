@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp/mcpclient"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -26,6 +27,7 @@ import (
 	"github.com/egladman/magus/types"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,16 +60,17 @@ func fixtureMagus(t *testing.T) *magus.Magus {
 	return m
 }
 
-// fakeTel records MCP calls for assertions. It embeds the wide Provider
-// interface so only RecordMCPCall needs an implementation; wrap touches no
-// other method, so the nil embedded value is never dereferenced.
-type fakeTel struct {
-	observability.Provider
-	calls []observability.MCPCall
-}
-
-func (f *fakeTel) RecordMCPCall(_ context.Context, c observability.MCPCall) {
-	f.calls = append(f.calls, c)
+// mcpCallTelemetry expects exactly one RecordMCPCall and captures it: the request size
+// and the wall-clock time vary, so the call is asserted on after wrap returns. wrap
+// touches no other Provider method, and the mock fails the test if it does.
+func mcpCallTelemetry(t *testing.T) (*mocks.MockProvider, *[]observability.MCPCall) {
+	t.Helper()
+	var calls []observability.MCPCall
+	tel := mocks.NewMockProvider(t)
+	tel.EXPECT().RecordMCPCall(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, c observability.MCPCall) { calls = append(calls, c) }).
+		Once()
+	return tel, &calls
 }
 
 func quietLogger() *slog.Logger {
@@ -88,7 +91,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	req := callRequest("client", map[string]any{"script": "magus\\query"})
 
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
-		tel := &fakeTel{}
+		tel, calls := mcpCallTelemetry(t)
 		const out = "hello world result"
 		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
@@ -98,8 +101,8 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		require.Len(t, tel.calls, 1)
-		got := tel.calls[0]
+		require.Len(t, *calls, 1)
+		got := (*calls)[0]
 		// The request size and the wall-clock time are bounded below rather than pinned.
 		assert.Equal(t, observability.MCPCall{
 			Tool: "client", Outcome: "ok", InputBytes: got.InputBytes, OutputBytes: int64(len(out)), Duration: got.Duration,
@@ -109,7 +112,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
-		tel := &fakeTel{}
+		tel, calls := mcpCallTelemetry(t)
 		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
@@ -118,8 +121,8 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 		require.Error(t, err)
 		assert.Nil(t, result)
 
-		require.Len(t, tel.calls, 1)
-		got := tel.calls[0]
+		require.Len(t, *calls, 1)
+		got := (*calls)[0]
 		// The request size and the wall-clock time are not pinned; a nil result adds no output.
 		assert.Equal(t, observability.MCPCall{
 			Tool: "client", Outcome: "error", InputBytes: got.InputBytes, Duration: got.Duration,
@@ -195,7 +198,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	// adapt() turns a soft failure into an IsError result with a nil err. The trail (and the
 	// metric) must record it as error, not ok: the regression the review caught.
 	dir := t.TempDir()
-	tel := &fakeTel{}
+	tel, calls := mcpCallTelemetry(t)
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "a"} }
 	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
@@ -208,8 +211,8 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, trail.OutcomeError, events[0].Outcome, "a soft IsError result must record as error")
-	require.Len(t, tel.calls, 1)
-	assert.Equal(t, trail.OutcomeError, tel.calls[0].Outcome, "the metric must also see error")
+	require.Len(t, *calls, 1)
+	assert.Equal(t, trail.OutcomeError, (*calls)[0].Outcome, "the metric must also see error")
 }
 
 // A server whose workspace failed to load keeps every tool listed, so an agent's tool list
@@ -296,14 +299,14 @@ func TestAgentFromRequest(t *testing.T) {
 	assert.Equal(t, "unknown", agentFromRequest(mk("", "")))      // nothing to identify
 }
 
-// fakeDriver is a SpellDriver that returns a canned response for adapt tests.
-type fakeDriver struct {
+// cannedDriver is a SpellDriver that returns a canned response for adapt tests.
+type cannedDriver struct {
 	resp spells.InvokeResponse
 	err  error
 }
 
-func (f fakeDriver) Name() string { return "fake" }
-func (f fakeDriver) Invoke(context.Context, spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (f cannedDriver) Name() string { return "canned" }
+func (f cannedDriver) Invoke(context.Context, spells.InvokeRequest) (spells.InvokeResponse, error) {
 	return f.resp, f.err
 }
 
@@ -311,7 +314,7 @@ func TestAdapt(t *testing.T) {
 	t.Parallel()
 
 	t.Run("error becomes a soft IsError result, not a transport error", func(t *testing.T) {
-		h := adapt(fakeDriver{err: errors.New("boom")})
+		h := adapt(cannedDriver{err: errors.New("boom")})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.True(t, res.IsError)
@@ -319,7 +322,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("structured Data is marshaled to JSON text", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
+		h := adapt(cannedDriver{resp: spells.InvokeResponse{Data: map[string]any{"ok": true}}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.False(t, res.IsError)
@@ -327,7 +330,7 @@ func TestAdapt(t *testing.T) {
 	})
 
 	t.Run("plain Text is returned verbatim when Data is nil", func(t *testing.T) {
-		h := adapt(fakeDriver{resp: spells.InvokeResponse{Text: "just text"}})
+		h := adapt(cannedDriver{resp: spells.InvokeResponse{Text: "just text"}})
 		res, err := h(context.Background(), mcplib.CallToolRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "just text", allText(res))
@@ -341,13 +344,13 @@ func TestAdapt(t *testing.T) {
 func TestUnregisteredDrivers(t *testing.T) {
 	t.Parallel()
 
-	// fakeDriver.Name() is "fake": no Registry entry named "fake" exists here, so it
+	// cannedDriver.Name() is "canned": no Registry entry named "canned" exists here, so it
 	// must be reported.
-	got := unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "other"}})
-	assert.Equal(t, []string{"fake"}, got)
+	got := unregisteredDrivers([]spells.Driver{cannedDriver{}}, []ToolDescriptor{{Name: "other"}})
+	assert.Equal(t, []string{"canned"}, got)
 
 	// A driver with a matching Registry entry is not reported.
-	got = unregisteredDrivers([]spells.Driver{fakeDriver{}}, []ToolDescriptor{{Name: "fake"}})
+	got = unregisteredDrivers([]spells.Driver{cannedDriver{}}, []ToolDescriptor{{Name: "canned"}})
 	assert.Empty(t, got)
 }
 
@@ -434,7 +437,7 @@ func TestJSONResult(t *testing.T) {
 func TestDeclaredParamsRefusesAnUndeclaredParam(t *testing.T) {
 	t.Parallel()
 
-	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(fakeDriver{resp: spells.InvokeResponse{Text: "ran"}}))
+	h := declaredParams(ToolDescriptor{Name: "demo", Params: []ParamDescriptor{{Name: "script"}}}, adapt(cannedDriver{resp: spells.InvokeResponse{Text: "ran"}}))
 	res, err := h(context.Background(), callRequest("demo", map[string]any{"script": "x", "input": 1}))
 	require.NoError(t, err)
 	assert.True(t, res.IsError)
@@ -451,14 +454,14 @@ func TestWrapMeasuresEveryByteSent(t *testing.T) {
 	t.Parallel()
 
 	originFn := func(context.Context) origin.Client { return origin.Client{Name: "test-agent"} }
-	tel := &fakeTel{}
+	tel, calls := mcpCallTelemetry(t)
 	h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return jsonResult(map[string]any{"ok": true})
 	})
 	result, err := h(context.Background(), callRequest(hint.ToolStatus.String(), nil))
 	require.NoError(t, err)
-	require.Len(t, tel.calls, 1)
-	assert.Equal(t, int64(2*len(allText(result))), tel.calls[0].OutputBytes)
+	require.Len(t, *calls, 1)
+	assert.Equal(t, int64(2*len(allText(result))), (*calls)[0].OutputBytes)
 }
 
 // TestToolCallBlobsAreRedacted is the test the trail's ctx parameter always needed.

@@ -11,23 +11,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeProbe is the test Probe with controllable answers. It lives in
+// presetProbe is a Probe whose answers each test sets. It lives in
 // _test.go so no production build can reach it.
-type fakeProbe struct {
+type presetProbe struct {
 	isTTY   bool
 	width   int
 	height  int
 	sizeErr error
 }
 
-func (f fakeProbe) IsTerminal(uintptr) bool { return f.isTTY }
-func (f fakeProbe) Size(uintptr) (int, int, error) {
+func (f presetProbe) IsTerminal(uintptr) bool { return f.isTTY }
+func (f presetProbe) Size(uintptr) (int, int, error) {
 	return f.width, f.height, f.sizeErr
 }
 
 // compile-time proof that both implementations satisfy the interface.
 var (
-	_ Probe = fakeProbe{}
+	_ Probe = presetProbe{}
 	_ Probe = systemProbe{}
 )
 
@@ -68,8 +68,8 @@ func TestFdDistinguishesNoDescriptorFromStdin(t *testing.T) {
 
 func TestIsTerminalWriterRequiresBothADescriptorAndATerminal(t *testing.T) {
 	t.Parallel()
-	yes := fakeProbe{isTTY: true}
-	no := fakeProbe{}
+	yes := presetProbe{isTTY: true}
+	no := presetProbe{}
 
 	assert.True(t, IsTerminalWriter(&ttyBuf{}, yes), "a descriptor the probe calls a terminal")
 	assert.False(t, IsTerminalWriter(&ttyBuf{}, no), "a descriptor the probe calls a pipe")
@@ -81,7 +81,7 @@ func TestIsTerminalWriterRequiresBothADescriptorAndATerminal(t *testing.T) {
 // any non-empty value disables colour, including "0" and "false", which
 // are values a user might expect to mean "off".
 func TestWantsColorHonoursNoColor(t *testing.T) {
-	terminal := fakeProbe{isTTY: true}
+	terminal := presetProbe{isTTY: true}
 
 	t.Run("unset means colour on a terminal", func(t *testing.T) {
 		t.Setenv("NO_COLOR", "")
@@ -99,7 +99,7 @@ func TestWantsColorHonoursNoColor(t *testing.T) {
 
 func TestWantsColorIsFalseOffATerminal(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	assert.False(t, WantsColor(&bytes.Buffer{}, fakeProbe{isTTY: true}),
+	assert.False(t, WantsColor(&bytes.Buffer{}, presetProbe{isTTY: true}),
 		"a pipe gets no escapes even when NO_COLOR is unset")
 }
 
@@ -109,7 +109,7 @@ func TestWantsColorIsFalseOffATerminal(t *testing.T) {
 // that moves the cursor or reserves rows may be written to it.
 func TestCanRenderIsFalseUnderTermDumb(t *testing.T) {
 	t.Setenv("TERM", "dumb")
-	assert.False(t, CanRender(&ttyBuf{}, fakeProbe{isTTY: true}))
+	assert.False(t, CanRender(&ttyBuf{}, presetProbe{isTTY: true}))
 }
 
 // TestWantsColorIsFalseUnderTermDumb is [TestCanRenderIsFalseUnderTermDumb]'s
@@ -118,7 +118,7 @@ func TestCanRenderIsFalseUnderTermDumb(t *testing.T) {
 func TestWantsColorIsFalseUnderTermDumb(t *testing.T) {
 	t.Setenv("TERM", "dumb")
 	t.Setenv("NO_COLOR", "")
-	assert.False(t, WantsColor(&ttyBuf{}, fakeProbe{isTTY: true}))
+	assert.False(t, WantsColor(&ttyBuf{}, presetProbe{isTTY: true}))
 }
 
 func TestCaptureProbeIgnoresShellCapabilities(t *testing.T) {
@@ -144,10 +144,10 @@ func TestIsTerminalReaderIsFalseForDevNull(t *testing.T) {
 		"/dev/null is a character device but never a terminal")
 }
 
-func TestFakeProbeSizeErrorPropagates(t *testing.T) {
+func TestPresetProbeSizeErrorPropagates(t *testing.T) {
 	t.Parallel()
 	want := errors.New("ioctl failed")
-	_, _, err := fakeProbe{sizeErr: want}.Size(1)
+	_, _, err := presetProbe{sizeErr: want}.Size(1)
 	assert.ErrorIs(t, err, want)
 }
 

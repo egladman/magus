@@ -40,7 +40,7 @@ service JobService {
 // failures (unknown job, missing token, internal error) use the transport's error codes instead.
 enum SubmitState {
   SUBMIT_STATE_UNSPECIFIED = 0;
-  SUBMIT_STATE_SUBMITTED = 1;       // a new background job was started
+  SUBMIT_STATE_SUBMITTED = 1; // a new background job was started
   SUBMIT_STATE_ALREADY_RUNNING = 2; // an identical job was already in flight; coalesced, not restarted
 }
 
@@ -55,17 +55,17 @@ message RunJobResponse {
   // its own origin. Empty only when the daemon coalesced a submit it could not name, since
   // a run with no invocation has nothing to link to.
   string console_url = 3;
-  Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
+  Job job = 4; // the job's descriptor plus its last-run and current-size metadata
 }
 
 // JobHolder is who runs a job. One listing carries both kinds, so a reader can tell the
 // daemon's own housekeeping from work a session was handed without asking a second door.
 enum JobHolder {
-  reserved 1;               // was JOB_HOLDER_DAEMON, the process `magus server` replaced
+  reserved 1; // was JOB_HOLDER_DAEMON, the process `magus server` replaced
   reserved "JOB_HOLDER_DAEMON";
   JOB_HOLDER_UNSPECIFIED = 0;
   JOB_HOLDER_SESSION = 2; // work an orchestrator declared for somebody else to hold
-  JOB_HOLDER_SERVER = 3;  // the daemon's own maintenance catalog
+  JOB_HOLDER_SERVER = 3; // the daemon's own maintenance catalog
 }
 
 // Job is the full picture of one job: what it is, who holds it, whether an instance is
@@ -79,11 +79,11 @@ message Job {
   // is the last segment, and is what the CLI's `job run <name>` leaf takes.
   string name = 1;
   string description = 2;
-  bool running = 3;        // an instance is in flight right now
-  JobRun last_run = 4;     // most recent run; unset if the job has never been submitted
+  bool running = 3; // an instance is in flight right now
+  JobRun last_run = 4; // most recent run; unset if the job has never been submitted
   ResourceSize target = 5; // current size of what the job operates on (trail, cache, or logs)
 
-  string id = 6;        // the bare row id, without the "jobs/" collection segment
+  string id = 6; // the bare row id, without the "jobs/" collection segment
   JobHolder holder = 7; // who runs it
   // state is the row's lifecycle position: declared, running, exited, pass, fail or
   // no_return. A string rather than an enum because the vocabulary is the job store's and a
@@ -127,17 +127,21 @@ message Job {
   string reported_base = 27;
   string base_verdict = 28;
   string checkout_root = 29;
-  int64 registered = 30;            // unix seconds the holder took the job, 0 while untaken
-  JobOrigin registered_by = 31;     // who declared the row
-  JobAttempt attempt = 32;          // the newest recorded run of the job's own check
+  int64 registered = 30; // unix seconds the holder took the job, 0 while untaken
+  JobOrigin registered_by = 31; // who declared the row
+  JobAttempt attempt = 32; // the newest recorded run of the job's own check
   repeated JobGateAttempt gate_attempts = 33;
   repeated JobUnattributedWrite unattributed = 34;
   repeated JobEntry entries = 35;
-  JobIntegration integration = 36;  // unset until the integrator verified the job
+  JobIntegration integration = 36; // unset until the integrator verified the job
   // The row's schema envelope: the newest store schema any writer of it used, and the
   // features a reader must implement to act on it (see ListJobsResponse.read_only).
   int32 schema_version = 38;
   repeated string requires = 37;
+  // waiter_evidence is the goals whose passing run came from the waiter's checkout rather than
+  // the holder's, unset unless `magus job wait --evidence` took some. gate_attempts keep the
+  // holder's own attempts untouched; this is the second fact beside them.
+  JobIntegration waiter_evidence = 39;
 }
 
 // JobOrigin is who did something to a row, one field per channel, as the activity trail
@@ -161,6 +165,16 @@ message JobAttempt {
   string target = 5;
   string spell = 6;
   bool failed = 7;
+  // attempt_id names this execution alone, where ref may name its step, which a later run of
+  // the same step takes over.
+  string attempt_id = 8;
+  // duration_ms is how long the run took. timestamp_ms is when it ENDED, so the run started at
+  // timestamp_ms - duration_ms.
+  int64 duration_ms = 9;
+  // revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the
+  // tree also held uncommitted changes then, so revision alone does not name what it read.
+  string revision = 10;
+  bool dirty = 11;
 }
 
 // JobGateAttempt is the newest recorded run of one goal's check.
@@ -180,7 +194,7 @@ message JobUnattributedWrite {
 message JobEntry {
   string path = 1;
   JobOrigin by = 2;
-  int64 at = 3;       // unix seconds
+  int64 at = 3; // unix seconds
   int64 consumed = 4; // unix seconds the entry was consumed, 0 while it stands
 }
 
@@ -245,7 +259,7 @@ message JobResult {
   repeated string changed_paths = 1;
   repeated string unresolved_risks = 2;
   repeated string descendants = 3;
-  string validation_command = 4;    // the command the holder ran as its check
+  string validation_command = 4; // the command the holder ran as its check
   string validation_output_ref = 5; // that run's output ref
   repeated JobGateEvidence gate_evidence = 6;
 }
@@ -263,6 +277,9 @@ message JobRelease {
   string path = 1;
   string digest = 2;
   int64 released_at = 3; // unix seconds
+  // revoked is a path taken from a job its holder had taken, by a writer other than that
+  // holder: the orchestrator revoking it rather than the worker giving it up.
+  bool revoked = 4;
 }
 
 // JobOverlap is one pair of jobs whose declared write paths intersect. Derived on every
@@ -290,13 +307,13 @@ message JobRun {
   string invocation_id = 1;
   google.protobuf.Timestamp end_time = 2;
   google.protobuf.Duration duration = 3;
-  bool ok = 4;          // false when the run errored
-  string error = 5;     // error text when ok is false
+  bool ok = 4; // false when the run errored
+  string error = 5; // error text when ok is false
 
   // Per-run deltas, populated only by jobs that measure them (a rotate reports what it dropped).
   // Zero when the job does not report a delta yet - additive, so a job starts reporting later
   // without a contract change.
-  int64 items_removed = 6;   // e.g. trail events pruned, cache entries invalidated
+  int64 items_removed = 6; // e.g. trail events pruned, cache entries invalidated
   int64 bytes_reclaimed = 7; // on-disk bytes freed
 }
 
@@ -317,11 +334,14 @@ message RunJobRequest {
 // Paginated by contract so growth never forces a breaking change, though the registry is a
 // fixed handful today and one page always holds it.
 message ListJobsRequest {
-  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
   string page_token = 2;
 }
 message ListJobsResponse {
-  repeated Job jobs = 1;      // every job, catalog and delegated, in a stable order
+  repeated Job jobs = 1; // every job, catalog and delegated, in a stable order
   string next_page_token = 2; // empty while one page holds the registry
   // overlaps are the pairs of jobs claiming common ground, derived from jobs on every read.
   repeated JobOverlap overlaps = 3;
@@ -330,6 +350,6 @@ message ListJobsResponse {
   repeated string overdue = 4;
   repeated string orphans = 5;
   repeated string stale = 6;
-  repeated JobBlock blocked = 7;       // live jobs waiting on a dependency that has not passed
-  repeated JobReadOnly read_only = 8;  // rows this daemon's binary can read but not write
+  repeated JobBlock blocked = 7; // live jobs waiting on a dependency that has not passed
+  repeated JobReadOnly read_only = 8; // rows this daemon's binary can read but not write
 }

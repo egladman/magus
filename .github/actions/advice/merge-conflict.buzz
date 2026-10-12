@@ -6,7 +6,7 @@
 // files actually conflict - an ordinary source conflict is the author's business.
 //
 // Writes its section of the pull request's one magus comment through advice\publish.
-import "proc";
+import "vcs";
 import "advice";
 import "magus";
 import "std";
@@ -37,9 +37,9 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // core.quotePath would C-quote a non-ASCII path ("gen/caf\303\251.json", quotes and all),
     // and that string reaches describe.file, matches no output glob, and gets reported to the
     // author as their file.
-    final res = proc\exec("git", args: ["-c", "core.quotePath=false", "merge-tree",
-        "--write-tree", "--name-only", "--no-messages", "origin/" + base, head], dir: ".",
-        opts: {"quiet": true, "allow_failure": true});
+    final res = vcs\cmd(["-c", "core.quotePath=false", "merge-tree",
+        "--write-tree", "--name-only", "--no-messages", "origin/" + base, head],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true});
     if (res.code == 0) { return mut [<str>]; }
     if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
 

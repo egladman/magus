@@ -357,18 +357,18 @@ func heldHere(rows []types.Job, root, forking string) []types.Job {
 // recorded, see WriteProof), nothing about a checkout holding no other live job, and
 // nothing about a job whose write paths cover no load file. Refusing more than magus can
 // prove is how a guard becomes something to route around.
-func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate types.Job) error {
-	if store == nil || len(candidate.WritePaths) == 0 {
+func RefuseSharedCheckout(store *Store, rows []types.Job, row types.Job) error {
+	if store == nil || len(row.WritePaths) == 0 {
 		return nil
 	}
-	held := heldHere(rows, store.root, id)
+	held := heldHere(rows, store.root, row.ID)
 	if len(held) == 0 {
 		return nil
 	}
 	// Read only once something else holds the checkout: the walk touches the tree, and a
 	// fork into an unshared checkout is the common case and must stay free.
 	for _, load := range describe.WorkspaceLoadFiles(store.root) {
-		declared, covered := writePathCovering(candidate.WritePaths, load)
+		declared, covered := writePathCovering(row.WritePaths, load)
 		if !covered {
 			continue
 		}
@@ -377,7 +377,7 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 			" so every job here loses `magus run` until it lands, not just this one,"+
 			" give %s its own worktree and fork it there, or leave %s out of its write paths,"+
 			" `%s` names what else that write path covers",
-			id, declared, load, held[0].ID, store.root, id, load, hint.DescribeFile.With(load))
+			row.ID, declared, load, held[0].ID, store.root, row.ID, load, hint.DescribeFile.With(load))
 	}
 	return nil
 }
@@ -394,12 +394,12 @@ func RefuseSharedCheckout(store *Store, rows []types.Job, id string, candidate t
 // part is itself a pattern. Any other glob (`docs/*.md`) names files and passes.
 //
 // A nil store, or one with no workspace root, has no tree to read and refuses nothing.
-func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) error {
+func RefuseDirectoryWritePaths(store *Store, row types.Job) error {
 	if store == nil || store.root == "" {
 		return nil
 	}
 	var refused []string
-	for _, decl := range candidate.WritePaths {
+	for _, decl := range row.WritePaths {
 		for _, dir := range claimedDirs(store.root, decl) {
 			named := fmt.Sprintf("%q", decl)
 			if dir != path.Clean(strings.TrimSpace(decl)) {
@@ -423,7 +423,7 @@ func RefuseDirectoryWritePaths(store *Store, id string, candidate types.Job) err
 		"job: %s declares a directory as a write path: %s. A write path names files: a directory, a project"+
 			" root included, claims every file under it, so the job would overlap every job editing anything there."+
 			" List the files the job will edit, and name each file it creates by its path",
-		id, strings.Join(refused, "; "))
+		row.ID, strings.Join(refused, "; "))
 }
 
 // claimedDirs returns the existing directories, workspace-relative, that the write path
@@ -487,21 +487,32 @@ func writePathCovering(paths []string, rel string) (string, bool) {
 	return "", false
 }
 
-// WriteProof grades candidate's write paths against every other live job working in this
-// checkout. See [types.JobWriteProof] for why the three answers are distinct.
+// WriteProof grades row's write paths against every other job in rows still editing with
+// write paths, that is working in this checkout or not yet taken by any. An untaken job
+// counts because only `job exec` binds one: two jobs forked back to back are both
+// untaken, and proving the second "alone" would be a claim about a plan nobody has
+// started. See [types.JobWriteProof] for why the three answers are distinct.
 //
-// A nil Store answers alone: a caller with no store knows of no other holder.
-func (s *Store) WriteProof(rows []types.Job, id string, candidate types.Job) types.JobWriteProof {
-	if s == nil {
+// A nil Store, or one with no root, answers alone: a caller with no checkout knows of no
+// other holder.
+func (s *Store) WriteProof(rows []types.Job, row types.Job) types.JobWriteProof {
+	if s == nil || s.root == "" {
 		return types.WriteProofAlone
 	}
-	held := heldHere(rows, s.root, id)
-	if len(held) == 0 {
+	here, err := filepath.Abs(s.root)
+	if err != nil {
 		return types.WriteProofAlone
 	}
-	for _, row := range held {
-		for _, mine := range candidate.WritePaths {
-			for _, theirs := range row.WritePaths {
+	peers := slices.DeleteFunc(slices.Clone(rows), func(peer types.Job) bool {
+		return peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 ||
+			peer.CheckoutRoot != "" && peer.CheckoutRoot != here
+	})
+	if len(peers) == 0 {
+		return types.WriteProofAlone
+	}
+	for _, peer := range peers {
+		for _, mine := range row.WritePaths {
+			for _, theirs := range peer.WritePaths {
 				if types.PathsIntersect(mine, theirs) {
 					return types.WriteProofOverlapping
 				}

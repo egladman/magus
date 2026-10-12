@@ -20,10 +20,12 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/maintenance"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
@@ -74,51 +76,10 @@ var verdictDecisionRe = regexp.MustCompile(`Decision(?::|\s*=)\s*"(\w+)"`)
 
 // fleetFixture stands up a workspace root and a lease ledger holding leases, and
 // returns the context pinning both, the workspace root, and the resolved cache dir.
-// Mirrors internal/guard's own fleetFixture through the exported guard.WithLocation
-// seam, since this package cannot reach the unexported hookActivityLocationKey it
-// uses directly.
 func fleetFixture(t *testing.T, leases ...types.Job) (ctx context.Context, root, cacheDir string) {
 	t.Helper()
-	// The ledger now lives in the per-repository state directory, and the guard resolves
-	// it with no seam a test can reach, so the environment is what keeps this off the
-	// developer's own ledger.
-	testkit.Isolate(t)
-	root, cacheDir = t.TempDir(), t.TempDir()
-	store := job.NewStore(job.Location{CacheDir: cacheDir, Root: root})
-	for _, u := range leases {
-		_, err := store.Update(t.Context(), u.ID, func(cur *types.Job) { *cur = u })
-		require.NoError(t, err)
-	}
+	root, cacheDir = fixture.SeedLeases(t, leases...)
 	return guard.WithLocation(t.Context(), cacheDir, root, ""), root, cacheDir
-}
-
-// fleetLeases mirrors internal/guard's own fleetLeases, unexported there: two live
-// workers with disjoint write paths, one of them declaring a denied subtree inside its
-// own.
-func fleetLeases() []types.Job {
-	return []types.Job{
-		{
-			ID:           "lease-a",
-			Criteria:     "own the ledger store\nacceptance: List stays cheap",
-			WritePaths:   []string{"internal/ledger/**"},
-			State:        types.StateRunning,
-			Checkpoint:   "rev-a",
-			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
-			Registered:   1,
-		},
-		{
-			ID:           "lease-b",
-			Criteria:     "grade writes in the guard",
-			WritePaths:   []string{"cmd/magus/**", "docs/guard.md"},
-			DenyPaths:    []string{"cmd/magus/gen/**"},
-			State:        types.StateDeclared,
-			Checkpoint:   "rev-a",
-			ReportedBase: "rev-a",
-			BaseVerdict:  types.BaseMatch,
-			Registered:   1,
-		},
-	}
 }
 
 // narrowLease is a delegated worker assigned one package's tests: the shape the
@@ -380,20 +341,45 @@ func hookCommandEvent(ctx context.Context, got trail.Event, origin types.Origin,
 		Binary:        got.Binary,
 		BinaryVersion: got.BinaryVersion,
 		Cwd:           got.Cwd,
+		Phases:        got.Phases,
 	}
 }
 
+// A hook row times the rule load against the hook's deadline, which starts before it, and
+// ends with the whole judgment.
+func TestHookCmd_RecordsEachPhase(t *testing.T) {
+	dir := t.TempDir()
+	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
+	require.NoError(t, shellStdin(ctx, strings.NewReader("ls"), io.Discard, []string{"-o", "name"}))
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	phases := events[0].Phases
+	require.Len(t, phases, 2)
+	assert.Equal(t, "load_rules", phases[0].Name)
+	assert.Positive(t, phases[0].BudgetMs)
+	assert.Less(t, phases[0].BudgetMs, (10 * time.Second).Milliseconds(), "inside the host's kill line")
+	assert.False(t, phases[0].Lapsed)
+	assert.Equal(t, "judge", phases[1].Name)
+}
+
 // assertJudgedBy pins the judging magus a hook row records, the running binary and its
-// version, and clears them from got so the rest of the row can be compared whole.
+// version, and the phases it timed, and clears them from got so the rest of the row can be
+// compared whole.
 func assertJudgedBy(t *testing.T, got *trail.Event) {
 	t.Helper()
 	assert.NotEmpty(t, got.Binary, "a hook row names the magus that judged it")
 	assert.Equal(t, version, got.BinaryVersion)
-	got.Binary, got.BinaryVersion = "", ""
+	names := make([]string, len(got.Phases))
+	for i, p := range got.Phases {
+		names[i] = p.Name
+	}
+	assert.Equal(t, []string{"load_rules", "judge"}, names)
+	got.Binary, got.BinaryVersion, got.Phases = "", "", nil
 }
 
 func TestHookCmd_AppendsNormalizedActivity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -460,7 +446,6 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	// The whole-struct assertion below includes Lease, which the hook reads off the
 	// environment, so a developer or CI job that exported one would fail this test over
 	// its own baggage.
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := guard.WithLocation(context.Background(), dir, "/repo/magus", "")
 	var out bytes.Buffer
@@ -479,6 +464,9 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 	got.Ts, got.RequestRef, got.ResponseRef = 0, "", ""
 	got.RequestBytes, got.ResponseBytes = 0, 0
 	assertJudgedBy(t, &got)
+	// A bare command names no directory, so the row records the one the judge ran in.
+	wd, err := os.Getwd()
+	require.NoError(t, err)
 	assert.Equal(t, trail.Event{
 		Kind:      trail.KindAgentCommand,
 		Origin:    trail.StampOrigin(ctx, types.Origin{EntryPoint: types.EntryPointHook, Host: "claude-code", Session: "abc123"}),
@@ -486,6 +474,7 @@ func TestHookCmd_RecordsHostAttribution(t *testing.T) {
 		Action:    "shell.command",
 		Outcome:   trail.OutcomeOK,
 		Preview:   "guard: pass",
+		Cwd:       wd,
 	}, got)
 
 	body, err := trail.ReadBlob(dir, requestRef)
@@ -743,7 +732,6 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 // is exercised end to end elsewhere; what matters here is that the mode parses,
 // shares the standard output arm, and FAILS OPEN on anything it cannot classify.
 func TestHookPathMode(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, tt := range []struct {
 		name string
 		args []string
@@ -952,9 +940,10 @@ func TestHookCmdShortensARepeatedDenial(t *testing.T) {
 func TestHookCmdRoutesAnAgentSourceWrite(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	t.Setenv(trail.EnvBaggage, "")
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	t.Chdir(root)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w.Magusfile("")
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "agent"), 0o755))
 
@@ -1003,7 +992,6 @@ func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
 			ctx, root, _ := fleetFixture(t)
 			// The fixture's cache dir is already elsewhere, so these rows exercise the
 			// literal spelling against a RELOCATED dir, which is the harder half.
@@ -1031,7 +1019,6 @@ func TestHookCmdJudgesTheCacheDirOnBothInputs(t *testing.T) {
 func TestHookCmdDeniesTheCacheDirAheadOfTheBoundaryItSitsIn(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.WritePaths = []string{"**"}
 	// Unregistered, so the write-path rule has a denial of its own to be outranked BY. A
@@ -1084,7 +1071,6 @@ func TestHookCmdDeniesTheGateUnderANarrowLease(t *testing.T) {
 	global = globalFlags{}
 	// The hook falls back to the environment for the lease, so a developer or CI job that
 	// exported one would decide the control case below.
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 	command := "./magus affected ci --no-default-charms"
 
@@ -1137,7 +1123,6 @@ func TestHookEnvelopeCwdLocatesTheWorkersCheckout(t *testing.T) {
 func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	wide := narrowLease()
 	wide.WritePaths = []string{"cmd/magus/**", "internal/hint/**"}
 	ctx, _, _ := fleetFixture(t, wide)
@@ -1180,7 +1165,6 @@ func TestHookCmdJudgesTheMCPLedgerInput(t *testing.T) {
 func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
@@ -1198,7 +1182,6 @@ func TestHookCmdErrorsOnAnUndeclaredLease(t *testing.T) {
 func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	for _, command := range []string{
@@ -1226,7 +1209,6 @@ func TestHookCmdLetsAnUndeclaredLeaseRepairItself(t *testing.T) {
 func TestHookCmdNoticesATerminalLease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	done := narrowLease()
 	done.State = types.StatePass
 	ctx, _, _ := fleetFixture(t, done)
@@ -1248,7 +1230,6 @@ func TestHookCmdNoticesATerminalLease(t *testing.T) {
 func TestHookVerdictCarriesTheActingLease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var leased bytes.Buffer
@@ -1280,7 +1261,6 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
 			ctx, _, _ := fleetFixture(t, narrowLease())
 
 			var out bytes.Buffer
@@ -1296,7 +1276,6 @@ func TestHookCmdAdvisesAnInvalidLeaseOnEveryInput(t *testing.T) {
 func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, _ := fleetFixture(t, narrowLease())
 
 	var out bytes.Buffer
@@ -1314,7 +1293,6 @@ func TestHookCmdRanksTheCacheDirAboveTheUndeclaredLease(t *testing.T) {
 func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	ctx, _, _ := fleetFixture(t, lease)
 
@@ -1341,7 +1319,6 @@ func TestHookCmdDeniesTheGateThroughTheMCPDoor(t *testing.T) {
 func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t, narrowLease())
 	gate := hint.NewGate(cacheDir, "session-preauth")
 	command := "./magus affected ci --no-default-charms"
@@ -1366,7 +1343,6 @@ func TestHookCmdStandsDownOnAServedNext(t *testing.T) {
 func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	ctx, _, cacheDir := fleetFixture(t)
 	gate := hint.NewGate(cacheDir, "session-carveout")
 
@@ -1387,7 +1363,6 @@ func TestHookCmdNeverPreauthorizesAWorkspaceWideDeny(t *testing.T) {
 func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
 	global = globalFlags{}
-	t.Setenv(trail.EnvBaggage, "")
 	lease := narrowLease()
 	lease.WritePaths = []string{".claude/**", "cmd/magus/**"}
 	ctx, _, _ := fleetFixture(t, lease)
@@ -1409,7 +1384,7 @@ func TestHookCmdDeniesAWiringWriteUnderALease(t *testing.T) {
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
+	ctx, root, cacheDir := fleetFixture(t, fixture.FleetLeases()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1525,8 +1500,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			global = globalFlags{}
-			t.Setenv(trail.EnvBaggage, "")
-			ctx, root, cacheDir := fleetFixture(t, fleetLeases()...)
+			ctx, root, cacheDir := fleetFixture(t, fixture.FleetLeases()...)
 			if tc.setup != nil {
 				tc.setup(t, ctx, cacheDir, root)
 			}
@@ -1540,8 +1514,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 
 	t.Run("an unbound caller rewires its own hosts", func(t *testing.T) {
 		global = globalFlags{}
-		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		require.NoError(t, shellStdin(ctx, strings.NewReader(rewire), &out, []string{"-o", "json"}))
 		assert.NotContains(t, out.String(), "leave the host harness alone")
@@ -1549,8 +1522,7 @@ func TestHookCmdRefusesAHarnessRewireUnderEveryLeaseSource(t *testing.T) {
 
 	t.Run("verify is a read", func(t *testing.T) {
 		global = globalFlags{}
-		t.Setenv(trail.EnvBaggage, "")
-		ctx, _, _ := fleetFixture(t, fleetLeases()...)
+		ctx, _, _ := fleetFixture(t, fixture.FleetLeases()...)
 		var out bytes.Buffer
 		_ = shellStdin(ctx, strings.NewReader("magus agent harness verify"), &out, []string{"--lease", "lease-a", "-o", "json"})
 		assert.NotContains(t, out.String(), "leave the host harness alone")
@@ -1607,6 +1579,29 @@ func TestHookCmd_AdvisesSpawnBeforeTheBrief(t *testing.T) {
 	assert.Equal(t, "pass\n", allowed.String(), "the brief is read once per session, not per spawn")
 }
 
+// The host-call flags reach the guard: a worker's backgrounded magus run is refused, the
+// same run in the foreground passes, and the foreground limits parse as milliseconds.
+func TestShellReadsHowTheHostRunsTheCall(t *testing.T) {
+	global = globalFlags{}
+	testkit.Isolate(t)
+	root, cacheDir := t.TempDir(), t.TempDir()
+	row := types.Job{ID: "worker", WritePaths: []string{"a.go"}, Check: &types.LeaseCheck{Target: "test", Project: "."}, State: types.StateRunning, Registered: 1}
+	_, err := job.NewStore(job.Location{CacheDir: cacheDir, Root: root}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
+	ctx := guard.WithLocation(t.Context(), cacheDir, root, "")
+	run := func(flags ...string) guard.Verdict {
+		var out bytes.Buffer
+		args := append([]string{"--lease", row.ID, "-o", "json"}, flags...)
+		_ = shellStdin(ctx, strings.NewReader("magus run test ."), &out, args)
+		var v guard.Verdict
+		require.NoError(t, json.Unmarshal(out.Bytes(), &v), out.String())
+		return v
+	}
+	refused := run("--call-background")
+	assert.Equal(t, []string{"deny", "worker-background-run"}, []string{refused.Decision, refused.Rule})
+	assert.Equal(t, "pass", run("--call-timeout-ms", "600000", "--foreground-default-ms", "120000", "--foreground-max-ms", "600000").Decision)
+}
+
 // denyRules is a magusfile whose spawn rule denies every spawn and whose command rule
 // denies every command.
 const denyRules = `import "magus";
@@ -1620,14 +1615,9 @@ magus\guard.command(fun (req: CommandRequest) > GuardVerdict {
 `
 
 // committedDenyRule is a git repository whose committed root magusfile is denyRules.
-func committedDenyRule(t *testing.T) string {
+func committedDenyRule(t *testing.T) *testkit.Repo {
 	t.Helper()
-	root := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(denyRules), 0o644))
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
-	return root
+	return testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyRules})
 }
 
 // A committed spawn rule still answers however the working tree leaves the root magusfile:
@@ -1650,7 +1640,7 @@ func TestLoadApprovedSpawnRuleSurvivesABrokenWorkingTree(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := committedDenyRule(t)
+			root := committedDenyRule(t).Root()
 			tc.mutate(t, root)
 
 			rule, err := magus.LoadApprovedSpawnRule(t.Context(), root)
@@ -1747,15 +1737,16 @@ func resetWorkspaceMemo(t *testing.T) {
 // branch checkout names its branch, a detached one names none, and a directory under no
 // version control is unknown.
 func TestCheckoutStateForGuard(t *testing.T) {
-	root := committedDenyRule(t)
-	runGit(t, root, "update-ref", "refs/remotes/origin/main", "HEAD")
+	repo := committedDenyRule(t)
+	root := repo.Root()
+	repo.Git("update-ref", "refs/remotes/origin/main", "HEAD")
 
 	got := checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
 	assert.NotEmpty(t, got.Branch)
 	assert.Equal(t, []string{"origin/main"}, got.RemoteBranches)
 
-	runGit(t, root, "checkout", "-q", "--detach")
+	repo.Git("checkout", "-q", "--detach")
 	got = checkoutStateForGuard(t.Context(), root)
 	require.NotNil(t, got)
 	assert.Empty(t, got.Branch)
@@ -1767,7 +1758,7 @@ func TestCheckoutStateForGuard(t *testing.T) {
 // here for a version floor this binary is below, still has its rules applied.
 func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 	t.Cleanup(snapshotGlobals())
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	version = "v0.5.0"
 	globalCfg.RequiredVersion = ">= 99.0.0"
@@ -1788,7 +1779,7 @@ func TestSpawnRuleSurvivesAVersionFloor(t *testing.T) {
 // A root magusfile that does not load is a load failure, not a workspace with no rules,
 // so the committed rules still apply to a spawn and to a command.
 func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("import \"magus\";\n\nmagus\\guard.spawn(\n"), 0o644))
 	t.Chdir(root)
@@ -1819,25 +1810,19 @@ func TestUnloadableWorkingTreeStillRunsTheCommittedRules(t *testing.T) {
 // committed magusfile imports in the same edit. Its own load never reads that file, and the
 // committed load still has to read it as committed, not as edited.
 func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
-	root := initGitRepo(t)
-	policy := filepath.Join(root, "policy")
-	require.NoError(t, os.MkdirAll(policy, 0o755))
-	write := func(name, body string) {
-		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(body), 0o644))
-	}
 	rule := func(ns, verdict string) string {
 		return "namespace " + ns + ";\n\nimport \"magus\";\n\nexport fun judge(req: CommandRequest) > GuardVerdict {\n    return " + verdict + ";\n}\n"
 	}
 	importing := func(name string) string {
 		return "import \"magus\";\nimport \"./policy/" + name + "\" as p;\nmagus\\guard.command(p\\judge);\n"
 	}
-	write("magus.yaml", "{}\n")
-	write("policy/a.buzz", rule("a", `magus\guard.deny("Not in this repository.")`))
-	write("policy/b.buzz", rule("b", `magus\guard.allow()`))
-	write("magusfile.buzz", importing("a"))
-	runGit(t, root, "add", "-A")
-	runGit(t, root, "commit", "-q", "-m", "init")
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"policy/a.buzz":  rule("a", `magus\guard.deny("Not in this repository.")`),
+		"policy/b.buzz":  rule("b", `magus\guard.allow()`),
+		"magusfile.buzz": importing("a"),
+	})
+	root, write := repo.Root(), repo.Write
 
 	write("magusfile.buzz", importing("b"))
 	write("policy/a.buzz", rule("a", `magus\guard.allow()`))
@@ -1854,10 +1839,68 @@ func TestApprovedRulesReadAnImportTheWorkingTreeDropped(t *testing.T) {
 	assert.Equal(t, types.GuardDeny, got.Decision)
 }
 
+// The hook timeout the guard reports an abandoned check against is the one the host's
+// harness declares, read through the hook's own dependencies, and nothing for a host the
+// workspace wires no harness for. The shipped spells' own declarations are the bindings'
+// test.
+func TestHostHookTimeoutIsTheHarnessDeclaration(t *testing.T) {
+	testkit.Isolate(t)
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "limit-host",
+		Display:       agent.HarnessDisplay{Name: "Limit host"},
+		Skills:        agent.HarnessSkills{Form: agent.FormShort},
+		Config:        agent.HarnessConfig{Path: "hooks.json"},
+		Limits:        agent.HarnessLimits{HookTimeoutMs: 30000},
+	})
+	root := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":                   "{}\n",
+		"magusfile.buzz":               "import \"magus\";\nimport \"spells/limit-host\" as host;\nmagus\\harness.provider(host);\n",
+		"spells/limit-host/spell.buzz": limitHostSpell,
+	}).Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	deps := guardDependencies(t.Context(), "")
+	require.NotNil(t, deps.HostHookTimeout)
+	got, ok := deps.HostHookTimeout(t.Context(), "limit-host")
+	assert.Equal(t, []any{30 * time.Second, true}, []any{got, ok})
+	_, ok = deps.HostHookTimeout(t.Context(), "codex")
+	assert.False(t, ok, "a host the workspace wires no harness for")
+}
+
+// A write to the root magusfile whose judgment ran out of time, its rules loaded through the
+// hook's own dependencies, goes through while no policy change is pending, so a slow
+// committed rule can be fixed, and is refused once a change is pending.
+func TestLapsedPolicyWriteIsSparedOnlyWithNothingPending(t *testing.T) {
+	testkit.Isolate(t)
+	const allow = "import \"magus\";\n\nmagus\\guard.write(fun (req: WriteRequest) > GuardVerdict {\n    return magus\\guard.allow();\n});\n"
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": allow})
+	root := repo.Root()
+	resetWorkspaceMemo(t)
+	t.Chdir(root)
+	judge := func() guard.Verdict {
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		defer cancel()
+		ctx = guard.WithLocation(ctx, t.TempDir(), root, root)
+		return guard.Judge(ctx, guardDependencies(ctx, ""), guard.Request{
+			Input: filepath.Join(root, "magusfile.buzz"), IsPath: true, Host: "claude-code", Session: "lapsed-policy-write",
+		})
+	}
+
+	v := judge()
+	assert.Equal(t, "advise", v.Decision, v.Reason)
+	assert.Contains(t, v.Context, "lets it through, because the guard loads this file itself")
+
+	repo.Write("magusfile.buzz", allow+"// pending\n")
+	v = judge()
+	assert.Equal(t, "deny", v.Decision)
+	assert.Contains(t, v.Reason, "magus ran out of time judging this file write")
+}
+
 // The committed side is loaded only while a file the root load read differs from it:
 // an uncommitted edit anywhere else changes nothing either side registers.
 func TestApprovedRulesLoadOnlyForAPendingPolicySource(t *testing.T) {
-	root := committedDenyRule(t)
+	root := committedDenyRule(t).Root()
 	resetWorkspaceMemo(t)
 	t.Chdir(root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "other"), 0o755))
@@ -1904,14 +1947,12 @@ func TestWithinBudgetReturnsOnTime(t *testing.T) {
 func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	testkit.Isolate(t)
 	resetWorkspaceMemo(t)
-	primary := initGitRepo(t)
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"),
-		[]byte("import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n"), 0o644))
-	runGit(t, primary, "add", "-A")
-	runGit(t, primary, "commit", "-q", "-m", "init")
-	worktree := filepath.Join(t.TempDir(), "worker")
-	runGit(t, primary, "worktree", "add", "-q", worktree)
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":     "{}\n",
+		"magusfile.buzz": "import \"magus\";\nmagus\\guard.builtins({\"output-redirect\": \"deny\"});\n",
+	})
+	primary := repo.Root()
+	worktree := repo.AddWorktree("worker").Root()
 	t.Chdir(primary)
 
 	envelope := fmt.Sprintf(`{"session_id":"worktree-verdict","hook_event_name":"PreToolUse","cwd":%q,`+
@@ -1935,4 +1976,92 @@ func TestRepeatDenyInALinkedWorktreeIsReadableThere(t *testing.T) {
 	require.NoError(t, err)
 	_, err = trail.ReadBlob(primaryCache, ref)
 	assert.ErrorIs(t, err, os.ErrNotExist, "the hook process's checkout is not where the call ran")
+}
+
+// A guard-rule load that runs past the hook's deadline still stores every chunk it
+// compiled, so the hook after it loads warm: a cold cache costs one hook its time, never
+// every hook after it.
+func TestGuardRuleLoadPastItsDeadlineWarmsTheNextHook(t *testing.T) {
+	global = globalFlags{}
+	testkit.Isolate(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":      "{}\n",
+		"magusfile.buzz":  "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n",
+		"lib/policy.buzz": "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.deny(\"no\");\n}\n",
+	})
+	chunks := func() []string {
+		var out []string
+		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				out = append(out, p)
+			}
+			return nil
+		})
+		return out
+	}
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+
+	rules, err := loadGuardRules(expired, repo.Root())
+	require.NoError(t, err)
+	require.NotNil(t, rules.CommandRule())
+	stored := chunks()
+	require.Len(t, stored, 3, "the magusfile, its import, and the magusfile's facts")
+
+	_, err = loadGuardRules(t.Context(), repo.Root())
+	require.NoError(t, err)
+	assert.Equal(t, stored, chunks(), "the next load compiles nothing")
+}
+
+// The approved side keeps its compile in its own sealed store, keyed by committed content,
+// and never reads or writes the working tree's chunk cache: a pending edit cannot seed what
+// the approved rule runs. A resolve that starts past its deadline reads nothing from
+// version control and answers no rule, which the guard takes for a lapse rather than for
+// "none" (askWorkspaceRules).
+func TestApprovedResolveLeavesTheWorkingTreeChunkCacheAlone(t *testing.T) {
+	global = globalFlags{}
+	testkit.Isolate(t)
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	const rule = "import \"magus\";\n\nexport fun rule(req: CommandRequest) > GuardVerdict {\n    return magus\\guard.%s;\n}\n"
+	const magusfile = "import \"magus\";\nimport \"./lib/policy\" as policy;\n\nmagus\\guard.command(policy\\rule);\n"
+	repo := testkit.NewRepo(t, map[string]string{
+		"magus.yaml":      "{}\n",
+		"magusfile.buzz":  magusfile,
+		"lib/policy.buzz": fmt.Sprintf(rule, `deny("no")`),
+	})
+	repo.Write("magusfile.buzz", magusfile+"// pending\n")
+	repo.Write("lib/policy.buzz", fmt.Sprintf(rule, "allow()"))
+	chunks := func() []string {
+		var out []string
+		_ = filepath.WalkDir(filepath.Join(cache, "magus", "buzz-bytecode"), func(p string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				out = append(out, p)
+			}
+			return nil
+		})
+		return out
+	}
+	rules, err := loadGuardRules(t.Context(), repo.Root())
+	require.NoError(t, err)
+	worktree := chunks()
+
+	expired, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
+	defer cancel()
+	<-expired.Done()
+	late, err := rules.ApprovedCommandRule(expired)
+	require.NoError(t, err)
+	assert.Nil(t, late, "past its deadline the resolve reads no approved state")
+	assert.Equal(t, worktree, chunks(), "and compiles nothing")
+
+	approved, err := rules.ApprovedCommandRule(t.Context())
+	require.NoError(t, err)
+	require.NotNil(t, approved)
+	got, err := approved(t.Context(), types.CommandRequest{Command: "ls"}, hint.NewGate(t.TempDir(), "s"))
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardDeny, got.Decision, "the committed rule answers")
+	assert.Equal(t, worktree, chunks(), "compiling the committed sources stores nothing")
 }

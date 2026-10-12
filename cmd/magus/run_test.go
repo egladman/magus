@@ -13,6 +13,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -371,12 +372,8 @@ func TestApplyTargetFilter(t *testing.T) {
 // a magusfile body to actually run, and the interpreter is a pack only cmd/magus wires in
 // (packs_interp.go): the root test binary registers shim spells that collide with it.
 func TestCrossProjectOutputReplaysFromCache(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("magusfile.buzz", "")
 	write("site/magusfile.buzz", "")
 	// fs.writeFile, not a shelled-out redirect: what is under test is magus's handling of
@@ -437,12 +434,8 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // manifest quietly omits the foreign file, and every later cache hit would replay a
 // partial output set into a tree this target does not own.
 func TestCrossProjectOutputMustBeProduced(t *testing.T) {
-	root := t.TempDir()
-	write := func(rel, content string) {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(content), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root, write := w.Root(), w.Write
 	write("magusfile.buzz", "")
 	write("site/magusfile.buzz", "")
 	write("producer/magusfile.buzz", `import "magus";
@@ -733,7 +726,6 @@ func TestQueueGateKeysLikeTheCIShards(t *testing.T) {
 
 	cfg, err := config.LoadFile(filepath.Join(root, "magus.yaml"), false)
 	require.NoError(t, err)
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	ctx := context.Background()

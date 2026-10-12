@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeIndexWorkspace builds its knowledge store from in on every KnowledgeGraph call, as
+// rebuildingWorkspace builds its knowledge store from in on every KnowledgeGraph call, as
 // the real workspace rebuilds cache-first.
-type fakeIndexWorkspace struct {
+type rebuildingWorkspace struct {
 	types.WorkspaceRepository
 	cacheDir string
 	in       knowledge.Inputs
@@ -23,18 +23,18 @@ type fakeIndexWorkspace struct {
 	probed   bool
 }
 
-func (f *fakeIndexWorkspace) KnowledgeGraph(ctx context.Context, _ bool) (*knowledge.Graph, error) {
+func (f *rebuildingWorkspace) KnowledgeGraph(ctx context.Context, _ bool) (*knowledge.Graph, error) {
 	return knowledge.Build(ctx, f.cacheDir, knowledge.BuildOptions{}, f.in, nil)
 }
 
-func (f *fakeIndexWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (f *rebuildingWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return f.gaps, f.probed
 }
 
-func (f *fakeIndexWorkspace) CacheDir() string { return f.cacheDir }
+func (f *rebuildingWorkspace) CacheDir() string { return f.cacheDir }
 
-func indexWorkspace(t *testing.T) *fakeIndexWorkspace {
-	return &fakeIndexWorkspace{
+func indexWorkspace(t *testing.T) *rebuildingWorkspace {
+	return &rebuildingWorkspace{
 		cacheDir: filepath.Join(t.TempDir(), ".magus"),
 		in: knowledge.Inputs{Graph: types.TargetGraphOutput{Projects: []types.TargetGraphProject{
 			{Path: "pkg/a", Engine: "buzz", Nodes: []types.TargetGraphNode{{Name: "build"}}},

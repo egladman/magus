@@ -40,7 +40,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills --foreground-default-ms 120000 --foreground-max-ms 600000",
             "timeout": 10,
             "type": "command"
           }

@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/dependency"
 	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // newAffectedWorkspace lays down a workspace with three projects in
@@ -330,12 +332,16 @@ func TestVCSRootPrefix(t *testing.T) {
 	})
 }
 
-// countObserver counts the graph events it receives.
-type countObserver struct{ builds, queries, errs int }
-
-func (c *countObserver) OnBuild(types.BuildStats) { c.builds++ }
-func (c *countObserver) OnQuery(types.QueryEvent) { c.queries++ }
-func (c *countObserver) OnError(error)            { c.errs++ }
+// buildOnceObserver expects exactly one OnBuild; a second call, from a request that
+// should not reach it, fails the test.
+func buildOnceObserver(t *testing.T) *mocks.MockObserver {
+	t.Helper()
+	obs := mocks.NewMockObserver(t)
+	obs.EXPECT().OnBuild(mock.Anything).Return().Once()
+	obs.EXPECT().OnQuery(mock.Anything).Return().Maybe()
+	obs.EXPECT().OnError(mock.Anything).Return().Maybe()
+	return obs
+}
 
 // TestAffectedRequestScopedObserver verifies the C4 fix: a graph observer is
 // scoped per request via context, not shared workspace state. Two independent
@@ -345,20 +351,20 @@ func (c *countObserver) OnError(error)            { c.errs++ }
 func TestAffectedRequestScopedObserver(t *testing.T) {
 	ws := newAffectedWorkspace(t)
 
-	obsA := &countObserver{}
-	obsB := &countObserver{}
+	obsA := buildOnceObserver(t)
+	obsB := buildOnceObserver(t)
 	_, err := AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsA), ws, []string{"api/x.go"})
 	require.NoError(t, err, "call A")
 	_, err = AffectedFromPaths(types.ContextWithGraphObserver(context.Background(), obsB), ws, []string{"api/x.go"})
 	require.NoError(t, err, "call B")
-	assert.Equal(t, 1, obsA.builds, "observer A builds")
-	assert.Equal(t, 1, obsB.builds, "observer B builds")
+	obsA.AssertNumberOfCalls(t, "OnBuild", 1)
+	obsB.AssertNumberOfCalls(t, "OnBuild", 1)
 
 	_, err = AffectedFromPaths(context.Background(), ws, []string{"api/x.go"})
 	require.NoError(t, err, "call C")
 	// An observerless call must not leak events into either observer.
-	assert.Equal(t, 1, obsA.builds, "an observerless call leaked events into A")
-	assert.Equal(t, 1, obsB.builds, "an observerless call leaked events into B")
+	obsA.AssertNumberOfCalls(t, "OnBuild", 1)
+	obsB.AssertNumberOfCalls(t, "OnBuild", 1)
 }
 
 // buildWorkspace constructs a minimal Workspace from a list of projects.

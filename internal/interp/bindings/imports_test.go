@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -36,15 +37,6 @@ func declaredCtx(t *testing.T, root string, cfg config.SpellsConfig) context.Con
 	return types.WithWorkspace(t.Context(), spellImportsWS{rootOnlyWS{root: root}, im})
 }
 
-// symlinkFreeTempDir keeps the workspace root and the magusfile's directory in one
-// spelling, as a real workspace root is (macOS puts t.TempDir behind /var -> /private).
-func symlinkFreeTempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	return dir
-}
-
 func parseIn(ctx context.Context, t *testing.T, dir string) error {
 	t.Helper()
 	src, err := interp.Find(dir)
@@ -56,9 +48,10 @@ func parseIn(ctx context.Context, t *testing.T, dir string) error {
 // Registration is by name, so a workspace spell carrying an embedded spell's name
 // would silently bind the embedded one. Undeclared, that is MGS1002.
 func TestWorkspaceSpellWithAnEmbeddedNameIsRefused(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }`)
-	writeFile(t, root, "magusfile.buzz", "import \"magus\";\nimport \"spells/go\" as gocopy;\n")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }`)
+	w.Write("magusfile.buzz", "import \"magus\";\nimport \"spells/go\" as gocopy;\n")
 
 	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
 	require.ErrorIs(t, err, types.SpellShadowed)
@@ -66,9 +59,10 @@ func TestWorkspaceSpellWithAnEmbeddedNameIsRefused(t *testing.T) {
 }
 
 func TestOverrideMustCarryTheEmbeddedName(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "spells/mygo/spell.buzz", `export fun mgs_getName() > str { return "mygo"; }`)
-	writeFile(t, root, "magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/mygo/spell.buzz", `export fun mgs_getName() > str { return "mygo"; }`)
+	w.Write("magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
 	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
 		"magus/spell/go": {Path: "spells/mygo"},
 	}})
@@ -85,13 +79,14 @@ func TestOverrideReplacesTheEmbeddedSpell(t *testing.T) {
 	require.True(t, ok)
 	t.Cleanup(func() { project.DefaultSpellRegistry().ReplaceSpell(embedded) })
 
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/go/spell.buzz", `export fun mgs_getName() > str { return "go"; }
 export fun mgs_listTargets() > any {
     return {"vet": {"bin": "go", "args": ["vet", "./..."]}};
 }
 `)
-	writeFile(t, root, "magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
+	w.Write("magusfile.buzz", "import \"magus\";\nimport \"magus/spell/go\";\n")
 	ctx := declaredCtx(t, root, config.SpellsConfig{Imports: map[string]config.SpellImport{
 		"magus/spell/go": {Path: "spells/go"},
 	}})
@@ -103,8 +98,9 @@ export fun mgs_listTargets() > any {
 }
 
 func TestUndeclaredRemoteImportIsRefused(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "magusfile.buzz", "import \"magus\";\nimport \"ghcr.io/team/spells/lint\";\n")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("magusfile.buzz", "import \"magus\";\nimport \"ghcr.io/team/spells/lint\";\n")
 
 	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
 	require.ErrorIs(t, err, types.RemoteSpellUndeclared)
@@ -113,9 +109,10 @@ func TestUndeclaredRemoteImportIsRefused(t *testing.T) {
 // A remote spell replaced by a workspace copy binds under the path's last segment, as
 // the remote one would, and never reaches a registry.
 func TestRemoteOverrideBindsTheWorkspaceCopy(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "vendor/lint/spell.buzz", `export fun mgs_getName() > str { return "lintcopy"; }`)
-	writeFile(t, root, "magusfile.buzz", `import "magus";
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("vendor/lint/spell.buzz", `export fun mgs_getName() > str { return "lintcopy"; }`)
+	w.Write("magusfile.buzz", `import "magus";
 import "ghcr.io/team/spells/lint";
 
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
@@ -154,17 +151,17 @@ func TestRootFirstLevels(t *testing.T) {
 // a nested project, shaped like this repo's docs magusfile: every import statement
 // reaches the resolver, so each module is resolved once per importing file.
 func BenchmarkResolveLocalSpellImport(b *testing.B) {
-	root, err := filepath.EvalSymlinks(b.TempDir())
-	require.NoError(b, err)
+	w := testkit.NewWorkspace(b)
+	root := w.Root()
 	var imports []string
 	for i := range 20 {
 		name := fmt.Sprintf("page%02d", i)
-		writeFile(b, root, filepath.Join("docs", "site", name+".buzz"), "export fun f() > void {}\n")
+		w.Write(filepath.Join("docs", "site", name+".buzz"), "export fun f() > void {}\n")
 		imports = append(imports, "site/"+name)
 	}
 	for i := range 10 {
 		name := fmt.Sprintf("lib%02d", i)
-		writeFile(b, root, filepath.Join("hack", name+".buzz"), "export fun f() > void {}\n")
+		w.Write(filepath.Join("hack", name+".buzz"), "export fun f() > void {}\n")
 		imports = append(imports, "../hack/"+name, "hack/"+name)
 	}
 	src := &interp.Source{Dir: filepath.Join(root, "docs")}
@@ -192,10 +189,11 @@ func BenchmarkResolveLocalSpellImport(b *testing.B) {
 
 // A load's probes answer the same imports the same way stat does.
 func TestResolveLocalSpellImportWithProbes(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "spells/hello/spell.buzz", `export fun mgs_getName() > str { return "probehello"; }`)
-	writeFile(t, root, "spells/flat.buzz", `export fun mgs_getName() > str { return "probeflat"; }`)
-	writeFile(t, root, "web/lib.buzz", "export fun f() > void {}\n")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("spells/hello/spell.buzz", `export fun mgs_getName() > str { return "probehello"; }`)
+	w.Write("spells/flat.buzz", `export fun mgs_getName() > str { return "probeflat"; }`)
+	w.Write("web/lib.buzz", "export fun f() > void {}\n")
 	src := &interp.Source{Dir: filepath.Join(root, "web")}
 	base := interp.WithSource(declaredCtx(t, root, config.SpellsConfig{}), src)
 	im := remotespell.ImportsFromContext(base)
@@ -229,22 +227,21 @@ func TestSpellSearchLevelsFallBackToCwdOnlyWithoutWorkspace(t *testing.T) {
 
 // escapeeSpell plants a spell in outer, the directory holding the workspace root, at
 // spells/escapee/spell.buzz: where `../spells/escapee` joined onto the root lands.
-func escapeeSpell(t *testing.T) (outer, root, outside string) {
+func escapeeSpell(t *testing.T) (w *testkit.Workspace, root, outside string) {
 	t.Helper()
-	outer = symlinkFreeTempDir(t)
-	root = filepath.Join(outer, "ws")
-	writeFile(t, outer, "spells/escapee/spell.buzz", `export fun mgs_getName() > str { return "escapee"; }`)
-	outside = filepath.Join(outer, "spells", "escapee", "spell.buzz")
+	w = testkit.NewWorkspace(t)
+	root = w.Path("ws")
+	outside = w.Write("spells/escapee/spell.buzz", `export fun mgs_getName() > str { return "escapee"; }`)
 	require.Equal(t, outside, filepath.Join(root, "../spells/escapee", "spell.buzz"))
-	return outer, root, outside
+	return w, root, outside
 }
 
 // The root level used to find a spell above the workspace for a `../` import that
 // the project's own level resolves inside it; from a worktree that loaded the main
 // checkout's spell.
 func TestSpellImportAboveTheRootIsNeitherProbedNorLoaded(t *testing.T) {
-	_, root, outside := escapeeSpell(t)
-	writeFile(t, root, "app/magusfile.buzz", "import \"magus\";\n")
+	w, root, outside := escapeeSpell(t)
+	w.Write("ws/app/magusfile.buzz", "import \"magus\";\n")
 	base := interp.WithSource(declaredCtx(t, root, config.SpellsConfig{}), &interp.Source{Dir: filepath.Join(root, "app")})
 	ctx, seal := interp.WithImportProbes(base)
 	defer seal()
@@ -264,8 +261,8 @@ func TestSpellImportAboveTheRootIsNeitherProbedNorLoaded(t *testing.T) {
 // With no level left inside the root the import is refused rather than handed to a
 // file search that would read outside the workspace.
 func TestSpellImportEscapingEveryLevelIsRefused(t *testing.T) {
-	_, root, _ := escapeeSpell(t)
-	writeFile(t, root, "magusfile.buzz", "import \"magus\";\nimport \"../spells/escapee\" as escapee;\n")
+	w, root, _ := escapeeSpell(t)
+	w.Write("ws/magusfile.buzz", "import \"magus\";\nimport \"../spells/escapee\" as escapee;\n")
 
 	err := parseIn(declaredCtx(t, root, config.SpellsConfig{}), t, root)
 
@@ -280,9 +277,10 @@ func TestSpellImportEscapingEveryLevelIsRefused(t *testing.T) {
 // The memo is keyed on the absolute candidate, so the same relative import from two
 // projects resolves two spells, and a repeat of one answers without the filesystem.
 func TestSpellImportMemoIsKeyedOnTheAbsoluteCandidate(t *testing.T) {
-	root := symlinkFreeTempDir(t)
-	writeFile(t, root, "a/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memoa"; }`)
-	writeFile(t, root, "b/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memob"; }`)
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("a/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memoa"; }`)
+	w.Write("b/spells/p/spell.buzz", `export fun mgs_getName() > str { return "memob"; }`)
 	base, seal := interp.WithImportProbes(declaredCtx(t, root, config.SpellsConfig{}))
 	defer seal()
 	im := remotespell.ImportsFromContext(base)

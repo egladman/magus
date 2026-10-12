@@ -20,8 +20,8 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// fakeWorkspace answers with canned graphs, the shape the graph handler tests use.
-type fakeWorkspace struct {
+// cannedWorkspace answers with canned graphs, the shape the graph handler tests use.
+type cannedWorkspace struct {
 	targets types.TargetGraphOutput
 	imports types.ImportGraph
 	remote  string
@@ -30,26 +30,26 @@ type fakeWorkspace struct {
 	importLoads *atomic.Int32
 }
 
-func (f fakeWorkspace) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
+func (f cannedWorkspace) TargetGraph(context.Context) (types.TargetGraphOutput, error) {
 	return f.targets, nil
 }
 
-func (f fakeWorkspace) ImportGraph(context.Context) (types.ImportGraph, error) {
+func (f cannedWorkspace) ImportGraph(context.Context) (types.ImportGraph, error) {
 	if f.importLoads != nil {
 		f.importLoads.Add(1)
 	}
 	return f.imports, nil
 }
 
-func (f fakeWorkspace) SymbolIndex(context.Context) (types.SymbolIndexDigest, error) {
+func (f cannedWorkspace) SymbolIndex(context.Context) (types.SymbolIndexDigest, error) {
 	return types.SymbolIndexDigest{Indexed: f.imports.Indexed}, nil
 }
 
-func (f fakeWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
+func (f cannedWorkspace) ReviewOrigin(context.Context) types.ReviewOrigin {
 	return types.ReviewOrigin{Remote: f.remote}
 }
 
-func (f fakeWorkspace) RevisionCheckpoint(_ context.Context, rev string) (types.VCSCheckpoint, error) {
+func (f cannedWorkspace) RevisionCheckpoint(_ context.Context, rev string) (types.VCSCheckpoint, error) {
 	if f.head == "" {
 		return types.VCSCheckpoint{}, errors.New("no revision")
 	}
@@ -57,8 +57,8 @@ func (f fakeWorkspace) RevisionCheckpoint(_ context.Context, rev string) (types.
 }
 
 // chainWorkspace is app -> lib -> core -> base, plus a tool project depending on nothing.
-func chainWorkspace() fakeWorkspace {
-	return fakeWorkspace{
+func chainWorkspace() cannedWorkspace {
+	return cannedWorkspace{
 		targets: types.TargetGraphOutput{
 			Definition: "magusfile.buzz",
 			Projects: []types.TargetGraphProject{
@@ -77,7 +77,7 @@ func chainWorkspace() fakeWorkspace {
 	}
 }
 
-func get(t *testing.T, ws fakeWorkspace, target string) *httptest.ResponseRecorder {
+func get(t *testing.T, ws cannedWorkspace, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
 	NewHandler(ws, nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, target, nil))
@@ -140,7 +140,7 @@ func TestDiagramSecondRequestIsServedFromTheCache(t *testing.T) {
 	serve("/api/v1/diagrams/projects?focus=libs/core&depth=1")
 	assert.Equal(t, int32(2), compiles.Load(), "another lens is another figure")
 
-	h.ws = func() fakeWorkspace {
+	h.ws = func() cannedWorkspace {
 		ws := chainWorkspace()
 		ws.targets.Projects = ws.targets.Projects[:4]
 		return ws

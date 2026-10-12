@@ -31,11 +31,11 @@ enum Kind {
   KIND_STARTED = 7;
   KIND_FINISHED = 8;
   // Content events, produced between the lifecycle pair.
-  KIND_EXEC = 9;    // a subprocess is about to run: the command line (groups the output below it)
-  KIND_OUTPUT = 1;  // a subprocess stdout/stderr line
-  KIND_RESULT = 2;  // a target finished (pass/fail/cached), with its ref + duration
-  KIND_SCOPE = 4;   // the run's project scope header
-  KIND_WARN = 6;    // a magus warning
+  KIND_EXEC = 9; // a subprocess is about to run: the command line (groups the output below it)
+  KIND_OUTPUT = 1; // a subprocess stdout/stderr line
+  KIND_RESULT = 2; // a target finished (pass/fail/cached), with its ref + duration
+  KIND_SCOPE = 4; // the run's project scope header
+  KIND_WARN = 6; // a magus warning
   // A credential was READ: the reference and the provider that served it, never the
   // value. Distinct from WARN because it is not a problem - it is the record that a
   // build reached for something privileged, which is what an audit answers for.
@@ -61,19 +61,19 @@ enum Status {
 // failure came from `magus affected ci`").
 enum Trigger {
   TRIGGER_UNSPECIFIED = 0;
-  TRIGGER_RUN = 1;       // magus run
-  TRIGGER_AFFECTED = 2;  // magus affected
-  TRIGGER_CI = 3;        // magus ci / affected ci
-  TRIGGER_X = 4;         // magus x (interactive picker)
-  TRIGGER_WATCH = 5;     // magus watch
-  TRIGGER_DIRECT = 6;    // a directly invoked spell/op
+  TRIGGER_RUN = 1; // magus run
+  TRIGGER_AFFECTED = 2; // magus affected
+  TRIGGER_CI = 3; // magus ci / affected ci
+  TRIGGER_X = 4; // magus x (interactive picker)
+  TRIGGER_WATCH = 5; // magus watch
+  TRIGGER_DIRECT = 6; // a directly invoked spell/op
 }
 
 // Command is the invoking command line and context - what was asked of magus.
 message Command {
-  repeated string arguments = 1;  // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
-  reserved 2;                     // was: repeated string args (merged into arguments)
-  string cwd = 3;              // directory the command was invoked in
+  repeated string arguments = 1; // the full argument vector, subcommand included (e.g. ["run", "build", "api"])
+  reserved 2; // was: repeated string args (merged into arguments)
+  string cwd = 3; // directory the command was invoked in
   Trigger trigger = 4;
 }
 
@@ -85,7 +85,7 @@ message Invocation {
   string id = 1;
   Command command = 2;
   google.protobuf.Timestamp start_time = 3;
-  google.protobuf.Timestamp end_time = 4;  // unset while still running
+  google.protobuf.Timestamp end_time = 4; // unset while still running
   string magus_version = 5;
   // Outcome, when the run reached one. The events carry this too (KIND_FINISHED), but a listing
   // reads run HEADERS without opening any journal, so a browser that had to decide pass from fail
@@ -103,8 +103,8 @@ message Invocation {
 // declares (MGS1028): directory containment chose it, so the targets it reran could
 // not have answered differently. Rides KIND_SCOPE.
 message UndeclaredSeed {
-  string project = 1;          // repo-relative project path
-  repeated string files = 2;   // the undeclared files that selected it
+  string project = 1; // repo-relative project path
+  repeated string files = 2; // the undeclared files that selected it
   // inputs is the subset of files that read as build INPUTS (a dependency lock, a
   // linter rule set, a toolchain pin). It is the half that changes what a verdict
   // means: a target selected anyway can still replay an answer computed under the
@@ -113,19 +113,19 @@ message UndeclaredSeed {
 }
 
 message Event {
-  google.protobuf.Timestamp time = 1;    // when the event occurred
-  string project = 2;                    // repo-relative project path
-  string target = 3;                     // target name, as the CLI spells it (with charms)
+  google.protobuf.Timestamp time = 1; // when the event occurred
+  string project = 2; // repo-relative project path
+  string target = 3; // target name, as the CLI spells it (with charms)
   Kind kind = 4;
-  Stream stream = 5;                     // output events only
-  string level = 6;                      // info|warn|error, for magus events
-  Status status = 7;                     // result events only
-  string ref = 8;                        // target-output ref, on result events
+  Stream stream = 5; // output events only
+  string level = 6; // info|warn|error, for magus events
+  Status status = 7; // result events only
+  string ref = 8; // target-output ref, on result events
   google.protobuf.Duration duration = 9; // how long the target ran, on result events
-  string text = 10;                      // output line or message (raw; may contain ANSI)
+  string text = 10; // output line or message (raw; may contain ANSI)
 
-  Command command = 11;                  // set only on the KIND_STARTED event
-  string magus_version = 12;             // set only on the KIND_STARTED event
+  Command command = 11; // set only on the KIND_STARTED event
+  string magus_version = 12; // set only on the KIND_STARTED event
 
   // Set only on a KIND_SCOPE event carrying no target: the projects this run
   // selected on files nothing declares. It rides the run's own stream because it
@@ -193,33 +193,36 @@ message GetInvocationRequest {
 // The time window (including its since resume cursor) lives here too, so one message carries
 // the whole filter.
 message EventQuery {
-  repeated string projects = 1;                 // repo-relative project paths
-  repeated string targets = 2;                  // target names
-  repeated string kinds = 3;                    // event kinds: output|result|exec|scope|warn|...
-  repeated string streams = 4;                  // stdout|stderr, for output events
-  repeated string levels = 5;                   // info|warn|error
-  string status = 6;                            // pass|fail|cached, for result events
+  repeated string projects = 1; // repo-relative project paths
+  repeated string targets = 2; // target names
+  repeated string kinds = 3; // event kinds: output|result|exec|scope|warn|...
+  repeated string streams = 4; // stdout|stderr, for output events
+  repeated string levels = 5; // info|warn|error
+  string status = 6; // pass|fail|cached, for result events
   repeated magus.query.v1alpha1.StringMatch text = 7; // free-text matches against an event's text
-  magus.query.v1alpha1.TimeRange time = 8;            // event time window; since doubles as stream resume
+  magus.query.v1alpha1.TimeRange time = 8; // event time window; since doubles as stream resume
 }
 
 message ListEventsRequest {
   // The run that owns these events - the collection's parent, per AIP-132.
   string parent = 1 [(buf.validate.field).string.pattern = "^(out[0-9a-f]+|inv[0-9a-z]+)$"];
-  int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 5000
+  }];
   string page_token = 3;
-  EventQuery filter = 4;  // viewer-typed content + time filter
+  EventQuery filter = 4; // viewer-typed content + time filter
 }
 message ListEventsResponse {
   repeated Event events = 1;
-  string next_page_token = 2;  // set when more events remain
+  string next_page_token = 2; // set when more events remain
 }
 
 message StreamEventsRequest {
   // The invocation whose events stream. Named parent to match ListEvents; only a whole
   // invocation streams, so this one does not take an output ref.
   string parent = 1 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
-  EventQuery filter = 2;  // viewer-typed content filter; filter.time.since resumes the stream
+  EventQuery filter = 2; // viewer-typed content filter; filter.time.since resumes the stream
 }
 message StreamEventsResponse {
   Event event = 1;
@@ -242,12 +245,15 @@ message Output {
 }
 
 message ListOutputsRequest {
-  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 5000
+  }];
   string page_token = 2;
 }
 message ListOutputsResponse {
   repeated Output outputs = 1;
-  string next_page_token = 2;  // set when more outputs remain
+  string next_page_token = 2; // set when more outputs remain
 }
 
 message GetOutputRequest {
@@ -260,12 +266,15 @@ message GetOutputResponse {
 }
 
 message ListInvocationsRequest {
-  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 5000
+  }];
   string page_token = 2;
 }
 message ListInvocationsResponse {
   repeated Invocation invocations = 1;
-  string next_page_token = 2;  // set when more invocations remain
+  string next_page_token = 2; // set when more invocations remain
 }
 
 message GetJournalRequest {

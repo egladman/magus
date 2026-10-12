@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/queue"
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/testkit"
 	magustypes "github.com/egladman/magus/types"
 	magusmocks "github.com/egladman/magus/types/gen/mocks"
 )
@@ -68,6 +69,7 @@ export fun list_artifacts(io: {str: any}) > any {
 // queueFixture is a checkout the queue runs in: a directory whose version control is a
 // mock, and a provider script written into it.
 type queueFixture struct {
+	*testkit.Workspace
 	root     string
 	vcs      *magusmocks.MockVCSDriver
 	provider string
@@ -75,7 +77,8 @@ type queueFixture struct {
 
 func newQueueFixture(t *testing.T, changes, run string) *queueFixture {
 	t.Helper()
-	f := &queueFixture{root: t.TempDir(), vcs: magusmocks.NewMockVCSDriver(t)}
+	w := testkit.NewWorkspace(t)
+	f := &queueFixture{Workspace: w, root: w.Root(), vcs: magusmocks.NewMockVCSDriver(t)}
 	opened := queueOpenVCS
 	queueOpenVCS = func(_ context.Context, root, name, remote string) (magustypes.VCSDriver, error) {
 		assert.Equal(t, f.root, root)
@@ -90,9 +93,7 @@ func newQueueFixture(t *testing.T, changes, run string) *queueFixture {
 	if run == "" {
 		run = "[<any>]"
 	}
-	f.provider = filepath.Join(f.root, "local.buzz")
-	src := strings.NewReplacer("CHANGES", changes, "RUN", run).Replace(queueProvider)
-	require.NoError(t, os.WriteFile(f.provider, []byte(src), 0o644))
+	f.provider = f.Write("local.buzz", strings.NewReplacer("CHANGES", changes, "RUN", run).Replace(queueProvider))
 	return f
 }
 
@@ -647,8 +648,7 @@ func TestQueuePlanAsksTheMagusWorkspaceByDefault(t *testing.T) {
 	f := newQueueFixture(t, changes, "")
 	for rel, body := range map[string]string{"magusfile.buzz": "", "app/magusfile.buzz": "", "lib/magusfile.buzz": "",
 		"app/a.txt": "x\n", "lib/b.txt": "x\n"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(f.root, filepath.Dir(rel)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(f.root, rel), []byte(body), 0o644))
+		f.Write(rel, body)
 	}
 	paths := map[string]string{queueHead("1"): "app/a.txt", queueHead("2"): "lib/b.txt"}
 	f.vcs.EXPECT().RemoteURL(mock.Anything, f.root, "origin").Return("https://example.invalid/r.git", nil)
@@ -888,7 +888,6 @@ func TestTheBoxKeysNoStep(t *testing.T) {
 	// probe must still resolve tools pinned by this checkout's mise.toml.
 	t.Setenv("MISE_TRUSTED_CONFIG_PATHS", root)
 	t.Setenv("MISE_SAFE", "1")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	t.Setenv("MAGUS_CACHE_REMOTE_TRUSTED_KEYS", "")
 	const project = "libs/diagnostics"

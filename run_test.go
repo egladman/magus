@@ -23,9 +23,12 @@ import (
 	"github.com/egladman/magus/internal/file/diff"
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/report"
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -37,8 +40,9 @@ import (
 // row while the composite passed, so the gate reader met two answers and had to work out
 // which one was the run's. The row now carries the status once.
 func TestStageRowSaysAdvisoryForAMemberTheCompositeCarriesOnPast(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithTarget("security",
@@ -117,20 +121,18 @@ func TestForcesNoCache(t *testing.T) {
 // that's already a cache hit must still genuinely re-execute under --race
 // (magus.WithRace), not replay; otherwise the race detector observes nothing.
 func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
-	const spellName = "zzz-race-test-spell"
 	var calls atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-race-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -156,16 +158,13 @@ func TestRun_RaceReexecutesCachedTarget(t *testing.T) {
 // failed target result and as an MGS3009 diagnostic, both naming the holder.
 func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "")
-	const spellName = "zzz-machine-refusal-spell"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-machine-refusal-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			t.Error("a refused target must not run")
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	// A real broker, and a second client holding the whole host: the refusal crosses the
 	// wire exactly as it does between two worktrees.
@@ -190,8 +189,9 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg),
@@ -239,20 +239,18 @@ func TestRun_MachineRefusalReachesTheReport(t *testing.T) {
 // --race, the rebuild refreshes the entry, so a subsequent ordinary run hits
 // the refreshed result instead of missing or replaying something stale.
 func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
-	const spellName = "zzz-no-cache-test-spell"
 	var calls atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-no-cache-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -279,20 +277,18 @@ func TestRun_NoCacheReexecutesAndRefreshesEntry(t *testing.T) {
 // projects" (types.ErrAffectedFallback) rather than erroring, the same
 // documented safety net a real no-VCS or disabled-VCS workspace gets.
 func TestRunAffected_NoCacheReexecutes(t *testing.T) {
-	const spellName = "zzz-affected-no-cache-test-spell"
 	var calls atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-affected-no-cache-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			calls.Add(1)
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -319,7 +315,8 @@ func TestRunAffected_NoCacheReexecutes(t *testing.T) {
 // in a target body populate that target's per-target cache footprint (step.Sources /
 // step.Outputs), joined to the project path, without leaking to a sibling target.
 func TestInputsOutputsColocation(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 magus\project({"outputs": ["legacy/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {
@@ -328,7 +325,7 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 export fun test(ctx: magus\Context, args: [str]) > void {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -364,14 +361,15 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 // so. buildStep seeds the footprint with the magusfile globs for exactly that reason, and
 // this asserts the seed rather than trusting the comment there.
 func TestFootprintAlwaysKeysOnTheDefiningMagusfile(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	// A footprint naming one unrelated file: the narrowest a target can declare.
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("src/**");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -388,7 +386,8 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // A composer's key must move when the artifact of a composed skip_cache target
 // does; see types.ChainSkipCacheOutputs for why.
 func TestComposerKeysOnAComposedSkipCacheTargetsOutput(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun index_generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("MAGUS.md");
@@ -401,7 +400,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void {
 }
 export fun test(ctx: magus\Context, args: [str]) > void {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -428,7 +427,8 @@ export fun test(ctx: magus\Context, args: [str]) > void {}
 // write: `generate` accused of modifying the CHANGELOG.md that changelog-generate
 // declares and maintains.
 func TestComposerInheritsAComposedTargetsUpdates(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun changelog_generate(ctx: magus\Context, args: [str]) > void {
     ctx.modifiesExistingFiles("CHANGELOG.md");
@@ -438,7 +438,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 }
 export fun test(ctx: magus\Context, args: [str]) > void {}
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -572,9 +572,8 @@ func TestChainSkipCacheStepsSkipsATargetThatMaintainsNoArtifact(t *testing.T) {
 // runs must run even when the target that composes it replays. Counted through a
 // spell invoker, following TestRun_RaceReexecutesCachedTarget.
 func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
-	const spellName = "zzz-gate-test-spell"
 	var composer, gate atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-gate-test-spell",
 		spells.WithTargets("composer", "gate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
@@ -586,11 +585,10 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -629,12 +627,12 @@ func TestRun_CachedComposerStillRunsItsSkipCacheGate(t *testing.T) {
 // member's artifact, so a member left for the body to run rewrote a key input mid-run and
 // the run was refused a cache entry; every change then cost two full executions.
 func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact(t *testing.T) {
-	const spellName = "zzz-gate-first-run-spell"
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	artifact := filepath.Join(root, "GATE.md")
 	var composer atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-gate-first-run-spell",
 		spells.WithTargets("composer", "gate"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target == "composer" {
@@ -644,8 +642,6 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 			return nil, os.WriteFile(artifact, []byte("fresh\n"), 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 	require.NoError(t, os.WriteFile(artifact, []byte("stale\n"), 0o644))
 
 	reg := NewWorkspaceRegistry()
@@ -665,18 +661,224 @@ func TestRun_FirstRunAfterAChangeIsStoredWhenASkipCacheMemberRewritesItsArtifact
 	assert.Equal(t, int32(1), composer.Load(), "the first run was stored, so the second replays")
 }
 
+// TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn reproduces harness gap 8.
+// proto's lint inherits the project's gen/**, which generate declares. lint ran beside a
+// drift-failing generate and recorded the stale tree; after `generate:rw` and a commit,
+// each `affected ci` replayed lint first, which wrote the stale tree back, and generate's
+// drift check failed again on the same key until a run happened to miss lint.
+func TestCheckOnlyTargetNeverReplaysAGeneratedTreeItDoesNotOwn(t *testing.T) {
+	var lint atomic.Int32
+	spellName := register.Spell(t, "zzz-foreign-output-spell",
+		spells.WithTargets("lint", "generate"),
+		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			if req.Target == "lint" {
+				lint.Add(1)
+			}
+			return nil, nil
+		}),
+	)
+
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	generated := w.Write("gen/api.pb.go", "stale\n")
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".", WithSpell(spellName))
+	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	p.Outputs = []types.Glob{{Pattern: "gen/**"}}
+	p.TargetOutputs = map[string][]types.OutputRef{"generate": {{Glob: "gen/**"}}}
+
+	assert.Empty(t, m.buildStep(p, "lint").ForeignOutputs,
+		"a spell op run on its own may be the one writing what its spell provides")
+	// proto's lint is a magusfile export wrapping buf-lint; only the export is carved.
+	p.MagusfileTargets = append(p.MagusfileTargets, "lint", "generate")
+	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs)
+	assert.Empty(t, m.buildStep(p, "generate").ForeignOutputs, "a target never treats its own declaration as foreign")
+
+	targets := []types.Target{{Path: ".", Name: "lint"}}
+	require.NoError(t, m.Run(context.Background(), targets), "first lint")
+	require.NoError(t, os.WriteFile(generated, []byte("regenerated\n"), 0o644))
+	require.NoError(t, m.Run(context.Background(), targets), "second lint")
+
+	assert.Equal(t, int32(1), lint.Load(), "the second lint replays")
+	got, err := os.ReadFile(generated)
+	require.NoError(t, err)
+	assert.Equal(t, "regenerated\n", string(got), "lint's hit wrote its stale copy of generate's output")
+}
+
+// TestComposerKeepsTheOutputsOfWhatItComposes: a composer inherits the baseline the same
+// way, but the targets it runs with ctx.needs write inside its window, so their outputs
+// stay its own to record and restore.
+func TestComposerKeepsTheOutputsOfWhatItComposes(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+`
+	w.Magusfile(mf)
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+	p.Outputs = []types.Glob{{Pattern: "gen/**"}, {Pattern: "dist/**"}}
+
+	assert.Empty(t, m.buildStep(p, "build").ForeignOutputs)
+	assert.Equal(t, []types.Glob{{Pattern: "gen/**"}}, m.buildStep(p, "lint").ForeignOutputs,
+		"only the overlapping declaration is foreign; dist/** stays lint's")
+
+	// A chain step in a project that does not resolve could be a writer this step runs, so
+	// a chain walked in part carves out nothing.
+	p.TargetChains["lint"] = []types.ChainStep{{Project: "missing", Target: "generate"}}
+	assert.Empty(t, m.buildStep(p, "lint").ForeignOutputs)
+}
+
+// TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt pins harness gap 8b: docs content-generate
+// renders the rules pages from magus\describe.rule(), the running binary's catalog, so a
+// binary rebuilt with new rules left the entry keyed on unchanged sources replaying the
+// old pages. A target reaching magus\describe or a nested magus, directly, through a
+// helper, or through an imported module's function, keys on the build; nothing else does.
+func TestStepKeysOnTheBinaryOnlyWhenItsBodyAsksIt(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	const mf = `import "magus";
+import "./lib/index" as index;
+import "fs";
+export fun rules_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("rules.md");
+    final rules = magus\describe.rule();
+    fs\writeFile("rules.md", "{rules.len()}");
+}
+export fun index_generate(ctx: magus\Context, args: [str]) > void {
+    index\render(".");
+}
+export fun nested(ctx: magus\Context, args: [str]) > void {
+    helper();
+}
+fun helper() > void {
+    magus\run(["build"]);
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    index\plain();
+    fs\writeFile("out.txt", "built");
+}
+`
+	const lib = `namespace index;
+import "magus";
+import "fs";
+export fun render(project: str) > void {
+    fs\writeFile("MAGUS.md", magus\describe.graphMarkdown([project]));
+}
+export fun plain() > void {}
+`
+	w.Magusfile(mf)
+	w.Write("lib/index.buzz", lib)
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	build := proc.BinaryBuild()
+	require.NotEmpty(t, build)
+	for _, target := range []string{"rules-generate", "index-generate", "nested"} {
+		assert.Equal(t, build, m.buildStep(p, target).BinaryBuild, target)
+		_, lines, err := m.ComputeTargetKey(context.Background(), ".", target, nil)
+		require.NoError(t, err, target)
+		assert.Contains(t, lines, "binary:"+build, "describe target --cache must mint the key a run does: %s", target)
+	}
+	assert.Empty(t, m.buildStep(p, "build").BinaryBuild, "a target that never asks the binary keeps its key across rebuilds")
+	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "build", nil)
+	require.NoError(t, err)
+	assert.NotContains(t, lines, "binary:"+build)
+}
+
+// TestDriftGateVerifiesItsOutputsOnlyWithoutWrite: a target that declares outputs and
+// branches on rw is a drift gate when run without rw, so its hit must find its outputs as
+// the entry recorded them (cache.Step.VerifyOutputs). Under rw it writes them, and a
+// build that never reads rw keeps restoring its outputs on a hit.
+func TestDriftGateVerifiesItsOutputsOnlyWithoutWrite(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	const mf = `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+    if (ctx.hasCharm("rw")) { return; }
+}
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("dist/**");
+}
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    if (ctx.hasCharm("rw")) { return; }
+}
+`
+	w.Magusfile(mf)
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	keyed := func(target string, charms ...string) cache.Step {
+		step := m.buildStep(p, target)
+		applyRunKeying(&step, p, nil, nil, charms)
+		return step
+	}
+	assert.True(t, keyed("generate").VerifyOutputs, "the check form compares its outputs")
+	assert.False(t, keyed("generate", types.CharmReadWrite).VerifyOutputs, "the rw form writes them")
+	assert.False(t, keyed("build").VerifyOutputs, "a build that never reads rw restores its outputs")
+	assert.False(t, keyed("lint").VerifyOutputs, "a target declaring no outputs has none to verify")
+}
+
+// TestDriftGateDetectionIgnoresWhichFileDeclaresWhat: the rw branch may sit in an earlier
+// file than the outputs it guards, and the target is still a drift gate.
+func TestDriftGateDetectionIgnoresWhichFileDeclaresWhat(t *testing.T) {
+	w := testkit.NewWorkspace(t)
+	w.Write("magusfiles/a.buzz", `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    if (ctx.hasCharm("rw")) { return; }
+}
+`)
+	w.Write("magusfiles/b.buzz", `import "magus";
+export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**");
+}
+`)
+	m, err := Open(context.Background(), w.Root())
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+	p := m.Get(".")
+	require.NotNil(t, p, "root project")
+
+	step := m.buildStep(p, "generate")
+	applyRunKeying(&step, p, nil, nil, nil)
+	assert.True(t, step.VerifyOutputs)
+}
+
 // TestInputsDynamicArgIsLoadError guards the loud-rejection contract: a
 // magus.inputs/outputs call with a non-literal (computed) argument is a hard load
 // error, because a computed footprint is invisible to the static cache read.
 func TestInputsDynamicArgIsLoadError(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final extra = "gen/**";
     ctx.readsFiles(extra);
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	_, err := Open(context.Background(), root)
 	require.Error(t, err, "Open must reject a computed magus.inputs argument")
@@ -691,14 +893,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // because an unevaluated project reads as cacheable. A computed ctx.withEnv is the shape
 // that tripped it: it must load, with or without the interpreter linked in.
 func TestComputedExecOverrideLoadsForALibraryCaller(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {
     final env = mut {"GOOS": "linux"};
     go["go-build"](ctx.withEnv(env), {});
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	_, err := Open(context.Background(), root)
 	require.NoError(t, err, "a computed ctx.withEnv must not be a load error")
@@ -946,8 +1149,9 @@ func TestGateDriftPropagatesTargetError(t *testing.T) {
 func TestCurrentRevisionNoVCS(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
@@ -959,17 +1163,15 @@ func TestCurrentRevisionNoVCS(t *testing.T) {
 
 // TestCurrentRevisionWithVCS pins the success path CurrentRevisionNoVCS does not
 // reach: a real git repo yields meta.ID/meta.IsDirty verbatim as (revision, dirty).
-// Reuses gitRun/writeCommit/gitHeadFull from knowledge_test.go rather than
-// reimplementing a git fixture helper.
 func TestCurrentRevisionWithVCS(t *testing.T) {
-	root := t.TempDir()
-	gitRun(t, root, "init", "-q")
-	writeCommit(t, root, "magusfile.buzz", "")
+	repo := testkit.NewRepo(t, nil)
+	root := repo.Root()
+	writeCommit(t, repo, "magusfile.buzz", "")
 	// Open creates the .magus cache dir as a side effect; untracked, it would
 	// otherwise read as an uncommitted change unrelated to anything this test
 	// does. Ignore it before the "clean tree" assertion below.
-	writeCommit(t, root, ".gitignore", ".magus/\n")
-	head := gitHeadFull(t, root)
+	writeCommit(t, repo, ".gitignore", ".magus/\n")
+	head := repo.Head()
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -979,7 +1181,7 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 	assert.Equal(t, head, revision, "CurrentRevision must pass meta.ID through verbatim")
 	assert.False(t, dirty, "a freshly committed tree is clean")
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("x"), 0o644))
+	repo.Magusfile("x")
 	_, revision, dirty = m.CurrentRevision(t.Context())
 	assert.Equal(t, head, revision, "an uncommitted edit does not move HEAD")
 	assert.True(t, dirty, "an uncommitted edit must report dirty")
@@ -992,18 +1194,16 @@ func TestCurrentRevisionWithVCS(t *testing.T) {
 func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 
-	const spellName = "zzz-no-vcs-revision-test-spell"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-no-vcs-revision-test-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -1017,7 +1217,7 @@ func TestRun_NoVCSLeavesRevisionEmpty(t *testing.T) {
 
 	key, _, err := m.ComputeTargetKey(ctx, ".", "build", nil)
 	require.NoError(t, err, "ComputeTargetKey")
-	desc, err := m.OutputDescriptorByRef(cache.PortableRef(key))
+	desc, err := m.OutputDescriptorByRef(ctx, cache.PortableRef(key))
 	require.NoError(t, err, "OutputDescriptorByRef")
 	assert.Empty(t, desc.Revision, "no VCS: revision is unknown, not an error")
 	assert.False(t, desc.Dirty)
@@ -1578,7 +1778,8 @@ func TestToolVersionsByProjectTakesTheNilGateMap(t *testing.T) {
 // every nested project's generated MAGUS.md. Root ci ran a nested generate, the nested project's
 // own output changed, and the root reported it as an undeclared source mutation.
 func TestOwnedOutputsSpanEveryProjectNotJustTheRunningOne(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const rootMF = `import "magus";
 magus\project({"sources": ["**/*.md"]});
 export fun ci(ctx: magus\Context, args: [str]) > void {}
@@ -1588,9 +1789,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("INDEX.md");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(rootMF), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "leaf"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(leafMF), 0o644))
+	w.Magusfile(rootMF)
+	w.Write("leaf/magusfile.buzz", leafMF)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -1615,9 +1815,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // regression in a sibling got a second attempt nobody asked to give it and the run
 // came back green. Both targets fail here; exactly one may run twice.
 func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
-	const spellName = "zzz-retry-granularity-spell"
 	var flaky, steady atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-retry-granularity-spell",
 		spells.WithTargets("flaky", "steady"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
@@ -1629,11 +1828,10 @@ func TestRun_RetryOnVolatileIsPerTargetNotPerRun(t *testing.T) {
 			return nil, errors.New("boom")
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".",
@@ -1684,9 +1882,8 @@ func (b *syncBuffer) String() string {
 // failed, silently reran, passed, and the run went green with the first attempt's output
 // collapsed: the unnoticed volatile target the annotation exists to prevent, unnoticed.
 func TestRun_RetryIsAudibleOffCI(t *testing.T) {
-	const spellName = "zzz-retry-audible-spell"
 	var calls atomic.Int32
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-retry-audible-spell",
 		spells.WithTargets("flaky"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			if calls.Add(1) == 1 {
@@ -1695,16 +1892,15 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	var logged syncBuffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".",
@@ -1732,22 +1928,19 @@ func TestRun_RetryIsAudibleOffCI(t *testing.T) {
 // sizes its claim from the measured peaks of runs shaped like it, and records its own
 // outcome under that same shape for the next run to read.
 func TestRun_MemoryClaimFollowsTheRunsShape(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	const spellName = "zzz-shaped-claim-spell"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-shaped-claim-spell",
 		spells.WithTargets("work"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	var logged syncBuffer
 	prev := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	args := []string{"-run", "X"}
 	shape := forecast.NewShape([]string{types.CharmReadWrite}, args)
@@ -1940,15 +2133,13 @@ func TestTargetDrivenEnvKeys(t *testing.T) {
 // plain `magus run go::go-vet` shared one cache entry and a failure from one replayed onto
 // the other.
 func TestComputeTargetKeyFoldsOpDeclaredEnvKeys(t *testing.T) {
-	const spellName = "zzz-platform-spell"
-	s := spells.NewSpell(spellName, spells.WithOps(map[string]spells.Op{
+	spellName := register.Spell(t, "zzz-platform-spell", spells.WithOps(map[string]spells.Op{
 		"build": {Command: spells.Command{Bin: "true", EnvKeys: []string{"GOOS"}}},
 	}), spells.WithTargets("build"))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -2004,23 +2195,19 @@ func TestCharmsForCI(t *testing.T) {
 // child's own output, reported as MGS3001 against the parent's composer. Nothing in the
 // child ran, which is why the dispatch set never had anything to mark.
 func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
-	const spellName = "zzz-nested-output-spell"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-nested-output-spell",
 		spells.WithTargets("gen"),
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			return nil, os.WriteFile(filepath.Join(req.Dir, "gen", "own.txt"), []byte("parent"), 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
-	childOut := filepath.Join(root, "leaf", "gen", "child.txt")
-	require.NoError(t, os.MkdirAll(filepath.Dir(childOut), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
-	require.NoError(t, os.WriteFile(childOut, []byte("child v1"), 0o644))
+	childOut := w.Write("leaf/gen/child.txt", "child v1")
+	w.Write("leaf/magusfile.buzz", "")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("**/gen/*.txt"))
@@ -2049,20 +2236,16 @@ func TestReplayLeavesNestedProjectOutputsAlone(t *testing.T) {
 // was open while its replay wrote. The glob here is rooted in the nested project, so the
 // boundary keeps the record, and the replay overwrites the child's own bytes.
 func TestDirectHitReplayIntoANestedProjectIsAudited(t *testing.T) {
-	const spellName = "zzz-direct-hit-audit-spell"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-direct-hit-audit-spell",
 		spells.WithTargets("gen"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) { return nil, nil }),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
-	childOut := filepath.Join(root, "leaf", "gen", "child.txt")
-	require.NoError(t, os.MkdirAll(filepath.Dir(childOut), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
-	require.NoError(t, os.WriteFile(childOut, []byte("child v1"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	childOut := w.Write("leaf/gen/child.txt", "child v1")
+	w.Write("leaf/magusfile.buzz", "")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName), WithOutputs("leaf/gen/*.txt"))
@@ -2087,7 +2270,7 @@ func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeR
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	spell := spells.NewSpell(spellName,
+	spellName = register.Spell(t, spellName,
 		spells.WithTargets("lint"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 			if err := invoke(req); err != nil {
@@ -2097,14 +2280,12 @@ func runCancelledLint(t *testing.T, spellName string, invoke func(spells.InvokeR
 			return nil, ctx.Err()
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "leaf", "src"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "magusfile.buzz"), []byte(""), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "leaf", "src", "app.ts"), []byte("x"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	w.Write("leaf/magusfile.buzz", "")
+	w.Write("leaf/src/app.ts", "x")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -2167,10 +2348,10 @@ func TestCancelledTargetStillReportsItsWriteIntoADescendant(t *testing.T) {
 // and must claim what the cache snapshot claims: nothing inside a nested project that
 // the glob is not rooted in.
 func TestOutputGlobsByRootStopsAtNestedProjects(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "leaf/magusfile.buzz", "gen/own.txt", "leaf/gen/child.txt"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, filepath.Dir(rel)), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, rel), []byte(rel), 0o644))
+		w.Write(rel, rel)
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithOutputs("**/gen/*.txt"))

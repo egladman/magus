@@ -73,8 +73,8 @@ type StateSuite struct {
 }
 
 func (s *StateSuite) SetupTest() {
-	s.dir = s.T().TempDir()
-	s.T().Setenv("XDG_STATE_HOME", s.dir)
+	testkit.Isolate(s.T())
+	s.dir = os.Getenv("XDG_STATE_HOME")
 }
 
 func TestStateSuite(t *testing.T) {

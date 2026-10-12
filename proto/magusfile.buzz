@@ -61,6 +61,13 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("proto");
 }
 
+// format rewrites the .proto files with buf format, after generate refreshes the trees.
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(generate);
+    ctx.modifiesExistingFiles("**/*.proto");
+    buf["buf-format"](ctx);
+}
+
 export fun lint(ctx: magus\Context, args: [str]) > void { buf["buf-lint"](ctx); }
 export fun ci(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(generate, lint);

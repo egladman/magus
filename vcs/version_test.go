@@ -3,12 +3,11 @@ package vcs
 import (
 	"errors"
 	"flag"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -75,12 +74,11 @@ func TestCachedToolVersionForgetsATooOldVerdict(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake binary is a shell script")
 	}
-	dir := t.TempDir()
-	fake := filepath.Join(dir, "git")
+	w := testkit.NewWorkspace(t)
 	write := func(version string) {
-		require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\necho 'git version "+version+"'\n"), 0o755))
+		w.WriteExecutable("git", "#!/bin/sh\necho 'git version "+version+"'\n")
 	}
-	t.Setenv("PATH", dir)
+	t.Setenv("PATH", w.Root())
 	toolProbes.Delete("git")
 	t.Cleanup(func() { toolProbes.Delete("git") })
 

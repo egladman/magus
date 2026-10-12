@@ -80,9 +80,9 @@ done
 
 ```console
 $ magus ls jobs
-JOB          HOLDER  STATE  MODEL  PATHS  PROOF  CHECK
-upgrade/api  ana     pass   -      1      alone  magus run test api
-upgrade/web  ben     pass   -      1      alone  magus run test web
+JOB          HOLDER  STATE  MODEL  PATHS  PROOF     CHECK
+upgrade/api  ana     pass   -      1      alone     magus run test api
+upgrade/web  ben     pass   -      1      disjoint  magus run test web
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -187,9 +187,9 @@ The board says both items came back, and nothing more:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  changelog  exited  -      1      alone  -
-release-1.3/notes      notes      exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  exited  -      1      alone     -
+release-1.3/notes      notes      exited  -      1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -227,9 +227,9 @@ reads it. The board is the checklist:
 
 ```console
 $ magus ls jobs
-JOB                    HOLDER     STATE   MODEL  PATHS  PROOF  CHECK
-release-1.3/changelog  changelog  pass    -      1      alone  -
-release-1.3/notes      notes      exited  -      1      alone  -
+JOB                    HOLDER     STATE   MODEL  PATHS  PROOF     CHECK
+release-1.3/changelog  changelog  pass    -      1      alone     -
+release-1.3/notes      notes      exited  -      1      disjoint  -
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

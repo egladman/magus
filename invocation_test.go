@@ -12,7 +12,8 @@ import (
 	"github.com/egladman/magus/internal/journal"
 	json "github.com/egladman/magus/internal/json"
 	procrun "github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -20,8 +21,9 @@ import (
 )
 
 func TestBeginInvocationWritesLifecycle(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	m, err := Inspect(context.Background(), root)
 	require.NoError(t, err)
 	workspace := m.(*Magus)
@@ -100,20 +102,18 @@ func TestAttributeRunKeepsAnIdentityItWasGiven(t *testing.T) {
 // context it is invoked with. Driven through the public Run, because the three tests
 // above call attributeRun themselves and so stay green when nothing calls it.
 func TestLibraryRunStampsTheIdentityTheWorkReads(t *testing.T) {
-	const spellName = "zzz-invocation-identity-spell"
 	var invoked context.Context
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-invocation-identity-spell",
 		spells.WithTargets("build"),
 		spells.WithInvoker(func(ctx context.Context, _ spells.InvokeRequest) (any, error) {
 			invoked = ctx
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))

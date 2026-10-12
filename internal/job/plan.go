@@ -74,7 +74,8 @@ func writeMerge(ctx context.Context, store *Store, id string, merge func(*types.
 // to, and returns the write proof a created row records. A merge that creates the row meets
 // every one: graded, within the jobs limits, unambiguous symbol goals, and write paths that
 // are no directory (MGS3018), ungradable claim (MGS3031), shared checkout or unordered
-// shared file (MGS3032). A merge onto an existing row meets the same rules for what it
+// shared file (MGS3032), and a check that skips a test of its write paths' packages or that
+// the guard denies its holder. A merge onto an existing row meets the same rules for what it
 // ADDS: the goals and write paths it did not carry, so a path the row already held never
 // blocks an unrelated update.
 func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string, merge func(*types.Job), limits config.Jobs, read SymbolReader) (types.JobWriteProof, error) {
@@ -95,40 +96,69 @@ func refuseMerge(ctx context.Context, store *Store, rows []types.Job, id string,
 			return "", err
 		}
 		added := slices.DeleteFunc(slices.Clone(merged.WritePaths), func(p string) bool { return slices.Contains(prev.WritePaths, p) })
-		if err := RefuseAddedWritePaths(ctx, store, id, added); err != nil {
+		addedRow := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
+		if err := RefuseAddedWritePaths(ctx, store, addedRow); err != nil {
 			return "", err
 		}
 		addedDenies := slices.DeleteFunc(slices.Clone(merged.DenyPaths), func(p string) bool { return slices.Contains(prev.DenyPaths, p) })
-		if err := RefuseUngradableClaims(ctx, store, id, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
+		if err := RefuseUngradableClaims(ctx, store, types.Job{ID: id, DenyPaths: addedDenies}); err != nil {
 			return "", err
 		}
-		candidate := types.Job{ID: id, WritePaths: added, Parent: merged.Parent, DependsOn: merged.DependsOn}
-		return "", RefuseUnorderedFileShare(ctx, store, rows, id, candidate)
+		if err := RefuseUnorderedFileShare(ctx, store, rows, addedRow); err != nil {
+			return "", err
+		}
+		// Judged on what the update changes, so a check the row already held never blocks an
+		// unrelated update: a new check or goal is graded against every write path, an old
+		// one only against the paths this update adds.
+		checkChanged := !types.SameLeaseCheck(prev.Check, merged.Check)
+		newChecks := types.Job{ID: id, WritePaths: merged.WritePaths, Goals: goals}
+		if checkChanged {
+			newChecks.Check = merged.Check
+		}
+		if err := RefuseNarrowedTests(store, newChecks); err != nil {
+			return "", err
+		}
+		if len(added) > 0 {
+			oldChecks := types.Job{ID: id, WritePaths: added, Check: merged.Check, Goals: merged.Goals}
+			if err := RefuseNarrowedTests(store, oldChecks); err != nil {
+				return "", err
+			}
+		}
+		if checkChanged {
+			return "", RefuseDeniedCheck(ctx, store, merged)
+		}
+		return "", nil
 	}
-	candidate := types.Job{ID: id}
-	merge(&candidate)
-	if err := RefuseUngraded(candidate); err != nil {
+	row := types.Job{ID: id}
+	merge(&row)
+	if err := RefuseUngraded(row); err != nil {
 		return "", err
 	}
-	if err := RefuseForkLimits(rows, id, candidate.Parent, limits); err != nil {
+	if err := RefuseForkLimits(rows, id, row.Parent, limits); err != nil {
 		return "", err
 	}
-	if err := RefuseAmbiguousSymbols(ctx, candidate.Goals, read); err != nil {
+	if err := RefuseAmbiguousSymbols(ctx, row.Goals, read); err != nil {
 		return "", err
 	}
-	if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+	if err := RefuseDirectoryWritePaths(store, row); err != nil {
 		return "", err
 	}
-	if err := RefuseUngradableClaims(ctx, store, id, candidate); err != nil {
+	if err := RefuseUngradableClaims(ctx, store, row); err != nil {
 		return "", err
 	}
-	if err := RefuseSharedCheckout(store, rows, id, candidate); err != nil {
+	if err := RefuseSharedCheckout(store, rows, row); err != nil {
 		return "", err
 	}
-	if err := RefuseUnorderedFileShare(ctx, store, rows, id, candidate); err != nil {
+	if err := RefuseUnorderedFileShare(ctx, store, rows, row); err != nil {
 		return "", err
 	}
-	return store.WriteProof(rows, id, candidate), nil
+	if err := RefuseNarrowedTests(store, row); err != nil {
+		return "", err
+	}
+	if err := RefuseDeniedCheck(ctx, store, row); err != nil {
+		return "", err
+	}
+	return store.WriteProof(rows, row), nil
 }
 
 // Applied is one record `magus job apply` wrote, or would write: the row before (zero when
@@ -249,19 +279,19 @@ func specChanges(prev, next types.Job) []string {
 	})
 }
 
-// RefuseAddedWritePaths holds the write paths a write adds to job id to the rules a fork's
+// RefuseAddedWritePaths holds the write paths a write adds to a job to the rules a fork's
 // are held to: no directory (MGS3018) and no claim a footprint cannot grade (MGS3031). A
-// rule that held only at creation would depend on which call wrote the path. Only the added
-// paths are judged, so a path the row already carried never blocks an unrelated write.
-func RefuseAddedWritePaths(ctx context.Context, store *Store, id string, added []string) error {
-	if len(added) == 0 {
+// rule that held only at creation would depend on which call wrote the path. added is the
+// job's row carrying only the write paths the write adds, so a path the row already held
+// never blocks an unrelated write.
+func RefuseAddedWritePaths(ctx context.Context, store *Store, added types.Job) error {
+	if len(added.WritePaths) == 0 {
 		return nil
 	}
-	candidate := types.Job{ID: id, WritePaths: added}
-	if err := RefuseDirectoryWritePaths(store, id, candidate); err != nil {
+	if err := RefuseDirectoryWritePaths(store, added); err != nil {
 		return err
 	}
-	return RefuseUngradableClaims(ctx, store, id, candidate)
+	return RefuseUngradableClaims(ctx, store, added)
 }
 
 // RefuseUngraded refuses a writing job that declares neither a check nor a goal: `job wait`

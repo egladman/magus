@@ -3,6 +3,7 @@ package knowledge
 import (
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -58,8 +59,9 @@ func TestLastMatchWins(t *testing.T) {
 }
 
 func TestAssembleOwnersEdgesAndNodes(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "CODEOWNERS", "# owners\n* @root\n/pkg/a/ @team-a @alice\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("CODEOWNERS", "# owners\n* @root\n/pkg/a/ @team-a @alice\n")
 
 	nodes := []ownedNode{
 		{ID: "project:pkg/a", Path: "pkg/a"},
@@ -88,8 +90,9 @@ func TestAssembleOwnersEdgesAndNodes(t *testing.T) {
 // A package directory takes its owner from the last rule matching its own path, so a
 // figure can zone a box by owner.
 func TestAssembleOwnersReachesPackageDirs(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "CODEOWNERS", "* @root\n/internal/handler/ @web\n/internal/handler/mcp/ \n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("CODEOWNERS", "* @root\n/internal/handler/ @web\n/internal/handler/mcp/ \n")
 
 	projects := []types.TargetGraphProject{{Path: "."}}
 	dirs := packageDirs([]string{"magus.go", "internal/handler/h.go", "internal/handler/mcp/m.go", "internal/cache/c.go"}, projects, nil)
@@ -128,8 +131,9 @@ func TestAssembleOwnersNoFile(t *testing.T) {
 // TestOwnersOnlyMatchExistingNodes: a rule covering a path not in the graph adds no
 // dangling edge (owners are matched against existing nodes only).
 func TestOwnersOnlyMatchExistingNodes(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "CODEOWNERS", "/nonexistent/ @ghost\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("CODEOWNERS", "/nonexistent/ @ghost\n")
 	s := assembleOwners(root, []ownedNode{{ID: "project:pkg/a", Path: "pkg/a"}})
 	assert.Empty(t, s.Edges)
 }

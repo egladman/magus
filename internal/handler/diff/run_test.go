@@ -18,11 +18,11 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-type fakeRunSource struct {
+type declaredTargets struct {
 	targets map[string][]string
 }
 
-func (f fakeRunSource) ProjectTargets(_ context.Context, project string) []string {
+func (f declaredTargets) ProjectTargets(_ context.Context, project string) []string {
 	return f.targets[project]
 }
 
@@ -30,7 +30,7 @@ func (f fakeRunSource) ProjectTargets(_ context.Context, project string) []strin
 // reporting nothing in flight. Callers override socket/statusFn per case.
 func newTestRunHandler(t *testing.T, cacheDir string, submitted *[][]string) *RunHandler {
 	t.Helper()
-	h := NewRunHandler(fakeRunSource{targets: map[string][]string{
+	h := NewRunHandler(declaredTargets{targets: map[string][]string{
 		"libs/authkit": {"test", "lint"},
 	}}, cacheDir, "v0-test", nil)
 	h.socket = func() string { return "test-socket" }

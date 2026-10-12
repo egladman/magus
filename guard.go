@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/guard/builtin"
@@ -767,11 +768,15 @@ func batched(approved ApprovedPolicy) bool {
 // what it registered. pending names the sources the working tree changed, so a file it
 // deleted is still found. It must be the whole tree's answer when approved is not
 // batched. Nil with no error when there is no magusfile to evaluate.
+//
+// The load may run up to approvedLoadGrace past ctx's deadline; see approvedLoadContext.
 func approvedRegistry(ctx context.Context, root, projectPath string, resolver *secret.Resolver, approved ApprovedPolicy, pending []string) (*workspace.WorkspaceRegistry, error) {
 	defer closeApproved(approved)
 	if !interp.Available() {
 		return nil, nil //nolint:nilnil // without an interpreter no magusfile can register a rule
 	}
+	ctx, cancel := approvedLoadContext(ctx)
+	defer cancel()
 	read := approvedReader(ctx, approved, pending)
 	files, err := approvedMagusfiles(root, pending, read, func() ([]string, error) {
 		// The single magusfile is absent from the approved state, so the load is
@@ -786,13 +791,39 @@ func approvedRegistry(ctx context.Context, root, projectPath string, resolver *s
 	lctx := interp.WithGuardRules(installWorkspaceRegistry(ctx, reg))
 	lctx = secret.ContextWithResolver(lctx, resolver)
 	lctx = interp.WithProjectPath(lctx, projectPath)
-	lctx = interp.WithSourceReader(lctx, read)
+	lctx = interp.WithApprovedSourceReader(lctx, read)
 	for _, src := range interp.Sources(root, files) {
 		if _, err := interp.Parse(lctx, src); err != nil {
 			return nil, fmt.Errorf("approved magusfile: %w", err)
 		}
 	}
 	return reg, nil
+}
+
+// approvedLoadGrace is how far past its caller's deadline the approved load may run.
+const approvedLoadGrace = 2 * time.Second
+
+// approvedLoadContext bounds the approved load to approvedLoadGrace past ctx's deadline, and
+// leaves a ctx with no deadline as it is. A compile does not stop at a deadline anyway, but
+// the reads and the run after it do, and a chunk is stored only once its run finishes: a
+// load cut off there would spend every hook's time on the same compile and keep none of it.
+// The caller still sees its own deadline pass and reads the answer as late. Cancelling ctx
+// for any other reason cancels the load.
+func approvedLoadContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return ctx, func() {}
+	}
+	lctx, cancel := context.WithDeadline(context.WithoutCancel(ctx), deadline.Add(approvedLoadGrace))
+	stop := context.AfterFunc(ctx, func() {
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+	return lctx, func() {
+		stop()
+		cancel()
+	}
 }
 
 // approvedMagusfiles is the root magusfile's files as approved holds them, in whichever

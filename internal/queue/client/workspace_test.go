@@ -2,8 +2,6 @@ package client
 
 import (
 	"maps"
-	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -11,18 +9,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/queue/types"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 )
 
 func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz": "", "api/magusfile.buzz": "", "web/magusfile.buzz": "", "api/main.go": "package main\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	w, err := OpenWorkspace(t.Context(), root, "ci")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
@@ -51,18 +47,15 @@ func TestWorkspaceAnswersFromTheProjectGraph(t *testing.T) {
 // its regeneration runs, whatever their extension, and so is anything that reaches it
 // through the project graph; an edit to the declarations proves nothing.
 func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"outputs\": [\"gen/**\"]});\n",
 		"web/magusfile.buzz": "", "api/main.go": "package main\n", "api/gen/out.go": "package gen\n",
 		"api/notes.md": "notes\n", "api/CMakeLists.txt": "project(api)\n", "api/requirements.txt": "requests\n",
 		"web/notes.md": "notes\n", "web/app.go": "package web\n", "vendor/blob.go": "package blob\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	w, err := OpenWorkspace(t.Context(), root, "ci")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
@@ -98,8 +91,8 @@ func TestWorkspaceSaysWhatIsGeneratedAndWhatItsRegenerationRuns(t *testing.T) {
 // runs declares it: a formatter's claim on every Go file must not open them all to it.
 // magus rewrites the file it maintains whatever anyone declares.
 func TestWorkspaceClassifyCountsOnlyTheRegenerationsUpdates(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz": "",
 		"api/magusfile.buzz": `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
@@ -113,11 +106,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 }
 `,
 		"api/README.md": "# api\n", "api/main.go": "package main\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	paths := []string{"api/README.md", "api/main.go", ".gitattributes"}
 	for name, tc := range map[string]struct {
 		opts []WorkspaceOption
@@ -141,15 +131,12 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 // A merge is allowed by magus's change classifier: prose by the built-in markdown globs,
 // code only where a project's merge_low_risk opts it in.
 func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"merge_low_risk\": [\"fixtures/**\"]});\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	w, err := OpenWorkspace(t.Context(), root, "ci")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
@@ -172,15 +159,12 @@ func TestWorkspaceAutoResolvableIsTheChangeClassifier(t *testing.T) {
 // prose by the built-in markdown globs, and code for whatever no spell declares comments
 // for.
 func TestWorkspaceClassifyEditIsTheChangeClassifier(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz":     "",
 		"api/magusfile.buzz": "import \"magus\";\nmagus\\project({\"outputs\": [\"gen/**\"]});\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	w, err := OpenWorkspace(t.Context(), root, "ci")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })
@@ -199,18 +183,15 @@ func TestWorkspaceClassifyEditIsTheChangeClassifier(t *testing.T) {
 // The hooks get the grants of the spells the base's projects resolved, not of every
 // spell this magus has registered, and each target's own.
 func TestWorkspaceSandboxesAreTheResolvedSpellsAndTheTargets(t *testing.T) {
-	root := t.TempDir()
-	for rel, body := range map[string]string{
+	ws := testkit.NewWorkspace(t)
+	ws.WriteTree(map[string]string{
 		"magusfile.buzz": "",
 		"api/magusfile.buzz": "import \"magus\";\nimport \"magus/spell/go\";\nmagus\\project({\"spells\": [go], \"targets\": {\n" +
 			"    \"go-test\": {\"sandbox\": {\"allow\": [{\"path\": \"/proc\", \"mode\": \"ro\"}]}},\n}});\n",
 		"api/go.mod":  "module example.com/api\n\ngo 1.25\n",
 		"api/main.go": "package main\n",
-	} {
-		abs := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	})
+	root := ws.Root()
 	w, err := OpenWorkspace(t.Context(), root, "ci")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = w.Close() })

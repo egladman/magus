@@ -118,7 +118,7 @@ func TestImportRejectsTamperedLog(t *testing.T) {
 	require.NoError(t, os.WriteFile(stored, poisoned, 0o644))
 
 	_, cB := openSigned(t, remote, nil, trusted)
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, "test/pkg", rA.Hash)
+	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.Error(t, err, "a tampered log must fail verification")
 	assert.Contains(t, err.Error(), "signature")
 
@@ -154,7 +154,7 @@ func TestImportWithCorruptBlobKeepsTheStoredOne(t *testing.T) {
 	require.NoError(t, err)
 
 	_, cB := openSigned(t, remote, nil, trusted)
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, "test/pkg", rA.Hash)
+	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.NoError(t, err, "the untampered artifact must import")
 	m, err := cB.readManifest("test/pkg", rA.Hash)
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestImportWithCorruptBlobKeepsTheStoredOne(t *testing.T) {
 	poisoned := rewriteTarMember(t, stored, func(name string) bool {
 		return strings.HasPrefix(name, "cas/")
 	}, []byte("MALICIOUS: not the bytes this blob is named for\n"))
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, "test/pkg", rA.Hash)
+	_, err = cB.importArtifact(context.Background(), bytes.NewReader(poisoned), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.Error(t, err, "a blob whose content does not match its name must fail the import")
 	assert.Contains(t, err.Error(), "content hashes to")
 
@@ -358,7 +358,7 @@ func TestImportDoesNotDependOnFixedStagingNames(t *testing.T) {
 		require.NoError(t, os.MkdirAll(p, 0o755))
 	}
 
-	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, "test/pkg", rA.Hash)
+	_, err = cB.importArtifact(context.Background(), bytes.NewReader(raw), cB.dir, importRequest{project: "test/pkg", hash: rA.Hash})
 	require.NoError(t, err, "the import failed because a fixed staging path was taken")
 	_, err = cB.readManifest("test/pkg", rA.Hash)
 	require.NoError(t, err, "the imported manifest must be committed")

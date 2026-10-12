@@ -172,7 +172,7 @@ func TestCLIErrorsCarryTheirExitCode(t *testing.T) {
 func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	// The refusal is built inside the cache, so stand in for it with an error carrying
 	// the same two properties the real one does (machine_test.go pins that it does).
-	busy := machineBusyStub{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
+	busy := machineRefusal{types.DiagnosticErrorf(types.MachineBudgetExhausted, "the machine is full")}
 
 	code, ok := proc.ExitCode(busy)
 	require.True(t, ok, "the server must be able to read the code off a forwarded refusal")
@@ -187,9 +187,9 @@ func TestMachineBusyRidesTheExitCodeSeam(t *testing.T) {
 	assert.Equal(t, 1, mapExitCode(errors.Join(errSilent{exitCode: 1}, busy)))
 }
 
-type machineBusyStub struct{ error }
+type machineRefusal struct{ error }
 
-func (machineBusyStub) ExitCode() int { return cache.ExitCodeMachineBusy }
+func (machineRefusal) ExitCode() int { return cache.ExitCodeMachineBusy }
 
 // TestExitCodeOfPrintsWhatNoOneElseDid pins which of the two exit-75 refusals mapExitCode
 // prints. A contended workspace lock is refused before any step exists, so this line is
@@ -202,7 +202,7 @@ func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	lock := lockContendedStub{errors.New("magus: project . is locked by another magus process (held by pid 41221 magus run test in /elsewhere); not waiting")}
+	lock := lockRefusal{errors.New("magus: project . is locked by another magus process (held by pid 41221 magus run test in /elsewhere); not waiting")}
 	assert.Equal(t, 75, mapExitCode(fmt.Errorf("run: %w", lock)))
 	assert.Contains(t, logged.String(), "held by pid 41221 magus run test in /elsewhere")
 
@@ -213,13 +213,13 @@ func TestExitCodeOfPrintsWhatNoOneElseDid(t *testing.T) {
 	assert.Empty(t, logged.String())
 }
 
-// lockContendedStub has the shape of the root package's unexported lockContendedError:
+// lockRefusal has the shape of the root package's unexported lockContendedError:
 // a plain error that states 75 and is not an ExitError.
-type lockContendedStub struct{ error }
+type lockRefusal struct{ error }
 
-func (lockContendedStub) ExitCode() int { return 75 }
+func (lockRefusal) ExitCode() int { return 75 }
 
-func (e machineBusyStub) Unwrap() error { return e.error }
+func (e machineRefusal) Unwrap() error { return e.error }
 
 func TestUsagefCarriesTheMisuseMessage(t *testing.T) {
 	err := usagef("magus diff: %d is too many", 3)

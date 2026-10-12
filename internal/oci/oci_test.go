@@ -81,10 +81,10 @@ func TestEmptyConfigPayloadMatchesTheSpecDescriptor(t *testing.T) {
 	assert.Equal(t, ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.MediaType)
 }
 
-// fakeRegistry is enough of the v2 API to push and pull: a token endpoint, the two-step
+// inMemoryRegistry is enough of the v2 API to push and pull: a token endpoint, the two-step
 // blob upload, and tag- or digest-addressed manifests. It serves TLS because the client addresses
 // every registry as https, and httptest's own client trusts its certificate.
-type fakeRegistry struct {
+type inMemoryRegistry struct {
 	srv   *httptest.Server
 	mu    sync.Mutex
 	blobs map[string][]byte
@@ -107,20 +107,20 @@ type fakeRegistry struct {
 	link string
 }
 
-func newFakeRegistry(t *testing.T) *fakeRegistry {
-	r := &fakeRegistry{blobs: map[string][]byte{}, tags: map[string][]byte{}}
+func newInMemoryRegistry(t *testing.T) *inMemoryRegistry {
+	r := &inMemoryRegistry{blobs: map[string][]byte{}, tags: map[string][]byte{}}
 	r.srv = httptest.NewTLSServer(http.HandlerFunc(r.serve))
 	t.Cleanup(r.srv.Close)
 	return r
 }
 
-func (r *fakeRegistry) client() *Client { return &Client{HTTP: r.srv.Client()} }
+func (r *inMemoryRegistry) client() *Client { return &Client{HTTP: r.srv.Client()} }
 
-func (r *fakeRegistry) ref(repo, tag string) Reference {
+func (r *inMemoryRegistry) ref(repo, tag string) Reference {
 	return Reference{Registry: strings.TrimPrefix(r.srv.URL, "https://"), Repository: repo, Tag: tag}
 }
 
-func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
+func (r *inMemoryRegistry) serve(w http.ResponseWriter, req *http.Request) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	p := req.URL.Path
@@ -139,7 +139,7 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	case p == "/token":
 		r.tokenAuth = append(r.tokenAuth, req.Header.Get("Authorization"))
-		_, _ = w.Write([]byte(`{"token":"fake"}`))
+		_, _ = w.Write([]byte(`{"token":"issued"}`))
 	case strings.HasPrefix(p, "/upload/"):
 		body, _ := io.ReadAll(req.Body)
 		r.blobs[req.URL.Query().Get("digest")] = body
@@ -184,7 +184,7 @@ func (r *fakeRegistry) serve(w http.ResponseWriter, req *http.Request) {
 
 // serveTags answers tags/list in lexical order, after ?last= and at most pageSize per
 // page, the way the distribution spec paginates.
-func (r *fakeRegistry) serveTags(w http.ResponseWriter, req *http.Request) {
+func (r *inMemoryRegistry) serveTags(w http.ResponseWriter, req *http.Request) {
 	var all []string
 	for name := range r.tags {
 		if !strings.Contains(name, ":") {
@@ -216,7 +216,7 @@ func testContent(layers ...Layer) Content {
 // TestPushAndFetchLayersByTitle is the whole point of the multi-layer shape: a reader
 // names one layer and gets that layer's bytes, without reading the others.
 func TestPushAndFetchLayersByTitle(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 
@@ -252,7 +252,7 @@ func TestPushAndFetchLayersByTitle(t *testing.T) {
 // TestArtifactRefusesAWrongArtifactType pins the check that stops a tag someone else's
 // tooling wrote to from yielding bytes that merely parse as JSON.
 func TestArtifactRefusesAWrongArtifactType(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 	_, err := c.Push(t.Context(), ref, testContent(
@@ -267,7 +267,7 @@ func TestArtifactRefusesAWrongArtifactType(t *testing.T) {
 // TestBlobRefusesContentTheManifestDoesNotDescribe covers the two bounds a layer fetch
 // carries: the digest the manifest named, and the size it declared.
 func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 	payload := []byte(`{"nodes":[]}`)
@@ -300,7 +300,7 @@ func TestBlobRefusesContentTheManifestDoesNotDescribe(t *testing.T) {
 // TestPushRefusesAnEmptyArtifact keeps a manifest with no layers off a registry: it is
 // not a valid artifact, and the failure it causes surfaces on the puller's machine.
 func TestPushRefusesAnEmptyArtifact(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "latest"), testContent())
 	assert.Error(t, err)
 }
@@ -308,7 +308,7 @@ func TestPushRefusesAnEmptyArtifact(t *testing.T) {
 // TestPinnedPullRefusesAnotherManifest pins the check that makes a digest reference mean
 // something: the registry answering with a different manifest is refused before decode.
 func TestPinnedPullRefusesAnotherManifest(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	ref := reg.ref("team/graph", "latest")
 	pushed, err := c.Push(t.Context(), ref, testContent(
@@ -343,7 +343,7 @@ func TestParseReferenceDigest(t *testing.T) {
 }
 
 func TestPushRefusesADigestReference(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	ref := reg.ref("team/graph", "latest")
 	ref.Digest = digest.FromBytes([]byte("m"))
 	_, err := reg.client().Push(t.Context(), ref, testContent(
@@ -369,7 +369,7 @@ func TestParseRepository(t *testing.T) {
 // One upload per blob however many tags a push writes: each extra tag is a manifest PUT
 // of the same bytes, so every tag serves the digest Push returned.
 func TestPushWritesEveryTagFromOneUpload(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	content := testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{"a":1}`)})
 
@@ -381,12 +381,12 @@ func TestPushWritesEveryTagFromOneUpload(t *testing.T) {
 
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each") //nolint:fieldwise // fakeRegistry holds a server, a mutex and counters; its state is not a value to compare whole
+	assert.Equal(t, 2, reg.uploads, "the config blob and the one layer, once each") //nolint:fieldwise // inMemoryRegistry holds a server, a mutex and counters; its state is not a value to compare whole
 	assert.Equal(t, map[string][]byte{"v1": raw, "latest": raw, "stable": raw, pushed.String(): raw}, reg.tags)
 }
 
 func TestPushValidatesEveryTagBeforeUploading(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "v1"),
 		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}), "not/a/tag")
 	require.ErrorContains(t, err, `tag "not/a/tag"`)
@@ -419,7 +419,7 @@ func TestContentManifestCarriesAnnotations(t *testing.T) {
 }
 
 func TestTagsFollowsLinkPagination(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	_, err := c.Push(t.Context(), reg.ref("team/graph", "v1"),
 		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}), "v2", "v3", "latest", "v4")
@@ -436,7 +436,7 @@ func TestTagsFollowsLinkPagination(t *testing.T) {
 // The next page is fetched with this repository's bearer token, so a Link naming
 // another host would hand the token to it.
 func TestTagsRefusesACrossOriginNextPage(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	c := reg.client()
 	reg.mu.Lock()
 	reg.link = `<https://elsewhere.example/v2/team/graph/tags/list?last=v1>; rel="next"`
@@ -448,7 +448,7 @@ func TestTagsRefusesACrossOriginNextPage(t *testing.T) {
 // Credentials reach the token endpoint on a pull as well as a push, and an anonymous
 // client sends none. One client asks once per scope: the Tags call reuses the pull token.
 func TestTokenCarriesCredentialsOnPull(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	_, err := reg.client().Push(t.Context(), reg.ref("team/graph", "v1"),
 		testContent(Layer{Name: "only", MediaType: "application/json", Payload: []byte(`{}`)}))
 	require.NoError(t, err)
@@ -463,7 +463,7 @@ func TestTokenCarriesCredentialsOnPull(t *testing.T) {
 	basic := "Basic " + base64.StdEncoding.EncodeToString([]byte("bot:s3cret-token"))
 	reg.mu.Lock()
 	defer reg.mu.Unlock()
-	assert.Equal(t, []string{"", basic}, reg.tokenAuth) //nolint:fieldwise // fakeRegistry holds a server, a mutex and counters; its state is not a value to compare whole
+	assert.Equal(t, []string{"", basic}, reg.tokenAuth) //nolint:fieldwise // inMemoryRegistry holds a server, a mutex and counters; its state is not a value to compare whole
 	assert.Equal(t, 2, reg.pings, "one challenge per client")
 }
 
@@ -499,7 +499,7 @@ func TestAuthorizeFollowsARealmOnAnotherHost(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `{"access_token":"tok-%s"}`, q.Get("scope"))
 	}))
 	t.Cleanup(auth.Close)
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	reg.mu.Lock()
 	reg.realm = auth.URL + "/auth/issue"
 	reg.mu.Unlock()
@@ -531,7 +531,7 @@ func TestAuthorizeFollowsARealmOnAnotherHost(t *testing.T) {
 // A registry that answers /v2/ with only a Basic challenge gets the credentials on
 // every request and no token exchange; without credentials it is refused up front.
 func TestAuthorizeAnswersABasicChallenge(t *testing.T) {
-	reg := newFakeRegistry(t)
+	reg := newInMemoryRegistry(t)
 	reg.mu.Lock()
 	reg.basicOnly = true
 	reg.mu.Unlock()

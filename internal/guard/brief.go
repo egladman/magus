@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -41,10 +42,29 @@ var briefNegationRe = regexp.MustCompile(`(?i)\b(?:never|not|don't|do not|no lon
 // briefPlaceholderRe matches a `<placeholder>`, which a shell would read as a redirect.
 var briefPlaceholderRe = regexp.MustCompile(`<[A-Za-z][^<>\n]*>`)
 
-// denyBriefCommand refuses a brief that teaches a denied command, naming the command and
-// the rule, or returns the zero verdict.
-func denyBriefCommand(deps Dependencies, brief string) ShellVerdict {
-	for _, cmd := range briefCommands(brief) {
+// briefInput is a spawn's brief and the description it was spawned under.
+type briefInput struct {
+	text  string
+	title string
+}
+
+// lazyProducers finds, once and on demand, whether a target regenerates a row's write
+// paths. The lookup loads the workspace, so a caller that never needs it pays nothing.
+type lazyProducers func() func(target, project string) bool
+
+// noProducers is the lookup for a row whose write paths nothing regenerates.
+func noProducers() func(target, project string) bool {
+	return func(string, string) bool { return false }
+}
+
+// definesTarget reports whether the workspace defines a target of that name.
+type definesTarget func(target string) bool
+
+// judgeBriefCommand refuses a brief that teaches a denied command, naming the command and
+// the rule. Otherwise it passes, and the verdict may carry Context saying why a magus run
+// in the brief was not held to a check.
+func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
+	for _, cmd := range briefCommands(brief.text) {
 		cmd = withoutBootstrap(cmd)
 		if strings.TrimSpace(cmd) == "" {
 			continue
@@ -61,7 +81,7 @@ func denyBriefCommand(deps Dependencies, brief string) ShellVerdict {
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: v.RuleName()},
 		}
 	}
-	return denyBriefOffCheck(deps, brief)
+	return judgeBriefOffCheck(deps, brief)
 }
 
 // briefJobRe finds the job a brief hands its worker: the lease it exports, the job it takes,
@@ -75,13 +95,18 @@ var briefProseRunRe = regexp.MustCompile(`(?:^|[^\w./-])(?:\./)?magus\s+`)
 // briefTargetPhraseRe matches "run the lint target" and "run `lint` target".
 var briefTargetPhraseRe = regexp.MustCompile("(?i)\\brun\\s+(?:the\\s+)?`?([A-Za-z0-9_:-]+)`?\\s+target\\b")
 
-// denyBriefOffCheck refuses a brief that tells the worker of a live row to run a magus target
+// judgeBriefOffCheck refuses a brief that tells the worker of a live row to run a magus target
 // other than that row's check and the targets declaring its write paths, quoting the line.
-// The spawn path hands the grader no context, so it reads the store itself. A brief naming
-// no live job passes: there is no check to hold it to.
-func denyBriefOffCheck(deps Dependencies, brief string) ShellVerdict {
-	ids := briefJobIDs(brief)
-	if len(ids) == 0 {
+// The spawn path hands the grader no context, so it reads the store itself.
+//
+// The rows are the one the brief names and the one the spawn title names (in the
+// `<parent>/<role> <job>` form), each held to its own check. A brief that reaches no live row
+// passes, since there is no check to hold it to, and so does a run the row allows or a line
+// that forbids it; the verdict's Context then says which, so a pass is never silent about why
+// a magus run in the brief was not graded.
+func judgeBriefOffCheck(deps Dependencies, brief briefInput) ShellVerdict {
+	runs := briefRuns(brief.text)
+	if !slices.ContainsFunc(runs, func(r briefRun) bool { return !r.negated }) {
 		return ShellVerdict{}
 	}
 	ctx := context.Background()
@@ -93,13 +118,18 @@ func denyBriefOffCheck(deps Dependencies, brief string) ShellVerdict {
 	if err != nil {
 		return ShellVerdict{}
 	}
-	row, ok := briefRow(ids, rows)
-	if !ok {
-		return ShellVerdict{}
+	ids := briefJobIDs(brief.text)
+	var graded []types.Job
+	if row, ok := briefRow(ids, rows); ok {
+		graded = append(graded, row)
 	}
-	produces := sync.OnceValue(func() func(target, project string) bool {
-		return leaseProducers(ctx, deps, at.workspace, row.WritePaths)
-	})
+	if row, ok := spawnTitleJob(ctx, at, brief.title); ok && gradableRow(row) && !slices.ContainsFunc(graded, func(g types.Job) bool { return g.ID == row.ID }) {
+		graded = append(graded, row)
+		ids = append(ids, row.ID)
+	}
+	if len(graded) == 0 {
+		return briefUngraded(whyNoBriefRow(ids, rows), runs)
+	}
 	targets := sync.OnceValue(func() []types.TargetEntry {
 		ws, err := deps.inspect(ctx, at.workspace)
 		if err != nil || ws == nil {
@@ -108,16 +138,111 @@ func denyBriefOffCheck(deps Dependencies, brief string) ShellVerdict {
 		entries, _ := ws.ListTargets(ctx)
 		return entries
 	})
-	defines := func(target string) bool {
+	defines := definesTarget(func(target string) bool {
 		return slices.ContainsFunc(targets(), func(e types.TargetEntry) bool { return targetName(e.Name) == targetName(target) })
+	})
+	var notes []string
+	for _, row := range graded {
+		produces := lazyProducers(sync.OnceValue(func() func(target, project string) bool {
+			return leaseProducers(ctx, deps, at.workspace, row.WritePaths)
+		}))
+		if off, found := briefOffCheck(runs, row, produces, defines); found {
+			return ShellVerdict{
+				Deny: briefOffCheckDeny(row, off.line, off.run.target),
+				Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+			}
+		}
+		notes = append(notes, briefPassNotes(runs, row, produces, defines)...)
 	}
-	line, target, found := briefOffCheck(brief, row, produces, defines)
-	if !found {
+	return briefPassVerdict(notes)
+}
+
+// gradableRow is a live row that names a check and does not own the gate: one a brief's
+// runs can be held to.
+func gradableRow(row types.Job) bool {
+	return row.State.Live() && !LeaseOwnsGate(row) && len(rowChecks(row)) > 0
+}
+
+// whyNoBriefRow says why none of ids is a row to hold a brief to.
+func whyNoBriefRow(ids []string, rows []types.Job) string {
+	if len(ids) == 0 {
+		return "the brief names no job (no `magus.lease=<id>`, `job exec <id>` or `JOB ID:` line) and the spawn description is not `<parent>/<role> <job>`"
+	}
+	var why []string
+	for _, id := range ids {
+		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
+		switch {
+		case i < 0:
+			why = append(why, "job "+id+" is not in the store")
+		case !rows[i].State.Live():
+			why = append(why, "job "+id+" is not live")
+		case LeaseOwnsGate(rows[i]):
+			why = append(why, "job "+id+" owns the gate, which may run anything")
+		default:
+			why = append(why, "job "+id+" declares no check")
+		}
+	}
+	return strings.Join(why, "; ")
+}
+
+// briefUngraded is the pass for a brief whose magus runs met no row, saying so for each.
+func briefUngraded(why string, runs []briefRun) ShellVerdict {
+	var notes []string
+	for _, r := range runs {
+		if !r.negated {
+			notes = append(notes, briefRunLabel(r)+" is not graded: no row was held to a check; "+why)
+		}
+	}
+	return briefPassVerdict(notes)
+}
+
+func briefRunLabel(r briefRun) string {
+	return strconv.Quote(elideCommand(strings.TrimSpace(r.line)))
+}
+
+// briefPassNotes explains each of a brief's runs that row's grader passed for a reason a reader
+// could take for an oversight: the line forbids it, the workspace defines no such target,
+// or the target regenerates the row's write paths. A run of the row's own check needs no
+// words.
+func briefPassNotes(runs []briefRun, row types.Job, produces lazyProducers, defines definesTarget) []string {
+	checks := rowChecks(row)
+	var notes []string
+	for _, r := range runs {
+		line := briefRunLabel(r)
+		if r.negated {
+			notes = append(notes, line+" is not graded: the line forbids the run")
+			continue
+		}
+		if strings.ContainsAny(r.run.target, "<>$") {
+			continue
+		}
+		if r.prose && !defines(r.run.target) {
+			notes = append(notes, line+" is not graded: `"+r.run.target+"` is no target this workspace defines")
+			continue
+		}
+		if r.run.allowed(checks, noProducers) {
+			continue
+		}
+		if r.run.allowed(checks, produces) {
+			notes = append(notes, line+" is allowed: it regenerates job "+row.ID+"'s write paths")
+		}
+	}
+	return notes
+}
+
+// briefPassVerdict folds notes into the Context of a verdict that does not refuse. At most
+// five are told, since a long brief can carry many runs.
+func briefPassVerdict(notes []string) ShellVerdict {
+	if len(notes) == 0 {
 		return ShellVerdict{}
 	}
+	notes = slices.Compact(slices.Sorted(slices.Values(notes)))
+	if len(notes) > 5 {
+		notes = append(notes[:5:5], fmt.Sprintf("and %d more", len(notes)-5))
+	}
 	return ShellVerdict{
-		Deny: briefOffCheckDeny(row, line, target),
-		Rule: denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
+		Context: "worker-check-only passed this brief: " + strings.Join(notes, "; ") + ".",
+		Rule:    denyRule{Name: denyRuleBriefCommand, Arg: string(denyRuleWorkerCheckOnly)},
 	}
 }
 
@@ -149,34 +274,34 @@ func briefJobIDs(brief string) []string {
 func briefRow(ids []string, rows []types.Job) (types.Job, bool) {
 	for _, id := range ids {
 		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == id })
-		if i >= 0 && rows[i].State.Live() && !LeaseOwnsGate(rows[i]) && len(rowChecks(rows[i])) > 0 {
+		if i >= 0 && gradableRow(rows[i]) {
 			return rows[i], true
 		}
 	}
 	return types.Job{}, false
 }
 
-// briefOffCheck finds the first run a brief tells row's worker to make that the row does not
-// allow, reporting the line that says so and the target it names.
+// briefOffCheck finds the first of a brief's runs that row does not allow its worker, as the
+// run and the line that presents it.
 //
 // Running text is read more loosely than a code span. Its word after `run` is a target only
 // when the workspace defines one by that name ("magus run takes one target" names none),
 // and a run of the check's target passes whatever follows it, since no parser can tell a
 // project from the next word of the sentence.
-func briefOffCheck(brief string, row types.Job, produces func() func(target, project string) bool, defines func(target string) bool) (line, target string, found bool) {
+func briefOffCheck(runs []briefRun, row types.Job, produces lazyProducers, defines definesTarget) (briefRun, bool) {
 	checks := rowChecks(row)
-	for _, r := range briefRuns(brief) {
-		if strings.ContainsAny(r.run.target, "<>$") || (r.prose && !defines(r.run.target)) {
+	for _, r := range runs {
+		if r.negated || strings.ContainsAny(r.run.target, "<>$") || (r.prose && !defines(r.run.target)) {
 			continue
 		}
 		if r.prose && slices.ContainsFunc(checks, func(c types.LeaseCheck) bool { return sameTarget(c.Target, r.run.target) }) {
 			continue
 		}
 		if !r.run.allowed(checks, produces) {
-			return r.line, r.run.target, true
+			return r, true
 		}
 	}
-	return "", "", false
+	return briefRun{}, false
 }
 
 // briefRun is one run a brief presents, with the line presenting it.
@@ -184,49 +309,51 @@ type briefRun struct {
 	line  string
 	run   targetRun
 	prose bool
+	// negated is a run on a line that forbids it (never, do not, instead of), or in a block
+	// introduced by one. It is kept so a pass can say it was not graded, and never refused.
+	negated bool
 }
 
-// briefRuns are the magus runs a brief presents as ones to make: each line of a shell block,
-// each inline span, each run named in running text, and each "run the X target". A line
-// that negates (never, do not, instead of) is passed over, as briefCommands passes it.
+// briefRuns are the magus runs a brief presents: each line of a shell block, each inline
+// span, each run named in running text, and each "run the X target". A line that negates
+// is marked, as briefCommands passes it over.
 func briefRuns(brief string) []briefRun {
 	var out []briefRun
-	fromShell := func(line, text string) {
+	fromShell := func(line, text string, negated bool) {
 		cmds, ok := ParseCommands(text)
 		if !ok {
 			return
 		}
 		for _, c := range cmds {
 			if r, ok := parseTargetRun(c); ok {
-				out = append(out, briefRun{line: line, run: r})
+				out = append(out, briefRun{line: line, run: r, negated: negated})
 			}
 		}
 	}
 	lines := strings.Split(brief, "\n")
 	for _, m := range briefFenceRe.FindAllStringSubmatchIndex(brief, -1) {
-		if !shellFence(strings.ToLower(brief[m[2]:m[3]])) || briefNegationRe.MatchString(lineBefore(lines, strings.Count(brief[:m[0]], "\n"))) {
+		if !shellFence(strings.ToLower(brief[m[2]:m[3]])) {
 			continue
 		}
+		negated := briefNegationRe.MatchString(lineBefore(lines, strings.Count(brief[:m[0]], "\n")))
 		for _, l := range strings.Split(brief[m[4]:m[5]], "\n") {
 			l = strings.TrimPrefix(strings.TrimSpace(l), "$ ")
-			fromShell(l, l)
+			fromShell(l, l, negated)
 		}
 	}
 	for _, line := range strings.Split(briefFenceRe.ReplaceAllString(brief, ""), "\n") {
-		if briefNegationRe.MatchString(line) {
-			continue
-		}
+		negated := briefNegationRe.MatchString(line)
 		for _, m := range briefSpanRe.FindAllStringSubmatch(line, -1) {
-			fromShell(line, m[1])
+			fromShell(line, m[1], negated)
 		}
 		prose := briefSpanRe.ReplaceAllString(line, " ")
 		for _, m := range briefProseRunRe.FindAllStringIndex(prose, -1) {
 			if r, ok := proseTargetRun(prose[m[1]:]); ok {
-				out = append(out, briefRun{line: line, run: r, prose: true})
+				out = append(out, briefRun{line: line, run: r, prose: true, negated: negated})
 			}
 		}
 		for _, m := range briefTargetPhraseRe.FindAllStringSubmatch(line, -1) {
-			out = append(out, briefRun{line: line, run: targetRun{verb: "run", target: m[1]}, prose: true})
+			out = append(out, briefRun{line: line, run: targetRun{verb: "run", target: m[1]}, prose: true, negated: negated})
 		}
 	}
 	return out

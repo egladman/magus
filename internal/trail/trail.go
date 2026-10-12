@@ -170,13 +170,27 @@ type Event struct {
 	// which nothing decided.
 	DecidedBy string `json:"decided_by,omitempty"`
 	// Binary and BinaryVersion name the magus that judged a hook call, and Cwd the
-	// directory the host said the call ran in. Without them a verdict cannot be tied to the
-	// build that reached it, which is the first question when a guard rule that should
-	// have fired did not: the hook may have run a different checkout's binary than the
-	// session's.
+	// directory it judged the call in: the one the host reported, else the hook process's
+	// own. Without them a verdict cannot be tied to the build that reached it, which is the
+	// first question when a guard rule that should have fired did not: the hook may have
+	// run a different checkout's binary than the session's.
 	Binary        string `json:"binary,omitempty"`
 	BinaryVersion string `json:"binary_version,omitempty"`
 	Cwd           string `json:"cwd,omitempty"`
+	// Phases are the timed steps of a hook judgment, in the order they ran. A host kills a
+	// hook that outlives its own timeout and no row is written, so these are what show
+	// where a slow judgment that did finish spent its time.
+	Phases []Phase `json:"phases,omitempty"`
+}
+
+// Phase is one timed step of a hook judgment.
+type Phase struct {
+	Name      string `json:"name"`
+	ElapsedMs int64  `json:"elapsed_ms"`
+	// BudgetMs is the share of the hook's deadline the step had, 0 when it had none.
+	BudgetMs int64 `json:"budget_ms,omitempty"`
+	// Lapsed reports that the step ran out of its budget before it answered.
+	Lapsed bool `json:"lapsed,omitempty"`
 }
 
 // UnmarshalJSON decodes an event, reading a duration written under either spelling.
@@ -260,11 +274,12 @@ type AgentCommand struct {
 	// RuleFailures are the workspace command rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
-	// Binary, BinaryVersion and Cwd are the judging magus and the host's reported
-	// directory; see Event.
+	// Binary, BinaryVersion and Cwd are the judging magus and the directory it judged in,
+	// and Phases its timed steps; see Event.
 	Binary        string
 	BinaryVersion string
 	Cwd           string
+	Phases        []Phase
 }
 
 const agentCommandSchemaVersion = 1
@@ -389,6 +404,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Binary:        command.Binary,
 		BinaryVersion: command.BinaryVersion,
 		Cwd:           command.Cwd,
+		Phases:        command.Phases,
 	})
 }
 
@@ -435,11 +451,12 @@ type AgentSpawn struct {
 	// RuleFailures are the workspace spawn rules that judged nothing, empty when every
 	// rule answered.
 	RuleFailures []RuleFailure
-	// Binary, BinaryVersion and Cwd are the judging magus and the host's reported
-	// directory; see Event.
+	// Binary, BinaryVersion and Cwd are the judging magus and the directory it judged in,
+	// and Phases its timed steps; see Event.
 	Binary        string
 	BinaryVersion string
 	Cwd           string
+	Phases        []Phase
 }
 
 // RuleFailure is one side of a workspace guard rule that judged nothing, and why.
@@ -546,6 +563,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Binary:        spawn.Binary,
 		BinaryVersion: spawn.BinaryVersion,
 		Cwd:           spawn.Cwd,
+		Phases:        spawn.Phases,
 	})
 }
 

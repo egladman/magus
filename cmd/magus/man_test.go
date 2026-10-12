@@ -1,11 +1,11 @@
 package main
 
 import (
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,15 +31,9 @@ func TestDefaultManDir(t *testing.T) {
 }
 
 func TestManUsage(t *testing.T) {
-	previous := os.Stderr
-	read, write, err := os.Pipe()
-	require.NoError(t, err)
-	os.Stderr = write
-	t.Cleanup(func() { os.Stderr = previous })
+	var cmdErr error
+	content := testkit.CaptureStderr(t, func() { cmdErr = manCmd(nil) })
 
-	assert.Error(t, manCmd(nil))
-	require.NoError(t, write.Close())
-	content, err := io.ReadAll(read)
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "Usage: magus man install")
+	assert.Error(t, cmdErr)
+	assert.Contains(t, content, "Usage: magus man install")
 }

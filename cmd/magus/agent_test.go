@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -267,10 +269,10 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 		"root declares no MAGUS.md": {silent, false},
 	} {
 		t.Run(name, func(t *testing.T) {
-			root := t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-			require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(tc.magusfile), 0o644))
-			assert.Equal(t, tc.want, declaresRoutingIndex(context.Background(), root))
+			w := testkit.NewWorkspace(t)
+			w.Write("magus.yaml", "")
+			w.Magusfile(tc.magusfile)
+			assert.Equal(t, tc.want, declaresRoutingIndex(context.Background(), w.Root()))
 		})
 	}
 
@@ -278,10 +280,10 @@ func TestDeclaresRoutingIndex(t *testing.T) {
 		assert.False(t, declaresRoutingIndex(context.Background(), t.TempDir()))
 	})
 	t.Run("below the root", func(t *testing.T) {
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(writer), 0o644))
-		sub := filepath.Join(root, "sub")
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "")
+		w.Magusfile(writer)
+		sub := filepath.Join(w.Root(), "sub")
 		require.NoError(t, os.Mkdir(sub, 0o755))
 		assert.False(t, declaresRoutingIndex(context.Background(), sub))
 	})
@@ -398,19 +400,13 @@ func TestCheckSkillStatusesNoFooter(t *testing.T) {
 // spell would.
 func writeStatusHarness(t *testing.T, skillsDir string) {
 	t.Helper()
-	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "status-test" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            "status-test",
-			Display:       agent.HarnessDisplay{Name: "Status test"},
-			Skills:        agent.HarnessSkills{Paths: []string{skillsDir}, Form: agent.FormFull},
-			Config:        agent.HarnessConfig{Path: ".status-test/config.json"},
-		}, "spell:status-test", true, nil
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "status-test",
+		Display:       agent.HarnessDisplay{Name: "Status test"},
+		Skills:        agent.HarnessSkills{Paths: []string{skillsDir}, Form: agent.FormFull},
+		Config:        agent.HarnessConfig{Path: ".status-test/config.json"},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
 }
 
 // TestCheckSkillStatusesIgnoresForeignAgentsMD proves an AGENTS.md without our

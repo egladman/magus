@@ -47,12 +47,12 @@ func matchWorkspaceShell(rules []WorkspaceShellRule, command string, d Dialect) 
 			continue
 		}
 		switch r.Decision {
-		case "deny":
+		case decisionDeny:
 			return ShellVerdict{
 				Deny: r.Reason,
 				Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)},
 			}
-		case "advise":
+		case decisionAdvise:
 			if advise.Context == "" {
 				advise = ShellVerdict{Context: r.Reason, Rule: denyRule{Name: denyRuleName(workspaceShellPrefix + r.Name)}}
 			}

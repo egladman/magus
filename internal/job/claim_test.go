@@ -2,40 +2,19 @@ package job
 
 import (
 	"context"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// gitRepo is a git checkout at a temp dir holding files, with the box's own git config shut
-// out so a global attributes file cannot name a driver the test did not.
-func gitRepo(t *testing.T, files map[string]string) string {
-	t.Helper()
-	dir := t.TempDir()
-	for name, body := range files {
-		full := filepath.Join(dir, filepath.FromSlash(name))
-		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
-		require.NoError(t, os.WriteFile(full, []byte(body), 0o644))
-	}
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	out, err := cmd.CombinedOutput()
-	require.NoError(t, err, "%s", out)
-	return dir
-}
-
 func TestRefuseUngradableClaims(t *testing.T) {
 	t.Parallel()
 
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"})
+	root := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n*.md diff=markdown\n", "run.go": "package run\n", "notes/a#b.md": "# A\n"}).Root()
 	for _, tc := range []struct {
 		name  string
 		paths []string
@@ -99,38 +78,20 @@ func TestRefuseUngradableClaims(t *testing.T) {
 	t.Run("a checkout with no version control", func(t *testing.T) {
 		t.Parallel()
 		s := NewStore(tmpLoc(t, t.TempDir()))
-		err := RefuseUngradableClaims(context.Background(), s, "wave/job", types.Job{WritePaths: []string{"run.go#executeStages"}})
+		err := RefuseUngradableClaims(context.Background(), s, types.Job{ID: "wave/job", WritePaths: []string{"run.go#executeStages"}})
 		require.ErrorIs(t, err, types.WritePathClaimUngradable)
 		assert.Contains(t, err.Error(), `"run.go": `)
 	})
-}
-
-// commitRepo commits everything gitRepo wrote and returns HEAD, so a footprint has a
-// revision to diff against.
-func commitRepo(t *testing.T, dir string) string {
-	t.Helper()
-	run := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com")
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%s", out)
-		return strings.TrimSpace(string(out))
-	}
-	run("add", "-A")
-	run("commit", "-q", "-m", "seed")
-	return run("rev-parse", "HEAD")
 }
 
 func TestRefuseUnorderedFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n", "notes.txt": "hi\n", "docs/x.md": "# X\n"}
-	bRoot := gitRepo(t, files)
-	aRoot := gitRepo(t, files)
-	aRev := commitRepo(t, aRoot)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRoot := aRepo.Root()
+	aRev := aRepo.Head()
 
 	for _, tc := range []struct {
 		name        string
@@ -167,7 +128,7 @@ func TestRefuseUnorderedFileShare(t *testing.T) {
 			require.NoError(t, err)
 
 			candidate := types.Job{ID: "B", WritePaths: tc.bWrite, Parent: tc.bParent, DependsOn: tc.bDependsOn}
-			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate)
+			refErr := RefuseUnorderedFileShare(context.Background(), s, rows, candidate)
 			if !tc.wantRefused {
 				require.NoError(t, refErr)
 				return
@@ -187,9 +148,10 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files)
-	aRoot := gitRepo(t, files)
-	aRev := commitRepo(t, aRoot)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRoot := aRepo.Root()
+	aRev := aRepo.Head()
 
 	for state, refused := range map[types.JobState]bool{types.StateRunning: true, types.StateExited: false} {
 		s := NewStore(tmpLoc(t, bRoot))
@@ -197,7 +159,7 @@ func TestExitedHolderClaimsNoFileShare(t *testing.T) {
 		rows, err := s.List()
 		require.NoError(t, err)
 
-		err = RefuseUnorderedFileShare(context.Background(), s, rows, "B", types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}})
+		err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}})
 		if refused {
 			require.ErrorIs(t, err, types.WritePathFileShared, state)
 			continue
@@ -212,9 +174,10 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files)
-	aRoot := gitRepo(t, files)
-	aRev := commitRepo(t, aRoot)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRoot := aRepo.Root()
+	aRev := aRepo.Head()
 
 	s := NewStore(tmpLoc(t, bRoot))
 	seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"magusfile.buzz"}, Checkpoint: aRev, CheckoutRoot: aRoot})
@@ -223,9 +186,9 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	replacement := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"A"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement))
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement))
 	replacement.DependsOn = nil
-	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", replacement), types.WritePathFileShared)
+	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement), types.WritePathFileShared)
 }
 
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
@@ -239,9 +202,10 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	t.Parallel()
 
 	files := map[string]string{"magusfile.buzz": "target a {}\n"}
-	bRoot := gitRepo(t, files)
-	aRoot := gitRepo(t, files)
-	aRev := commitRepo(t, aRoot)
+	bRoot := testkit.NewRepo(t, files).Root()
+	aRepo := testkit.NewRepo(t, files)
+	aRoot := aRepo.Root()
+	aRev := aRepo.Head()
 
 	loc := tmpLoc(t, bRoot)
 	s := NewStore(loc)
@@ -251,5 +215,5 @@ func TestRefuseUnorderedFileShareTransitiveDependsOn(t *testing.T) {
 	require.NoError(t, err)
 
 	candidate := types.Job{ID: "B", WritePaths: []string{"magusfile.buzz"}, DependsOn: []string{"M"}}
-	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, "B", candidate))
+	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, candidate))
 }

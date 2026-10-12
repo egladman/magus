@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,11 +17,8 @@ import (
 // and returns its dir plus the resolution Checkpoint takes.
 func checkpointRepo(t *testing.T) (string, types.VCSResolution) {
 	t.Helper()
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "alpha\n"})
-	// Named explicitly: git's default branch depends on the version and on an
-	// init.defaultBranch the fixture env deliberately cannot see, so asserting on
-	// Branch needs a name this test chose.
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "alpha\n"}).Root()
+	// The tests assert on Branch, so it is a name they chose rather than the fixture's main.
 	gitRun(t, dir, "checkout", "-q", "-b", "work")
 	return dir, types.VCSResolution{Name: "git", VCS: gitVCS{}}
 }

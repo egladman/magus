@@ -63,6 +63,9 @@ type OutputDescriptor struct {
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds
 	DurationMs  int64  `json:"duration_ms"`
 
+	FailedNeedTarget string `json:"failed_need_target,omitempty"` // ctx.needs member a composed target failed on; its output lives under FailedNeedRef
+	FailedNeedRef    string `json:"failed_need_ref,omitempty"`    // ref of that member's own run, deepest when members compose further
+
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   int    `json:"key_version,omitempty"` // key recipe version that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id

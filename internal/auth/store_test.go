@@ -576,8 +576,8 @@ func TestLoadStoreRefusesTokensWrittenBeforeGrants(t *testing.T) {
 	}
 	for rel, body := range cases {
 		t.Run(rel, func(t *testing.T) {
-			state := t.TempDir()
-			t.Setenv("XDG_STATE_HOME", state)
+			testkit.Isolate(t)
+			state := os.Getenv("XDG_STATE_HOME")
 			path := filepath.Join(state, "magus", filepath.FromSlash(rel))
 			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
 			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
@@ -602,8 +602,8 @@ func TestLoadStoreRefusesTokensWrittenBeforeGrants(t *testing.T) {
 
 // With a retired store present, the operator token still verifies: it never opens the store.
 func TestOperatorVerifiesBesideARetiredStore(t *testing.T) {
-	state := t.TempDir()
-	t.Setenv("XDG_STATE_HOME", state)
+	testkit.Isolate(t)
+	state := os.Getenv("XDG_STATE_HOME")
 	old := filepath.Join(state, "magus", "connectors.d", "obsidian.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(old), 0o700))
 	require.NoError(t, os.WriteFile(old, []byte(`{"version":1}`), 0o600))

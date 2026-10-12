@@ -1,17 +1,17 @@
 package attention
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/libs/testkit"
 )
@@ -253,49 +253,30 @@ func TestAttentionHandler_SecondDisposeReturns409(t *testing.T) {
 	}
 }
 
-// dispositionRecorder captures the one Provider call this handler makes. The interface is
-// embedded rather than implemented: every other method is a nil panic, which is the assertion
-// that the disposal path records this instrument and no other.
-type dispositionRecorder struct {
-	observability.Provider
-	secs []float64
-	sevs []string
-}
-
-func (r *dispositionRecorder) RecordAttentionDisposition(_ context.Context, secs float64, sev string) {
-	r.secs = append(r.secs, secs)
-	r.sevs = append(r.sevs, sev)
-}
-
 // A disposal has to record the wait it ended. The instrument registers whether or not this
-// route calls it, so the wiring is what the test is for.
+// route calls it, so the wiring is what the test is for. The mock expects this one Provider
+// method and no other, so a disposal that records anything else fails the test.
 func TestAttentionHandler_DisposeRecordsTheWait(t *testing.T) {
 	root, dir := plantStore(t)
 	id := raise(t, dir, "agent-1", "needs the deploy key")
-	rec := &dispositionRecorder{}
+	rec := mocks.NewMockProvider(t)
+	// raise files no severity, and an absent one must land on the declared "unset" rather
+	// than an empty attribute value or a series of its own.
+	rec.EXPECT().RecordAttentionDisposition(
+		mock.Anything,
+		mock.MatchedBy(func(secs float64) bool { return secs >= 0 }),
+		"unset",
+	).Once()
 	h := NewHandler(root, "v0.0.0-test", nil, rec)
 
 	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusOK {
 		t.Fatalf("want the disposal to succeed, got %d; body %s", w.Code, w.Body.String())
 	}
-	if len(rec.secs) != 1 {
-		t.Fatalf("want one disposition recorded, got %d", len(rec.secs))
-	}
-	if rec.secs[0] < 0 {
-		t.Errorf("want a non-negative wait, got %v", rec.secs[0])
-	}
-	// raise files no severity, and an absent one must land on the declared "unset" rather
-	// than an empty attribute value or a series of its own.
-	if rec.sevs[0] != "unset" {
-		t.Errorf("want severity unset, got %q", rec.sevs[0])
-	}
 
-	// A refused disposal closed nothing, so it must record nothing.
+	// A refused disposal closed nothing, so it must record nothing: the single expected
+	// call is already spent, and a second one fails the test.
 	if w := postDispose(t, h, `{"id":"`+id+`"}`); w.Code != http.StatusConflict {
 		t.Fatalf("want 409 on the second disposal, got %d", w.Code)
-	}
-	if len(rec.secs) != 1 {
-		t.Errorf("a refused disposal must record nothing, got %d observations", len(rec.secs))
 	}
 }
 

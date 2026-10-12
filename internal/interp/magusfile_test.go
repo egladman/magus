@@ -5,18 +5,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestImportProbesIsFileMatchesStat(t *testing.T) {
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	j := func(rel string) string { return filepath.Join(root, filepath.FromSlash(rel)) }
 	for _, rel := range []string{"a.buzz", "d/b.buzz", "d/e/spell.buzz", "f", "café.buzz"} {
-		require.NoError(t, os.MkdirAll(filepath.Dir(j(rel)), 0o755))
-		require.NoError(t, os.WriteFile(j(rel), []byte("x"), 0o644))
+		w.Write(rel, "x")
 	}
 	require.NoError(t, os.Symlink(j("a.buzz"), j("link.buzz")))
 	require.NoError(t, os.Symlink(j("d"), j("ld")))

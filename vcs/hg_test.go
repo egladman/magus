@@ -341,7 +341,7 @@ func cmdFrames(msgs ...string) string {
 	return buf.String()
 }
 
-func fakeCmdBatch(stdout string) *cmdBatch {
+func cmdBatchReading(stdout string) *cmdBatch {
 	return &cmdBatch{
 		prog:   "hg",
 		rev:    ".",
@@ -354,12 +354,12 @@ func fakeCmdBatch(stdout string) *cmdBatch {
 // The command-server protocol makes an unknown lowercase channel optional, so
 // a server that adds a debug channel still answers.
 func TestCmdBatchSkipsAnUnknownLowercaseChannel(t *testing.T) {
-	b := fakeCmdBatch(cmdFrames("ddebug", "oone\n", "r\x00\x00\x00\x00"))
+	b := cmdBatchReading(cmdFrames("ddebug", "oone\n", "r\x00\x00\x00\x00"))
 	got, err := b.Read("a.buzz")
 	require.NoError(t, err)
 	assert.Equal(t, "one\n", got)
 
-	b = fakeCmdBatch(cmdFrames("I\x00\x00\x10\x00"))
+	b = cmdBatchReading(cmdFrames("I\x00\x00\x10\x00"))
 	_, err = b.Read("a.buzz")
 	require.ErrorContains(t, err, "channel 'I'")
 }
@@ -367,7 +367,7 @@ func TestCmdBatchSkipsAnUnknownLowercaseChannel(t *testing.T) {
 // A malformed reply leaves the stream out of step with its commands, so every
 // later read returns that failure instead of a reply meant for another path.
 func TestCmdBatchFailureIsSticky(t *testing.T) {
-	b := fakeCmdBatch(cmdFrames("r\x00\x00", "otwo\n", "r\x00\x00\x00\x00"))
+	b := cmdBatchReading(cmdFrames("r\x00\x00", "otwo\n", "r\x00\x00\x00\x00"))
 	_, first := b.Read("a.buzz")
 	require.Error(t, first)
 	_, err := b.Read("b.buzz")

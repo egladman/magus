@@ -91,6 +91,8 @@ type Store struct {
 	outputs func(root string) AttemptResolver
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
 	landed func(context.Context, types.Job) string
+	// grader is Location.Grader.
+	grader CheckGrader
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -124,6 +126,11 @@ type Location struct {
 	// result its worker recorded in another checkout of the repository. Nil tries the
 	// caller's resolver alone.
 	Outputs func(root string) AttemptResolver
+	// Grader judges a declared check the way the guard will judge the row's holder running
+	// it, for the fork doors, against the rules of the workspace at Root. Nil grades
+	// nothing: the guard lives above this package, so only a door that can reach it
+	// supplies one.
+	Grader CheckGrader
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -138,7 +145,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader}
 	s.path, s.err = jobsPath(loc)
 	return s
 }

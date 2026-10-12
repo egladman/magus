@@ -603,6 +603,18 @@ type CheckoutReporter interface {
 	UnpublishedRevisions(ctx context.Context, dir, rev string, bases ...string) ([]string, error)
 }
 
+// LandingReporter is the capability to report whether a revision's changes have landed in
+// another, by content rather than by ancestry: a cherry-pick under a new id, or one folded
+// into a larger commit, has landed. Unlike the capabilities VCSDriver embeds it is
+// optional, and a driver that does not implement it cannot prove anything landed.
+type LandingReporter interface {
+	// UnlandedPaths returns the repo-relative paths rev changed since merge-base(rev, into)
+	// whose content in into differs from rev's, sorted; empty means every change rev made
+	// reads the same in into. It writes nothing to the repository. Revisions with no merge
+	// base are an error.
+	UnlandedPaths(ctx context.Context, dir, rev, into string) ([]string, error)
+}
+
 // DefaultRefReporter is the capability (sibling of RemoteReporter) to report the
 // repository's default branch, e.g. "main", independent of whatever branch is currently
 // checked out. Committed artifacts (MAGUS.md's forge links) use it so their URLs stay

@@ -16,13 +16,13 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// fakeInsightSource is an insightSource returning a canned view or a fixed error.
-type fakeInsightSource struct {
+// cannedInsight is an insightSource returning a canned view or a fixed error.
+type cannedInsight struct {
 	view       types.InsightView
 	insightErr error
 }
 
-func (f fakeInsightSource) Insight(context.Context) (types.InsightView, error) {
+func (f cannedInsight) Insight(context.Context) (types.InsightView, error) {
 	return f.view, f.insightErr
 }
 
@@ -30,7 +30,7 @@ func (f fakeInsightSource) Insight(context.Context) (types.InsightView, error) {
 
 func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 	// The folded shape: the four VCS lenses plus the volatility lens under one view.
-	src := fakeInsightSource{view: types.InsightView{
+	src := cannedInsight{view: types.InsightView{
 		Hotspots:   types.HotspotOutput{Commits: 42},
 		Volatility: &types.VolatilityReport{Threshold: 0.05, Targets: []types.VolatilityTarget{{Project: "p", Target: "test", Volatile: true}}},
 	}}
@@ -57,7 +57,7 @@ func TestInsightHandler_Returns200WithJSON(t *testing.T) {
 
 // The error names the server's workspace path, so it stays in the log.
 func TestInsightHandler_ErrorReturns500(t *testing.T) {
-	h := NewHandler(fakeInsightSource{insightErr: errors.New("git -C /Users/dev/repo log: scan boom")}, nil)
+	h := NewHandler(cannedInsight{insightErr: errors.New("git -C /Users/dev/repo log: scan boom")}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusInternalServerError {
@@ -73,7 +73,7 @@ func TestInsightHandler_ErrorReturns500(t *testing.T) {
 }
 
 func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewHandler(fakeInsightSource{insightErr: console.ErrNoWorkspace}, nil)
+	h := NewHandler(cannedInsight{insightErr: console.ErrNoWorkspace}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/insight", nil))
 	if w.Code != http.StatusServiceUnavailable {
@@ -85,7 +85,7 @@ func TestInsightHandler_NoWorkspaceReturns503(t *testing.T) {
 }
 
 func TestInsightHandler_MethodNotAllowed(t *testing.T) {
-	h := NewHandler(fakeInsightSource{}, nil)
+	h := NewHandler(cannedInsight{}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/insight", nil))
 	if w.Code != http.StatusMethodNotAllowed {
@@ -94,7 +94,7 @@ func TestInsightHandler_MethodNotAllowed(t *testing.T) {
 }
 
 func TestInsightHandler_OptionsNoContent(t *testing.T) {
-	h := NewHandler(fakeInsightSource{}, nil)
+	h := NewHandler(cannedInsight{}, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodOptions, "/api/v1/insight", nil))
 	if w.Code != http.StatusNoContent {

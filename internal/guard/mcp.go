@@ -281,6 +281,9 @@ func (r *clientReader) call(member []string, c *ast.CallExpr) {
 	case `job\wait`:
 		id, _ := literalString(clientArg(c, 0, "id"))
 		r.lines = append(r.lines, hint.JobWait.WithAs("magus", quoteValue(orUnread(id))))
+	case `job\exit`:
+		id, _ := literalString(clientArg(c, 0, "id"))
+		r.lines = append(r.lines, hint.JobExit.WithAs("magus", quoteValue(orUnread(id))))
 	case "job":
 		r.lines = append(r.lines, strings.Split(unreadClientCall(), "\n")...)
 	}

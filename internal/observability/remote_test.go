@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeBackend is a minimal cache.RemoteBackend whose get/put behaviour the test
+// cannedBackend is a minimal cache.RemoteBackend whose get/put behaviour the test
 // controls directly, so assertions don't depend on a real transport.
-type fakeBackend struct {
+type cannedBackend struct {
 	data   []byte // artifact returned on get; nil = miss
 	getErr error
 	putErr error
@@ -22,11 +22,11 @@ type fakeBackend struct {
 	pruned bool
 }
 
-func (f *fakeBackend) Name() string { return "fake" }
+func (f *cannedBackend) Name() string { return "canned" }
 
-func (f *fakeBackend) Active(context.Context) bool { return true }
+func (f *cannedBackend) Active(context.Context) bool { return true }
 
-func (f *fakeBackend) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
+func (f *cannedBackend) GetArtifact(context.Context, string, string) (io.ReadCloser, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
@@ -36,7 +36,7 @@ func (f *fakeBackend) GetArtifact(context.Context, string, string) (io.ReadClose
 	return io.NopCloser(bytes.NewReader(f.data)), nil
 }
 
-func (f *fakeBackend) PutArtifact(_ context.Context, _, _ string, r io.Reader) error {
+func (f *cannedBackend) PutArtifact(_ context.Context, _, _ string, r io.Reader) error {
 	b, err := io.ReadAll(r)
 	f.put = b
 	if f.putErr != nil {
@@ -45,14 +45,14 @@ func (f *fakeBackend) PutArtifact(_ context.Context, _, _ string, r io.Reader) e
 	return err
 }
 
-func (f *fakeBackend) HasArtifact(context.Context, string, string) (bool, error) {
+func (f *cannedBackend) HasArtifact(context.Context, string, string) (bool, error) {
 	return f.data != nil, nil
 }
 
-// fakePruner adds the optional RemotePruner capability.
-type fakePruner struct{ *fakeBackend }
+// prunableBackend adds the optional RemotePruner capability.
+type prunableBackend struct{ *cannedBackend }
 
-func (f *fakePruner) PruneArtifacts(context.Context, cache.RetentionPolicy) error {
+func (f *prunableBackend) PruneArtifacts(context.Context, cache.RetentionPolicy) error {
 	f.pruned = true
 	return nil
 }
@@ -60,7 +60,7 @@ func (f *fakePruner) PruneArtifacts(context.Context, cache.RetentionPolicy) erro
 func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := InstrumentRemoteBackend(&fakeBackend{data: []byte("hello")}, rec)
+	b := InstrumentRemoteBackend(&cannedBackend{data: []byte("hello")}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
 	require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestInstrumentRemoteBackend_GetHit(t *testing.T) {
 func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := InstrumentRemoteBackend(&fakeBackend{data: nil}, rec)
+	b := InstrumentRemoteBackend(&cannedBackend{data: nil}, rec)
 
 	rc, err := b.GetArtifact(context.Background(), "p", "h")
 	require.ErrorIs(t, err, cache.ErrRemoteMiss, "a miss passes through as the sentinel")
@@ -91,7 +91,7 @@ func TestInstrumentRemoteBackend_GetMiss(t *testing.T) {
 func TestInstrumentRemoteBackend_PutExists(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := InstrumentRemoteBackend(&fakeBackend{putErr: cache.ErrRemoteExists}, rec)
+	b := InstrumentRemoteBackend(&cannedBackend{putErr: cache.ErrRemoteExists}, rec)
 
 	err := b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world")))
 	require.ErrorIs(t, err, cache.ErrRemoteExists)
@@ -102,7 +102,7 @@ func TestInstrumentRemoteBackend_PutExists(t *testing.T) {
 // HasArtifact reaches the wrapped backend, so backfill works with telemetry on.
 func TestInstrumentRemoteBackend_HasPassesThrough(t *testing.T) {
 	t.Parallel()
-	b := InstrumentRemoteBackend(&fakeBackend{data: []byte("x")}, &recorder{})
+	b := InstrumentRemoteBackend(&cannedBackend{data: []byte("x")}, &recorder{})
 	has, err := b.HasArtifact(context.Background(), "p", "h")
 	require.NoError(t, err)
 	assert.True(t, has)
@@ -111,7 +111,7 @@ func TestInstrumentRemoteBackend_HasPassesThrough(t *testing.T) {
 func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	b := InstrumentRemoteBackend(&fakeBackend{getErr: errors.New("boom")}, rec)
+	b := InstrumentRemoteBackend(&cannedBackend{getErr: errors.New("boom")}, rec)
 
 	_, err := b.GetArtifact(context.Background(), "p", "h")
 	assert.Error(t, err)
@@ -122,7 +122,7 @@ func TestInstrumentRemoteBackend_GetError(t *testing.T) {
 func TestInstrumentRemoteBackend_Put(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
-	fb := &fakeBackend{}
+	fb := &cannedBackend{}
 	b := InstrumentRemoteBackend(fb, rec)
 
 	require.NoError(t, b.PutArtifact(context.Background(), "p", "h", bytes.NewReader([]byte("world"))))
@@ -145,7 +145,7 @@ func (*disabledRec) Enabled() bool { return false }
 // the default (telemetry-off) path.
 func TestInstrumentRemoteBackend_DisabledPassthrough(t *testing.T) {
 	t.Parallel()
-	fb := &fakeBackend{}
+	fb := &cannedBackend{}
 	assert.Equal(t, cache.RemoteBackend(fb), InstrumentRemoteBackend(fb, &disabledRec{}), "disabled provider should return the backend unwrapped")
 }
 
@@ -155,10 +155,10 @@ func TestInstrumentRemoteBackend_PrunePreserved(t *testing.T) {
 	t.Parallel()
 	rec := &recorder{}
 
-	plain := InstrumentRemoteBackend(&fakeBackend{}, rec)
+	plain := InstrumentRemoteBackend(&cannedBackend{}, rec)
 	assert.NotImplements(t, (*cache.RemotePruner)(nil), plain, "plain backend should not gain a prune capability")
 
-	fp := &fakePruner{fakeBackend: &fakeBackend{}}
+	fp := &prunableBackend{cannedBackend: &cannedBackend{}}
 	wrapped := InstrumentRemoteBackend(fp, rec)
 	pr, ok := wrapped.(cache.RemotePruner)
 	require.True(t, ok, "prune capability lost after wrapping")

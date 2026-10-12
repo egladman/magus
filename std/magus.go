@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -1708,6 +1709,32 @@ type workspaceJobLimits interface {
 	JobLimits() config.Jobs
 }
 
+// jobGrader is the CheckGrader for the Stores jobStoreFromContext opens, nil until the
+// composition root registers one.
+var (
+	jobGraderMu sync.RWMutex
+	jobGrader   job.CheckGrader
+)
+
+// RegisterJobGrader installs the grader magus\job.put and its siblings judge a declared
+// check with, as Location.Grader for the workspace on the context. It is registered rather
+// than imported because the grader runs the guard's rules, and the guard imports this
+// package; with none registered a check is not graded. A later call replaces it and
+// returns the one it replaced, for a test that swaps in its own to put back. Safe to call
+// while a magus\job member runs; that member sees the old grader or the new one.
+func RegisterJobGrader(g job.CheckGrader) (previous job.CheckGrader) {
+	jobGraderMu.Lock()
+	defer jobGraderMu.Unlock()
+	previous, jobGrader = jobGrader, g
+	return previous
+}
+
+func currentJobGrader() job.CheckGrader {
+	jobGraderMu.RLock()
+	defer jobGraderMu.RUnlock()
+	return jobGrader
+}
+
 // jobStoreFromContext opens the job store for the workspace already on ctx. A
 // fresh Store per call is deliberate and matches job.Store's own documented contract:
 // it holds no state beyond its path and lock, and a cross-process race over the file is
@@ -1731,7 +1758,7 @@ func jobStoreFromContext(ctx context.Context, member string) (*job.Store, error)
 	if !ok {
 		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
 	}
-	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}
+	loc := job.Location{CacheDir: cd.CacheDir(), Root: ws.Root(), Grader: currentJobGrader()}
 	// A Buzz process keeps the lease it was launched under in context. Do not
 	// rediscover it from the mutable environment at each job-store write: a script
 	// could otherwise unset BAGGAGE and become an apparent orchestrator mid-run. It is
@@ -1904,13 +1931,13 @@ func MagusWaitJob(ctx context.Context, id string, result map[string]any) (types.
 	// The CLI and the MCP tool both hold one and wire it.
 	observe := job.CheckpointObserver(types.WorkspaceFromContext(ctx).Root(), nil)
 	if result == nil {
-		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe)
+		return job.Wait(ctx, store, strings.TrimSpace(id), nil, nil, observe, nil)
 	}
 	report, err := jobResultFromMap(result)
 	if err != nil {
 		return types.JobStatus{}, err
 	}
-	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe)
+	return job.Wait(ctx, store, strings.TrimSpace(id), &report, jobAttemptFromContext, observe, nil)
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or

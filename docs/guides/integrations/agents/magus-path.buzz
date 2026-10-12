@@ -61,7 +61,7 @@
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 22
+// magus-guard-template: 23
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -176,7 +176,7 @@ fun main(args: [str]) > void {
     final event = json\parse(raw ?? "") catch null;
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
-    final bin = hook\resolveBin(cwd: cwd);
+    final bin = hook\resolveBin(cwd: cwd, session: hook\field(event, dotPath: sessionPath), file: "magus-path.buzz");
     if (bin == "" or !hook\isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
         // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.

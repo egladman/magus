@@ -37,6 +37,7 @@ var scribes = map[string]func(args []string) error{
 	"cliflags":        runCLIFlags,
 	"config":          runConfig,
 	"api":             runAPI,
+	"goapi":           runGoAPI,
 	"cut":             runCut,
 	"release-index":   runReleaseIndex,
 }

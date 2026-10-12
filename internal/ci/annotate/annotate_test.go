@@ -39,8 +39,8 @@ func TestDetectIsNopWithoutAProvider(t *testing.T) {
 
 func TestDetectUsesAnActiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func() Annotator { return stubProvider{active: true} })
-	assert.IsType(t, stubProvider{}, Detect())
+	RegisterOpener(func() Annotator { return spellBackedProvider{active: true} })
+	assert.IsType(t, spellBackedProvider{}, Detect())
 }
 
 // TestDetectIgnoresAnInactiveProvider covers the common wiring: a spell is
@@ -48,7 +48,7 @@ func TestDetectUsesAnActiveProvider(t *testing.T) {
 // off its own CI system, which must cost nothing.
 func TestDetectIgnoresAnInactiveProvider(t *testing.T) {
 	t.Cleanup(func() { RegisterOpener(nil) })
-	RegisterOpener(func() Annotator { return stubProvider{active: false} })
+	RegisterOpener(func() Annotator { return spellBackedProvider{active: false} })
 	assert.IsType(t, Nop{}, Detect())
 }
 
@@ -59,16 +59,16 @@ func TestDetectToleratesAProviderReturningNil(t *testing.T) {
 	assert.IsType(t, Nop{}, Detect())
 }
 
-// stubProvider stands in for a spell-backed provider.
-type stubProvider struct{ active bool }
+// spellBackedProvider is a provider that reports a fixed active answer, as a spell does.
+type spellBackedProvider struct{ active bool }
 
-func (s stubProvider) Active() bool            { return s.active }
-func (stubProvider) StartGroup(Group) error    { return nil }
-func (stubProvider) EndGroup(string) error     { return nil }
-func (stubProvider) Annotate(Annotation) error { return nil }
-func (stubProvider) Defang(text string) string { return text }
+func (s spellBackedProvider) Active() bool            { return s.active }
+func (spellBackedProvider) StartGroup(Group) error    { return nil }
+func (spellBackedProvider) EndGroup(string) error     { return nil }
+func (spellBackedProvider) Annotate(Annotation) error { return nil }
+func (spellBackedProvider) Defang(text string) string { return text }
 
-var _ Annotator = stubProvider{}
+var _ Annotator = spellBackedProvider{}
 
 // TestDefangWithDefusesInjectedCommands is a security property, not
 // cosmetics: magus replays captured subprocess output, so a dependency

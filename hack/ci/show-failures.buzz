@@ -7,6 +7,7 @@ import "os";
 import "proc";
 import "serialize";
 import "std";
+import "vcs";
 
 import "assert";
 
@@ -63,7 +64,11 @@ export fun main(args: [str]) > void !> any {
     final want = parseFilter(args);
     var run = want.run;
     if (run == "") {
-        final sha = capture("git", args: ["rev-parse", "--verify", "{want.commit}^\{commit}"]).trim();
+        final parsed = vcs\cmd(["rev-parse", "--verify", "{want.commit}^\{commit}"], opts: {"quiet": true, "allow_failure": true});
+        if (!parsed.ok) {
+            throw "failures: git rev-parse --verify {want.commit}: exit {parsed.code}: {parsed.stderr}";
+        }
+        final sha = parsed.stdout.trim();
         final listed = serialize\jsonDecode(capture("gh", args: ["run", "list", "--commit", sha, "--workflow", WORKFLOW,
             "--limit", "1", "--json", "databaseId"])).listValue();
         if (listed.len() == 0) {

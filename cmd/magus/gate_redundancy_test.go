@@ -30,8 +30,8 @@ func seedGreenGate(t *testing.T, root, fp string) {
 	}, sessions.InvocationStart{Workspace: root}))
 }
 
-// stubPool pins the load answer for one test, restoring the real probe after.
-func stubPool(t *testing.T, saturated bool) {
+// pinPoolLoad pins the load answer for one test, restoring the real probe after.
+func pinPoolLoad(t *testing.T, saturated bool) {
 	t.Helper()
 	prev := gatePoolProbe
 	state := "idle: 2 of 8 slots held"
@@ -51,7 +51,7 @@ func TestGateEvaluateRefusesUnderLoad(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	err := g.evaluate(context.Background(), false)
@@ -80,7 +80,7 @@ func TestGateRefusalRecordsDeferral(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c2", fp: "fp-1", projects: []string{"."}}
 	require.Error(t, g.evaluate(context.Background(), false))
@@ -136,7 +136,7 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, false)
+	pinPoolLoad(t, false)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	err := g.evaluate(context.Background(), false)
@@ -151,7 +151,7 @@ func TestGateEvaluateRefusesWhenIdle(t *testing.T) {
 func TestGateEvaluateInertWithoutRecord(t *testing.T) {
 	testkit.Isolate(t)
 	t.Setenv("MAGUS_LEVEL", "0")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: t.TempDir(), target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	require.NoError(t, g.evaluate(context.Background(), false))
@@ -164,7 +164,7 @@ func TestGateEvaluateOverride(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	require.NoError(t, g.evaluate(context.Background(), true))
@@ -177,7 +177,7 @@ func TestGateEvaluateOtherBranch(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "0")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "other", commit: "c1", fp: "fp-1"}
 	require.NoError(t, g.evaluate(context.Background(), false))
@@ -195,7 +195,7 @@ func TestGateEvaluateFailedRecord(t *testing.T) {
 		Target: types.TargetCI, Ref: "b", Commit: "c1",
 		Outcome: sessions.OutcomeFail, Fingerprint: "fp-1",
 	}, sessions.InvocationStart{Workspace: root}))
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	require.NoError(t, g.evaluate(context.Background(), false))
@@ -208,7 +208,7 @@ func TestGateEvaluateNestedNeverRefuses(t *testing.T) {
 	t.Setenv("MAGUS_LEVEL", "1")
 	root := t.TempDir()
 	seedGreenGate(t, root, "fp-1")
-	stubPool(t, true)
+	pinPoolLoad(t, true)
 
 	g := &gateRedundancy{root: root, target: types.TargetCI, ref: "b", commit: "c1", fp: "fp-1"}
 	require.NoError(t, g.evaluate(context.Background(), false))

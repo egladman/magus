@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/rogpeppe/go-internal/txtar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,15 +78,14 @@ func writeProbeableHarness(t *testing.T, root, id, command string) {
 }
 
 // probeCommand is the shape a harness wires the command glue in: the workspace's
-// binary running the Buzz file. The binary these tests put at root/magus is a stub,
+// binary running the Buzz file. The binary these tests put at root/magus is a stand-in,
 // so what answers is whatever the test registered for the glue.
 const probeCommand = "./magus buzz -s magus-command.buzz"
 
-// writeFakeMagusBinary satisfies checkProbeEnvironment's presence check with a
+// writeSilentMagus satisfies checkProbeEnvironment's presence check with a
 // binary that answers nothing at all.
-func writeFakeMagusBinary(t *testing.T, root string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexit 0\n"), 0o755))
+func writeSilentMagus(w *testkit.Workspace) {
+	w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 }
 
 // TestVerifyHarnessProbeCatchesABrokenWiredCommand is defect 2's pinning test: a
@@ -96,8 +96,9 @@ func writeFakeMagusBinary(t *testing.T, root string) {
 // presence-only implementation: that code never executes anything, so it would
 // report HarnessVerified here as it did for the config that locked a session out.
 func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
-	root := t.TempDir()
-	writeFakeMagusBinary(t, root)
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeSilentMagus(w)
 	writeProbeableHarness(t, root, "broken", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "broken")
@@ -111,8 +112,9 @@ func TestVerifyHarnessProbeCatchesABrokenWiredCommand(t *testing.T) {
 // shape, but the script is really there and really answers "deny" for the
 // universal whole-tree-stash event. Only this earns HarnessVerified.
 func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
-	root := t.TempDir()
-	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeAnsweringMagus(w, "magus-command.buzz", "deny")
 	writeProbeableHarness(t, root, "working", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "working")
@@ -127,9 +129,9 @@ func TestVerifyHarnessProbeAcceptsAWorkingWiredCommand(t *testing.T) {
 // never reads; grading it as part of the answer reported a guard that was denying
 // correctly as uncovered.
 func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) {
-	root := t.TempDir()
-	script := "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(script), 0o755))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\necho 'magus: using this workspace ...' >&2\nprintf 'deny'\n")
 	writeProbeableHarness(t, root, "chatty", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "chatty")
@@ -142,8 +144,9 @@ func TestVerifyHarnessProbeIgnoresWhatTheWiredCommandSaysOnStderr(t *testing.T) 
 // this event: the case a raw "it produced non-empty output" check would have
 // missed.
 func TestVerifyHarnessProbeAnswersWithAWrongDecisionIsUncovered(t *testing.T) {
-	root := t.TempDir()
-	writeStubGuardScript(t, root, "magus-command.buzz", "pass")
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	writeAnsweringMagus(w, "magus-command.buzz", "pass")
 	writeProbeableHarness(t, root, "wrongdecision", probeCommand)
 
 	result, err := VerifyHarness(untimedProbes(), root, "wrongdecision")
@@ -175,8 +178,9 @@ func TestVerifyHarnessProbeReportsNoMagusBinaryAsUnprobed(t *testing.T) {
 // short says nothing about the config: under memory pressure a working guard
 // misses the deadline too, and uncovered would blame a correct config.
 func TestVerifyHarnessProbeOutlastingItsDeadlineIsUnprobed(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\nexec sleep 5\n"), 0o755))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.WriteExecutable("magus", "#!/bin/sh\nexec sleep 5\n")
 	writeProbeableHarness(t, root, "slow", probeCommand)
 
 	ctx := ContextWithProbeTimeout(context.Background(), 50*time.Millisecond)
@@ -198,10 +202,11 @@ func TestVerifyHarnessProbeSkipsLifecycleScripts(t *testing.T) {
 		"magus buzz -s magus-rehydrate.buzz -- --format json",
 	} {
 		t.Run(command, func(t *testing.T) {
-			root := t.TempDir()
-			writeFakeMagusBinary(t, root)
+			w := testkit.NewWorkspace(t)
+			root := w.Root()
+			writeSilentMagus(w)
 			writeProbeableHarness(t, root, "lifecycle", command)
-			// No stub script written at all: if this were probed, it would fail.
+			// No answer script written at all: if this were probed, it would fail.
 
 			result, err := VerifyHarness(untimedProbes(), root, "lifecycle")
 			require.NoError(t, err)

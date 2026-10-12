@@ -193,12 +193,12 @@ func miseDirs() map[string]string {
 // the rest of the test and returns that root. The original environment is restored and
 // the root removed when the test ends. Like tb.Setenv it changes process-wide state, so
 // it fails a test that is, or later becomes, parallel.
-func Isolate(tb testing.TB) string {
+func Isolate(tb TB) string {
 	tb.Helper()
 	root := shortRoot(tb)
 	environ, err := Environ(root)
 	if err != nil {
-		tb.Fatal(err)
+		tb.Fatalf("testkit: %v", err)
 	}
 	keep := make(map[string]bool, len(environ))
 	for _, kv := range environ {
@@ -221,7 +221,7 @@ func Isolate(tb testing.TB) string {
 
 // shortRoot is a per-test root short enough for a socket under XDG_RUNTIME_DIR; see
 // redirects.
-func shortRoot(tb testing.TB) string {
+func shortRoot(tb TB) string {
 	tb.Helper()
 	root, err := os.MkdirTemp("", "tk")
 	if err != nil {

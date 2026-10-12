@@ -40,7 +40,7 @@
 // cohort. Only the base graph sees that, and silence is the safe direction.
 //
 // Reads the `missing-target-min-cohort` and `missing-target-min-share` inputs.
-import "proc";
+import "vcs";
 import "advice";
 import "magus";
 import "std";
@@ -240,9 +240,8 @@ fun main() > void !> any {
         final path = f["project"] ?? "";
         if (has(asked, name: path)) { continue; }
         asked.append(path);
-        final res = proc\exec("git",
-            args: ["show", "origin/" + base + ":" + magusfilePath(path)],
-            dir: ".", opts: {"quiet": true, "allow_failure": true});
+        final res = vcs\cmd(["show", "origin/" + base + ":" + magusfilePath(path)],
+            opts: {"dir": ".", "quiet": true, "allow_failure": true});
         if (res.ok) { atBase[path] = declaredTargets(res.stdout); }
     }
 

@@ -23,14 +23,14 @@ import (
 
 func TestMain(m *testing.M) { testkit.Main(m) }
 
-// fakeWS is a workspace whose trail lives at dir and whose cache reports a fixed size.
-type fakeWS struct {
+// trailWorkspace is a workspace whose trail lives at dir and whose cache reports a fixed size.
+type trailWorkspace struct {
 	dir        string
 	cacheBytes int64
 }
 
-func (f fakeWS) CacheDir() string      { return f.dir }
-func (f fakeWS) CacheDiskBytes() int64 { return f.cacheBytes }
+func (f trailWorkspace) CacheDir() string      { return f.dir }
+func (f trailWorkspace) CacheDiskBytes() int64 { return f.cacheBytes }
 
 // newTestService builds a Service with injected proc seams so no live server is needed.
 func newTestService(ws workspace, submit func(context.Context, string, []string, string) (string, error), status func(context.Context, string) (*proc.StatusReply, error)) *Service {
@@ -44,7 +44,7 @@ func newTestService(ws workspace, submit func(context.Context, string, []string,
 }
 
 func TestSubmit_NewJobIsSubmitted(t *testing.T) {
-	ws := fakeWS{dir: t.TempDir(), cacheBytes: 4096}
+	ws := trailWorkspace{dir: t.TempDir(), cacheBytes: 4096}
 	submit := func(context.Context, string, []string, string) (string, error) { return "inv-new", nil }
 	status := func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil }
 	s := newTestService(ws, submit, status)
@@ -59,7 +59,7 @@ func TestSubmit_NewJobIsSubmitted(t *testing.T) {
 }
 
 func TestSubmit_CoalescedReportsRunningInvocation(t *testing.T) {
-	ws := fakeWS{dir: t.TempDir()}
+	ws := trailWorkspace{dir: t.TempDir()}
 	submit := func(context.Context, string, []string, string) (string, error) { return "", nil } // coalesced
 	// The server reports an identical rotate-activities job already in flight.
 	status := func(context.Context, string) (*proc.StatusReply, error) {
@@ -77,7 +77,7 @@ func TestSubmit_CoalescedReportsRunningInvocation(t *testing.T) {
 func TestSubmit_ProcErrorIsInternal(t *testing.T) {
 	submit := func(context.Context, string, []string, string) (string, error) { return "", errors.New("boom") }
 	status := func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil }
-	s := newTestService(fakeWS{dir: t.TempDir()}, submit, status)
+	s := newTestService(trailWorkspace{dir: t.TempDir()}, submit, status)
 
 	_, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/sync-graph"}))
 	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
@@ -86,7 +86,7 @@ func TestSubmit_ProcErrorIsInternal(t *testing.T) {
 // A name nobody registered is NotFound, not a SubmitState: the enum reports how a valid
 // submission resolved, and this never became one. Reachable only now that the RPC takes a name.
 func TestRunJob_UnknownNameIsNotFound(t *testing.T) {
-	s := newTestService(fakeWS{dir: t.TempDir()},
+	s := newTestService(trailWorkspace{dir: t.TempDir()},
 		func(context.Context, string, []string, string) (string, error) { return "x", nil },
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 
@@ -95,7 +95,7 @@ func TestRunJob_UnknownNameIsNotFound(t *testing.T) {
 }
 
 func TestSubmit_NoSocketIsUnavailable(t *testing.T) {
-	s := newTestService(fakeWS{dir: t.TempDir()},
+	s := newTestService(trailWorkspace{dir: t.TempDir()},
 		func(context.Context, string, []string, string) (string, error) { return "x", nil },
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.socket = func() string { return "" } // no server socket
@@ -112,7 +112,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 	trail.Append(t.Context(), dir, trail.Event{Ts: start + 1, Kind: trail.KindMCPToolCall, Action: "query", Outcome: trail.OutcomeOK})
 	trail.Append(t.Context(), dir, trail.Event{Ts: start + 2, Kind: trail.KindMCPToolCall, Action: "explain", Outcome: trail.OutcomeOK})
 
-	s := newTestService(fakeWS{dir: dir}, nil, nil)
+	s := newTestService(trailWorkspace{dir: dir}, nil, nil)
 	running := map[string]string{argvKey([]string{"server", "rotate-activities"}): "inv-live"}
 
 	j, ok := jobstore.Lookup("rotate-activities")
@@ -133,7 +133,7 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 }
 
 func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
-	s := newTestService(fakeWS{dir: t.TempDir()}, nil,
+	s := newTestService(trailWorkspace{dir: t.TempDir()}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 
 	resp, err := s.ListJobs(context.Background(), connect.NewRequest(&jobv1.ListJobsRequest{}))
@@ -161,7 +161,7 @@ func TestListJobs_ReturnsCatalogAndDelegatedJobs(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	s := newTestService(fakeWS{dir: dir}, nil,
+	s := newTestService(trailWorkspace{dir: dir}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.store = store
 
@@ -229,7 +229,7 @@ func TestListJobs_ServesTheStoredRowVerbatim(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	s := newTestService(fakeWS{dir: dir}, nil,
+	s := newTestService(trailWorkspace{dir: dir}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.store = store
 
@@ -287,7 +287,7 @@ func TestListJobs_ReportsOverlappingWritePaths(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s := newTestService(fakeWS{dir: dir}, nil,
+	s := newTestService(trailWorkspace{dir: dir}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.store = store
 
@@ -306,7 +306,7 @@ func TestListJobs_ReportsOverlappingWritePaths(t *testing.T) {
 // where nobody has handed out a job yet lists the catalog and nothing else, never null.
 func TestListJobs_EmptyStoreServesEmptyList(t *testing.T) {
 	dir := t.TempDir()
-	s := newTestService(fakeWS{dir: dir}, nil,
+	s := newTestService(trailWorkspace{dir: dir}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.store = jobstore.NewStore(jobstore.Location{StateBase: t.TempDir(), CacheDir: dir, Root: dir})
 
@@ -337,13 +337,21 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 		CheckoutRoot: "/w/agent-1",
 		Registered:   1700000100,
 		RegisteredBy: by,
-		Attempt:      &types.JobAttempt{Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true},
+		Attempt: &types.JobAttempt{
+			Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
+			AttemptID: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+		},
+		Releases:     []types.JobRelease{{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}},
 		GateAttempts: []types.JobGateAttempt{{GateID: "lint", Attempt: types.JobAttempt{Found: true, Ref: "out2"}}},
 		Unattributed: []types.JobUnattributedWrite{{Path: "api/store.go", Digest: "sha", At: 7}},
 		Entries:      []types.JobEntry{{Path: "api/new.go", By: by, At: 8, Consumed: 9}},
 		Integration: &types.JobIntegration{
 			Checkout: "/w", At: 10, Verified: true,
 			Gates: []types.GateStatus{{ID: "lint", Verified: false, OutputRef: "out3", Violations: []string{"red"}}},
+		},
+		WaiterEvidence: &types.JobIntegration{
+			Checkout: "/waiter", At: 12, Verified: true,
+			Gates: []types.GateStatus{{ID: "lint", Verified: true, OutputRef: "out4"}},
 		},
 		Result: &types.JobResult{
 			Validation:   types.JobResultValidation{Command: "magus run go-test api", OutputRef: "out1"},
@@ -370,7 +378,15 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	}
 	require.True(t, proto.Equal(wantBy, got.RegisteredBy), "registered_by: %v", got.RegisteredBy)
 
-	require.True(t, proto.Equal(&jobv1.JobAttempt{Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true}, got.Attempt))
+	require.True(t, proto.Equal(&jobv1.JobAttempt{
+		Found: true, Ref: "out1", TimestampMs: 5, Project: "api", Target: "go-test", Failed: true,
+		AttemptId: "att-1", DurationMs: 1200, Revision: "94d434ac0", Dirty: true,
+	}, got.Attempt))
+	require.True(t, proto.Equal(&jobv1.JobRelease{Path: "api/old.go", Digest: "sha", ReleasedAt: 6, Revoked: true}, got.Releases[0]))
+	require.True(t, proto.Equal(&jobv1.JobIntegration{
+		Checkout: "/waiter", At: 12, Verified: true,
+		Gates: []*jobv1.JobGateStatus{{Id: "lint", Verified: true, OutputRef: "out4"}},
+	}, got.WaiterEvidence))
 	require.Len(t, got.GateAttempts, 1)
 	require.Equal(t, "lint", got.GateAttempts[0].GateId)
 	require.Equal(t, "out2", got.GateAttempts[0].Attempt.GetRef())
@@ -390,6 +406,7 @@ func TestDelegatedJob_CarriesEveryStoredFact(t *testing.T) {
 	require.Nil(t, bare.RegisteredBy, "a row from before origins were recorded has no origin to report")
 	require.Nil(t, bare.Attempt)
 	require.Nil(t, bare.Integration)
+	require.Nil(t, bare.WaiterEvidence)
 }
 
 // TestListJobs_ServesTheStoresReport pins that the listing's flags are the ones the store's
@@ -410,7 +427,7 @@ func TestListJobs_ServesTheStoresReport(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s := newTestService(fakeWS{dir: dir}, nil,
+	s := newTestService(trailWorkspace{dir: dir}, nil,
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.store = store
 

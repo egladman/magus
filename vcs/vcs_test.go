@@ -124,32 +124,8 @@ func TestVCSClaims(t *testing.T) {
 }
 
 func TestDirtyGitPathScoped(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not in PATH")
-	}
-
-	dir := t.TempDir()
-	mustRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "%v: %s", args, out)
-	}
-	write := func(rel, content string) {
-		t.Helper()
-		p := filepath.Join(dir, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(content), 0o644))
-	}
-	mustRun("git", "init")
-	mustRun("git", "config", "user.email", "test@example.com")
-	mustRun("git", "config", "user.name", "Test")
-	mustRun("git", "config", "commit.gpgsign", "false")
-	write("a.txt", "alpha\n")
-	write("sub/b.txt", "beta\n")
-	mustRun("git", "add", "-A")
-	mustRun("git", "commit", "-m", "init")
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "alpha\n", "sub/b.txt": "beta\n"})
+	dir := r.Root()
 
 	t.Setenv("MAGUS_VCS_NAME", "git")
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{})
@@ -168,7 +144,7 @@ func TestDirtyGitPathScoped(t *testing.T) {
 	assert.False(t, dirty("a.txt"), "clean path should not be dirty")
 
 	// Modify only a.txt.
-	write("a.txt", "alpha changed\n")
+	r.Write("a.txt", "alpha changed\n")
 	assert.True(t, dirty(), "modified tree should be dirty repo-wide")
 	assert.True(t, dirty("a.txt"), "modified path should be dirty")
 	assert.False(t, dirty("sub/b.txt"), "unmodified path must not report dirty (scoping)")
@@ -176,28 +152,9 @@ func TestDirtyGitPathScoped(t *testing.T) {
 }
 
 func TestDiffCommandsGit(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not in PATH")
-	}
-
-	dir := t.TempDir()
-	mustRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "%v: %s", args, out)
-	}
-	mustRun("git", "init")
-	mustRun("git", "config", "user.email", "test@example.com")
-	mustRun("git", "config", "user.name", "Test")
-	mustRun("git", "config", "commit.gpgsign", "false")
-	mustRun("git", "commit", "--allow-empty", "-m", "init")
-
-	// Capture the SHA we just created.
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	require.NoError(t, err)
-	wantSHA := strings.TrimSpace(string(out))
+	r := testkit.NewRepo(t, nil)
+	dir := r.Root()
+	wantSHA := r.Head()
 
 	t.Setenv("MAGUS_VCS_NAME", "git")
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{})
@@ -217,35 +174,14 @@ func TestDiffCommandsGit(t *testing.T) {
 // base...HEAD diff was empty. Diff must surface both an uncommitted edit to a
 // tracked file and a brand-new untracked file.
 func TestDiffGitIncludesWorkingTree(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not in PATH")
-	}
-
-	dir := t.TempDir()
-	mustRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "%v: %s", args, out)
-	}
-	mustRun("git", "init")
-	mustRun("git", "config", "user.email", "test@example.com")
-	mustRun("git", "config", "user.name", "Test")
-	mustRun("git", "config", "commit.gpgsign", "false")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v1\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "ignored.log"), []byte("noise\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o644))
-	mustRun("git", "add", "tracked.txt", ".gitignore")
-	mustRun("git", "commit", "-m", "init")
-
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	require.NoError(t, err)
-	base := strings.TrimSpace(string(out)) // HEAD == base: base...HEAD would be empty
+	r := testkit.NewRepo(t, map[string]string{"tracked.txt": "v1\n", ".gitignore": "*.log\n"})
+	dir := r.Root()
+	r.Write("ignored.log", "noise\n")
+	base := r.Head() // HEAD == base: base...HEAD would be empty
 
 	// Modify a tracked file (uncommitted) and add a new untracked file; no new commit.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("v2\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644))
+	r.Write("tracked.txt", "v2\n")
+	r.Write("new.txt", "new\n")
 
 	files, err := gitVCS{}.ChangedFiles(context.Background(), dir, base)
 	require.NoError(t, err, "Diff")
@@ -255,24 +191,12 @@ func TestDiffGitIncludesWorkingTree(t *testing.T) {
 }
 
 func TestFindCommitAndHistoryGit(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not in PATH")
-	}
-
-	dir := t.TempDir()
-	mustRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "%v: %s", args, out)
-	}
-	mustRun("git", "init")
-	mustRun("git", "config", "user.email", "alice@example.com")
-	mustRun("git", "config", "user.name", "Alice")
-	mustRun("git", "config", "commit.gpgsign", "false")
-	mustRun("git", "commit", "--allow-empty", "-m", "first")
-	mustRun("git", "commit", "--allow-empty", "-m", "second line\n\nbody text")
+	r := testkit.NewRepo(t, nil)
+	dir := r.Root()
+	r.Git("config", "user.email", "alice@example.com")
+	r.Git("config", "user.name", "Alice")
+	r.Git("commit", "-q", "--amend", "--allow-empty", "--reset-author", "-m", "first")
+	r.Git("commit", "-q", "--allow-empty", "-m", "second line\n\nbody text")
 
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
 	require.NoError(t, err, "Resolve")
@@ -349,23 +273,8 @@ func TestBisectRejectsFlagLikeRev(t *testing.T) {
 }
 
 func TestDescribeGit(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not in PATH")
-	}
-
-	dir := t.TempDir()
-	mustRun := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoErrorf(t, err, "%v: %s", args, out)
-	}
-	mustRun("git", "init")
-	mustRun("git", "config", "user.email", "alice@example.com")
-	mustRun("git", "config", "user.name", "Alice")
-	mustRun("git", "config", "commit.gpgsign", "false")
-	mustRun("git", "commit", "--allow-empty", "-m", "first")
+	r := testkit.NewRepo(t, nil)
+	dir := r.Root()
 
 	res, err := Resolve(context.Background(), dir, "", types.VCSOptions{Name: "git"})
 	require.NoError(t, err, "Resolve")
@@ -378,14 +287,14 @@ func TestDescribeGit(t *testing.T) {
 	assert.NotContains(t, d, "-dirty", "clean tree must not be marked dirty")
 
 	// Tagged: describe reports the tag.
-	mustRun("git", "tag", "v1.2.3")
+	r.Git("tag", "v1.2.3")
 	d, err = res.VCS.Describe(ctx, dir)
 	require.NoError(t, err)
 	assert.Equal(t, "v1.2.3", d)
 
 	// Dirty tree: -dirty suffix.
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x"), 0o644))
-	mustRun("git", "add", "f.txt")
+	r.Write("f.txt", "x")
+	r.Git("add", "f.txt")
 	d, err = res.VCS.Describe(ctx, dir)
 	require.NoError(t, err)
 	assert.Equal(t, "v1.2.3-dirty", d)
@@ -698,8 +607,7 @@ func TestAutodetectPrefersJJInAColocatedRepo(t *testing.T) {
 
 // git stays the answer where it is the only marker, and where there is none at all.
 func TestAutodetectKeepsGitForPlainRepositoriesAndAsTheDefault(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	res, err := Resolve(t.Context(), repo, "", types.VCSOptions{})
 	require.NoError(t, err, "Resolve")
 	assert.Equal(t, "git", res.Name)
@@ -2220,8 +2128,6 @@ func TestParityCapabilityMatrix(t *testing.T) {
 func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
 	eachBackend(t, func(t *testing.T, b parityBackend) {
 		skipUnsupported(t, b, types.CapMergeDriverInstaller)
-		isolateGitConfig(t)
-		isolateUserConfig(t)
 		dir := t.TempDir()
 		b.init(t, dir, map[string]string{"a.txt": "a\n"})
 		ctx := t.Context()
@@ -2235,15 +2141,6 @@ func TestParityMergeDriverCommandReadsTheRegistration(t *testing.T) {
 		require.NoErrorf(t, err, "%s after install", b.name)
 		assert.Containsf(t, got, "vcs merge-driver", "%s", b.name)
 	})
-}
-
-// isolateUserConfig moves HOME and XDG_CONFIG_HOME under the test, since jj keeps a
-// repository's own config under the user's config directory, not in the working copy.
-func isolateUserConfig(t *testing.T) {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 }
 
 // skipUnsupported skips a parity test for a backend the matrix says declines capability.

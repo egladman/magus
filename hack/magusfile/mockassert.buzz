@@ -15,9 +15,7 @@ export object AssertFile {
 }
 
 // isInternal reports a package no consumer can import. Its mocks serve only this repo's
-// tests, which fail at the use site, and those tests sit in the mocked package itself
-// (internal/dry/eval_test.go is `package dry`), so an assertion importing it would close
-// an import cycle.
+// tests, which fail at the use site, so they need no assertion.
 fun isInternal(pkgPath: str) > bool {
     return pkgPath.indexOf("/internal/") != null or pkgPath.endsWith("/internal");
 }
@@ -79,7 +77,9 @@ export fun files(config: str) > [AssertFile] !> any {
         final names = sort\strings(packages[pkgPath]!.q(["interfaces"]).mapValue().keys());
         if (names.len() == 0) { continue; }
         assertions.append(AssertFile{
-            path = mocksDir(pkgPath) + "/assert.go",
+            // A test file, so importing the mocks never imports the mocked package: the
+            // package's own tests can use them, and the check still compiles in go vet.
+            path = mocksDir(pkgPath) + "/assert_test.go",
             body = render(pkgPath, interfaces: names),
         });
     }
@@ -133,10 +133,10 @@ test "only published packages that mock something get a file" {
     interfaces:
 `);
     std\assert(got.len() == 3, message: "the root, internalize and types; internal and empty skipped");
-    std\assert(got[0].path == "gen/mocks/assert.go", message: "the module root writes under gen/mocks");
+    std\assert(got[0].path == "gen/mocks/assert_test.go", message: "the module root writes under gen/mocks");
     std\assert(got[0].body.indexOf("\t_ iface.Server = (*MockServer)(nil)\n") != null, message: "root body");
-    std\assert(got[1].path == "internalize/gen/mocks/assert.go", message: "a name containing internal is not internal");
-    std\assert(got[2].path == "types/gen/mocks/assert.go", message: "a nested package");
+    std\assert(got[1].path == "internalize/gen/mocks/assert_test.go", message: "a name containing internal is not internal");
+    std\assert(got[2].path == "types/gen/mocks/assert_test.go", message: "a nested package");
     std\assert(got[2].body == render("github.com/egladman/magus/types", interfaces: ["Inspector", "Repository"]),
         message: "interfaces sorted by byte");
 }

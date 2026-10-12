@@ -93,6 +93,25 @@ func TestInsightsUseHistoryAndProjectLabels(t *testing.T) {
 	}, hotspots)
 }
 
+// gitRun is not a testkit.Repo: the commits here need their own author and committer
+// identity and dates, and the workspace directory is named for what the test asserts.
+func gitRun(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = insightGitEnv()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+}
+
+// insightGitEnv is the test's environment with the user's global and system git config
+// switched off, so a signing key or a hooks path there cannot reach the fixture.
+func insightGitEnv() []string {
+	return append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1")
+}
+
 func commitInsightFiles(t *testing.T, dir, author, when string, files map[string]string) {
 	t.Helper()
 	for path, body := range files {
@@ -102,7 +121,7 @@ func commitInsightFiles(t *testing.T, dir, author, when string, files map[string
 	}
 	gitRun(t, dir, "add", "-A")
 	cmd := exec.Command("git", "-C", dir, "commit", "-q", "-m", "insight")
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(insightGitEnv(),
 		"GIT_AUTHOR_NAME="+author,
 		"GIT_AUTHOR_EMAIL="+strings.ToLower(author)+"@example.test",
 		"GIT_AUTHOR_DATE="+when,

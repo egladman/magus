@@ -197,8 +197,16 @@ func (s *InputHash) Dirs(p string) {
 func (s *InputHash) Sum() string { return hex.EncodeToString(s.h.Sum(nil)) }
 
 // file folds one file's identity, plus its content when its mtime is too recent to trust.
+// A device, pipe or socket folds its kind alone: a stat says nothing of what reading it
+// yields, its mtime moves with every write anyone makes to it (as /dev/null's does where
+// it serves as core.excludesFile), and opening a pipe blocks until it has a writer.
 func (s *InputHash) file(abs string, info fs.FileInfo) {
-	s.buf = binary.BigEndian.AppendUint32(s.buf[:0], uint32(info.Mode().Type()))
+	kind := info.Mode().Type()
+	s.buf = binary.BigEndian.AppendUint32(s.buf[:0], uint32(kind))
+	if kind&(fs.ModeDevice|fs.ModeNamedPipe|fs.ModeSocket) != 0 {
+		_, _ = s.h.Write(s.buf)
+		return
+	}
 	s.buf = binary.BigEndian.AppendUint64(s.buf, uint64(info.Size()))
 	s.buf = binary.BigEndian.AppendUint64(s.buf, uint64(info.ModTime().UnixNano()))
 	_, _ = s.h.Write(s.buf)

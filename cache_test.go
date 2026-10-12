@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,14 +11,16 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestCacheOperationsWithoutOpenCache(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	m, err := Inspect(context.Background(), root)
 	require.NoError(t, err)
 	workspace := m.(*Magus)
@@ -132,21 +133,22 @@ func TestOutputLookupsOnAnEmptyStore(t *testing.T) {
 	m, _ := openTempWorkspace(t, "api", nil)
 	const ref = "outdeadbe"
 
-	_, _, err := m.OutputByRef(ref)
+	ctx := t.Context()
+	_, _, err := m.OutputByRef(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputAttempts(ref)
+	_, err = m.OutputAttempts(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputDescriptorByRef(ref)
+	_, err = m.OutputDescriptorByRef(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
-	_, err = m.OutputKeyInputs(ref)
+	_, err = m.OutputKeyInputs(ctx, ref)
 	assert.ErrorIs(t, err, fs.ErrNotExist)
 
 	// With a live cache the remote namespace is consulted too; with no backend
 	// wired it still comes back as unknown rather than hanging or panicking.
-	_, _, err = m.OutputByRefRemote(context.Background(), ref)
+	_, _, err = m.OutputByRefRemote(ctx, ref)
 	assert.Error(t, err)
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -399,7 +401,6 @@ func TestWorkerCheckOnlyNextQuotesTheCheck(t *testing.T) {
 // nothing else to key on, so every such caller in the checkout reads it, and no caller its
 // host names ever does.
 func TestIdentityLessCallersShareTheCheckoutRecord(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	ctx, _ := fleetFixture(t, narrowLease())
 	bindCaller(t, ctx, hookAttribution{Host: "opencode"}, narrowLease().ID)
 
@@ -466,6 +467,9 @@ func TestDenyLeaseScopedVCS(t *testing.T) {
 		"git rebase main",
 		"git merge main",
 		"git cherry-pick abc123",
+		"git branch -f lease-job HEAD~1",
+		"git update-ref refs/heads/main HEAD",
+		"git pull --rebase",
 		"cd sub && git commit -m done",
 		"git -c core.pager=cat stash --help",
 		"git stash --help | cat",
@@ -610,9 +614,9 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 // on every backend.
 func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 	ctx, r, worker, wt := leaseVCSRepo(t)
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main))
-	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"commit", "-m", "done"}, wt, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"-C", wt, "commit", "-m", "done"}, r.main, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"status", "--short"}, r.main, nil))
 	for _, c := range []struct {
 		backend string
 		args    []string
@@ -628,10 +632,166 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		{"sl", []string{"push", "--to", "main"}, wt},
 		{"jj", []string{"git", "push"}, wt},
 	} {
-		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir)
+		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
+	}
+}
+
+// TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository pins that a script's scratch
+// repository is not the job's tree: its commit runs, while the job's own repository,
+// reached by any checkout of it, stays refused.
+func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil).Root()
+
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", scratch}, commit...), wt, nil))
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"--git-dir", filepath.Join(scratch, ".git"), "commit", "-m", "done"}, scratch, nil))
+
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, r.main, nil))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", r.main}, commit...), scratch, nil))
+	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main, nil))
+}
+
+// TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
+// of the job's repository that differ from the registered path as strings: a case variant
+// on a case-insensitive filesystem, macOS's firmlinked data volume, and a symlinked parent.
+// Each names the primary checkout, or a submodule inside the worker's own, and git accepts
+// every one.
+func TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil)
+	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(filepath.Dir(r.main), link))
+	aliases := map[string]func(string) string{
+		"symlinked parent": func(p string) string { return filepath.Join(link, filepath.Base(p)) },
+	}
+	if upper := strings.ToUpper(r.main); sameDir(upper, r.main) {
+		aliases["case variant"] = strings.ToUpper
+	} else {
+		t.Log("the filesystem is case-sensitive, so a case variant names another place")
+	}
+	if data := "/System/Volumes/Data" + realPath(r.main); sameDir(data, r.main) {
+		aliases["firmlink"] = func(p string) string { return "/System/Volumes/Data" + realPath(p) }
+	}
+	for name, alias := range aliases {
+		main, sub := alias(r.main), filepath.Join(alias(wt), "sub")
+		if name == "symlinked parent" {
+			sub = filepath.Join(link, filepath.Base(wt), "sub")
+		}
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, main, nil), "%s: the primary checkout", name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", append([]string{"-C", main}, commit...), scratch.Root(), nil), "%s: -C the primary checkout", name)
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, sub, nil), "%s: a submodule in the worker's checkout", name)
+		assert.True(t, samePath(main, r.main), name)
+		assert.True(t, within(sub, wt), name)
+		assert.False(t, within(main, wt), name)
+	}
+}
+
+// sameDir reports whether a and b are one existing directory by device and inode.
+func sameDir(a, b string) bool {
+	ia, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	ib, err := os.Stat(b)
+	return err == nil && os.SameFile(ia, ib)
+}
+
+// TestVCSCmdRefusalReadsTheEnvironmentGitStartsWith pins the exemption, and the commit
+// rule behind it, to the environment the child starts with: GIT_DIR or its siblings, set
+// by os\with_env or inherited, move git's repository off the directory it runs in, so a
+// commit run from a scratch repository can land on the job's.
+func TestVCSCmdRefusalReadsTheEnvironmentGitStartsWith(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil).Root()
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	adminDir := filepath.Join(r.main, ".git", "worktrees", "lease-job")
+
+	for name, env := range map[string][]string{
+		"GIT_DIR on the job's repository":  {"GIT_DIR=" + filepath.Join(r.main, ".git")},
+		"GIT_DIR relative to the scratch":  {"GIT_DIR=" + mustRel(t, scratch, filepath.Join(r.main, ".git"))},
+		"GIT_WORK_TREE":                    {"GIT_WORK_TREE=" + r.main},
+		"GIT_COMMON_DIR":                   {"GIT_COMMON_DIR=" + filepath.Join(r.main, ".git")},
+		"GIT_INDEX_FILE":                   {"GIT_INDEX_FILE=" + filepath.Join(r.main, ".git", "index")},
+		"GIT_DIR on the scratch's own dir": {"GIT_DIR=" + filepath.Join(scratch, ".git")},
+		"the last GIT_DIR wins":            {"GIT_DIR=" + filepath.Join(scratch, ".git"), "GIT_DIR=" + filepath.Join(r.main, ".git")},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, env), name)
+	}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, scratch, []string{"HOME=/tmp"}), "an environment that moves nothing")
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, wt, []string{"GIT_DIR=" + adminDir}), "GIT_DIR on the worker's own worktree")
+	err := vcsCmdRefusal(ctx, worker, "git", commit, wt, []string{"GIT_DIR=" + filepath.Join(r.main, ".git")})
+	require.Error(t, err, "GIT_DIR moves a commit run in the worker's checkout onto the primary")
+	assert.Contains(t, err.Error(), "It commits in "+r.main)
+}
+
+func mustRel(t *testing.T, base, target string) string {
+	t.Helper()
+	rel, err := filepath.Rel(base, target)
+	require.NoError(t, err)
+	return rel
+}
+
+// TestVCSCmdRefusalExemptsOnlyAnotherRepository pins the scratch-repository exemption to a
+// git operation whose site and work tree stand outside the job's checkout, in a repository
+// of their own. Pointed at another repository with --git-dir, git takes the job's checkout
+// as the work tree, so a clean or checkout there wipes the job's files; a submodule or
+// nested repository inside the checkout is the job's files under another git directory;
+// core.worktree, in the scratch's config or inline, moves the work tree onto the job's; and
+// a push writes to a remote that may be the job's repository.
+func TestVCSCmdRefusalExemptsOnlyAnotherRepository(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil)
+	scratchGit := "--git-dir=" + filepath.Join(scratch.Root(), ".git")
+
+	nested := filepath.Join(wt, "nested")
+	r.git(wt, "init", "-q", nested)
+	r.git(wt, "-c", "protocol.file.allow=always", "submodule", "add", "-q", scratch.Root(), "sub")
+	sub := filepath.Join(wt, "sub")
+	moved := testkit.NewRepo(t, nil)
+	moved.Git("config", "core.worktree", wt)
+
+	for name, c := range map[string]struct {
+		args []string
+		dir  string
+		env  []string
+	}{
+		"clean through --git-dir":             {[]string{scratchGit, "clean", "-fdx"}, wt, nil},
+		"checkout through --git-dir":          {[]string{scratchGit, "checkout", "--", "."}, wt, nil},
+		"commit through --git-dir":            {[]string{scratchGit, "commit", "-m", "done"}, wt, nil},
+		"clean in a submodule":                {[]string{"clean", "-fdx"}, sub, nil},
+		"commit in a submodule":               {[]string{"commit", "-m", "done"}, sub, nil},
+		"commit in a nested repo":             {[]string{"-C", nested, "commit", "-m", "done"}, wt, nil},
+		"checkout in a nested repo":           {[]string{"checkout", "--", "."}, nested, nil},
+		"clean with GIT_DIR on the scratch":   {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_DIR=" + filepath.Join(scratch.Root(), ".git")}},
+		"clean with GIT_WORK_TREE on the job": {[]string{"clean", "-fdx"}, scratch.Root(), []string{"GIT_WORK_TREE=" + wt}},
+		"clean with core.worktree inline":     {[]string{"-c", "core.worktree=" + wt, "clean", "-fdx"}, scratch.Root(), nil},
+		"clean with core.worktree configured": {[]string{"clean", "-fdx"}, moved.Root(), nil},
+		"push from a scratch repo":            {[]string{"push", r.main, "HEAD:main"}, scratch.Root(), nil},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, c.env), name)
+	}
+
+	fresh := testkit.NewRepo(t, nil)
+	linked := filepath.Join(t.TempDir(), "linked")
+	fresh.Git("worktree", "add", "-q", linked)
+	for name, c := range map[string]struct {
+		args []string
+		dir  string
+	}{
+		"commit in a scratch repo":          {[]string{"commit", "-q", "--allow-empty", "-m", "done"}, fresh.Root()},
+		"clean in a scratch repo":           {[]string{"clean", "-fdx"}, scratch.Root()},
+		"worktree remove in a scratch repo": {[]string{"worktree", "remove", "--force", linked}, fresh.Root()},
+		"reset -C a scratch repo":           {[]string{"-C", fresh.Root(), "reset", "--hard"}, wt},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, nil), name)
 	}
 }
 
@@ -684,7 +844,6 @@ func TestUndeclaredLeaseRepairsReadsPastWritingSpellings(t *testing.T) {
 // ended, never as unbound: its work is refused with the reason and the one command that
 // binds it again, and that command still runs and rebinds over the tombstone.
 func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	gone := t.TempDir()
 	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, CheckoutRoot: gone, Registered: 1, ReportedBase: "77aa01c"}
 	next := types.Job{ID: "next-job", State: types.StateDeclared, WritePaths: []string{"internal/next/**"}}
@@ -729,27 +888,67 @@ func TestATombstonedBindingIsRefusedUntilItRebinds(t *testing.T) {
 	assert.Equal(t, outcome{"pass", "", next.ID}, judge(bashCall(t, who.Session, who.Agent, "ls")))
 }
 
-// A caller that ends its own job is unbound from then on: a binding nothing released
-// graded it under a row it had finished with, so its next fork was refused as outside that
-// row's tree, and once the row was removed every shell line it ran was refused as acting
-// under an undeclared lease.
+// A caller whose job ends is unbound from then on: a binding nothing released graded it
+// under a row it had finished with, so its next fork was refused as outside that row's
+// tree, and once the row was removed every shell line it ran was refused as acting under
+// an undeclared lease. The holder ends its job itself through exit or rm, in any shape a
+// shell line or a client script takes; a wait is its orchestrator's, so the holder's own
+// next call releases a row the wait moved to pass or fail. A rejected wait leaves the row
+// exited, which still holds its holder.
 func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
+	moves := func(state types.JobState) func(*testing.T, *job.Store, string) {
+		return func(t *testing.T, s *job.Store, id string) {
+			_, err := s.Update(t.Context(), id, func(cur *types.Job) { cur.State = state })
+			require.NoError(t, err)
+		}
+	}
+	exited, passed, failed := moves(types.StateExited), moves(types.StatePass), moves(types.StateFail)
+	removed := func(t *testing.T, s *job.Store, id string) {
+		_, err := s.Delete(t.Context(), id, true)
+		require.NoError(t, err)
+	}
+	const result = `{"schema_version":1,"summary":"done"}`
+	client := func(script string) func(*testing.T, hookAttribution) string {
+		return func(t *testing.T, who hookAttribution) string {
+			env := map[string]any{"session_id": who.Session, "cwd": "/Users/dev/repo", "hook_event_name": "PreToolUse",
+				"tool_name": "mcp__magus__client", "tool_input": map[string]any{"script": `import "magus"; ` + script}}
+			if who.Agent != "" {
+				env["agent_id"], env["agent_type"] = who.Agent, "general-purpose"
+			}
+			return hookJSON(t, env)
+		}
+	}
+	shell := func(command string) func(*testing.T, hookAttribution) string {
+		return func(t *testing.T, who hookAttribution) string { return bashCall(t, who.Session, who.Agent, command) }
+	}
+	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
+	unbound, stillHeld := job.Binding{}, job.Binding{Job: held.ID}
 	for _, tc := range []struct {
-		name, command string
-		ends          func(*testing.T, *job.Store, string)
+		name string
+		call func(*testing.T, hookAttribution) string
+		ends func(*testing.T, *job.Store, string)
+		// byOrchestrator runs call from the holder's root session rather than the holder.
+		byOrchestrator bool
+		want           job.Binding
 	}{
-		{"exit", "magus job exit held-job", func(t *testing.T, s *job.Store, id string) {
-			_, err := s.Update(t.Context(), id, func(cur *types.Job) { cur.State = types.StateExited })
-			require.NoError(t, err)
-		}},
-		{"rm", "magus job rm held-job --force", func(t *testing.T, s *job.Store, id string) {
-			_, err := s.Delete(t.Context(), id, true)
-			require.NoError(t, err)
-		}},
+		{"exit", shell("magus job exit held-job"), exited, false, unbound},
+		{"exit with a heredoc", shell("./magus job exit held-job --stdin <<'EOF'\n" + result + "\nEOF"), exited, false, unbound},
+		{"exit with stdin first", shell("./magus job exit --stdin held-job <<EOF\n" + result + "\nEOF"), exited, false, unbound},
+		{"exit after cd", shell("cd /Users/dev/repo && ./magus job exit held-job"), exited, false, unbound},
+		{"exit then echo", shell("./magus job exit held-job ; echo filed"), exited, false, unbound},
+		{"exit under global flags", shell("./magus -s --root . job exit held-job"), exited, false, unbound},
+		{"exit with an env prefix", shell("BAGGAGE=magus.lease=held-job ./magus job exit held-job"), exited, false, unbound},
+		{"exit through bash -c", shell(`bash -c "./magus job exit held-job"`), exited, false, unbound},
+		{"rm", shell("magus job rm held-job --force"), removed, false, unbound},
+		{"client exit", client(`magus\job.exit("held-job");`), exited, false, unbound},
+		{"client exit with a result", client(`magus\job.exit("held-job", result: {"schema_version": 1, "summary": "done"});`), exited, false, unbound},
+		{"client nested exit", client(`magus\cmd("job", ["exit", "held-job"]);`), exited, false, unbound},
+		{"wait reaching pass", shell("./magus job wait held-job"), passed, true, unbound},
+		{"wait reaching fail", shell("./magus job wait held-job"), failed, true, unbound},
+		{"client wait reaching pass", client(`magus\job.wait("held-job");`), passed, true, unbound},
+		{"a rejected wait", shell("./magus job wait held-job"), exited, true, stillHeld},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
 			ctx, _ := fleetFixture(t, held)
 			at := hookLocation(ctx, Dependencies{})
 			who := hookAttribution{Host: "claude-code", Session: "8f2c6a1e", Agent: "a1b2c3"}
@@ -758,13 +957,23 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 				return Judge(ctx, Dependencies{}, Request{Input: bashCall(t, who.Session, who.Agent, command), Host: who.Host})
 			}
 
-			require.NotEqual(t, "deny", judge(tc.command).Decision, "ending its own job")
-			tc.ends(t, job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}), held.ID)
+			by := who
+			if tc.byOrchestrator {
+				by.Agent = ""
+			}
+			v := Judge(ctx, Dependencies{}, Request{Input: tc.call(t, by), Host: by.Host})
+			require.NotEqual(t, "deny", v.Decision, "ending the job: %s", v.Reason)
+			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			tc.ends(t, store, held.ID)
 
-			assert.Equal(t, job.Binding{}, boundJob(who, at), "the caller is unbound")
-			for _, command := range []string{"magus job fork next-job --parent other --read-only", "sed -n 1,5p x"} {
-				v := judge(command)
-				assert.NotEqual(t, "deny", v.Decision, "%q: %s", command, v.Reason)
+			fork := judge("magus job fork next-job --parent other --read-only")
+			assert.Equal(t, tc.want == stillHeld, fork.Decision == "deny", "a fork outside the job's tree: %s", fork.Reason)
+			assert.NotEqual(t, "deny", judge("sed -n 1,5p x").Decision, "a read")
+			assert.Equal(t, tc.want, boundJob(who, at), "the holder's binding")
+			rows, err := store.List()
+			require.NoError(t, err)
+			if i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == held.ID }); i >= 0 {
+				assert.Equal(t, held.WritePaths, rows[i].WritePaths, "releasing leaves the row's record alone")
 			}
 		})
 	}
@@ -773,7 +982,6 @@ func TestEndingYourOwnJobReleasesTheBinding(t *testing.T) {
 // A binding whose row someone else removed is a tombstone, never an unbound caller, and
 // the caller can still read with sed while it is refused work.
 func TestABindingToARemovedRowIsATombstone(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	held := types.Job{ID: "held-job", State: types.StateRunning, WritePaths: []string{"internal/held/**"}, Registered: 1}
 	ctx, _ := fleetFixture(t, held)
 	at := hookLocation(ctx, Dependencies{})

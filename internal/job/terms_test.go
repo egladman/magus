@@ -59,6 +59,21 @@ func TestTermsNamesAWorkspaceThatWouldNotLoad(t *testing.T) {
 	assert.Contains(t, b.String(), briefRow().Criteria, "the row is rendered whatever the workspace does")
 }
 
+// The unrun gates are a section of the terms, after the regenerated outputs, and a row with
+// none renders as it did before the section existed.
+func TestTermsRendersUnrunGatesAsASection(t *testing.T) {
+	t.Parallel()
+
+	bare := NewTerms(briefRow(), TermsFacts{}).String()
+	assert.NotContains(t, bare, unrunHeading)
+
+	gate := UnrunGate{Target: "lint", Project: ".", Source: "**/*.go", Goal: unrunGoal(".", "lint", map[string]bool{})}
+	got := NewTerms(briefRow(), TermsFacts{UnrunGates: []UnrunGate{gate}}).String()
+	assert.Contains(t, got, "\n"+unrunHeading+"\n  lint . (reads **/*.go)\n  goals to add: ")
+	assert.Less(t, strings.Index(got, unrunHeading), strings.Index(got, "the only check you run"),
+		"the section sits among the facts, ahead of the check")
+}
+
 // Nothing outside the fixed order reaches the worker, which is how the gate stops leaking
 // into a brief: `ci` is not rendered because nothing renders it.
 func TestTermsRendersOnlyTheRow(t *testing.T) {
