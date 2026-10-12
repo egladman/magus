@@ -168,6 +168,9 @@ type Dependencies struct {
 	// caller is who makes the judged call, which decides whether a lease acts as a worker.
 	// Judge fills it; zero is an identity-less caller.
 	caller job.Caller
+	// facts holds the caller's own session facts, its spawn records among them. Judge fills
+	// it, so a remedy graded for this caller reads no other session's; zero reads none.
+	facts hint.Gate
 	// lease is the lease the judged call acts under, "" for the orchestrator or a person.
 	// Judge fills it once it has resolved the lease, so the rules that word a remedy can
 	// tell a worker, who never builds the binary, from the one who does.
@@ -762,6 +765,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	}
 	markers := hint.NewGate(stateAt.cacheDir, who.callerKey())
 	facts := hint.NewGate(stateAt.cacheDir, who.factsKey())
+	deps.facts = facts
 	skills := hint.NewGate(stateAt.cacheDir, who.skillsKey())
 	// persists is whether this judgment may change the session's records at all.
 	persists := !req.DryRun && !req.Observe
