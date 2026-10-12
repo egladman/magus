@@ -267,7 +267,11 @@ func TestSetGraphObserver_Invoked(t *testing.T) {
 	require.NoError(t, err)
 
 	var builds int
-	m.SetGraphObserver(&countingObserver{onBuild: func() { builds++ }})
+	obs := mocks.NewMockObserver(t)
+	obs.EXPECT().OnBuild(mock.Anything).Run(func(types.BuildStats) { builds++ }).Return().Maybe()
+	obs.EXPECT().OnQuery(mock.Anything).Return().Maybe()
+	obs.EXPECT().OnError(mock.Anything).Return().Maybe()
+	m.SetGraphObserver(obs)
 	_, err = m.Graph()
 	require.NoError(t, err)
 	assert.NotZero(t, builds, "SetGraphObserver: OnBuild never called after Graph()")
@@ -356,17 +360,6 @@ func TestStepFor_NestedProject(t *testing.T) {
 	assert.Contains(t, spec.Sources, types.Glob{Pattern: "magusfile.buzz"}, "Sources must contain root magusfile glob")
 	assert.Equal(t, types.MustParseGlobs("api/bin/server"), spec.Outputs, "Outputs")
 }
-
-// countingObserver is a types.Observer stub that counts OnBuild calls.
-type countingObserver struct{ onBuild func() }
-
-func (c *countingObserver) OnBuild(types.BuildStats) {
-	if c.onBuild != nil {
-		c.onBuild()
-	}
-}
-func (c *countingObserver) OnQuery(types.QueryEvent) {}
-func (c *countingObserver) OnError(error)            {}
 
 // TestMagusfileGlobs verifies the workspace-relative glob sets returned
 // for root and non-root project paths.

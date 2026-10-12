@@ -23,7 +23,9 @@ import (
 	"github.com/egladman/magus/internal/stamp"
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -2661,20 +2663,12 @@ func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
 
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
-	probe := &ensureRecorder{VCSDriver: gitVCS{}}
+	// Only the read is expected, so any EnsureMergeDriver call, which may write, fails the test.
+	probe := mocks.NewMockVCSDriver(t)
+	probe.EXPECT().MergeDriverCommand(mock.Anything, "").Return("", context.Canceled).Once()
 	assert.True(t, installsMergeDriver(probe))
-	assert.False(t, probe.ensured, "the probe called EnsureMergeDriver, which may write")
+	assert.True(t, installsMergeDriver(gitVCS{}), "git registers a merge driver")
 	assert.True(t, installsMergeDriver(jjVCS{}), "jj registers a merge tool for jj resolve")
-}
-
-type ensureRecorder struct {
-	types.VCSDriver
-	ensured bool
-}
-
-func (r *ensureRecorder) EnsureMergeDriver(context.Context, string, types.MergeDriverGlobs) (bool, error) {
-	r.ensured = true
-	return false, nil
 }
 
 // queueIdentity is who the tests commit as through the capabilities, which read no

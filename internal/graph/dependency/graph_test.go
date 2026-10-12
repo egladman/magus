@@ -2,11 +2,16 @@ package dependency
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 )
 
 // build constructs a Graph from a simple spec: each entry is
@@ -82,18 +87,16 @@ func TestBuildDupEdgeOK(t *testing.T) {
 // ErrCycle when cycle detection trips.
 func TestObserverOnErrorFiresOnCycle(t *testing.T) {
 	t.Parallel()
-	var seen []error
-	obs := &captureObserver{onErr: func(err error) { seen = append(seen, err) }}
+	obs := mocks.NewMockObserver(t)
+	obs.EXPECT().OnError(mock.MatchedBy(func(err error) bool { return errors.Is(err, ErrCycle) })).Return().Once()
 
 	b := New()
 	a := b.AddNode("a")
 	c := b.AddNode("c")
 	_ = b.AddEdge(a, c)
 	_ = b.AddEdge(c, a)
-	_, err := b.Build(WithObserver(obs))
+	_, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
 	require.Error(t, err, "Build: expected ErrCycle")
-	require.Len(t, seen, 1)
-	assert.ErrorIs(t, seen[0], ErrCycle)
 }
 
 func TestPathOutOfRange(t *testing.T) {
@@ -188,22 +191,14 @@ func TestNCCDEmpty(t *testing.T) {
 // fires the observer (regression guard).
 func TestNCCDEmptyEmitsEvent(t *testing.T) {
 	t.Parallel()
-	var seen []QueryEvent
-	obs := &captureObserver{onQuery: func(e QueryEvent) { seen = append(seen, e) }}
+	obs := mocks.NewMockObserver(t)
+	obs.EXPECT().OnBuild(mock.Anything).Return().Once()
+	obs.EXPECT().OnQuery(mock.MatchedBy(func(e types.QueryEvent) bool { return e.Op == "nccd" })).Return().Once()
 
 	b := New()
-	g, err := b.Build(WithObserver(obs))
+	g, err := b.Build(WithObserver(graphObsAdapter{o: obs}))
 	require.NoError(t, err, "Build")
 	_ = g.NCCD()
-
-	var ok bool
-	for _, e := range seen {
-		if e.Op == "nccd" {
-			ok = true
-			break
-		}
-	}
-	assert.True(t, ok, "NCCD on empty graph did not emit observer event; got %v", seen)
 }
 
 func TestNCCDStarTopology(t *testing.T) {
@@ -329,30 +324,6 @@ func TestNearCyclesCancellable(t *testing.T) {
 func iota3(i int) string {
 	// trivial 3-digit string
 	return string(rune('a'+i/100)) + string(rune('a'+(i/10)%10)) + string(rune('a'+i%10))
-}
-
-type captureObserver struct {
-	onBuild func(BuildStats)
-	onQuery func(QueryEvent)
-	onErr   func(error)
-}
-
-func (c *captureObserver) OnBuild(s BuildStats) {
-	if c.onBuild != nil {
-		c.onBuild(s)
-	}
-}
-
-func (c *captureObserver) OnQuery(e QueryEvent) {
-	if c.onQuery != nil {
-		c.onQuery(e)
-	}
-}
-
-func (c *captureObserver) OnError(err error) {
-	if c.onErr != nil {
-		c.onErr(err)
-	}
 }
 
 // linear builds a chain: 0→1→2→…→n-1 where each node depends on the next.
