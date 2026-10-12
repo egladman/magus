@@ -115,6 +115,6 @@ packages:
           structname: MockWorkspaceSource
   github.com/egladman/magus/internal/handler/tool:
     interfaces:
-      lifecycleAsker:
+      lifecycleSource:
         config:
-          structname: MockLifecycleAsker
+          structname: MockLifecycleSource
