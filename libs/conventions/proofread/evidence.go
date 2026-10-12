@@ -20,33 +20,31 @@ package proofread
 // second-person and participles were redesigned after round 4 and measured
 // over frozen round 5 (testdata/rounds/round5.json); second-person fired on no
 // guide there, so it keeps its round-2 precision and lower bound. participles
-// passed advise in round 7 at z 2.24 and stays capped until a person
-// spot-checks the labels that record lists.
+// passed advise in round 7 at z 2.24 (38/40, lower bound 0.81); a person
+// spot-checked ten agreed-correct labels, so its declared advise now ships.
 var evidenceCeiling = map[Rule]Decision{
-	RuleNonspecific:      DecisionOff, // round 7: 17/40, 0.27 at z 2.24
-	RuleAbsolute:         DecisionOff, // 6/40, 0.07
-	RuleSecondPerson:     DecisionOff, // round 2: 0.19, 0.10; no fresh firing in round 5
-	RuleIssueRepro:       DecisionOff, // 26/40, 0.50
-	RuleChangelogHeading: DecisionOff, // no fresh firing
-	RuleIngTail:          DecisionOff, // 3/17, 0.06
-	RuleClaim:            DecisionOff, // 22/40, 0.40
-	RuleOptionList:       DecisionOff, // 0/1
-	RuleParticiples:      DecisionOff, // round 7: 38/40, 0.81 at z 2.24; passed advise, spot-check pending
-
-	RuleVerdict:        DecisionOff,    // 16/40, 0.26
-	RuleJudgmentAsFact: DecisionOff,    // 15/40, 0.24
-	RuleStaccato:       DecisionOff,    // 6/12, 0.25
-	RuleIntent:         DecisionOff,    // 1/4, 0.05
-	RuleChatbot:        DecisionOff,    // 13/20, 0.43
-	RuleBareImperative: DecisionOff,    // 29/40, 0.57
-	RuleReplyOpener:    DecisionOff,    // 21/40, 0.37
-	RuleCondescension:  DecisionOff,    // 20/26, 0.58
-	RuleContrast:       DecisionOff,    // 4/5, 0.38
-	RuleHedge:          DecisionOff,    // 31/40, 0.62
-	RuleAllCaps:        DecisionOff,    // 27/40, 0.52
-	RuleFiller:         DecisionOff,    // 32/40, 0.65
-	RuleBlame:          DecisionAdvise, // 34/37, 0.79
-	RuleSubjectMood:    DecisionAdvise, // 37/40, 0.80
+	RuleNonspecific:      DecisionOff,    // round 7: 17/40, 0.27 at z 2.24
+	RuleAbsolute:         DecisionOff,    // 6/40, 0.07
+	RuleSecondPerson:     DecisionOff,    // round 2: 0.19, 0.10; no fresh firing in round 5
+	RuleIssueRepro:       DecisionOff,    // 26/40, 0.50
+	RuleChangelogHeading: DecisionOff,    // no fresh firing
+	RuleIngTail:          DecisionOff,    // 3/17, 0.06
+	RuleClaim:            DecisionOff,    // 22/40, 0.40
+	RuleOptionList:       DecisionOff,    // 0/1
+	RuleVerdict:          DecisionOff,    // 16/40, 0.26
+	RuleJudgmentAsFact:   DecisionOff,    // 15/40, 0.24
+	RuleStaccato:         DecisionOff,    // 6/12, 0.25
+	RuleIntent:           DecisionOff,    // 1/4, 0.05
+	RuleChatbot:          DecisionOff,    // 13/20, 0.43
+	RuleBareImperative:   DecisionOff,    // 29/40, 0.57
+	RuleReplyOpener:      DecisionOff,    // 21/40, 0.37
+	RuleCondescension:    DecisionOff,    // 20/26, 0.58
+	RuleContrast:         DecisionOff,    // 4/5, 0.38
+	RuleHedge:            DecisionOff,    // 31/40, 0.62
+	RuleAllCaps:          DecisionOff,    // 27/40, 0.52
+	RuleFiller:           DecisionOff,    // 32/40, 0.65
+	RuleBlame:            DecisionAdvise, // 34/37, 0.79
+	RuleSubjectMood:      DecisionAdvise, // 37/40, 0.80
 }
 
 // strictness orders decisions from off to deny.

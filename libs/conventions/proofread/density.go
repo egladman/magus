@@ -46,14 +46,16 @@ var densityTexts = map[Rule]ruleText{
 			"longer counted. The rest turn on whether a tail claims a benefit or states a fact (\", " +
 			"renaming the types\"), which the rule cannot read. It stays off until a fresh labeling round " +
 			"measures it. A finding quotes each clause it counted, so its reader can check them, and a " +
-			"platform's footer (Copilot's tips) is not the author's text and is not counted. Labeling round 5 " +
+			"platform's setup tips are not the author's text and are not counted. Labeling round 5 " +
 			"measured 60.0% (24 of 40, lower bound 0.45); its wrong firings counted a coding agent's quoted " +
 			"prompt and pasted summaries, so those are blanked with their words, and nouns, so an -ing word " +
 			"opening a bare item of a series (\", logging methods, and\"), the subject of a verb (\", caching " +
 			"is\") or a bold label is no longer counted. Labeling round 6 measured 82.5% (33 of 40, lower bound " +
 			"0.68). Six of its seven wrong firings counted an adjective before its noun (\"existing code\", " +
 			"\"outgoing calls\"), a gerund opening the main clause after an opening element (\"Currently, " +
-			"setting X behaves\") or an item of a series of -ing topics, which are no longer counted.",
+			"setting X behaves\") or an item of a series of -ing topics, which are no longer counted. Labeling " +
+			"round 7 measured 95.0% (38 of 40, lower bound 0.81 at z 2.24); a person spot-checked ten " +
+			"agreed-correct labels, so it advises.",
 	},
 	RuleNominalizations: {
 		code:      "PRF4021",

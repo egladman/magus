@@ -79,7 +79,7 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [ing-tail](ing-tail.md)               | PRF4011 | economy   | off            | a participle clause added to claim significance (", highlighting the importance of")                    |
 | [staccato](staccato.md)               | PRF4012 | structure | off            | three or more consecutive sentences of six words or fewer in one paragraph                              |
 | [heading-case](heading-case.md)       | PRF4013 | structure | advise         | a heading whose every word after the first is capitalized                                               |
-| [participles](participles.md)         | PRF4020 | economy   | off            | a text that hangs present participial clauses on its sentences at a generated-writing rate              |
+| [participles](participles.md)         | PRF4020 | economy   | advise         | a text that hangs present participial clauses on its sentences at a generated-writing rate              |
 | [nominalizations](nominalizations.md) | PRF4021 | economy   | advise         | a text whose verbs are turned into nouns (validation, agreement, stability) at a generated-writing rate |
 
 ## House style

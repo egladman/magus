@@ -85,14 +85,13 @@ var (
 )
 
 var (
-	// copilotTip is the line GitHub's Copilot coding agent appends to a pull
-	// request it opens: a tip, a survey or an offer to set itself up. The tip
-	// is keyed on its wording after the product's name, which has changed.
-	copilotTip = regexp.MustCompile(`^\s*(?:\x{1F4A1}|\x{1F4AC}|\x{2728})?\s*(?:You can make [\w ]{1,30} smarter by setting up custom instructions|` +
-		`Share your feedback on Copilot coding agent |Let Copilot coding agent \[set things up for you\]|` +
-		`We'd love your input! Share your thoughts on Copilot coding agent )`)
-	// vscodeFooter is the line the GitHub Pull Requests extension appends.
-	vscodeFooter = regexp.MustCompile(`^\s*Created from VS Code via the \[GitHub Pull Request\]\(`)
+	// agentTip is a setup tip, survey or setup offer a coding agent appends to
+	// a pull request. It keys on the wording, not the product that wrote it.
+	agentTip = regexp.MustCompile(`^\s*(?:\x{1F4A1}|\x{1F4AC}|\x{2728})?\s*(?:You can make [\w ]{1,30} smarter by setting up custom instructions|` +
+		`Share your feedback on (?:(?:[\w-]+\s+){0,2})coding agent |Let (?:(?:[\w-]+\s+){0,2})coding agent \[set things up for you\]|` +
+		`We'd love your input! Share your thoughts on (?:(?:[\w-]+\s+){0,2})coding agent )`)
+	// editorFooter is the generated footer an editor's pull-request extension appends.
+	editorFooter = regexp.MustCompile(`^\s*Created from [^[]+ via the \[[^]]+\]\(`)
 	// templateTask is an open task-list item a template writes for its author
 	// to tick: an attestation or a question to the author ("- [ ] I have added
 	// tests", "- [ ] Have you done a self-review?"). An open item in the
@@ -102,41 +101,34 @@ var (
 		`My code|My changes|This PR|This pull request|PR was|Any dependent|New and existing)\b`)
 )
 
-// copilotFirewall is the summary of the warning Copilot quotes into a pull
-// request when its firewall blocked a host.
-const copilotFirewall = "Firewall rules blocked me from connecting to one or more addresses"
+// agentFirewall is the summary of the warning a coding agent quotes into a
+// pull request when its firewall blocked a host.
+const agentFirewall = "Firewall rules blocked me from connecting to one or more addresses"
 
-// botBlocks are the comment pairs a review bot writes its own text between:
-// CodeRabbit, cubic, mrge and Cypress mark theirs "auto-generated".
+// botBlocks are paired HTML comments that explicitly mark auto-generated text.
 var botBlocks = []struct{ open, close *regexp.Regexp }{
 	{
 		regexp.MustCompile(`(?i)<!--\s*This is an auto-generated (?:comment|description)\b`),
 		regexp.MustCompile(`(?i)<!--\s*end of auto-generated (?:comment|description)\b`),
 	},
-	{regexp.MustCompile(`<!--\s*Reviewable:start\s*-->`), regexp.MustCompile(`<!--\s*Reviewable:end\s*-->`)},
-	{regexp.MustCompile(`<!--\s*CURSOR_SUMMARY\s*-->`), regexp.MustCompile(`<!--\s*/CURSOR_SUMMARY\s*-->`)},
-	{regexp.MustCompile(`<!--\s*start pr-codex\s*-->`), regexp.MustCompile(`<!--\s*end pr-codex\s*-->`)},
-	// Ellipsis opens and closes its summary with the same comment.
-	{regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`), regexp.MustCompile(`<!--\s*ELLIPSIS_HIDDEN\s*-->`)},
 }
 
-// botReply is the comment CodeRabbit opens a reply with when it wrote the
-// whole reply; no comment closes it.
+// botReply is the comment an automated reviewer opens when it wrote the whole
+// reply; no comment closes it.
 var botReply = regexp.MustCompile(`(?i)^\s*<!--\s*This is an auto-generated reply\b`)
 
 var (
-	// agentSuffix is the comment Copilot's coding agent writes before what it
-	// appends to a pull request it opens, the prompt it was given among them.
-	agentSuffix = regexp.MustCompile(`<!--\s*START COPILOT CODING AGENT SUFFIX\s*-->`)
+	// agentSuffix is a coding agent's suffix marker before the prompt it quotes.
+	agentSuffix = regexp.MustCompile(`<!--\s*START (?:(?:[A-Z0-9_-]+\s+){0,3})CODING AGENT SUFFIX\s*-->`)
 	// promptSummary opens the collapsed block holding that prompt.
 	promptSummary = regexp.MustCompile(`^\s*(?:<details>\s*)?<summary>\s*Original prompt\s*</summary>\s*$`)
 	// chatPrompt is the italic line above the quoted prompt of a pull request
-	// opened from Copilot chat.
+	// opened from a coding-agent chat.
 	chatPrompt = regexp.MustCompile(`^\s*[*_]This pull request was created as a result of the following prompt ` +
-		`from Copilot chat\.?[*_]\s*$`)
-	// summaryLabel opens a summary pasted from Copilot's pull request summary,
+		`from (?:(?:[\w-]+\s+){0,2})chat\.?[*_]\s*$`)
+	// summaryLabel opens a summary pasted from a coding agent's pull request,
 	// whose sentences cite the diff as [[1]](diffhunk://...).
-	summaryLabel = regexp.MustCompile(`^\s*\[Copilot summary\]\s*$`)
+	summaryLabel = regexp.MustCompile(`^\s*\[(?:(?:[\w-]+\s+){0,2})summary\]\s*$`)
 	diffhunkLink = regexp.MustCompile(`\[\[\d+\]\]\(diffhunk://`)
 	// templateCategory is an open task item a template lists as one choice
 	// of a category ("- [ ] Public API: Breaking change (...)"): a capitalized
@@ -185,9 +177,9 @@ func blankBoilerplate(raw []string) []string {
 
 	for i := 0; i < len(lines); i++ {
 		switch {
-		case copilotTip.MatchString(lines[i]), vscodeFooter.MatchString(lines[i]):
+		case agentTip.MatchString(lines[i]), editorFooter.MatchString(lines[i]):
 			lines[i] = ""
-		case strings.Contains(lines[i], copilotFirewall) && inQuote(lines[i]):
+		case strings.Contains(lines[i], agentFirewall) && inQuote(lines[i]):
 			i = blankQuote(lines, i)
 		case templateTask.MatchString(lines[i]), templateCategory.MatchString(lines[i]):
 			i = blankItem(lines, i)
@@ -250,7 +242,7 @@ func blankOriginalPrompt(lines []string, at int) int {
 	return at
 }
 
-// blankPastedSummary blanks the pasted Copilot summary its label at line at
+// blankPastedSummary blanks a pasted agent summary its label at line at
 // opens: every block through the paragraph after the last one citing a diff
 // hunk, stopping at a heading, a thematic break or a comment. A label with no
 // citation under it is blanked alone. It returns the last line it blanked.

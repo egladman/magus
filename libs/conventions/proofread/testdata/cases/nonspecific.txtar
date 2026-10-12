@@ -79,7 +79,7 @@ Moved the retry behind a backoff.
 
 Please fix this.
 -- pass/review-reply whole --
-<!-- This is an auto-generated reply by CodeRabbit -->
+<!-- This is an auto-generated reply by an automated reviewer -->
 Something went wrong, please try again.
 -- pass/review-reply --
 Oops, my bad.

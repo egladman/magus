@@ -66,7 +66,7 @@ var reviewTexts = map[Rule]ruleText{
 			"referent as an anchored reply's line is, so a reply holding one is left alone, and so is a " +
 			"judgment in single quotes. An apology owning the writer's fault (\"my bad\"), a fix the writer " +
 			"takes on (\"will fix it\"), and thanks or a conceded point that asks for nothing judge nobody's " +
-			"work. A reply CodeRabbit marks as its own auto-generated reply is not the author's.",
+			"work. A reply an automated reviewer marks as auto-generated is not the author's.",
 	},
 	RuleWhyOpener: {
 		code:      "PRF8011",

@@ -242,46 +242,45 @@ const pullRequestWithBoilerplate = "fix: keep the key stable\n" +
 	"> <details>\n" +
 	"> <summary>Firewall rules blocked me from connecting to one or more addresses</summary>\n" +
 	">\n" +
-	"> If you need me to simply access something, Copilot can either:\n" +
+	"> If you need me to simply access something, an agent can either:\n" +
 	"> </details>\n" +
 	"\n" +
-	"<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n" +
-	"## Summary by CodeRabbit\n" +
+	"<!-- This is an auto-generated comment: release notes -->\n" +
+	"## Automated summary\n" +
 	"- It simply works.\n" +
-	"<!-- end of auto-generated comment: release notes by coderabbit.ai -->\n" +
+	"<!-- end of auto-generated comment: release notes -->\n" +
 	"\n" +
-	"Created from VS Code via the [GitHub Pull Request](https://marketplace.visualstudio.com/items?" +
-	"itemName=GitHub.vscode-pull-request-github) extension.\n" +
+	"Created from an editor via the [pull-request extension](https://example.com/extension).\n" +
 	"\n" +
-	"<!-- START COPILOT CODING AGENT TIPS -->\n" +
+	"<!-- START CODING AGENT TIPS -->\n" +
 	"---\n" +
 	"\n" +
-	"\U0001F4A1 You can make Copilot smarter by setting up custom instructions, customizing its development " +
+	"\U0001F4A1 You can make the coding agent smarter by setting up custom instructions, customizing its development " +
 	"environment and configuring Model Context Protocol (MCP) servers. Learn more " +
-	"[Copilot coding agent tips](https://gh.io/copilot-coding-agent-tips) in the docs.\n" +
+	"[coding agent tips](https://example.com/tips) in the docs.\n" +
 	"\n" +
-	"\U0001F4AC Share your feedback on Copilot coding agent for the chance to win a $200 gift card! " +
+	"\U0001F4AC Share your feedback on a coding agent for the chance to win a $200 gift card! " +
 	"Click [here](https://survey3.medallia.com/?x) to start the survey.\n" +
 	"\n" +
-	"Copilot simply opened this without a test."
+	"The agent simply opened this without a test."
 
 func TestJudgeTextSkipsWhatAPlatformWrote(t *testing.T) {
 	got := ruleLines(JudgeText(pullRequestWithBoilerplate, KindChangeDescription, houseOn), RuleFiller, RuleAttribution)
 
-	if want := []string{"filler:6", "filler:7", "filler:31", "attribution:31"}; !slices.Equal(got, want) {
+	if want := []string{"filler:6", "filler:7", "filler:31"}; !slices.Equal(got, want) {
 		t.Errorf("findings: got %q, want %q", got, want)
 	}
 }
 
 // The prompts and pasted summaries a platform writes into a pull request, and
-// a template's category checkbox; only lines 2, 5, 15 and 39 are the author's.
+// a template's category checkbox; only lines 2, 5, 15 and 30 are the author's.
 const pullRequestWithAgentText = "fix: keep the key stable\n" +
 	"The key simply sorts its inputs.\n" +
 	"\n" +
 	"- [ ] Public API: Breaking change (it simply renames the key)\n" +
 	"- [ ] Docs: simply update the guide (after the merge)\n" +
 	"\n" +
-	"[Copilot summary]\n" +
+	"[Agent summary]\n" +
 	"This pull request simply sorts the key. [[1]](diffhunk://#diff-1a)\n" +
 	"\n" +
 	"* It simply hashes the inputs. [[2]](diffhunk://#diff-2b)\n" +
@@ -291,16 +290,7 @@ const pullRequestWithAgentText = "fix: keep the key stable\n" +
 	"## Testing\n" +
 	"The tests simply pass.\n" +
 	"\n" +
-	"<!-- ELLIPSIS_HIDDEN -->\n" +
-	"\n" +
-	"> [!IMPORTANT]\n" +
-	"> Simply sorts the key.\n" +
-	">\n" +
-	"> <sup>This description was created by </sup>[<img alt=\"Ellipsis\" src=\"https://img.shields.io/badge/x\">](https://ellipsis.dev)\n" +
-	"\n" +
-	"<!-- ELLIPSIS_HIDDEN -->\n" +
-	"\n" +
-	"<!-- START COPILOT CODING AGENT SUFFIX -->\n" +
+	"<!-- START CODING AGENT SUFFIX -->\n" +
 	"\n" +
 	"<details>\n" +
 	"\n" +
@@ -310,7 +300,7 @@ const pullRequestWithAgentText = "fix: keep the key stable\n" +
 	"> <issue_description>It simply drifts.</issue_description>\n" +
 	"\n" +
 	"</details>\n" +
-	"*This pull request was created as a result of the following prompt from Copilot chat.*\n" +
+	"*This pull request was created as a result of the following prompt from an agent chat.*\n" +
 	"> Simply keep the key stable.\n" +
 	"\n" +
 	"Fixes #12, which simply drifted."
@@ -318,7 +308,7 @@ const pullRequestWithAgentText = "fix: keep the key stable\n" +
 func TestJudgeTextSkipsAPromptOrSummaryAPlatformQuoted(t *testing.T) {
 	got := ruleLines(JudgeText(pullRequestWithAgentText, KindChangeDescription, houseOn), RuleFiller)
 
-	if want := []string{"filler:2", "filler:5", "filler:15", "filler:39"}; !slices.Equal(got, want) {
+	if want := []string{"filler:2", "filler:5", "filler:15", "filler:30"}; !slices.Equal(got, want) {
 		t.Errorf("findings: got %q, want %q", got, want)
 	}
 }
@@ -326,8 +316,8 @@ func TestJudgeTextSkipsAPromptOrSummaryAPlatformQuoted(t *testing.T) {
 // A marker with nothing of its platform's under it blanks no author text.
 func TestJudgeTextKeepsWhatFollowsAMarkerWithNoPlatformText(t *testing.T) {
 	text := "fix: keep the key stable\nThe key sorts its inputs.\n\n" +
-		"[Copilot summary]\nIt simply sorts the key.\n\n" +
-		"<!-- START COPILOT CODING AGENT SUFFIX -->\n\nIt simply hashes.\n\n" +
+		"[Agent summary]\nIt simply sorts the key.\n\n" +
+		"<!-- START CODING AGENT SUFFIX -->\n\nIt simply hashes.\n\n" +
 		"*Created from a prompt.*\n> It simply drifts."
 
 	if got, want := ruleLines(JudgeText(text, KindChangeDescription, houseOn), RuleFiller), []string{"filler:5", "filler:9", "filler:12"}; !slices.Equal(got, want) {
@@ -335,18 +325,18 @@ func TestJudgeTextKeepsWhatFollowsAMarkerWithNoPlatformText(t *testing.T) {
 	}
 }
 
-func TestCopilotTipMatchesUnderAnyProductName(t *testing.T) {
+func TestAgentTipMatchesUnderAnyProductName(t *testing.T) {
 	for _, line := range []string{
-		"\U0001F4A1 You can make Copilot smarter by setting up custom instructions, customizing its development environment.",
+		"\U0001F4A1 You can make an agent smarter by setting up custom instructions, customizing its development environment.",
 		"You can make the coding agent smarter by setting up custom instructions, customizing its development environment.",
 	} {
-		if !copilotTip.MatchString(line) {
-			t.Errorf("copilotTip does not match %q", line)
+		if !agentTip.MatchString(line) {
+			t.Errorf("agentTip does not match %q", line)
 		}
 	}
 
-	if copilotTip.MatchString("You can make the build smarter by caching its inputs.") {
-		t.Error("copilotTip matches a sentence with no custom instructions in it")
+	if agentTip.MatchString("You can make the build smarter by caching its inputs.") {
+		t.Error("agentTip matches a sentence with no custom instructions in it")
 	}
 }
 
@@ -359,9 +349,9 @@ func TestJudgeTextSkipsAReplyABotWroteWhole(t *testing.T) {
 		name, text string
 		want       []string
 	}{
-		{"opened by the marker", "\n<!-- This is an auto-generated reply by CodeRabbit -->\n" + notice, nil},
+		{"opened by the marker", "\n<!-- This is an auto-generated reply by an automated reviewer -->\n" + notice, nil},
 		{"no marker", notice, []string{"nonspecific:1"}},
-		{"the marker after the text", notice + "\n<!-- This is an auto-generated reply by CodeRabbit -->",
+		{"the marker after the text", notice + "\n<!-- This is an auto-generated reply by an automated reviewer -->",
 			[]string{"nonspecific:1"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -377,7 +367,7 @@ func TestJudgeTextSkipsAReplyABotWroteWhole(t *testing.T) {
 func TestJudgeTextKeepsATextThatOnlyResemblesBoilerplate(t *testing.T) {
 	text := "fix: keep the key stable\nThe key sorts its inputs.\n\n" +
 		"<!-- This is an auto-generated comment: release notes -->\nIt simply works.\n\n" +
-		"They said you can make Copilot smarter by simply asking."
+		"They said you can make an agent smarter by simply asking."
 
 	if got, want := ruleLines(JudgeText(text, KindChangeDescription, houseOn), RuleFiller), []string{"filler:5", "filler:7"}; !slices.Equal(got, want) {
 		t.Errorf("findings: got %q, want %q", got, want)
