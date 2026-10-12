@@ -80,3 +80,41 @@ packages:
       BuildFacts:
       VerdictSource:
       ArtifactLister:
+  # Internal: the telemetry seam, whose callers' tests assert on the metric recorded.
+  github.com/egladman/magus/internal/observability:
+    interfaces:
+      Provider:
+  github.com/egladman/magus/internal/sandbox:
+    interfaces:
+      MetricsRecorder:
+  github.com/egladman/magus/internal/cache:
+    interfaces:
+      Tracer:
+      RemoteBackend:
+  github.com/egladman/magus/internal/ci:
+    interfaces:
+      Forecaster:
+  github.com/egladman/magus/internal/service:
+    interfaces:
+      Runner:
+  # Public: the Buzz host callback a std member invokes.
+  github.com/egladman/magus/std:
+    interfaces:
+      Callback:
+  # Unexported seams of the Connect handlers. structname exports the mock type, which a
+  # test in the handler's own package can then use.
+  github.com/egladman/magus/internal/handler/diff:
+    interfaces:
+      patchSource:
+        config:
+          structname: MockPatchSource
+  github.com/egladman/magus/internal/handler/mcp:
+    interfaces:
+      workspaceSource:
+        config:
+          structname: MockWorkspaceSource
+  github.com/egladman/magus/internal/handler/tool:
+    interfaces:
+      lifecycleAsker:
+        config:
+          structname: MockLifecycleAsker
