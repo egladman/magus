@@ -220,8 +220,8 @@ see. The same three doors are covered, since `magus job fork`, `client` (`magus\
 Nothing else about a shared checkout is refused. Two sets of write paths that
 merely overlap are the orchestrator's call (it may have sequenced them
 deliberately), so the fork RECORDS what it could prove instead, in `write_proof`:
-`alone` when no other live job with write paths was bound to the checkout, else
-`disjoint` or `overlapping`. `magus ls jobs` prints it per row, so a plan read
+`alone` when no other live job with write paths was bound to the checkout or not yet
+taken in it, else `disjoint` or `overlapping`. `magus ls jobs` prints it per row, so a plan read
 later says which forks were checked and which were not.
 
 **A declared boundary is enforced elsewhere.** Beyond the row ownership above,

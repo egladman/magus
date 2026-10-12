@@ -12,6 +12,7 @@ import (
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/interactive"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 func TestWhereUniqueMatch(t *testing.T) {
@@ -81,8 +82,7 @@ func TestResolveProjectArg(t *testing.T) {
 }
 
 func TestCwdAnchor(t *testing.T) {
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err, "eval-symlinks temp dir")
+	root := testkit.NewWorkspace(t).Root()
 	sub := filepath.Join(root, "web", "studio")
 	require.NoError(t, os.MkdirAll(sub, 0o755), "mkdir")
 
@@ -117,10 +117,9 @@ func TestCwdAnchor(t *testing.T) {
 // project directory, enough for both matchers the command consults.
 func whereRoot(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd", "magus"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "magus", "guard_shell.go"), []byte("package main\n"), 0o644))
-	return root
+	w := testkit.NewWorkspace(t)
+	w.Write("cmd/magus/guard_shell.go", "package main\n")
+	return w.Root()
 }
 
 // `magus where` normalizes its filters through the same function `magus query` does, so

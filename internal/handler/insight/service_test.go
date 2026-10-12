@@ -16,13 +16,15 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeSource is a insightSource returning a canned view or a fixed error.
-type fakeSource struct {
+// cannedInsightSource is an insightSource returning a canned view or a fixed error.
+type cannedInsightSource struct {
 	view types.InsightView
 	err  error
 }
 
-func (f fakeSource) Insight(context.Context) (types.InsightView, error) { return f.view, f.err }
+func (f cannedInsightSource) Insight(context.Context) (types.InsightView, error) {
+	return f.view, f.err
+}
 
 func get(t *testing.T, src insightSource) (*insightv1.Insight, error) {
 	t.Helper()
@@ -36,7 +38,7 @@ func get(t *testing.T, src insightSource) (*insightv1.Insight, error) {
 func TestGetInsight_MapsEveryLens(t *testing.T) {
 	commit := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	lastPass := time.Date(2026, 7, 2, 9, 30, 0, 0, time.UTC)
-	src := fakeSource{view: types.InsightView{
+	src := cannedInsightSource{view: types.InsightView{
 		Hotspots: types.HotspotOutput{
 			Definition: types.HotspotDefinition,
 			Commits:    42,
@@ -179,7 +181,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 // (a reader always has four git lenses to render), volatility is ABSENT rather than an empty
 // report, and no empty row list is encoded.
 func TestGetInsight_NilVolatility(t *testing.T) {
-	got, err := get(t, fakeSource{view: types.InsightView{Hotspots: types.HotspotOutput{Commits: 3}}})
+	got, err := get(t, cannedInsightSource{view: types.InsightView{Hotspots: types.HotspotOutput{Commits: 3}}})
 	require.NoError(t, err)
 	want := &insightv1.Insight{
 		Hotspots:  &insightv1.HotspotOutput{Commits: 3},
@@ -193,7 +195,7 @@ func TestGetInsight_NilVolatility(t *testing.T) {
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.
 func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
-	got, err := get(t, fakeSource{view: types.InsightView{
+	got, err := get(t, cannedInsightSource{view: types.InsightView{
 		// Two node shapes reach UNSET differently: no pointer at all, and a pointer to a zero time.
 		Hotspots: types.HotspotOutput{
 			Files: []types.FileHotspot{{Path: "a.go"}},
@@ -212,11 +214,11 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {
-	_, err := get(t, fakeSource{err: console.ErrNoWorkspace})
+	_, err := get(t, cannedInsightSource{err: console.ErrNoWorkspace})
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
 func TestGetInsight_ScanErrorIsInternal(t *testing.T) {
-	_, err := get(t, fakeSource{err: errors.New("scan boom")})
+	_, err := get(t, cannedInsightSource{err: errors.New("scan boom")})
 	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }

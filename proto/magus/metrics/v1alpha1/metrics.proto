@@ -37,18 +37,18 @@ message StreamMetricsResponse {
 // aggregated for the dashboard.
 message Snapshot {
   google.protobuf.Timestamp capture_time = 1;
-  Latency target = 2;       // magus.target.duration + magus.target.runs
+  Latency target = 2; // magus.target.duration + magus.target.runs
   // cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
   // Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
   // this family measures a Cache.Run, not a resolved op.
   Latency cache = 3;
-  Latency pool_wait = 4;    // magus.pool.wait.duration
-  Latency graph_query = 5;  // magus.graph.query.duration + magus.graph.queries
-  Remote remote = 6;        // magus.cache.remote.*
-  repeated TargetStat target_stats = 7;  // per-target rollup of magus.target.{duration,runs}
-  repeated MCPToolStat mcp_tools = 8;     // per-tool rollup of magus.mcp.tool.*
-  Buzz buzz = 9;            // magus.buzz.* families
-  Sandbox sandbox = 10;     // magus.sandbox.* filesystem families
+  Latency pool_wait = 4; // magus.pool.wait.duration
+  Latency graph_query = 5; // magus.graph.query.duration + magus.graph.queries
+  Remote remote = 6; // magus.cache.remote.*
+  repeated TargetStat target_stats = 7; // per-target rollup of magus.target.{duration,runs}
+  repeated MCPToolStat mcp_tools = 8; // per-tool rollup of magus.mcp.tool.*
+  Buzz buzz = 9; // magus.buzz.* families
+  Sandbox sandbox = 10; // magus.sandbox.* filesystem families
 }
 
 // Latency is an operation-family rollup: how many happened and how long they took. The
@@ -57,12 +57,12 @@ message Snapshot {
 // NAME (AIP-141): a bare p95 cannot tell a reader whether it is seconds or milliseconds,
 // and the dashboard does arithmetic on these.
 message Latency {
-  int64 count = 1;  // number of observations (the operation count)
+  int64 count = 1; // number of observations (the operation count)
   double p50_seconds = 2;
   double p95_seconds = 3;
   double p99_seconds = 4;
-  double max_seconds = 5;  // upper bound of the largest populated bucket
-  double sum_seconds = 6;  // total observed, for averages / throughput
+  double max_seconds = 5; // upper bound of the largest populated bucket
+  double sum_seconds = 6; // total observed, for averages / throughput
 }
 
 // Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
@@ -73,7 +73,7 @@ message Remote {
   int64 errors = 3;
   double duration_p50_seconds = 4;
   double duration_p95_seconds = 5;
-  int64 io_count = 6;       // number of get/put operations observed
+  int64 io_count = 6; // number of get/put operations observed
   int64 transferred_bytes = 7; // total bytes transferred (sum of the io.size histogram)
 }
 
@@ -81,16 +81,16 @@ message Remote {
 // percentiles, cache hit-rate, and success/error split. Grouped from the magus.target.duration
 // histogram's per-(project,spell,target,outcome,cache.hit) data points.
 message TargetStat {
-  string project = 1;        // magus.project attribute
-  string target = 2;         // magus.target attribute
-  string spell = 3;          // magus.spell attribute ("" when the project declares none)
-  int64 count = 4;           // total executions (including cache replays)
+  string project = 1; // magus.project attribute
+  string target = 2; // magus.target attribute
+  string spell = 3; // magus.spell attribute ("" when the project declares none)
+  int64 count = 4; // total executions (including cache replays)
   double p50_seconds = 5;
   double p95_seconds = 6;
   double p99_seconds = 7;
   double cache_hit_rate = 8; // [0,1]; fraction of runs served from cache
-  int64 success = 9;         // runs with outcome=success
-  int64 errors = 10;         // runs with outcome=error
+  int64 success = 9; // runs with outcome=success
+  int64 errors = 10; // runs with outcome=error
 }
 
 // MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
@@ -101,10 +101,10 @@ message MCPToolStat {
   int64 errors = 3;
   double input_p50_bytes = 4;
   double input_p95_bytes = 5;
-  int64 input_total = 6;   // total input bytes observed
+  int64 input_total = 6; // total input bytes observed
   double output_p50_bytes = 7;
   double output_p95_bytes = 8;
-  int64 output_total = 9;  // total output bytes observed
+  int64 output_total = 9; // total output bytes observed
   double duration_p50_seconds = 10;
   double duration_p95_seconds = 11;
 }
@@ -121,8 +121,8 @@ message Buzz {
   int64 host_call_count = 7;
   double host_call_p50_seconds = 8;
   double host_call_p95_seconds = 9;
-  int64 session_pool_reuse = 10;    // acquires served from an idle session
-  int64 session_pool_idle = 11;     // current idle sessions (gauge)
+  int64 session_pool_reuse = 10; // acquires served from an idle session
+  int64 session_pool_idle = 11; // current idle sessions (gauge)
   int64 session_pool_evictions = 12;
   double session_warm_p50_seconds = 13;
   double session_warm_p95_seconds = 14;
@@ -144,7 +144,7 @@ message Sandbox {
   int64 rules_read = 3;
   int64 rules_write = 4;
   int64 rules_exec = 5;
-  int64 env_rules = 6;    // exact + glob env rules
+  int64 env_rules = 6; // exact + glob env rules
   int64 checks_allow = 7;
   int64 checks_deny = 8;
   int64 env_dropped = 9;
@@ -153,7 +153,7 @@ message Sandbox {
 // Backfill is the ring-buffer history the server sends once, right after a dashboard
 // connects, so the utilization grid and cache-rate trend start populated instead of empty.
 message Backfill {
-  repeated Sample samples = 1;  // oldest-first
+  repeated Sample samples = 1; // oldest-first
 }
 
 // Sample is one point in the rolling utilization/activity history. The server appends one
@@ -175,12 +175,12 @@ message Backfill {
 // previous value forward.
 message Sample {
   google.protobuf.Timestamp sample_time = 1;
-  optional int32 running = 2;       // pool slots running at this tick; unset = pool unreadable
-  optional int32 capacity = 3;      // pool capacity (0 = unlimited); unset = pool unreadable
-  optional int32 queued = 4;        // targets queued for a slot; unset = pool unreadable
-  optional int64 cache_hits = 5;    // cumulative; diff adjacent samples for a hit rate
-  optional int64 cache_misses = 6;  // cumulative
-  optional int64 target_runs = 7;   // cumulative target executions
+  optional int32 running = 2; // pool slots running at this tick; unset = pool unreadable
+  optional int32 capacity = 3; // pool capacity (0 = unlimited); unset = pool unreadable
+  optional int32 queued = 4; // targets queued for a slot; unset = pool unreadable
+  optional int64 cache_hits = 5; // cumulative; diff adjacent samples for a hit rate
+  optional int64 cache_misses = 6; // cumulative
+  optional int64 target_runs = 7; // cumulative target executions
   // observe_start_time identifies the GENERATION the cumulative counters above belong to:
   // the instant the server began observing. The counters restart at zero when the server
   // does, so two samples from different generations cannot be differenced - their

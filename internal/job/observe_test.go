@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -284,6 +285,75 @@ func TestChangedSinceDoesNotAskForRegionsWhenNothingChanged(t *testing.T) {
 	assert.Equal(t, Observed{ChangedKnown: true, ChangedFrom: "abc1234", RegionsKnown: true}, seen)
 }
 
+// A holder whose branch never had its checkpoint is diffed from where the two meet, so the
+// checkpoint's own commits are not read as the holder deleting them, and the result names
+// the base it used beside the checkpoint. A holder on its checkpoint is diffed from it.
+func TestCheckpointObserverDiffsFromTheHoldersBase(t *testing.T) {
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	root := repo.Root()
+	base := repo.Head()
+	commit := func(name string) string { return repo.Commit(name, map[string]string{name: name + "\n"}) }
+	git := repo.Git
+	git("checkout", "-q", "-b", "plan")
+	checkpoint := commit("plan.txt")
+	row := types.Job{ID: "w", Checkpoint: checkpoint, CheckoutRoot: root}
+	observe := func() Observed {
+		seen, err := CheckpointObserver(root, nil)(t.Context(), row)
+		require.NoError(t, err)
+		require.True(t, seen.ChangedKnown, "%+v", seen)
+		return seen
+	}
+
+	git("checkout", "-q", "-b", "worker", base)
+	head := commit("worker.txt")
+	seen := observe()
+	assert.Equal(t, []any{[]string{"worker.txt"}, base + " (the merge base of the holder's HEAD " + head + " and its checkpoint " + checkpoint + ")"},
+		[]any{seen.Changed, seen.ChangedFrom}, "plan.txt is the checkpoint's, not the holder's")
+
+	git("checkout", "-q", "plan")
+	commit("on-plan.txt")
+	seen = observe()
+	assert.Equal(t, []any{[]string{"on-plan.txt"}, checkpoint}, []any{seen.Changed, seen.ChangedFrom}, "a holder on its checkpoint is diffed from it")
+}
+
+// With no merge base to read, the diff is taken from the base the holder reported, and
+// with none of that either, from the checkpoint.
+func TestDiffBaseFallsBackToTheReportedBase(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, reported     string
+		head               error
+		mergeBase          error
+		wantRev, wantNamed string
+	}{
+		{
+			"no head", "def5678+00ff", errors.New("no revision"), nil, "def5678",
+			"def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: the holder's HEAD could not be read: no revision)",
+		},
+		{
+			"no merge base", "def5678", nil, &types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}, "def5678",
+			"def5678 (the base its holder reported, not its checkpoint abc1234; no merge base: " +
+				(&types.VCSUnsupportedError{VCS: "hg", Capability: types.CapTreeMerger}).Error() + ")",
+		},
+		{"no reported base", "", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},
+		{"a reported base on the checkpoint", "abc1234+00ff", errors.New("no revision"), nil, "abc1234", "abc1234 (its checkpoint; no merge base: the holder's HEAD could not be read: no revision)"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			driver := mocks.NewMockVCSDriver(t)
+			driver.EXPECT().FindCommit(mock.Anything, "/repo", "").Return(types.Commit{ID: "head1"}, tc.head)
+			if tc.head == nil {
+				driver.EXPECT().MergeBase(mock.Anything, "/repo", "head1", "abc1234").Return("", false, tc.mergeBase)
+			}
+
+			got := diffBase(t.Context(), driver, "/repo", types.Job{Checkpoint: "abc1234+deadbeef", ReportedBase: tc.reported})
+
+			assert.Equal(t, diffFrom{revision: tc.wantRev, named: tc.wantNamed}, got)
+		})
+	}
+}
+
 func TestVerifyGatesCarriesTheFootprintAndGradesNothingOnIt(t *testing.T) {
 	t.Parallel()
 
@@ -420,11 +490,16 @@ func TestOverlapFootprints(t *testing.T) {
 			if tc.untakenB {
 				f.rows[1].CheckoutRoot = ""
 			}
+			// Each holder's branch has its checkpoint, so the merge base is the checkpoint.
 			if tc.askA {
+				f.driver.EXPECT().FindCommit(mock.Anything, f.root, "").Return(types.Commit{ID: "heada"}, nil)
+				f.driver.EXPECT().MergeBase(mock.Anything, f.root, "heada", "reva").Return("reva", true, nil)
 				f.driver.EXPECT().ChangedFiles(mock.Anything, f.root, "reva").Return(changed, nil)
 				f.driver.EXPECT().Regions(mock.Anything, f.root, "reva", files).Return(tc.a, tc.regionsErr)
 			}
 			if tc.askB {
+				f.driver.EXPECT().FindCommit(mock.Anything, f.other, "").Return(types.Commit{ID: "headb"}, nil)
+				f.driver.EXPECT().MergeBase(mock.Anything, f.other, "headb", "revb").Return("revb", true, nil)
 				f.driver.EXPECT().ChangedFiles(mock.Anything, f.other, "revb").Return(changed, nil)
 				f.driver.EXPECT().Regions(mock.Anything, f.other, "revb", files).Return(tc.b, tc.regionsErr)
 			}
@@ -459,8 +534,9 @@ func TestOverlapFootprintsWithNoVCS(t *testing.T) {
 func TestMeasureOverlaps(t *testing.T) {
 	t.Parallel()
 
-	root := gitRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
-	rev := commitRepo(t, root)
+	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	root := repo.Root()
+	rev := repo.Head()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
 	rows := []types.Job{
 		{ID: "a", State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{"api"}},

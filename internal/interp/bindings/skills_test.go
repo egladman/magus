@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -71,18 +72,12 @@ func callSkills(t *testing.T, ctx context.Context, sess *buzz.Session, name stri
 // against the real catalog, installed the way `magus agent install` writes it.
 func TestSkillsThroughBuzzScript(t *testing.T) {
 	root := t.TempDir()
-	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "skills-test" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            "skills-test",
-			Display:       agent.HarnessDisplay{Name: "Skills test"},
-			Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormFull},
-		}, "spell:skills-test", true, nil
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "skills-test",
+		Display:       agent.HarnessDisplay{Name: "Skills test"},
+		Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormFull},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(loadHarnessFromSpell) })
 
 	_, _, err := skillCatalog().WriteSkillTree(root, ".agents/skills", false, agent.FormFull)
 	require.NoError(t, err)

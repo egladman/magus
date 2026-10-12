@@ -40,6 +40,7 @@ import "std";
 import "os";
 import "proc";
 import "semver";
+import "vcs";
 
 // remotes maps a probed binary to the upstream repository that tags its releases, and to
 // the prefix its tags carry. Each entry is a deliberate trust decision: this is the host
@@ -73,8 +74,8 @@ fun fetchReleaseTags(bin: str) > [str] !> any {
     os\withEnv({"GIT_TERMINAL_PROMPT": "0"}, callback: fun () > void !> any {
         // quiet: this is a 954-line listing being consumed, not a build step being
         // watched. Capture is unaffected.
-        final res = proc\exec("git", args: ["ls-remote", "--tags", "--refs", remote["url"]],
-            dir: ".", opts: {"allow_failure": true, "quiet": true});
+        final res = vcs\cmd(["ls-remote", "--tags", "--refs", remote["url"]],
+            opts: {"allow_failure": true, "quiet": true});
         if (res.code != 0) {
             return; // unreachable remote: reported as unknown, never as up to date
         }

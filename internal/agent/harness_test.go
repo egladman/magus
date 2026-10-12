@@ -7,8 +7,10 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +19,7 @@ import (
 
 // registerHarnessSpell decodes a JSON descriptor body — the same shape a
 // harnesses/<id>.json compat file used to carry — into a HarnessDescriptor and
-// registers it as a fake harness spell for id, restoring the previous loader when
+// registers it as a harness spell for id, restoring the previous loader when
 // the test ends. LoadHarness has no JSON fallback any more, and PlanHarness and
 // VerifyHarness operate on whatever LoadHarness resolves without
 // caring which source supplied it, so every fixture body below is unchanged from
@@ -228,7 +230,8 @@ func TestWorkspaceHarnessLoads(t *testing.T) {
 }
 
 func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	writeTestHarness(t, root)
 	result, err := VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
@@ -237,15 +240,16 @@ func TestVerifyHarnessReportsCoverageRatherThanGuessing(t *testing.T) {
 	mergeHarness(t, root, "test-host")
 	// The wired commands now have to actually answer, not merely be present: give
 	// them something real to run.
-	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
-	writeStubGuardScript(t, root, "magus-path.buzz", "advise")
+	writeAnsweringMagus(w, "magus-command.buzz", "deny")
+	writeAnsweringMagus(w, "magus-path.buzz", "advise")
 	result, err = VerifyHarness(untimedProbes(), root, "test-host")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
 }
 
 func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	registerHarnessSpell(t, "flat", `{
   "schema_version": 2,
   "id": "flat",
@@ -273,7 +277,7 @@ func TestPlanHarnessFlatEntriesAndConfigDefaults(t *testing.T) {
 	// cursor-hook.buzz's reply dialect is self-contained (see probeEvent), so the
 	// probe only checks that it answers something; magus-checkpoint.buzz renders no
 	// verdict at all and is never probed.
-	writeStubGuardScript(t, root, "cursor-hook.buzz", "ok")
+	writeAnsweringMagus(w, "cursor-hook.buzz", "ok")
 	result, err := VerifyHarness(untimedProbes(), root, "flat")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status, result.Reason)
@@ -339,7 +343,8 @@ func TestPlanHarnessSetsAnObjectDefaultKeyByKey(t *testing.T) {
 }
 
 func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	registerHarnessSpell(t, "managed", `{
   "schema_version": 2,
   "id": "managed",
@@ -363,7 +368,7 @@ func TestPlanHarnessOwnsManagedEntries(t *testing.T) {
 
 	// magus-checkpoint.buzz renders no verdict and is never probed; magus-command.buzz
 	// is, so it needs something real behind it now.
-	writeStubGuardScript(t, root, "magus-command.buzz", "deny")
+	writeAnsweringMagus(w, "magus-command.buzz", "deny")
 	result, err := VerifyHarness(untimedProbes(), root, "managed")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessVerified, result.Status)
@@ -705,22 +710,21 @@ func TestLoadHarnessSpellOnlyWhenWired(t *testing.T) {
 	assert.Equal(t, "spell/hooks.json", d.Config.Path)
 }
 
-// writeStubGuardScript registers output as the answer to the glue file called name,
-// and puts a stub magus at root/magus that drains stdin and prints the answer
-// registered for whichever glue file its argv names. It stands in for magus running
+// writeAnsweringMagus registers output as the answer to the glue file called name,
+// and puts a magus at root/magus that drains stdin and prints the answer
+// registered for whichever glue file its argv names. It plays magus running
 // the shipped glue, so VerifyHarness's probe (harness_probe.go) has something real
 // to execute when a harness wires `./magus buzz -s <glue>`. Tests that only exercise
 // PlanHarness's own merge mechanics do not need this; only a test that calls
 // VerifyHarness against a command probeHarnessCommands recognizes as guard-shaped
 // does. See harness_probe_test.go for the probe's own tests.
-func writeStubGuardScript(t *testing.T, root, name, output string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "stub-"+name), []byte(output), 0o644))
-	const stub = "#!/bin/sh\ncat >/dev/null\nfor a in \"$@\"; do [ -f \"stub-$a\" ] && exec cat \"stub-$a\"; done\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(stub), 0o755))
+func writeAnsweringMagus(w *testkit.Workspace, name, output string) {
+	w.Write("answer-"+name, output)
+	const script = "#!/bin/sh\ncat >/dev/null\nfor a in \"$@\"; do [ -f \"answer-$a\" ] && exec cat \"answer-$a\"; done\n"
+	w.WriteExecutable("magus", script)
 }
 
-// writeTestHarness registers the "test-host" fixture as a fake harness spell. root
+// writeTestHarness registers the "test-host" fixture as a harness spell. root
 // is accepted only so every existing call site (this package and catalog_test.go)
 // need not change; the descriptor no longer lives under it.
 func writeTestHarness(t *testing.T, root string) {
@@ -1357,4 +1361,21 @@ func TestHarnessDescriptorRejectsAMalformedAgentFile(t *testing.T) {
 	ok := base
 	ok.Agents = []HarnessAgentFile{{Path: ".a/agents/a.md", Content: "x"}}
 	assert.NoError(t, validateHarnessDescriptor(ok))
+}
+
+func foregroundLimits(ms int64) HarnessDescriptor {
+	return HarnessDescriptor{Limits: HarnessLimits{ForegroundMaxMs: ms}}
+}
+
+func TestShortestForegroundMaxPicksTheShortestDeclared(t *testing.T) {
+	got, ok := ShortestForegroundMax([]HarnessDescriptor{foregroundLimits(600000), {}, foregroundLimits(300000)})
+
+	require.True(t, ok)
+	assert.Equal(t, 5*time.Minute, got)
+}
+
+func TestShortestForegroundMaxIsFalseWhenNoneDeclaresOne(t *testing.T) {
+	_, ok := ShortestForegroundMax([]HarnessDescriptor{{}, foregroundLimits(0)})
+
+	assert.False(t, ok)
 }

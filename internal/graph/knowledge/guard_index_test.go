@@ -12,24 +12,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
+var guardFiles = map[string]string{
+	"magusfile.buzz": "export fun lint() > void {}\n",
+	"pkg/a.go":       "package pkg\nfunc Judge() {}\n",
+	"docs/x.md":      "# Title\n",
+	"notes.txt":      "not indexed\n",
+}
+
 func guardFixture(t *testing.T) (root, cacheDir string, g *Graph) {
 	t.Helper()
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	for rel, body := range map[string]string{
-		"magusfile.buzz": "export fun lint() > void {}\n",
-		"pkg/a.go":       "package pkg\nfunc Judge() {}\n",
-		"docs/x.md":      "# Title\n",
-		"notes.txt":      "not indexed\n",
-	} {
-		p := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-	g = NewGraph()
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(guardFiles)
+	return w.Root(), t.TempDir(), guardGraph()
+}
+
+func guardGraph() *Graph {
+	g := NewGraph()
 	g.AddNode(types.KnowledgeNode{ID: "symbol:go pkg/Judge().", Kind: types.KindSymbol, Label: "Judge", Source: "pkg/a.go:2"})
 	g.AddNode(types.KnowledgeNode{ID: "symbol:go other/Judge().", Kind: types.KindSymbol, Label: "Judge", Source: "other/j.go:1"})
 	g.AddNode(types.KnowledgeNode{ID: "file:pkg/a.go", Kind: types.KindFile})
@@ -42,7 +44,7 @@ func guardFixture(t *testing.T) (root, cacheDir string, g *Graph) {
 	g.AddNode(types.KnowledgeNode{ID: "target:.:lint", Kind: types.KindTarget})
 	g.AddNode(types.KnowledgeNode{ID: "diagnostic:MGS1001", Kind: types.KindDiagnostic})
 	g.AddNode(types.KnowledgeNode{ID: "spell:go", Kind: types.KindSpell})
-	return root, t.TempDir(), g
+	return g
 }
 
 // TestGuardIndexRoundTrip pins what the guard reads back: names for symbols, ids for the
@@ -149,26 +151,22 @@ func TestGuardIndexRefusesAnotherRoot(t *testing.T) {
 }
 
 // guardRepo is guardFixture committed to a git repository on main, with a runner for more
-// git commands there. Global and system config stay out, so a signing or hook setting on
-// the box cannot fail a commit.
+// git commands there. A rebase is the one command allowed to fail: the tests want the
+// state it stops in.
 func guardRepo(t *testing.T) (root, cacheDir string, g *Graph, git func(args ...string) string) {
 	t.Helper()
-	root, cacheDir, g = guardFixture(t)
+	r := testkit.NewRepo(t, guardFiles)
 	git = func(args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_EDITOR=true")
-		out, err := cmd.CombinedOutput()
 		if args[0] != "rebase" {
-			require.NoError(t, err, "git %v: %s", args, out)
+			return r.Git(args...)
 		}
+		cmd := exec.Command("git", append([]string{"-C", r.Root()}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_EDITOR=true")
+		out, _ := cmd.CombinedOutput()
 		return strings.TrimSpace(string(out))
 	}
-	git("init", "-q", "-b", "main")
-	git("add", "-A")
-	git("commit", "-q", "-m", "one")
-	return root, cacheDir, g, git
+	return r.Root(), t.TempDir(), guardGraph(), git
 }
 
 var guardKinds = []string{GuardSymbol, types.KindDocSection, types.KindTarget, types.KindDiagnostic, types.KindFile}

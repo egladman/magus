@@ -201,12 +201,17 @@ flag run/stdin
 flag run/step
 flag run/timeout
 flag run/upstream
+flag session/all
 flag session/brief
 flag session/limit
 flag session/since
 flag shell/agent
 flag shell/agent-name
+flag shell/call-background
+flag shell/call-timeout-ms
 flag shell/event
+flag shell/foreground-default-ms
+flag shell/foreground-max-ms
 flag shell/lease
 flag shell/message
 flag shell/observe

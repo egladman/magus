@@ -23,10 +23,10 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1/viewerv1alpha1connect"
 )
 
-// fakeRuns is the runSource half of the handler's contract, filled in per test. It is a struct of
+// storedRuns is the runSource half of the handler's contract, filled in per test. It is a struct of
 // stored answers rather than a mock: every RPC here reads, so what a test needs to say is what the
 // store would have returned.
-type fakeRuns struct {
+type storedRuns struct {
 	// mu guards events so a streaming test can append mid-stream (a live journal grows under
 	// its reader) without racing the handler goroutine.
 	mu     sync.Mutex
@@ -37,9 +37,9 @@ type fakeRuns struct {
 	desc   map[string]cache.OutputDescriptor
 }
 
-func (f *fakeRuns) ListRunLogs(int) []cache.RunLog { return f.logs }
+func (f *storedRuns) ListRunLogs(int) []cache.RunLog { return f.logs }
 
-func (f *fakeRuns) InvocationEventsByID(string) (journal.Invocation, []journal.Event, error) {
+func (f *storedRuns) InvocationEventsByID(string) (journal.Invocation, []journal.Event, error) {
 	if f.err != nil {
 		return journal.Invocation{}, nil, f.err
 	}
@@ -49,7 +49,7 @@ func (f *fakeRuns) InvocationEventsByID(string) (journal.Invocation, []journal.E
 // InvocationEventsFrom serves the tail the same way the store does, with an event INDEX standing in
 // for the store's byte offset: both say "resume where the last read stopped", which is all the
 // handler does with the cursor.
-func (f *fakeRuns) InvocationEventsFrom(_ string, from int64) ([]journal.Event, int64, error) {
+func (f *storedRuns) InvocationEventsFrom(_ string, from int64) ([]journal.Event, int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {
@@ -62,13 +62,13 @@ func (f *fakeRuns) InvocationEventsFrom(_ string, from int64) ([]journal.Event, 
 }
 
 // append adds events to the journal as a running build would.
-func (f *fakeRuns) append(events ...journal.Event) {
+func (f *storedRuns) append(events ...journal.Event) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.events = append(f.events, events...)
 }
 
-func (f *fakeRuns) DescriptorByRef(ref string) (cache.OutputDescriptor, error) {
+func (f *storedRuns) DescriptorByRef(ref string) (cache.OutputDescriptor, error) {
 	d, ok := f.desc[ref]
 	if !ok {
 		return cache.OutputDescriptor{}, errors.New("no such ref")
@@ -76,27 +76,27 @@ func (f *fakeRuns) DescriptorByRef(ref string) (cache.OutputDescriptor, error) {
 	return d, nil
 }
 
-// fakeOutputs is the outputSource half. The ListEvents/GetInvocation tests never reach it.
-type fakeOutputs struct {
+// storedOutputs is the outputSource half. The ListEvents/GetInvocation tests never reach it.
+type storedOutputs struct {
 	descs []cache.OutputDescriptor
 	body  []byte
 }
 
-func (f *fakeOutputs) ListDescriptors() []cache.OutputDescriptor { return f.descs }
+func (f *storedOutputs) ListDescriptors() []cache.OutputDescriptor { return f.descs }
 
-func (f *fakeOutputs) ByRef(string) ([]byte, cache.OutputDescriptor, error) {
+func (f *storedOutputs) ByRef(string) ([]byte, cache.OutputDescriptor, error) {
 	return f.body, cache.OutputDescriptor{}, nil
 }
 
 // TestListEventsUnfiltered checks the whole journal comes back when no filter is set, in stored
 // order, with the next token empty because one page held everything.
 func TestListEventsUnfiltered(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{
+	runs := &storedRuns{events: []journal.Event{
 		{Ts: 1, Project: "web", Kind: journal.KindOutput, Text: "compiling"},
 		{Ts: 2, Project: "api", Kind: journal.KindOutput, Text: "linking"},
 		{Ts: 3, Project: "web", Kind: journal.KindResult, Status: journal.StatusFail},
 	}}
-	s := NewService(&fakeOutputs{}, runs)
+	s := NewService(&storedOutputs{}, runs)
 
 	resp, err := s.ListEvents(context.Background(), connect.NewRequest(&viewerv1.ListEventsRequest{
 		Parent: "inv1a2b3c",
@@ -110,12 +110,12 @@ func TestListEventsUnfiltered(t *testing.T) {
 // TestListEventsFilterNarrows is the regression for the filter being declared on the request and
 // silently ignored: a filtered call returned the whole journal.
 func TestListEventsFilterNarrows(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{
+	runs := &storedRuns{events: []journal.Event{
 		{Ts: 1, Project: "web", Kind: journal.KindOutput, Text: "compiling"},
 		{Ts: 2, Project: "api", Kind: journal.KindOutput, Text: "linking"},
 		{Ts: 3, Project: "web", Kind: journal.KindResult, Status: journal.StatusFail},
 	}}
-	s := NewService(&fakeOutputs{}, runs)
+	s := NewService(&storedOutputs{}, runs)
 
 	resp, err := s.ListEvents(context.Background(), connect.NewRequest(&viewerv1.ListEventsRequest{
 		Parent: "inv1a2b3c",
@@ -135,7 +135,7 @@ func TestListEventsFiltersBeforePaging(t *testing.T) {
 		events = append(events, journal.Event{Ts: int64(i), Project: "noise", Kind: journal.KindOutput})
 	}
 	events = append(events, journal.Event{Ts: 99, Project: "web", Kind: journal.KindOutput, Text: "needle"})
-	s := NewService(&fakeOutputs{}, &fakeRuns{events: events})
+	s := NewService(&storedOutputs{}, &storedRuns{events: events})
 
 	resp, err := s.ListEvents(context.Background(), connect.NewRequest(&viewerv1.ListEventsRequest{
 		Parent:   "inv1a2b3c",
@@ -159,7 +159,7 @@ func TestListEventsPagesFilteredMatches(t *testing.T) {
 		}
 		events = append(events, journal.Event{Ts: int64(i), Project: p, Kind: journal.KindOutput})
 	}
-	s := NewService(&fakeOutputs{}, &fakeRuns{events: events})
+	s := NewService(&storedOutputs{}, &storedRuns{events: events})
 	filter := &viewerv1.EventQuery{Projects: []string{"web"}}
 
 	first, err := s.ListEvents(context.Background(), connect.NewRequest(&viewerv1.ListEventsRequest{
@@ -180,7 +180,7 @@ func TestListEventsPagesFilteredMatches(t *testing.T) {
 // TestGetInvocationResolvesRefAndID covers both spellings of a run's resource name: an invocation
 // id used as-is, and an output ref resolved through the descriptor to the run that produced it.
 func TestGetInvocationResolvesRefAndID(t *testing.T) {
-	runs := &fakeRuns{
+	runs := &storedRuns{
 		header: journal.Invocation{
 			ID:           "inv1a2b3c",
 			Command:      journal.Command{Arguments: []string{"magus", "run", "build"}, Trigger: "run"},
@@ -191,7 +191,7 @@ func TestGetInvocationResolvesRefAndID(t *testing.T) {
 		},
 		desc: map[string]cache.OutputDescriptor{"out1a2b3c": {Ref: "out1a2b3c", Inv: "inv1a2b3c"}},
 	}
-	s := NewService(&fakeOutputs{}, runs)
+	s := NewService(&storedOutputs{}, runs)
 
 	byID, err := s.GetInvocation(context.Background(), connect.NewRequest(&viewerv1.GetInvocationRequest{Name: "inv1a2b3c"}))
 	require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestGetInvocationResolvesRefAndID(t *testing.T) {
 // TestGetInvocationRejectsPreJournalRef pins the deliberate NotFound for an output whose run
 // predates journalling: an empty journal would read as "this run did nothing".
 func TestGetInvocationRejectsPreJournalRef(t *testing.T) {
-	s := NewService(&fakeOutputs{}, &fakeRuns{
+	s := NewService(&storedOutputs{}, &storedRuns{
 		desc: map[string]cache.OutputDescriptor{"out1a2b3c": {Ref: "out1a2b3c"}},
 	})
 	_, err := s.GetInvocation(context.Background(), connect.NewRequest(&viewerv1.GetInvocationRequest{Name: "out1a2b3c"}))
@@ -222,7 +222,7 @@ func TestGetInvocationRejectsPreJournalRef(t *testing.T) {
 // does not wait on the production cadence.
 func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServiceClient {
 	t.Helper()
-	s := NewService(&fakeOutputs{}, runs)
+	s := NewService(&storedOutputs{}, runs)
 	s.poll = 5 * time.Millisecond
 	path, handler := viewerv1alpha1connect.NewViewerServiceHandler(s)
 	mux := http.NewServeMux()
@@ -236,7 +236,7 @@ func streamClient(t *testing.T, runs runSource) viewerv1alpha1connect.ViewerServ
 // held arrives first, what the run appends next arrives as it lands, and the terminal event ends the
 // stream instead of leaving the caller polling an idle journal forever.
 func TestStreamEventsReplaysThenTails(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
+	runs := &storedRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
 	client := streamClient(t, runs)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -264,7 +264,7 @@ func TestStreamEventsReplaysThenTails(t *testing.T) {
 // pinning) that the terminal event is read from the UNFILTERED batch: a filter excluding it must
 // still end the stream.
 func TestStreamEventsFilterNarrows(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{
+	runs := &storedRuns{events: []journal.Event{
 		{Ts: 1, Kind: journal.KindExec, Text: "go build"},
 		{Ts: 2, Kind: journal.KindOutput, Text: "compiling"},
 		{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass},
@@ -289,7 +289,7 @@ func TestStreamEventsFilterNarrows(t *testing.T) {
 // the caller has not seen. The boundary is inclusive, so the event resumed FROM arrives again;
 // at-least-once is the honest guarantee for a millisecond cursor several events can share.
 func TestStreamEventsResumesFromSince(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{
+	runs := &storedRuns{events: []journal.Event{
 		{Ts: 1, Kind: journal.KindOutput, Text: "compiling"},
 		{Ts: 2, Kind: journal.KindOutput, Text: "linking"},
 		{Ts: 3, Kind: journal.KindFinished, Status: journal.StatusPass},
@@ -314,7 +314,7 @@ func TestStreamEventsResumesFromSince(t *testing.T) {
 // TestStreamEventsEndsOnClientCancel checks a caller walking away from an unfinished run ends the
 // RPC rather than leaving the server polling a journal nobody reads.
 func TestStreamEventsEndsOnClientCancel(t *testing.T) {
-	runs := &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
+	runs := &storedRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput, Text: "compiling"}}}
 	client := streamClient(t, runs)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -330,7 +330,7 @@ func TestStreamEventsEndsOnClientCancel(t *testing.T) {
 // TestStreamEventsUnknownInvocation checks an invocation with no journal is NotFound at the first
 // read rather than an empty stream, which a caller cannot tell from a run that has yet to emit.
 func TestStreamEventsUnknownInvocation(t *testing.T) {
-	client := streamClient(t, &fakeRuns{err: fs.ErrNotExist})
+	client := streamClient(t, &storedRuns{err: fs.ErrNotExist})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -343,7 +343,7 @@ func TestStreamEventsUnknownInvocation(t *testing.T) {
 // TestListEventsRejectsBadPageToken checks an unparseable token errors rather than restarting at
 // page one, which a caller would read as the end of the list.
 func TestListEventsRejectsBadPageToken(t *testing.T) {
-	s := NewService(&fakeOutputs{}, &fakeRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput}}})
+	s := NewService(&storedOutputs{}, &storedRuns{events: []journal.Event{{Ts: 1, Kind: journal.KindOutput}}})
 	_, err := s.ListEvents(context.Background(), connect.NewRequest(&viewerv1.ListEventsRequest{
 		Parent: "inv1a2b3c", PageToken: "not-a-number",
 	}))

@@ -89,6 +89,7 @@ var defaults = map[string]Decision{
 	"token-state":           Deny,
 	"vcs-off-switch":        Deny,
 	"whole-tree":            Deny,
+	"worker-background-run": Deny,
 	"worker-check-only":     Deny,
 	"worktree-remove":       Deny,
 
@@ -96,6 +97,7 @@ var defaults = map[string]Decision{
 	// raise one to deny or turn it off. lease-state, lease-invalid and lease-terminal are
 	// advisories, not the lease-* denies above.
 	"capture-filter":     Advise,
+	"check-timeout":      Advise,
 	"checkpoint-state":   Advise,
 	"dependency-install": Advise,
 	"dependency-update":  Advise,
@@ -129,6 +131,7 @@ var defaults = map[string]Decision{
 	"timed-magus":        Advise,
 	"unleased-write":     Advise,
 
+	"guard-unfinished":         Advise,
 	"workspace-command-failed": Advise,
 	"workspace-spawn-failed":   Advise,
 	"workspace-write-failed":   Advise,
@@ -138,6 +141,7 @@ var defaults = map[string]Decision{
 // notices that report on the workspace's own rules, so a setting would let a workspace
 // silence the report or promote it to a refusal. Every name is also in defaults.
 var fixed = map[string]string{
+	"guard-unfinished":         "a guard check",
 	"workspace-command-failed": "a command rule",
 	"workspace-spawn-failed":   "a spawn rule",
 	"workspace-write-failed":   "a write rule",

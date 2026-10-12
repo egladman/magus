@@ -10,7 +10,7 @@ import (
 	"github.com/egladman/magus/internal/changeset"
 	"github.com/egladman/magus/internal/interp/bindings"
 	store "github.com/egladman/magus/internal/notes"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -126,7 +126,7 @@ func TestAStoredSessionWithNoPatchHasNoSnapshotId(t *testing.T) {
 // up. Without a server the forge is asked directly rather than the reader being shown a review
 // with nobody else in it.
 func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
-	withFakeReviewProvider(t, []any{
+	withCannedThreads(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 	})
 	cache := t.TempDir()
@@ -143,7 +143,7 @@ func TestReviewCommentsReachTheForgeWithNoServer(t *testing.T) {
 // The watermark outlives the server that normally reads it, so a thread already seen does not
 // come back marked new the moment the server is stopped.
 func TestASeenThreadIsNotNewWithoutAServer(t *testing.T) {
-	withFakeReviewProvider(t, []any{
+	withCannedThreads(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 	})
 	cache := t.TempDir()
@@ -175,7 +175,7 @@ func TestCaptureSaysWhatWasNewToThisReader(t *testing.T) {
 // A malformed remark is reported rather than dropped: the threads that decoded still travel,
 // and the caller says what it could not read.
 func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
-	withFakeReviewProvider(t, []any{
+	withCannedThreads(t, []any{
 		map[string]any{"id": "t1", "path": "a.go", "line": 11, "author": "priya", "body": "theirs"},
 		"not a thread at all",
 	})
@@ -185,12 +185,11 @@ func TestALocalReadReportsWhatItCouldNotDecode(t *testing.T) {
 	assert.NotEmpty(t, reason, "a transcript silently missing a remark is worse than no transcript")
 }
 
-// withFakeReviewProvider wires a review provider for this test, so the server-free read path
+// withCannedThreads wires a review provider for this test, so the server-free read path
 // can be exercised against threads instead of only against an unwired workspace.
-func withFakeReviewProvider(t *testing.T, threads []any) {
+func withCannedThreads(t *testing.T, threads []any) {
 	t.Helper()
-	name := "fake-notes-review-" + t.Name()
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "canned-notes-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			switch req.Target {
 			case spells.FindReviewContract:
@@ -200,7 +199,7 @@ func withFakeReviewProvider(t *testing.T, threads []any) {
 			default:
 				return map[string]any{}, nil
 			}
-		})))
+		}))
 	prev := bindings.ReviewProvider()
 	bindings.SetReviewProvider(name)
 	t.Cleanup(func() { bindings.SetReviewProvider(prev) })

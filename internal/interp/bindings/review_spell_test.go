@@ -3,38 +3,32 @@ package bindings
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
 // withReviewSpell registers a fake provider and selects it, restoring the selection afterwards.
 //
-// The name is derived from the test and a counter because the registry panics on a duplicate
-// and every case here needs its own answer. `answer` receives the op, so one provider can
+// The name is derived from the test because the registry panics on a duplicate and every
+// case here needs its own answer. `answer` receives the op, so one provider can
 // succeed on a lookup and refuse a publish, which no real spell can be made to do on demand.
 func withReviewSpell(t *testing.T, answer func(op string) (any, error)) {
 	t.Helper()
-	fakeSpellSeq++
-	name := fmt.Sprintf("fake-review-%s-%d", t.Name(), fakeSpellSeq)
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "fake-review",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			return answer(req.Target)
-		})))
+		}))
 	prev := ReviewProvider()
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })
 }
-
-// fakeSpellSeq keeps two registrations inside one test distinct.
-var fakeSpellSeq int
 
 func TestFindReviewDecodesTheTargetAndCarriesTheRepo(t *testing.T) {
 	withReviewSpell(t, func(string) (any, error) {
@@ -222,13 +216,11 @@ func TestReviewCommentsAsksNothingWithoutAnOpenReview(t *testing.T) {
 
 func TestPublishReviewCarriesTheDraftsAndFailsLoudly(t *testing.T) {
 	var sent []any
-	fakeSpellSeq++
-	name := fmt.Sprintf("fake-capture-%d", fakeSpellSeq)
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "fake-capture",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			sent, _ = req.Params["drafts"].([]any)
 			return map[string]any{}, nil
-		})))
+		}))
 	prev := ReviewProvider()
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })
@@ -326,13 +318,11 @@ func TestFindReviewAsksWhoTheCredentialIsOnlyOnce(t *testing.T) {
 	t.Cleanup(func() { rememberViewer("") })
 
 	var asked []bool
-	fakeSpellSeq++
-	name := fmt.Sprintf("fake-viewer-%d", fakeSpellSeq)
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "fake-viewer",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			asked = append(asked, req.Params["want_viewer"] == true)
 			return map[string]any{"id": "482", "author": "priya", "viewer": "eli"}, nil
-		})))
+		}))
 	prev := ReviewProvider()
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })
@@ -367,13 +357,11 @@ func TestOpenedByViewerIsUnknownWhenEitherNameIsMissing(t *testing.T) {
 func capturedVerdict(t *testing.T, at types.ReviewTarget, want types.ReviewVerdict) (sent string, published types.ReviewVerdict) {
 	t.Helper()
 	var got string
-	fakeSpellSeq++
-	name := fmt.Sprintf("fake-verdict-%d", fakeSpellSeq)
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "fake-verdict",
 		spells.WithInvoker(func(_ context.Context, req spells.InvokeRequest) (any, error) {
 			got, _ = req.Params["verdict"].(string)
 			return map[string]any{}, nil
-		})))
+		}))
 	prev := ReviewProvider()
 	SetReviewProvider(name)
 	t.Cleanup(func() { SetReviewProvider(prev) })

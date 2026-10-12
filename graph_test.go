@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/graph/knowledge"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -207,7 +208,8 @@ func TestWarmGraphWatchRebuildsInTheBackground(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping fsnotify integration test under -short")
 	}
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
 	rebuild, n := countingRebuild()
 	w := newWarmGraph(rebuild, nil)
 	w.settle = 10 * time.Millisecond
@@ -222,7 +224,7 @@ func TestWarmGraphWatchRebuildsInTheBackground(t *testing.T) {
 		"watching should warm the cache without a query")
 	require.Equal(t, int64(1), n.Load())
 
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// x\n"), 0o644))
+	ws.Magusfile("// x\n")
 
 	require.Eventually(t, func() bool { return n.Load() == 2 && w.cached() != nil }, 5*time.Second, 10*time.Millisecond,
 		"a change to a .buzz file should rebuild the warm cache in the background")

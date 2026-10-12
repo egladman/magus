@@ -18,14 +18,14 @@ import (
 	"github.com/egladman/magus/internal/queue/types"
 )
 
-// upstreamCall is one request the fake cache service received.
+// upstreamCall is one request the recording cache service received.
 type upstreamCall struct {
 	Path, Auth, ContentType, Body string
 }
 
-// fakeCacheService answers every method with a signed download URL and records what
+// recordingCacheService answers every method with a signed download URL and records what
 // reached it.
-func fakeCacheService(t *testing.T) (*httptest.Server, func() []upstreamCall) {
+func recordingCacheService(t *testing.T) (*httptest.Server, func() []upstreamCall) {
 	t.Helper()
 	var (
 		mu    sync.Mutex
@@ -71,7 +71,7 @@ func twirp(t *testing.T, p *CacheReadProxy, token, method, body string) (*http.R
 }
 
 func TestCacheReadProxyForwardsALookupWithTheRealTokenUpstreamOnly(t *testing.T) {
-	up, calls := fakeCacheService(t)
+	up, calls := recordingCacheService(t)
 	p := startProxy(t, up.URL, nil)
 	require.True(t, strings.HasPrefix(p.URL, "http://127.0.0.1:"), "loopback only: %s", p.URL)
 	require.True(t, strings.HasSuffix(p.URL, "/"), "a base URL, as the runner's is")
@@ -93,7 +93,7 @@ func TestCacheReadProxyForwardsALookupWithTheRealTokenUpstreamOnly(t *testing.T)
 }
 
 func TestCacheReadProxyRefusesEveryWriteAndAnythingUnknown(t *testing.T) {
-	up, calls := fakeCacheService(t)
+	up, calls := recordingCacheService(t)
 	var log bytes.Buffer
 	p := startProxy(t, up.URL, NewHookLog(&log))
 	for _, method := range []string{"CreateCacheEntry", "FinalizeCacheEntryUpload", "DeleteCacheEntry", "Unknown", "../CacheService/CreateCacheEntry", ""} {
@@ -137,7 +137,7 @@ func TestStartCacheReadProxyNeedsTheRunnersCredentials(t *testing.T) {
 
 // The runner's cache credentials are scrubbed; the proxy's stand-ins take their names.
 func TestHooksReadTheCacheThroughTheProxyAndNeverHoldTheRealToken(t *testing.T) {
-	up, _ := fakeCacheService(t)
+	up, _ := recordingCacheService(t)
 	t.Setenv("ACTIONS_RUNTIME_TOKEN", "real-runtime-token")
 	t.Setenv("ACTIONS_RESULTS_URL", up.URL+"/")
 	p := startProxy(t, up.URL, nil)

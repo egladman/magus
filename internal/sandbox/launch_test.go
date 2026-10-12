@@ -10,8 +10,8 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// fakeABI answers kernelABI with abi and err for the rest of the test.
-func fakeABI(t *testing.T, abi int, err error) {
+// setKernelABI answers kernelABI with abi and err for the rest of the test.
+func setKernelABI(t *testing.T, abi int, err error) {
 	t.Helper()
 	saved := kernelABI
 	kernelABI = func() (int, error) { return abi, err }
@@ -33,19 +33,19 @@ func TestKernelConfinesFollowsTheMode(t *testing.T) {
 	var off *Policy
 	assert.False(t, confines(off), "a nil policy confines nothing")
 
-	fakeABI(t, 0, ErrUnsupported)
+	setKernelABI(t, 0, ErrUnsupported)
 	assert.False(t, confines(best))
 	_, err := required.KernelConfines()
 	require.ErrorIs(t, err, types.SandboxRequired)
 	assert.ErrorContains(t, err, "/ws")
 
-	fakeABI(t, 2, nil)
+	setKernelABI(t, 2, nil)
 	assert.True(t, confines(best), "best-effort takes an old kernel's partial confinement")
 	_, err = required.KernelConfines()
 	require.ErrorIs(t, err, types.SandboxRequired)
 	assert.ErrorContains(t, err, "ABI is 2")
 
-	fakeABI(t, RequiredABI, nil)
+	setKernelABI(t, RequiredABI, nil)
 	assert.True(t, confines(required))
 }
 

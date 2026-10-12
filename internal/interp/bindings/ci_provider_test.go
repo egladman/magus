@@ -6,22 +6,30 @@ import (
 
 	"github.com/egladman/magus/internal/ci/annotate"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/spells/gen/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+// opTarget matches an Invoke request for one op, whatever its params: these tests assert
+// which op the annotator calls, and the mock answers so it runs without a Buzz VM.
+func opTarget(name string) any {
+	return mock.MatchedBy(func(req spells.InvokeRequest) bool { return req.Target == name })
+}
 
 // An op the spell does not declare is a nil result with no error, and stays a
 // no-op: a provider implements only the verbs its host supports.
 func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
-	drv := &stubDriver{}
+	drv := mocks.NewMockDriver(t)
+	for _, op := range []string{"group_start", "group_end", "annotate"} {
+		drv.EXPECT().Invoke(mock.Anything, opTarget(op)).Return(spells.InvokeResponse{}, nil).Once()
+	}
 	a := &spellAnnotator{drv: drv}
 
 	require.NoError(t, a.StartGroup(annotate.Group{ID: "g", Title: "t"}))
-	assert.Equal(t, "group_start", drv.got.Target)
 	require.NoError(t, a.EndGroup("g"))
-	assert.Equal(t, "group_end", drv.got.Target)
 	require.NoError(t, a.Annotate(annotate.Annotation{Level: annotate.LevelError, Message: "m"}))
-	assert.Equal(t, "annotate", drv.got.Target)
 }
 
 // A provider whose handler raises must say so. The error was discarded here, so
@@ -29,7 +37,9 @@ func TestSpellAnnotatorUndeclaredOpIsNotAFailure(t *testing.T) {
 // build, and the adapter is the only layer that can tell the two apart.
 func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 	boom := errors.New("handler raised")
-	a := &spellAnnotator{drv: &stubDriver{err: boom}}
+	drv := mocks.NewMockDriver(t)
+	drv.EXPECT().Invoke(mock.Anything, mock.Anything).Return(spells.InvokeResponse{}, boom).Times(3)
+	a := &spellAnnotator{drv: drv}
 
 	for name, err := range map[string]error{
 		"group_start": a.StartGroup(annotate.Group{ID: "g"}),
@@ -45,16 +55,19 @@ func TestSpellAnnotatorReportsARealFailure(t *testing.T) {
 // every shape but a complete {run, commit} record reads as "no green run",
 // including the raised error, which the annotate ops above must NOT swallow.
 func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
-	drv := &stubDriver{resp: spells.InvokeResponse{Data: map[string]any{
+	drv := mocks.NewMockDriver(t)
+	drv.EXPECT().Invoke(mock.Anything, opTarget("last_green_run")).Return(spells.InvokeResponse{Data: map[string]any{
 		"run":    "https://example/run/7",
 		"commit": "green0123456789",
-	}}}
+	}}, nil).Once()
 	got, ok := (&spellAnnotator{drv: drv}).LastGreenRun()
 	require.True(t, ok)
 	assert.Equal(t, annotate.GreenRun{Run: "https://example/run/7", Commit: "green0123456789"}, got)
-	assert.Equal(t, "last_green_run", drv.got.Target)
 
-	declines := map[string]*stubDriver{
+	declines := map[string]struct {
+		resp spells.InvokeResponse
+		err  error
+	}{
 		"undeclared op":    {},
 		"a null answer":    {resp: spells.InvokeResponse{Data: nil}},
 		"a raised handler": {err: errors.New("handler raised")},
@@ -63,8 +76,10 @@ func TestSpellAnnotatorLastGreenRunDecodesTheContract(t *testing.T) {
 		"no commit":        {resp: spells.InvokeResponse{Data: map[string]any{"run": "https://example/run/7"}}},
 		"wrong types":      {resp: spells.InvokeResponse{Data: map[string]any{"run": 7, "commit": 9}}},
 	}
-	for name, d := range declines {
+	for name, row := range declines {
 		t.Run(name, func(t *testing.T) {
+			d := mocks.NewMockDriver(t)
+			d.EXPECT().Invoke(mock.Anything, opTarget("last_green_run")).Return(row.resp, row.err).Once()
 			got, ok := (&spellAnnotator{drv: d}).LastGreenRun()
 			assert.False(t, ok)
 			assert.Equal(t, annotate.GreenRun{}, got)

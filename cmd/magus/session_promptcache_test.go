@@ -36,7 +36,6 @@ func TestRenderPromptCacheShowsEveryProvider(t *testing.T) {
 
 func TestPromptCacheForCheckoutReadsThisCheckoutsTrail(t *testing.T) {
 	testkit.Isolate(t)
-	t.Setenv(trail.EnvBaggage, "")
 	previous := global
 	t.Cleanup(func() { global = previous })
 	global = globalFlags{}

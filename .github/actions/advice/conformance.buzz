@@ -36,7 +36,7 @@
 // re-signs that differs from how the rest of the workspace declares the same kind of thing.
 // magus\diff computes it from the symbol index (one pass over every declaration, too large for
 // a script) and hands each changed symbol its `checks`; this renders them, one table per check.
-import "proc";
+import "vcs";
 import "advice";
 import "magus";
 import "std";
@@ -308,8 +308,8 @@ fun main() > void !> any {
     // Only the targets this pull request adds. The magusfile is the declaration, so the
     // diff proposes the names and the base tree rejects the ones already there.
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
+    final diff = vcs\cmd(["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true}).stdout;
     var added = mut [<str>];
     foreach (n in advice\addedTargets(diff)) {
         if (advice\declaredAtBase(n, base: base)) { continue; }

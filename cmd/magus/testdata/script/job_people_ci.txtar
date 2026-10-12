@@ -81,9 +81,9 @@ integration: release/pricing passes in ~/src/shop; its state is unchanged
 release/pricing: 1 of 1 goal(s) met
   [met] check
 -- ls.out --
-JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
-release/pricing  -       declared  -      1      alone  magus run test .
-release/tax      -       declared  -      1      alone  magus run test .
+JOB              HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
+release/pricing  -       declared  -      1      alone     magus run test .
+release/tax      -       declared  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 -- fail.out --

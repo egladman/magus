@@ -9,13 +9,13 @@ export fun bootstrapFigure() > figure\Figure !> any {
     final rule = magus\dir("internal/guard");
     final stamp = magus\dir("internal/interp/bindings");
     final person = figure\external("Person or hook", sub: "shell or PreToolUse");
-    // internal/guard/catalog.go advises this one command, and only with no ./magus.
+    // internal/guard/catalog.go advises this one command, with no ./magus or one that cannot load the tree.
     final exempt = figure\external("go run ./cmd/magus", sub: "run go-build, alone", look: figure\Look.focal);
     final target = figure\external("go-build", sub: "generate, link, stamp", tag: "target", look: figure\Look.plain);
     final spells = figure\external("Spell bytecode", sub: "spells-generate", look: figure\Look.store);
     // hack/policy/stale.buzz holds both the stamp comparison and the escape.
     final stale = figure\external("Stale policy", sub: "stamp vs sources", look: figure\Look.input);
-    final escape = figure\external("Relink escape", sub: "mv magus magus.old", look: figure\Look.plain);
+    final escape = figure\external("Bootstrap again", sub: "over a stale ./magus", look: figure\Look.plain);
     return figure\of("bootstrap",
             title: "One go run, then magus builds magus",
             eyebrow: "bootstrap",
@@ -26,8 +26,8 @@ export fun bootstrapFigure() > figure\Figure !> any {
                 + "was built from. Every other raw go command, a bare go build included, is refused "
                 + "and served that command; once ./magus exists the rule names ./magus run go-build . instead. The "
                 + "magus on PATH re-execs that ./magus; the stale policy compares its stamp with "
-                + "the checkout, and when a binary can no longer load the tree the escape moves it "
-                + "aside, which is the one way back to the bootstrap.",
+                + "the checkout, and when a binary can no longer load the tree the same bootstrap "
+                + "is allowed over it, which is the one way back.",
             direction: figure\Direction.down)
         .actor(person)
         .box(cli, label: "magus on PATH", sub: "re-execs ./magus")
@@ -50,7 +50,7 @@ export fun bootstrapFigure() > figure\Figure !> any {
         .flowAcross(target, dst: stale, label: "buildStamp")
         .flowIn(stale, dst: stamp, label: "reads")
         .flowAcross(stale, dst: escape, label: "decls moved")
-        .flowAcross(escape, dst: exempt, label: "mv magus.old", stroke: figure\Stroke.focal)
+        .flowAcross(escape, dst: exempt, label: "run again", stroke: figure\Stroke.focal)
         .zone("no ./magus yet", dirs: [rule], actors: [exempt])
         .zone("magus builds magus", dirs: [stamp], actors: [target, spells])
         .zone("kept fresh", actors: [stale, escape])

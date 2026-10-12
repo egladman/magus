@@ -109,7 +109,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents), [ListJ
 
 ### GetPayloadRequest
 
-Source: [activity.proto:233](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L233).
+Source: [activity.proto:239](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L239).
 
 | Field | Type   | # | Description                                                                                                                |
 | ----- | ------ | - | -------------------------------------------------------------------------------------------------------------------------- |
@@ -131,7 +131,7 @@ Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### ListActivityEventsResponse
 
-Source: [activity.proto:218](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L218).
+Source: [activity.proto:221](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L221).
 
 | Field             | Type                                     | # | Description                 |
 | ----------------- | ---------------------------------------- | - | --------------------------- |
@@ -144,7 +144,7 @@ Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 
 Payload is one stored request or response body, resolved from an ActivityEvent's ref.
 
-Source: [activity.proto:238](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L238).
+Source: [activity.proto:245](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L245).
 
 | Field        | Type  | # | Description |
 | ------------ | ----- | - | ----------- |
@@ -157,7 +157,7 @@ Used by: [GetPayload (response)](activity.md#getpayload).
 
 WatchActivityEventsRequest subscribes to the merged feed.
 
-Source: [activity.proto:224](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L224).
+Source: [activity.proto:227](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L227).
 
 | Field      | Type                            | # | Description                                                                                                                                                                                                                                                                                                                                                       |
 | ---------- | ------------------------------- | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

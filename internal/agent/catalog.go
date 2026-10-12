@@ -357,7 +357,14 @@ import (
 //
 // 118: magus-change-summary drops its `--prompt` section, because magus diff no longer has
 // that flag.
-const SkillVersion = 118
+//
+// 119: magus-multi-agent tells a worker to run its check in the foreground with a timeout
+// that covers it and never end its turn while a run is pending.
+//
+// 120: magus-sdk teaches testing code that uses the SDK (role fakes, testkit workspaces and
+// isolation, a one-method Run interface, register.Spell) and corrects WithRegisteredSpell to
+// WithSpell and the nested-module tag statement.
+const SkillVersion = 120
 
 const skillLicense = "GPL-3.0-or-later"
 

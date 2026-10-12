@@ -214,7 +214,7 @@ var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleStaleBinary),
 		Catches: "a call that changes state while the magus judging it cannot load this tree's guard policy",
 		Why: "A magus older than the tree, or one answering for a checkout with no ./magus, cannot load the magusfile, so none of the workspace's rules run and a fresh worktree has no record of them to fall back on. The magusfile visibly registering a guard rule is enough to refuse. " +
-			"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, `mv magus magus.old`, the bootstrap, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
+			"Edits, spawns, pushes, writing MCP tools and every command that changes state wait until a magus loads the tree. A line passes only when it proves read-only (every program reads, no redirect writes a file, nothing is computed by a substitution), is the fix (`./magus run go-build .`, the relink, the bootstrap over a ./magus that cannot load the tree, each alone on its line), or is a read-only scout recording its work (`magus job exec`, `magus job exit`, `magus buzz --record`). " +
 			"A leased worker is never told to build: there is one binary per base and the main session places it, so the worker's one fix is the placement it is served, `<main checkout>/magus buzz hack/dev/bootstrap-worktree.buzz -- --job <id> --from <main checkout>`. A load failure no newer binary fixes, such as a typo in a checkout with its own ./magus, is policy-unloaded's instead."},
 	{Name: string(denyRuleStageAll),
 		Catches: "a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output",
@@ -270,11 +270,16 @@ var denyRuleDocs = []types.RuleDoc{
 	{Name: string(denyRuleLeaseRebind), Catches: "a leased worker rewriting who it is or what its own job row says"},
 	{Name: string(denyRuleLeaseUndeclared), Catches: "a call graded under a lease id the job store has no row for, or a binding it tombstoned"},
 	{Name: string(denyRuleLeaseVCS),
-		Catches: "a worker lease pushing, stashing or reverting, or committing outside its own branch and checkout",
+		Catches: "a worker lease mutating version control, or committing outside its own branch and checkout",
 		Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
-			"A commit is the one exception: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+			"A worker may run only what reads the repository or touches its own index and branch: status, diff, log and the other reads, add, restore of named paths, switch or checkout without a force, branch creation, a fetch into remote-tracking refs; any other verb, an alias from config included, is refused. " +
+			"A commit is the one exception beyond those: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
 			"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
+			"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 			"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
+			"vcs\\cmd may also run any git operation but a push in a repository standing wholly outside the job's checkout, such as a script's scratch repository: its directory, -C and the work tree a --git-dir implies are outside the checkout, its common git directory is not the job's, git reports that directory as its work tree, and neither -c nor --config-env nor GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR or GIT_INDEX_FILE is set. " +
+			"A scratch repository inside the checkout, under .magus/ say, is refused like a submodule there: it holds the job's files under another git directory. " +
+			"proc\\exec and proc\\shell refuse git, hg, sl and jj outright and name the vcs\\cmd call to make instead, so a Buzz script's version control is judged here. " +
 			"A worker is a row with a parent, a lease a subagent holds, or a caller that names no session; only an identified root session holding a parentless row is the root."},
 	{Name: string(denyRuleLeaseWrite),
 		Catches: "a leased write outside its write paths, or into a path it was denied or another lease owns",
@@ -293,14 +298,23 @@ var denyRuleDocs = []types.RuleDoc{
 			"Allowed under a live lease: the row's check, with or without a charm and forwarded args; a `magus run` of a target that declares an output among the row's write paths, read from the workspace's own declarations (a `-generate` name or a charm stands in when the workspace cannot load); and every other verb, and every run that only reports (--plan, --dry-run, --graph). " +
 			"`magus affected` is never the check, since it takes its projects from the diff. Rebuilding magus's own binary (`go-build .`) is not on the list either: there is one binary per base, the main session builds it and places a copy in the worker's checkout. An unbound caller, a row that owns the gate and a row declaring no check are untouched. " +
 			"The same rule grades a spawn or continuation brief naming a live row (by `magus.lease=`, `job exec` or its JOB ID line): a brief telling that worker to run another target is refused under brief-command, quoting the line, before any worker exists."},
+	{Name: string(denyRuleWorkerBackgroundRun),
+		Catches: "a bound worker running a magus target in the background",
+		Why: "A worker that backgrounds its check ends its turn with the run pending and parks there: nothing reports the result to the session that spawned it, and the background tasks pile up. " +
+			"It fires when the wiring reports that the host runs the call in the background, for a `magus run` or `magus affected` by a worker under a live lease that does not own the gate. A run that only reports (--plan, --dry-run, --graph, --help) passes. " +
+			"A wiring that does not report how the host runs a call leaves it silent, and so does a pre-authorized next, since the host's choice is the call's and not the line's. " +
+			"The answer is a foreground call with a timeout that covers the run; check-timeout names one from the target's last real run, and a check longer than the host's foreground maximum is one to hand back for a narrower check."},
 	{Name: string(denyRuleWorktreeRemove),
 		Catches: "removing a worktree magus cannot prove holds nothing that would be lost",
 		Why: "A worktree may be where another session is working right now, and what it holds may exist nowhere else. " +
 			"`git worktree remove` passes only when every condition holds: the path is a linked worktree of this repository (per `git worktree list`), not the main one and not the checkout the session runs in; " +
 			"it has no modified, staged or untracked files (ignored files do not count); " +
-			"every commit its HEAD carries is on a remote-tracking ref or the base branch, or a job that finished (pass or fail) was taken in it and filed its result; " +
-			"no live job was taken in it; and it is not locked. " +
-			"The refusal names each failed condition and the command that inspects it, and `--force` changes nothing. " +
+			"every commit its HEAD carries is on a remote-tracking ref or the base branch, or every path those commits changed reads the same in the HEAD of the session's own checkout, so a cherry-pick under a new id counts, whatever state the job taken in it ended in; " +
+			"no live job was taken in it, and an exited one serves `magus job wait <id>`; " +
+			"and it is not locked, unless the session is the root and spawned that worktree's worker for a job that ended pass or fail, as its own spawn record shows. " +
+			"That lock is the one thing `-f -f` reaches past, and a plain removal of such a worktree is served the `git worktree remove -f -f <path>` line; a `magus checkout` lock never is. " +
+			"`git worktree unlock` is judged by the same conditions but the lock, since an unlocked worktree has nothing else stopping its removal. " +
+			"The refusal names each failed condition and the command that inspects it, and `--force` changes nothing else. " +
 			"Removal cannot be undone, so a fact that cannot be read refuses too: an unreadable job store, a line that does not parse, a path that is not a literal word, a removal inside a conditional or behind a wrapper. " +
 			"`git worktree prune` passes, since it only clears records of directories already gone, and `git worktree remove --help` and `-h`, alone on the line, print usage and pass. " +
 			"`jj workspace forget` stays refused: the jj driver cannot yet report a workspace's registration or which of its commits are published, so nothing proves a forget loses nothing."},
@@ -320,6 +334,13 @@ var advisoryDocs = []types.RuleDoc{
 			"It ADVISES rather than refuses: most such filters are a search the reader needs, and a refused reader then reads the whole file into context. " +
 			"It fires only on a file a filter READS: a host task capture (`tasks/<id>.output`) or a run log (`.magus/logs/<hex>.log`). A pattern shaped like one, such as `grep 'global\\.output' cmd/`, is not a capture."},
 	{Name: string(advisoryCheckpointState), Catches: "a command reaching for a tree's identity, which a revision alone cannot give"},
+	{Name: string(advisoryCheckTimeout),
+		Catches: "a bound worker's magus run whose timeout is shorter than the target's last real run allows for",
+		Why: "A call the host times out moves to the background, and a worker that then ends its turn parks until the run ends, with nobody told the result. " +
+			"The duration is the newest run of that target and project that really ran, from the newest invocations in the repository's session store; a replay or a run refused before it started does not count. " +
+			"It names a timeout of half again that duration, rounded up to a minute and capped at the host's foreground maximum. When the last run alone took longer than the maximum it says the check cannot finish in the foreground and to ask the orchestrator for a narrower one. " +
+			"It reads the host's foreground default and maximum from the wiring, which declares them, and the call's own timeout, and is silent when either limit is undeclared, when the target has no recorded run, and for anyone but a worker under a live lease that does not own the gate. " +
+			"Held to one firing per target per session."},
 	{Name: string(advisoryDependencyInstall), Catches: "a raw package install that the cached install target already runs"},
 	{Name: string(advisoryDependencyUpdate), Catches: "a raw dependency update outside a target's update charm"},
 	{Name: string(advisoryEchoOnSuccess), Catches: "an `&& echo` that restates what the exit status already says"},
@@ -409,6 +430,14 @@ var advisoryDocs = []types.RuleDoc{
 			"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
 			"It stands alone only when the built-in rules passed the call; on any other verdict the note is appended to that verdict. " +
 			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing."},
+	{Name: string(advisoryUnfinished),
+		Catches: "earlier guard checks that never finished, so no rule judged their calls",
+		Why: "A host stops waiting on a hook that has not answered within its hook timeout, with no trail row and no word to the agent. " +
+			"Each check leaves a mark when it starts, before the workspace's rules load, and removes it when it answers while the host still waits. " +
+			"The host stopped waiting when the hook process it started is gone, or past the hook timeout the host's harness declares in harness_limits; a host whose harness declares none is not taken to have given up on a slow check. " +
+			"The next check in the session reports and clears every mark whose process ended without removing it, and every one still running past the declared timeout. " +
+			"It stands alone only when the rules passed the call; on any other verdict the note is appended to that verdict. " +
+			"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing."},
 }
 
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
@@ -427,7 +456,7 @@ func Rules() []types.RuleDoc {
 		// Deny sorts before advise, which is neither alphabetical nor accidental: a
 		// reader opening this list is asking what stops them first.
 		if a.Decision != b.Decision {
-			if a.Decision == "deny" {
+			if a.Decision == string(builtin.Deny) {
 				return -1
 			}
 			return 1
@@ -459,7 +488,7 @@ var advisoryKinds = []hint.MarkerKind{
 	advisoryHookWiring, advisoryNewFile, advisoryLeaseTerminal, advisoryLeaseInvalid, advisoryLeasedPath,
 	advisoryGeneratedWrite, advisoryInstalledSkill, advisoryInstruction,
 	advisoryScopeDrift, advisoryNewSourceDir, advisorySplitRun, advisoryCaptureFilter,
-	advisoryGraphPipe, advisoryStdinClosed, advisorySharedCheckout,
+	advisoryGraphPipe, advisoryStdinClosed, advisorySharedCheckout, advisoryCheckTimeout,
 }
 
 // advisoryRuleNames are the advisories that name themselves WITHOUT enrolling in the

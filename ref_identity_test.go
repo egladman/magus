@@ -12,7 +12,8 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -25,13 +26,11 @@ import (
 // instead of taking as a parameter.
 func newIdentityWorkspace(t *testing.T, defaultCharms ...string) *Magus {
 	t.Helper()
-	const spellName = "zzz-identify-spell"
-	s := spells.NewSpell(spellName, spells.WithTargets("build"))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-identify-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -137,13 +136,11 @@ func TestIdentifyRef_InvalidRefShape(t *testing.T) {
 // (Inspect) workspace can mint no keys at all, so ComputeTargetKey's
 // types.ErrNoCache must propagate rather than silently resolving to "no matches".
 func TestIdentifyRef_NoCachePropagatesError(t *testing.T) {
-	const spellName = "zzz-identify-nocache-spell"
-	s := spells.NewSpell(spellName, spells.WithTargets("build"))
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-identify-nocache-spell", spells.WithTargets("build"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -170,16 +167,14 @@ func TestIdentifyRef_SkipsTargetThatFailsToKey(t *testing.T) {
 		t.Skip("running as root: permission bits do not block reads")
 	}
 
-	const spellName = "zzz-identify-skip-spell"
-	s := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-identify-skip-spell",
 		spells.WithTargets("build", "broken"),
 		spells.WithTargetSources(map[string][]string{"broken": {"secret.txt"}}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	secret := filepath.Join(root, "secret.txt")
 	require.NoError(t, os.WriteFile(secret, []byte("shh"), 0o644))
 	require.NoError(t, os.Chmod(secret, 0o000))
@@ -266,13 +261,13 @@ func TestRefMatchCommand(t *testing.T) {
 // IdentifyRef now reads directly instead of taking as a parameter.
 func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, filesPerProject int, defaultCharms []string) *Magus {
 	b.Helper()
-	root := b.TempDir()
-	require.NoError(b, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(b)
+	w.Magusfile("")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	for i := 0; i < nProjects; i++ {
 		projPath := fmt.Sprintf("svc%02d", i)
-		spellName := fmt.Sprintf("zzz-bench-identity-spell-%02d", i)
 
 		targets := make([]string, targetsPerProject)
 		for t := range targets {
@@ -280,18 +275,13 @@ func newIdentitySweepWorkspace(b *testing.B, nProjects, targetsPerProject, files
 		}
 		// Unprefixed glob: baseStep joins it with the project path, mirroring how a
 		// real spell declares sources relative to the project it binds to.
-		s := spells.NewSpell(spellName,
+		spellName := register.Spell(b, fmt.Sprintf("zzz-bench-identity-spell-%02d", i),
 			spells.WithTargets(targets...),
 			spells.WithSources("**/*.go"),
 		)
-		project.DefaultSpellRegistry().RegisterSpell(s)
-		b.Cleanup(func(name string) func() {
-			return func() { project.DefaultSpellRegistry().UnregisterSpell(name) }
-		}(spellName))
 
 		projDir := filepath.Join(root, projPath)
-		require.NoError(b, os.MkdirAll(projDir, 0o755))
-		require.NoError(b, os.WriteFile(filepath.Join(projDir, "magusfile.buzz"), []byte(""), 0o644))
+		w.Write(projPath+"/magusfile.buzz", "")
 		for f := 0; f < filesPerProject; f++ {
 			body := fmt.Sprintf("package p\n\nvar V%d = %d\n", f, f)
 			require.NoError(b, os.WriteFile(filepath.Join(projDir, fmt.Sprintf("f%04d.go", f)), []byte(body), 0o644))

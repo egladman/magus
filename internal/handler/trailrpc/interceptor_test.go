@@ -94,25 +94,25 @@ func TestKnownVerbs(t *testing.T) {
 	}
 }
 
-// fakeTokenService is a minimal TokenServiceHandler that always succeeds, so the interceptor's recording
-// is exercised over a real Connect handler+client roundtrip (AnyRequest cannot be faked: it has
+// alwaysOKTokenService is a minimal TokenServiceHandler that always succeeds, so the interceptor's recording
+// is exercised over a real Connect handler+client roundtrip (AnyRequest cannot be built by hand: it has
 // unexported methods, so a real call is the only way to drive Spec().Procedure).
-type fakeTokenService struct{}
+type alwaysOKTokenService struct{}
 
-func (fakeTokenService) ListTokens(context.Context, *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
+func (alwaysOKTokenService) ListTokens(context.Context, *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
 	return connect.NewResponse(&tokenv1.ListTokensResponse{}), nil
 }
-func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
+func (alwaysOKTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	return connect.NewResponse(&tokenv1.TokenInfo{}), nil
 }
-func (fakeTokenService) CreateToken(context.Context, *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
+func (alwaysOKTokenService) CreateToken(context.Context, *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
 	return connect.NewResponse(&tokenv1.CreateTokenResponse{}), nil
 }
 
 func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
-		fakeTokenService{},
+		alwaysOKTokenService{},
 		connect.WithInterceptors(Interceptor(dir, trail.KindTokenLifecycle)),
 	)
 	mux := http.NewServeMux()
@@ -160,7 +160,7 @@ var (
 
 // subjectService answers a revoke with a named token, so the WithSubject test can show the
 // subject lands in the trail.
-type subjectService struct{ fakeTokenService }
+type subjectService struct{ alwaysOKTokenService }
 
 func (subjectService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	return connect.NewResponse(&tokenv1.TokenInfo{Id: "3fa9c1d2", Name: "laptop"}), nil
@@ -215,7 +215,7 @@ func verifiedAs(credential types.Credential, next http.Handler) http.Handler {
 func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	dir := t.TempDir()
 	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
-		fakeTokenService{},
+		alwaysOKTokenService{},
 		connect.WithInterceptors(Interceptor(dir, trail.KindNotes, WithAuditReads())),
 	)
 	mux := http.NewServeMux()
@@ -258,7 +258,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 
 // erroringTokenService fails RevokeToken, so the interceptor's error-outcome branch is exercised: a failed
 // mutation is still recorded, with OutcomeError and the error text.
-type erroringTokenService struct{ fakeTokenService }
+type erroringTokenService struct{ alwaysOKTokenService }
 
 func (erroringTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	return nil, connect.NewError(connect.CodeNotFound, errors.New("no token matches"))

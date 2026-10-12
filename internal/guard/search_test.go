@@ -338,12 +338,18 @@ func TestSymbolSearchStaysSilentOutsideTheWorkspace(t *testing.T) {
 // through a context flag, and a translated heading search.
 func staleGraphTree(t *testing.T) (root string, deps Dependencies) {
 	t.Helper()
-	root = writeTree(t, map[string]string{
-		"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n",
-		"docs/guide.md":           "# Guide\n\n## Setup\n",
-		"notes.txt":               "one\n",
-	})
-	return root, strict(Dependencies{
+	root = writeTree(t, staleGraphFiles)
+	return root, staleGraphDeps(root)
+}
+
+var staleGraphFiles = map[string]string{
+	"internal/api/handler.go": "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n",
+	"docs/guide.md":           "# Guide\n\n## Setup\n",
+	"notes.txt":               "one\n",
+}
+
+func staleGraphDeps(root string) Dependencies {
+	return strict(Dependencies{
 		SymbolDefined: func(name string) (bool, bool) { return name == "HandleRequest", true },
 		GraphIDs: graphOf(map[string][]string{
 			types.KindDocSection: {"docsection:docs/guide.md#guide", "docsection:docs/guide.md#setup"},
@@ -372,31 +378,24 @@ var staleGraphCommands = []struct {
 // real tree to an index describing another one, so each advises that the graph is stale
 // and names the rebuild for after the rebase instead.
 func TestGraphBackedDeniesAdviseWhileARebaseLeavesTheIndexStale(t *testing.T) {
-	root, deps := staleGraphTree(t)
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
-		cmd.Dir = root
-		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1", "GIT_EDITOR=true")
-		out, err := cmd.CombinedOutput()
-		if args[0] != "rebase" {
-			require.NoError(t, err, "git %v: %s", args, out)
-		}
-	}
-	git("init", "-q", "-b", "main")
-	git("add", "-A")
-	git("commit", "-q", "-m", "one")
+	r := testkit.NewRepo(t, staleGraphFiles)
+	root, deps := r.Root(), staleGraphDeps(r.Root())
 	for _, side := range []string{"topic", "main"} {
 		if side == "topic" {
-			git("checkout", "-q", "-b", "topic")
+			r.Git("checkout", "-q", "-b", "topic")
 		} else {
-			git("checkout", "-q", "main")
+			r.Git("checkout", "-q", "main")
 		}
-		require.NoError(t, os.WriteFile(filepath.Join(root, "notes.txt"), []byte(side+"\n"), 0o644))
-		git("commit", "-q", "-am", side)
+		r.Commit(side, map[string]string{"notes.txt": side + "\n"})
 	}
-	git("checkout", "-q", "topic")
-	git("rebase", "main")
+	r.Git("checkout", "-q", "topic")
+
+	// Both sides changed notes.txt, so the rebase stops on the conflict and leaves
+	// itself in progress; Repo.Git would fail the test on that exit code.
+	rebase := exec.Command("git", "rebase", "main")
+	rebase.Dir = root
+	rebase.Env = append(os.Environ(), "GIT_EDITOR=true")
+	_ = rebase.Run()
 
 	for _, tt := range staleGraphCommands {
 		v := Evaluate(strict(deps), tt.command)

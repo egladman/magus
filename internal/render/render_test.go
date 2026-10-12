@@ -123,26 +123,26 @@ func TestWriteGraphDOT_Determinism(t *testing.T) {
 	assert.Equal(t, b1.String(), b2.String(), "WriteGraphDOT is not deterministic")
 }
 
-// fakeRepo is a minimal in-memory DepGraphRepository. WriteTree only reaches for
+// adjacencyRepo is a minimal in-memory DepGraphRepository. WriteTree only reaches for
 // Successors/Predecessors/Nodes (plus Graph.Project, which comes from the project
-// map handed to NewGraph), so the remaining interface methods are stubs that a
+// map handed to NewGraph), so the remaining interface methods are no-ops that a
 // tree render never calls.
-type fakeRepo struct {
+type adjacencyRepo struct {
 	nodes []string
 	succ  map[string][]string
 	pred  map[string][]string
 }
 
-func (r *fakeRepo) Successors(path string) []string   { return r.succ[path] }
-func (r *fakeRepo) Predecessors(path string) []string { return r.pred[path] }
-func (r *fakeRepo) Nodes() []string                   { return r.nodes }
+func (r *adjacencyRepo) Successors(path string) []string   { return r.succ[path] }
+func (r *adjacencyRepo) Predecessors(path string) []string { return r.pred[path] }
+func (r *adjacencyRepo) Nodes() []string                   { return r.nodes }
 
-func (r *fakeRepo) TopoSort() []string                                { return nil }
-func (r *fakeRepo) ReverseClosure(seeds []string) []string            { return nil }
-func (r *fakeRepo) NearCycles(context.Context, int) []types.NearCycle { return nil }
-func (r *fakeRepo) BlastRadius() map[string]int                       { return nil }
-func (r *fakeRepo) NCCD() float64                                     { return 0 }
-func (r *fakeRepo) PathsFromSeeds([]string, string) []types.AffectedPath {
+func (r *adjacencyRepo) TopoSort() []string                                { return nil }
+func (r *adjacencyRepo) ReverseClosure(seeds []string) []string            { return nil }
+func (r *adjacencyRepo) NearCycles(context.Context, int) []types.NearCycle { return nil }
+func (r *adjacencyRepo) BlastRadius() map[string]int                       { return nil }
+func (r *adjacencyRepo) NCCD() float64                                     { return 0 }
+func (r *adjacencyRepo) PathsFromSeeds([]string, string) []types.AffectedPath {
 	return nil
 }
 
@@ -163,7 +163,7 @@ func buildGraph(nodes []string, succ map[string][]string, spellOf map[string]str
 		}
 		projects[n] = p
 	}
-	return types.NewGraph(&fakeRepo{nodes: nodes, succ: succ, pred: pred}, projects)
+	return types.NewGraph(&adjacencyRepo{nodes: nodes, succ: succ, pred: pred}, projects)
 }
 
 // linearGraph: api -> db -> util (downstream = "depends on").

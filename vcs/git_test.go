@@ -21,8 +21,11 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,18 +74,20 @@ func TestExtractTarRejectsEscape(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "escaping entry must not be written")
 }
 
-// gitEnv is the environment every git subprocess in this file runs under. Beyond fixed
-// identities for reproducible commits, it neuters the developer's own git config: a global
-// core.hooksPath (husky and pre-commit both install one) would otherwise run their hooks
-// inside these fixtures, and a hardened protocol.file.allow would break the file:// clones
-// outright. GIT_TERMINAL_PROMPT=0 keeps a misconfigured fixture from hanging on a prompt.
+// gitEnv is the environment the git subprocesses of this file's non-Repo fixtures (clones,
+// bare and nested repositories, the other backends' parity tables) run under. The
+// developer's own git config stays out through testkit.Main, which moves HOME. Beyond fixed
+// identities for reproducible commits, GIT_TERMINAL_PROMPT=0 keeps a misconfigured fixture
+// from hanging on a prompt.
 func gitEnv() []string {
 	return append(os.Environ(),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_SYSTEM="+os.DevNull, "GIT_TERMINAL_PROMPT=0")
+		"GIT_TERMINAL_PROMPT=0")
 }
 
-// gitRun runs one git command in dir and fails the test if it does not succeed.
+// gitRun runs one git command in dir and fails the test if it does not succeed. Fixtures
+// that start as a testkit.Repo run their later commands through it too, since a Repo
+// cannot be made over a directory something else created.
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
@@ -116,7 +121,9 @@ func gitConfigureFixture(t *testing.T, dir string) {
 	}
 }
 
-// gitInitRepo makes a throwaway repo at dir with files committed. Skips if git is absent.
+// gitInitRepo makes a throwaway repo at dir with files committed, for the parity tables
+// whose backends all init into a directory the table made. Everything else starts from
+// testkit.NewRepo. Skips if git is absent.
 func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -137,12 +144,11 @@ func gitInitRepo(t *testing.T, dir string, files map[string]string) {
 // TestExportRevision exercises the real git-archive -> tar -> temp-tree path, including
 // the subdir re-rooting (a workspace root nested below the git root).
 func TestExportRevision(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{
+	repo := testkit.NewRepo(t, map[string]string{
 		"magus.yaml":       "version: 1\n",
 		"pkg/service.buzz": "target build {}\n",
 		"sub/proj/app.txt": "nested\n",
-	})
+	}).Root()
 	ctx := context.Background()
 
 	// From the git root: the whole tree is exported, re-rooted at repo.
@@ -166,8 +172,7 @@ func TestExportRevision(t *testing.T) {
 
 // TestExportRevisionBadRev reports a clear error (not a panic or hang) for an unknown rev.
 func TestExportRevisionBadRev(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	err := gitVCS{}.ExportRevision(context.Background(), repo, "no-such-rev", t.TempDir())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no-such-rev")
@@ -211,8 +216,7 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 // is what got written: no shell logic beyond the command, pre-push's own arguments and
 // the `|| true`.
 func TestInstallDriftHookInstallsBoth(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 
 	installed, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "magus job run check-drift")
 	require.NoError(t, err)
@@ -232,8 +236,7 @@ func TestInstallDriftHookInstallsBoth(t *testing.T) {
 // TestInstallDriftHookRewritesAnOlderSection pins that a drift section an older magus wrote,
 // which named no hook, is rewritten in place on the next install rather than left as it is.
 func TestInstallDriftHookRewritesAnOlderSection(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	prePush := filepath.Join(dir, ".git", "hooks", "pre-push")
 	_, err := writeManagedSection(prePush, driftMarkers, "magus job run check-drift >/dev/null 2>&1 || true\n", hookFile, stamp.Judge{})
 	require.NoError(t, err)
@@ -249,8 +252,7 @@ func TestInstallDriftHookRewritesAnOlderSection(t *testing.T) {
 // git does, with the remote and url as arguments and the pushed refs on stdin, and pins that
 // the command receives all three untouched.
 func TestPrePushDriftHookHandsOverItsArgumentsAndStdin(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	got := filepath.Join(t.TempDir(), "got")
 	record := filepath.Join(t.TempDir(), "record")
 	require.NoError(t, os.WriteFile(record, []byte("#!/bin/sh\n{ echo \"$@\"; cat; } >"+got+"\n"), 0o755))
@@ -273,8 +275,7 @@ func TestPrePushDriftHookHandsOverItsArgumentsAndStdin(t *testing.T) {
 // hand-written body, share one hook file without overwriting each other. Today's hook
 // sets do not overlap, so the shared file is staged by hand.
 func TestInstallDriftHookCoexistsWithRefreshHook(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 
 	_, err := gitVCS{}.InstallRefreshHook(t.Context(), dir, "magus job run sync-graph")
 	require.NoError(t, err)
@@ -312,8 +313,7 @@ func TestInstallGitHooksOutsideARepositoryInstallNothing(t *testing.T) {
 
 // A cancelled install is an error, never the "not a repository, nothing to do" answer.
 func TestInstallGitHooksReportsCancellation(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -325,10 +325,9 @@ func TestInstallGitHooksReportsCancellation(t *testing.T) {
 // Every worktree of a repository shares one lock, in the common dir, so no lock file
 // appears in a worktree where it would show as untracked.
 func TestGitRepoPathsOfLinkedWorktree(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, dir, "worktree", "add", "-q", linked)
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	dir := r.Root()
+	linked := r.AddWorktree("linked").Root()
 
 	paths, ok, err := resolveGitRepoPaths(t.Context(), linked)
 	require.NoError(t, err)
@@ -386,8 +385,7 @@ func TestCommitPushed(t *testing.T) {
 	remote := t.TempDir()
 	gitRun(t, remote, "init", "-q", "--bare")
 
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	gitRun(t, dir, "remote", "add", "origin", remote)
 	gitRun(t, dir, "push", "-q", "-u", "origin", "HEAD")
 
@@ -406,8 +404,7 @@ func TestCommitPushed(t *testing.T) {
 	assert.True(t, ok)
 	assert.False(t, pushed, "the local-only commit must report not pushed")
 
-	noUpstream := t.TempDir()
-	gitInitRepo(t, noUpstream, map[string]string{"a.txt": "a\n"})
+	noUpstream := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	sha := gitRun2(t, noUpstream, "rev-parse", "HEAD")
 	_, ok, err = gitVCS{}.CommitPushed(t.Context(), noUpstream, sha)
 	require.NoError(t, err)
@@ -420,10 +417,9 @@ func TestCommitPushed(t *testing.T) {
 // notice offer --amend on a commit the remote already carries.
 func TestCommitPushedRefusesToAnswerFromAnAbsentHistory(t *testing.T) {
 	remote := t.TempDir()
-	gitRun(t, remote, "init", "-q", "--bare")
+	gitRun(t, remote, "init", "-q", "--bare", "-b", "main")
 
-	origin := t.TempDir()
-	gitInitRepo(t, origin, map[string]string{"a.txt": "a\n"})
+	origin := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	firstSHA := gitRun2(t, origin, "rev-parse", "HEAD")
 	gitRun(t, origin, "commit", "-q", "--allow-empty", "-m", "second")
 	gitRun(t, origin, "remote", "add", "origin", remote)
@@ -453,8 +449,7 @@ func gitRun2(t *testing.T, dir string, args ...string) string {
 // that both still exit 0. This is the whole safety contract types.DriftHookInstaller
 // promises: whatever the command does, the hook itself never fails a commit or a push.
 func TestDriftHookBodyNeverBlocksAndNeedsNoServer(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 
 	_, err := gitVCS{}.InstallDriftHook(t.Context(), dir, "definitely-not-a-real-command-xyz")
 	require.NoError(t, err)
@@ -576,30 +571,24 @@ func TestParseChangesByCommitEmpty(t *testing.T) {
 // --unshallow`. Keep `trunk` well above the ladder's first rung.
 func gitDivergedOrigin(t *testing.T, trunk int) (string, int) {
 	t.Helper()
-	origin := t.TempDir()
-	gitInitRepo(t, origin, map[string]string{"magus.yaml": "version: 1\n"})
-	gitRun(t, origin, "branch", "-M", "main")
-	commit := func(name string) {
-		require.NoError(t, os.WriteFile(filepath.Join(origin, name), []byte(name), 0o644))
-		gitRun(t, origin, "add", "-A")
-		gitRun(t, origin, "commit", "-q", "-m", name)
-	}
+	origin := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"})
+	commit := func(name string) { origin.Commit(name, map[string]string{name: name}) }
 	for i := range trunk {
 		commit(fmt.Sprintf("trunk-%d.txt", i))
 	}
 
-	gitRun(t, origin, "checkout", "-q", "-b", "feat")
+	origin.Git("checkout", "-q", "-b", "feat")
 	commit("app.txt")
 
 	// main moves on past the branch point, so the merge base is neither branch's tip and
 	// the diff has post-branch-point commits it must exclude.
-	gitRun(t, origin, "checkout", "-q", "main")
+	origin.Git("checkout", "-q", "main")
 	const pastBranchPoint = 3
 	for i := range pastBranchPoint {
 		commit(fmt.Sprintf("main-%d.txt", i))
 	}
-	// gitInitRepo's own commit, the trunk, then the three above. "feat" is not on main.
-	return origin, 1 + trunk + pastBranchPoint
+	// The fixture's own commit, the trunk, then the three above. "feat" is not on main.
+	return origin.Root(), 1 + trunk + pastBranchPoint
 }
 
 // gitCloneShallow clones branch "feat" from origin at depth, single-branch: the shape a CI
@@ -727,11 +716,10 @@ func TestRecoverMergeBaseUnusableBase(t *testing.T) {
 // build product. Neither Dirty nor DirtyFiles can answer it, because an ignored file and a
 // clean tracked file both report nothing dirty.
 func TestTrackedFiles(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{
+	repo := testkit.NewRepo(t, map[string]string{
 		"tracked.html": "<small>built</small>\n",
 		".gitignore":   "gen/\n",
-	})
+	}).Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(repo, "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "gen", "page.html"), []byte("x"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "untracked.html"), []byte("x"), 0o644))
@@ -803,30 +791,12 @@ func TestGitEnvironStripsRedirectsAndKeepsTransport(t *testing.T) {
 // merge of `other` conflicts. Returns the repo dir.
 func mergeRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	if out, err := exec.Command("git", "-C", dir, "init", "-b", "main").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
-	write := func(body string) {
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "gen.txt"), []byte(body), 0o644))
-	}
-	write("base\n")
-	git("add", "gen.txt")
-	git("commit", "-m", "base")
-	git("checkout", "-b", "other")
-	write("theirs\n")
-	git("commit", "-am", "theirs")
-	git("checkout", "main")
-	write("ours\n")
-	git("commit", "-am", "ours")
-	return dir
+	r := testkit.NewRepo(t, map[string]string{"gen.txt": "base\n"})
+	r.Git("checkout", "-b", "other")
+	r.Commit("theirs", map[string]string{"gen.txt": "theirs\n"})
+	r.Git("checkout", "main")
+	r.Commit("ours", map[string]string{"gen.txt": "ours\n"})
+	return r.Root()
 }
 
 // TestStartMergeReportsConflictsRatherThanFailing pins the contract vcs resolve --against
@@ -914,8 +884,7 @@ func TestGitStatusPaths(t *testing.T) {
 // asking "is this release tagged at HEAD?" got no match for exactly the tags a release
 // process creates.
 func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, repo, "tag", "-a", "v1.0.0", "-m", "annotated")
 	gitRun(t, repo, "tag", "v1.0.1")
 
@@ -935,8 +904,7 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 // abbreviates refs/tags/v1.0.0 to "tags/v1.0.0" when a branch shares the name and so hides
 // the tag from every caller asking whether HEAD carries a release.
 func TestTagsNamesATagSharedWithABranch(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, repo, "tag", "v1.0.0")
 	gitRun(t, repo, "branch", "v1.0.0")
 
@@ -951,8 +919,7 @@ func TestTagsNamesATagSharedWithABranch(t *testing.T) {
 // cut today is a loose file while the repository's history is packed, and pins that a
 // wildcard still stops at "/".
 func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, repo, "tag", "v1.0.0")
 	gitRun(t, repo, "tag", "libs/diagnostics/v0.1.0")
 	gitRun(t, repo, "pack-refs", "--all")
@@ -985,8 +952,7 @@ func TestTagsSeesLooseAndPackedRefs(t *testing.T) {
 // Both probes are covered: the tracked path goes through `git diff`, the untracked one
 // through `git ls-files --others`, and the flag has to be on each of them.
 func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"})
+	repo := testkit.NewRepo(t, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"}).Root()
 	base, err := gitOutput(t.Context(), repo, gitOpts{}, "rev-parse", "HEAD")
 	require.NoError(t, err)
 
@@ -1024,9 +990,7 @@ func TestUncoloredUsesEachBackendsOwnSwitch(t *testing.T) {
 // them is also being edited elsewhere. The remote-tracking refs are built by hand rather than by
 // cloning: what matters is that the ref exists under refs/remotes, not how it got there.
 func TestBranchChangesReportsOtherRemoteBranches(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
-	gitRun(t, repo, "branch", "-M", "main")
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}).Root()
 
 	// Two colleagues' branches, each touching one file, recorded where a fetch would put them.
 	gitRun(t, repo, "checkout", "-q", "-b", "theirs")
@@ -1060,9 +1024,7 @@ func TestBranchChangesReportsOtherRemoteBranches(t *testing.T) {
 // The cap belongs to the backend so git can apply it to the ref listing and no diff is ever run
 // for a branch that was going to be discarded.
 func TestBranchChangesHonorsTheLimit(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
-	gitRun(t, repo, "branch", "-M", "main")
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"}).Root()
 	for _, name := range []string{"one", "two", "three"} {
 		gitRun(t, repo, "checkout", "-q", "-b", name, "main")
 		require.NoError(t, os.WriteFile(filepath.Join(repo, name+".go"), []byte("package "+name+"\n"), 0o644))
@@ -1086,9 +1048,7 @@ func TestBranchChangesHonorsTheLimit(t *testing.T) {
 // somebody else editing the exact files the reader had open: the worst possible false alarm from
 // a feature whose whole job is warning about collisions.
 func TestBranchChangesExcludesTheReadersBranchOnAnyRemote(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
-	gitRun(t, repo, "branch", "-M", "main")
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"}).Root()
 
 	gitRun(t, repo, "checkout", "-q", "-b", "mine", "main")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // mine\n"), 0o644))
@@ -1109,9 +1069,7 @@ func TestBranchChangesExcludesTheReadersBranchOnAnyRemote(t *testing.T) {
 // on, and it is the normal shape of agent fan-out: worktrees of one repository, on local branches
 // with no remote-tracking copy. An empty answer here is indistinguishable from "nothing competes".
 func TestBranchChangesSeesLocalBranchesNobodyHasPushed(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
-	gitRun(t, repo, "branch", "-M", "main")
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"}).Root()
 
 	// Never pushed, so no refs/remotes/ entry exists for either.
 	gitRun(t, repo, "checkout", "-q", "-b", "agent-one")
@@ -1141,9 +1099,7 @@ func TestBranchChangesSeesLocalBranchesNobodyHasPushed(t *testing.T) {
 // tell the reader two people are editing a file when one is, and the local side wins because it is
 // the current answer where the tracking copy is only as new as the last fetch.
 func TestBranchChangesReportsABranchAndItsTrackingCopyOnce(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.go": "package a\n"})
-	gitRun(t, repo, "branch", "-M", "main")
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n"}).Root()
 
 	gitRun(t, repo, "checkout", "-q", "-b", "theirs")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.go"), []byte("package a // theirs\n"), 0o644))
@@ -1181,8 +1137,7 @@ func gitCapture(t *testing.T, dir string, env []string, args ...string) string {
 // refs/magus/preserved is a namespace, not a signature: anyone can update-ref into it, and
 // this pruner runs unasked inside every Preserve.
 func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 
 	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
 	foreign := gitCapture(t, dir, nil, "commit-tree", tree, "-p", "HEAD", "-m", "a snapshot someone else took")
@@ -1211,8 +1166,7 @@ func TestGitPrunePreservedSparesARefMagusDidNotWrite(t *testing.T) {
 // the constant they move with it, and 29 either side of thirty seconds is still one on each
 // side. Measured by setting the constant to thirty seconds.
 func TestGitPreserveRetentionBoundaryIsThirtyDays(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
 
 	// Aged through the committer date, which is what PrunePreserved keys on.
@@ -1267,8 +1221,7 @@ exit $status
 // points at when the delete lands. In between, a capture magus would never have chosen is
 // deletable, and it is user work with no other copy.
 func TestGitPrunePreservedRefusesARefThatMoved(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	tree := gitCapture(t, dir, nil, "rev-parse", "HEAD^{tree}")
 
 	when := time.Now().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
@@ -1289,8 +1242,7 @@ func TestGitPrunePreservedRefusesARefThatMoved(t *testing.T) {
 // git creates the scratch index, so nothing in the working tree records that it existed
 // and only Preserve's own removal bounds it.
 func TestGitPreserveLeavesNoTempIndexBehind(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
 
@@ -1314,12 +1266,10 @@ func TestGitPreserveLeavesNoTempIndexBehind(t *testing.T) {
 // build a fully qualified one, so the same test passes on a laptop and fails on a runner,
 // which is the split being fixed rather than a test of it.
 func TestGitPreserveNeedsNoConfiguredIdentity(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
 	require.NoError(t, os.WriteFile(cfg, []byte("[user]\n\tuseConfigOnly = true\n"), 0o644))
 	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	// Unset, not blanked: git rejects an empty ident with a different error, which would
 	// pass this test for a reason it is not about.
 	for _, name := range []string{"GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"} {
@@ -1349,12 +1299,9 @@ func TestGitPreserveNeedsNoConfiguredIdentity(t *testing.T) {
 // the target explicit rather than merely unset, and the config assertion below is what proves
 // the write landed here.
 func TestEnsureMergeDriverIdempotent(t *testing.T) {
-	repo := t.TempDir()
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
 	t.Setenv("GIT_WORK_TREE", repo)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
 	outputGlobs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 	attrsPath := filepath.Join(repo, ".gitattributes")
 
@@ -1398,11 +1345,7 @@ func TestEnsureMergeDriverIdempotent(t *testing.T) {
 // every shared write and changes nothing. Its commit date is the LATER one, so the refusal
 // comes from ancestry, not from the fallback.
 func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
-	repo, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	oldCommit := gitRun2(t, repo, "rev-parse", "HEAD")
 	require.NoError(t, os.WriteFile(filepath.Join(repo, "a.txt"), []byte("a\n"), 0o644))
 	gitRun(t, repo, "add", "a.txt")
@@ -1417,7 +1360,7 @@ func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
 	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 
 	require.NoError(t, gitVCS{}.InstallMergeDriver(newer, repo, globs))
-	_, err = gitVCS{}.InstallRegenHook(newer, repo, "magus vcs resolve --hook")
+	_, err := gitVCS{}.InstallRegenHook(newer, repo, "magus vcs resolve --hook")
 	require.NoError(t, err)
 	assert.Equal(t, stamp.Self(newer).String(), gitConfigValue(t, repo, gitWriterKey))
 
@@ -1458,9 +1401,7 @@ func TestOlderMagusCannotDowngradeSharedState(t *testing.T) {
 // source a reviewer must see, and a slashless one is anchored at the root as magus.yaml's
 // globs are. Installing the same globs again changes nothing.
 func TestEnsureMergeDriverRoutesAutoResolveGlobs(t *testing.T) {
-	repo := t.TempDir()
-	isolateGitConfig(t)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}, AutoResolve: []string{"CHANGELOG.md", "docs/**/*.md"}}
 
 	changed, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, globs)
@@ -1487,9 +1428,7 @@ func TestEnsureMergeDriverRoutesAutoResolveGlobs(t *testing.T) {
 // anchored, since git matches one at every depth and magus's globs are rooted. An
 // auto-resolve glob, written last, can still opt a carved file back in.
 func TestGitAttrsCarveOutsReturnAHandFileToTheDefaultMerge(t *testing.T) {
-	repo := t.TempDir()
-	isolateGitConfig(t)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	globs := types.MergeDriverGlobs{
 		Outputs:     []string{"MAGUS.md", "gen/*.go"},
 		Carved:      []string{"gen/runtime.go", "gen/opted.go"},
@@ -1536,10 +1475,7 @@ const wantDiffDriverLines = "*.go diff=golang\n" +
 // merge driver and gains the diff driver. check-attr is git's own answer, so this holds
 // whatever order the section writes them in.
 func TestGitAttrsGeneratedGoKeepsMergeDriverAndGainsDiffDriver(t *testing.T) {
-	repo := t.TempDir()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{Outputs: []string{"gen/*.go"}}))
 
 	out, err := gitOutput(t.Context(), repo, gitOpts{}, "check-attr", "merge", "diff", "linguist-generated", "--",
@@ -1568,9 +1504,6 @@ func TestGitAttrsGeneratedGoKeepsMergeDriverAndGainsDiffDriver(t *testing.T) {
 // render method and the `final another` case are the ones that fail unless the custom
 // patterns are in force. The built-in drivers get one case each to prove the routing.
 func TestDiffDriverHeadersNameTheDeclaration(t *testing.T) {
-	repo := t.TempDir()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	files := map[string]string{
 		"a.buzz": `import "std";
 
@@ -1655,7 +1588,7 @@ export type Pair<T> = {
 Run it.
 `,
 	}
-	gitInitRepo(t, repo, files)
+	repo := testkit.NewRepo(t, files).Root()
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, types.MergeDriverGlobs{}))
 
 	for _, tc := range []struct {
@@ -1702,10 +1635,7 @@ Run it.
 // A clone wired by an older magus has the merge driver and none of the diff drivers. That is
 // incomplete wiring, reported the way a missing merge driver is and repaired by Ensure.
 func TestCheckMergeDriverReportsMissingDiffDrivers(t *testing.T) {
-	repo := t.TempDir()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	globs := types.MergeDriverGlobs{Outputs: []string{"gen/**"}}
 	require.NoError(t, gitVCS{}.InstallMergeDriver(t.Context(), repo, globs))
 
@@ -1772,17 +1702,16 @@ func TestMissingDiffDriversOutsideARepository(t *testing.T) {
 // reproducible off Windows. The final describe is the assertion that matters, because it is
 // the exact call version() makes.
 func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
-	repo := t.TempDir()
+	r := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := r.Root()
 	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
 	t.Setenv("GIT_WORK_TREE", repo)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	outputGlobs := types.MergeDriverGlobs{Outputs: []string{"gen/**", "docs/gen/**"}}
 
 	// Commit the section as an LF blob, the way every non-Windows contributor does.
 	_, wanted, err := gitVCS{}.gitAttrsState(t.Context(), repo, outputGlobs)
 	require.NoError(t, err)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n", ".gitattributes": wanted})
+	r.Commit("attributes", map[string]string{".gitattributes": wanted})
 	gitRun(t, repo, "config", "core.autocrlf", "true")
 	gitRun(t, repo, "tag", "v0.4.1")
 
@@ -1819,16 +1748,12 @@ func TestEnsureMergeDriverLeavesACRLFWorktreeClean(t *testing.T) {
 // command invoked from a pre-commit hook registered the merge driver in whatever repository
 // was being committed to, succeeding quietly, because nothing ever read the value back.
 func TestEnsureMergeDriverIgnoresAmbientGitDir(t *testing.T) {
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
-	bystander := t.TempDir()
-	gitInitRepo(t, bystander, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
+	bystander := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 
 	// Point the ambient environment at the bystander, exactly as a git hook would.
 	t.Setenv("GIT_DIR", filepath.Join(bystander, ".git"))
 	t.Setenv("GIT_WORK_TREE", bystander)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 
 	_, err := gitVCS{}.EnsureMergeDriver(t.Context(), repo, types.MergeDriverGlobs{Outputs: []string{"gen/**"}})
 	require.NoError(t, err)
@@ -1900,10 +1825,7 @@ func TestDriverIsPreferredHere(t *testing.T) {
 // empty value. Both are unusable, since every predicate downstream reads an executable
 // path out of the command.
 func TestRegisteredDriverReportsAbsence(t *testing.T) {
-	repo := t.TempDir()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	gitInitRepo(t, repo, map[string]string{"magus.yaml": "version: 1\n"})
+	repo := testkit.NewRepo(t, map[string]string{"magus.yaml": "version: 1\n"}).Root()
 	setDriver := func(value string) {
 		t.Helper()
 		_, err := gitOutput(t.Context(), repo, gitOpts{}, "config", "merge.magus.driver", value)
@@ -1931,42 +1853,24 @@ func TestRegisteredDriverReportsAbsence(t *testing.T) {
 // a VCS invokes a merge driver only for the first.
 func conflictRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "-C", dir, "init", "-b", "main").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	write := func(name, body string) {
-		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
-	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
+	r := testkit.NewRepo(t, map[string]string{
+		"shared.txt": "base\n",
+		"gone.txt":   "base\n",
+		"stable.txt": "base\n",
+	})
+	dir := r.Root()
 
-	write("shared.txt", "base\n")
-	write("gone.txt", "base\n")
-	write("stable.txt", "base\n")
-	git("add", ".")
-	git("commit", "-m", "base")
-
-	git("checkout", "-b", "side")
-	write("shared.txt", "side\n")
+	r.Git("checkout", "-b", "side")
 	require.NoError(t, os.Remove(filepath.Join(dir, "gone.txt")))
-	git("add", "-A")
-	git("commit", "-m", "side")
+	r.Commit("side", map[string]string{"shared.txt": "side\n"})
 
-	git("checkout", "main")
-	write("shared.txt", "main\n")
-	write("gone.txt", "main\n")
-	git("add", "-A")
-	git("commit", "-m", "main")
+	r.Git("checkout", "main")
+	r.Commit("main", map[string]string{"shared.txt": "main\n", "gone.txt": "main\n"})
 
 	// Expected to exit non-zero: that IS the conflict.
-	_ = exec.Command("git", "-C", dir, "merge", "side").Run()
+	merge := exec.Command("git", "-C", dir, "merge", "side")
+	merge.Env = gitEnv()
+	_ = merge.Run()
 	return dir
 }
 
@@ -2066,10 +1970,7 @@ func TestParseConflicts(t *testing.T) {
 }
 
 func TestGitConflictsNoMergeInProgress(t *testing.T) {
-	dir := t.TempDir()
-	if out, err := exec.Command("git", "-C", dir, "init").CombinedOutput(); err != nil {
-		t.Skipf("git init failed: %v\n%s", err, out)
-	}
+	dir := testkit.NewRepo(t, nil).Root()
 	got, err := gitVCS{}.Conflicts(context.Background(), dir)
 	require.NoError(t, err, "no operation in progress is not an error")
 	assert.Empty(t, got)
@@ -2332,14 +2233,6 @@ func TestGitCheckoutState(t *testing.T) {
 	assert.Equal(t, types.CheckoutState{RemoteBranches: []string{"origin/main"}}, got)
 }
 
-// isolateGitConfig keeps the developer's own git config out of the production calls a
-// test makes, since gitExec (rightly) inherits it.
-func isolateGitConfig(t *testing.T) {
-	t.Helper()
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-}
-
 func refsOf(t *testing.T, dir string) string {
 	t.Helper()
 	return gitTestOutput(t, dir, "for-each-ref", "--format=%(refname) %(objectname)")
@@ -2348,11 +2241,8 @@ func refsOf(t *testing.T, dir string) string {
 // The affected set: a rename's old path belongs to the project it left, so ChangedFiles and
 // BranchChanges must report it under diff.renames (git's default) too.
 func TestChangedFilesAndBranchChangesReportBothSidesOfARename(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a/moved.txt": "content that survives the move\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a/moved.txt": "content that survives the move\n"}).Root()
 	gitRun(t, dir, "config", "diff.renames", "true")
-	gitRun(t, dir, "branch", "-M", "main")
 	gitRun(t, dir, "checkout", "-q", "-b", "move")
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "b"), 0o755))
 	gitRun(t, dir, "mv", "a/moved.txt", "b/moved.txt")
@@ -2373,10 +2263,7 @@ func TestChangedFilesAndBranchChangesReportBothSidesOfARename(t *testing.T) {
 // deletes gone.txt; "theirs" edits the same line and edits gone.txt; "clean" only adds.
 func mergeFixture(t *testing.T) (dir string, revs map[string]string) {
 	t.Helper()
-	isolateGitConfig(t)
-	dir = t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"f.txt": "a\nb\nc\n", "gone.txt": "g\n"})
-	gitRun(t, dir, "branch", "-M", "main")
+	dir = testkit.NewRepo(t, map[string]string{"f.txt": "a\nb\nc\n", "gone.txt": "g\n"}).Root()
 	revs = map[string]string{"base": gitTestOutput(t, dir, "rev-parse", "HEAD")}
 	branch := func(name string, edit func()) {
 		gitRun(t, dir, "checkout", "-q", "-b", name, revs["base"])
@@ -2413,11 +2300,9 @@ func TestStartMergeRefusesWhenAMergeIsAlreadyUnderway(t *testing.T) {
 // B13: an exported GIT_DIR, which git exports into every hook, must not send magus's own
 // git calls into another repository, the fetch recovery included.
 func TestGitCallsIgnoreAHostileGitDir(t *testing.T) {
-	isolateGitConfig(t)
 	origin, _ := gitDivergedOrigin(t, 40)
 	clone := gitCloneShallow(t, origin, 1)
-	elsewhere := t.TempDir()
-	gitInitRepo(t, elsewhere, map[string]string{"x.txt": "x\n"})
+	elsewhere := testkit.NewRepo(t, map[string]string{"x.txt": "x\n"}).Root()
 	before := refsOf(t, elsewhere)
 
 	t.Run("hostile environment", func(t *testing.T) {
@@ -2483,9 +2368,7 @@ func TestCheckRemoteNameAndRev(t *testing.T) {
 // `bisect run` runs the user's test command, which inherits whatever git exports. magus's
 // pins must not reach it: a test that runs git itself would see magus's config, not its own.
 func TestBisectRunCarriesNoMagusPins(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "0\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "0\n"}).Root()
 	good := gitTestOutput(t, dir, "rev-parse", "HEAD")
 	for i := 1; i <= 2; i++ {
 		writeRepoFile(t, dir, "a.txt", fmt.Sprintf("%d\n", i))
@@ -2520,9 +2403,7 @@ func TestShallowRecoveryRunsNoHook(t *testing.T) {
 // status.showUntrackedFiles, a diff produced by an external driver, prefixes dropped by
 // diff.noprefix, and color forced on.
 func TestStatusAndDiffIgnoreDisplayConfig(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	for _, kv := range [][2]string{
 		{"status.showUntrackedFiles", "no"}, {"diff.external", "false"}, {"diff.noprefix", "true"},
 		{"color.diff", "always"}, {"color.status", "always"},
@@ -2550,8 +2431,7 @@ func TestStatusAndDiffIgnoreDisplayConfig(t *testing.T) {
 // which every caller of Ref would take for a branch: two detached checkouts would
 // share one gate record.
 func TestGitMetadataRefIsEmptyOnADetachedHead(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, dir, "switch", "-q", "-c", "work")
 	g := gitVCS{}
 
@@ -2569,18 +2449,15 @@ func TestGitMetadataRefIsEmptyOnADetachedHead(t *testing.T) {
 // Ref reads a checkout's HEAD and ref files and starts no git, which is the commit-msg
 // hook's whole cost. PATH is emptied, so any git it started would fail the call.
 func TestGitRefStartsNoGit(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	dir := r.Root()
 	gitRun(t, dir, "switch", "-q", "-c", "feat/work")
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
-	packed := t.TempDir()
-	gitInitRepo(t, packed, map[string]string{"a.txt": "one\n"})
+	linked := r.AddWorktree("side").Root()
+	packed := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, packed, "switch", "-q", "-c", "packed")
 	gitRun(t, packed, "pack-refs", "--all")
 	require.NoFileExists(t, filepath.Join(packed, ".git", "refs", "heads", "packed"))
-	detached := t.TempDir()
-	gitInitRepo(t, detached, map[string]string{"a.txt": "one\n"})
+	detached := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, detached, "switch", "-q", "--detach")
 
 	t.Setenv("PATH", t.TempDir())
@@ -2603,11 +2480,9 @@ func TestGitRefStartsNoGit(t *testing.T) {
 // error on an unborn branch, and the qualified name --abbrev-ref gives a branch a tag
 // shadows.
 func TestGitRefAsksGitWhenTheFilesCannotSettleIt(t *testing.T) {
-	unborn := t.TempDir()
-	gitInitRepo(t, unborn, map[string]string{"a.txt": "one\n"})
+	unborn := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, unborn, "switch", "-q", "--orphan", "fresh")
-	shadowed := t.TempDir()
-	gitInitRepo(t, shadowed, map[string]string{"a.txt": "one\n"})
+	shadowed := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, shadowed, "switch", "-q", "-c", "work")
 	gitRun(t, shadowed, "tag", "work")
 
@@ -2638,11 +2513,10 @@ func swapSeam[T any](t *testing.T, seam *T, to T) {
 // Ref asks git, whose own verdict and error then stand. PATH is emptied, so reaching git
 // fails the call, which is how the test sees the fast path decline.
 func TestGitRefAsksGitWhenTheRepositoryIsNotOwned(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"})
+	dir := r.Root()
 	gitRun(t, dir, "switch", "-q", "-c", "work")
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
+	linked := r.AddWorktree("side").Root()
 	t.Setenv("PATH", t.TempDir())
 
 	var checked []string
@@ -2686,8 +2560,7 @@ func dedupe(s []string) []string {
 // GIT_DISCOVERY_ACROSS_FILESYSTEM is set. The device seam puts the repository root on its
 // own device, as a mount at the checkout's top would.
 func TestGitRefStopsAtAFilesystemBoundary(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"sub/b.txt": "two\n"})
+	dir := testkit.NewRepo(t, map[string]string{"sub/b.txt": "two\n"}).Root()
 	gitRun(t, dir, "switch", "-q", "-c", "work")
 	sub := filepath.Join(dir, "sub")
 	t.Setenv("PATH", t.TempDir())
@@ -2763,8 +2636,7 @@ func TestGitPackedRefsCacheFollowsTheFile(t *testing.T) {
 // An edited packed-refs changes Ref's answer: deleting the branch's line leaves a ref
 // files cannot vouch for, so Ref goes to git.
 func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	gitRun(t, dir, "switch", "-q", "-c", "packed")
 	gitRun(t, dir, "pack-refs", "--all")
 	path := filepath.Join(dir, ".git", "packed-refs")
@@ -2791,20 +2663,12 @@ func TestGitRefReadsAnEditedPackedRefs(t *testing.T) {
 
 // Asking whether a backend installs a merge driver reads nothing and writes nothing.
 func TestInstallsMergeDriverAsksWithoutEnsuring(t *testing.T) {
-	probe := &ensureRecorder{VCSDriver: gitVCS{}}
+	// Only the read is expected, so any EnsureMergeDriver call, which may write, fails the test.
+	probe := mocks.NewMockVCSDriver(t)
+	probe.EXPECT().MergeDriverCommand(mock.Anything, "").Return("", context.Canceled).Once()
 	assert.True(t, installsMergeDriver(probe))
-	assert.False(t, probe.ensured, "the probe called EnsureMergeDriver, which may write")
+	assert.True(t, installsMergeDriver(gitVCS{}), "git registers a merge driver")
 	assert.True(t, installsMergeDriver(jjVCS{}), "jj registers a merge tool for jj resolve")
-}
-
-type ensureRecorder struct {
-	types.VCSDriver
-	ensured bool
-}
-
-func (r *ensureRecorder) EnsureMergeDriver(context.Context, string, types.MergeDriverGlobs) (bool, error) {
-	r.ensured = true
-	return false, nil
 }
 
 // queueIdentity is who the tests commit as through the capabilities, which read no
@@ -2824,13 +2688,10 @@ type remoteFixture struct {
 
 func newRemoteFixture(t *testing.T) remoteFixture {
 	t.Helper()
-	isolateGitConfig(t)
 	remote := t.TempDir()
 	gitRun(t, remote, "init", "-q", "--bare", "-b", "main")
 	gitConfigureFixture(t, remote)
-	seed := t.TempDir()
-	gitInitRepo(t, seed, map[string]string{"base.txt": "base\n"})
-	gitRun(t, seed, "branch", "-M", "main")
+	seed := testkit.NewRepo(t, map[string]string{"base.txt": "base\n"}).Root()
 	gitRun(t, seed, "tag", "v1")
 	gitRun(t, seed, "remote", "add", "origin", remote)
 	gitRun(t, seed, "push", "-q", "origin", "main", "v1")
@@ -3064,9 +2925,7 @@ func TestCommitPushAndCheckoutRunNoHooks(t *testing.T) {
 
 // B11: a path is a path. "*.txt" commits the file of that name, not every .txt file.
 func TestCommitRecordsLiteralPaths(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"keep.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"keep.txt": "one\n"}).Root()
 	writeRepoFile(t, dir, "*.txt", "star\n")
 	writeRepoFile(t, dir, "keep.txt", "two\n")
 
@@ -3081,9 +2940,7 @@ func TestCommitRecordsLiteralPaths(t *testing.T) {
 }
 
 func TestCommitRefusesAnIncompleteIdentityAndAnEmptyCommit(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	head := gitTestOutput(t, dir, "rev-parse", "HEAD")
 
 	_, err := gitVCS{}.Commit(t.Context(), dir, types.CheckoutCommit{CommitMeta: types.CommitMeta{Message: "x", Author: queueIdentity}})
@@ -3120,9 +2977,7 @@ func TestMergeTreesReportsConflictKindsAsAResult(t *testing.T) {
 // child's merge from the plan's base brings the line back; from the commit the child was
 // built on, it stays deleted, as validated.
 func TestMergeTreesWithAnExplicitBaseMergesOnlyWhatTheirsAdded(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"src.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"src.txt": "one\n"}).Root()
 	g := gitVCS{}
 	ctx := t.Context()
 	commit := func(content, msg string) string {
@@ -3242,9 +3097,7 @@ func TestTreeIDIgnoresReplaceRefs(t *testing.T) {
 
 // B9: plumbing, so diff.renames cannot fold a rename into its new path alone.
 func TestRangeFilesReportsBothSidesOfARename(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"old.txt": "content that survives the move\n"})
+	dir := testkit.NewRepo(t, map[string]string{"old.txt": "content that survives the move\n"}).Root()
 	gitRun(t, dir, "config", "diff.renames", "true")
 	base := gitTestOutput(t, dir, "rev-parse", "HEAD")
 	gitRun(t, dir, "mv", "old.txt", "new.txt")
@@ -3256,9 +3109,7 @@ func TestRangeFilesReportsBothSidesOfARename(t *testing.T) {
 }
 
 func TestRangeFilesAndRangeCommitsNarrowToPaths(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"keep/a.txt": "a\n", "drop.txt": "d\n"})
+	dir := testkit.NewRepo(t, map[string]string{"keep/a.txt": "a\n", "drop.txt": "d\n"}).Root()
 	base := gitTestOutput(t, dir, "rev-parse", "HEAD")
 	writeRepoFile(t, dir, "keep/a.txt", "a2\n")
 	gitRun(t, dir, "commit", "-q", "-am", "keep")
@@ -3277,9 +3128,7 @@ func TestRangeFilesAndRangeCommitsNarrowToPaths(t *testing.T) {
 // global attributes file do not count, and $GIT_DIR/info/attributes, which git cannot be
 // told to skip, is an error.
 func TestGeneratedPathsReadsTheRevisionsMarkOnly(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{".gitattributes": "gen/** linguist-generated\n", "gen/a.txt": "a\n", "src.go": "x\n"})
+	dir := testkit.NewRepo(t, map[string]string{".gitattributes": "gen/** linguist-generated\n", "gen/a.txt": "a\n", "src.go": "x\n"}).Root()
 	rev := gitTestOutput(t, dir, "rev-parse", "HEAD")
 	writeRepoFile(t, dir, ".gitattributes", "src.go linguist-generated\n")
 	global := filepath.Join(t.TempDir(), "attributes")
@@ -3297,9 +3146,7 @@ func TestGeneratedPathsReadsTheRevisionsMarkOnly(t *testing.T) {
 }
 
 func TestCheckoutLifecycle(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	g := gitVCS{}
 	ctx := t.Context()
 	co := filepath.Join(t.TempDir(), "co")
@@ -3328,9 +3175,7 @@ func TestCheckoutLifecycle(t *testing.T) {
 // RemoveCheckout touches only what CreateCheckout made: a worktree the user added by hand
 // is neither listed nor removable through it.
 func TestRemoveCheckoutRefusesACheckoutItDidNotCreate(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	mine := filepath.Join(t.TempDir(), "mine")
 	gitRun(t, dir, "worktree", "add", "-q", "--detach", mine, "HEAD")
 
@@ -3344,9 +3189,7 @@ func TestRemoveCheckoutRefusesACheckoutItDidNotCreate(t *testing.T) {
 // RegisteredCheckouts lists every worktree git registers, the main one first, with its
 // revision and lock, including one whose directory is gone.
 func TestGitRegisteredCheckouts(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	head := gitTestOutput(t, dir, "rev-parse", "HEAD")
 	parent := t.TempDir()
 	locked, plain, gone := filepath.Join(parent, "locked"), filepath.Join(parent, "plain"), filepath.Join(parent, "gone")
@@ -3382,10 +3225,7 @@ func TestParseWorktreeList(t *testing.T) {
 // UnpublishedRevisions names the commits no remote-tracking ref and no base reaches, and
 // nothing once one of them does.
 func TestGitUnpublishedRevisions(t *testing.T) {
-	isolateGitConfig(t)
-	origin := t.TempDir()
-	gitInitRepo(t, origin, map[string]string{"a.txt": "a\n"})
-	gitRun(t, origin, "branch", "-M", "main")
+	origin := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	clone := filepath.Join(t.TempDir(), "clone")
 	cmd := exec.Command("git", "clone", "-q", "file://"+origin, clone)
 	cmd.Env = gitEnv()
@@ -3414,11 +3254,39 @@ func TestGitUnpublishedRevisions(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A worker's change has landed once every path it touched reads the same in the root's
+// HEAD, whatever ids carried it there and whatever else came with them.
+func TestGitUnlandedPaths(t *testing.T) {
+	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n", "b.txt": "b\n"})
+	worker := root.AddWorktree("worker")
+	require.NoError(t, os.Remove(worker.Path("b.txt")))
+	picked := worker.Commit("work", map[string]string{"a.txt": "a2\n", "c.txt": "c\n"})
+	var g types.LandingReporter = gitVCS{}
+
+	got, err := g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.txt", "b.txt", "c.txt"}, got, "nothing landed yet; the deletion counts")
+
+	root.Git("cherry-pick", "--no-commit", picked)
+	root.Commit("pick", map[string]string{"d.txt": "extra\n"})
+	objects := root.Git("count-objects")
+	got, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Empty(t, got, "a pick under a new id with an extra file landed")
+	assert.Equal(t, objects, root.Git("count-objects"), "the comparison writes no object")
+
+	root.Commit("edit", map[string]string{"c.txt": "changed\n"})
+	got, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c.txt"}, got)
+
+	_, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "")
+	require.Error(t, err)
+}
+
 // A checkout reached through a symlink that lands inside the repository is inside it.
 func TestCreateCheckoutResolvesSymlinksBeforeRefusingAPathInside(t *testing.T) {
-	isolateGitConfig(t)
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	link := filepath.Join(t.TempDir(), "link")
 	require.NoError(t, os.Symlink(dir, link))
 
@@ -3462,9 +3330,7 @@ func hostileGitDir(t *testing.T, root, script string) string {
 // CreateCheckout made reads the paths recorded at creation, so a rewrite landing after
 // the check still runs nothing.
 func TestGitInACheckoutReadsTheRepositoryItWasMadeIn(t *testing.T) {
-	isolateGitConfig(t)
-	root := t.TempDir()
-	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	co := filepath.Join(t.TempDir(), "co")
 	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
 	marker := filepath.Join(t.TempDir(), "ran")
@@ -3484,9 +3350,7 @@ func TestGitInACheckoutReadsTheRepositoryItWasMadeIn(t *testing.T) {
 // Any change to a file naming the checkout's repository fails every later call on the
 // checkout with a *types.CheckoutTamperedError naming it, before git starts.
 func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
-	isolateGitConfig(t)
-	root := t.TempDir()
-	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	marker := filepath.Join(t.TempDir(), "ran")
 	script := markerScript(t, marker)
 	for name, tamper := range map[string]func(co, gitDir string) string{
@@ -3536,11 +3400,8 @@ func TestGitInACheckoutWhoseRepositoryFilesChangedIsRefused(t *testing.T) {
 // status in a checkout CreateCheckout made never looks inside, even when .gitmodules
 // asks it to, and still lists a submodule whose commit moved.
 func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
-	isolateGitConfig(t)
-	sub := t.TempDir()
-	gitInitRepo(t, sub, map[string]string{"s.txt": "s\n"})
-	root := t.TempDir()
-	gitInitRepo(t, root, map[string]string{".gitmodules": "[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n\tignore = none\n"})
+	sub := testkit.NewRepo(t, map[string]string{"s.txt": "s\n"}).Root()
+	root := testkit.NewRepo(t, map[string]string{".gitmodules": "[submodule \"sub\"]\n\tpath = sub\n\turl = ./sub\n\tignore = none\n"}).Root()
 	gitRun(t, root, "update-index", "--add", "--cacheinfo", "160000,"+gitTestOutput(t, sub, "rev-parse", "HEAD")+",sub")
 	gitRun(t, root, "commit", "-q", "-m", "sub")
 	co := filepath.Join(t.TempDir(), "co")
@@ -3567,9 +3428,7 @@ func TestStatusInACheckoutRunsNothingASubmoduleConfigures(t *testing.T) {
 // RemoveCheckout deletes what CreateCheckout made and reads nothing the checkout's code
 // could rewrite: a registration pointed at another directory leaves that directory be.
 func TestRemoveCheckoutIgnoresARewrittenRegistration(t *testing.T) {
-	isolateGitConfig(t)
-	root := t.TempDir()
-	gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	co := filepath.Join(t.TempDir(), "co")
 	require.NoError(t, gitVCS{}.CreateCheckout(t.Context(), root, co, "HEAD"))
 	made, ok := madeCheckout(co)
@@ -3634,9 +3493,7 @@ func TestAnObjectPlantedInTheStore(t *testing.T) {
 		assert.Equal(t, "forged\n", got)
 	})
 	t.Run("under a blob a later commit writes is read in its place", func(t *testing.T) {
-		isolateGitConfig(t)
-		root := t.TempDir()
-		gitInitRepo(t, root, map[string]string{"a.txt": "a\n"})
+		root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 		cmd := exec.Command("git", "hash-object", "--stdin")
 		cmd.Dir, cmd.Env, cmd.Stdin = root, gitEnv(), strings.NewReader("merged\n")
 		out, err := cmd.Output()
@@ -3672,7 +3529,6 @@ func TestStartMergeInALinkedCheckoutReportsConflicts(t *testing.T) {
 // the merge of b ask the remote for a blob the merge wrote.
 func stackFixture(t *testing.T) string {
 	t.Helper()
-	isolateGitConfig(t)
 	const n = 40
 	files := map[string]string{"t1.txt": "t1 base\n"}
 	for i := 1; i <= n; i++ {
@@ -3682,9 +3538,7 @@ func stackFixture(t *testing.T) string {
 		}
 		files[fmt.Sprintf("m%d.txt", i)] = b.String()
 	}
-	seed := t.TempDir()
-	gitInitRepo(t, seed, files)
-	gitRun(t, seed, "branch", "-M", "main")
+	seed := testkit.NewRepo(t, files).Root()
 	for _, edit := range []struct {
 		branch, line, to string
 	}{{"a", "5", "five"}, {"b", "45", "forty-five"}} {
@@ -3879,8 +3733,7 @@ func assertHistoryScenario(t *testing.T, drv types.VCSDriver, dir string) {
 }
 
 func TestGitHistoryFollowsPathsAndFirstParent(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"})
+	dir := testkit.NewRepo(t, map[string]string{"docs/a.md": "a\n", "x.txt": "x\n"}).Root()
 	gitRun(t, dir, "checkout", "-q", "-b", "side")
 	writeRepoFile(t, dir, "docs/b.md", "b\n")
 	gitRun(t, dir, "add", "docs/b.md")
@@ -3897,8 +3750,7 @@ func TestGitHistoryFollowsPathsAndFirstParent(t *testing.T) {
 
 // A path is data, never pathspec magic, and a rename is both of its paths.
 func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"*.md": "star\n", "a.md": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"*.md": "star\n", "a.md": "a\n"}).Root()
 	gitRun(t, dir, "mv", "a.md", "b.md")
 	gitRun(t, dir, "commit", "-q", "-m", "rename")
 
@@ -3913,11 +3765,10 @@ func TestGitHistoryReadsPathsLiterallyAndRenamesAsBoth(t *testing.T) {
 }
 
 func TestGitObjectBatchReadsCommittedFiles(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{
+	dir := testkit.NewRepo(t, map[string]string{
 		"magusfile.buzz":         "one\n",
 		"hack/policy/guard.buzz": "two\n",
-	})
+	}).Root()
 	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, batch.Close()) }()
@@ -3940,11 +3791,10 @@ func TestGitObjectBatchReadsCommittedFiles(t *testing.T) {
 // would answer the request before it: an approved read of one file would return
 // another's bytes.
 func TestGitObjectBatchRefusesAPathWithANewline(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{
+	dir := testkit.NewRepo(t, map[string]string{
 		"magusfile.buzz": "one\n",
 		"other.buzz":     "two\n",
-	})
+	}).Root()
 	batch, err := gitVCS{}.OpenObjectBatch(t.Context(), dir, "")
 	require.NoError(t, err)
 	defer func() { require.NoError(t, batch.Close()) }()
@@ -3980,10 +3830,9 @@ func (nopWriteCloser) Close() error { return nil }
 // in the linked worktree that runs it and in no other checkout of the repository. A root
 // holding .git is read with no git started; a directory under it asks git.
 func TestGitOperationInProgressWithoutAConflict(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, dir, "worktree", "add", "-q", "-b", "side", linked)
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "one\n", "sub/b.txt": "two\n"})
+	dir := r.Root()
+	linked := r.AddWorktree("side").Root()
 	require.NoError(t, os.WriteFile(filepath.Join(linked, "a.txt"), []byte("two\n"), 0o644))
 	gitRun(t, linked, "commit", "-q", "-am", "two")
 	cmd := exec.Command("git", "-C", linked, "rebase", "--exec", "false", "HEAD~1")
@@ -4005,8 +3854,7 @@ func TestGitOperationInProgressWithoutAConflict(t *testing.T) {
 
 // A revert that conflicts leaves REVERT_HEAD, which names it apart from a cherry-pick.
 func TestGitOperationInProgressNamesARevert(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "one\n"}).Root()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("two\n"), 0o644))
 	gitRun(t, dir, "commit", "-q", "-am", "two")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("three\n"), 0o644))
@@ -4023,10 +3871,9 @@ func TestGitOperationInProgressNamesARevert(t *testing.T) {
 // The command read back is the one installed, from a linked worktree too, since that is
 // the checkout a not-indexed verdict asks about.
 func TestReadGitRefreshHook(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, dir, "worktree", "add", "-q", linked)
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	dir := r.Root()
+	linked := r.AddWorktree("linked").Root()
 
 	_, installed, err := ReadGitRefreshHook(t.Context(), linked)
 	require.NoError(t, err)
@@ -4044,8 +3891,7 @@ func TestReadGitRefreshHook(t *testing.T) {
 // A magus workspace below the repository's top level: the hook runs at the top, so that
 // is where its ./magus resolves, not the workspace root the lookup was asked from.
 func TestReadGitRefreshHookNamesTheTopLevelAboveANestedWorkspace(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"tools/ws/magusfile.buzz": "\n"})
+	dir := testkit.NewRepo(t, map[string]string{"tools/ws/magusfile.buzz": "\n"}).Root()
 	workspace := filepath.Join(dir, "tools", "ws")
 	_, err := gitVCS{}.InstallRefreshHook(t.Context(), workspace, "./magus job run sync-graph")
 	require.NoError(t, err)
@@ -4079,11 +3925,14 @@ func TestGitIgnoreSources(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "xdg"))
-	repo := t.TempDir()
-	gitInitRepo(t, repo, map[string]string{"a.txt": "a\n"})
+	r := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"})
+	repo := r.Root()
 	realRepo, err := filepath.EvalSymlinks(repo)
 	require.NoError(t, err)
 	ctx := t.Context()
+	// The fixture pins core.excludesFile to the null device; this test is about git's
+	// default.
+	gitRun(t, repo, "config", "--unset", "core.excludesFile")
 
 	got, err := gitVCS{}.IgnoreSources(ctx, repo)
 	require.NoError(t, err)
@@ -4100,8 +3949,7 @@ func TestGitIgnoreSources(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, global, got[1])
 
-	linked := filepath.Join(t.TempDir(), "linked")
-	gitRun(t, repo, "worktree", "add", "-q", linked)
+	linked := r.AddWorktree("linked").Root()
 	fromLinked, err := gitVCS{}.IgnoreSources(ctx, linked)
 	require.NoError(t, err)
 	exclude, err = filepath.EvalSymlinks(filepath.Dir(fromLinked[0]))

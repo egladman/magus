@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
 	// The interpreter a real magusfile load needs, which cmd/magus links in production.
 	_ "github.com/egladman/magus/internal/interp/bindings"
@@ -47,7 +47,7 @@ func (p *spawnRuleProbe) rule() workspace.SpawnRule {
 func spawnFixture(t *testing.T) (ctx context.Context, cacheDir string) {
 	t.Helper()
 	testkit.Isolate(t)
-	root := t.TempDir()
+	root := testkit.NewWorkspace(t).Root()
 	cacheDir = t.TempDir()
 	return WithLocation(t.Context(), cacheDir, root, root), cacheDir
 }
@@ -904,6 +904,130 @@ func TestRegisterAgentBaseRecordsTheCallersCheckout(t *testing.T) {
 	}, got)
 }
 
+// An isolated worker registers on its first call, at the revision its worktree was created
+// on, and only then switches to the branch it was handed. The registration follows it there
+// rather than staying frozen on a diverged creation base; a worker whose own commit moved
+// a matching checkout is not re-registered, since its commit would read as a divergence.
+func TestRegisterAgentBaseFollowsADivergedCheckout(t *testing.T) {
+	const created, checkpoint = "24114cc", "07e1c16"
+	for _, tc := range []struct {
+		name               string
+		verdict            types.JobBaseVerdict
+		reported, revision string
+		wantBase           string
+		wantVerdict        types.JobBaseVerdict
+	}{
+		{"switched onto its checkpoint", types.BaseDiverged, created, checkpoint, checkpoint, types.BaseMatch},
+		{"switched onto another base", types.BaseDiverged, created, "5ee1abc", "5ee1abc", types.BaseDiverged},
+		{"still where it registered", types.BaseDiverged, created, created, created, types.BaseDiverged},
+		{"a commit on its checkpoint", types.BaseMatch, checkpoint, "c0ffee1", checkpoint, types.BaseMatch},
+		{"no revision to read", types.BaseDiverged, created, "", created, types.BaseDiverged},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Checkpoint: checkpoint}
+			ctx, root := fleetFixture(t, row)
+			at := hookLocation(ctx, Dependencies{})
+			store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+			_, err := store.Exec(ctx, row.ID, tc.reported)
+			require.NoError(t, err)
+			deps := Dependencies{
+				Revision: func(_ context.Context, dir, rev string) string {
+					assert.Equal(t, []string{root, ""}, []string{dir, rev}, "the revision is read from the worker's checkout")
+					return tc.revision
+				},
+				CheckoutBase: func(context.Context, string) string { return tc.revision },
+			}
+
+			wrote := registerAgentBase(ctx, deps, at, row.ID)
+
+			rows, err := store.List()
+			require.NoError(t, err)
+			require.Len(t, rows, 1)
+			assert.Equal(t, []any{tc.wantBase != tc.reported, tc.wantBase, tc.wantVerdict},
+				[]any{wrote, rows[0].ReportedBase, rows[0].BaseVerdict})
+		})
+	}
+}
+
+// A registration the job store refuses (another checkout holds the job) is not tried again
+// until the row changes: each try reads the checkout's base, a VCS process, for nothing.
+func TestRegisterAgentBaseStopsAfterARefusal(t *testing.T) {
+	row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+	ctx, _ := fleetFixture(t, row)
+	at := hookLocation(ctx, Dependencies{})
+	reads := 0
+	deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
+
+	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+	assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+	assert.Equal(t, 1, reads, "the refused row is not tried again")
+
+	changed := row
+	changed.CheckoutRoot = ""
+	assert.NotEqual(t, agentBaseRefusedKind(row, at.workspace), agentBaseRefusedKind(changed, at.workspace), "a changed row is tried again")
+}
+
+// A registration that fails for a reason that passes, here a cancelled wait for a store
+// lock another process holds, is tried again on the next call: remembering it would refuse
+// the worker's writes for as long as the row stands. That holds for a row another checkout
+// holds too: only the store's holder refusal is remembered, never the row's look.
+func TestRegisterAgentBaseRetriesAPassingFailure(t *testing.T) {
+	t.Run("a declared row", func(t *testing.T) {
+		row := types.Job{ID: "lease-life", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+		ctx, _ := fleetFixture(t, row)
+		at := hookLocation(ctx, Dependencies{})
+		deps := Dependencies{CheckoutBase: func(context.Context, string) string { return "9c0ffee" }}
+
+		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
+			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		})
+		assert.True(t, registerAgentBase(ctx, deps, at, row.ID), "the lapsed try is not remembered as a refusal")
+	})
+	t.Run("a row another checkout holds", func(t *testing.T) {
+		row := types.Job{ID: "lease-life", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, CheckoutRoot: t.TempDir()}
+		ctx, _ := fleetFixture(t, row)
+		at := hookLocation(ctx, Dependencies{})
+		reads := 0
+		deps := Dependencies{CheckoutBase: func(context.Context, string) string { reads++; return "9c0ffee" }}
+
+		withLapsedLock(t, ctx, at, func(lapsed context.Context) {
+			assert.False(t, registerAgentBase(lapsed, deps, at, row.ID))
+		})
+		assert.False(t, registerAgentBase(ctx, deps, at, row.ID), "the holder refuses")
+		assert.False(t, registerAgentBase(ctx, deps, at, row.ID))
+		assert.Equal(t, 2, reads, "the lapsed try is tried again, the holder's refusal is not")
+	})
+}
+
+// withLapsedLock runs fn with a cancelled context while another process holds the job
+// store's lock.
+func withLapsedLock(t *testing.T, ctx context.Context, at location, fn func(lapsed context.Context)) {
+	t.Helper()
+	path, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Path()
+	require.NoError(t, err)
+	lapsed, cancel := context.WithCancel(ctx)
+	cancel()
+	require.NoError(t, file.WithLock(ctx, path+".lock", 0, func() error {
+		fn(lapsed)
+		return nil
+	}))
+}
+
+// A checkout's current revision is read once per judgment, however many rules compare
+// against it; a named revision is read each time.
+func TestRevisionIsReadOncePerJudgment(t *testing.T) {
+	reads := 0
+	deps := Dependencies{
+		Revision:  func(context.Context, string, string) string { reads++; return "9c0ffee" },
+		revisions: &revisionMemo{current: map[string]string{}},
+	}
+	for range 3 {
+		assert.Equal(t, "9c0ffee", deps.revision(t.Context(), "/w", ""))
+	}
+	deps.revision(t.Context(), "/w", "HEAD~1")
+	assert.Equal(t, 2, reads)
+}
+
 // The command and path glue forward one field of the event, not the envelope, so the
 // subagent id arrives as --agent beside the extracted command. It must attribute exactly as
 // the envelope's agent_id does, or every subagent shell call is graded as its parent's.
@@ -924,7 +1048,6 @@ func TestAgentFlagAttributesAnExtractedCommandToTheSubagentsJob(t *testing.T) {
 // through a child id it made up; it may hand out only its own lease or a job forked beneath
 // it. An unleased spawner, the orchestrator or a person, may name any live job.
 func TestASpawnAttributesOnlyAJobItsSpawnerCanHandOut(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	running := func(id, parent string) types.Job {
 		return types.Job{ID: id, Parent: parent, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	}
@@ -1035,7 +1158,6 @@ func gradedAs(v Verdict) graded { return graded{v.Decision == "deny", v.Lease, v
 // CLI wrote a checkout-wide marker, the orchestrator's session fell back to it, and its
 // next `job fork` and `git merge` were refused as the worker's.
 func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	research := types.Job{ID: "linux-platform-design", Parent: "harness-audit", Criteria: "research only", ReadOnly: true, State: types.StateDeclared, Checkpoint: "23558048b"}
 	ctx, root := fleetFixture(t,
 		types.Job{ID: "harness-audit", Criteria: "the audit", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}},
@@ -1071,7 +1193,6 @@ func TestASubagentsExecNeverBindsItsParent(t *testing.T) {
 // Exec binds exactly the identity the host named on the call, through either door, and
 // nobody sharing its session or checkout.
 func TestExecBindsTheCallersIdentity(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	running := func(id string) types.Job {
 		return types.Job{ID: id, State: types.StateRunning, WritePaths: []string{"internal/" + id + "/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	}
@@ -1108,9 +1229,9 @@ func TestExecBindsTheCallersIdentity(t *testing.T) {
 
 // A job that has exited or ended holds its caller to nothing, so the next exec takes the
 // next job with nothing to give up first. Exited is live, yet nobody is required to wait
-// on it, so a caller held to it could be stuck for good.
+// on it, so a caller held to it could be stuck for good. A job a verdict ended has
+// released its caller by the time the exec is graded.
 func TestExecAfterAnEndedJobRebinds(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, state := range []types.JobState{types.StateExited, types.StatePass, types.StateFail, types.StateNoReturn} {
 		t.Run(string(state), func(t *testing.T) {
 			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
@@ -1120,7 +1241,11 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 			bindCaller(t, ctx, who, held.ID)
 
 			v := Judge(ctx, Dependencies{}, Request{Input: "magus job exec next-job", Host: who.Host, Session: who.Session, Agent: who.Agent})
-			assert.Equal(t, graded{Lease: held.ID, From: types.LeaseSourceAgent}, gradedAs(v))
+			want := graded{}
+			if state.Live() {
+				want = graded{Lease: held.ID, From: types.LeaseSourceAgent}
+			}
+			assert.Equal(t, want, gradedAs(v))
 			assert.Equal(t, job.Binding{Job: next.ID}, boundJob(who, hookLocation(ctx, Dependencies{})))
 		})
 	}
@@ -1129,7 +1254,6 @@ func TestExecAfterAnEndedJobRebinds(t *testing.T) {
 // A job still declared or running holds its caller: taking another is how a worker would
 // be graded against a boundary nobody handed it. Taking its own again passes.
 func TestExecUnderARunningJobIsRefused(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	for _, state := range []types.JobState{types.StateDeclared, types.StateRunning} {
 		t.Run(string(state), func(t *testing.T) {
 			held := types.Job{ID: "held-job", State: state, WritePaths: []string{"internal/held/**"}, Registered: 1}
@@ -1152,7 +1276,6 @@ func TestExecUnderARunningJobIsRefused(t *testing.T) {
 // A worker its spawn already attributed is bound; its exec records the base and binds
 // nothing new, here or in the checkout.
 func TestAttributedWorkersExecIsIdempotent(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	row := types.Job{ID: "guard-facts", State: types.StateRunning, WritePaths: []string{"internal/guard/**"}, Registered: 1, ReportedBase: "77aa01c"}
 	ctx, _ := fleetFixture(t, row)
 	Judge(ctx, Dependencies{}, Request{Input: finishedSpawn(t, "orchestrator/integrator guard-facts", "", "", "", "a1b2c3"), Host: "claude-code"})
@@ -1197,20 +1320,9 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 // whose working tree then holds worktree in its place.
 func committedSpawnRule(t *testing.T, worktree string) string {
 	t.Helper()
-	root := t.TempDir()
-	runGit := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", root, "-c", "user.email=test@example.com", "-c", "user.name=test"}, args...)...).CombinedOutput()
-		require.NoError(t, err, "git %v: %s", args, out)
-	}
-	runGit("init", "-q")
-	magusfile := filepath.Join(root, "magusfile.buzz")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("{}\n"), 0o644))
-	require.NoError(t, os.WriteFile(magusfile, []byte(denyEverySpawn), 0o644))
-	runGit("add", "-A")
-	runGit("commit", "-q", "-m", "init")
-	require.NoError(t, os.WriteFile(magusfile, []byte(worktree), 0o644))
-	return root
+	r := testkit.NewRepo(t, map[string]string{"magus.yaml": "{}\n", "magusfile.buzz": denyEverySpawn})
+	r.Magusfile(worktree)
+	return r.Root()
 }
 
 func inspectMagus(t *testing.T, root string) *magus.Magus {
@@ -1245,22 +1357,27 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 `))
 	require.NotNil(t, m.SpawnRule())
 
-	prev := approvedResolveTimeout
-	approvedResolveTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { approvedResolveTimeout = prev })
 	slow := func(ctx context.Context) (workspace.SpawnRule, error) {
 		<-ctx.Done()
 		return m.ApprovedSpawnRule(ctx)
 	}
 
 	ctx, cacheDir := spawnFixture(t)
+	ctx, cancel := context.WithTimeout(ctx, judgeReserve+600*time.Millisecond)
+	defer cancel()
 	v := Judge(ctx, Dependencies{SpawnRule: m.SpawnRule(), ApprovedSpawnRule: slow},
 		Request{Input: claudeSpawnEnvelope, Host: "claude-code"})
-	assert.Equal(t, Verdict{SchemaVersion: v.SchemaVersion, Decision: "deny", Reason: approvedRuleTimedOut(seamSpawn), Rule: workspaceSpawnRule, Lease: v.Lease, LeaseFrom: v.LeaseFrom}, v)
+	assert.Equal(t, verdictWithRule("deny", workspaceSpawnRule), unworded(v))
+	assert.Regexp(t, `magus ran out of time judging a subagent spawn: resolving the approved magus\\guard\.spawn rule did not finish within \d+ms`, v.Reason)
 
 	spawns := trailEvents(t, cacheDir, trail.KindAgentSpawn)
 	require.Len(t, spawns, 1)
 	assert.Equal(t, decidedByApproved, spawns[0].DecidedBy)
-	assert.Equal(t, []trail.RuleFailure{{Side: decidedByApproved, Error: "resolving the rule took longer than 50ms"}},
-		readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures)
+	failures := readSpawnBlob(t, cacheDir, spawns[0]).RuleFailures
+	require.Len(t, failures, 1)
+	assert.Equal(t, decidedByApproved, failures[0].Side)
+	assert.Regexp(t, `^resolving the rule did not finish within \d+ms$`, failures[0].Error)
+	require.NotEmpty(t, spawns[0].Phases)
+	assert.Equal(t, phaseApprovedResolve, spawns[0].Phases[0].Name)
+	assert.True(t, spawns[0].Phases[0].Lapsed)
 }

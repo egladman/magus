@@ -133,6 +133,37 @@ func TestUpstreamFileOpenIsChecked(t *testing.T) {
 		"a path the policy grants still opens")
 }
 
+// The fixture grants no exec at all, so a refusal that came after the fork would surface
+// as MGS2007 rather than as the remedy.
+func TestUpstreamOsExecuteRefusesVCS(t *testing.T) {
+	f := newGuardFixture(t)
+	cases := []struct {
+		argv []string
+		want string
+	}{
+		{
+			[]string{"git", "commit", "-m", "x"},
+			`os.execute git: git runs only through vcs\cmd, which holds it to the lease rules: call vcs\cmd(["commit", "-m", "x"]) instead`,
+		},
+		{
+			[]string{"/usr/bin/hg", "status"},
+			`os.execute /usr/bin/hg: hg runs only through vcs\cmd, which holds it to the lease rules: call vcs\cmd(["status"]) instead`,
+		},
+		{
+			[]string{"sh", "-c", "cd sub && jj describe"},
+			`os.execute sh: jj runs only through vcs\cmd, which holds it to the lease rules: call vcs\cmd(["describe"]) instead`,
+		},
+	}
+	for _, tc := range cases {
+		items := make([]vm.Value, len(tc.argv))
+		for i, w := range tc.argv {
+			items[i] = vm.StrValue(w)
+		}
+		_, err := f.call(t, f.confined, "os", "execute", vm.ListValue(items))
+		require.EqualError(t, err, tc.want, tc.argv)
+	}
+}
+
 // TestUpstreamOsExecuteGoesThroughRunExec: os.execute forked with the whole process
 // environment, proc socket included, and with no exec check.
 func TestUpstreamOsExecuteGoesThroughRunExec(t *testing.T) {

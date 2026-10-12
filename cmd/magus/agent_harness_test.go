@@ -12,7 +12,6 @@ import (
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/proc"
-	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/stretchr/testify/assert"
@@ -64,8 +63,6 @@ func TestHarnessInstallReportsWhatItWroteAndPruned(t *testing.T) {
 // with. Only the claim used to count, so a worker `magus job exec` bound, with no BAGGAGE,
 // could rewrite the skills that steer it.
 func TestHarnessInstallRefusesABoundJobFromEitherSource(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, "")
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
 	globalCfg = config.Config{}

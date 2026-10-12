@@ -3,7 +3,6 @@ package magus
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"testing"
@@ -11,17 +10,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
 // sourceCheckout is a checkout of module holding a binary named magus at its root.
 func sourceCheckout(t *testing.T, module string) (root, exe string) {
 	t.Helper()
-	root = t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "go.mod"), []byte("module "+module+"\n\ngo 1.26\n"), 0o644))
-	exe = filepath.Join(root, "magus")
-	require.NoError(t, os.WriteFile(exe, []byte("binary"), 0o755))
-	return root, exe
+	w := testkit.NewWorkspace(t)
+	w.Write("go.mod", "module "+module+"\n\ngo 1.26\n")
+	return w.Root(), w.WriteExecutable("magus", "binary")
 }
 
 func builtFrom(module, pkg string) *debug.BuildInfo {
@@ -32,7 +30,7 @@ func TestOwnBuildEscapeNamesTheLinkForAnOwnSourceBuild(t *testing.T) {
 	root, exe := sourceCheckout(t, "example.com/tool")
 	assert.Equal(t, "This binary was built from this checkout's own sources and predates them, so it cannot "+
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one "+
-		"command at a time: `mv magus magus.old`, then `go build -o magus ./cmd/tool`, then rebuild it the "+
+		"command at a time: `go build -o magus ./cmd/tool`, then rebuild it the "+
 		"way this workspace builds it. If that link fails with `undefined:` in generated code, the "+
 		"checkout's committed generated files are behind its sources (a merge kept one side), and "+
 		"restoring either side's copy brings back the mismatch: regenerate them with the `go generate` "+
@@ -46,7 +44,8 @@ func TestOwnBuildEscapeNamesMagusGeneratorsInOrder(t *testing.T) {
 	root, exe := sourceCheckout(t, ownModule)
 	escape := ownBuildEscape(exe, builtFrom(ownModule, "cmd/magus"), root)
 
-	assert.Contains(t, escape, "`mv magus magus.old`, then `go build -o magus ./cmd/magus`")
+	assert.Contains(t, escape, "command at a time: `go build -o magus ./cmd/magus`, then rebuild")
+	assert.NotContains(t, escape, "magus.old")
 	assert.Contains(t, escape, "regenerate them, one command at a time, with what the *_generate targets run: "+
 		"`go generate ./cmd/magus-utils`, then `go generate ./internal/spell/...`, then "+
 		"`go run ./cmd/magus-utils jobschema -out internal/job/gen`, then `go generate ./internal/langservice`, then "+

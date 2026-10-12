@@ -51,11 +51,7 @@ magus\project({"outputs": ["gen/*"]});
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 
-	// Resolved, not w.Root() verbatim: on macOS TMPDIR is under /var, a symlink to
-	// /private/var, and magus.Open resolves it while the raw path would not; the
-	// mismatch reads every file as escaping the workspace and classifies nothing.
-	root, err := filepath.EvalSymlinks(w.Root())
-	require.NoError(t, err)
+	root := w.Root()
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
@@ -93,8 +89,7 @@ magus\project({"outputs": ["gen/*"]});
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
 
-	root, err := filepath.EvalSymlinks(w.Root())
-	require.NoError(t, err)
+	root := w.Root()
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
@@ -372,10 +367,7 @@ func BenchmarkTextPresenceSparseMatches(b *testing.B) {
 magus\project({"outputs": ["gen/**"]});
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
-	root, err := filepath.EvalSymlinks(w.Root())
-	if err != nil {
-		b.Fatal(err)
-	}
+	root := w.Root()
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)
 	if err != nil {

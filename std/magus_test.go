@@ -5,9 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -68,7 +66,6 @@ func TestMagusCmdWarnsForTypedSubcommands(t *testing.T) {
 }
 
 func TestRecursiveMagusEnvPreservesTheCapturedLease(t *testing.T) {
-	t.Setenv("BAGGAGE", "")
 	ctx := proc.WithLease(t.Context(), "fleet/captured")
 	assert.Contains(t, recursiveMagusEnv(ctx), "BAGGAGE=magus.lease=fleet/captured")
 }
@@ -237,45 +234,45 @@ func raiseOpts(cause any, url string) map[string]any {
 	return o
 }
 
-// fakeAnalyzer is a workspace that can answer the insight lenses, recording the
+// recordingAnalyzer is a workspace that can answer the insight lenses, recording the
 // options it was handed so a test can prove they arrived.
-type fakeAnalyzer struct {
+type recordingAnalyzer struct {
 	types.WorkspaceRepository
 	got       types.InsightOptions
 	failTrend bool
 }
 
-func (f *fakeAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
+func (f *recordingAnalyzer) Hotspots(_ context.Context, o types.InsightOptions) (types.HotspotOutput, error) {
 	f.got = o
 	return types.HotspotOutput{Definition: "hot"}, nil
 }
-func (f *fakeAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
+func (f *recordingAnalyzer) Affinity(context.Context, types.InsightOptions) (types.AffinityOutput, error) {
 	return types.AffinityOutput{}, nil
 }
-func (f *fakeAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
+func (f *recordingAnalyzer) Ownership(context.Context, types.InsightOptions) (types.OwnershipOutput, error) {
 	return types.OwnershipOutput{}, nil
 }
-func (f *fakeAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
+func (f *recordingAnalyzer) Trend(context.Context, types.InsightOptions) (types.TrendOutput, error) {
 	if f.failTrend {
 		return types.TrendOutput{}, errors.New("no history")
 	}
 	return types.TrendOutput{}, nil
 }
-func (f *fakeAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
+func (f *recordingAnalyzer) Volatility(context.Context) (types.VolatilityReport, error) {
 	return types.VolatilityReport{}, errors.New("no run history")
 }
-func (f *fakeAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
+func (f *recordingAnalyzer) Unreferenced(context.Context) (types.UnreferencedOutput, error) {
 	return types.UnreferencedOutput{}, errors.New("no symbol index")
 }
 
-func (f *fakeAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
+func (f *recordingAnalyzer) Duplication(context.Context) (types.DuplicationOutput, error) {
 	return types.DuplicationOutput{}, errors.New("no symbol index")
 }
 
 func TestInsightIsServedInProcess(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 
 	report, err := MagusInsight(ctx, nil)
@@ -285,14 +282,14 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	assert.True(t, a.got.Files, "the report always carries the per-file ranking")
 }
 
-// fakeToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
+// cannedToolReporter is a workspace that reports its tools, so magus\describe.tool() can be shown
 // to answer in-process rather than forking a nested magus.
-type fakeToolReporter struct {
+type cannedToolReporter struct {
 	types.WorkspaceRepository
 	report types.ToolReport
 }
 
-func (f *fakeToolReporter) Tools(context.Context, ...string) (types.ToolReport, error) {
+func (f *cannedToolReporter) Tools(context.Context, ...string) (types.ToolReport, error) {
 	return f.report, nil
 }
 
@@ -305,7 +302,7 @@ func TestMagusToolsIsServedInProcess(t *testing.T) {
 		Lifecycle: types.LifecycleStatus{Provider: "endoflife-date", State: types.LifecycleLive},
 		Tools:     []types.ToolRow{{Project: ".", Bin: "go", Lifecycle: "go", Cycle: "1.26", Support: "supported"}},
 	}
-	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &fakeToolReporter{report: want}))
+	got, err := MagusDescribeTool(types.WithWorkspace(t.Context(), &cannedToolReporter{report: want}))
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 }
@@ -327,7 +324,7 @@ func TestInsightNeedsAWorkspace(t *testing.T) {
 func TestInsightRejectsAnUnknownOption(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
 	for _, opts := range []map[string]any{
 		{"comits": 50.0},
 		{"layoutStyle": "safe"},
@@ -345,7 +342,7 @@ func TestInsightRejectsAnUnknownOption(t *testing.T) {
 func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 	// A Buzz number arrives as float64; an int is what a Go caller would pass.
 	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
@@ -364,7 +361,7 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	t.Parallel()
 
-	a := &fakeAnalyzer{}
+	a := &recordingAnalyzer{}
 	report, err := buildInsightReport(t.Context(), a, types.InsightOptions{Commits: 500})
 	require.NoError(t, err, "volatility and unreferenced failing must not fail the report")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
@@ -375,17 +372,17 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	require.Error(t, err)
 }
 
-// fakeLedgerWorkspace is a workspace that can back a job Store: it
+// ledgerWorkspace is a workspace that can back a job Store: it
 // carries the cache directory jobStoreFromContext needs beyond
 // types.WorkspaceRepository's own Root.
-type fakeLedgerWorkspace struct {
+type ledgerWorkspace struct {
 	types.WorkspaceRepository
 	cacheDir string
 	root     string
 }
 
-func (f *fakeLedgerWorkspace) CacheDir() string { return f.cacheDir }
-func (f *fakeLedgerWorkspace) Root() string     { return f.root }
+func (f *ledgerWorkspace) CacheDir() string { return f.cacheDir }
+func (f *ledgerWorkspace) Root() string     { return f.root }
 
 // Not parallel: the job store resolves the per-repository state directory, and
 // jobStoreFromContext offers no seam to redirect it, so the environment is the only
@@ -393,7 +390,7 @@ func (f *fakeLedgerWorkspace) Root() string     { return f.root }
 func TestLedgerIsServedInProcess(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "ship it", "state": "running"})
 	require.NoError(t, err)
@@ -409,7 +406,7 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 // workspace on the context whose store holds something else, and every write refuses.
 func TestJobListAnswersFromAPinnedSnapshot(t *testing.T) {
 	testkit.Isolate(t)
-	ws := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ws := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ws, "on-disk", map[string]any{"criteria": "not what the guard read"})
 	require.NoError(t, err)
 
@@ -465,25 +462,14 @@ func TestJobListMeasuresOverlapFootprints(t *testing.T) {
 		t.Skip("git not on PATH")
 	}
 	testkit.Isolate(t)
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	root := t.TempDir()
-	git := func(args ...string) string {
-		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%s", out)
-		return strings.TrimSpace(string(out))
-	}
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "api"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitattributes"), []byte("*.go diff=golang\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\treturn\n}\n"), 0o644))
-	git("init", "-q", "-b", "main")
-	git("add", "-A")
-	git("commit", "-q", "-m", "seed")
-	rev := git("rev-parse", "HEAD")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+	repo := testkit.NewRepo(t, map[string]string{
+		".gitattributes": "*.go diff=golang\n",
+		"api/x.go":       "package api\n\nfunc X() {\n\treturn\n}\n",
+	})
+	root, rev := repo.Root(), repo.Head()
+	repo.Write("api/x.go", "package api\n\nfunc X() {\n\tpanic(1)\n}\n")
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: root})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
 	for id, paths := range map[string][]any{"a": {"api/*.go"}, "b": {"api/x.go"}} {
 		_, err := MagusPutJob(ctx, id, map[string]any{"checkpoint": rev, "write_paths": paths, "check": "test .", "state": "running"})
 		require.NoError(t, err)
@@ -519,7 +505,7 @@ func TestLedgerNeedsAWorkspace(t *testing.T) {
 func TestLedgerNeedsACacheDir(t *testing.T) {
 	t.Parallel()
 
-	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	ctx := types.WithWorkspace(t.Context(), &recordingAnalyzer{})
 	_, err := MagusListJob(ctx)
 	assert.ErrorContains(t, err, "cache directory")
 }
@@ -533,7 +519,7 @@ func TestLedgerNeedsACacheDir(t *testing.T) {
 func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "the declared goal", "write_paths": "internal/job", "check": "test ."})
 	require.NoError(t, err)
@@ -552,7 +538,7 @@ func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
 func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"state": "passed"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no_return")
@@ -561,7 +547,7 @@ func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
 func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 	testkit.Isolate(t)
 
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()})
 	_, err := MagusPutJob(ctx, "u1", nil)
 	require.NoError(t, err)
 	_, err = MagusPutJob(ctx, "u2", nil)
@@ -578,7 +564,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 
 func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 	testkit.Isolate(t)
-	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
 	store, err := jobStoreFromContext(ctx, "job.put")
@@ -590,7 +576,7 @@ func TestJobStoreRetainsTheLeaseCapturedOnTheBuzzContext(t *testing.T) {
 // exactly as it does for `magus job` and the guard.
 func TestJobStorePrefersTheCheckoutsBindingOverTheCapturedClaim(t *testing.T) {
 	testkit.Isolate(t)
-	workspace := &fakeLedgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
+	workspace := &ledgerWorkspace{cacheDir: t.TempDir(), root: t.TempDir()}
 	require.NoError(t, job.NewStore(job.Location{CacheDir: workspace.cacheDir}).Bind(job.Caller{}, "fleet/bound"))
 	ctx := proc.WithLease(types.WithWorkspace(t.Context(), workspace), "fleet/captured")
 
@@ -608,7 +594,7 @@ func TestLedgerBindingAndStoreAgree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", stateBase)
 
 	cacheDir, root := t.TempDir(), t.TempDir()
-	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir, root: root})
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: cacheDir, root: root})
 
 	_, err := MagusPutJob(ctx, "u1", map[string]any{"criteria": "shared row"})
 	require.NoError(t, err)
@@ -647,30 +633,30 @@ func TestJobResultFromMapUsesTheVersionedStrictDecoder(t *testing.T) {
 	assert.Contains(t, err.Error(), "claimed_pass", "a Buzz map cannot smuggle a field the verifier ignores")
 }
 
-// fakeGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
+// builtGraphWorkspace is a workspace holding a hand-built knowledge graph and an output
 // store, which is all the graph members and magus\output read off it.
-type fakeGraphWorkspace struct {
+type builtGraphWorkspace struct {
 	types.WorkspaceRepository
 	g        *knowledge.Graph
 	cacheDir string
 	projects []*types.Project
 }
 
-func (f *fakeGraphWorkspace) All() []*types.Project { return f.projects }
+func (f *builtGraphWorkspace) All() []*types.Project { return f.projects }
 
-func (f *fakeGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
+func (f *builtGraphWorkspace) KnowledgeGraphWithSymbolsForRef(context.Context, string) (*knowledge.Graph, error) {
 	return f.g, nil
 }
-func (f *fakeGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (f *builtGraphWorkspace) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return nil, true
 }
-func (f *fakeGraphWorkspace) CacheDir() string { return f.cacheDir }
+func (f *builtGraphWorkspace) CacheDir() string { return f.cacheDir }
 
 const graphSymbol = "symbol:example.com/x Foo#"
 
@@ -691,7 +677,7 @@ func graphContext(t *testing.T) context.Context {
 			Provenance: "scip count=1 lines=3",
 		})
 	}
-	return types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	return types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 }
 
 func TestGraphMembersAreServedInProcess(t *testing.T) {
@@ -766,7 +752,7 @@ func TestImportGraphHostCallReportsWhetherAnIndexWasRead(t *testing.T) {
 		"graphContext holds a symbol but no dir imports another")
 
 	g := knowledge.NewGraph()
-	ctx := types.WithWorkspace(t.Context(), &fakeGraphWorkspace{g: g, cacheDir: t.TempDir()})
+	ctx := types.WithWorkspace(t.Context(), &builtGraphWorkspace{g: g, cacheDir: t.TempDir()})
 	empty, err := MagusImportGraph(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, types.ImportGraph{Indexed: false, Packages: map[string][]string{}, Languages: map[string]string{}}, empty)
@@ -843,19 +829,19 @@ func TestOutputReadsTheCheckoutsStore(t *testing.T) {
 	require.ErrorContains(t, err, "no stored output")
 }
 
-// fakeCheckoutWorkspace is a workspace rooted at this package's own checkout.
-type fakeCheckoutWorkspace struct {
+// checkoutWorkspace is a workspace rooted at this package's own checkout.
+type checkoutWorkspace struct {
 	types.WorkspaceRepository
 }
 
-func (fakeCheckoutWorkspace) Root() string                 { return "." }
-func (fakeCheckoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (checkoutWorkspace) Root() string                 { return "." }
+func (checkoutWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // The member and `magus vcs checkpoint` resolve the same tree the same way, so the two
 // cannot describe it differently.
 func TestVCSCheckpointAgreesWithTheCLI(t *testing.T) {
 	t.Parallel()
-	ctx := types.WithWorkspace(t.Context(), fakeCheckoutWorkspace{})
+	ctx := types.WithWorkspace(t.Context(), checkoutWorkspace{})
 
 	got, gotErr := MagusVCSCheckpoint(ctx)
 
@@ -889,4 +875,51 @@ func TestTypedMagusSubcommandsNameRealMembers(t *testing.T) {
 	for noun, method := range typedDescribeNouns {
 		assert.True(t, describe[method], "magus.cmd(\"describe\", [%q]) points at magus\\describe.%s, which does not exist", noun, method)
 	}
+}
+
+// withJobGrader registers g for the test and restores whatever was registered. The
+// registration is process-wide, so a test that uses it does not run in parallel.
+func withJobGrader(t *testing.T, g job.CheckGrader) {
+	t.Helper()
+	previous := RegisterJobGrader(g)
+	t.Cleanup(func() { RegisterJobGrader(previous) })
+}
+
+// magus\job.put forks by merge, and the multi-agent skill sends agents through it, so it is
+// held to the guard's verdict on the check the way `magus job fork` is: the grader the
+// composition root registered refuses a denied check, with nothing written.
+func TestMagusPutJobGradesTheCheckLikeFork(t *testing.T) {
+	testkit.Isolate(t)
+	var roots []string
+	withJobGrader(t, func(_ context.Context, root string, row types.Job) job.CheckVerdict {
+		roots = append(roots, root)
+		if row.Check.Target != "go-build" {
+			return job.CheckVerdict{}
+		}
+		return job.CheckVerdict{Denied: true, Rule: "worker-builds-magus", Reason: "a worker does not build magus"}
+	})
+
+	root := t.TempDir()
+	ctx := types.WithWorkspace(t.Context(), &ledgerWorkspace{cacheDir: t.TempDir(), root: root})
+	put := func(check string) error {
+		_, err := MagusPutJob(ctx, "w", map[string]any{"write_paths": []any{"run.go"}, "check": check})
+		return err
+	}
+
+	err := put("go-build .")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "would be denied to its worker by the guard (worker-builds-magus)")
+	assert.Contains(t, err.Error(), "`go::go-vet .`")
+	assert.Equal(t, []string{root}, roots, "the grader judges the workspace the put runs in")
+
+	stored, err := jobStoreFromContext(ctx, "job.list")
+	require.NoError(t, err)
+	rows, err := stored.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows, "a refused put writes nothing")
+
+	require.NoError(t, put("go::go-vet ."))
+	rows, err = stored.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
 }

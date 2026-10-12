@@ -1,6 +1,6 @@
 ---
 title: The Go SDK
-description: Use magus as a Go library instead of the CLI (Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, and what the SDK does not give you yet).
+description: Use magus as a Go library instead of the CLI (Open vs Inspect, the interface hierarchy, the List/Evaluate/Classify axis, ctx and cancellation, testing code that uses the SDK, and what the SDK does not give you yet).
 tags: [go, sdk, library, api, embedding, import, package, reference]
 ---
 
@@ -21,15 +21,15 @@ the other side.
 As of this writing, `go get github.com/egladman/magus` does not resolve on
 its own. The module's `go.mod` requires two nested modules:
 `github.com/egladman/magus/libs/gopherbuzz` and
-`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod`, and
-neither has a tagged release (`libs/gopherbuzz/vX.Y.Z` /
-`libs/diagnostics/vX.Y.Z`) yet. The root repository resolves them with local
-`replace` directives, which are not transitive, so a downstream consumer
+`github.com/egladman/magus/libs/diagnostics`, each with its own `go.mod`. Both
+carry `v0.1.0` tags (`libs/gopherbuzz/v0.1.0`, `libs/diagnostics/v0.1.0`), but
+the root module still requires them at `v0.0.0` and resolves that through local
+`replace` directives. Those are not transitive, so a downstream consumer
 inherits none of that and hits `unknown revision libs/gopherbuzz/v0.0.0`.
 
-Until those get their own tags, clone the repository (or vendor
-`libs/gopherbuzz` and `libs/diagnostics` out of it) and add matching `replace`
-directives to your own `go.mod`:
+Until the root requires the tagged versions and drops its replaces, clone the
+repository (or vendor `libs/gopherbuzz` and `libs/diagnostics` out of it) and
+add matching `replace` directives to your own `go.mod`:
 
 ```go
 require github.com/egladman/magus v0.3.0
@@ -200,6 +200,112 @@ The returned error wraps `ctx.Err()` directly, so both
 empty or short `List*`/`Evaluate*` result as "the workspace has nothing"
 without checking the error first.
 
+## Testing code that uses the SDK
+
+Test at the narrowest seam your code allows, and move to a real workspace only
+for what a fake cannot tell you.
+
+**Unit tests: fake the role.** A function that takes `types.WorkspaceReader`
+needs a test double with six methods, not a workspace. `types/gen/mocks`
+publishes a mockery mock for each role interface, which suits a test that
+asserts on the call itself (which method, with what arguments, how often).
+Here `countProjects` is your function, taking a `types.WorkspaceReader`:
+
+```go
+func TestCountProjects(t *testing.T) {
+    r := mocks.NewMockWorkspaceReader(t)
+    r.EXPECT().All().Return([]*types.Project{{Path: "api"}, {Path: "web"}})
+
+    assert.Equal(t, 2, countProjects(r))
+}
+```
+
+When a test only needs one method to return something, embed the interface and
+override that method. Any other method panics on the nil embedded value, which
+tells you the code under test reached for more than you thought:
+
+```go
+type twoProjects struct{ types.WorkspaceReader }
+
+func (twoProjects) All() []*types.Project {
+    return []*types.Project{{Path: "api"}, {Path: "web"}}
+}
+```
+
+**Integration tests: a real workspace.** `testkit.NewWorkspace(t)` returns a
+temporary directory you fill with `Write`, `WriteTree` and `Magusfile`, and
+`magus.Inspect` reads it like any other workspace. Inspect opens no cache, so
+this is the cheapest way to check that your code reads projects, targets and
+the graph correctly:
+
+```go
+func TestProjectsOfAMonorepo(t *testing.T) {
+    ws := testkit.NewWorkspace(t)
+    ws.WriteTree(map[string]string{
+        "magusfile.buzz":     "",
+        "api/magusfile.buzz": "",
+    })
+
+    m, err := magus.Inspect(t.Context(), ws.Root())
+    require.NoError(t, err)
+
+    assert.Len(t, m.All(), 2)
+}
+```
+
+**Isolate the test process.** Call `testkit.Main` from `TestMain`, or
+`testkit.Isolate(t)` at the top of a test that is not parallel:
+
+```go
+func TestMain(m *testing.M) { testkit.Main(m) }
+```
+
+Both reduce the environment to an allowlist and move `HOME` and the `XDG_*`
+directories under a temporary root. This matters more than it looks, because
+the `Output*` lookups (`OutputByRef`, `OutputAttempts`,
+`OutputDescriptorByRef`, `OutputKeyInputs`) do not stop at the workspace's own
+cache when a ref is missing. They read the session store under
+`XDG_STATE_HOME`, then the other checkouts of the same repository, and
+`PayloadByRef` reads the primary checkout's store the same way. Without
+isolation, the result of a miss depends on what the developer running the tests
+did yesterday.
+`Isolate` changes process-wide state, so it fails a parallel test; use
+`Main` when most of the package's tests run in parallel.
+
+**Running targets: depend on a one-method interface.** `*magus.Magus` has
+many methods, and a fake that implements them all is not worth writing.
+Declare what you call instead, and `*magus.Magus` satisfies it:
+
+```go
+type runner interface {
+    Run(ctx context.Context, targets []types.Target, opts ...magus.RunOption) error
+}
+```
+
+A test then passes a function that records the targets it was handed. Keep a
+small number of end-to-end tests for the code that builds those targets.
+
+**Magusfile targets do not run in your tests.** As described in
+[what this SDK does not give you](#what-this-sdk-does-not-give-you), a target
+declared in a `magusfile.buzz` is visible to `TargetGraph` but never
+dispatched outside this module. A test that writes one and calls `Run`
+passes without running anything. To exercise a real run, register a spell in
+Go and attach it with `WithSpell`; see `ExampleWorkspaceRegistry_withSpell`.
+
+**Programmatic spells.** `project.DefaultSpellRegistry()` is process-global, so
+two tests that register the same name in parallel race, and a spell left
+registered leaks into every later test. `register.Spell(tb, name, opts ...spells.Option)` in
+`libs/testkit/register` registers a spell for the duration of `tb` and
+returns its name. It takes the options of the `spells` package itself, such as
+`spells.WithTargets` and `spells.WithInvoker`. The suffix it adds keeps two
+registrations of one name apart, but the registry stays shared: a parallel
+test that lists or looks up spells sees another test's spell, so keep those
+tests out of `t.Parallel`.
+
+`testkit` and `register` take a `testkit.TB`, the part of `testing.TB` they
+call. `*testing.T` and `*testing.B` satisfy it, and so can a small type of your
+own where no test is running, such as an `Example`.
+
 ## What this SDK does not give you
 
 > [!IMPORTANT]
@@ -224,7 +330,7 @@ know this limitation going in.
 
 The escape hatch: build the workspace programmatically instead of authoring
 a magusfile, using the exported wire API in the root package:
-`WithRegisteredSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
+`WithSpell`, `WithTarget`, `WithDependsOn`, and friends, composed via
 a `WorkspaceRegistry` passed to `Open`/`Inspect` as an `Option`. Built-in
 spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
 `internal/spell`, which the exported wrapper functions can reach on your

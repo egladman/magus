@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/workspace"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -44,13 +45,11 @@ func init() {
 // options first.
 func makeWorkspaceRoot(t *testing.T, manifests ...string) string {
 	t.Helper()
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	for _, rel := range manifests {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+		w.Write(rel, "")
 	}
-	return root
+	return w.Root()
 }
 
 // TestWithDependsOnRelativeSibling verifies that WithDependsOn("../api") from
@@ -125,8 +124,9 @@ func TestWithDependsOnEscapesRoot(t *testing.T) {
 // TestWithSpellAddsLanguage verifies that WithSpell(name) populates
 // both the Spell and Spells fields via Register.
 func TestWithSpellAddsLanguage(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("//go:build magus\npackage main\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("//go:build magus\npackage main\n")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("go"))
@@ -159,8 +159,9 @@ func TestWithSpellMultipleTools(t *testing.T) {
 // TestWithSpellUnknownTool verifies that WithSpell("nope") errors
 // out at Open time rather than silently doing nothing.
 func TestWithSpellUnknownTool(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("//go:build magus\npackage main\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("//go:build magus\npackage main\n")
+	root := w.Root()
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell("nope"))

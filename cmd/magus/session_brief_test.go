@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
@@ -124,50 +124,44 @@ func TestSessionBriefNamesWhatItCouldNotRead(t *testing.T) {
 func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	testkit.Isolate(t)
 	global = globalFlags{}
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	// The guard-wiring section runs the stand-in written below, which answers at
 	// once; the shipped probe deadline would measure only how loaded the machine is.
 	ctx := agent.ContextWithProbeTimeout(context.Background(), time.Hour)
 
 	// An empty magusfile marks the directory as a workspace root.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "AGENTS.md"), []byte("# rules\n"), 0o644))
+	w.Magusfile("")
+	w.Write("AGENTS.md", "# rules\n")
 	// "brief-host" is wired as a harness spell (no harnesses/*.json compat
 	// directory left to write it into): a WorkspaceRegistry records the wiring the
 	// way magus\harness.provider would, and RegisterHarnessSpellLoader answers for
 	// it the way a real spell's harness_config would.
-	agent.RegisterHarnessSpellLoader(func(_ context.Context, id string) (agent.HarnessDescriptor, string, bool, error) {
-		if id != "brief-host" {
-			return agent.HarnessDescriptor{}, "", false, nil
-		}
-		return agent.HarnessDescriptor{
-			SchemaVersion: 2,
-			ID:            "brief-host",
-			Display:       agent.HarnessDisplay{Name: "Brief Host"},
-			Config:        agent.HarnessConfig{Path: "host/hooks.json"},
-			Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
-			ManagedEntries: []agent.HarnessEntries{{
-				Path: []string{"hooks", "before"},
-				Entries: []map[string]any{{
-					"match":    "run",
-					"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
-				}},
+	fixture.WireHarness(t, agent.HarnessDescriptor{
+		SchemaVersion: 2,
+		ID:            "brief-host",
+		Display:       agent.HarnessDisplay{Name: "Brief Host"},
+		Config:        agent.HarnessConfig{Path: "host/hooks.json"},
+		Skills:        agent.HarnessSkills{Paths: []string{".agents/skills"}, Form: agent.FormBoth},
+		ManagedEntries: []agent.HarnessEntries{{
+			Path: []string{"hooks", "before"},
+			Entries: []map[string]any{{
+				"match":    "run",
+				"commands": []any{map[string]any{"type": "command", "command": "./magus buzz -s magus-command.buzz"}},
 			}},
-		}, "spell:brief-host", true, nil
+		}},
 	})
-	t.Cleanup(func() { agent.RegisterHarnessSpellLoader(nil) })
 	reg := magus.NewWorkspaceRegistry()
 	reg.AddHarness("brief-host")
 	ws, err := magus.Inspect(ctx, root, magus.WithWorkspaceRegistry(reg))
 	require.NoError(t, err)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "host"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "host", "hooks.json"),
-		[]byte(`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`), 0o644))
+	w.Write("host/hooks.json",
+		`{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"./magus buzz -s magus-command.buzz"}]}]}}`)
 	// VerifyHarness actually runs the wired command (internal/agent's
 	// harness_probe.go) instead of trusting its mere presence in the config, so
 	// the brief's guard-wiring section needs something real behind it: a stand-in
 	// for magus running the command glue, answering as a working guard would.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte("#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n"), 0o755))
+	w.WriteExecutable("magus", "#!/bin/sh\ncat >/dev/null\nprintf 'deny'\n")
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -230,13 +224,44 @@ func TestSessionBriefReadsTheCheckout(t *testing.T) {
 	assertBriefIsContextSafe(t, text)
 }
 
+// A refusal ran nothing, so it has no output ref; the code is the whole of what the brief
+// can say about it. Another worktree's later failure must not stand in for this checkout's.
+func TestSessionBriefFailuresAreThisCheckoutsAndCarryTheRefusalCode(t *testing.T) {
+	testkit.Isolate(t)
+	root := t.TempDir()
+
+	refused := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: root, Command: "affected ci"})
+	require.NotNil(t, refused)
+	emitJournalEvent(t, refused, journal.Event{
+		Kind: journal.KindResult, Inv: "invRefused", Target: "ci", Project: "pkg",
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	})
+	time.Sleep(2 * time.Millisecond) // the other checkout's run is the newer one
+	other := sessions.NewFactHandler(root, sessions.InvocationStart{Workspace: filepath.Join(root, "elsewhere"), Command: "run test"})
+	require.NotNil(t, other)
+	emitJournalEvent(t, other, journal.Event{
+		Kind: journal.KindResult, Inv: "invOther", Target: "test", Project: "other", Status: journal.StatusFail, Ref: "ref-other",
+	})
+
+	failures := lastRunFailures(root)
+	require.Len(t, failures, 1)
+	require.NotEmpty(t, failures[0].At)
+	assert.Equal(t, briefFailure{Target: "ci", Project: "pkg", DiagnosticCode: "MGS3009", At: failures[0].At}, failures[0],
+		"a refusal carries its code and no ref to inspect")
+
+	var text strings.Builder
+	sessionBrief{Failures: failures}.writeFailures(&text)
+	assert.Contains(t, text.String(), "ci pkg [MGS3009] (")
+}
+
 // A terminal lease has stopped competing for its paths, so a rehydrating session
 // must not be told to bind it.
 func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -258,9 +283,10 @@ func TestSessionBriefSkipsLeasesThatAreDone(t *testing.T) {
 // every other live lease is one count line with the command that lists them.
 func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)
@@ -303,9 +329,10 @@ func TestSessionBriefNamesOnlyTheLeasesThatBindThisCheckout(t *testing.T) {
 // window.
 func TestSessionBriefCapsLiveLeases(t *testing.T) {
 	testkit.Isolate(t)
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ctx := context.Background()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
 
 	store, err := openJobs(root)
 	require.NoError(t, err)

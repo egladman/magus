@@ -18,22 +18,15 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	"github.com/egladman/magus/internal/service"
+	"github.com/egladman/magus/internal/service/gen/mocks"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-// recordRunner is a service.Runner that records starts without forking a process.
-type recordRunner struct{ started int }
-
-func (r *recordRunner) Start(context.Context, spells.Service) (service.Handle, error) {
-	r.started++
-	return struct{}{}, nil
-}
-func (r *recordRunner) Stop(context.Context, service.Handle) {}
 
 func serviceOp() spells.Op {
 	// bin "true" exits 0, so the non-supervised fall-through fork is harmless.
@@ -98,27 +91,29 @@ func TestRunCommandScopesAChildToItsProjectsSpells(t *testing.T) {
 // the supervisor (not a foreground fork) when supervision is active: the case of a
 // service reached via magus.needs.
 func TestRunCommandSupervisesServiceDependency(t *testing.T) {
-	rr := &recordRunner{}
+	// The mock starts the service without forking a process: one start is the supervision.
+	rr := mocks.NewMockRunner(t)
+	rr.EXPECT().Start(mock.Anything, mock.Anything).Return(struct{}{}, nil).Once()
+	rr.EXPECT().Stop(mock.Anything, mock.Anything).Maybe()
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
 	ctx := service.WithSupervision(service.WithSession(context.Background(), sess))
 
 	_, err := runCommand(ctx, serviceOp(), commandOpts{})
 	require.NoError(t, err)
-	assert.Equal(t, 1, rr.started, "service dependency should be supervised, not forked")
 }
 
 // TestRunCommandForegroundsDirectService proves a service op with no active
 // supervision falls through to a real fork (the directly-run case), and is not
 // handed to the supervisor.
 func TestRunCommandForegroundsDirectService(t *testing.T) {
-	rr := &recordRunner{}
+	// No expectations: a directly-run service must foreground, so any Start fails the test.
+	rr := mocks.NewMockRunner(t)
 	sess := service.NewSession(service.New(rr, 0), nil, nil)
 	// Session present but supervision NOT active: this is a directly-run service.
 	ctx := service.WithSession(context.Background(), sess)
 
 	_, err := runCommand(ctx, serviceOp(), commandOpts{})
 	require.NoError(t, err) // `true` exits 0
-	assert.Equal(t, 0, rr.started, "directly-run service must foreground, not be supervised")
 }
 
 // streamOp runs a shell line under capture (and quiet when asked) and returns what

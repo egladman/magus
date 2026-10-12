@@ -750,10 +750,10 @@ func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	assert.NotContains(t, string(body), "nothing running")
 }
 
-// fakeProcServers returns a statusQuery answering for exactly the addresses in replies,
-// standing in for live proc servers. An address with no entry fails the way a socket that
+// answeringServers returns a statusQuery answering for exactly the addresses in replies,
+// in place of live proc servers. An address with no entry fails the way a socket that
 // died between discovery and the query does.
-func fakeProcServers(replies map[string]*proc.StatusReply) statusQuery {
+func answeringServers(replies map[string]*proc.StatusReply) statusQuery {
 	return func(_ context.Context, addr string) (*proc.StatusReply, error) {
 		reply, ok := replies[addr]
 		if !ok {
@@ -773,7 +773,7 @@ func TestApplyStatusPools(t *testing.T) {
 
 	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
-		applyStatusPools(ctx, &snapshot, []string{sockA}, fakeProcServers(servers))
+		applyStatusPools(ctx, &snapshot, []string{sockA}, answeringServers(servers))
 		require.NotNil(t, snapshot.Pool)
 		// Available is 8 capacity less 3 running.
 		assert.Equal(t, types.StatusOutput{ParentPID: 111, Socket: sockA, Capacity: 8, Running: 3, Available: 5}, *snapshot.Pool)
@@ -783,18 +783,18 @@ func TestApplyStatusPools(t *testing.T) {
 
 	t.Run("the reply that reports itself as the server fills the server section", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
-		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, fakeProcServers(servers))
+		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, answeringServers(servers))
 		require.NotNil(t, snapshot.Server)
 		assert.Equal(t, 222, snapshot.Server.PID)
 
 		alone := types.StatusSnapshot{}
-		applyStatusPools(ctx, &alone, []string{sockA}, fakeProcServers(servers))
+		applyStatusPools(ctx, &alone, []string{sockA}, answeringServers(servers))
 		assert.Nil(t, alone.Server, "a per-process pool is never reported as the server")
 	})
 
 	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
-		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, fakeProcServers(servers))
+		applyStatusPools(ctx, &snapshot, []string{sockA, sockB}, answeringServers(servers))
 		assert.Empty(t, snapshot.PoolError, "more than one server is reported, not refused")
 		require.Len(t, snapshot.Pools, 2)
 		assert.Equal(t, []string{sockA, sockB}, []string{snapshot.Pools[0].Socket, snapshot.Pools[1].Socket})
@@ -806,7 +806,7 @@ func TestApplyStatusPools(t *testing.T) {
 
 	t.Run("a server that died is dropped, the rest still report", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
-		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock", sockB}, fakeProcServers(servers))
+		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock", sockB}, answeringServers(servers))
 		assert.Empty(t, snapshot.PoolError)
 		require.NotNil(t, snapshot.Pool)
 		assert.Equal(t, sockB, snapshot.Pool.Socket)
@@ -815,7 +815,7 @@ func TestApplyStatusPools(t *testing.T) {
 
 	t.Run("nothing answered reports why", func(t *testing.T) {
 		snapshot := types.StatusSnapshot{}
-		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock"}, fakeProcServers(servers))
+		applyStatusPools(ctx, &snapshot, []string{"unix:///run/magus-gone.sock"}, answeringServers(servers))
 		assert.Nil(t, snapshot.Pool)
 		assert.Contains(t, snapshot.PoolError, "magus-gone.sock")
 	})

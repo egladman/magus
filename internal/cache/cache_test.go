@@ -134,8 +134,8 @@ func TestCacheHitReplaysLogToStderrNotStdout(t *testing.T) {
 	require.NoError(t, err, "cache.Open(read)")
 
 	var stdoutOut, stderrOut string
-	stdoutOut = captureStdout(t, func() {
-		stderrOut = captureStderr(t, func() {
+	stdoutOut = testkit.CaptureStdout(t, func() {
+		stderrOut = testkit.CaptureStderr(t, func() {
 			r2, err := c2.Run(context.Background(), step, fn)
 			require.NoError(t, err, "Run(hit)")
 			require.True(t, r2.Hit, "second Run must hit")
@@ -703,7 +703,7 @@ func TestCaptureRunCollapseSuppressesOutputOnSuccess(t *testing.T) {
 	c := collapseCache(t)
 	lp := c.logPath("svc/api", "deadbeef")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling lots of noisy output...")
@@ -722,7 +722,7 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	lp := c.logPath("svc/api", "cafef00d")
 	want := errors.New("boom")
 
-	stderrOut := captureStderr(t, func() {
+	stderrOut := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "lint: undefined symbol foo")
@@ -739,38 +739,6 @@ func TestCaptureRunCollapseShowsFailureExcerpt(t *testing.T) {
 	data, statErr := os.ReadFile(lp)
 	require.NoError(t, statErr, "collapse failure log should be retained after replay")
 	assert.Contains(t, string(data), "lint: undefined symbol foo")
-}
-
-// captureStdout redirects os.Stdout for the duration of fn and returns what was written.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-
-	fn()
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
-}
-
-// captureStderr redirects os.Stderr for the duration of fn and returns what was written.
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-	orig := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = orig }()
-
-	fn()
-	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
 }
 
 // captureLog points the process logger at the pretty display for the duration of fn and
@@ -799,7 +767,7 @@ func TestCaptureRunSilentBubblesNotices(t *testing.T) {
 	c.log = slog.New(NewPrettyHandler(&buf, slog.LevelError))
 	lp := c.logPath("svc/api", "deadbeef")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "compiling...")
@@ -821,7 +789,7 @@ func TestCaptureRunSilentBoundsFailureAndKeepsLog(t *testing.T) {
 	lp := c.logPath("svc/api", "cafef00d")
 	want := errors.New("boom")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			for i := 0; i < maxFailTailLines+10; i++ {
@@ -851,7 +819,7 @@ func TestCaptureRunQuietRetainsFailureLog(t *testing.T) {
 	lp := c.logPath("svc/api", "0badf00d")
 	want := errors.New("boom")
 
-	_ = captureStderr(t, func() {
+	_ = testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "line 0")
@@ -869,7 +837,7 @@ func TestCaptureRunSilentPassNoNoticeIsSilent(t *testing.T) {
 	c := silentCache(t)
 	lp := c.logPath("svc/api", "feedface")
 
-	out := captureStderr(t, func() {
+	out := testkit.CaptureStderr(t, func() {
 		_, err := c.captureRun(context.Background(), lp, "svc/api", "test", func(ctx context.Context) error {
 			stdout, _ := runPkg.OutputWriters(ctx)
 			fmt.Fprintln(stdout, "all good, nothing to report")
@@ -1167,6 +1135,58 @@ func TestRunDeterministicFailureNeverReplays(t *testing.T) {
 		assert.False(t, res.Hit, "run %d", i+1)
 	}
 	assert.Equal(t, 3, calls)
+}
+
+// TestHitLeavesAForeignOutputAlone pins the proto drift gate's repeat failure (harness
+// gap 8): proto lint inherits the project's gen/**, which proto generate declares. Its
+// entry recorded the stale generated tree it found, and every later hit wrote that copy
+// over the regenerated one just ahead of the drift check. A foreign output is neither
+// recorded nor replayed, including from an entry written before the step carved it out.
+func TestHitLeavesAForeignOutputAlone(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	own := touchOut(t, root)
+	generated := filepath.Join(root, "test", "pkg", "gen", "x.pb.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(generated), 0o755))
+	require.NoError(t, os.WriteFile(generated, []byte("stale"), 0o644))
+
+	read := func(path string) string {
+		b, err := os.ReadFile(path)
+		require.NoError(t, err)
+		return string(b)
+	}
+
+	step := makeStep(root)
+	step.Outputs = types.MustParseGlobs("test/pkg/out.txt", "test/pkg/gen/**")
+	calls := 0
+	fn := func(_ context.Context) error {
+		calls++
+		return os.WriteFile(own, []byte("lint report"), 0o644)
+	}
+
+	// The entry an older binary wrote: it recorded the stale generated file as its own.
+	_, err := c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(miss)")
+	require.NoError(t, os.WriteFile(generated, []byte("regenerated"), 0o644))
+	require.NoError(t, os.Remove(own))
+
+	step.ForeignOutputs = types.MustParseGlobs("test/pkg/gen/**")
+	res, err := c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(hit)")
+	require.True(t, res.Hit, "ForeignOutputs is unhashed, so the key and its entry stay")
+	assert.Equal(t, 1, calls)
+	assert.Equal(t, "regenerated", read(generated), "a hit must not restore another target's output")
+	assert.Equal(t, "lint report", read(own), "the step's own output still replays")
+	assert.NotContains(t, res.Outputs, generated)
+
+	// A fresh entry never records the foreign file at all.
+	require.NoError(t, c.Delete(t.Context(), step.ProjectPath))
+	_, err = c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(miss after delete)")
+	require.NoError(t, os.WriteFile(generated, []byte("edited"), 0o644))
+	_, err = c.Run(t.Context(), step, fn)
+	require.NoError(t, err, "Run(hit)")
+	assert.Equal(t, "edited", read(generated))
 }
 
 // TestRunNoHintWhenInputsChanged verifies the warning is about the KEY: an edited source
@@ -1763,4 +1783,86 @@ func TestExportDoesNotBlockANestedRun(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Export did not finish once no run held the cache")
 	}
+}
+
+func TestWrapNeedFailureKeepsTheErrorText(t *testing.T) {
+	base := errors.New("[MGS4007] .:lint-rules failed")
+	wrapped := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", base), NeedMember{Target: "lint-rules", Ref: "outaaaaaaaaaaaa"})
+
+	assert.Equal(t, "ctx.needs: [MGS4007] .:lint-rules failed", wrapped.Error(), "hopChain and causeSignature read this text")
+	require.ErrorIs(t, wrapped, base)
+	target, ref := asNeedFailure(fmt.Errorf("ctx.needs: %w", wrapped))
+	assert.Equal(t, "lint-rules", target)
+	assert.Equal(t, "outaaaaaaaaaaaa", ref)
+}
+
+func TestWrapNeedFailureKeepsTheDeepestMember(t *testing.T) {
+	inner := WrapNeedFailure(errors.New("golangci exited 1"), NeedMember{Target: "lint-go", Ref: "outbbbbbbbbbbbb"})
+	outer := WrapNeedFailure(fmt.Errorf("ctx.needs: %w", inner), NeedMember{Target: "lint", Ref: "outcccccccccccc"})
+
+	target, ref := asNeedFailure(outer)
+	assert.Equal(t, "lint-go", target)
+	assert.Equal(t, "outbbbbbbbbbbbb", ref)
+}
+
+func TestWrapNeedFailureLeavesWhatItCannotName(t *testing.T) {
+	require.NoError(t, WrapNeedFailure(nil, NeedMember{Target: "lint", Ref: "outaaaaaaaaaaaa"}))
+
+	boom := errors.New("boom")
+	assert.Same(t, boom, WrapNeedFailure(boom, NeedMember{Target: "lint"}), "a member whose output was not persisted has no ref to name")
+	target, ref := asNeedFailure(boom)
+	assert.Empty(t, target)
+	assert.Empty(t, ref)
+}
+
+func TestRunRecordsTheFailedNeedOnTheDescriptor(t *testing.T) {
+	step, c := hintCache(t, "package main // failed need")
+	boom := WrapNeedFailure(errors.New("lint findings"), NeedMember{Target: "lint-go", Ref: "outdddddddddddd"})
+
+	res, err := c.Run(context.Background(), step, func(context.Context) error {
+		return fmt.Errorf("ctx.needs: %w", boom)
+	})
+	require.Error(t, err)
+	require.NotEmpty(t, res.Ref)
+
+	_, d, err := c.outputs.ByRef(res.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, OutputDescriptor{
+		Failed:           true,
+		ErrMsg:           "ctx.needs: lint findings",
+		FailedNeedTarget: "lint-go",
+		FailedNeedRef:    "outdddddddddddd",
+	}, OutputDescriptor{Failed: d.Failed, ErrMsg: d.ErrMsg, FailedNeedTarget: d.FailedNeedTarget, FailedNeedRef: d.FailedNeedRef},
+		"the error text is not rewritten; the member rides beside it")
+}
+
+func TestRunRecordsNoFailedNeedForAnOrdinaryFailure(t *testing.T) {
+	step, c := hintCache(t, "package main // ordinary failure")
+
+	res, err := c.Run(context.Background(), step, func(context.Context) error { return errors.New("boom") })
+	require.Error(t, err)
+
+	_, d, err := c.outputs.ByRef(res.Ref)
+	require.NoError(t, err)
+	assert.Empty(t, d.FailedNeedTarget)
+	assert.Empty(t, d.FailedNeedRef)
+}
+
+// The unchanged-inputs hint points at the member that holds the findings, not at the
+// composed target's own output, which only restates them.
+func TestUnchangedFailureHintNamesTheFailedNeedRef(t *testing.T) {
+	step, c := hintCache(t, "package main // hint failed need")
+	member := WrapNeedFailure(errors.New("lint findings\nmore"), NeedMember{Target: "lint-go", Ref: "outeeeeeeeeeeee"})
+	fn := func(context.Context) error { return member }
+
+	_, err := c.Run(context.Background(), step, fn)
+	require.Error(t, err)
+
+	out := captureLog(t, func() {
+		_, err = c.Run(context.Background(), step, fn)
+		require.Error(t, err)
+	})
+	assert.Contains(t, out, "inputs unchanged since out")
+	assert.Contains(t, out, "magus query output outeeeeeeeeeeee")
+	assert.Contains(t, out, "lint-go")
 }

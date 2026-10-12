@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeResolver resolves exactly the anchors it was given and nothing else, and reports
+// givenAnchorsResolver resolves exactly the anchors it was given and nothing else, and reports
 // whatever digest it was told to.
-type fakeResolver struct {
+type givenAnchorsResolver struct {
 	live    map[string]bool
 	digests map[string]string
 	// decls is left nil by most cases on purpose: an anchor with no current declaration
@@ -21,13 +21,13 @@ type fakeResolver struct {
 	decls map[string]string
 }
 
-func (f fakeResolver) Resolves(_ context.Context, a Anchor) bool {
+func (f givenAnchorsResolver) Resolves(_ context.Context, a Anchor) bool {
 	return f.live[string(a.Kind)+":"+a.Target]
 }
-func (f fakeResolver) Digest(_ context.Context, a Anchor) (string, error) {
+func (f givenAnchorsResolver) Digest(_ context.Context, a Anchor) (string, error) {
 	return f.digests[string(a.Kind)+":"+a.Target], nil
 }
-func (f fakeResolver) DeclDigest(_ context.Context, a Anchor) (string, error) {
+func (f givenAnchorsResolver) DeclDigest(_ context.Context, a Anchor) (string, error) {
 	return f.decls[string(a.Kind)+":"+a.Target], nil
 }
 
@@ -43,7 +43,7 @@ func TestAnchorIssues(t *testing.T) {
 		Body: "prose",
 	}))
 
-	res := fakeResolver{live: map[string]bool{
+	res := givenAnchorsResolver{live: map[string]bool{
 		"file:internal/cache/cache.go": true,
 	}}
 	issues, err := AnchorIssues(context.Background(), dir, res)
@@ -73,7 +73,7 @@ func TestAnchorIssues_AllLiveReportsNothing(t *testing.T) {
 		Anchors: []Anchor{{Kind: AnchorProject, Target: "."}},
 	}))
 
-	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{live: map[string]bool{"project:.": true}})
+	issues, err := AnchorIssues(context.Background(), dir, givenAnchorsResolver{live: map[string]bool{"project:.": true}})
 	require.NoError(t, err)
 	assert.Empty(t, issues)
 }
@@ -93,7 +93,7 @@ func TestAnchorIssues_NeverRewritesTheStore(t *testing.T) {
 	before, err := Get(dir, n.Name)
 	require.NoError(t, err)
 
-	_, err = AnchorIssues(context.Background(), dir, fakeResolver{})
+	_, err = AnchorIssues(context.Background(), dir, givenAnchorsResolver{})
 	require.NoError(t, err)
 
 	after, err := Get(dir, n.Name)
@@ -117,7 +117,7 @@ func TestAnchorIssuesReportsDrift(t *testing.T) {
 		Title:   "Two caches",
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "aaaaaaaaaaaaaaaa"}},
 	}))
-	res := fakeResolver{
+	res := givenAnchorsResolver{
 		live:    map[string]bool{"symbol:m cache/Put().": true},
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	}
@@ -142,7 +142,7 @@ func TestAnchorIssuesSilentWhenADigestIsUnavailable(t *testing.T) {
 	}))
 	live := map[string]bool{"symbol:m cache/Put().": true}
 
-	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{live: live}) // no digests at all
+	issues, err := AnchorIssues(context.Background(), dir, givenAnchorsResolver{live: live}) // no digests at all
 	require.NoError(t, err)
 	assert.Empty(t, issues, "an uncomputable fingerprint is silence")
 
@@ -154,7 +154,7 @@ func TestAnchorIssuesSilentWhenADigestIsUnavailable(t *testing.T) {
 		Title:   "Never re-anchored",
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put()."}},
 	}))
-	issues, err = AnchorIssues(context.Background(), fresh, fakeResolver{
+	issues, err = AnchorIssues(context.Background(), fresh, givenAnchorsResolver{
 		live:    live,
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	})
@@ -169,7 +169,7 @@ func TestRecordDigestsIsDeliberateAndReportsWhatItDid(t *testing.T) {
 		Title:   "Two caches",
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "aaaaaaaaaaaaaaaa"}},
 	}))
-	res := fakeResolver{
+	res := givenAnchorsResolver{
 		live:    map[string]bool{"symbol:m cache/Put().": true},
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	}
@@ -197,7 +197,7 @@ func TestRecordDigestsUpdatesTheNoteInPlaceAfterARename(t *testing.T) {
 	file := filepath.Join(dir, "Some Note.md")
 	require.NoError(t, os.WriteFile(file,
 		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m cache/Put().\n---\n\nProse.\n"), 0o644))
-	res := fakeResolver{
+	res := givenAnchorsResolver{
 		live:    map[string]bool{"symbol:m cache/Put().": true},
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	}
@@ -221,7 +221,7 @@ func TestAnchorIssuesReportsTheRealFileAfterARename(t *testing.T) {
 	require.NoError(t, os.WriteFile(file,
 		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m gone/Removed().\n---\n\nProse.\n"), 0o644))
 
-	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{})
+	issues, err := AnchorIssues(context.Background(), dir, givenAnchorsResolver{})
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t, file, issues[0].Path)
@@ -237,7 +237,7 @@ func TestRecordDigestsSkipsADanglingAnchor(t *testing.T) {
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m gone/Removed#"}},
 	}))
 
-	changed, err := RecordDigests(context.Background(), dir, "ghost", "cafe1234", fakeResolver{
+	changed, err := RecordDigests(context.Background(), dir, "ghost", "cafe1234", givenAnchorsResolver{
 		digests: map[string]string{"symbol:m gone/Removed#": "cccccccccccccccc"},
 	})
 	require.NoError(t, err)
@@ -258,7 +258,7 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 	n.Anchors = []Anchor{{Kind: AnchorFile, Target: "a.go"}}
 	require.NoError(t, Save(dir, n))
 
-	changed, err := RecordDigests(context.Background(), dir, "stamped", "cafe1234", fakeResolver{
+	changed, err := RecordDigests(context.Background(), dir, "stamped", "cafe1234", givenAnchorsResolver{
 		live:    map[string]bool{"file:a.go": true},
 		digests: map[string]string{"file:a.go": "d1"},
 	})
@@ -273,7 +273,7 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 
 	// The drift report is what the provenance is FOR: naming the diff turns "something
 	// changed" into something a reader can act on without going looking.
-	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{
+	issues, err := AnchorIssues(context.Background(), dir, givenAnchorsResolver{
 		live:    map[string]bool{"file:a.go": true},
 		digests: map[string]string{"file:a.go": "d2"},
 	})
@@ -298,7 +298,7 @@ func TestBodyChangeUnderAnUnchangedDeclarationIsNotDrift(t *testing.T) {
 		}},
 		Body: "prose",
 	}))
-	res := fakeResolver{
+	res := givenAnchorsResolver{
 		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
 		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
 		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "decl"},
@@ -322,7 +322,7 @@ func TestDeclarationChangeIsStillDrift(t *testing.T) {
 		}},
 		Body: "prose",
 	}))
-	res := fakeResolver{
+	res := givenAnchorsResolver{
 		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
 		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
 		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "newdecl"},
@@ -357,7 +357,7 @@ func TestAnUngradedAnchorReportsDrift(t *testing.T) {
 				}},
 				Body: "prose",
 			}))
-			res := fakeResolver{
+			res := givenAnchorsResolver{
 				live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
 				digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
 				decls:   tt.current,
@@ -373,7 +373,7 @@ func TestAnUngradedAnchorReportsDrift(t *testing.T) {
 
 // gradedStore writes one note per grading outcome, so a note NAME identifies the expected
 // verdict without any test having to read a verdict back out of prose.
-func gradedStore(t *testing.T) (string, fakeResolver) {
+func gradedStore(t *testing.T) (string, givenAnchorsResolver) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "notes")
 	for _, n := range []Note{
@@ -394,7 +394,7 @@ func gradedStore(t *testing.T) (string, fakeResolver) {
 		require.NoError(t, Save(dir, n))
 	}
 
-	return dir, fakeResolver{
+	return dir, givenAnchorsResolver{
 		live: map[string]bool{
 			"file:internal/cache/cache.go": true,
 			"symbol:m cache/Put().":        true,
@@ -532,7 +532,7 @@ func TestUngradedResolutionDiffersOnlyInStatus(t *testing.T) {
 
 // errDeclResolver computes a body digest but fails on the declaration: a symbol the indexer
 // found but reported no enclosing range for.
-type errDeclResolver struct{ fakeResolver }
+type errDeclResolver struct{ givenAnchorsResolver }
 
 func (errDeclResolver) DeclDigest(context.Context, Anchor) (string, error) {
 	return "", assert.AnError
@@ -553,11 +553,11 @@ func TestDeclarationHeldFailsTowardsUngraded(t *testing.T) {
 		res      Resolver
 		want     bool
 	}{
-		{"nothing recorded", "", fakeResolver{decls: map[string]string{key: "decl"}}, false},
-		{"nothing computable", "decl", fakeResolver{}, false},
+		{"nothing recorded", "", givenAnchorsResolver{decls: map[string]string{key: "decl"}}, false},
+		{"nothing computable", "decl", givenAnchorsResolver{}, false},
 		{"declaration errored", "decl", errDeclResolver{}, false},
-		{"declaration moved", "decl", fakeResolver{decls: map[string]string{key: "other"}}, false},
-		{"declaration held", "decl", fakeResolver{decls: map[string]string{key: "decl"}}, true},
+		{"declaration moved", "decl", givenAnchorsResolver{decls: map[string]string{key: "other"}}, false},
+		{"declaration held", "decl", givenAnchorsResolver{decls: map[string]string{key: "decl"}}, true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			a := Anchor{Kind: AnchorSymbol, Target: target, Digest: "oldbody", DeclDigest: tt.recorded}

@@ -126,9 +126,9 @@ func rootElsewhere(t *testing.T) string {
 	testkit.Isolate(t)
 	resetWorkspaceMemo(t)
 	checkout := func() string {
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), nil, 0o644))
-		return dir
+		w := testkit.NewWorkspace(t)
+		w.Write("magus.yaml", "")
+		return w.Root()
 	}
 	loaded := checkout()
 	t.Chdir(checkout())
@@ -349,8 +349,7 @@ func TestRefsTextNoGeneratedFiltersAndReportsTheCount(t *testing.T) {
 magus\project({"outputs": ["gen/*"]});
 export fun build(ctx: magus\Context, args: [str]) > void {}
 `)
-	root, err := filepath.EvalSymlinks(w.Root())
-	require.NoError(t, err)
+	root := w.Root()
 
 	ctx := context.Background()
 	m, err := magus.Open(ctx, root)

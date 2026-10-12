@@ -76,7 +76,7 @@ func gradeClaimedDeclarations(ctx context.Context, workspace string, me types.Jo
 }
 
 func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string, mine []string) writeGrade {
-	return writeGrade{Decision: "deny", Rule: string(denyRuleClaimedDeclaration), Reason: denial{
+	return writeGrade{Decision: decisionDeny, Rule: string(denyRuleClaimedDeclaration), Reason: denial{
 		Say: fmt.Sprintf("magus workspace: this edit changes %s in %s, a declaration lease %s claims; "+leaseActorClause("re-partition the plan, or release "+rel+"#"+claim+" once lease "+owner.ID+" has finished with it"),
 			declaration, rel, owner.ID),
 		Why: fmt.Sprintf("You claim %s in %s. Lease %s (%s) claims it as %s#%s and is %s right now, and you are lease %s. Two agents editing one declaration is the collision a claim exists to prevent; this guard is where it gets read.\n"+
@@ -85,6 +85,25 @@ func denyClaimedDeclaration(me, owner types.Job, rel, claim, declaration string,
 			strings.Join(mine, ", "), rel, owner.ID, criteriaLine(owner), rel, claim, owner.State, me.ID,
 			owner.ID, time.Since(time.Unix(owner.Updated, 0)).Round(time.Second), hint.JobExit.With(owner.ID)),
 	}.full()}
+}
+
+// soleClaim names the declaration owner claims in rel when that is all it holds of the
+// file: no entry of its write paths covers rel whole.
+func soleClaim(owner types.Job, rel string) (declaration string, ok bool) {
+	var whole []string
+	for _, entry := range owner.WritePaths {
+		if _, decl := types.SplitClaim(entry); decl == "" {
+			whole = append(whole, entry)
+		}
+	}
+	if _, covered, _ := declarationCovering(whole, rel); covered {
+		return "", false
+	}
+	claims := claimsOn(owner.WritePaths, rel)
+	if len(claims) == 0 {
+		return "", false
+	}
+	return claims[0], true
 }
 
 // claimsOn are the declarations write paths claim in the file rel, whole-file entries left

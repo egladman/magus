@@ -216,20 +216,52 @@ export fun workspaceRootAt(dir: str) > str {
 // cwd, the directory the host says the call runs in, is walked first: a host runs a
 // subagent's hooks from the session's directory while the subagent works in its own
 // worktree, whose binary is the one that tree builds.
-export fun resolveBin(cwd: str = "") > str {
+//
+// A workspace with no runnable ./magus falls through to PATH, and the PATH copy may
+// predate the checkout's rules. A caller that passes file (and the session, when the
+// host reports one) has that said once per session on stderr: for a ./magus that cannot
+// run, and for a checkout of magus itself with none, naming the PATH copy and where its
+// link points. Anywhere else PATH is where magus is meant to come from. The version is
+// left to the trail row: asking costs a process on the hook that says it.
+export fun resolveBin(cwd: str = "", session: str = "", file: str = "") > str {
     final declared = env\get("__MAGUS_BIN") catch "";
     if (declared != "") { return declared; }
     var root = "";
     if (cwd != "") { root = workspaceRootAt(cwd); }
     if (root == "") { root = workspaceRoot(); }
-    if (root != "") {
-        final candidate = "{root}/magus";
-        if (isExecutable(candidate)) { return candidate; }
-        // The root was found and the binary beside it cannot be run. Falling
-        // through to PATH here is the same answer the walk's `break` gave: do not
-        // keep climbing into a parent checkout.
+    if (root == "") { return proc\which("magus") catch ""; }
+    final candidate = "{root}/magus";
+    if (isExecutable(candidate)) { return candidate; }
+    // The root was found and the binary beside it cannot be run. Falling through to
+    // PATH here is the same answer the walk's `break` gave: do not keep climbing into
+    // a parent checkout.
+    final onPath = proc\which("magus") catch "";
+    if (file != "") {
+        final present = (fs\stat(candidate) catch null) != null;
+        if (present and noticeOnce(session, family: "bin-not-executable", file: file)) {
+            io\stderr.write("{file}: {candidate} exists but is not executable, so this hook judges with the magus on PATH, "
+                + "which may predate this checkout's rules; run `chmod +x {candidate}`\n") catch void;
+        }
+        if (!present and onPath != "" and buildsMagus(root) and noticeOnce(session, family: "bin-absent", file: file)) {
+            io\stderr.write("{file}: {root} has no ./magus, so this hook judges with the magus on PATH, "
+                + "{describeBin(onPath)}, which may predate this checkout's rules\n") catch void;
+        }
     }
-    return proc\which("magus") catch "";
+    return onPath;
+}
+
+// buildsMagus reports whether root is a checkout of magus, which judges with the ./magus it
+// builds.
+fun buildsMagus(root: str) > bool {
+    final mod = fs\readFile("{root}/go.mod") catch "";
+    return mod.startsWith("module github.com/egladman/magus\n");
+}
+
+// describeBin names bin and, when it is a link, where the link points.
+fun describeBin(bin: str) > str {
+    final target = fs\readlink(bin) catch "";
+    if (target == "") { return bin; }
+    return "{bin} (a link to {target})";
 }
 
 fun fileSafe(key: str) > str {
@@ -252,15 +284,26 @@ fun olderThanWindow(marker: str) > bool {
     return os\time() - mtime! > minutes * 60000.0;
 }
 
+// tempBase is the directory fs\tempDir makes its directories in. No std member
+// names it, so a probe is made and removed.
+fun tempBase() > str {
+    final probe = fs\tempDir("magus-guard-notices-") catch "";
+    if (probe == "") { return envOr("TMPDIR", fallback: "/tmp"); }
+    fs\removeAll(probe) catch void;
+    return fs\dirname(probe);
+}
+
 // noticeOnce holds a broken-installation notice to one firing per session.
 //
 // The notices report a broken installation. That is a fact for the person, and
 // there is nothing in it an agent can act on, so a repeat is noise: measured at
 // 2,741 firings over recent sessions, 99% of them same-session repeats.
 //
-// The marker lives under TMPDIR, per user, because a world-writable /tmp lets
-// anyone pre-create someone else's marker and silence their notices. This runs
-// when magus cannot be asked for a place to put it. A host that reports no
+// The marker lives in the temp dir fs\tempDir uses, per user, because a
+// world-writable /tmp lets anyone pre-create someone else's marker and silence
+// their notices. Under the sandbox that is the policy's private temp dir, fixed per
+// workspace: the shared TMPDIR is granted to no sandboxed run. This runs when
+// magus cannot be asked for a place to put it. A host that reports no
 // session id shares one marker, aged out after __MAGUS_NOTICE_WINDOW minutes, so
 // the first session cannot silence every later one.
 //
@@ -268,8 +311,7 @@ fun olderThanWindow(marker: str) > bool {
 // line with the entry's matcher at best, and a reader with several entries
 // needs to know which file said it.
 export fun noticeOnce(session: str, family: str, file: str) > bool {
-    final tmp = envOr("TMPDIR", fallback: "/tmp");
-    final dir = "{tmp}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
+    final dir = "{tempBase()}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
     var key = session;
     if (key == "") { key = "anon"; }
     final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
@@ -304,6 +346,28 @@ test "a call from a nested project resolves the workspace root's binary" {
     std\assert(resolveBin(cwd: "{root}/console/src") == "{root}/magus", message: "the root's binary");
     std\assert(resolveBin(cwd: "{root}/console") == "{root}/magus", message: "from the project directory itself");
     fs\removeAll(root);
+}
+
+test "a ./magus that cannot run is said once per session, and only then" {
+    final root = fs\tempDir("hook-unrunnable-");
+    final session = fileSafe(root);
+    final bare = fs\tempDir("hook-no-binary-");
+    fs\writeFile("{root}/magus.yaml", content: "");
+    fs\writeFile("{bare}/magus.yaml", content: "");
+    fs\writeFile("{root}/magus", content: "#!/bin/sh\n");
+
+    resolveBin(cwd: root, session: session, file: "test.buzz");
+    std\assert(noticeOnce(session, family: "bin-not-executable", file: "test.buzz") == false, message: "the first call said it");
+
+    final quiet = "{session}-quiet";
+    resolveBin(cwd: bare, session: quiet, file: "test.buzz");
+    std\assert(noticeOnce(quiet, family: "bin-not-executable", file: "test.buzz"), message: "no ./magus at all is not this notice");
+
+    final named = "{session}-named";
+    resolveBin(cwd: root, session: named);
+    std\assert(noticeOnce(named, family: "bin-not-executable", file: "test.buzz"), message: "a caller that names no file stays silent");
+    fs\removeAll(root);
+    fs\removeAll(bare);
 }
 
 test "a worktree under another checkout never climbs into it" {

@@ -400,7 +400,7 @@ any cap the user set for the tree. Require the worker to:
   verdict is ever keyed on them{{else}}: the guard grades its writes only when that is
   set{{end}};
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
-- run only its assigned magus target.
+- run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never

@@ -153,6 +153,15 @@ type Magus struct {
 	// load evaluated it, by project path. A project absent here was not evaluated.
 	magusfileExports map[string][]string
 
+	// binaryAnswerTargets are the targets whose bodies ask the running binary for their
+	// answer (interp.BinaryAnswerTargets). buildStep keys them on the build. Written once
+	// by the load, read by every run after.
+	binaryAnswerTargets map[types.TargetRef]bool
+	// driftGateTargets are the targets that declare outputs and branch on the rw charm: without
+	// rw such a target compares its outputs, so its hit must find them as the entry
+	// recorded them (cache.Step.VerifyOutputs). Written once by the load.
+	driftGateTargets map[types.TargetRef]bool
+
 	// resolver is shared with preloadMagusfiles, so a magusfile with a top-level
 	// magus\secret.read costs one provider invocation rather than two.
 	resolver *secret.Resolver

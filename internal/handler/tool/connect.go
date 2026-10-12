@@ -51,9 +51,9 @@ type workspace interface {
 	All() []*types.Project
 }
 
-// lifecycleAsker is the workspace that can ask its lifecycle provider (a *magus.Magus
-// can). A workspace that cannot reads as one with no provider wired.
-type lifecycleAsker interface {
+// lifecycleSource is a workspace with a lifecycle provider wired (a *magus.Magus is one).
+// A workspace that is not reads as one with no provider wired.
+type lifecycleSource interface {
 	Lifecycles(ctx context.Context, installed ...types.ToolRow) (types.LifecycleStatus, []spells.Lifecycle, error)
 }
 
@@ -140,7 +140,7 @@ func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.Lis
 // lifecycles returns the provider's answer, memoized: lifecycleTTL for one that arrived,
 // probeTTL for one that did not.
 func (s *Service) lifecycles(ctx context.Context, installed []types.ToolRow) (lifecycleAnswer, error) {
-	asker, ok := s.ws.(lifecycleAsker)
+	source, ok := s.ws.(lifecycleSource)
 	if !ok {
 		return lifecycleAnswer{status: types.LifecycleStatus{State: types.LifecycleUnwired}}, nil
 	}
@@ -155,7 +155,7 @@ func (s *Service) lifecycles(ctx context.Context, installed []types.ToolRow) (li
 			return *a, nil
 		}
 	}
-	status, got, err := asker.Lifecycles(ctx, installed...)
+	status, got, err := source.Lifecycles(ctx, installed...)
 	if err != nil {
 		return lifecycleAnswer{}, err
 	}

@@ -535,7 +535,7 @@ whose source is `claude-code-mod/` beside this page. Install it once per person:
 /plugin install magus --marketplace egladman/magus
 ```
 
-It adds three things to a session:
+It adds these to a session:
 
 - A status line entry and a band above the prompt that name a magus problem with the
   command that fixes it: no binary, a borrowed or stale `./magus`, a stopped daemon,
@@ -546,8 +546,26 @@ It adds three things to a session:
 - Prompt-cache warnings: a countdown before the cache expires, and a warning or a
   held prompt when you submit after it has, priced from a rates table you can
   replace through the mod's `ratesFile` setting.
+- Cost gates, each priced from the same table and each off, `warn` (a toast) or a
+  stronger step, `warn` by default. The price step gate acts when the context the
+  next prompt re-sends is at or within `priceStepMarginTokens` of a model's
+  prompt-size price step, past which every request costs more, and `confirm` holds
+  the prompt once and suggests `/compact`. The subagent gate checks the model a
+  spawn runs on against `spawnMaxInputUsdPerMTok` (2 by default, Sonnet's input
+  rate; 0 turns it off); `deny` refuses the spawn before it starts and points to
+  the read-only `magus-scout` agent or `model: haiku`. The budget gate acts once
+  the session's spend passes `sessionBudgetUsd` (0 by default, which is off), and
+  `confirm` holds the prompt once.
+- The session's spend, main conversation and subagents together, in the status line
+  and at the top of the pane.
 
-Every threshold is a setting in `/config`. The mod uses the early-access Claude
+Every threshold is a setting in `/config`: `cacheGate`, `cacheWarnMinutes`,
+`gateMinTokens`, `cacheTtl`, `priceStepGate`, `priceStepMarginTokens`, `spawnGate`,
+`spawnMaxInputUsdPerMTok`, `sessionBudgetUsd`, `budgetGate`, `subagentTokenBudget`,
+`ratesFile` and `ratesStaleDays`. The mod reads a spawn's model from the call, then
+the agent's definition file under `.claude/agents`, then
+`CLAUDE_CODE_SUBAGENT_MODEL`, then the session; a built-in or plugin agent it cannot
+read is judged after it starts, by a toast alone. The mod uses the early-access Claude
 Code plugin API, so a Claude Code update can change what it needs.
 
 A workspace can register the marketplace and turn the mod on for everyone who opens

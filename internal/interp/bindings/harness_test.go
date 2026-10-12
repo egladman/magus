@@ -45,13 +45,13 @@ func TestBuildHarness(t *testing.T) {
 
 // TestDecodeHarnessPrompts pins that a spell's harness_prompts list reaches the descriptor
 // field for field, in the shape a Buzz spell returns it: lists of any, maps of any.
-func TestDecodeHarnessPrompts(t *testing.T) {
+func TestDecodeHarnessJSONReadsPrompts(t *testing.T) {
 	t.Run("a whole file and a JSON key both decode", func(t *testing.T) {
 		var d agent.HarnessDescriptor
-		require.NoError(t, decodeHarnessPrompts([]any{
+		require.NoError(t, decodeHarnessJSON([]any{
 			map[string]any{"path": ".codex/rules/magus.rules", "content": "prefix_rule()\n"},
 			map[string]any{"path": "opencode.json", "key": []any{"permission", "bash", "git push *"}, "value": "ask"},
-		}, &d))
+		}, &d.Prompts))
 		assert.Equal(t, []agent.HarnessPrompt{
 			{Path: ".codex/rules/magus.rules", Content: "prefix_rule()\n"},
 			{Path: "opencode.json", Key: []string{"permission", "bash", "git push *"}, Value: "ask"},
@@ -60,12 +60,12 @@ func TestDecodeHarnessPrompts(t *testing.T) {
 
 	t.Run("anything but a list is refused", func(t *testing.T) {
 		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessPrompts(map[string]any{"path": "opencode.json"}, &d))
+		assert.Error(t, decodeHarnessJSON(map[string]any{"path": "opencode.json"}, &d.Prompts))
 		assert.Empty(t, d.Prompts)
 	})
 
 	t.Run("a field of the wrong type is refused", func(t *testing.T) {
 		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessPrompts([]any{map[string]any{"path": "x", "key": "not a list"}}, &d))
+		assert.Error(t, decodeHarnessJSON([]any{map[string]any{"path": "x", "key": "not a list"}}, &d.Prompts))
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,8 +15,7 @@ import (
 // g, so a merge of side changes exactly g against main.
 func settleRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"f": "base\n", "g": "base\n"})
+	dir := testkit.NewRepo(t, map[string]string{"f": "base\n", "g": "base\n"}).Root()
 	gitRun(t, dir, "checkout", "-q", "-b", "side")
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "g"), []byte("side\n"), 0o644))
 	gitRun(t, dir, "commit", "-q", "-am", "side")

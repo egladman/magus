@@ -22,6 +22,8 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/environ"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -190,20 +192,17 @@ func TestSymbolIndexerExecuteRetriesAMidRunEditWithoutBackoff(t *testing.T) {
 // TestRunReturnsUndeclaredSourceModified pins what the retry above relies on: MGS4007
 // raised by the cache survives Magus.Run's error chain, so errors.Is sees it.
 func TestRunReturnsUndeclaredSourceModified(t *testing.T) {
-	const spellName = "zzz-source-mutation-spell"
-	root := t.TempDir()
-	src := filepath.Join(root, "a.txt")
-	require.NoError(t, os.WriteFile(src, []byte("before\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), nil, 0o644))
-	spell := spells.NewSpell(spellName,
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	src := w.Write("a.txt", "before\n")
+	w.Magusfile("")
+	spellName := register.Spell(t, "zzz-source-mutation-spell",
 		spells.WithTargets("touch"),
 		spells.WithSources("*.txt"),
 		spells.WithInvoker(func(context.Context, spells.InvokeRequest) (any, error) {
 			return nil, os.WriteFile(src, []byte("after\n"), 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -346,9 +345,9 @@ func TestReindexRefusedByAnAncestorLockGetsNoInstallHint(t *testing.T) {
 // freshenSymbolIndexes will rebuild its index.
 func indexerOnPath(t *testing.T) {
 	t.Helper()
-	bin := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(bin, indexerBin), []byte("#!/bin/sh\n"), 0o755))
-	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	bin := testkit.NewWorkspace(t)
+	bin.WriteExecutable(indexerBin, "#!/bin/sh\n")
+	t.Setenv("PATH", bin.Root()+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // A reader that freshens the index it reads (magus\precedents, Diff) is called from a
@@ -357,11 +356,10 @@ func indexerOnPath(t *testing.T) {
 // (MGS3007), so the reader read a stale index. The rebuild now runs inside the outer run.
 func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 	indexerOnPath(t)
-	const readerSpell = "zzz-index-reader-spell"
 	var m *Magus
 	var freshenErr error
 	var seen types.SymbolIndexFreshness
-	reader := spells.NewSpell(readerSpell,
+	readerSpell := register.Spell(t, "zzz-index-reader-spell",
 		spells.WithTargets("lint"),
 		spells.WithInvoker(func(ctx context.Context, req spells.InvokeRequest) (any, error) {
 			if req.Target != "lint" {
@@ -372,8 +370,6 @@ func TestFreshenInsideATargetReindexesThroughTheOuterRun(t *testing.T) {
 			return nil, nil
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(reader)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(readerSpell) })
 
 	m, src, _ := newIndexedWorkspaceWith(t, readerSpell)
 	require.NoError(t, os.WriteFile(src, []byte("package main\n\nfunc Added() {}\n"), 0o644))
@@ -436,10 +432,8 @@ const indexerBin = "zzz-scip-freshness-indexer"
 // further registered spells to bind the root project to.
 func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *string) {
 	t.Helper()
-	const spellName = "zzz-scip-freshness-test-spell"
-	const skillsSpell = "zzz-scip-freshness-skills-spell"
 	version := "1.0.0"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-scip-freshness-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: indexerBin}}),
 		spells.WithOps(map[string]spells.Op{
@@ -462,16 +456,11 @@ func newIndexedWorkspaceWith(t *testing.T, extra ...string) (*Magus, string, *st
 		}),
 		spells.WithInvoker(writesTheIndex),
 	)
-	skills := spells.NewSpell(skillsSpell, spells.WithSources(".claude/skills/**/SKILL.md"))
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	project.DefaultSpellRegistry().RegisterSpell(skills)
-	t.Cleanup(func() {
-		project.DefaultSpellRegistry().UnregisterSpell(spellName)
-		project.DefaultSpellRegistry().UnregisterSpell(skillsSpell)
-	})
+	skillsSpell := register.Spell(t, "zzz-scip-freshness-skills-spell", spells.WithSources(".claude/skills/**/SKILL.md"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	require.NoError(t, os.WriteFile(src, []byte("package main\n"), 0o644))
 	skill := filepath.Join(root, ".claude", "skills", "magus-query", "SKILL.md")
@@ -668,8 +657,9 @@ func TestMissingBuzzIndexerFailsOnlyItsOwnIndex(t *testing.T) {
 		project.DefaultSpellRegistry().RegisterSpell(sp)
 		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
 	}
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644))
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(goSpell), WithSpell("buzz"))
@@ -725,13 +715,13 @@ func TestSymbolGapNamesTheMissingIndexerOfASingleIndex(t *testing.T) {
 // server's own: a run that put scip-buzz on its PATH builds the index, so a review must
 // not leave that index out as uninstalled.
 func TestInstalledIndexesUsesTheRunsPATH(t *testing.T) {
-	server, bin := t.TempDir(), t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(server, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-buzz"), []byte("#!/bin/sh\n"), 0o755))
-	t.Setenv("PATH", server)
+	server, bin := testkit.NewWorkspace(t), testkit.NewWorkspace(t)
+	server.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	bin.WriteExecutable("zzz-scip-buzz", "#!/bin/sh\n")
+	t.Setenv("PATH", server.Root())
 	ctx := environ.With(t.Context())
-	environ.From(ctx).Set("PATH", bin)
+	environ.From(ctx).Set("PATH", bin.Root())
 
 	p := &types.Project{Path: "."}
 	idxs := []projectIndex{{project: p, op: "scip", bin: "zzz-scip-go"}, {project: p, op: "scip-buzz", bin: "zzz-scip-buzz"}}
@@ -779,7 +769,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}
 	}
 	indexer := spells.WithInvoker(writesTheIndex)
-	goSpell := spells.NewSpell("zzz-uses-go-spell",
+	goSpell := register.Spell(t, "zzz-uses-go-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.go"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-go"}, Uses: []string{"zzz-uses-go"}}),
@@ -790,7 +780,7 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}),
 		spells.WithVersionProber(prober), indexer,
 	)
-	tsSpell := spells.NewSpell("zzz-uses-ts-spell",
+	tsSpell := register.Spell(t, "zzz-uses-ts-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSources("**/*.ts"),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP, Command: spells.Command{Bin: "zzz-uses-scip-ts"}}),
@@ -801,21 +791,17 @@ func TestToolchainUpgradeStalesOnlyTheIndexThatUsesIt(t *testing.T) {
 		}),
 		spells.WithVersionProber(prober), indexer,
 	)
-	for _, sp := range []*spells.Spell{goSpell, tsSpell} {
-		project.DefaultSpellRegistry().RegisterSpell(sp)
-		t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(sp.Name()) })
-	}
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	for dir, file := range map[string]string{"svc": "main.go", "web": "index.ts"} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, dir), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, dir, "magusfile.buzz"), []byte(""), 0o644))
-		require.NoError(t, os.WriteFile(filepath.Join(root, dir, file), []byte("x\n"), 0o644))
+		w.Write(dir+"/magusfile.buzz", "")
+		w.Write(dir+"/"+file, "x\n")
 	}
 	reg := NewWorkspaceRegistry()
-	reg.RegisterProject("svc", WithSpell(goSpell.Name()))
-	reg.RegisterProject("web", WithSpell(tsSpell.Name()))
+	reg.RegisterProject("svc", WithSpell(goSpell))
+	reg.RegisterProject("web", WithSpell(tsSpell))
 	m, err := Open(context.Background(), root, WithWorkspaceRegistry(reg))
 	require.NoError(t, err, "Open")
 	t.Cleanup(func() { _ = m.Close() })
@@ -863,11 +849,11 @@ func TestSymbolStatusForksNoProbeTheScipOpDoesNotDrive(t *testing.T) {
 			return "v1", nil
 		}),
 	)
-	binDir := t.TempDir()
+	binDir := testkit.NewWorkspace(t)
 	for _, bin := range []string{"scip-go", "govulncheck"} {
-		require.NoError(t, os.WriteFile(filepath.Join(binDir, bin), []byte("\x7fELF binary"), 0o755))
+		binDir.WriteExecutable(bin, "\x7fELF binary")
 	}
-	t.Setenv("PATH", binDir)
+	t.Setenv("PATH", binDir.Root())
 
 	root := t.TempDir()
 	var ps []*types.Project
@@ -909,8 +895,8 @@ func TestProbeObservationsWarnsOnlyForAnInstalledToolThatFails(t *testing.T) {
 			return "", errors.New("segmentation fault")
 		}),
 	)
-	binDir := t.TempDir()
-	t.Setenv("PATH", binDir)
+	binDir := testkit.NewWorkspace(t)
+	t.Setenv("PATH", binDir.Root())
 	root := t.TempDir()
 	p := &types.Project{Path: ".", Dir: root, ResolvedSpells: []*spells.Spell{sp}}
 	m := &Magus{ws: &types.Workspace{Root: root}}
@@ -925,7 +911,7 @@ func TestProbeObservationsWarnsOnlyForAnInstalledToolThatFails(t *testing.T) {
 	assert.Equal(t, "UNPROBED", got["."]["buzz:scip-buzz"])
 	assert.Empty(t, buf.String(), "a tool that is not installed")
 
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, "scip-buzz"), []byte("\x7fELF binary"), 0o755))
+	binDir.WriteExecutable("scip-buzz", "\x7fELF binary")
 	m.probeObservations(t.Context(), []*types.Project{p}, driven)
 	assert.Contains(t, buf.String(), "observation probe failed", "an installed tool that cannot answer")
 }
@@ -1056,9 +1042,9 @@ func TestFreshenIndexesFailsWhenTheCacheRecordsNothing(t *testing.T) {
 // indexer is installed the Buzz index is left out, and a project with no indexer installed
 // keeps every index, so its review still fails naming what to install.
 func TestInstalledIndexesDropsAMissingSecondIndexer(t *testing.T) {
-	bin := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(bin, "zzz-scip-go"), []byte("#!/bin/sh\n"), 0o755))
-	t.Setenv("PATH", bin)
+	bin := testkit.NewWorkspace(t)
+	bin.WriteExecutable("zzz-scip-go", "#!/bin/sh\n")
+	t.Setenv("PATH", bin.Root())
 	root, docs := &types.Project{Path: "."}, &types.Project{Path: "docs"}
 	idxs := []projectIndex{
 		{project: root, op: "scip", language: "go", bin: "zzz-scip-go"},
@@ -1107,9 +1093,8 @@ func TestDiagnosticOfKeepsTheCode(t *testing.T) {
 // the tree went back to must not replay over an index built from the edit: `magus refs`
 // then answered with a line the source no longer held, and status called it up to date.
 func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
-	const spellName = "zzz-scip-replay-test-spell"
 	runs := 0
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-scip-replay-test-spell",
 		spells.WithTargets(spells.DefaultSymbolIndexOp),
 		spells.WithSymbolIndexer(&spells.SymbolIndexer{Format: spells.SymbolFormatSCIP}),
 		spells.WithSources("**/*.go"),
@@ -1126,11 +1111,10 @@ func TestScipReplayNeverKeepsAnIndexOfOtherSources(t *testing.T) {
 			return nil, os.WriteFile(index, body, 0o644)
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	src := filepath.Join(root, "main.go")
 	original := []byte("package main\n\nfunc Tokenize() {}\n")
 	edited := []byte("package main\n\n// shifts Tokenize down a line\nfunc Tokenize() {}\n")

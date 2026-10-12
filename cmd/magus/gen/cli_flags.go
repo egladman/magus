@@ -321,6 +321,8 @@ const (
 	FlagJobPruneAll = "all"
 	// job rm: --force
 	FlagJobRmForce = "force"
+	// job wait: --evidence
+	FlagJobWaitEvidence = "evidence"
 	// job wait: --integration
 	FlagJobWaitIntegration = "integration"
 	// job wait: --schema
@@ -577,6 +579,8 @@ const (
 	FlagSessionNotifyDesktop = "desktop"
 	// session notify: --outcome
 	FlagSessionNotifyOutcome = "outcome"
+	// session: --all
+	FlagSessionAll = "all"
 	// session: --brief
 	FlagSessionBrief = "brief"
 	// session: --limit
@@ -587,8 +591,16 @@ const (
 	FlagShellAgent = "agent"
 	// shell: --agent-name
 	FlagShellAgentName = "agent-name"
+	// shell: --call-background
+	FlagShellCallBackground = "call-background"
+	// shell: --call-timeout-ms
+	FlagShellCallTimeoutMs = "call-timeout-ms"
 	// shell: --event
 	FlagShellEvent = "event"
+	// shell: --foreground-default-ms
+	FlagShellForegroundDefaultMs = "foreground-default-ms"
+	// shell: --foreground-max-ms
+	FlagShellForegroundMaxMs = "foreground-max-ms"
 	// shell: --lease
 	FlagShellLease = "lease"
 	// shell: --message
@@ -1206,19 +1218,23 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 
 // ShellFlags are the flags declared for `magus shell`.
 type ShellFlags struct {
-	Path          bool   // --path
-	Observe       bool   // --observe
-	Message       bool   // --message
-	Lease         string // --lease
-	AgentName     string // --agent-name
-	Transport     string // --transport
-	Session       string // --session
-	Agent         string // --agent
-	Transcript    string // --transcript
-	Event         string // --event
-	ReportsSkills bool   // --reports-skills
-	RendersAsk    bool   // --renders-ask
-	RewritesInput bool   // --rewrites-input
+	Path                bool   // --path
+	Observe             bool   // --observe
+	Message             bool   // --message
+	Lease               string // --lease
+	AgentName           string // --agent-name
+	Transport           string // --transport
+	Session             string // --session
+	Agent               string // --agent
+	Transcript          string // --transcript
+	Event               string // --event
+	ReportsSkills       bool   // --reports-skills
+	RendersAsk          bool   // --renders-ask
+	RewritesInput       bool   // --rewrites-input
+	CallBackground      bool   // --call-background
+	CallTimeoutMs       int    // --call-timeout-ms
+	ForegroundDefaultMs int    // --foreground-default-ms
+	ForegroundMaxMs     int    // --foreground-max-ms
 }
 
 // BindShell registers `magus shell`'s flags on fs and returns the destination.
@@ -1237,6 +1253,10 @@ func BindShell(fs *flag.FlagSet) *ShellFlags {
 	fs.BoolVar(&f.ReportsSkills, FlagShellReportsSkills, false, "This hook wiring reports when the host loads a skill (a named reference document), so a rule may require one before a spawn, a write or a command; without it those rules stand down")
 	fs.BoolVar(&f.RendersAsk, FlagShellRendersAsk, false, "This wiring puts an ask verdict in front of the person through the host's own approval prompt; without it an ask is returned as a deny")
 	fs.BoolVar(&f.RewritesInput, FlagShellRewritesInput, false, "The input is a shell command the host runs, and this wiring hands the host the verdict's updated_command in its place; with it a pass or advise returns the command with stdin closed")
+	fs.BoolVar(&f.CallBackground, FlagShellCallBackground, false, "The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused")
+	fs.IntVar(&f.CallTimeoutMs, FlagShellCallTimeoutMs, 0, "The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default")
+	fs.IntVar(&f.ForegroundDefaultMs, FlagShellForegroundDefaultMs, 0, "The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run-timeout advice stands down")
+	fs.IntVar(&f.ForegroundMaxMs, FlagShellForegroundMaxMs, 0, "The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run-timeout advice stands down")
 	return &f
 }
 
@@ -1630,6 +1650,7 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 // SessionFlags are the flags declared for `magus session`.
 type SessionFlags struct {
 	Brief bool   // --brief
+	All   bool   // --all
 	Limit int    // --limit
 	Since string // --since
 }
@@ -1638,6 +1659,7 @@ type SessionFlags struct {
 func BindSession(fs *flag.FlagSet) *SessionFlags {
 	var f SessionFlags
 	fs.BoolVar(&f.Brief, FlagSessionBrief, false, "Print this checkout's state for a session that lost its history: revision, unpushed commits, classified dirty tree, capped live leases, the last run's failures, guard wiring (--limit and --since do not apply)")
+	fs.BoolVar(&f.All, FlagSessionAll, false, "List invocations from every checkout of this repository, not only this one")
 	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many invocations (0 for all)")
 	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only invocations active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
@@ -1769,6 +1791,9 @@ func BindJobExit(fs *flag.FlagSet) *JobExitFlags {
 }
 
 // JobWaitFlags are the flags declared for `magus job wait`.
+//
+// It does NOT carry --evidence: a custom-valued flag is bound by the command itself,
+// which must do so alongside this binder.
 type JobWaitFlags struct {
 	Schema      bool // --schema
 	Stdin       bool // --stdin

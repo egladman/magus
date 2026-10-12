@@ -8,7 +8,7 @@
 //
 // Only NEW targets, read from the diff: an existing target without outputs is a decision
 // already made, and re-litigating it on every unrelated push is how a bot gets muted.
-import "proc";
+import "vcs";
 import "advice";
 import "magus";
 import "std";
@@ -49,8 +49,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
+    final diff = vcs\cmd(["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true}).stdout;
     final names = advice\addedTargets(diff);
     if (names.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -188,15 +189,15 @@ func TestPackageDirsMajorityLanguageTiesToTheLexicallyFirst(t *testing.T) {
 func TestFindPackageSourcesWalksIndexedLanguages(t *testing.T) {
 	t.Parallel()
 
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
 	for _, rel := range []string{
 		"a.go", "a_test.go", "gen/g.go", "src/app.tsx", "src/app.test.ts", "lib/m.py", "crate/src/lib.rs",
 		"node_modules/x/y.js", "testdata/t.go", ".hidden/h.go", "vendor/v.go", "README.md", "src/style.css",
 	} {
-		writeFile(t, root, rel, "")
+		ws.Write(rel, "")
 	}
 
-	assert.Equal(t, []string{"a.go", "crate/src/lib.rs", "gen/g.go", "lib/m.py", "src/app.tsx"}, findPackageSources(root))
+	assert.Equal(t, []string{"a.go", "crate/src/lib.rs", "gen/g.go", "lib/m.py", "src/app.tsx"}, findPackageSources(ws.Root()))
 }
 
 func TestUnionLayersJoinsProjectsAndRefusesTwoNames(t *testing.T) {

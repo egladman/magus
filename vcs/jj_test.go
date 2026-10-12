@@ -63,7 +63,6 @@ func TestJJMergeDriverRegistersTheToolInTheRepoConfig(t *testing.T) {
 	if _, err := exec.LookPath("jj"); err != nil {
 		t.Skip("jj not available")
 	}
-	isolateUserConfig(t)
 	dir := t.TempDir()
 	jjInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
 	ctx := t.Context()

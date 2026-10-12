@@ -37,7 +37,7 @@ Takes [RunJobRequest](#runjobrequest), returns [RunJobResponse](#runjobresponse)
 
 CompletionGate is one machine-verifiable condition a job's completion is checked against, projected from types.Goal. kind names WHAT it examines and expect names what must be true of it; check/paths/symbols carry whichever subject that kind actually uses. check is rendered as the command that runs it, the same way Job.check is - the wire never carries the unrendered form, so a client needs no second parser for it.
 
-Source: [job.proto:231](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L231).
+Source: [job.proto:245](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L245).
 
 | Field         | Type            | # | Description |
 | ------------- | --------------- | - | ----------- |
@@ -60,46 +60,47 @@ ONE message for both kinds. A catalog job fills the description and target; a de
 
 Source: [job.proto:77](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L77).
 
-| Field            | Type                                                   | #  | Description                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------- | ------------------------------------------------------ | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`           | string                                                 | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                                                                                                                                                                                                                   |
-| `description`    | string                                                 | 2  |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `running`        | bool                                                   | 3  | an instance is in flight right now                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `last_run`       | [JobRun](#jobrun)                                      | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                                                                                                                                                                                                         |
-| `target`         | [ResourceSize](#resourcesize)                          | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                                                                                                                                                                                                                   |
-| `id`             | string                                                 | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                                                                                                                                                                                            |
-| `holder`         | [JobHolder](#jobholder)                                | 7  | who runs it                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `state`          | string                                                 | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                                                                                                                                                                                         |
-| `criteria`       | string                                                 | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field.                                                                                                                                                                |
-| `parent`         | string                                                 | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                                                                                                                                                                                            |
-| `model`          | string                                                 | 11 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `check`          | string                                                 | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                                                                                                                                                                                  |
-| `write_paths`    | repeated string                                        | 13 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `deny_paths`     | repeated string                                        | 14 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `read_paths`     | repeated string                                        | 15 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `depends_on`     | repeated string                                        | 16 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `read_only`      | bool                                                   | 17 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `checkpoint`     | string                                                 | 18 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `releases`       | [repeated JobRelease](#jobrelease)                     | 19 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `created`        | int64                                                  | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                                                                                                                                                                                                            |
-| `updated`        | int64                                                  | 21 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `goals`          | [repeated CompletionGate](#completiongate)             | 22 | Goals are the job's declared definition of done, graded by `magus job wait`, empty on a job that named none beyond its primary check. See CompletionGate.                                                                                                                                                                                                                                                                          |
-| `result`         | [JobResult](#jobresult)                                | 23 | Result is what the holder filed on exit, unset until it has.                                                                                                                                                                                                                                                                                                                                                                       |
-| `deadline`       | int64                                                  | 24 | Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork set no timeout.                                                                                                                                                                                                                                                                                                                            |
-| `end_reason`     | string                                                 | 25 | The facts the store computes about a delegated row, the same ones `magus ls jobs` prints. end\_reason is why magus ended the row itself, empty when a holder or a person did. write\_proof is alone, disjoint or overlapping, what fork could prove about the write paths. reported\_base and base\_verdict are the base the worker landed on and how it compares to checkpoint. checkout\_root is the checkout that took the job. |
-| `write_proof`    | string                                                 | 26 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `reported_base`  | string                                                 | 27 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `base_verdict`   | string                                                 | 28 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `checkout_root`  | string                                                 | 29 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `registered`     | int64                                                  | 30 | unix seconds the holder took the job, 0 while untaken                                                                                                                                                                                                                                                                                                                                                                              |
-| `registered_by`  | [JobOrigin](#joborigin)                                | 31 | who declared the row                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `attempt`        | [JobAttempt](#jobattempt)                              | 32 | the newest recorded run of the job's own check                                                                                                                                                                                                                                                                                                                                                                                     |
-| `gate_attempts`  | [repeated JobGateAttempt](#jobgateattempt)             | 33 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `unattributed`   | [repeated JobUnattributedWrite](#jobunattributedwrite) | 34 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `entries`        | [repeated JobEntry](#jobentry)                         | 35 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `integration`    | [JobIntegration](#jobintegration)                      | 36 | unset until the integrator verified the job                                                                                                                                                                                                                                                                                                                                                                                        |
-| `schema_version` | int32                                                  | 38 | The row's schema envelope: the newest store schema any writer of it used, and the features a reader must implement to act on it (see ListJobsResponse.read\_only).                                                                                                                                                                                                                                                                 |
-| `requires`       | repeated string                                        | 37 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Field             | Type                                                   | #  | Description                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------- | ------------------------------------------------------ | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`            | string                                                 | 1  | name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id is the last segment, and is what the CLI's `job run <name>` leaf takes.                                                                                                                                                                                                                                                                   |
+| `description`     | string                                                 | 2  |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `running`         | bool                                                   | 3  | an instance is in flight right now                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `last_run`        | [JobRun](#jobrun)                                      | 4  | most recent run; unset if the job has never been submitted                                                                                                                                                                                                                                                                                                                                                                         |
+| `target`          | [ResourceSize](#resourcesize)                          | 5  | current size of what the job operates on (trail, cache, or logs)                                                                                                                                                                                                                                                                                                                                                                   |
+| `id`              | string                                                 | 6  | the bare row id, without the "jobs/" collection segment                                                                                                                                                                                                                                                                                                                                                                            |
+| `holder`          | [JobHolder](#jobholder)                                | 7  | who runs it                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `state`           | string                                                 | 8  | state is the row's lifecycle position: declared, running, exited, pass, fail or no\_return. A string rather than an enum because the vocabulary is the job store's and a second closed set here would be a second place to add a value to.                                                                                                                                                                                         |
+| `criteria`        | string                                                 | 9  | The facts a DELEGATED job carries, empty on a catalog job. These are what an orchestrator declared, never a verdict magus reached. Renamed from `goal`; the field NUMBER is the wire identity, so a peer built before the rename still reads and writes this field.                                                                                                                                                                |
+| `parent`          | string                                                 | 10 | the job this one was handed out under, empty for a root                                                                                                                                                                                                                                                                                                                                                                            |
+| `model`           | string                                                 | 11 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `check`           | string                                                 | 12 | the one check this job runs, rendered as the command that runs it                                                                                                                                                                                                                                                                                                                                                                  |
+| `write_paths`     | repeated string                                        | 13 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `deny_paths`      | repeated string                                        | 14 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `read_paths`      | repeated string                                        | 15 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `depends_on`      | repeated string                                        | 16 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `read_only`       | bool                                                   | 17 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `checkpoint`      | string                                                 | 18 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `releases`        | [repeated JobRelease](#jobrelease)                     | 19 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `created`         | int64                                                  | 20 | unix SECONDS, as the store records them                                                                                                                                                                                                                                                                                                                                                                                            |
+| `updated`         | int64                                                  | 21 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `goals`           | [repeated CompletionGate](#completiongate)             | 22 | Goals are the job's declared definition of done, graded by `magus job wait`, empty on a job that named none beyond its primary check. See CompletionGate.                                                                                                                                                                                                                                                                          |
+| `result`          | [JobResult](#jobresult)                                | 23 | Result is what the holder filed on exit, unset until it has.                                                                                                                                                                                                                                                                                                                                                                       |
+| `deadline`        | int64                                                  | 24 | Deadline is unix seconds past which the guard denies this job's writes; 0 when the fork set no timeout.                                                                                                                                                                                                                                                                                                                            |
+| `end_reason`      | string                                                 | 25 | The facts the store computes about a delegated row, the same ones `magus ls jobs` prints. end\_reason is why magus ended the row itself, empty when a holder or a person did. write\_proof is alone, disjoint or overlapping, what fork could prove about the write paths. reported\_base and base\_verdict are the base the worker landed on and how it compares to checkpoint. checkout\_root is the checkout that took the job. |
+| `write_proof`     | string                                                 | 26 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `reported_base`   | string                                                 | 27 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `base_verdict`    | string                                                 | 28 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `checkout_root`   | string                                                 | 29 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `registered`      | int64                                                  | 30 | unix seconds the holder took the job, 0 while untaken                                                                                                                                                                                                                                                                                                                                                                              |
+| `registered_by`   | [JobOrigin](#joborigin)                                | 31 | who declared the row                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `attempt`         | [JobAttempt](#jobattempt)                              | 32 | the newest recorded run of the job's own check                                                                                                                                                                                                                                                                                                                                                                                     |
+| `gate_attempts`   | [repeated JobGateAttempt](#jobgateattempt)             | 33 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `unattributed`    | [repeated JobUnattributedWrite](#jobunattributedwrite) | 34 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `entries`         | [repeated JobEntry](#jobentry)                         | 35 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `integration`     | [JobIntegration](#jobintegration)                      | 36 | unset until the integrator verified the job                                                                                                                                                                                                                                                                                                                                                                                        |
+| `schema_version`  | int32                                                  | 38 | The row's schema envelope: the newest store schema any writer of it used, and the features a reader must implement to act on it (see ListJobsResponse.read\_only).                                                                                                                                                                                                                                                                 |
+| `requires`        | repeated string                                        | 37 |                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `waiter_evidence` | [JobIntegration](#jobintegration)                      | 39 | waiter\_evidence is the goals whose passing run came from the waiter's checkout rather than the holder's, unset unless `magus job wait --evidence` took some. gate\_attempts keep the holder's own attempts untouched; this is the second fact beside them.                                                                                                                                                                        |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -107,17 +108,21 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobAttempt is a recorded run of a check, as `magus job wait` found it.
 
-Source: [job.proto:156](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L156).
+Source: [job.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L160).
 
-| Field          | Type   | # | Description |
-| -------------- | ------ | - | ----------- |
-| `found`        | bool   | 1 |             |
-| `ref`          | string | 2 |             |
-| `timestamp_ms` | int64  | 3 |             |
-| `project`      | string | 4 |             |
-| `target`       | string | 5 |             |
-| `spell`        | string | 6 |             |
-| `failed`       | bool   | 7 |             |
+| Field          | Type   | #  | Description                                                                                                                                                                        |
+| -------------- | ------ | -- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `found`        | bool   | 1  |                                                                                                                                                                                    |
+| `ref`          | string | 2  |                                                                                                                                                                                    |
+| `timestamp_ms` | int64  | 3  |                                                                                                                                                                                    |
+| `project`      | string | 4  |                                                                                                                                                                                    |
+| `target`       | string | 5  |                                                                                                                                                                                    |
+| `spell`        | string | 6  |                                                                                                                                                                                    |
+| `failed`       | bool   | 7  |                                                                                                                                                                                    |
+| `attempt_id`   | string | 8  | attempt\_id names this execution alone, where ref may name its step, which a later run of the same step takes over.                                                                |
+| `duration_ms`  | int64  | 9  | duration\_ms is how long the run took. timestamp\_ms is when it ENDED, so the run started at timestamp\_ms - duration\_ms.                                                         |
+| `revision`     | string | 10 | revision is the VCS revision the run read its inputs at, empty when unknown. dirty says the tree also held uncommitted changes then, so revision alone does not name what it read. |
+| `dirty`        | bool   | 11 |                                                                                                                                                                                    |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -125,7 +130,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobBlock is a live job waiting on a dependency that has not passed. state is empty when no row declares the dependency.
 
-Source: [job.proto:205](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L205).
+Source: [job.proto:219](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L219).
 
 | Field   | Type   | # | Description |
 | ------- | ------ | - | ----------- |
@@ -139,7 +144,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobEntry is an acknowledged write into the job's paths by somebody other than its holder.
 
-Source: [job.proto:180](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L180).
+Source: [job.proto:194](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L194).
 
 | Field      | Type                    | # | Description                                            |
 | ---------- | ----------------------- | - | ------------------------------------------------------ |
@@ -154,7 +159,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobGateAttempt is the newest recorded run of one goal's check.
 
-Source: [job.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L167).
+Source: [job.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L181).
 
 | Field     | Type                      | # | Description |
 | --------- | ------------------------- | - | ----------- |
@@ -167,7 +172,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobGateEvidence is the run a holder offered for one goal.
 
-Source: [job.proto:254](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L254).
+Source: [job.proto:268](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L268).
 
 | Field        | Type   | # | Description |
 | ------------ | ------ | - | ----------- |
@@ -180,7 +185,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobGateStatus is one gate's verdict at integration.
 
-Source: [job.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L196).
+Source: [job.proto:210](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L210).
 
 | Field        | Type            | # | Description |
 | ------------ | --------------- | - | ----------- |
@@ -195,7 +200,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobIntegration is the integrator's verification of the job in its own checkout.
 
-Source: [job.proto:188](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L188).
+Source: [job.proto:202](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L202).
 
 | Field      | Type                                     | # | Description  |
 | ---------- | ---------------------------------------- | - | ------------ |
@@ -210,7 +215,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobOrigin is who did something to a row, one field per channel, as the activity trail records an action's origin.
 
-Source: [job.proto:145](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L145).
+Source: [job.proto:149](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L149).
 
 | Field         | Type                                                         | # | Description |
 | ------------- | ------------------------------------------------------------ | - | ----------- |
@@ -230,7 +235,7 @@ JobOverlap is one pair of jobs whose declared write paths intersect. Derived on 
 
 Each side's intersecting declarations come separately, because the two are rarely the same string ("internal/job" and "internal/job/store.go" intersect) and a reader who cannot tell which job claimed which has nothing to act on.
 
-Source: [job.proto:275](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L275).
+Source: [job.proto:292](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L292).
 
 | Field       | Type                                        | # | Description                                                                                                                                                                                                                                                                                      |
 | ----------- | ------------------------------------------- | - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -247,7 +252,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobOverlapFootprint is whether two overlapping jobs' diffs touch the same declaration. verdict is disjoint, shared or unknown; shared lists the colliding locations; reason says why when it is unknown.
 
-Source: [job.proto:220](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L220).
+Source: [job.proto:234](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L234).
 
 | Field     | Type            | # | Description |
 | --------- | --------------- | - | ----------- |
@@ -261,7 +266,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobReadOnly is a row this binary can read but not write: the store features it lacks.
 
-Source: [job.proto:212](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L212).
+Source: [job.proto:226](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L226).
 
 | Field   | Type            | # | Description |
 | ------- | --------------- | - | ----------- |
@@ -274,13 +279,14 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 JobRelease is a path a job gave up, and the version of it the next one inherits. The digest is the file's sha256 when there was a file; "absent" and "dir" are carried through as they are rather than turned into a hash-shaped lie.
 
-Source: [job.proto:262](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L262).
+Source: [job.proto:276](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L276).
 
-| Field         | Type   | # | Description  |
-| ------------- | ------ | - | ------------ |
-| `path`        | string | 1 |              |
-| `digest`      | string | 2 |              |
-| `released_at` | int64  | 3 | unix seconds |
+| Field         | Type   | # | Description                                                                                                                                                    |
+| ------------- | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `path`        | string | 1 |                                                                                                                                                                |
+| `digest`      | string | 2 |                                                                                                                                                                |
+| `released_at` | int64  | 3 | unix seconds                                                                                                                                                   |
+| `revoked`     | bool   | 4 | revoked is a path taken from a job its holder had taken, by a writer other than that holder: the orchestrator revoking it rather than the worker giving it up. |
 
 Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runjob).
 
@@ -288,7 +294,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobResult is what a holder filed when it exited: the paths it changed, the risks it left unresolved, the jobs it spawned, and the runs it offered as evidence.
 
-Source: [job.proto:244](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L244).
+Source: [job.proto:258](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L258).
 
 | Field                   | Type                                         | # | Description                             |
 | ----------------------- | -------------------------------------------- | - | --------------------------------------- |
@@ -305,7 +311,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobRun is one completed execution of a job.
 
-Source: [job.proto:289](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L289).
+Source: [job.proto:306](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L306).
 
 | Field             | Type      | # | Description                                                                                                                                                                                                                                                           |
 | ----------------- | --------- | - | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -323,7 +329,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 JobUnattributedWrite is a write inside the job's paths that no lease claimed.
 
-Source: [job.proto:173](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L173).
+Source: [job.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L187).
 
 | Field    | Type   | # | Description  |
 | -------- | ------ | - | ------------ |
@@ -337,7 +343,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 Paginated by contract so growth never forces a breaking change, though the registry is a fixed handful today and one page always holds it.
 
-Source: [job.proto:319](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L319).
+Source: [job.proto:336](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L336).
 
 | Field        | Type   | # | Description                     |
 | ------------ | ------ | - | ------------------------------- |
@@ -348,7 +354,7 @@ Used by: [ListJobs (request)](job.md#listjobs).
 
 ### ListJobsResponse
 
-Source: [job.proto:323](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L323).
+Source: [job.proto:343](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L343).
 
 | Field             | Type                                 | # | Description                                                                                                                                            |
 | ----------------- | ------------------------------------ | - | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -367,7 +373,7 @@ Used by: [ListJobs (response)](job.md#listjobs).
 
 ResourceSize is the current magnitude of a job's target resource, for a caller to show how much there is to maintain (and to judge whether a rotate/clear is worth running).
 
-Source: [job.proto:305](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L305).
+Source: [job.proto:322](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L322).
 
 | Field        | Type  | # | Description                                                 |
 | ------------ | ----- | - | ----------------------------------------------------------- |
@@ -378,7 +384,7 @@ Used by: [ListJobs (response)](job.md#listjobs), [RunJob (response)](job.md#runj
 
 ### RunJobRequest
 
-Source: [job.proto:310](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L310).
+Source: [job.proto:327](https://github.com/egladman/magus/blob/main/proto/magus/job/v1alpha1/job.proto#L327).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                       |
 | ------ | ------ | - | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

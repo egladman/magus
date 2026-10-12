@@ -223,6 +223,13 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   Only a call addressed to the magus server (`mcp__magus__<tool>`)
   is graded as a magus call, and the call is normalized to a command line before
   any rule sees it, so what the activity trail records is what was graded.
+- **A worker's magus run in the background**
+  ([worker-background-run](../../../reference/rules/worker-background-run.md)). A
+  worker that backgrounds its check ends its turn with the run pending and parks there,
+  and nobody is told the result. The wiring reports what the call asked of the host
+  (`--call-background`, `--call-timeout-ms`), and a `magus run` or `magus affected` by a
+  worker under a live lease that does not own the gate is refused when the host would
+  run it in the background. A wiring that reports nothing leaves the rule silent.
 
 ## What magus advises by default
 
@@ -473,6 +480,14 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   declared no validation, and a row whose validation names `ci` are all
   unaffected. See
   [what the guard enforces under a lease](leases.md#what-the-guard-enforces-under-a-lease).
+- A worker's magus run whose timeout is shorter than the target's last real run allows
+  for ([check-timeout](../../../reference/rules/check-timeout.md)). It names a timeout
+  of half again that run, capped at the host's foreground maximum, or says the check
+  cannot finish in the foreground and to ask for a narrower one, as it does when the
+  call already waits the maximum. The host's foreground
+  default and maximum come from the wiring (`--foreground-default-ms`,
+  `--foreground-max-ms`), which the harness spell declares; without them it is silent.
+  Once per target per session.
 
 Everything else about the command itself passes. Two rules then read state
 outside the command line, and speak only into the silence the rules above leave:

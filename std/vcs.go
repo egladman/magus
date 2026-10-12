@@ -563,7 +563,7 @@ func VcsCmd(ctx context.Context, args []string, opts map[string]any) (types.Exec
 	}
 	dir := resolveDir(ctx, optStringDefault(opts, "dir", ""))
 	v, _ := resolveVCS(ctx)
-	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir); err != nil {
+	if err := vcsLeaseRefusal(ctx, v.Name(), args, dir, childEnv(ctx)); err != nil {
 		return types.ExecResult{}, err
 	}
 	return runResult(ctx, bin, args, dir, `vcs\cmd`, bin, opts)

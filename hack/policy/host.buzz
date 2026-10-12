@@ -3,13 +3,18 @@
 // host-capture (deny): cat, sed, rg, grep, head or tail aimed at a run log
 //   (.magus/logs/<hex>.log) or a host task capture (tasks/<id>.output). The
 //   compiled rule only advises a filter of those files, and a range read
-//   (sed -n) is the same filter. The log's ref is what query output reads.
+//   (sed -n) is the same filter. The log's ref is what query output reads. A task
+//   capture is read here to name the refs and invocation ids it holds, so the
+//   denial points at the run and not at the file. With no ./magus in the
+//   workspace there is no query output to point at, and the read is allowed.
 // host-terminals (deny): creating or reading a directory named terminals.
 //   A host session folder is not a run; magus status reads the project lock.
 namespace agentpolicy\host;
 
 import "std";
+import "fs";
 import "magus";
+import "./hack/policy/binaries" as binaries;
 import "./hack/policy/helpers" as helpers;
 import "./hack/policy/verdict" as verdict;
 
@@ -21,19 +26,129 @@ final terminalsDenial = "a directory named terminals is a host session folder, n
     + "Status reports who holds the lock, what they are running, and how long they have held it. "
     + "Do not create a terminals directory and do not read its files.";
 
+// captureBytes is the largest task capture decideHost scans for refs; a bigger one gets
+// the generic denial. A workspace rule that outlives its 3 second budget is skipped, which
+// reads as an allow, so the scan stays small.
+final captureBytes = 1024 * 1024;
+
+// otherRefs is how many refs past the first the verdict lists.
+final otherRefs = 5;
+
+final refPattern = std\pattern("\\bout[0-9a-f]\{12\}\\b");
+final invocationPattern = std\pattern("\\binv[0-9a-z]\{6,\}\\b");
+
+// Reads is what decideHost learns from outside the command line, passed in so the tests
+// can describe a workspace without building one.
+export object Reads {
+    // text: a capture file's content, "" when it cannot be read or is too large to scan.
+    text: fun (path: str) > str,
+    // binary: the workspace holds the ./magus that query output needs.
+    binary: fun () > bool,
+}
+
+// readsFrom reads captures and looks for ./magus on disk. A relative capture path is
+// resolved against dir, where the command runs. An unknown workspace counts as holding a
+// binary, so the denial stands.
+export fun readsFrom(workspace: str, dir: str) > Reads {
+    return Reads{
+        text = fun (path: str) > str {
+            var file = path;
+            if (dir != "" and !file.startsWith("/") and file.indexOf(":") == null) {
+                file = "{dir}/{path}";
+            }
+            if ((fs\size(file) catch captureBytes + 1) > captureBytes) {
+                return "";
+            }
+            return fs\readFile(file) catch "";
+        },
+        binary = fun () > bool {
+            return workspace == "" or binaries\onDisk().hasBinary(workspace);
+        },
+    };
+}
+
 // decideHost denies a command that reads a run capture or that creates or reads
 // a terminals directory. Anything else is allowed, including a search whose
-// pattern merely mentions those names.
-export fun decideHost(programs: [helpers\Program]) > GuardVerdict {
+// pattern merely mentions those names, and a capture read in a workspace with no
+// ./magus: the denial's remedy cannot be followed there, and the capture may be the
+// only place the failure was written.
+export fun decideHost(programs: [helpers\Program], reads: Reads) > GuardVerdict {
     foreach (p in programs) {
-        if (readsCapture(p)) {
-            return magus\guard.deny(captureDenial);
+        final path = capturePath(p);
+        if (path != "" and reads.binary()) {
+            return magus\guard.deny(denialFor(path, reads: reads));
         }
         if (touchesTerminals(p)) {
             return magus\guard.deny(terminalsDenial);
         }
     }
     return magus\guard.allow();
+}
+
+// denialFor is the capture denial for path. A task capture is read for the refs and
+// invocation ids it printed, so the verdict names the run's own ref; a run log, or a
+// capture holding neither, gets the generic text and how to find an invocation id.
+fun denialFor(path: str, reads: Reads) > str {
+    if (!slashed(path).endsWith(".output")) {
+        return captureDenial;
+    }
+    final text = reads.text(path);
+    final refs = distinct(refPattern.matchAll(text) ?? [<[str]>]);
+    final invocations = invocationIds(invocationPattern.matchAll(text) ?? [<[str]>]);
+    if (refs.len() > 0) {
+        var rest = "";
+        if (refs.len() > 1) {
+            var shown = refs.len() - 1;
+            if (shown > otherRefs) {
+                shown = otherRefs;
+            }
+            rest = "Other refs in this capture: {refs.sub(1, len: shown).join(", ")}";
+            if (refs.len() - 1 > shown) {
+                rest = rest + ", and {refs.len() - 1 - shown} more";
+            }
+            rest = rest + ".\n";
+        }
+        rest = rest + "The whole invocation lists each failed target with its ref: ";
+        if (invocations.len() > 0) {
+            rest = rest + "`magus query invocation {invocations[0]}`.";
+        } else {
+            rest = rest + "`magus query invocation <id>`; `magus query output {refs[0]} --identity` prints the id.";
+        }
+        return "reading this capture keeps a slice; the run's log is whole: `magus query output {refs[0]}`.\n" + rest;
+    }
+    if (invocations.len() > 0) {
+        return "this capture prints no output ref; read the whole run: `magus query invocation {invocations[0]}`.\n"
+            + "The invocation lists each failed target and its cause. Reading the capture by cat or by a range keeps a slice.";
+    }
+    return captureDenial + "\nIf the capture names an `inv<id>`, `magus query invocation <id>` reads the whole run; "
+        + "`magus session -o name` lists the recent invocations.";
+}
+
+// distinct is the first element of each match, once, in order of appearance.
+fun distinct(matches: [[str]]) > [str] {
+    final found = mut [<str>];
+    foreach (m in matches) {
+        if (found.indexOf(m[0]) == null) {
+            found.append(m[0]);
+        }
+    }
+    return found;
+}
+
+// invocationIds are the distinct inv<base36> ids among matches. A word such as
+// "invalidate" has the prefix and no digit; a minted id carries a base-36 timestamp.
+fun invocationIds(matches: [[str]]) > [str] {
+    final found = mut [<str>];
+    foreach (id in distinct(matches)) {
+        var digit = false;
+        foreach (n in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+            if (id.indexOf("{n}") != null) { digit = true; }
+        }
+        if (digit and id.utf8Len() >= 9) {
+            found.append(id);
+        }
+    }
+    return found;
 }
 
 // writePath is the denial for a write whose path is a capture or sits in a
@@ -48,13 +163,15 @@ export fun writePath(path: str) > str {
     return "";
 }
 
-fun readsCapture(p: helpers\Program) > bool {
+// capturePath is the first capture or log directory a program is aimed at, "" when it
+// reads none.
+fun capturePath(p: helpers\Program) > str {
     final recursive = p.name == "rg" or p.name == "grep" or p.name == "find";
     foreach (file in readerPaths(p)) {
-        if (isCapture(file)) { return true; }
-        if (recursive and isLogDir(file)) { return true; }
+        if (isCapture(file)) { return file; }
+        if (recursive and isLogDir(file)) { return file; }
     }
-    return false;
+    return "";
 }
 
 fun touchesTerminals(p: helpers\Program) > bool {
@@ -183,8 +300,29 @@ fun slashed(path: str) > str {
 
 // judged is decideHost with every denial held to the verdict shape.
 fun judged(programs: [helpers\Program]) > GuardVerdict {
+    return judgedWith(programs, reads: fakeReads({<str: str>}, binary: true));
+}
+
+fun judgedWith(programs: [helpers\Program], reads: Reads) > GuardVerdict {
     final label = programs.map(fun (index: int, p: helpers\Program) > str => p.name + " " + p.args.join(" ")).join(" ; ");
-    return verdict\checked(decideHost(programs), label: label);
+    return verdict\checked(decideHost(programs, reads: reads), label: label);
+}
+
+// fakeReads describes a workspace: the captures that exist and whether ./magus does.
+fun fakeReads(files: {str: str}, binary: bool) > Reads {
+    return Reads{
+        text = fun (path: str) > str {
+            return files[path] ?? "";
+        },
+        binary = fun () > bool {
+            return binary;
+        },
+    };
+}
+
+// capture is the command that reads the task capture at path.
+fun capture(path: str) > [helpers\Program] {
+    return helpers\request([["cat", path]]);
 }
 
 // shaped is writePath with a denial held to the verdict shape.
@@ -237,6 +375,97 @@ test "a search whose pattern mentions a log, and a read of source, stay silent" 
     ]) {
         std\assert(judged(helpers\request([argv])).decision == "allow", message: argv.join(" "));
     }
+}
+
+test "a task capture holding refs is denied naming the first ref, the rest and the invocation below" {
+    final path = "/tmp/claude/tasks/b3x.output";
+    final text = "exit 1\noutput: out0123456789ab\nlint output: outfedcba987654\nagain out0123456789ab\ninv: invmsm3vcou1\n";
+    final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    final lines = v.reason.split("\n");
+    std\assert(lines[0].indexOf("`magus query output out0123456789ab`") != null, message: lines[0]);
+    std\assert(lines[0].indexOf("outfedcba987654") == null, message: "one command on the verdict line");
+    std\assert(v.reason.indexOf("outfedcba987654") != null, message: "the other ref follows the newline");
+    std\assert(v.reason.indexOf("`magus query invocation invmsm3vcou1`") != null, message: "the invocation: " + v.reason);
+    std\assert(v.reason.split("out0123456789ab").len() == 2, message: "a repeated ref is named once: " + v.reason);
+}
+
+test "a capture holding many refs lists the first few and counts the rest" {
+    final path = "tasks/9.output";
+    final lines = mut [<str>];
+    foreach (n in [10, 11, 12, 13, 14, 15, 16, 17]) {
+        lines.append("output: out0123456789{n}");
+    }
+    final v = judgedWith(capture(path), reads: fakeReads({path: lines.join("\n")}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.split("\n")[0].indexOf("`magus query output out012345678910`") != null, message: v.reason);
+    std\assert(v.reason.indexOf("out012345678915") != null and v.reason.indexOf("out012345678916") == null, message: "five others are named: " + v.reason);
+    std\assert(v.reason.indexOf("and 2 more") != null, message: v.reason);
+}
+
+test "a capture with one ref and no invocation id says where the id is printed" {
+    final path = "tasks/9.output";
+    final v = judgedWith(capture(path), reads: fakeReads({path: "cause: failed\noutput: out0123456789ab\n"}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.split("\n")[0].indexOf("`magus query output out0123456789ab`") != null, message: v.reason);
+    std\assert(v.reason.indexOf("magus query invocation <id>") != null, message: v.reason);
+    std\assert(v.reason.indexOf("--identity") != null, message: "how to find the id");
+}
+
+test "a capture with an invocation id and no ref names query invocation on the verdict line" {
+    final path = "tasks/9.output";
+    final v = judgedWith(capture(path), reads: fakeReads({path: "run inv1a2b3c4d5 exited 75\n"}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.split("\n")[0].indexOf("`magus query invocation inv1a2b3c4d5`") != null, message: v.reason);
+}
+
+test "a capture with neither, an unreadable one and a word that only starts with inv fall back to the generic text" {
+    final path = "tasks/9.output";
+    foreach (text in ["", "exit 1\ninvalidate the cache\ninvoke\n", "out12345 short\nxout0123456789abx\n"]) {
+        final v = judgedWith(capture(path), reads: fakeReads({path: text}, binary: true));
+        std\assert(v.decision == "deny", message: text);
+        std\assert(v.reason.indexOf("magus query output <ref>") != null, message: "still names query output: " + v.reason);
+        std\assert(v.reason.indexOf("`magus query invocation <id>`") != null, message: "names query invocation: " + v.reason);
+        std\assert(v.reason.indexOf("magus session -o name") != null, message: "how to find the id: " + v.reason);
+    }
+}
+
+test "a run log keeps the generic text and is never read for refs" {
+    final v = judgedWith(capture(".magus/logs/abc.log"), reads: fakeReads({".magus/logs/abc.log": "output: out0123456789ab"}, binary: true));
+    std\assert(v.decision == "deny", message: v.decision);
+    std\assert(v.reason.indexOf("magus query output <ref>") != null, message: v.reason);
+    std\assert(v.reason.indexOf("out0123456789ab") == null, message: "the log's own refs are not extracted");
+}
+
+test "with no ./magus in the workspace a capture read is allowed; a terminals read is still denied" {
+    final none = fakeReads({"tasks/9.output": "output: out0123456789ab"}, binary: false);
+    foreach (argv in [
+        ["cat", "tasks/9.output"],
+        ["sed", "-n", "1,40p", "/tmp/x/tasks/9.output"],
+        ["cat", ".magus/logs/abc.log"],
+        ["rg", "needle", ".magus/logs"],
+    ]) {
+        std\assert(judgedWith(helpers\request([argv]), reads: none).decision == "allow", message: argv.join(" "));
+    }
+    final terminals = judgedWith(helpers\request([["cat", "terminals/266091.txt"]]), reads: none);
+    std\assert(terminals.decision == "deny", message: "terminals");
+    std\assert(terminals.reason.indexOf("magus status") != null, message: terminals.reason);
+}
+
+test "readsFrom reads a capture relative to the command's directory and finds ./magus on disk" {
+    final dir = fs\tempDir("host-reads") catch "";
+    std\assert(dir != "", message: "temp dir");
+    fs\mkdirAll("{dir}/tasks");
+    fs\writeFile("{dir}/tasks/1.output", content: "output: out0123456789ab");
+    final reads = readsFrom(dir, dir: dir);
+    std\assert(reads.text("tasks/1.output") == "output: out0123456789ab", message: "relative to dir");
+    std\assert(reads.text("{dir}/tasks/1.output") == "output: out0123456789ab", message: "absolute");
+    std\assert(reads.text("tasks/gone.output") == "", message: "a missing capture reads as empty");
+    std\assert(!reads.binary(), message: "no ./magus yet");
+    fs\writeFile("{dir}/magus", content: "");
+    std\assert(reads.binary(), message: "./magus present");
+    std\assert(readsFrom("", dir: dir).binary(), message: "an unknown workspace keeps the denial");
+    fs\removeAll(dir);
 }
 
 test "creating or reading a terminals directory is denied, naming magus status" {

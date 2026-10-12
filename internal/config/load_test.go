@@ -14,6 +14,7 @@ import (
 
 	queuetypes "github.com/egladman/magus/internal/queue/types"
 	"github.com/egladman/magus/internal/ward"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -345,7 +346,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
 				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: mv magus magus.old, then GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// A release build cannot be the one a checkout outgrew, so it is never told to
 		// bootstrap; the checkout's own build is still a fix.
@@ -372,7 +373,7 @@ func TestUnknownKeyMessage(t *testing.T) {
 				"Fix it:\n" +
 				"  - released binary: magus self update\n" +
 				"  - built from this checkout: ./magus run go-build .\n" +
-				"  - if that cannot load the tree either: mv magus magus.old, then GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+				"  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
 		},
 		// The loader is never told the version, and neither side is invented.
 		"a single unknown key with nothing known": {
@@ -436,14 +437,13 @@ func TestUnknownKeyMessage(t *testing.T) {
 // decides how its path renders and whether it is a source tree.
 func unknownKeyWorkspace(t *testing.T, doc string, sourceTree bool) string {
 	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module tmp\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus.yaml"), []byte(doc), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Write("go.mod", "module tmp\n")
+	w.Write("magus.yaml", doc)
 	if sourceTree {
-		require.NoError(t, os.MkdirAll(filepath.Join(dir, "cmd", "magus"), 0o755))
+		require.NoError(t, os.MkdirAll(w.Path("cmd", "magus"), 0o755))
 	}
-	return dir
+	return w.Root()
 }
 
 // TestUnknownKeysDropsNothing pins that grouping removes only repeated prose: twenty

@@ -33,7 +33,7 @@ func TestCrossDispatchRunOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := cd.Dispatch(context.Background(), fakeProject("gopherbuzz"), "build")
+			err := cd.Dispatch(context.Background(), wsProject("gopherbuzz"), "build")
 			assert.ErrorIs(t, err, wantErr)
 		}()
 	}
@@ -48,9 +48,9 @@ func TestCrossDispatchCycle(t *testing.T) {
 	cd := NewCrossDispatch(cache.NewTargetRuns())
 	cd.run = func(ctx context.Context, _, target string) error {
 		// Simulate the remote target depending back on itself across the boundary.
-		return cd.Dispatch(ctx, fakeProject("a"), target)
+		return cd.Dispatch(ctx, wsProject("a"), target)
 	}
-	err := cd.Dispatch(context.Background(), fakeProject("a"), "build")
+	err := cd.Dispatch(context.Background(), wsProject("a"), "build")
 	assert.Error(t, err, "expected a cross-project cycle error")
 	assert.ErrorIs(t, err, types.TargetDependencyCycle, "a cycle carries the MGS1007 diagnostic code")
 }
@@ -74,14 +74,14 @@ func TestCrossDispatchPanicUnblocksWaiters(t *testing.T) {
 		defer func() {
 			assert.NotNil(t, recover(), "panic should propagate to the running caller")
 		}()
-		_ = cd.Dispatch(context.Background(), fakeProject("a"), "build")
+		_ = cd.Dispatch(context.Background(), wsProject("a"), "build")
 	}()
 
 	// Second caller parks on e.done; it must unblock with the converted error
 	// rather than hang.
 	started.Wait()
 	done := make(chan error, 1)
-	go func() { done <- cd.Dispatch(context.Background(), fakeProject("a"), "build") }()
+	go func() { done <- cd.Dispatch(context.Background(), wsProject("a"), "build") }()
 	close(release)
 
 	select {
@@ -124,7 +124,7 @@ func TestCrossDispatchResetsBuzzAncestors(t *testing.T) {
 	// The caller is mid-run inside the parent project, whose "lint" target is what
 	// reached across the boundary.
 	ctx := buzz.WithAncestors(context.Background(), []string{"lint"})
-	require.NoError(t, cd.Dispatch(ctx, fakeProject("sub"), "build"),
+	require.NoError(t, cd.Dispatch(ctx, wsProject("sub"), "build"),
 		"a sub-project target sharing a name with a caller's ancestor is not a cycle")
 	assert.True(t, ran.Load(), "the sub-project's target never ran")
 }
@@ -134,9 +134,9 @@ func TestCrossDispatchDistinct(t *testing.T) {
 	cd := NewCrossDispatch(cache.NewTargetRuns())
 	var runs atomic.Int32
 	cd.run = func(_ context.Context, _, _ string) error { runs.Add(1); return nil }
-	_ = cd.Dispatch(context.Background(), fakeProject("a"), "build")
-	_ = cd.Dispatch(context.Background(), fakeProject("b"), "build")
-	_ = cd.Dispatch(context.Background(), fakeProject("a"), "test")
+	_ = cd.Dispatch(context.Background(), wsProject("a"), "build")
+	_ = cd.Dispatch(context.Background(), wsProject("b"), "build")
+	_ = cd.Dispatch(context.Background(), wsProject("a"), "test")
 	assert.Equal(t, int32(3), runs.Load(), "distinct keys should each run")
 }
 
@@ -159,8 +159,8 @@ func TestCrossDispatchResetsTargetInterceptor(t *testing.T) {
 		return nil
 	}
 
-	ctx := buzz.WithTargetInterceptor(context.Background(), stubInterceptor{})
-	require.NoError(t, cd.Dispatch(ctx, fakeProject("sub"), "build"))
+	ctx := buzz.WithTargetInterceptor(context.Background(), passThroughInterceptor{})
+	require.NoError(t, cd.Dispatch(ctx, wsProject("sub"), "build"))
 
 	assert.False(t, sawInterceptor.Load(),
 		"the caller's interceptor crossed the project boundary, so the remote project's needs mint steps against the caller")
@@ -179,18 +179,18 @@ func TestCrossDispatchDropsForwardedArgs(t *testing.T) {
 	}
 
 	ctx := project.WithExtraArgs(context.Background(), []string{"--inherited=fatal"})
-	require.NoError(t, cd.Dispatch(ctx, fakeProject("libs/gopherbuzz"), "format"))
+	require.NoError(t, cd.Dispatch(ctx, wsProject("libs/gopherbuzz"), "format"))
 
 	assert.Nil(t, got, "the caller's forwarded args reached a cross-project dependency")
 }
 
-// fakeProject is a workspace project at path, rooted under /ws.
-func fakeProject(path string) *types.Project { return &types.Project{Path: path, Dir: "/ws/" + path} }
+// wsProject is a workspace project at path, rooted under /ws.
+func wsProject(path string) *types.Project { return &types.Project{Path: path, Dir: "/ws/" + path} }
 
-// stubInterceptor stands in for the caller's project-bound interceptor. Its body is never
+// passThroughInterceptor is the caller's project-bound interceptor. Its body is never
 // meant to run: the point is whether it CROSSES.
-type stubInterceptor struct{}
+type passThroughInterceptor struct{}
 
-func (stubInterceptor) InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
+func (passThroughInterceptor) InterceptTarget(ctx context.Context, _ string, invoke func(context.Context) error) error {
 	return invoke(ctx)
 }

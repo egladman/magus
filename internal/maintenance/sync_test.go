@@ -1,13 +1,14 @@
 package maintenance
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/libs/testkit"
 )
 
 func TestSyncRequestRoundTrip(t *testing.T) {
@@ -124,12 +125,13 @@ func TestDiagnoseSync(t *testing.T) {
 }
 
 func TestHookBinary(t *testing.T) {
-	top := t.TempDir()
+	checkout := testkit.NewWorkspace(t)
+	top := checkout.Root()
 	bin, ok := HookBinary(top, "./magus job run sync-graph")
 	assert.Equal(t, "./magus", bin)
 	assert.False(t, ok, "no ./magus in the checkout yet")
 
-	require.NoError(t, os.WriteFile(filepath.Join(top, "magus"), []byte("#!/bin/sh\n"), 0o755))
+	checkout.WriteExecutable("magus", "#!/bin/sh\n")
 	_, ok = HookBinary(top, "./magus job run sync-graph")
 	assert.True(t, ok)
 

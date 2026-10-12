@@ -102,28 +102,28 @@ func TestWorkspaceRegistry_RegisterProject_AccumulatesOptions(t *testing.T) {
 	assert.Equal(t, []string{"api"}, r.ProjectPaths())
 }
 
-// fakeWorkspace is a minimal WorkspaceRepository: Apply only reads Root, All,
+// rootedWorkspace is a minimal WorkspaceRepository: Apply only reads Root, All,
 // and Get, so the embedded interface stays nil and any other method would panic
 // (a signal that Apply started calling more methods).
-type fakeWorkspace struct {
+type rootedWorkspace struct {
 	types.WorkspaceRepository
 	root     string
 	projects map[string]*types.Project
 }
 
-func newFakeWorkspace(root string, projects ...*types.Project) *fakeWorkspace {
+func newRootedWorkspace(root string, projects ...*types.Project) *rootedWorkspace {
 	m := make(map[string]*types.Project, len(projects))
 	for _, p := range projects {
 		m[p.Path] = p
 	}
-	return &fakeWorkspace{root: root, projects: m}
+	return &rootedWorkspace{root: root, projects: m}
 }
 
-func (f *fakeWorkspace) Root() string { return f.root }
+func (f *rootedWorkspace) Root() string { return f.root }
 
-func (f *fakeWorkspace) Get(path string) *types.Project { return f.projects[path] }
+func (f *rootedWorkspace) Get(path string) *types.Project { return f.projects[path] }
 
-func (f *fakeWorkspace) All() []*types.Project {
+func (f *rootedWorkspace) All() []*types.Project {
 	out := make([]*types.Project, 0, len(f.projects))
 	for _, p := range f.projects {
 		out = append(out, p)
@@ -133,7 +133,7 @@ func (f *fakeWorkspace) All() []*types.Project {
 
 func TestApply_AppliesRegisteredOptions(t *testing.T) {
 	p := &types.Project{Path: "api"}
-	w := newFakeWorkspace("/repo", p)
+	w := newRootedWorkspace("/repo", p)
 
 	r := NewWorkspaceRegistry()
 	r.RegisterProject("api", WithOutputs("dist/**"), WithName("API"))
@@ -143,7 +143,7 @@ func TestApply_AppliesRegisteredOptions(t *testing.T) {
 }
 
 func TestApply_UnknownProjectErrorsWithHint(t *testing.T) {
-	w := newFakeWorkspace("/repo",
+	w := newRootedWorkspace("/repo",
 		&types.Project{Path: "api"},
 		&types.Project{Path: "web"},
 	)
@@ -161,7 +161,7 @@ func TestApply_UnknownProjectErrorsWithHint(t *testing.T) {
 
 func TestApply_PropagatesOptionError(t *testing.T) {
 	p := &types.Project{Path: "api"}
-	w := newFakeWorkspace("/repo", p)
+	w := newRootedWorkspace("/repo", p)
 
 	r := NewWorkspaceRegistry()
 	// An invalid watch-ignore regex makes the option return an error.
@@ -181,7 +181,7 @@ func TestApply_ResolvesSpellsAndUnionsDeps(t *testing.T) {
 	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	p := &types.Project{Path: "api", Dir: "/repo/api", Spells: []string{spellName}, DependsOn: []string{"other"}}
-	w := newFakeWorkspace("/repo", p)
+	w := newRootedWorkspace("/repo", p)
 
 	r := NewWorkspaceRegistry()
 	r.RegisterProject("api") // no opts; spell resolution runs over all projects
@@ -195,7 +195,7 @@ func TestApply_ResolvesSpellsAndUnionsDeps(t *testing.T) {
 
 func TestApply_UnknownSpellErrorsAndLeavesResolvedNil(t *testing.T) {
 	p := &types.Project{Path: "api", Spells: []string{"no_such_spell"}}
-	w := newFakeWorkspace("/repo", p)
+	w := newRootedWorkspace("/repo", p)
 
 	r := NewWorkspaceRegistry()
 	r.RegisterProject("api")
@@ -210,7 +210,7 @@ func TestApply_UnknownSpellErrorsAndLeavesResolvedNil(t *testing.T) {
 
 func TestApply_EmptyRegistryIsNoop(t *testing.T) {
 	p := &types.Project{Path: "api"}
-	w := newFakeWorkspace("/repo", p)
+	w := newRootedWorkspace("/repo", p)
 	require.NoError(t, NewWorkspaceRegistry().Apply(w))
 	assert.Empty(t, p.Outputs)
 	assert.Nil(t, p.ResolvedSpells)

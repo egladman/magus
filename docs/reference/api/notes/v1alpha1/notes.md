@@ -49,7 +49,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 ### GetNoteRequest
 
-Source: [notes.proto:210](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L210).
+Source: [notes.proto:213](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L213).
 
 | Field  | Type   | # | Description                                                                                                                                                                                                                                                                                                                                                                      |
 | ------ | ------ | - | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,7 +70,7 @@ Used by: [ListNotes (request)](notes.md#listnotes).
 
 ### ListNotesResponse
 
-Source: [notes.proto:202](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L202).
+Source: [notes.proto:205](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L205).
 
 | Field             | Type                                 | # | Description                                                                                                                                                      |
 | ----------------- | ------------------------------------ | - | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |

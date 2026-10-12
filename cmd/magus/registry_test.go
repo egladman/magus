@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -85,15 +83,14 @@ func TestAcquireKeepsAFailedWorkspaceWithoutReopening(t *testing.T) {
 // magusfile stopped on, which is what the console and the Connect error carry.
 func TestAcquireReportsWhereAMagusfileFailed(t *testing.T) {
 	testkit.Isolate(t)
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), nil, 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
-		[]byte("import \"magus\";\nimport \"fs\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {\n  final x: int = \"s\";\n}\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("magus.yaml", "")
+	w.Magusfile("import \"magus\";\nimport \"fs\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {\n  final x: int = \"s\";\n}\n")
 	r := newTestRegistry()
 	defer close(r.stopCh)
 
-	_, err = r.acquire(root)
+	_, err := r.acquire(root)
 	require.Error(t, err)
 
 	got := r.status()

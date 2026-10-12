@@ -2,12 +2,10 @@ package knowledge
 
 import (
 	"fmt"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 )
 
@@ -19,9 +17,10 @@ func docShard(root string, spells []types.Spell, notesPath string) Shard {
 }
 
 func TestDocsDanglingCodeReferenceMGS7002(t *testing.T) {
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
 	// MGS2001 is registered (PathReadDenied); MGS9998 is not.
-	writeFile(t, root, "docs/x.md", "See MGS2001, but MGS9998 does not exist.\n")
+	ws.Write("docs/x.md", "See MGS2001, but MGS9998 does not exist.\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -68,8 +67,9 @@ func TestDocHeadingsIgnoresCodeFences(t *testing.T) {
 // heading, each a citable pointer, with a heading contained by its enclosing heading rather
 // than by the page, so the graph mirrors the outline and a nested query stays scoped.
 func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n# Top\n\nintro\n\n## Sub\n\nbody\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/guide.md", "---\ntitle: Guide\n---\n# Top\n\nintro\n\n## Sub\n\nbody\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -93,11 +93,12 @@ func TestAssembleDocsEmitsSectionNodes(t *testing.T) {
 }
 
 func TestDocsFrontmatterAttrs(t *testing.T) {
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
 	// A page with frontmatter title/tags, and one without: the second must carry
 	// neither attr (best-effort, not a hard requirement).
-	writeFile(t, root, "docs/charms.md", "---\ntitle: Charms\ntags: [reference, argv]\n---\n\nCharms modify argv.\n")
-	writeFile(t, root, "docs/plain.md", "# Plain\nNo frontmatter here.\n")
+	ws.Write("docs/charms.md", "---\ntitle: Charms\ntags: [reference, argv]\n---\n\nCharms modify argv.\n")
+	ws.Write("docs/plain.md", "# Plain\nNo frontmatter here.\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -116,8 +117,9 @@ func TestDocsFrontmatterAttrs(t *testing.T) {
 // frontmatter and a dangling-code reference keeps both sets of attrs (the
 // diagnostic branch merges rather than clobbering the frontmatter map).
 func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/x.md", "---\ntitle: X\n---\n\nMentions MGS9998 which does not exist.\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/x.md", "---\ntitle: X\n---\n\nMentions MGS9998 which does not exist.\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -132,9 +134,10 @@ func TestDocsFrontmatterCoexistsWithDiagnostic(t *testing.T) {
 // it both an input and an output (its body carries live counts that feed edges that
 // change the counts), which is what produced the "settle gen fixpoint" churn.
 func TestMagusMdNotIngested(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
-	writeFile(t, root, "README.md", "The `go` spell.\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("MAGUS.md", "# magus\nUses the `go` spell; see MGS2001.\n")
+	ws.Write("README.md", "The `go` spell.\n")
 
 	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
@@ -149,15 +152,16 @@ func TestMagusMdNotIngested(t *testing.T) {
 }
 
 func TestAssembleDocs(t *testing.T) {
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
 	// The CURRENT (post-reorg) layout: codes under reference/codes, spells under
 	// concepts/spells, modules under reference/buzz. The matchers anchor on filename +
 	// path segment, not a fixed prefix, so these must produce documents edges: the exact
 	// thing the reorg silently broke.
-	writeFile(t, root, "docs/reference/codes/sandbox/MGS2010.md", "# MGS2010\nRelated to MGS2001. See [go spell](../../../concepts/spells/go.md).\n")
-	writeFile(t, root, "docs/concepts/spells/go.md", "# go\nThe go spell.\n")
-	writeFile(t, root, "docs/reference/buzz/fs.md", "# fs\nFilesystem module.\n")
-	writeFile(t, root, "README.md", "Uses the `go` spell; see MGS2010 when it fails.\n")
+	ws.Write("docs/reference/codes/sandbox/MGS2010.md", "# MGS2010\nRelated to MGS2001. See [go spell](../../../concepts/spells/go.md).\n")
+	ws.Write("docs/concepts/spells/go.md", "# go\nThe go spell.\n")
+	ws.Write("docs/reference/buzz/fs.md", "# fs\nFilesystem module.\n")
+	ws.Write("README.md", "Uses the `go` spell; see MGS2010 when it fails.\n")
 
 	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
@@ -192,12 +196,13 @@ func TestAssembleDocs(t *testing.T) {
 // key on entity identity + a path segment, NOT a fixed directory prefix, so moving the docs
 // tree cannot silently sever them. Entities here sit under a directory no convention names.
 func TestDocsPathResilience(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "handbook/errors/MGS2001.md", "# MGS2001\n") // code: filename-keyed
-	writeFile(t, root, "handbook/spells/go.md", "# go\n")           // spell: "spells" segment
-	writeFile(t, root, "handbook/buzz/fs.md", "# fs\n")             // module: "buzz" segment
-	writeFile(t, root, "handbook/errors/MGS9998.md", "# MGS9998\n") // unregistered code
-	writeFile(t, root, "handbook/spells/notaspell.md", "# not\n")   // not a known spell
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("handbook/errors/MGS2001.md", "# MGS2001\n") // code: filename-keyed
+	ws.Write("handbook/spells/go.md", "# go\n")           // spell: "spells" segment
+	ws.Write("handbook/buzz/fs.md", "# fs\n")             // module: "buzz" segment
+	ws.Write("handbook/errors/MGS9998.md", "# MGS9998\n") // unregistered code
+	ws.Write("handbook/spells/notaspell.md", "# not\n")   // not a known spell
 
 	out := mergeAll([]Shard{docShard(root, []types.Spell{{Name: "go"}}, "")}).Output()
 
@@ -213,10 +218,11 @@ func TestDocsPathResilience(t *testing.T) {
 // TestDocsSectionAttr checks the derived section attr: a page carries its docs/ top-level
 // section so it is queryable by where it lives, with no section for top-level or non-docs.
 func TestDocsSectionAttr(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/guides/mcp.md", "# MCP\n")
-	writeFile(t, root, "docs/glossary.md", "# Glossary\n")
-	writeFile(t, root, "README.md", "# Readme\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/guides/mcp.md", "# MCP\n")
+	ws.Write("docs/glossary.md", "# Glossary\n")
+	ws.Write("README.md", "# Readme\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -238,9 +244,10 @@ func TestDocsSectionAttr(t *testing.T) {
 // TestDocsCommandReferences checks the doc<->command interconnection: a `magus <sub>` mention
 // references the manpage doc that documents it, and a manpage never references itself.
 func TestDocsCommandReferences(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/reference/manpage/magus-run.md", "# magus run\nRun a target.\n")
-	writeFile(t, root, "docs/concepts/targets.md", "A target is what you run with `magus run`.\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/reference/manpage/magus-run.md", "# magus run\nRun a target.\n")
+	ws.Write("docs/concepts/targets.md", "A target is what you run with `magus run`.\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "")}).Output()
 
@@ -257,21 +264,10 @@ func TestDocsCommandReferences(t *testing.T) {
 // the person regenerating it happened to have installed, so the drift gate failed
 // for everyone else and CI could never reproduce it.
 func TestFindDocFiles_SkipsVCSIgnored(t *testing.T) {
-	root := t.TempDir()
-	git := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = root
-		require.NoError(t, cmd.Run(), "git %v", args)
-	}
-	write := func(rel, body string) {
-		t.Helper()
-		path := filepath.Join(root, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-	}
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
+	write := r.Write
 
-	git("init", "-q")
 	write(".gitignore", ".agents/skills/\n.claude/skills/*\n!.claude/skills/hand-authored/\n")
 	write("README.md", "# readme")
 	write("docs/guide.md", "# guide")
@@ -294,10 +290,10 @@ func TestFindDocFiles_SkipsVCSIgnored(t *testing.T) {
 // No VCS at all is a normal way to run magus, and it must not silently empty the
 // doc set. No answer means index what was found.
 func TestFindDocFiles_NoVCSIndexesEverything(t *testing.T) {
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# readme"), 0o644))
+	ws := testkit.NewWorkspace(t)
+	ws.Write("README.md", "# readme")
 
-	assert.Equal(t, []string{"README.md"}, findDocFiles(root, ""))
+	assert.Equal(t, []string{"README.md"}, findDocFiles(ws.Root(), ""))
 }
 
 // TestFindDocFiles_ExcludesDeclaredNotes is the guard against the quietest failure in the
@@ -309,10 +305,11 @@ func TestFindDocFiles_NoVCSIndexesEverything(t *testing.T) {
 // Both directions matter. The exclusion follows the DECLARED path, so a workspace that
 // declares nothing keeps indexing a directory that merely happens to be called notes.
 func TestFindDocFiles_ExcludesDeclaredNotes(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/guide.md", "a real doc\n")
-	writeFile(t, root, "notes/cache-pairing.md", "---\nname: cache-pairing\n---\n\nprose\n")
-	writeFile(t, root, "team/notes/deep.md", "---\nname: deep\n---\n\nprose\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/guide.md", "a real doc\n")
+	ws.Write("notes/cache-pairing.md", "---\nname: cache-pairing\n---\n\nprose\n")
+	ws.Write("team/notes/deep.md", "---\nname: deep\n---\n\nprose\n")
 
 	assert.Equal(t,
 		[]string{"docs/guide.md", "notes/cache-pairing.md", "team/notes/deep.md"},
@@ -333,9 +330,10 @@ func TestFindDocFiles_ExcludesDeclaredNotes(t *testing.T) {
 // TestAssembleDocs_DeclaredNotesProduceNoDocNode closes the same gap one level up, at the
 // shard, which is what a query actually reads.
 func TestAssembleDocs_DeclaredNotesProduceNoDocNode(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "docs/guide.md", "a real doc\n")
-	writeFile(t, root, "notes/cache-pairing.md", "---\nname: cache-pairing\n---\n\nprose\n")
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("docs/guide.md", "a real doc\n")
+	ws.Write("notes/cache-pairing.md", "---\nname: cache-pairing\n---\n\nprose\n")
 
 	out := mergeAll([]Shard{docShard(root, nil, "notes")}).Output()
 
@@ -383,12 +381,13 @@ func TestParseDocBodyReadsShellFencesOnly(t *testing.T) {
 }
 
 func TestAssembleDocsDocumentsTheTargetsARunNames(t *testing.T) {
-	root := t.TempDir()
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
 	projects := []types.TargetGraphProject{
 		{Path: ".", Nodes: []types.TargetGraphNode{{Name: "go-build"}, {Name: "ci"}}},
 		{Path: "docs", Nodes: []types.TargetGraphNode{{Name: "lint"}}},
 	}
-	writeFile(t, root, "docs/guide.md", "---\ntitle: Guide\n---\n```sh\nmagus run go-build\n```\n\n## Checks\n\n"+
+	ws.Write("docs/guide.md", "---\ntitle: Guide\n---\n```sh\nmagus run go-build\n```\n\n## Checks\n\n"+
 		"```sh\nmagus run lint docs\nmagus run lint:rw ./docs\nmagus run nope docs\nmagus run build api\nmagus run nope\nmagus run ci:gha /\n```\n")
 
 	s, _ := assembleDocs(root, nil, projects, "")

@@ -59,7 +59,7 @@ func ownBuildEscape(exe string, info *debug.BuildInfo, root string) string {
 	pkg := strings.TrimPrefix(info.Path, info.Main.Path+"/")
 	return "This binary was built from this checkout's own sources and predates them, so it cannot " +
 		"rebuild itself: every command it runs loads the same tree. Link a new one from source, one " +
-		"command at a time: `mv " + name + " " + name + ".old`, then `go build -o " + name + " ./" + pkg +
+		"command at a time: `go build -o " + name + " ./" + pkg +
 		"`, then rebuild it the way this workspace builds it. If that link fails with `undefined:` in " +
 		"generated code, the checkout's committed generated files are behind its sources (a merge kept " +
 		"one side), and restoring either side's copy brings back the mismatch: " + regenerate(info.Main.Path) +

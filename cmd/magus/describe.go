@@ -782,7 +782,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	var storedLines []string
 	var storedRef, storedKey string
 	if against != "" {
-		desc, aerr := m.OutputDescriptorByRef(against)
+		desc, aerr := m.OutputDescriptorByRef(ctx, against)
 		if aerr != nil {
 			return reportRefLookupError(ctx, m, against, aerr)
 		}
@@ -790,7 +790,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if storedRef == "" {
 			storedRef = against
 		}
-		storedLines, err = m.OutputKeyInputs(against)
+		storedLines, err = m.OutputKeyInputs(ctx, against)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
 			slog.ErrorContext(ctx, fmt.Sprintf("ref %s resolves but has no stored key inputs (the run predates key-input persistence); re-run the target once to record them", storedRef),
@@ -839,7 +839,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			if !matches {
 				mismatched = true
 			}
-		} else if rec, rerr := m.LastRecordedRun(e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
+		} else if rec, rerr := m.LastRecordedRun(ctx, e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
 			// With no peer named, the peer is this machine's own last run of the target.
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every

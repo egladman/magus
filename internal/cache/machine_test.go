@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/types"
 )
 
@@ -260,9 +261,9 @@ func TestMachineSnapshotReportsHolders(t *testing.T) {
 	}, b.Snapshot())
 }
 
-// fakeAdmitter is a MachineAdmitter whose answers a test writes. It records every
-// request so the gate's calls can be observed.
-type fakeAdmitter struct {
+// budgetAdmitter is a MachineAdmitter whose answers come from a budget a test writes. It
+// records every request so the gate's calls can be observed.
+type budgetAdmitter struct {
 	mu       sync.Mutex
 	budget   *MachineBudget
 	requests int
@@ -270,7 +271,7 @@ type fakeAdmitter struct {
 	released []string
 }
 
-func (f *fakeAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
+func (f *budgetAdmitter) Request(_ context.Context, c types.MachineClaim) (types.MachineVerdict, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.requests++
@@ -280,23 +281,23 @@ func (f *fakeAdmitter) Request(_ context.Context, c types.MachineClaim) (types.M
 	return f.budget.Request(c), nil
 }
 
-func (f *fakeAdmitter) Release(_ context.Context, id string) {
+func (f *budgetAdmitter) Release(_ context.Context, id string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.released = append(f.released, id)
 	f.budget.Release(id)
 }
 
-func testGate(t *testing.T, b *MachineBudget) (*machineGate, *fakeAdmitter) {
+func testGate(t *testing.T, b *MachineBudget) (*machineGate, *budgetAdmitter) {
 	t.Helper()
-	adm := &fakeAdmitter{budget: b}
+	adm := &budgetAdmitter{budget: b}
 	g := &machineGate{admit: adm, log: newLogger("", 0)}
 	return g, adm
 }
 
 func TestAdmitMachineClaimsAndReleasesNonRunWork(t *testing.T) {
 	budget, now := testBudget(t, 1000, 2)
-	adm := &fakeAdmitter{budget: budget}
+	adm := &budgetAdmitter{budget: budget}
 	release, err := AdmitMachine(t.Context(), adm, types.MachineClaim{
 		Project: ".", Target: "session-brief", MemoryMB: 512,
 	}, false)
@@ -453,11 +454,15 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	var out bytes.Buffer
 	c, err := Open(t.Context(), t.TempDir(),
 		WithLogger(slog.New(NewPrettyHandler(&out, slog.LevelInfo))),
-		WithMachineAdmission(&fakeAdmitter{budget: b}))
+		WithMachineAdmission(&budgetAdmitter{budget: b}))
 	require.NoError(t, err)
 
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	ctx = journal.WithInvocationID(ctx, "invrefused")
+
 	var observed []error
-	_, err = c.RunAll(t.Context(), []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
+	_, err = c.RunAll(ctx, []Step{{ProjectPath: ".", Target: "test", MemoryMB: 9000}},
 		func(context.Context, Step) error {
 			t.Error("a refused step must not run")
 			return nil
@@ -479,11 +484,74 @@ func TestRunAllReportsAMachineRefusal(t *testing.T) {
 	require.Len(t, observed, 1, "the result observers feed -o jsonl's run.target.result and run.diagnostic")
 	assert.ErrorIs(t, observed[0], types.MachineBudgetExhausted)
 	assert.Equal(t, Stats{Error: 1}, c.Stats(), "a refusal counts toward the run's failed total")
+
+	// The session store and `magus session --brief` read failures off result events, so a
+	// refusal that emitted none left them showing a run that never happened.
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, refusalEvent("invrefused"), normalizeRefusal(t, events[0]),
+		"nothing ran, so nothing was captured and there is no ref")
+}
+
+// refusalEvent is the result event a machine refusal of `.`'s test journals, with the
+// volatile fields normalizeRefusal clears.
+func refusalEvent(inv string) journal.Event {
+	return journal.Event{
+		Inv: inv, Project: ".", Target: "test", Kind: journal.KindResult, Level: "error",
+		Status: journal.StatusFail, DiagnosticCode: string(types.MachineBudgetExhausted),
+	}
+}
+
+// normalizeRefusal clears a refusal event's timestamp and its cause text, which names the
+// holder's figures, once the text is checked to give the cause.
+func normalizeRefusal(t *testing.T, e journal.Event) journal.Event {
+	t.Helper()
+	assert.Contains(t, e.Text, "build budget is full")
+	e.Ts, e.Text = 0, ""
+	return e
+}
+
+// RunAside has no batch to report the refusal to, so its caller sees only the returned
+// error; the journal is where the record of a run that did nothing lives.
+func TestRunAsideJournalsAMachineRefusal(t *testing.T) {
+	t.Setenv("MAGUS_LEVEL", "")
+	b, _ := testBudget(t, 10_000, 8)
+	held := b.Request(types.MachineClaim{
+		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
+	})
+	require.True(t, held.Granted, "the fixture's holder must own the budget")
+
+	c, err := Open(t.Context(), t.TempDir(), WithMachineAdmission(&budgetAdmitter{budget: b}))
+	require.NoError(t, err)
+
+	sink := &eventSink{}
+	ctx := journal.WithLogger(t.Context(), journal.NewLogger(sink))
+	_, err = c.RunAside(ctx, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a refused step must not run")
+			return nil
+		})
+
+	require.ErrorIs(t, err, types.MachineBudgetExhausted)
+	events := sink.snapshot()
+	require.Len(t, events, 1)
+	assert.Equal(t, refusalEvent(events[0].Inv), normalizeRefusal(t, events[0]))
+
+	// A claim that ends because the run was cancelled is not a refusal to put on record.
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	_, err = c.RunAside(cancelled, Step{ProjectPath: ".", Target: "test", MemoryMB: 9000},
+		func(context.Context) error {
+			t.Error("a cancelled step must not run")
+			return nil
+		})
+	require.Error(t, err)
+	assert.Len(t, sink.snapshot(), 1, "a cancelled claim journals nothing")
 }
 
 // cachedUnderFullBudget warms a local entry for step with no admitter, then reopens the
 // same cache under an admitter whose budget another checkout's claim has filled.
-func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
+func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *budgetAdmitter) {
 	t.Helper()
 	t.Setenv("MAGUS_LEVEL", "")
 	cdir := t.TempDir()
@@ -497,7 +565,7 @@ func cachedUnderFullBudget(t *testing.T, step Step) (*Cache, *fakeAdmitter) {
 		Project: ".", Target: "test", MemoryMB: 9000, PID: 100, Dir: "/elsewhere/checkout",
 	})
 	require.True(t, held.Granted, "the fixture's holder must own the budget")
-	adm := &fakeAdmitter{budget: b}
+	adm := &budgetAdmitter{budget: b}
 	c, err := Open(t.Context(), cdir, WithLocalWrite(true), WithMachineAdmission(adm))
 	require.NoError(t, err)
 	return c, adm

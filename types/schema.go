@@ -86,7 +86,7 @@ var JobSchema = SchemaLedger{
 	Name:    "job",
 	Type:    reflect.TypeFor[Job](),
 	Version: JobSchemaVersion,
-	Added:   map[string]int{"entries": 11, "goals": 11, "integration": 11},
+	Added:   map[string]int{"entries": 11, "goals": 11, "integration": 11, "waiter_evidence": 11},
 	// The four boundary renames, still folded from stored rows (see job.foldStoredNames),
 	// and completion_gates, which a stored row drops unread.
 	Reserved: []string{"owned_paths", "forbidden_paths", "focus", "tier", "completion_gates"},
@@ -121,6 +121,7 @@ var StoredOutputSchema = SchemaLedger{
 	Name:    "output-record",
 	Type:    reflect.TypeFor[StoredOutput](),
 	Version: StoredOutputSchemaVersion,
+	Added:   map[string]int{"failed_need_target": 1, "failed_need_ref": 1},
 }
 
 // SchemaLedgers are every ledger the conventions test holds to the contract.

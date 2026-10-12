@@ -3,18 +3,19 @@ package knowledge
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAssembleBuzz(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a.buzz", `import "magus";
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("a.buzz", `import "magus";
 import "b";
 import "magus/spell/go";
 export fun build(ctx: magus\Context, args: [str]) > void {
@@ -23,9 +24,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 fun helper() > void {}
 `)
-	writeFile(t, root, "b.buzz", "export fun thing() > void {}\n")
+	ws.Write("b.buzz", "export fun thing() > void {}\n")
 	// A testdata fixture must be skipped, not extracted.
-	writeFile(t, root, "testdata/skip.buzz", "export fun ignored() > void {}\n")
+	ws.Write("testdata/skip.buzz", "export fun ignored() > void {}\n")
 
 	out := mergeAll([]Shard{assembleBuzz(root)}).Output()
 
@@ -78,8 +79,9 @@ fun helper() > void {}
 }
 
 func TestBuzzUnresolvableImportTaggedMGS7001(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a.buzz", `import "magus";
+	ws := testkit.NewWorkspace(t)
+	root := ws.Root()
+	ws.Write("a.buzz", `import "magus";
 import "fs";
 import "buzz:os";
 import "magus/spell";
@@ -106,15 +108,13 @@ export fun f(ctx: magus\Context, args: [str]) > void {}
 // 2026-09-23: one .buzz file under the ignored dist/ put itself second in the file row
 // and its hub function first in the function row.
 func TestSourceWalksSkipVCSIgnored(t *testing.T) {
-	root := t.TempDir()
-	cmd := exec.Command("git", "init", "-q")
-	cmd.Dir = root
-	require.NoError(t, cmd.Run())
-	writeFile(t, root, ".gitignore", "/dist/\n")
-	writeFile(t, root, "kept.buzz", "fun kept() > void {}\n")
-	writeFile(t, root, "kept.go", "package kept\n")
-	writeFile(t, root, "dist/built.buzz", "fun built() > void {}\n")
-	writeFile(t, root, "dist/built.go", "package built\n")
+	r := testkit.NewRepo(t, nil)
+	root := r.Root()
+	r.Write(".gitignore", "/dist/\n")
+	r.Write("kept.buzz", "fun kept() > void {}\n")
+	r.Write("kept.go", "package kept\n")
+	r.Write("dist/built.buzz", "fun built() > void {}\n")
+	r.Write("dist/built.go", "package built\n")
 
 	assert.Equal(t, []string{"kept.buzz"}, findBuzzFiles(root))
 	assert.Equal(t, []string{"kept.buzz", "kept.go"}, findCommentSources(root))

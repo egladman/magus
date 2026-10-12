@@ -310,23 +310,24 @@ func delegatedJob(row types.Job) *jobv1.Job {
 		Result:     wireJobResult(row.Result),
 		Deadline:   row.Deadline,
 
-		EndReason:     row.EndReason,
-		WriteProof:    string(row.WriteProof),
-		ReportedBase:  row.ReportedBase,
-		BaseVerdict:   string(row.BaseVerdict),
-		CheckoutRoot:  row.CheckoutRoot,
-		Registered:    row.Registered,
-		RegisteredBy:  wireOrigin(row.RegisteredBy),
-		Attempt:       wireAttempt(row.Attempt),
-		Integration:   wireIntegration(row.Integration),
-		SchemaVersion: int32(row.Version),
-		Requires:      row.Requires,
+		EndReason:      row.EndReason,
+		WriteProof:     string(row.WriteProof),
+		ReportedBase:   row.ReportedBase,
+		BaseVerdict:    string(row.BaseVerdict),
+		CheckoutRoot:   row.CheckoutRoot,
+		Registered:     row.Registered,
+		RegisteredBy:   wireOrigin(row.RegisteredBy),
+		Attempt:        wireAttempt(row.Attempt),
+		Integration:    wireIntegration(row.Integration),
+		WaiterEvidence: wireIntegration(row.WaiterEvidence),
+		SchemaVersion:  int32(row.Version),
+		Requires:       row.Requires,
 	}
 	if row.Holder.OrSession() == types.HolderServer {
 		j.Holder = jobv1.JobHolder_JOB_HOLDER_SERVER
 	}
 	for _, r := range row.Releases {
-		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt})
+		j.Releases = append(j.Releases, &jobv1.JobRelease{Path: r.Path, Digest: r.Digest, ReleasedAt: r.ReleasedAt, Revoked: r.Revoked})
 	}
 	for _, g := range row.GateAttempts {
 		j.GateAttempts = append(j.GateAttempts, &jobv1.JobGateAttempt{GateId: g.GateID, Attempt: wireAttempt(&g.Attempt)})
@@ -366,6 +367,7 @@ func wireAttempt(a *types.JobAttempt) *jobv1.JobAttempt {
 	return &jobv1.JobAttempt{
 		Found: a.Found, Ref: a.Ref, TimestampMs: a.TimestampMs,
 		Project: a.Project, Target: a.Target, Spell: a.Spell, Failed: a.Failed,
+		AttemptId: a.AttemptID, DurationMs: a.DurationMs, Revision: a.Revision, Dirty: a.Dirty,
 	}
 }
 

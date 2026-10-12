@@ -12,7 +12,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -202,16 +203,17 @@ func servedNextTemplates(t *testing.T) map[string]string {
 
 // denyRemedyFixture is one refused line whose rule serves a remedy. ident is the constant
 // the rule hands hint.NextForDenyRemedy, which is how the sweep below finds a rule with no
-// fixture; setup builds whatever the rule reads, in the judged workspace root when it reads
-// a tree, and returns the line and its remedy.
+// fixture; setup builds whatever the rule reads, in the judged workspace and its cache
+// when it reads either, and returns the call, which Judge makes under each role's lease,
+// and its remedy.
 type denyRemedyFixture struct {
 	ident string
 	rule  denyRuleName
-	setup func(t *testing.T, root string) (command, want string)
+	setup func(t *testing.T, at location) (call Request, want string)
 }
 
-func fixed(command, want string) func(*testing.T, string) (string, string) {
-	return func(*testing.T, string) (string, string) { return command, want }
+func fixed(command, want string) func(*testing.T, location) (Request, string) {
+	return func(*testing.T, location) (Request, string) { return Request{Input: command}, want }
 }
 
 func denyRemedyFixtures() []denyRemedyFixture {
@@ -229,33 +231,52 @@ func denyRemedyFixtures() []denyRemedyFixture {
 		{"denyRuleSymbolSearch", denyRuleSymbolSearch, fixed("grep -rn MGS2011 docs/", "magus explain diagnostic:MGS2011")},
 		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 600 magus run lint .", "magus run --timeout 10m lint .")},
 		{"denyRuleMagusTimeout", denyRuleMagusTimeout, fixed("timeout 60 magus ls jobs", "magus ls jobs")},
-		{"denyRuleGrepReader", denyRuleGrepReader, func(t *testing.T, root string) (string, string) {
+		{"denyRuleGrepReader", denyRuleGrepReader, func(t *testing.T, at location) (Request, string) {
 			src := "package api\n\n// HandleRequest serves one request.\nfunc HandleRequest() {}\n"
-			require.NoError(t, os.WriteFile(filepath.Join(root, "handler.go"), []byte(src), 0o644))
-			t.Chdir(root)
-			return "grep -n 'func HandleRequest' -A20 handler.go", "sed -n 3,4p handler.go"
+			require.NoError(t, os.WriteFile(filepath.Join(at.workspace, "handler.go"), []byte(src), 0o644))
+			t.Chdir(at.workspace)
+			return Request{Input: "grep -n 'func HandleRequest' -A20 handler.go"}, "sed -n 3,4p handler.go"
 		}},
-		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T, _ string) (string, string) {
-			const spellName = "guard-remedy-test"
-			project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(
-				spellName,
+		{"denyRuleRawTool", denyRuleRawTool, func(t *testing.T, _ location) (Request, string) {
+			spellName := register.Spell(t, "guard-remedy-test",
 				spells.WithTargets("check"),
 				spells.WithCommandRenderer(func(target string, _ []string) (string, []string, bool, error) {
 					return "remedy-tool", []string{"check"}, target == "check", nil
 				}),
-			))
-			t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
-			return "remedy-tool check", "magus run " + spellName + "::check"
+			)
+			return Request{Input: "remedy-tool check"}, "magus run " + spellName + "::check"
 		}},
-		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ string) (string, string) {
+		{"denyRuleSiblingCheckout", denyRuleSiblingCheckout, func(t *testing.T, _ location) (Request, string) {
 			main, wt := twoCheckouts(t)
 			require.NoError(t, os.WriteFile(filepath.Join(wt, "magus"), []byte("#!/bin/sh\n"), 0o755))
 			t.Chdir(main)
 			// Relative, so the temp dir the fixture lives in does not read as a throwaway copy.
-			return "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker",
+			return Request{Input: "cd ../" + filepath.Base(wt) + " && ./magus describe job harness/worker"},
 				filepath.Join(wt, "magus") + " --root " + wt + " describe job harness/worker"
 		}},
+		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
+			r := newWorktreeRepo(t)
+			wt, row := r.workerWorktree(types.StatePass)
+			row.ID = "remedy-lock"
+			seedRemedyJob(t, at, row)
+			writeSpawnedAgent(hint.NewGate(at.cacheDir, FactsKey("claude", "remedy")), "agent-remedy", spawnedAgent{Description: "root/worker remedy-lock"})
+			return Request{Input: "git worktree remove " + wt, Dir: r.main, Host: "claude", Session: "remedy"}, "git worktree remove -f -f " + wt
+		}},
+		{"denyRuleWorktreeRemove", denyRuleWorktreeRemove, func(t *testing.T, at location) (Request, string) {
+			r := newWorktreeRepo(t)
+			wt, row := r.workerWorktree(types.StateExited)
+			row.ID = "remedy-wait"
+			seedRemedyJob(t, at, row)
+			return Request{Input: "git worktree remove " + wt, Dir: r.main}, hint.JobWait.With("remedy-wait")
+		}},
 	}
+}
+
+// seedRemedyJob files row in the job store the fixtures are judged against.
+func seedRemedyJob(t *testing.T, at location, row types.Job) {
+	t.Helper()
+	_, err := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}).Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
+	require.NoError(t, err)
 }
 
 // remedyRe finds the rules that construct a remedy in the guard's own source.
@@ -351,10 +372,12 @@ func TestEveryServedNextPassesTheGuardForEveryRole(t *testing.T) {
 		// was never served, and whatever it keeps must pass.
 		for _, f := range denyRemedyFixtures() {
 			t.Run(role.name+"/deny-"+string(f.rule), func(t *testing.T) {
-				command, want := f.setup(t, root)
+				call, want := f.setup(t, hookLocation(ctx, Dependencies{}))
+				call.Lease = role.lease
+				command := call.Input
 				deps := strict(testDependencies())
 				deps.GraphIDs = diagnosticGraph
-				v := Judge(ctx, deps, Request{Input: command, Lease: role.lease})
+				v := Judge(ctx, deps, call)
 				shape := verdictWithRule("deny", string(f.rule))
 				shape.Next = v.Next // graded one by one below, as this role is served them
 				require.Equal(t, shape, unworded(v), command)

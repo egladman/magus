@@ -20,7 +20,7 @@
 // link the console draws it from.
 //
 // Reads the `fanout-share` and `console-base` inputs.
-import "proc";
+import "vcs";
 import "advice";
 import "figure-link" as figurelink;
 import "magus";
@@ -30,8 +30,8 @@ final section = "blast-radius";
 
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
-    final res = proc\exec("git", args: ["diff", "--name-only", advice\diffRange(base, head: head)],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final res = vcs\cmd(["diff", "--name-only", advice\diffRange(base, head: head)],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
         if (line != "") { paths.append(line); }

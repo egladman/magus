@@ -142,6 +142,9 @@ them and magus describe job prints one job's terms.
 
 ### job wait options
 
+**--evidence** *\<goal\>*
+: Grade check goal \`\<goal\>\` against the run \`\<ref\>\` recorded in THIS checkout instead of the job's own; \`check\` names the job's check. The changed paths must read the same here as in the job's checkout; repeatable
+
 **--integration**
 : Grade only the job's check goals against the runs the --stdin result names in THIS checkout, and record that beside its state
 

@@ -7,7 +7,7 @@
 //
 // Usually it means a project's `sources` glob is too narrow, or the file belongs to a
 // directory nobody declared as a project yet.
-import "proc";
+import "vcs";
 import "advice";
 import "magus";
 import "std";
@@ -19,8 +19,8 @@ final section = "unclaimed";
 // finding nobody can act on.
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
-    final res = proc\exec("git", args: ["diff", "--name-only", "--diff-filter=d", advice\diffRange(base, head: head)],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    final res = vcs\cmd(["diff", "--name-only", "--diff-filter=d", advice\diffRange(base, head: head)],
+        opts: {"dir": ".", "quiet": true, "allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
         if (line != "") { paths.append(line); }

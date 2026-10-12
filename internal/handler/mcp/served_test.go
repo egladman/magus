@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -75,10 +76,9 @@ func textParts(res mcplib.CallToolResult) []string {
 
 func workspaceDir(t *testing.T) string {
 	t.Helper()
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("import \"magus\";\n"), 0o644))
-	return dir
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("import \"magus\";\n")
+	return w.Root()
 }
 
 var testBuild = types.BuildInfo{Version: "v0.4.3-234", Commit: "00fd71e20"}

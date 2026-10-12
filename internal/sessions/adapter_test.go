@@ -9,9 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMain isolates the environment the adapters under test inherit.
+func TestMain(m *testing.M) { testkit.Main(m) }
 
 func TestRunAdaptersReportsEachOneWhole(t *testing.T) {
 	t.Parallel()

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -71,7 +70,7 @@ func TestCacheYieldExemptsSkipCacheTargets(t *testing.T) {
 			"generate": {SkipCache: true, SkipCacheReason: "is the drift gate itself"},
 		},
 	}}
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkCacheYield(projects)
 
@@ -93,7 +92,7 @@ func TestCacheYieldStillReportsUndeclaredTargets(t *testing.T) {
 		Path:           ".",
 		TargetPolicies: map[string]types.Target{"generate": {SkipCache: true, SkipCacheReason: "drift gate"}},
 	}, {Path: "docs"}}
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkCacheYield(projects)
 
@@ -111,7 +110,7 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 	dir := t.TempDir()
 	writeJournal(t, dir, ranNTimes(".", "go-build:rw", 9))
 
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 	got := r.checkCacheYield(nil)
 
 	require.Equal(t, types.CheckFail, got.Status)
@@ -125,39 +124,20 @@ func TestCacheYieldAdviceNamesBothCauses(t *testing.T) {
 // the build). built controls whether the build has run.
 func deadOutputRepo(t *testing.T, built bool) string {
 	t.Helper()
-	repo := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-		require.NoError(t, cmd.Run(), "git %v", args)
-	}
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(repo, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-
-	// Anchored, as the real one is (`console/gen/`). A bare `gen/` matches at any
-	// depth and would swallow src/gen too, collapsing the two cases this fixture exists
-	// to keep apart.
-	write(".gitignore", "/gen/\n")
-	// Nested exactly as console/src/gen is, so `src/gen/*` globs to a DIRECTORY. That is
-	// the case the tracked lookup has to survive: ls-files echoes the files underneath a
-	// directory argument, never the directory itself.
-	write("src/gen/magus/activity/v1alpha1/activity_pb.ts", "// generated, committed\n")
-	run("init", "-q", "-b", "main")
-	run("add", "-A")
-	run("commit", "-qm", "init")
-
+	repo := testkit.NewRepo(t, map[string]string{
+		// Anchored, as the real one is (`console/gen/`). A bare `gen/` matches at any
+		// depth and would swallow src/gen too, collapsing the two cases this fixture exists
+		// to keep apart.
+		".gitignore": "/gen/\n",
+		// Nested exactly as console/src/gen is, so `src/gen/*` globs to a DIRECTORY. That is
+		// the case the tracked lookup has to survive: ls-files echoes the files underneath a
+		// directory argument, never the directory itself.
+		"src/gen/magus/activity/v1alpha1/activity_pb.ts": "// generated, committed\n",
+	})
 	if built {
-		write("gen/index.html", "<html></html>")
+		repo.Write("gen/index.html", "<html></html>")
 	}
-	return repo
+	return repo.Root()
 }
 
 func deadOutputProject(dir string) *types.Project {
@@ -170,7 +150,7 @@ func deadOutputProject(dir string) *types.Project {
 // while passing on every developer machine, where gen/ had already been built.
 func TestDeadOutputGlobsIgnoresCommittedOutputs(t *testing.T) {
 	repo := deadOutputRepo(t, false)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(repo)})
 
@@ -188,7 +168,7 @@ func TestDeadOutputGlobsReportsOnceBuilt(t *testing.T) {
 	repo := deadOutputRepo(t, true)
 	p := deadOutputProject(repo)
 	p.Outputs = types.MustParseGlobs("gen/**", "src/gen/**", "dist/**")
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
@@ -205,7 +185,7 @@ func TestDeadOutputGlobsWithoutTrackedReporter(t *testing.T) {
 	dir := t.TempDir() // not a repository, so vcs.Resolve finds nothing
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "src", "gen"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "gen", "a.ts"), []byte("x"), 0o644))
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{deadOutputProject(dir)})
 
@@ -226,7 +206,7 @@ func TestDeadOutputGlobsJudgesAGlobByWhatItsExclusionsLeave(t *testing.T) {
 	}
 	p := deadOutputProject(dir)
 	p.Outputs = types.MustParseGlobs("src/gen/**", "gen/*.ts", "!gen/hand.ts")
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkDeadOutputGlobs([]*types.Project{p})
 
@@ -313,15 +293,10 @@ func TestGlobOutputs_CrossesDirectories(t *testing.T) {
 	assert.NotContains(t, hits, deep, "a single star must still not cross a separator")
 }
 
-// writeGuardProbeStub writes root/magus as a stub binary standing in for the
-// real one: the probe only cares that `magus shell -o name` prints a decision
-// on stdout and exits accordingly, never about actual guard rules.
-func writeGuardProbeStub(t *testing.T, root, body string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus"), []byte(body), 0o755))
-}
-
-const denyingProbeStub = "#!/bin/sh\necho deny\nexit 2\n"
+// The guard probe scripts stand in for the real ./magus: the probe only cares that
+// `magus shell -o name` prints a decision on stdout and exits accordingly, never about
+// actual guard rules.
+const denyingProbeScript = "#!/bin/sh\necho deny\nexit 2\n"
 
 // testProbeBudget is far above the shipped guardProbeBudget on purpose.
 // These subtests exec a real child process, and this repo is developed across
@@ -341,10 +316,10 @@ func TestCheckGuardWiring(t *testing.T) {
 	})
 
 	t.Run("probe does not return a deny -> fail with observed output", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardProbeStub(t, root, "#!/bin/sh\nexit 0\n")
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", "#!/bin/sh\nexit 0\n")
 
-		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckFail, c.Status)
 		assert.Contains(t, c.Message, "did not return a deny")
 		joined := strings.Join(c.Details, "\n")
@@ -352,31 +327,31 @@ func TestCheckGuardWiring(t *testing.T) {
 	})
 
 	t.Run("probe passes, no descriptor anywhere -> advice", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardProbeStub(t, root, denyingProbeStub)
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
 
-		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget)
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget)
 		require.Equal(t, types.CheckAdvice, c.Status)
 		assert.Contains(t, c.Message, "no harness descriptor found")
 		assert.Contains(t, strings.Join(c.Details, "\n"), "magus\\harness.provider")
 	})
 
 	t.Run("probe passes, descriptor verifies its configured adapter -> ok", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardProbeStub(t, root, denyingProbeStub)
-		writeCheckpointHarness(t, root, guardedHarnessConfig())
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
+		writeCheckpointHarness(t, w, guardedHarnessConfig())
 
-		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
 		require.Equal(t, types.CheckOK, c.Status)
-		assert.Contains(t, c.Details, filepath.Join(root, "host", "hooks.json"))
+		assert.Contains(t, c.Details, w.Path("host", "hooks.json"))
 	})
 
 	t.Run("probe passes, descriptor exposes a missing adapter -> fail", func(t *testing.T) {
-		root := t.TempDir()
-		writeGuardProbeStub(t, root, denyingProbeStub)
-		writeCheckpointHarness(t, root, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
+		w := testkit.NewWorkspace(t)
+		w.WriteExecutable("magus", denyingProbeScript)
+		writeCheckpointHarness(t, w, `{"hooks":{"before":[{"match":"run","commands":[{"type":"command","command":"other hook"}]}]}}`)
 
-		c := checkGuardWiring(harnessProbeCtx(), root, testProbeBudget, "test-host")
+		c := checkGuardWiring(harnessProbeCtx(), w.Root(), testProbeBudget, "test-host")
 		require.Equal(t, types.CheckFail, c.Status)
 		joined := strings.Join(c.Details, "\n")
 		assert.Contains(t, c.Message, "harness wiring is incomplete")
@@ -530,7 +505,7 @@ func TestDeclaredOutputFiles(t *testing.T) {
 // untracked), so the check has to skip instead of guess.
 func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 	// A non-git tree resolves no VCS, which is the same degrade path.
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	got := r.checkSelfStalingOutputs(nil)
 	assert.Equal(t, types.CheckOK, got.Status)
 	assert.True(t,
@@ -540,9 +515,9 @@ func TestSelfStalingSkipsWithoutTrackedReporter(t *testing.T) {
 		"expected a skip, got %q", got.Message)
 }
 
-type stubWorkspace struct{ types.WorkspaceReader }
+type detectingWorkspace struct{ types.WorkspaceReader }
 
-func (stubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
+func (detectingWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 
 // seedingRepo commits one declared source, one config nothing declares, and one
 // untracked build product. The third is the case the check must NOT report: a fresh
@@ -550,29 +525,12 @@ func (stubWorkspace) VCSOptions() types.VCSOptions { return types.VCSOptions{} }
 // whether somebody had built the tree.
 func seedingRepo(t *testing.T) string {
 	t.Helper()
-	repo := t.TempDir()
-	write := func(rel, body string) {
-		t.Helper()
-		p := filepath.Join(repo, filepath.FromSlash(rel))
-		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-		require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	}
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-		require.NoError(t, cmd.Run(), "git %v", args)
-	}
-	write("main.go", "package main\n")
-	write(".golangci.yml", "linters:\n")
-	run("init", "-q", "-b", "main")
-	run("add", "-A")
-	run("commit", "-qm", "init")
-	write("coverage.out", "mode: set\n") // untracked
-	return repo
+	repo := testkit.NewRepo(t, map[string]string{
+		"main.go":       "package main\n",
+		".golangci.yml": "linters:\n",
+	})
+	repo.Write("coverage.out", "mode: set\n") // untracked
+	return repo.Root()
 }
 
 func seedingProject() *types.Project {
@@ -585,7 +543,7 @@ func seedingProject() *types.Project {
 // request at a time; this answers it in one pass.
 func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 	repo := seedingRepo(t)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -602,7 +560,7 @@ func TestUndeclaredSeedingFilesReportsTheStandingSet(t *testing.T) {
 // a layout rather than reporting a cost.
 func TestUndeclaredSeedingFilesIsAdviceNotFailure(t *testing.T) {
 	repo := seedingRepo(t)
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -616,7 +574,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 	repo := seedingRepo(t)
 	p := seedingProject()
 	p.Sources = types.MustParseGlobs("**/*.go", ".golangci.yml")
-	r := &runner{root: repo, ws: stubWorkspace{}}
+	r := &runner{root: repo, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{p})
 
@@ -628,7 +586,7 @@ func TestUndeclaredSeedingFilesClearsOnceDeclared(t *testing.T) {
 // the working tree would answer a different question (it would count build residue).
 func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 	dir := t.TempDir() // not a repository
-	r := &runner{root: dir, ws: stubWorkspace{}}
+	r := &runner{root: dir, ws: detectingWorkspace{}}
 
 	got := r.checkUndeclaredSeedingFiles([]*types.Project{seedingProject()})
 
@@ -639,7 +597,7 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 // walk skips gen/vendor/node_modules/target wholesale, so a PATTERN aimed inside one
 // matches nothing and keys nothing, and the target replays while those files change.
 func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/*.binpb",
 		"src/**/*.ts",
@@ -659,7 +617,7 @@ func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
 // walk, so it reaches the cache key from inside a pruned tree normally; reporting it
 // would tell the author to fix something that already works.
 func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: types.MustParseGlobs(
 		"proto/gen/descriptor.binpb",
 		"node_modules/pkg/index.js",
@@ -675,7 +633,7 @@ func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 // against the binary belongs to internal/agent and is tested there.
 func TestCheckAgentSkills(t *testing.T) {
 	t.Run("no catalog supplied -> skipped, not a finding", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
 
 		got := r.checkAgentSkills()
 
@@ -684,7 +642,7 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("nothing installed -> advice naming the install command", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}}
 		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
 
 		got := r.checkAgentSkills()
@@ -695,12 +653,10 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("descriptor install -> fix through harness installer", func(t *testing.T) {
-		root := t.TempDir()
-		writeDoctorHarness(t, root)
-		require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents/skills/magus-query"), 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, ".agents/skills/magus-query/SKILL.md"),
-			[]byte("---\nname: magus-query\n---\nold generated body\n"), 0o644))
-		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
+		w := testkit.NewWorkspace(t)
+		writeDoctorHarness(t, w)
+		w.Write(".agents/skills/magus-query/SKILL.md", "---\nname: magus-query\n---\nold generated body\n")
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = agent.Default(types.KnowledgeSchemaVersion)
 
 		got := r.checkAgentSkills()
@@ -715,16 +671,14 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("stamped orphan -> the reinstall is the fix, since install prunes it", func(t *testing.T) {
-		root := t.TempDir()
-		writeDoctorHarness(t, root)
+		w := testkit.NewWorkspace(t)
+		writeDoctorHarness(t, w)
 		catalog := agent.Default(types.KnowledgeSchemaVersion)
-		_, _, err := catalog.WriteSkillTree(root, ".agents/skills", false, agent.FormBoth)
+		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
 		require.NoError(t, err)
-		orphan := filepath.Join(root, ".agents/skills/magus-retired")
-		require.NoError(t, os.MkdirAll(orphan, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-			catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort), 0o644))
-		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
+		w.Write(".agents/skills/magus-retired/SKILL.md",
+			string(catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), agent.VariantShort)))
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -741,13 +695,13 @@ func TestCheckAgentSkills(t *testing.T) {
 	})
 
 	t.Run("empty leftover directory -> stale, named with the command that removes it", func(t *testing.T) {
-		root := t.TempDir()
-		writeDoctorHarness(t, root)
+		w := testkit.NewWorkspace(t)
+		writeDoctorHarness(t, w)
 		catalog := agent.Default(types.KnowledgeSchemaVersion)
-		_, _, err := catalog.WriteSkillTree(root, ".agents/skills", false, agent.FormBoth)
+		_, _, err := catalog.WriteSkillTree(w.Root(), ".agents/skills", false, agent.FormBoth)
 		require.NoError(t, err)
-		require.NoError(t, os.MkdirAll(filepath.Join(root, ".agents/skills/magus-retired"), 0o755))
-		r := &runner{ws: rootStubWorkspace{root: root, harnesses: []string{"test-host"}}}
+		require.NoError(t, os.MkdirAll(w.Path(".agents/skills/magus-retired"), 0o755))
+		r := &runner{ws: rootedWorkspace{root: w.Root(), harnesses: []string{"test-host"}}}
 		r.opts.skills = catalog
 
 		got := r.checkAgentSkills()
@@ -767,7 +721,7 @@ func TestCheckAgentSkills(t *testing.T) {
 // in a nested project's generated MAGUS.md. Harmless until the content changes, and then the root
 // reports the nested project's own generate as an undeclared source mutation.
 func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
 		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("MAGUS.md")},
@@ -784,7 +738,7 @@ func TestOutputIsAnotherProjectsSourceReportsTheOverlap(t *testing.T) {
 // A project claiming its OWN output is not the finding: writing what you declared you write is what
 // generate is for, and reporting it would make the check fire on every project in the workspace.
 func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: "docs", Name: "docs", Sources: types.MustParseGlobs("**/*.md"), Outputs: types.MustParseGlobs("MAGUS.md")},
 	}
@@ -797,7 +751,7 @@ func TestOutputIsAnotherProjectsSourceIgnoresAProjectsOwnOutput(t *testing.T) {
 // A pattern output is not reported, which is the decidability line MGS4002 draws: whether two globs
 // can overlap is undecidable in general, whether a glob matches one literal path is not.
 func TestOutputIsAnotherProjectsSourceSkipsPatternOutputs(t *testing.T) {
-	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 	projects := []*types.Project{
 		{Path: ".", Name: "root", Sources: types.MustParseGlobs("**/*.md")},
 		{Path: "libs/leaf", Name: "leaf", Outputs: types.MustParseGlobs("docs/**")},
@@ -859,17 +813,17 @@ func TestCheckSessionLoadStates(t *testing.T) {
 // caller reporting on a tree: a machine-wide config in the reader's home says
 // nothing about whether the next clone of this repository is wired.
 func TestHookConfigsCoversTheCheckoutOnly(t *testing.T) {
-	root := t.TempDir()
-	writeCheckpointHarness(t, root, guardedHarnessConfig())
-	wired := filepath.Join(root, "host", "hooks.json")
+	w := testkit.NewWorkspace(t)
+	writeCheckpointHarness(t, w, guardedHarnessConfig())
+	wired := w.Path("host", "hooks.json")
 
-	assert.Equal(t, []string{wired}, HookConfigs(harnessProbeCtx(), root, "test-host"))
+	assert.Equal(t, []string{wired}, HookConfigs(harnessProbeCtx(), w.Root(), "test-host"))
 
 	// A config that names magus without running a hook of its own is not wiring: the
 	// same two markers the guard-wiring check reads, so neither can count a file the
 	// other would not.
-	require.NoError(t, os.WriteFile(wired, []byte(`{"note":"magus lives here"}`), 0o644))
-	assert.Empty(t, HookConfigs(harnessProbeCtx(), root, "test-host"))
+	w.Write("host/hooks.json", `{"note":"magus lives here"}`)
+	assert.Empty(t, HookConfigs(harnessProbeCtx(), w.Root(), "test-host"))
 }
 
 // sameStepFixture is the 2026-09-10 gate stall as a workspace declares it: `ci` composes a
@@ -973,7 +927,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	probe := spells.Command{Bin: "govulncheck", Args: []string{"-version"}}
 
 	t.Run("same command, no key -> fail", func(t *testing.T) {
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Probe: probe, Observe: probe}))
@@ -987,7 +941,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	t.Run("different args -> ok", func(t *testing.T) {
 		// spells/docker: `trivy version` keys the cache, `trivy version --format json`
 		// is the observation. One binary, two commands, no leak.
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("trivy", spells.Tool{
 			Probe:   spells.Command{Bin: "trivy", Args: []string{"version"}},
@@ -998,7 +952,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	})
 
 	t.Run("same command with a key -> ok", func(t *testing.T) {
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck", spells.Tool{
 			Probe: probe, Observe: probe, Key: spells.VersionKey{UpTo: spells.VersionPatch},
@@ -1010,7 +964,7 @@ func TestObservationKeyedAsVersion(t *testing.T) {
 	t.Run("observe with no probe -> ok", func(t *testing.T) {
 		// The shape the go spell carries today, and the one a check reading only
 		// Observe would misreport.
-		r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+		r := &runner{root: t.TempDir(), ws: detectingWorkspace{}}
 
 		got := r.checkObservationKeyedAsVersion(spellWithTool("govulncheck",
 			spells.Tool{Observe: probe}))
@@ -1025,22 +979,22 @@ func TestCheckJSONCodec(t *testing.T) {
 	assert.True(t, strings.HasPrefix(got.Message, "encoding/json "), got.Message)
 }
 
-// graphStubWorkspace answers Graph() with a fixed error, which is the only thing
+// graphErrorWorkspace answers Graph() with a fixed error, which is the only thing
 // checkGraphCycles reads.
-type graphStubWorkspace struct {
+type graphErrorWorkspace struct {
 	types.WorkspaceReader
 	err error
 }
 
-func (g graphStubWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
+func (g graphErrorWorkspace) Graph() (*types.Graph, error) { return nil, g.err }
 
 func TestCheckGraphCycles(t *testing.T) {
-	ok := (&runner{ws: graphStubWorkspace{}}).checkGraphCycles()
+	ok := (&runner{ws: graphErrorWorkspace{}}).checkGraphCycles()
 	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckOK, Message: "no cycles detected"}, ok)
 
 	// The graph builder is what detects a cycle, so its error IS the finding and has
 	// to reach the report rather than being replaced with a generic message.
-	bad := (&runner{ws: graphStubWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
+	bad := (&runner{ws: graphErrorWorkspace{err: errors.New("cycle: a -> b -> a")}}).checkGraphCycles()
 	assert.Equal(t, types.Check{Name: "dependency-graph", Status: types.CheckFail, Message: "cycle: a -> b -> a"}, bad)
 }
 
@@ -1143,7 +1097,7 @@ func TestCheckWorkspaceRegistration(t *testing.T) {
 
 	// The server passes the workspace through r.ws, leaving r.root empty on that path.
 	t.Run("root comes from the workspace when set", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
+		r := &runner{ws: rootedWorkspace{root: "/repo"}, opts: options{serverInfo: &ServerInfo{
 			Reachable:  true,
 			Workspaces: []LoadedWorkspace{{Root: "/repo", LastAccess: loaded}},
 		}}}
@@ -1332,7 +1286,7 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 	// An acknowledgment whose shadow is gone is dead config: the reason it carries no
 	// longer describes anything, which is what keeps the opt-out list meaningful.
 	t.Run("every ack is stale", func(t *testing.T) {
-		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
+		r := &runner{ws: rootedWorkspace{root: t.TempDir()}, opts: options{cfg: acks}}
 		got := r.checkStaleShadowAcks()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "2 allow_shadow entr(ies) no longer match a real shadow")
@@ -1342,15 +1296,6 @@ func TestCheckStaleShadowAcks(t *testing.T) {
 		assert.Contains(t, got.Details[0], "the nested copy is deliberate")
 		assert.Contains(t, got.Details[1], `"spells/world"`)
 	})
-}
-
-// plant writes a file under root, creating its parents, and returns the path.
-func plant(t *testing.T, root, rel, body string) string {
-	t.Helper()
-	p := filepath.Join(root, filepath.FromSlash(rel))
-	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o755))
-	require.NoError(t, os.WriteFile(p, []byte(body), 0o644))
-	return p
 }
 
 // touchAt backdates or advances a path's mtime, which is the whole input to the
@@ -1368,21 +1313,21 @@ func withoutPathMagus(t *testing.T) {
 }
 
 func TestNewestGoSource(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	base := time.Now().Add(-24 * time.Hour)
 
-	touchAt(t, plant(t, root, "old.go", "package a\n"), base)
-	newest := plant(t, root, "sub/new.go", "package b\n")
+	touchAt(t, w.Write("old.go", "package a\n"), base)
+	newest := w.Write("sub/new.go", "package b\n")
 	touchAt(t, newest, base.Add(time.Hour))
 	// Not Go source, so its mtime must not win.
-	touchAt(t, plant(t, root, "README.md", "hi\n"), base.Add(10*time.Hour))
+	touchAt(t, w.Write("README.md", "hi\n"), base.Add(10*time.Hour))
 	// The directories that never hold guard sources, each planted with a file newer
 	// than everything else so a missing skip shows up as the wrong answer.
 	for _, dir := range []string{".git", "node_modules", "gen", ".claude"} {
-		touchAt(t, plant(t, root, dir+"/skipped.go", "package c\n"), base.Add(20*time.Hour))
+		touchAt(t, w.Write(dir+"/skipped.go", "package c\n"), base.Add(20*time.Hour))
 	}
 
-	at, path := newestGoSource(root)
+	at, path := newestGoSource(w.Root())
 	assert.Equal(t, filepath.FromSlash("sub/new.go"), path)
 	assert.WithinDuration(t, base.Add(time.Hour), at, time.Second)
 }
@@ -1397,14 +1342,13 @@ func TestCheckGuardBinary(t *testing.T) {
 	// A stale guard is worse than an absent one: an absent guard is noticed within a
 	// command or two, a stale one is trusted indefinitely.
 	t.Run("older than the working tree", func(t *testing.T) {
-		root := t.TempDir()
+		w := testkit.NewWorkspace(t)
 		now := time.Now()
-		touchAt(t, plant(t, root, "main.go", "package main\n"), now)
-		bin := plant(t, root, "magus", "#!/bin/sh\n")
-		require.NoError(t, os.Chmod(bin, 0o755))
+		touchAt(t, w.Write("main.go", "package main\n"), now)
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now.Add(-time.Hour))
 
-		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "stale rules")
 		require.Len(t, got.Details, 3)
@@ -1413,14 +1357,13 @@ func TestCheckGuardBinary(t *testing.T) {
 	})
 
 	t.Run("newer than every tracked Go source", func(t *testing.T) {
-		root := t.TempDir()
+		w := testkit.NewWorkspace(t)
 		now := time.Now()
-		touchAt(t, plant(t, root, "main.go", "package main\n"), now.Add(-time.Hour))
-		bin := plant(t, root, "magus", "#!/bin/sh\n")
-		require.NoError(t, os.Chmod(bin, 0o755))
+		touchAt(t, w.Write("main.go", "package main\n"), now.Add(-time.Hour))
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 		touchAt(t, bin, now)
 
-		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "hook would run ./magus")
 	})
@@ -1428,20 +1371,19 @@ func TestCheckGuardBinary(t *testing.T) {
 	// The resolved path is reported always, not only on failure: "which binary is
 	// judging me?" has no other way to be asked.
 	t.Run("falls back to PATH", func(t *testing.T) {
-		dir := t.TempDir()
-		fake := filepath.Join(dir, "magus")
-		require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755))
-		t.Setenv("PATH", dir)
+		bin := testkit.NewWorkspace(t)
+		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
+		t.Setenv("PATH", bin.Root())
 
-		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckOK, got.Status)
 		assert.Contains(t, got.Message, "no ./magus built")
-		assert.Contains(t, got.Message, fake)
+		assert.Contains(t, got.Message, onPath)
 	})
 
 	t.Run("no binary anywhere", func(t *testing.T) {
 		withoutPathMagus(t)
-		got := (&runner{ws: rootStubWorkspace{root: t.TempDir()}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: t.TempDir()}}).checkGuardBinary()
 		assert.Equal(t, types.Check{
 			Status:  types.CheckFail,
 			Details: []string{"build one: magus run build ."},
@@ -1453,10 +1395,10 @@ func TestCheckGuardBinary(t *testing.T) {
 	// carry on to PATH rather than stopping at the name.
 	t.Run("non-executable ./magus", func(t *testing.T) {
 		withoutPathMagus(t)
-		root := t.TempDir()
-		plant(t, root, "magus", "not a binary\n")
+		w := testkit.NewWorkspace(t)
+		w.Write("magus", "not a binary\n")
 
-		got := (&runner{ws: rootStubWorkspace{root: root}}).checkGuardBinary()
+		got := (&runner{ws: rootedWorkspace{root: w.Root()}}).checkGuardBinary()
 		assert.Equal(t, types.CheckFail, got.Status)
 		assert.Contains(t, got.Message, "no ./magus and no magus on PATH")
 	})
@@ -1466,24 +1408,22 @@ func TestCheckGuardBinary(t *testing.T) {
 // a change to one check's resolution order cannot silently retarget the other's probe.
 func TestResolveGuardBinaryForWiring(t *testing.T) {
 	t.Run("prefers ./magus", func(t *testing.T) {
-		root := t.TempDir()
-		bin := plant(t, root, "magus", "#!/bin/sh\n")
-		require.NoError(t, os.Chmod(bin, 0o755))
+		w := testkit.NewWorkspace(t)
+		bin := w.WriteExecutable("magus", "#!/bin/sh\n")
 
-		got, ok := resolveGuardBinaryForWiring(root)
+		got, ok := resolveGuardBinaryForWiring(w.Root())
 		require.True(t, ok)
 		assert.Equal(t, bin, got)
 	})
 
 	t.Run("falls back to PATH", func(t *testing.T) {
-		dir := t.TempDir()
-		fake := filepath.Join(dir, "magus")
-		require.NoError(t, os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755))
-		t.Setenv("PATH", dir)
+		bin := testkit.NewWorkspace(t)
+		onPath := bin.WriteExecutable("magus", "#!/bin/sh\n")
+		t.Setenv("PATH", bin.Root())
 
 		got, ok := resolveGuardBinaryForWiring(t.TempDir())
 		require.True(t, ok)
-		assert.Equal(t, fake, got)
+		assert.Equal(t, onPath, got)
 	})
 
 	t.Run("nothing to resolve", func(t *testing.T) {
@@ -1503,21 +1443,20 @@ func TestResolveGuardBinaryForWiring(t *testing.T) {
 }
 
 func TestHarnessConfigCandidates(t *testing.T) {
-	root := t.TempDir()
-	writeDoctorHarness(t, root)
+	w := testkit.NewWorkspace(t)
+	writeDoctorHarness(t, w)
 
-	got, err := harnessConfigCandidates(root, "test-host")
+	got, err := harnessConfigCandidates(w.Root(), "test-host")
 	require.NoError(t, err)
-	assert.Equal(t, []string{filepath.Join(root, "host", "hooks.json")}, got)
+	assert.Equal(t, []string{w.Path("host", "hooks.json")}, got)
 }
 
 func TestGuardReferencedTemplates(t *testing.T) {
-	root := t.TempDir()
-	configDir := filepath.Join(root, ".claude")
-	require.NoError(t, os.MkdirAll(configDir, 0o755))
+	w := testkit.NewWorkspace(t)
+	root, configDir := w.Root(), w.Path(".claude")
 
-	fromRoot := plant(t, root, "docs/guides/magus-command.buzz", "import \"std\";\n")
-	besideConfig := plant(t, configDir, "magus-path.buzz", "import \"std\";\n")
+	fromRoot := w.Write("docs/guides/magus-command.buzz", "import \"std\";\n")
+	besideConfig := w.Write(".claude/magus-path.buzz", "import \"std\";\n")
 
 	t.Run("resolves against the root and against the config dir", func(t *testing.T) {
 		body := []byte(`{"command": "magus buzz -s docs/guides/magus-command.buzz", "other": "magus-path.buzz"}`)
@@ -1552,7 +1491,7 @@ func TestGuardReferencedTemplates(t *testing.T) {
 	// The token starts at the nearest quote, space, tab, newline or '=', so a bare
 	// basename is taken whole rather than swallowing the word before it.
 	t.Run("a bare basename", func(t *testing.T) {
-		bare := plant(t, root, "cursor-hook.buzz", "import \"std\";\n")
+		bare := w.Write("cursor-hook.buzz", "import \"std\";\n")
 		found, missing := guardReferencedTemplates(root, configDir, []byte("hook=cursor-hook.buzz\n"))
 		assert.Equal(t, []string{bare}, found)
 		assert.Empty(t, missing)
@@ -1688,24 +1627,24 @@ func TestCacheDir(t *testing.T) {
 func TestFirstExistingConfig(t *testing.T) {
 	assert.Equal(t, "", firstExistingConfig(t.TempDir()))
 
-	dotted := t.TempDir()
-	want := plant(t, dotted, ".magus.yaml", "log:\n")
-	assert.Equal(t, want, firstExistingConfig(dotted))
+	dotted := testkit.NewWorkspace(t)
+	want := dotted.Write(".magus.yaml", "log:\n")
+	assert.Equal(t, want, firstExistingConfig(dotted.Root()))
 
 	// magus.yaml wins when both exist, matching the loader's own order.
-	both := t.TempDir()
-	plain := plant(t, both, "magus.yaml", "log:\n")
-	plant(t, both, ".magus.yaml", "log:\n")
-	assert.Equal(t, plain, firstExistingConfig(both))
+	both := testkit.NewWorkspace(t)
+	plain := both.Write("magus.yaml", "log:\n")
+	both.Write(".magus.yaml", "log:\n")
+	assert.Equal(t, plain, firstExistingConfig(both.Root()))
 }
 
 func TestConfigFilePaths(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	root := t.TempDir()
-	want := plant(t, root, "magus.yaml", "log:\n")
+	w := testkit.NewWorkspace(t)
+	want := w.Write("magus.yaml", "log:\n")
 
-	got := configFilePaths(root)
+	got := configFilePaths(w.Root())
 	assert.Contains(t, got, want)
 	// Only files that exist: every path returned is handed straight to config.LoadFile,
 	// and a missing one would be reported as a config problem the user does not have.
@@ -1752,14 +1691,12 @@ func TestToSlashRel(t *testing.T) {
 }
 
 func TestSymlinkEscapes(t *testing.T) {
-	// EvalSymlinks first: macOS's TempDir sits under the /var -> /private/var link, and
-	// an unresolved root makes every in-tree target read as an escape.
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	outside, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	plant(t, root, "inside.txt", "hi\n")
-	plant(t, outside, "outside.txt", "hi\n")
+	// Both roots come resolved: an unresolved one makes every in-tree target read as an
+	// escape.
+	inside, away := testkit.NewWorkspace(t), testkit.NewWorkspace(t)
+	inside.Write("inside.txt", "hi\n")
+	away.Write("outside.txt", "hi\n")
+	root, outside := inside.Root(), away.Root()
 
 	t.Run("in-tree", func(t *testing.T) {
 		link := filepath.Join(root, "in.link")

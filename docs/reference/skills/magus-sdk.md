@@ -3,8 +3,8 @@ title: magus-sdk
 generated_from: internal/agent/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 12787
-skill_short_bytes: 9552
+skill_full_bytes: 14079
+skill_short_bytes: 10655
 ---
 
 # magus-sdk
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `118` |
+| `agent-skill-version` | `120` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `afdb27d6393c` |
+| `skill-content` | `aa1794323c21` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -69,9 +69,10 @@ never in what the CLI does, which this reader cannot see:
 
 No. `go get github.com/egladman/magus@v0.3.0` fails outright from a clean module. The root `go.mod` requires the nested
 `libs/gopherbuzz` and `libs/diagnostics` modules at `v0.0.0` through local replace
-directives. No tag exists for either, and replaces are not transitive.
+directives. Both modules carry `v0.1.0` tags the root does not require, and replaces are
+not transitive.
 
-Until those nested modules have their own tags, the only working install is a local
+Until the root requires the tagged versions, the only working install is a local
 copy. Clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it).
 Then add matching replace directives to the consumer's `go.mod`:
 
@@ -211,12 +212,32 @@ before you add a type.
 
 The one escape hatch: build the workspace programmatically, not through a magusfile.
 Use the exported `Option`/`ProjectOption`/`BindingOption` wire API (`register.go`:
-`WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
+`WithSpell`, `WithTarget`, `WithClaim`, ...).
 
 - Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
   `internal/spell`. That IS reachable this way.
 - This path gives real spell execution without a magusfile. It does not give
   arbitrary Buzz-authored targets.
+
+## Testing code that uses the SDK
+
+Test at the narrowest seam the code allows. Move to a real workspace only for what a
+fake cannot tell you.
+
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
+  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
+  method the test calls.
+- Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
+  `magus.Inspect`. Inspect opens no cache.
+- Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The
+  `Output*` lookups and `PayloadByRef` read the session store and other checkouts on a
+  miss.
+- For `Run`, declare a one-method interface and fake that. `*magus.Magus` has too many
+  methods to fake whole.
+- Magusfile targets do not run outside this module, so a test that writes one and calls
+  `Run` proves nothing. Register a spell from Go with `WithSpell` instead.
+- Register a programmatic spell with `register.Spell(tb, name, opts ...spells.Option)`
+  (`libs/testkit/register`), passing `spells.WithTargets` and the like.
 
 ## Audit mode
 
@@ -271,6 +292,7 @@ never in what the CLI does, which this reader cannot see:
 - ctx and cancellation
 - Two different graphs, easy to conflate
 - Sharp edges (verified, not folklore)
+- Testing code that uses the SDK
 - Audit mode
 
 ## Before anything else: can they even `go get` it?
@@ -280,14 +302,14 @@ VERIFIED against the real published module at the latest tag, with no local repl
 
 - `go.mod` requires `github.com/egladman/magus/libs/gopherbuzz` and
   `.../libs/diagnostics` (nested modules with their own `go.mod`) at `v0.0.0`.
-- No `libs/gopherbuzz/vX.Y.Z` or `libs/diagnostics/vX.Y.Z` tag exists; only root
-  tags (v0.1.0 to v0.3.0).
+- Both nested modules carry `v0.1.0` tags (`libs/gopherbuzz/v0.1.0`,
+  `libs/diagnostics/v0.1.0`), but the root still requires them at `v0.0.0`.
 - The root `go.mod` resolves them through LOCAL replace directives
   (`replace github.com/egladman/magus/libs/gopherbuzz => ./libs/gopherbuzz`).
   Replace directives are not transitive, so a downstream consumer hits `unknown
   revision libs/gopherbuzz/v0.0.0`.
 
-Until those nested modules have their own tags, the only working install is a local
+Until the root requires the tagged versions, the only working install is a local
 copy. Clone the repo (or vendor `libs/gopherbuzz` and `libs/diagnostics` from it).
 Then add matching replace directives to the consumer's `go.mod`:
 
@@ -451,7 +473,7 @@ was a `magusfile.buzz` with an `export fun build` target:
 
 The one escape hatch: build the workspace programmatically, not through a magusfile.
 Use the exported `Option`/`ProjectOption`/`BindingOption` wire API (`register.go`:
-`WithRegisteredSpell`, `WithTarget`, `WithClaim`, ...).
+`WithSpell`, `WithTarget`, `WithClaim`, ...).
 
 - Built-in spells (`go`, `ts`, `rust`, ...) decode from embedded bytecode through
   `internal/spell`. That IS reachable this way: the exported `register.go` functions
@@ -459,6 +481,27 @@ Use the exported `Option`/`ProjectOption`/`BindingOption` wire API (`register.go
   imports `internal/spell`.
 - This path gives real spell execution without a magusfile. It does not give
   arbitrary Buzz-authored targets.
+
+## Testing code that uses the SDK
+
+Test at the narrowest seam the code allows. Move to a real workspace only for what a
+fake cannot tell you.
+
+- Unit tests take the narrowest role (`types.WorkspaceReader` and so on). Fake it with a
+  mock from `types/gen/mocks`, or embed the interface in a struct and override the one
+  method the test calls.
+- Integration tests use `testkit.NewWorkspace(t)` (from `libs/testkit`) with
+  `magus.Inspect`. Inspect opens no cache.
+- Call `testkit.Main(m)` from `TestMain`, or `testkit.Isolate(t)` in a serial test. The
+  `Output*` lookups and `PayloadByRef` read the session store and other checkouts on a
+  miss, so without isolation the result depends on the developer's machine.
+- For `Run`, declare a one-method interface and fake that. `*magus.Magus` has too many
+  methods to fake whole.
+- Magusfile targets do not run outside this module, so a test that writes one and calls
+  `Run` proves nothing. Register a spell from Go with `WithSpell` instead.
+- Register a programmatic spell with `register.Spell(tb, name, opts ...spells.Option)`
+  (`libs/testkit/register`), passing `spells.WithTargets` and the like. The spell registry is process-global, so parallel
+  tests that register spells race.
 
 ## Audit mode
 

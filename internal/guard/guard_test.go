@@ -231,7 +231,6 @@ func TestJudgeLeavesCallersWithoutAFormAlone(t *testing.T) {
 // A command typed at a terminal is the CLI's: it records no session and is not an agent's,
 // while its terminal window still keys what the guard remembers for it.
 func TestATerminalCallIsRecordedAsTheCLIWithNoSession(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := trail.ContextWithEntryPoint(WithLocation(t.Context(), dir, "/repo", ""), types.EntryPointCLI)
 
@@ -270,6 +269,15 @@ type policyCase struct {
 	corruptStore bool
 	// lease is the job the caller acts under, "" for the orchestrator or a person.
 	lease string
+	// binary places an executable ./magus in the workspace, as every checkout a session runs in
+	// has; the capture rule answers differently when there is none.
+	binary bool
+}
+
+// placeBinary puts an executable file named magus at the workspace root.
+func placeBinary(t *testing.T, workspace string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(workspace, "magus"), []byte("#!/bin/sh\n"), 0o755))
 }
 
 func agentSpawn(toolInput map[string]any) map[string]any {
@@ -351,7 +359,8 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
-		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), decision: "deny", reason: "magus query output"},
+		{rule: "host-capture", name: "a cat of a run log", input: bash("cat .magus/logs/0123abcd.log"), binary: true, decision: "deny", reason: "magus query output"},
+		{rule: "host-capture", name: "a cat of a run log where the workspace has no ./magus", input: bash("cat .magus/logs/0123abcd.log"), decision: "pass"},
 		{rule: "host-terminals", name: "a mkdir of a terminals directory", input: bash("mkdir -p terminals"), decision: "deny", reason: "a directory named terminals is a host session folder, not a run"},
 	}
 
@@ -360,6 +369,9 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		covered[tc.rule] = true
 		t.Run(tc.rule+"/"+tc.name, func(t *testing.T) {
 			ctx, cacheDir := spawnFixture(t)
+			if tc.binary {
+				placeBinary(t, hookLocation(ctx, Dependencies{}).workspace)
+			}
 			store := job.NewStore(job.Location{CacheDir: cacheDir, Root: hookLocation(ctx, Dependencies{}).workspace})
 			for _, row := range tc.jobs {
 				_, err := store.Update(t.Context(), row.ID, func(cur *types.Job) { *cur = row })
@@ -415,6 +427,21 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			})})
 		}
 	}
+
+	t.Run("host-capture/a task capture outside the workspace names its own ref", func(t *testing.T) {
+		wsRoot := testkit.NewWorkspace(t)
+		wsRoot.WriteExecutable("magus", "#!/bin/sh\n")
+		ws := wsRoot.Root()
+		hostTemp := t.TempDir()
+		tasks := filepath.Join(hostTemp, "claude-501", "project", "session", "tasks")
+		require.NoError(t, os.MkdirAll(tasks, 0o755))
+		capture := filepath.Join(tasks, "bi3m8xyic.output")
+		require.NoError(t, os.WriteFile(capture, []byte("[fail] magus run (ran, 3s)\n  output: out1afa17d04e90\n"), 0o644))
+
+		v := shellIn(t, "trim-key", ws)("cat " + capture)
+		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), "the policy decided, not a built-in: %s", v.Reason)
+		assert.Contains(t, v.Reason, "`magus query output out1afa17d04e90`")
+	})
 
 	covered["commit-subject"] = true
 	t.Run("commit-subject", func(t *testing.T) {
@@ -548,12 +575,12 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 	}
 	checkout := func(t *testing.T, withBinary bool) string {
 		t.Helper()
-		dir := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module github.com/egladman/magus\n\ngo 1.25\n"), 0o644))
+		w := testkit.NewWorkspace(t)
+		w.Write("go.mod", "module github.com/egladman/magus\n\ngo 1.25\n")
 		if withBinary {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "magus"), []byte("binary"), 0o755))
+			w.WriteExecutable("magus", "binary")
 		}
-		return dir
+		return w.Root()
 	}
 
 	covered["foreign-binary"] = true
@@ -618,8 +645,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 // not this workspace's to advise on, and the audit caught advisories on exactly those.
 // The same write inside the root still is.
 func TestWriteOutsideTheWorkspaceIsAdvisedNothing(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
 	root, elsewhere := t.TempDir(), t.TempDir()
 	ctx := WithLocation(t.Context(), t.TempDir(), root, root)
 	write := func(path string) Verdict {
@@ -767,7 +793,6 @@ func TestDryRunJudgesAsTheCallAndWritesNothing(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx, deps, req := tc.setup(t)
-			t.Setenv(trail.EnvBaggage, "")
 			dirs := []string{hookLocation(ctx, deps).cacheDir, os.Getenv("XDG_STATE_HOME")}
 			checked := req
 			checked.DryRun = true
@@ -906,8 +931,8 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 			return false
 		}
 		for i, e := range as.Lhs {
-			lit, ok := as.Rhs[i].(*ast.BasicLit)
-			if verdictField(e, "Decision") && ok && lit.Kind == token.STRING && lit.Value != `"pass"` {
+			id, ok := as.Rhs[i].(*ast.Ident)
+			if verdictField(e, "Decision") && ok && strings.HasPrefix(id.Name, "decision") && id.Name != "decisionPass" {
 				return true
 			}
 		}
@@ -943,7 +968,6 @@ func TestEveryJudgedDecisionNamesItsRule(t *testing.T) {
 // to, and a reader of it waits forever. Where the wiring can hand the host a rewrite, the
 // guard closes it, says so once per session, and records that it did.
 func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	dir := t.TempDir()
 	ctx := WithLocation(t.Context(), dir, "/repo", "")
 	judge := func(input string, rewrites bool) Verdict {
@@ -989,7 +1013,6 @@ func TestJudgeClosesStdinForAShellCommand(t *testing.T) {
 // off keeps the rewrite and drops the notice, and deny refuses every line that leaves
 // stdin open, without rewriting it.
 func TestJudgeStdinClosedHonorsEveryDecision(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
 	refused := Verdict{Decision: "deny", Rule: string(advisoryStdinClosed)}
 	for _, tt := range []struct {
 		decision     builtin.Decision
@@ -1038,7 +1061,6 @@ func TestJudgeLeaseNoticesHonorEveryDecision(t *testing.T) {
 		} {
 			t.Run(string(notice.rule)+"/"+string(tt.decision), func(t *testing.T) {
 				ctx, _ := fleetFixture(t, types.Job{ID: "finished", State: types.StatePass})
-				t.Setenv(trail.EnvBaggage, "")
 				deps := withSetting(string(notice.rule), tt.decision)
 				judge := func() Verdict {
 					v := Judge(ctx, deps, Request{Input: "ls", Lease: notice.lease, Session: "s1"})

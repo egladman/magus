@@ -45,6 +45,7 @@ import "proc";
 import "serialize";
 import "std";
 import "time";
+import "vcs";
 import "hack/magusfile/commits" as commits;
 import "../../.github/actions/advice/figure-link" as figurelink;
 
@@ -1402,12 +1403,15 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
     foreach (r in refspecs) {
         fetch.append(r);
     }
-    capture("git", args: fetch);
+    final fetched = vcs\cmd(fetch, opts: {"quiet": true, "allow_failure": true});
+    if (!fetched.ok) {
+        throw "pull-requests: git {fetch.join(" ")}: exit {fetched.code}: {fetched.stderr}";
+    }
     final all = mut [<str>];
     final found = mut {<int: [str]>};
     final contents = mut {<str: str>};
     foreach (p in pulls) {
-        final res = proc\exec("git", args: ["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
+        final res = vcs\cmd(["merge-tree", "--write-tree", "--name-only", "origin/{p.base}", p.oid],
             opts: {"quiet": true, "allow_failure": true});
         // Exit 1 is a merge with conflicts; anything else is git failing.
         if (res.code != 0 and res.code != 1) {
@@ -1420,7 +1424,7 @@ fun findConflicts(pulls: [Pull]) > {int: [Conflict]} !> any {
             if (all.indexOf(path) == null) {
                 all.append(path);
             }
-            final blob = proc\exec("git", args: ["cat-file", "-p", "{tree}:{path}"], opts: {"quiet": true, "allow_failure": true});
+            final blob = vcs\cmd(["cat-file", "-p", "{tree}:{path}"], opts: {"quiet": true, "allow_failure": true});
             contents["{p.number}:{path}"] = blob.stdout;
         }
     }

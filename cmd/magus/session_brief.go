@@ -159,11 +159,12 @@ type briefLease struct {
 // briefFailure is one target the last recorded run failed, and the command that
 // reads its captured output back.
 type briefFailure struct {
-	Target  string `json:"target"`
-	Project string `json:"project,omitempty"`
-	Ref     string `json:"ref,omitempty"`
-	Inspect string `json:"inspect,omitempty"`
-	At      string `json:"at,omitempty"`
+	Target         string `json:"target"`
+	Project        string `json:"project,omitempty"`
+	Ref            string `json:"ref,omitempty"`
+	DiagnosticCode string `json:"diagnostic_code,omitempty"`
+	Inspect        string `json:"inspect,omitempty"`
+	At             string `json:"at,omitempty"`
 }
 
 // sessionBriefCmd implements `magus session --brief`.
@@ -421,7 +422,7 @@ func lastRunFailures(root string) []briefFailure {
 	if err != nil {
 		return nil
 	}
-	for _, s := range sessions.Summarize(fold) {
+	for _, s := range invocationsInCheckout(sessions.Summarize(fold), root) {
 		if len(s.Targets) == 0 {
 			continue
 		}
@@ -430,7 +431,7 @@ func lastRunFailures(root string) []briefFailure {
 			if t.Outcome != sessions.OutcomeFail {
 				continue
 			}
-			f := briefFailure{Target: t.Target, Project: t.Project, Ref: t.Ref, At: briefTime(s.LastMs)}
+			f := briefFailure{Target: t.Target, Project: t.Project, Ref: t.Ref, DiagnosticCode: t.DiagnosticCode, At: briefTime(s.LastMs)}
 			if t.Ref != "" {
 				f.Inspect = hint.QueryOutput.With(t.Ref)
 			}
@@ -622,7 +623,11 @@ func (b sessionBrief) writeFailures(s *strings.Builder) {
 	}
 	briefLine(s, "the last recorded run failed:")
 	for _, f := range b.Failures {
-		briefLine(s, "  %s %s (%s)", f.Target, orDash(f.Project), orDash(f.At))
+		if f.DiagnosticCode != "" {
+			briefLine(s, "  %s %s [%s] (%s)", f.Target, orDash(f.Project), f.DiagnosticCode, orDash(f.At))
+		} else {
+			briefLine(s, "  %s %s (%s)", f.Target, orDash(f.Project), orDash(f.At))
+		}
 		if f.Inspect != "" {
 			briefLine(s, "    %s", f.Inspect)
 		}

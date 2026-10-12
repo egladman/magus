@@ -111,9 +111,9 @@ const (
 	buzzUnresolvedImport = "BZZ2001"
 )
 
-// bootstrapCmd builds a first binary in a checkout no magus on hand can load; the guard
-// serves the same command.
-const bootstrapCmd = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+// BootstrapCommand builds a first binary in a checkout no magus on hand can load; the
+// guard serves the same command.
+const BootstrapCommand = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 
 // StaleBuild is what magus knows about a binary that may be older than its workspace:
 // the facts every out-of-date-binary report states, and the only ones it decides from.
@@ -137,7 +137,7 @@ type StaleBuild struct {
 // line, without a trailing newline.
 //
 // The go-build line appears only for a [StaleBuild.SourceTree] workspace, and the
-// [bootstrapCmd] only when the running build is also a dev build: that is the
+// [BootstrapCommand] only when the running build is also a dev build: that is the
 // binary that may be unable to load the tree it would rebuild itself from. An unknown
 // running version is not a dev build, so it never earns the bootstrap line.
 func (b StaleBuild) Advice() string {
@@ -147,10 +147,10 @@ func (b StaleBuild) Advice() string {
 	case b.SourceTree:
 		lines = append(lines, "  - built from this checkout: ./magus run go-build .")
 		if dev {
-			lines = append(lines, "  - if that cannot load the tree either: mv magus magus.old, then "+bootstrapCmd)
+			lines = append(lines, "  - if that cannot load the tree either: "+BootstrapCommand)
 		}
 	case dev:
-		lines = append(lines, "  - built from source, in the checkout it came from: "+bootstrapCmd)
+		lines = append(lines, "  - built from source, in the checkout it came from: "+BootstrapCommand)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -273,14 +273,32 @@ const staleNameNote = "This build does not provide that name; unless it is missp
 // or the one uncoded complaint it produces when a host object lacks a member the tree
 // calls. BZZ1009, a namespace the file never imported, is not one: no newer binary
 // supplies a missing import line.
+//
+// A guard rule the build does not know (MGS1045) is one too when no near name is offered:
+// a magusfile written after the binary names a rule the binary predates. A near name is a
+// typo, and a rebuild reports it the same way. Other MGS1045 failures are declaration
+// mistakes a rebuild does not fix.
 func staleShaped(err error) bool {
 	var d *diagnostics.Error
 	if errors.As(err, &d) {
-		code := string(d.Code)
-		return code == buzzUndefinedType || code == buzzUnresolvedImport
+		switch d.Code {
+		case types.GuardRuleMisdeclared:
+			return strings.Contains(d.Msg, unknownBuiltinRule) && !strings.Contains(d.Msg, nearNameOffer)
+		case buzzUndefinedType, buzzUnresolvedImport:
+			return true
+		}
+		return false
 	}
 	return missingObjectMember.MatchString(err.Error())
 }
+
+// The two phrases of internal/guard/builtin's complaint about a rule name it does not
+// provide. builtin exports no matcher, so TestStaleShapedReadsTheBuiltinComplaint resolves
+// real declarations against it to keep the two from drifting.
+const (
+	unknownBuiltinRule = "unknown built-in rule"
+	nearNameOffer      = "did you mean"
+)
 
 // missingObjectMember matches the checker's complaint that an object lacks a member. It
 // has no BZZ code, so the sentence is the only handle: a magusfile calling a host member

@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -218,21 +219,21 @@ func TestDecode_InstallGroupsSharedNameOneOp(t *testing.T) {
 	assert.ElementsMatch(t, []string{"pnpm-lock.yaml", "npm-lock.json"}, op.Install.Manifests[0].LockCandidates)
 }
 
-// fakeWorktrees lays out a primary checkout and one linked worktree the way git does,
+// layOutWorktrees lays out a primary checkout and one linked worktree the way git does,
 // using files only, and returns their roots.
-func fakeWorktrees(t *testing.T) (primary, linked string) {
+func layOutWorktrees(t *testing.T) (primary, linked string) {
 	t.Helper()
-	names := fakeWorktreeSet(t, "linked")
+	names := layOutWorktreeSet(t, "linked")
 	return names["primary"], names["linked"]
 }
 
-// fakeWorktreeSet lays out a primary checkout (holding the shared .git) plus one linked
+// layOutWorktreeSet lays out a primary checkout (holding the shared .git) plus one linked
 // worktree per name, the way git does, using files only. It returns every root keyed by
 // name, "primary" included, so a test can pick which siblings exist without hand-rolling
 // the admin-dir plumbing per case.
-func fakeWorktreeSet(t *testing.T, names ...string) map[string]string {
+func layOutWorktreeSet(t *testing.T, names ...string) map[string]string {
 	t.Helper()
-	base := t.TempDir()
+	base := testkit.NewWorkspace(t).Root()
 	primary := filepath.Join(base, "primary")
 	require.NoError(t, os.MkdirAll(primary, 0o755))
 	out := map[string]string{"primary": primary}
@@ -256,7 +257,7 @@ func TestSeedInstall(t *testing.T) {
 	choice := spells.InstallChoice{Install: spells.Install{Dir: "node_modules", Relocatable: true}}
 
 	t.Run("clones an absent tree from a sibling checkout", func(t *testing.T) {
-		primary, linked := fakeWorktrees(t)
+		primary, linked := layOutWorktrees(t)
 		writeFile(t, filepath.Join(primary, "app", "node_modules", ".pnpm", "lock.yaml"))
 		proj := filepath.Join(linked, "app")
 		require.NoError(t, os.MkdirAll(proj, 0o755))
@@ -264,14 +265,13 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(primary)
-		assert.Equal(t, real, from)
+		assert.Equal(t, primary, from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", ".pnpm", "lock.yaml"))
 		leftovers, _ := filepath.Glob(filepath.Join(proj, "node_modules"+seedSuffix+"*"))
 		assert.Empty(t, leftovers)
 	})
 	t.Run("never seeds over an existing tree", func(t *testing.T) {
-		primary, linked := fakeWorktrees(t)
+		primary, linked := layOutWorktrees(t)
 		writeFile(t, filepath.Join(primary, "app", "node_modules", "from-primary"))
 		proj := filepath.Join(linked, "app")
 		writeFile(t, filepath.Join(proj, "node_modules", "mine"))
@@ -283,7 +283,7 @@ func TestSeedInstall(t *testing.T) {
 		assert.NoFileExists(t, filepath.Join(proj, "node_modules", "from-primary"))
 	})
 	t.Run("not relocatable", func(t *testing.T) {
-		primary, linked := fakeWorktrees(t)
+		primary, linked := layOutWorktrees(t)
 		writeFile(t, filepath.Join(primary, "app", ".venv", "x"))
 		proj := filepath.Join(linked, "app")
 		require.NoError(t, os.MkdirAll(proj, 0o755))
@@ -295,7 +295,7 @@ func TestSeedInstall(t *testing.T) {
 		assert.NoDirExists(t, filepath.Join(proj, ".venv"))
 	})
 	t.Run("removes a clone a dead process abandoned", func(t *testing.T) {
-		primary, linked := fakeWorktrees(t)
+		primary, linked := layOutWorktrees(t)
 		writeFile(t, filepath.Join(primary, "app", "node_modules", "x"))
 		proj := filepath.Join(linked, "app")
 		// Far above any pid macOS hands out, so it reads as dead.
@@ -307,7 +307,7 @@ func TestSeedInstall(t *testing.T) {
 		assert.NoDirExists(t, stale)
 	})
 	t.Run("leaves a live seed's lock and directory alone", func(t *testing.T) {
-		primary, linked := fakeWorktrees(t)
+		primary, linked := layOutWorktrees(t)
 		writeFile(t, filepath.Join(primary, "app", "node_modules", "x"))
 		proj := filepath.Join(linked, "app")
 		// A reused pid must not decide this: the flock, not the number, is live.
@@ -325,7 +325,7 @@ func TestSeedInstall(t *testing.T) {
 		if os.Getuid() == 0 {
 			t.Skip("running as root; permission checks do not apply")
 		}
-		roots := fakeWorktreeSet(t, "bad", "good", "linked")
+		roots := layOutWorktreeSet(t, "bad", "good", "linked")
 		badSrc := filepath.Join(roots["bad"], "app", "node_modules")
 		writeFile(t, filepath.Join(badSrc, "x"))
 		writeFile(t, filepath.Join(roots["good"], "app", "node_modules", "x"))
@@ -339,12 +339,11 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), choice, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(roots["good"])
-		assert.Equal(t, real, from)
+		assert.Equal(t, roots["good"], from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", "x"))
 	})
 	t.Run("prefers the sibling installed from the same lock", func(t *testing.T) {
-		roots := fakeWorktreeSet(t, "same", "linked")
+		roots := layOutWorktreeSet(t, "same", "linked")
 		lock := func(root, body string) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, "app", "pnpm-lock.yaml"), []byte(body), 0o644))
 		}
@@ -362,8 +361,7 @@ func TestSeedInstall(t *testing.T) {
 		from, found, err := SeedInstall(context.Background(), withLock, proj)
 		require.NoError(t, err)
 		require.True(t, found)
-		real, _ := filepath.EvalSymlinks(roots["same"])
-		assert.Equal(t, real, from)
+		assert.Equal(t, roots["same"], from)
 		assert.FileExists(t, filepath.Join(proj, "node_modules", "from-same"))
 	})
 }

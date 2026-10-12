@@ -169,11 +169,15 @@ func upstreamEnv(ctx context.Context, args []vm.Value, orig func() (vm.Value, er
 
 // upstreamExecute is os.execute forked through run.Exec, so the child gets the exec check,
 // the scrubbed environment and no proc socket. Upstream handed it this process's whole
-// environment, MAGUS_PROC_SOCKET included.
+// environment, MAGUS_PROC_SOCKET included. A VCS binary is refused as proc\exec refuses
+// it, so the lease rules vcs\cmd applies have no second way around them.
 func upstreamExecute(ctx context.Context, args []vm.Value, orig func() (vm.Value, error)) (vm.Value, error) {
 	argv, ok := executeArgv(args)
 	if !ok {
 		return orig()
+	}
+	if err := std.RefuseVCS("os.execute", argv, ""); err != nil {
+		return vm.Null, err
 	}
 	cwd, _ := std.CwdFromContext(ctx)
 	res, err := run.Exec(ctx, argv[0], argv[1:], run.ExecOptions{Dir: cwd})

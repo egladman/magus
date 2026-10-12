@@ -25,8 +25,8 @@ syntax = "proto3";
 // be able to read it.
 package magus.notes.v1alpha1;
 
-import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
 
 // NotesService lists the workspace's notes and reads one in full.
 service NotesService {
@@ -195,13 +195,16 @@ message StoreStatus {
 message ListNotesRequest {
   // Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
   // why the three keep their own flat field rather than sharing a pagination message.
-  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  int32 page_size = 1 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 1000
+  }];
   string page_token = 2;
 }
 
 message ListNotesResponse {
   repeated Note notes = 1;
-  string next_page_token = 2;  // always empty until the store paginates
+  string next_page_token = 2; // always empty until the store paginates
   // stores reports both scopes whether or not either yielded a note, so a client can render
   // the empty and undeclared cases honestly instead of showing a blank list.
   repeated StoreStatus stores = 3;

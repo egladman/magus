@@ -1,13 +1,20 @@
 package proc
 
 import (
+	"bytes"
+	"cmp"
 	"crypto/rand"
 	"crypto/sha256"
+	"debug/elf"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
 	"strconv"
+	"sync"
 )
 
 // This file computes the ADOPTION IDENTITY: the version string a magus build sends over
@@ -139,4 +146,95 @@ var buildVCS = func() (rev string, modified bool, ok bool) {
 		}
 	}
 	return rev, modified, true
+}
+
+// BinaryBuild identifies the build of the running executable: a 16-hex digest of its Go
+// build ID, which the toolchain derives from the build's inputs, so two builds of the same
+// source share it and any other build does not, dirty tree or not. An executable whose
+// build ID cannot be read falls back to binaryIdentity, which only separates builds
+// further. Never empty: a cache key can carry it, a store directory cannot (see
+// [BinaryDigest]).
+func BinaryBuild() string { return cmp.Or(BinaryDigest(), binaryIdentity) }
+
+// BinaryDigest is BinaryBuild's digest of the Go build ID alone: "" when the executable
+// carries none or cannot be read. It names a build only by what the toolchain derived
+// from its inputs, so a caller that stores something per build uses it and stores
+// nothing when it is empty, rather than keying on a per-file identity that gives every
+// rebuilt or copied binary a store of its own.
+//
+// Read once per process, like binaryIdentity and for the same reason: a file rebuilt
+// underneath this process must not speak for the code it loaded. A func rather than the
+// OnceValue itself so no caller can reassign it.
+func BinaryDigest() string { return binaryDigest() }
+
+var binaryDigest = sync.OnceValue(func() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	digest, err := buildIDDigest(exe)
+	if err != nil {
+		return ""
+	}
+	return digest
+})
+
+// buildIDDigest is BinaryBuild's digest of exe's build ID: "" with no error when exe
+// carries none.
+func buildIDDigest(exe string) (string, error) {
+	id, err := readBuildID(exe)
+	if err != nil || id == "" {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(id))
+	return hex.EncodeToString(sum[:])[:16], nil
+}
+
+// readBuildID reads the build ID the Go linker writes at the start of the text segment,
+// which lies in the file's first 32 KiB (cmd/internal/buildid reads the same window), or
+// from ELF's .note.go.buildid when an external link moved text. "" with no error when exe
+// is readable and carries none; an error when it cannot be read or its note is malformed.
+func readBuildID(exe string) (string, error) {
+	f, err := os.Open(exe)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	head := make([]byte, 32<<10)
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	const marker = "\xff Go build ID: \""
+	if i := bytes.Index(head[:n], []byte(marker)); i >= 0 {
+		rest := head[i+len(marker) : n]
+		if j := bytes.IndexByte(rest, '"'); j > 0 {
+			return string(rest[:j]), nil
+		}
+	}
+	ef, err := elf.NewFile(f)
+	var notELF *elf.FormatError
+	if errors.As(err, &notELF) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	note := ef.Section(".note.go.buildid")
+	if note == nil {
+		return "", nil
+	}
+	// namesz, descsz, type, then "Go\x00\x00" and the ID.
+	data, err := note.Data()
+	if err != nil {
+		return "", err
+	}
+	if len(data) < 16 {
+		return "", fmt.Errorf("truncated .note.go.buildid in %s", exe)
+	}
+	size := int(ef.ByteOrder.Uint32(data[4:8]))
+	if len(data) < 16+size {
+		return "", fmt.Errorf("truncated .note.go.buildid in %s", exe)
+	}
+	return string(data[16 : 16+size]), nil
 }

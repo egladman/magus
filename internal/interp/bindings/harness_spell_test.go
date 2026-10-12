@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
@@ -78,40 +79,62 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 // that does not export it loads, ships no agent files, and was still offered the shipped
 // agents in Params.
 func TestHarnessSpellWithoutTheAgentsOpGetsNoAgents(t *testing.T) {
-	const id = "agentless-test"
 	var offered []any
-	if _, ok := project.DefaultSpellRegistry().Lookup(id); !ok {
-		project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(id, spells.WithInvoker(
-			func(_ context.Context, req spells.InvokeRequest) (any, error) {
-				switch req.Target {
-				case spells.HarnessConfigContract:
-					return map[string]any{"path": ""}, nil
-				case spells.HarnessAgentsContract:
-					offered, _ = req.Params["agents"].([]any)
-				}
-				return nil, nil
-			})))
-	}
+	id := register.Spell(t, "agentless-test", spells.WithInvoker(
+		func(_ context.Context, req spells.InvokeRequest) (any, error) {
+			switch req.Target {
+			case spells.HarnessConfigContract:
+				return map[string]any{"path": ""}, nil
+			case spells.HarnessAgentsContract:
+				offered, _ = req.Params["agents"].([]any)
+			}
+			return nil, nil
+		}))
 	d := loadShippedHarness(t, id)
 	assert.Empty(t, d.Agents)
 	require.Len(t, offered, 1)
 	assert.Equal(t, "magus-scout", offered[0].(map[string]any)["name"])
 }
 
-// TestDecodeHarnessAgents pins that a spell's harness_agents list reaches the descriptor
-// field for field.
-func TestDecodeHarnessAgents(t *testing.T) {
-	t.Run("path and content decode", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		require.NoError(t, decodeHarnessAgents([]any{
-			map[string]any{"path": ".cursor/agents/a.md", "content": "body\n"},
-		}, &d))
-		assert.Equal(t, []agent.HarnessAgentFile{{Path: ".cursor/agents/a.md", Content: "body\n"}}, d.Agents)
-	})
+func TestDecodeHarnessJSONReadsAListFieldForField(t *testing.T) {
+	var d agent.HarnessDescriptor
 
-	t.Run("anything but a list is refused", func(t *testing.T) {
-		var d agent.HarnessDescriptor
-		assert.Error(t, decodeHarnessAgents(map[string]any{"path": "a.md"}, &d))
-		assert.Empty(t, d.Agents)
-	})
+	require.NoError(t, decodeHarnessJSON([]any{
+		map[string]any{"path": ".cursor/agents/a.md", "content": "body\n"},
+	}, &d.Agents))
+
+	assert.Equal(t, []agent.HarnessAgentFile{{Path: ".cursor/agents/a.md", Content: "body\n"}}, d.Agents)
+}
+
+func TestDecodeHarnessJSONRefusesAMapForAListField(t *testing.T) {
+	var d agent.HarnessDescriptor
+
+	assert.Error(t, decodeHarnessJSON(map[string]any{"path": "a.md"}, &d.Agents))
+	assert.Empty(t, d.Agents)
+}
+
+// TestHarnessSpellsDeclareForegroundLimits pins the one host whose shell tool backgrounds a
+// command past its timeout, and whose wiring sets the hook timeout the guard reports
+// against, and that every other shipped harness declares no limits.
+func TestHarnessSpellsDeclareForegroundLimits(t *testing.T) {
+	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 120000, ForegroundMaxMs: 600000, HookTimeoutMs: 10000},
+		loadShippedHarness(t, "claude-code").Limits)
+	for _, id := range []string{"codex", "cursor", "opencode"} {
+		assert.Zero(t, loadShippedHarness(t, id).Limits, id)
+	}
+}
+
+func TestDecodeHarnessJSONReadsAMapField(t *testing.T) {
+	var d agent.HarnessDescriptor
+
+	require.NoError(t, decodeHarnessJSON(map[string]any{"foreground_default_ms": int64(1000), "foreground_max_ms": 2000.0}, &d.Limits))
+
+	assert.Equal(t, agent.HarnessLimits{ForegroundDefaultMs: 1000, ForegroundMaxMs: 2000}, d.Limits)
+}
+
+func TestDecodeHarnessJSONRefusesAListForAMapField(t *testing.T) {
+	var d agent.HarnessDescriptor
+
+	assert.Error(t, decodeHarnessJSON([]any{}, &d.Limits))
+	assert.Zero(t, d.Limits)
 }

@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -433,7 +434,7 @@ func verbFlagTakesValue(verb, name string) bool {
 // copy in each worker checkout, so a worker's own build is a second binary for the same base.
 //
 // `affected` is never a check: it picks its projects from the diff, and a check names one.
-func (r targetRun) allowed(checks []types.LeaseCheck, produces func() func(target, project string) bool) bool {
+func (r targetRun) allowed(checks []types.LeaseCheck, produces lazyProducers) bool {
 	projects := r.projects
 	if len(projects) == 0 {
 		projects = []string{"."}
@@ -1344,7 +1345,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	cmds, ok := ParseCommands(command)
-	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return vcsMutation(c) != "" }) {
+	if !ok || !slices.ContainsFunc(cmds, func(c hint.Invocation) bool { return workerVCSOp(c) != "" }) {
 		return ""
 	}
 	me, ok := actingLiveLease(ctx, deps, actingLease)
@@ -1356,7 +1357,7 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 		return ""
 	}
 	for _, c := range cmds {
-		if op := vcsMutation(c); op != "" && !recordsCommit(c) {
+		if op := workerVCSOp(c); op != "" && !recordsCommit(c) {
 			return workerVCSDenial("`"+command+"`", op, me, role, "")
 		}
 	}
@@ -1389,17 +1390,117 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 
 func init() { std.RegisterVCSLeaseGate(vcsCmdRefusal) }
 
-// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir. The
-// process knows no session or subagent, so row is graded as a worker: the answer the shell
-// rule gives a caller that names neither.
-func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string) error {
+// vcsCmdRefusal is lease-vcs for vcs\cmd, which a Buzz process runs under row in dir with
+// env, the environment the child starts with. The process knows no session or subagent, so
+// row is graded as a worker: the answer the shell rule gives a caller that names neither.
+func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []string, dir string, env []string) error {
 	inv := hint.Invocation{Name: backend, Args: args}
 	site, unlocated := argvSite(inv, dir)
+	relocated := false
+	if backend == "git" && unlocated == "" {
+		site, unlocated, relocated = gitEnvSite(site, env)
+	}
+	if unlocated == "" && !relocated && backend == "git" && actsInPlace(inv) &&
+		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
+		return nil
+	}
 	op, refused, why := workerVCSRefusal(ctx, types.VCSOptions{}, row, inv, site, unlocated)
 	if !refused {
 		return nil
 	}
 	return errors.New(workerVCSDenial(fmt.Sprintf("`vcs\\cmd(%q)`", args), op, row, workerRole(row, job.Caller{}), why))
+}
+
+// gitLocationVars are the environment variables that move git's repository, work tree or
+// index off the directory it runs in.
+var gitLocationVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE"}
+
+// gitEnvSite applies env, the environment git starts with, to site. GIT_DIR names the git
+// directory as --git-dir does, unless the arguments already named one; any other of
+// gitLocationVars leaves the commit unplaced. relocated reports that env set any of them,
+// which rules out the scratch-repository exemption: that exemption reads the repository
+// off the directory alone.
+func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, relocated bool) {
+	for _, name := range gitLocationVars {
+		value, ok := envValue(env, name)
+		if !ok {
+			continue
+		}
+		relocated = true
+		switch {
+		case name != "GIT_DIR":
+			return vcsSite{}, "Its environment sets " + name + ", so where it commits cannot be read.", true
+		case site.gitDir != "":
+		case value == "" || strings.HasPrefix(value, "~"):
+			return vcsSite{}, "The GIT_DIR its environment sets is not one literal path, so where it commits cannot be read.", true
+		case filepath.IsAbs(value):
+			site.gitDir = value
+		default:
+			site.gitDir = filepath.Join(site.dir, value)
+		}
+	}
+	return site, "", relocated
+}
+
+// envValue is name's value in env as exec hands it to a child: the last entry wins, and
+// Windows matches names without regard to case.
+func envValue(env []string, name string) (string, bool) {
+	for i := len(env) - 1; i >= 0; i-- {
+		k, v, ok := strings.Cut(env[i], "=")
+		if ok && (k == name || runtime.GOOS == "windows" && strings.EqualFold(k, name)) {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// inOtherRepository reports whether a git call at site stands wholly outside checkout, in a
+// repository of its own, such as a script's scratch repository. A site inside checkout
+// never does, whatever repository it names: a submodule or nested repository there holds
+// the job's files. With a git directory named, git takes the current directory as the
+// work tree, so that directory must be the git directory's own checkout. False when either
+// side cannot be read, so the refusal decides.
+func inOtherRepository(site vcsSite, checkout string) bool {
+	if checkout == "" || within(site.dir, checkout) {
+		return false
+	}
+	if site.gitDir != "" {
+		root, ok := gitDirCheckout(site.gitDir)
+		if !ok || !samePath(site.dir, root) {
+			return false
+		}
+	}
+	_, common, ok := gitCheckout(site.dir)
+	if !ok {
+		return false
+	}
+	_, own, ok := gitCheckout(checkout)
+	return ok && !samePath(common, own)
+}
+
+// actsInPlace reports whether a git argv acts only on the repository it runs in, so that
+// standing in another repository is enough to keep it off the job's. A push writes to a
+// remote, which may be the job's repository; inline config can move the work tree
+// (core.worktree) or define an alias that runs anything.
+func actsInPlace(inv hint.Invocation) bool {
+	g := parseGit(inv.Args)
+	return g.at >= 0 && g.sub != "push" && !g.configured
+}
+
+// workTreeAt reports whether git, run in dir, takes dir's own checkout as its work tree
+// and that work tree lies outside checkout. git is asked rather than the directory read:
+// the repository's config, or one it includes, can set core.worktree to the job's checkout.
+func workTreeAt(ctx context.Context, dir, checkout string) bool {
+	root, _, ok := gitCheckout(dir)
+	if !ok {
+		return false
+	}
+	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{Name: "git"})
+	if err != nil || res.VCS == nil {
+		return false
+	}
+	top, err := res.VCS.Root(ctx, dir)
+	return err == nil && samePath(top, root) && !within(top, checkout)
 }
 
 // workerRole says why row, acted under by caller, is a worker rather than the root, ""
@@ -1428,7 +1529,7 @@ func workerVCSDenial(what, op string, row types.Job, role, why string) string {
 		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
 	} else {
 		why = "The orchestrator lands the work from there. " +
-			"Pushing, stashing, reverting, resetting, cleaning, rebasing, merging, cherry-picking, discarding the tree and removing a worktree stay with the orchestrator."
+			"A worker reads the repository, stages, switches or creates a branch and fetches; every other version-control verb stays with the orchestrator."
 	}
 	return fmt.Sprintf("%s\n%s runs `%s`, and lease %s is %s. %s "+
 		"A worker may commit, with any backend, on its own branch in %s; every other version-control mutation changes the tree the orchestrator integrates from, and a whole-tree revert destroys a sibling's uncommitted work. "+
@@ -1451,7 +1552,7 @@ type vcsSite struct {
 // refuses a commit, since a commit that cannot be placed cannot be shown to be in the
 // worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
-	op = vcsMutation(inv)
+	op = workerVCSOp(inv)
 	switch {
 	case op == "":
 		return "", false, ""
@@ -1655,7 +1756,7 @@ func argvSite(inv hint.Invocation, dir string) (vcsSite, string) {
 // gitDirAssigned reads the git directory a line's environment names: a GIT_DIR assignment
 // as a command prefix, an export, or an `env` word, as written: a relative one resolves
 // where git runs. why says the line names a repository in a way that cannot be placed:
-// GIT_WORK_TREE, a value that is not literal, or more than one.
+// any other of gitLocationVars, a value that is not literal, or more than one.
 func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	f, err := parseFile(command, d)
 	if err != nil {
@@ -1665,7 +1766,7 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	unplaced := false
 	note := func(name, value string, literal bool) {
 		switch name {
-		case "GIT_WORK_TREE":
+		case "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE":
 			unplaced = true
 		case "GIT_DIR":
 			values = append(values, value)
@@ -1704,7 +1805,7 @@ func gitDirAssigned(command string, d Dialect) (gitDir, why string) {
 	})
 	switch {
 	case unplaced || len(values) > 1:
-		return "", "The line names its repository with GIT_DIR or GIT_WORK_TREE in a way that cannot be read as one checkout."
+		return "", "The line names its repository through " + strings.Join(gitLocationVars, ", ") + " in a way that cannot be read as one checkout."
 	case len(values) == 0:
 		return "", ""
 	case values[0] == "" || strings.HasPrefix(values[0], "~"):
@@ -1851,7 +1952,7 @@ func denyWriteOutsideLease(ctx context.Context, deps Dependencies, actingLease, 
 		if byCatchAll && !slices.Contains(redirects, candidate) && !pathShaped(location.workspace, rel) {
 			continue
 		}
-		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == "deny" {
+		if g := gradeLeasedWrite(ctx, deps, actingLease, candidate); g.Decision == decisionDeny {
 			return g.Reason
 		}
 	}

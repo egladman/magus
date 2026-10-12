@@ -1,10 +1,12 @@
 package interp
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	goast "go/ast"
+	"go/parser"
+	"go/token"
 	"io/fs"
 	"maps"
 	"os"
@@ -16,15 +18,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/observability/gen/mocks"
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/spell"
 	remotespell "github.com/egladman/magus/internal/spell/remote"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -141,15 +146,15 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			project, cwd := t.TempDir(), t.TempDir()
-			require.NoError(t, os.WriteFile(filepath.Join(project, "magusfile.buzz"), []byte(magusfile), 0o644))
+			project, cwd := testkit.NewWorkspace(t), testkit.NewWorkspace(t)
+			project.Magusfile(magusfile)
 			if tc.projectHelper != "" {
-				require.NoError(t, os.WriteFile(filepath.Join(project, "helper.buzz"), []byte(tc.projectHelper), 0o644))
+				project.Write("helper.buzz", tc.projectHelper)
 			}
-			require.NoError(t, os.WriteFile(filepath.Join(cwd, "helper.buzz"), []byte(tc.cwdHelper), 0o644))
-			t.Chdir(cwd)
+			cwd.Write("helper.buzz", tc.cwdHelper)
+			t.Chdir(cwd.Root())
 
-			src, err := Find(project)
+			src, err := Find(project.Root())
 			require.NoError(t, err)
 			load, err := execBuzzSrc(context.Background(), src, true)
 			if tc.wantErr != "" {
@@ -165,13 +170,11 @@ func TestMagusfileImportIgnoresCwd(t *testing.T) {
 // The search joins `../x` onto the root as root/../x.buzz, a file beside the workspace,
 // which from a worktree is a sibling checkout. It must be refused and never read.
 func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
-	outer := t.TempDir()
-	root := filepath.Join(outer, "ws")
-	require.NoError(t, os.MkdirAll(root, 0o755))
+	outer := testkit.NewWorkspace(t)
+	root := outer.Path("ws")
 	const module = "export fun touch() > void {}\n"
-	above := filepath.Join(outer, "x.buzz")
-	require.NoError(t, os.WriteFile(above, []byte(module), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "inside.buzz"), []byte(module), 0o644))
+	above := outer.Write("x.buzz", module)
+	outer.Write("ws/inside.buzz", module)
 
 	ctx := types.WithWorkspace(t.Context(), rootWorkspace{root: root})
 	oldJoin := strings.ReplaceAll(magusSearchPaths(ctx, root)[0], "?", "../x")
@@ -180,7 +183,7 @@ func TestModuleImportStaysInsideWorkspaceRoot(t *testing.T) {
 
 	load := func(t *testing.T, magusfile string) ([]string, error) {
 		t.Helper()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+		outer.Write("ws/magusfile.buzz", magusfile)
 		var reads []string
 		ctx := WithSourceReader(ctx, func(path string) ([]byte, error) {
 			reads = append(reads, path)
@@ -269,21 +272,6 @@ func TestReportImportError(t *testing.T) {
 	require.NoError(t, sink.take(), "take drains the sink")
 }
 
-// stepProbe records the policy a target body's ctx carries; TimeCall hands it the
-// ctx the body runs under.
-type stepProbe struct {
-	observability.Provider
-	policies []*sandbox.Policy
-}
-
-func (p *stepProbe) Enabled() bool { return true }
-
-func (p *stepProbe) RecordBuzzExec(ctx context.Context, _ float64, _, _ string) {
-	p.policies = append(p.policies, sandbox.PolicyFromContext(ctx))
-}
-
-func (p *stepProbe) RecordBuzzJITRun(context.Context) {}
-
 // A ctx.needs child never passes through runTarget, so its body must scope its own
 // step: here ci is the caller, as when ci composes test, and only test declares the
 // grant, as the root magusfile's test declares /proc.
@@ -294,10 +282,11 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 		spell.DeclareMagusTypes(sess, nil)
 	}
 	t.Cleanup(func() { buzzHostBindingsFn = prev })
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const magusfile = "import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n" +
 		"export fun test(ctx: magus\\Context, args: [str]) > void {}\n"
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
+	w.Magusfile(magusfile)
 	granted := t.TempDir()
 	probe := filepath.Join(granted, "stat")
 
@@ -319,7 +308,17 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = load.Session.Close() })
 
-	rec := &stepProbe{}
+	// TimeCall hands the provider the ctx a target body runs under, so the policy that ctx
+	// carries is captured from each RecordBuzzExec.
+	var policies []*sandbox.Policy
+	rec := mocks.NewMockProvider(t)
+	rec.EXPECT().Enabled().Return(true).Maybe()
+	rec.EXPECT().RecordBuzzJITRun(mock.Anything).Maybe()
+	rec.EXPECT().RecordBuzzExec(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(ctx context.Context, _ float64, _, _ string) {
+			policies = append(policies, sandbox.PolicyFromContext(ctx))
+		}).
+		Times(2)
 	ctx := observability.WithProvider(types.WithWorkspace(sandbox.WithPolicy(t.Context(), base), ws), rec)
 	parent := withDeclaredStep(ctx, root, "ci")
 	_, err = load.Targets["test"](parent, nil)
@@ -327,9 +326,9 @@ func TestComposedTargetRunsUnderItsOwnDeclaration(t *testing.T) {
 	_, err = load.Targets["ci"](parent, nil)
 	require.NoError(t, err)
 
-	require.Len(t, rec.policies, 2)
-	require.NoError(t, rec.policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
-	assert.Error(t, rec.policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
+	require.Len(t, policies, 2)
+	require.NoError(t, policies[0].CheckRead(t.Context(), probe), "a composed target lost its own grant")
+	assert.Error(t, policies[1].CheckRead(t.Context(), probe), "the parent gained its child's grant")
 	assert.Error(t, sandbox.PolicyFromContext(parent).CheckRead(t.Context(), probe), "the child's step leaked into its caller's ctx")
 }
 
@@ -361,11 +360,12 @@ func guardLoad(t *testing.T, ctx context.Context, root string) []string {
 // A guard load of the working tree keeps its chunks in the user's cache, never
 // the workspace, where the agents it judges can write.
 func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
-	root, cache := t.TempDir(), t.TempDir()
+	w, cache := testkit.NewWorkspace(t), t.TempDir()
+	root := w.Root()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", "")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export final marker = 1;\n"), 0o644))
+	w.Magusfile("export final marker = 1;\n")
 
 	assert.Equal(t, []string{"marker"}, guardLoad(t, t.Context(), root))
 	assert.Equal(t, map[string]bool{filepath.Join(root, "magusfile.buzz"): true}, storedChunks(t, root),
@@ -383,35 +383,78 @@ func TestGuardBytecodeStoreIsOutsideTheWorkspace(t *testing.T) {
 	}
 }
 
-// A load of approved sources trusts only the bytes its reader returns. A chunk
-// stored under the approved source's key, whoever wrote it, is not one of them.
-func TestGuardLoadOfApprovedSourcesIgnoresTheStore(t *testing.T) {
+// A load of approved sources trusts only the bytes its reader returns. A chunk a
+// working-tree load stored, under the approved source's key or moved into the approved
+// store over the approved chunk, is not one of them.
+func TestGuardLoadOfApprovedSourcesIgnoresWorkingTreeChunks(t *testing.T) {
 	root, cache := t.TempDir(), t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", filepath.Join(cache, "workspace"))
 	magusfile := filepath.Join(root, "magusfile.buzz")
 	const approved = "export final approved = 1;\n"
-	write := func(src string) string {
+	read := func(string) ([]byte, error) { return []byte(approved), nil }
+	load := func(ctx context.Context, src string) ([]string, string) {
 		t.Helper()
 		before := storedChunks(t, cache)
 		require.NoError(t, os.WriteFile(magusfile, []byte(src), 0o644))
-		guardLoad(t, t.Context(), root)
+		exports := guardLoad(t, ctx, root)
 		for path := range storedChunks(t, cache) {
 			if !before[path] {
-				return path
+				return exports, path
 			}
 		}
 		t.Fatalf("no chunk stored for %q", src)
-		return ""
+		return nil, ""
 	}
-	approvedChunk := write(approved)
-	planted, err := os.ReadFile(write("export final planted = 1;\n"))
+	_, worktreeChunk := load(t.Context(), approved)
+	_, plantedChunk := load(t.Context(), "export final planted = 1;\n")
+	planted, err := os.ReadFile(plantedChunk)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(approvedChunk, planted, 0o600))
+	require.NoError(t, os.WriteFile(worktreeChunk, planted, 0o600))
 
-	read := func(string) ([]byte, error) { return []byte(approved), nil }
-	assert.Equal(t, []string{"approved"}, guardLoad(t, WithSourceReader(t.Context(), read), root))
+	exports, approvedChunk := load(WithApprovedSourceReader(t.Context(), read), "export final planted = 1;\n")
+	assert.Equal(t, []string{"approved"}, exports)
+	assert.NotEqual(t, filepath.Dir(worktreeChunk), filepath.Dir(approvedChunk), "the approved load keeps its own store")
+
+	require.NoError(t, os.WriteFile(approvedChunk, planted, 0o600))
+	assert.Equal(t, []string{"approved"}, guardLoad(t, WithApprovedSourceReader(t.Context(), read), root))
+}
+
+// A load of approved sources compiles once per content: the next load of the same bytes
+// runs the stored chunk, whatever the working tree holds. A reader of any other kind keeps
+// nothing.
+func TestGuardLoadOfApprovedSourcesCompilesOnce(t *testing.T) {
+	w, cache := testkit.NewWorkspace(t), t.TempDir()
+	root := w.Root()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MAGUS_CACHE_DIR", "")
+	w.Magusfile("export final edited = 1;\n")
+	read := func(string) ([]byte, error) { return []byte("export final approved = 1;\n"), nil }
+	compiles := func(ctx context.Context) ([]string, bool) {
+		profile := buzz.NewProfile()
+		exports := guardLoad(t, buzz.WithProfile(ctx, profile), root)
+		return exports, profile.Report() != ""
+	}
+
+	exports, compiled := compiles(WithSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, true}, []any{exports, compiled})
+	assert.Empty(t, storedChunks(t, cache), "a reader that is not the approved one keeps nothing")
+
+	exports, compiled = compiles(WithApprovedSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, true}, []any{exports, compiled})
+	stored := storedChunks(t, cache)
+	require.Len(t, stored, 1)
+	for path := range stored {
+		rel, err := filepath.Rel(filepath.Join(cache, "magus", "buzz-bytecode-approved"), path)
+		require.NoError(t, err)
+		assert.True(t, filepath.IsLocal(rel), "the chunk is kept apart from working-tree chunks: %s", path)
+	}
+
+	exports, compiled = compiles(WithApprovedSourceReader(t.Context(), read))
+	assert.Equal(t, []any{[]string{"approved"}, false}, []any{exports, compiled}, "the second load compiles nothing")
+	assert.Equal(t, stored, storedChunks(t, cache))
 }
 
 // A new build's directory replaces the ones no build has used for a day.
@@ -439,32 +482,18 @@ func TestCompilerStampIsStable(t *testing.T) {
 	assert.Equal(t, stamp, compilerStamp())
 }
 
-// CI builds a fresh binary on every run: same bytes, new file, new mtime. Its chunks
-// are the ones the last run compiled.
-func TestCompilerStampIsTheBuildsContentNotItsFile(t *testing.T) {
-	exe, err := os.Executable()
-	require.NoError(t, err)
-	body, err := os.ReadFile(exe)
-	require.NoError(t, err)
-	fresh := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(fresh, body, 0o755))
-	long := time.Now().Add(-48 * time.Hour)
-	require.NoError(t, os.Chtimes(fresh, long, long))
+// An executable with no readable build ID has no name to store chunks under, so the load
+// compiles every time and leaves nothing behind.
+func TestGuardBytecodeStoreIsOffWithoutABuildID(t *testing.T) {
+	cache := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cache)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	old := compilerStamp
+	compilerStamp = func() string { return "" }
+	t.Cleanup(func() { compilerStamp = old })
 
-	stamp := readCompilerStamp(exe)
-	require.NotEmpty(t, stamp)
-	assert.Equal(t, stamp, readCompilerStamp(fresh))
-
-	id := goBuildID(exe)
-	require.NotEmpty(t, id, "the test binary carries a Go build ID")
-	replacement := []byte(id)
-	replacement[0] ^= 1
-	other := bytes.ReplaceAll(body, []byte(id), replacement)
-	require.False(t, bytes.Equal(body, other), "the test must change the stored build ID")
-	rebuilt := filepath.Join(t.TempDir(), "magus")
-	require.NoError(t, os.WriteFile(rebuilt, other, 0o755))
-	assert.Equal(t, string(replacement), goBuildID(rebuilt))
-	assert.NotEqual(t, stamp, readCompilerStamp(rebuilt), "another build is another compiler")
+	assert.Nil(t, guardBytecodeStore(t.TempDir()))
+	assert.NoDirExists(t, filepath.Join(cache, "magus", "buzz-bytecode"))
 }
 
 // A chunk is code the next load runs. One that does not verify is compiled over,
@@ -566,4 +595,195 @@ func BenchmarkMagusfileFacts(b *testing.B) {
 			loadMagusfileFacts(store, code)
 		}
 	})
+}
+
+// TestBinaryAnswersCoverEveryForkingMember holds binaryAnswers to std: every magus member
+// whose Go implementation reaches runMagus (a nested magus) must fall under an entry, or
+// a target calling it keys on nothing that moves when the binary does and replays the old
+// binary's answer. A new forking member fails here rather than escaping the key.
+//
+// The bindings are read structurally: each std.Magus* call sits inside the closure
+// registered under a string literal, in a file whose namespace bindingPrefix names.
+func TestBinaryAnswersCoverEveryForkingMember(t *testing.T) {
+	forks := stdForkingFuncs(t, filepath.Join("..", "..", "std"))
+	require.Contains(t, forks, "MagusDescribeRule", "the fork walk must see runMagusJSON")
+	require.Contains(t, forks, "MagusCmd", "the fork walk must see runMagusSub")
+
+	bindingPrefix := map[string][]string{
+		filepath.Join("bindings", "gen", "magus.go"): nil,
+		filepath.Join("bindings", "describe.go"):     {"describe"},
+		filepath.Join("bindings", "job.go"):          {"job"},
+		filepath.Join("bindings", "magus_trail.go"):  {"trail"},
+		filepath.Join("bindings", "magus_vcs.go"):    {"vcs"},
+	}
+	covered := func(path []string) bool {
+		return slices.ContainsFunc(binaryAnswers(), func(entry []string) bool {
+			return len(entry) <= len(path) && slices.Equal(entry, path[:len(entry)])
+		})
+	}
+	seen := 0
+	for _, file := range bindingFiles(t, "bindings") {
+		prefix, known := bindingPrefix[file]
+		for member, fn := range stdBindings(t, file) {
+			if !known {
+				t.Errorf("%s binds std.%s as %q but names no magus namespace here; add it to bindingPrefix", file, fn, member)
+				continue
+			}
+			seen++
+			path := append(slices.Clone(prefix), member)
+			if forks[fn] {
+				assert.True(t, covered(path), "magus\\%s forks a nested magus (std.%s) but binaryAnswers does not cover it",
+					strings.Join(path, "."), fn)
+			}
+		}
+	}
+	require.Positive(t, seen, "no std.Magus bindings found")
+}
+
+// stdForkingFuncs returns the top-level functions of the Go package in dir that reach
+// runMagus through calls within the package.
+func stdForkingFuncs(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	calls := map[string][]string{}
+	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
+	require.NoError(t, err)
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
+		require.NoError(t, err)
+		for _, decl := range f.Decls {
+			fd, ok := decl.(*goast.FuncDecl)
+			if !ok || fd.Recv != nil || fd.Body == nil {
+				continue
+			}
+			goast.Inspect(fd.Body, func(n goast.Node) bool {
+				call, ok := n.(*goast.CallExpr)
+				if !ok {
+					return true
+				}
+				fun := call.Fun
+				switch x := fun.(type) {
+				case *goast.IndexExpr:
+					fun = x.X
+				case *goast.IndexListExpr:
+					fun = x.X
+				}
+				if id, ok := fun.(*goast.Ident); ok {
+					calls[fd.Name.Name] = append(calls[fd.Name.Name], id.Name)
+				}
+				return true
+			})
+		}
+	}
+	forks := map[string]bool{"runMagus": true}
+	for changed := true; changed; {
+		changed = false
+		for fn, callees := range calls {
+			if !forks[fn] && slices.ContainsFunc(callees, func(c string) bool { return forks[c] }) {
+				forks[fn], changed = true, true
+			}
+		}
+	}
+	return forks
+}
+
+// bindingFiles lists the non-test Go files under dir, relative to the package.
+func bindingFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".go") && !strings.HasSuffix(path, "_test.go") {
+			out = append(out, path)
+		}
+		return err
+	})
+	require.NoError(t, err)
+	return out
+}
+
+// stdBindings maps each member a binding file registers to the std.Magus* function its
+// closure calls: the string literal opening the innermost enclosing registration,
+// MapSet("cmd", ...) or bind("rule", ...), names the member.
+func stdBindings(t *testing.T, file string) map[string]string {
+	t.Helper()
+	f, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.SkipObjectResolution)
+	require.NoError(t, err)
+	out := map[string]string{}
+	var stack []*goast.CallExpr
+	var walk func(n goast.Node) bool
+	walk = func(n goast.Node) bool {
+		call, ok := n.(*goast.CallExpr)
+		if !ok {
+			return true
+		}
+		if sel, isSel := call.Fun.(*goast.SelectorExpr); isSel {
+			if pkg, isIdent := sel.X.(*goast.Ident); isIdent && pkg.Name == "std" && strings.HasPrefix(sel.Sel.Name, "Magus") {
+				for i := len(stack) - 1; i >= 0; i-- {
+					if !isRegistration(stack[i]) || len(stack[i].Args) == 0 {
+						continue
+					}
+					if lit, isLit := stack[i].Args[0].(*goast.BasicLit); isLit && lit.Kind == token.STRING {
+						name, err := strconv.Unquote(lit.Value)
+						require.NoError(t, err)
+						out[name] = sel.Sel.Name
+						break
+					}
+				}
+			}
+		}
+		stack = append(stack, call)
+		for _, arg := range append([]goast.Expr{call.Fun}, call.Args...) {
+			goast.Inspect(arg, walk)
+		}
+		stack = stack[:len(stack)-1]
+		return false
+	}
+	goast.Inspect(f, walk)
+	return out
+}
+
+func isRegistration(call *goast.CallExpr) bool {
+	switch fun := call.Fun.(type) {
+	case *goast.SelectorExpr:
+		return fun.Sel.Name == "MapSet"
+	case *goast.Ident:
+		return fun.Name == "bind"
+	}
+	return false
+}
+
+// An unaliased import binds both its basename and the namespace it declares
+// (branch-stack.buzz declares `namespace branchstack`), so a call through either reaches
+// the module. A helper on a recursion cycle still answers for a later target that calls it.
+func TestBinaryAnswerTargetsFollowsHelpersAndImports(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`namespace lib;
+import "magus";
+export fun page() > str { return magus\describe.graphMarkdown(["."]); }
+export fun plain() > void {}
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "branch-stack.buzz"), []byte(`namespace branchstack;
+import "magus";
+export fun render() > void { magus\run(["."], ["generate"]); }
+`), 0o644))
+	src := `import "magus";
+import "./lib" as lib;
+import "./branch-stack";
+export fun direct(ctx: magus\Context, args: [str]) > void { final r = magus\describe.rule(); }
+export fun viaHelper(ctx: magus\Context, args: [str]) > void { helper(); }
+fun helper() > void { magus\cmd("doctor", []); }
+export fun viaImport(ctx: magus\Context, args: [str]) > void { final p = lib\page(); }
+export fun viaNamespace(ctx: magus\Context, args: [str]) > void { branchstack\render(); }
+export fun recursive(ctx: magus\Context, args: [str]) > void { loop(); }
+fun loop() > void { loop(); spin(); }
+fun spin() > void { loop(); }
+export fun afterCycle(ctx: magus\Context, args: [str]) > void { spin(); helper(); }
+export fun plain(ctx: magus\Context, args: [str]) > void { lib\plain(); magus\log.info("x"); }
+`
+	got := BinaryAnswerTargets(src, []string{dir}, os.ReadFile)
+	assert.Equal(t, map[string]bool{
+		"direct": true, "via-helper": true, "via-import": true, "via-namespace": true, "after-cycle": true,
+	}, got)
 }

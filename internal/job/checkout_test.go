@@ -33,12 +33,15 @@ func writeMarker(t *testing.T, cacheDir, content string) {
 // returns it.
 func loadableRoot(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte("jobs:\n  stale_after: 2h\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "internal", "job"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "internal", "job", "store.go"), []byte("package job\n"), 0o644))
-	return root
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(loadableFiles)
+	return w.Root()
+}
+
+var loadableFiles = map[string]string{
+	"magus.yaml":            "jobs:\n  stale_after: 2h\n",
+	"magusfile.buzz":        "export fun build() {}\n",
+	"internal/job/store.go": "package job\n",
 }
 
 // forkCheck is the check every writing fixture here declares, since a fork refuses a
@@ -128,18 +131,43 @@ func TestForkRecordsWhetherTheWritePathsWereProvenDisjoint(t *testing.T) {
 		"an overlap is recorded, never refused: widening a write path is the orchestrator's call")
 }
 
+// A job is bound to a checkout only by exec, so two jobs forked back to back are both
+// unbound. The second still has a peer, and a glob against a file inside it is the pair
+// the proof once called alone.
+func TestForkProvesAgainstDeclaredJobsNoOneHasExecuted(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := loadableRoot(t)
+	s := NewStore(tmpLoc(t, root))
+	fork := func(name string, paths ...string) types.Job {
+		t.Helper()
+		row, err := ForkMerge(ctx, s, name, func(u *types.Job) {
+			u.Check, u.State, u.WritePaths = forkCheck(), types.StateDeclared, paths
+		}, config.Jobs{}, nil)
+		require.NoError(t, err)
+		return row
+	}
+
+	assert.Equal(t, types.WriteProofAlone, fork("wave/glob", "internal/guard/*.go").WriteProof)
+	assert.Equal(t, types.WriteProofOverlapping, fork("wave/file", "internal/guard/guard.go").WriteProof,
+		"a file the earlier glob matches")
+	assert.Equal(t, types.WriteProofDisjoint, fork("wave/other", "internal/guard/README.md", "docs/x.md").WriteProof,
+		"unbound rows count, and a file the glob does not match is disjoint from it")
+}
+
 // TestForkRefusesADirectoryWritePath pins MGS3018 on both doors that fork by merge: a
 // directory claims every file under it, so no existing one is declarable, project roots
 // included. Only a directory the job creates passes.
 func TestForkRefusesADirectoryWritePath(t *testing.T) {
 	t.Parallel()
 
-	root := loadableRoot(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "libs", "lib", "magusfile.buzz"), []byte("export fun build() {}\n"), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "libs", "lib", "src"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "node_modules", "pkg"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "node_modules", "pkg", "magusfile.buzz"), nil, 0o644))
+	w := testkit.NewWorkspace(t)
+	w.WriteTree(loadableFiles)
+	root := w.Root()
+	w.Write("libs/lib/magusfile.buzz", "export fun build() {}\n")
+	require.NoError(t, os.MkdirAll(w.Path("libs", "lib", "src"), 0o755))
+	w.Write("node_modules/pkg/magusfile.buzz", "")
 
 	cases := []struct {
 		name  string
@@ -298,7 +326,6 @@ func TestLeaseQueryResolvesInOneOrder(t *testing.T) {
 func TestMarkerLivesOutsideTheCacheDir(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("XDG_STATE_HOME", state)
-	t.Setenv("BAGGAGE", "")
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
 
@@ -321,7 +348,6 @@ func TestBindRecordIsOwnerOnly(t *testing.T) {
 		t.Skip("no POSIX modes")
 	}
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("BAGGAGE", "")
 	cacheDir := filepath.Join(t.TempDir(), ".magus")
 
 	require.NoError(t, NewStore(Location{CacheDir: cacheDir}).Bind(Caller{}, "wave/worker"))

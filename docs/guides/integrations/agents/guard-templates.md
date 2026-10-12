@@ -159,6 +159,12 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 //                    stand down where it is absent. An argument this file does not know
 //                    is REPORTED on stderr and left out, and the call is judged anyway:
 //                    a misconfigured entry must not block work, and must not be silent
+//   -- --foreground-default-ms <ms> --foreground-max-ms <ms>  the host's foreground
+//                    limits for a shell command, declared by the harness spell on the
+//                    entry that judges one. With them, and the call's own
+//                    run_in_background and timeout read off the event, magus refuses a
+//                    leased worker's backgrounded magus run and advises a timeout that
+//                    covers it; without them that advice stands down
 //
 // Override any of the variables below:
 //
@@ -240,7 +246,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 22
+// magus-guard-template: 23
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -341,6 +347,13 @@ final ENVELOPE_PREFIX = "\{";
 // and magus can change it without every installed config being edited.
 final SUPPORTED_FLAGS = ["--reports-skills"];
 
+// The valued flags an entry may declare: the host's foreground limits in milliseconds, the
+// timeout a shell command that names none gets and the longest one it may name. They are
+// facts about the HOST that its event never states, and the harness spell declares them
+// once. Forwarded with the call facts below, never with the attribution, so a binary too
+// old for them drops them and keeps the rest.
+final FOREGROUND_FLAGS = ["--foreground-default-ms", "--foreground-max-ms"];
+
 // The host this entry is wired into. Valued, and read by this file rather than forwarded
 // as one of SUPPORTED_FLAGS, because the file needs it too: it picks the ask arm.
 final AGENT_NAME_FLAG = "--agent-name";
@@ -420,11 +433,9 @@ fun codexPromptBlocker(event: any?, pushRule: str?) > str {
 // supports, and decides for itself that an argument it did not declare is reported and
 // dropped rather than refused, because a misconfigured entry must not block work.
 fun shellFlags(args: [str]) > [str] {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
     if (parsed == null) {
-        // Unreachable while every supported flag is a switch, and caught anyway: NOTHING
-        // here may raise, and a `catch` that exists only for that is cheaper than a
-        // guarantee that has to be re-checked whenever the list grows a valued flag.
+        // A valued flag with no value after it. Caught because NOTHING here may raise.
         warn("could not parse this entry's arguments; the call was judged without them");
         return [<str>];
     }
@@ -433,7 +444,7 @@ fun shellFlags(args: [str]) > [str] {
         // "unsupported argument ;", and this line is the only remedy a misconfigured
         // reader is offered.
         warn("unsupported argument \"{word}\"; this call was judged WITHOUT it. "
-            + "Supported: {SUPPORTED_FLAGS.join(", ")}. Fix the hook command in your host config.");
+            + "Supported: {SUPPORTED_FLAGS.join(", ")}, {FOREGROUND_FLAGS.join(" <ms>, ")} <ms>. Fix the hook command in your host config.");
     }
     final supported = mut [<str>];
     foreach (name in SUPPORTED_FLAGS) {
@@ -442,10 +453,51 @@ fun shellFlags(args: [str]) > [str] {
     return supported;
 }
 
+fun valuedFlags() > [str] {
+    final valued = mut [AGENT_NAME_FLAG];
+    foreach (name in FOREGROUND_FLAGS) { valued.append(name); }
+    return valued;
+}
+
+// foregroundFlags are the host's foreground limits this entry declares, each flag with its
+// value, and none when the argv does not parse: the rules that read them then stand down.
+fun foregroundFlags(args: [str]) > [str] {
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
+    final declared = mut [<str>];
+    if (parsed == null) { return declared; }
+    foreach (name in FOREGROUND_FLAGS) {
+        final value = parsed!.values[name];
+        if (value != null) {
+            declared.append(name);
+            declared.append(value!);
+        }
+    }
+    return declared;
+}
+
+// callFlags is what a shell command's tool input asked of the host: to run it in the
+// background, and how long to wait on it. Read off the event because this file forwards
+// the command alone. JSON numbers parse as double.
+fun callFlags(event: any?) > [str] {
+    final facts = mut [<str>];
+    if (hook\dig(event, dotPath: "tool_input.run_in_background") == true) {
+        facts.append("--call-background");
+    }
+    final timeout = hook\dig(event, dotPath: "tool_input.timeout");
+    var ms = 0;
+    if (timeout is int) { ms = timeout as int; }
+    if (timeout is double) { ms = std\toInt(timeout as double); }
+    if (ms > 0) {
+        facts.append("--call-timeout-ms");
+        facts.append("{ms}");
+    }
+    return facts;
+}
+
 // readAgentName is the host this entry names on its argv, or "" when it names none. Empty is
 // not defaulted: `magus shell` refuses installed glue that names no host (MGS3024).
 fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: [AGENT_NAME_FLAG]) catch null;
+    final parsed = flags\parse(args, switches: SUPPORTED_FLAGS, valued: valuedFlags()) catch null;
     if (parsed == null) { return ""; }
     return parsed!.values[AGENT_NAME_FLAG] ?? "";
 }
@@ -677,7 +729,7 @@ fun main(args: [str]) > void {
     }
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
-    final bin = hook\resolveBin(cwd: cwd);
+    final bin = hook\resolveBin(cwd: cwd, session: session, file: "magus-command.buzz");
 
     // A message, by its shape: no tool, and text where HOST_MESSAGE_PATH points. Ahead of the
     // availability notice, which a message hook would hand the model as context.
@@ -724,9 +776,9 @@ fun main(args: [str]) > void {
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
     //
-    // --rewrites-input is newer than the rest, so a binary that rejects it is asked again
-    // with everything else before it is asked with nothing: dropping the rewrite must not
-    // also drop the attribution and the ask.
+    // --rewrites-input, the call facts and the foreground limits are newer than the rest,
+    // so a binary that rejects one is asked again with everything else before it is asked
+    // with nothing: dropping them must not also drop the attribution and the ask.
     //
     // --transport buzz names this glue as the caller. magus keeps a deny's full text and
     // its once-per-session notices per host, transport and session.
@@ -736,12 +788,19 @@ fun main(args: [str]) > void {
         attributed.append(word);
     }
     foreach (flag in capabilities) { attributed.append(flag); }
+    final newest = mut [<str>];
+    if (rewrites) { newest.append("--rewrites-input"); }
+    // Only a shell command the host runs has a background or a timeout to report.
+    if (!rawEvent and read == "") {
+        foreach (word in callFlags(event)) { newest.append(word); }
+        foreach (word in foregroundFlags(args)) { newest.append(word); }
+    }
     var result: proc\ExecResult? = null;
-    if (rewrites) {
-        final rewriting = mut [<str>];
-        foreach (word in attributed) { rewriting.append(word); }
-        rewriting.append("--rewrites-input");
-        result = judge(guard, extra: rewriting) catch null;
+    if (newest.len() > 0) {
+        final newer = mut [<str>];
+        foreach (word in attributed) { newer.append(word); }
+        foreach (word in newest) { newer.append(word); }
+        result = judge(guard, extra: newer) catch null;
     }
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         result = judge(guard, extra: attributed) catch null;
@@ -843,7 +902,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 22
+// magus-guard-template: 23
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -958,7 +1017,7 @@ fun main(args: [str]) > void {
     final event = json\parse(raw ?? "") catch null;
 
     final cwd = hook\field(event, dotPath: hook\envOr("HOST_CWD_PATH", fallback: "cwd"));
-    final bin = hook\resolveBin(cwd: cwd);
+    final bin = hook\resolveBin(cwd: cwd, session: hook\field(event, dotPath: sessionPath), file: "magus-path.buzz");
     if (bin == "" or !hook\isExecutable(bin)) {
         // Prints nothing by default: for most hosts an empty response means "allow".
         // Set __MAGUS_UNAVAILABLE_RESPONSE for a host that needs an explicit verdict.
@@ -1096,7 +1155,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 22
+// magus-guard-template: 23
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1298,7 +1357,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 22
+// magus-guard-template: 23
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1446,7 +1505,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 22
+// magus-guard-template: 23
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1587,7 +1646,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 22
+// magus-guard-template: 23
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";

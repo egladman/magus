@@ -9,14 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/stamp"
+	"github.com/egladman/magus/libs/testkit"
 )
 
 // TestOwedRegenerationRecordMergesAndDrops pins the record's lifecycle: one entry per
 // project and target however many files the merge kept, a drop that removes only what
 // was settled, and no file at all once nothing is owed.
 func TestOwedRegenerationRecordMergesAndDrops(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	ctx := t.Context()
 
 	for _, o := range []OwedRegeneration{
@@ -56,8 +56,7 @@ func TestOwedRegenerationRecordMergesAndDrops(t *testing.T) {
 // TestOwedRegenerationRejectsUnknownSchema refuses to guess at a record a newer magus
 // wrote.
 func TestOwedRegenerationRejectsUnknownSchema(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	path, err := OwedRegenerationPath(t.Context(), dir)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(path, []byte(`{"schema_version": 99, "owed": []}`), 0o644))
@@ -83,8 +82,7 @@ func TestOwedRegenerationOutsideARepository(t *testing.T) {
 // that post-commit keeps the drift section it shares, and that the section an earlier
 // magus wrote into post-merge is taken out.
 func TestInstallRegenHookCoexists(t *testing.T) {
-	dir := t.TempDir()
-	gitInitRepo(t, dir, map[string]string{"a.txt": "a\n"})
+	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()
 	ctx := t.Context()
 	hooks := filepath.Join(dir, ".git", "hooks")
 	old := managedMarkers{begin: "# BEGIN magus-regenerate-owed", end: "# END magus-regenerate-owed"}

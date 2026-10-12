@@ -19,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -27,9 +28,9 @@ import (
 // directory beneath a fresh root.
 func probeFixture(t *testing.T, bin string, content []byte) string {
 	t.Helper()
-	binDir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(binDir, bin), content, 0o755))
-	t.Setenv("PATH", binDir)
+	binDir := testkit.NewWorkspace(t)
+	binDir.WriteExecutable(bin, string(content))
+	t.Setenv("PATH", binDir.Root())
 	dir := filepath.Join(t.TempDir(), "web")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	return dir

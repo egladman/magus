@@ -307,3 +307,20 @@ func TestTouchRecordsTheLastSighting(t *testing.T) {
 	_, seen = NewGate("", "session-1").LastSeen(testKindC)
 	assert.False(t, seen, "no cache dir means nothing was ever recorded")
 }
+
+// Kinds lists one session's markers by prefix and never another session's in the same
+// directory.
+func TestKindsListsOneSessionsMarkersByPrefix(t *testing.T) {
+	g := testGate(t, "session-1")
+	other := NewGate(g.CacheDir(), "session-2")
+	assert.Empty(t, g.Kinds("kind-"), "nothing recorded yet")
+
+	g.Touch(testKindB)
+	g.Touch(testKindA)
+	g.Touch("other-kind")
+	other.Touch(testKindC)
+
+	assert.Equal(t, []MarkerKind{testKindA, testKindB}, g.Kinds("kind-"))
+	assert.Equal(t, []MarkerKind{testKindC}, other.Kinds("kind-"))
+	assert.Empty(t, NewGate("", "session-1").Kinds("kind-"), "no cache dir lists nothing")
+}

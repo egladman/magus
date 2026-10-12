@@ -97,9 +97,9 @@ board:
 
 ```console
 $ magus ls jobs
-JOB               HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
-refactor/pricing  -       declared  -      1      alone  magus run test .
-refactor/tax      -       declared  -      1      alone  magus run test .
+JOB               HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
+refactor/pricing  -       declared  -      1      alone     magus run test .
+refactor/tax      -       declared  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -218,9 +218,9 @@ call; wait checks what is mechanical.
 
 ```console
 $ magus ls jobs
-JOB               HOLDER        STATE      MODEL  PATHS  PROOF  CHECK
-refactor/pricing  shop-pricing  pass       -      1      alone  magus run test .
-refactor/tax      shop-tax      no_return  -      1      alone  magus run test .
+JOB               HOLDER        STATE      MODEL  PATHS  PROOF     CHECK
+refactor/pricing  shop-pricing  pass       -      1      alone     magus run test .
+refactor/tax      shop-tax      no_return  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```
@@ -408,9 +408,9 @@ not move:
 
 ```console
 $ magus ls jobs
-JOB              HOLDER  STATE     MODEL  PATHS  PROOF  CHECK
-release/pricing  -       declared  -      1      alone  magus run test .
-release/tax      -       declared  -      1      alone  magus run test .
+JOB              HOLDER  STATE     MODEL  PATHS  PROOF     CHECK
+release/pricing  -       declared  -      1      alone     magus run test .
+release/tax      -       declared  -      1      disjoint  magus run test .
 
 in flight: never fetched; `magus queue ls --provider <provider> --base <branch>` reads the open changes
 ```

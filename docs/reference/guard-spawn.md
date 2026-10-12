@@ -109,11 +109,21 @@ A `deny` blocks the call. An `advise` reaches the agent only where no built-in r
 already spoke. Nothing the function returns lifts a built-in deny, and it is not
 called when one stands.
 
-A function that raises, runs past three seconds, or returns something other than a
-verdict judges nothing: the built-ins apply alone and the agent is told once per
-session that the workspace rule failed. That is the stance `magus\guard.shell` takes
-on a rule it cannot use. Registering twice, from a project's magusfile, or with a
-non-function stops the workspace load with [MGS1045](codes/magusfile/MGS1045.md).
+A function that raises or returns something other than a verdict judges nothing: the
+built-ins apply alone and the agent is told once per session that the workspace rule
+failed. That is the stance `magus\guard.shell` takes on a rule it cannot use.
+
+A hook judgment answers within seven seconds of the hook starting, and the phases share
+that deadline: loading the rules, resolving the committed rule, calling it, and calling
+the working tree's rule each get their share of what is left. A phase that runs out
+denies a spawn, which would otherwise start unjudged, and lets a continuation through
+with a note naming the phase. A file write runs out the same way and is denied, except
+a write to a file the guard loads itself (the root magusfile and the sources it
+imports) once the committed rule has answered: that write is advised instead, so a slow
+or looping working-tree rule can still be fixed. When the committed side is what ran out,
+the write is denied like any other, since an agent can slow that side on purpose.
+Registering twice, from a project's magusfile, or with a non-function stops the
+workspace load with [MGS1045](codes/magusfile/MGS1045.md).
 
 ## Tighten live, loosen on approval
 

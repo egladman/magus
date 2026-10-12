@@ -3,9 +3,6 @@ package magus
 import (
 	"context"
 	"io/fs"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,24 +16,8 @@ import (
 // it was shown to sits in a linked worktree: the ref still resolves from the worktree, and
 // a miss names both stores it searched.
 func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git is not installed")
-	}
-	primary, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
-	git := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", primary}, args...)...).CombinedOutput()
-		require.NoErrorf(t, err, "git %v: %s", args, out)
-	}
-	git("init", "-q")
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "test")
-	require.NoError(t, os.WriteFile(filepath.Join(primary, "magusfile.buzz"), nil, 0o644))
-	git("add", "-A")
-	git("commit", "-q", "-m", "init")
-	worktree := filepath.Join(t.TempDir(), "worker")
-	git("worktree", "add", "-q", worktree)
+	primary, worktrees := linkedWorktrees(t, "worker")
+	worktree := worktrees[0]
 
 	primaryCache, err := ResolveCacheDir(primary)
 	require.NoError(t, err)
@@ -46,19 +27,19 @@ func TestPayloadByRefReadsThePrimaryCheckoutFromALinkedWorktree(t *testing.T) {
 	opened, err := Inspect(context.Background(), worktree)
 	require.NoError(t, err)
 	m := opened.(*Magus)
-	got, err := m.PayloadByRef(ref)
+	got, err := m.PayloadByRef(context.Background(), ref)
 	require.NoError(t, err)
 	assert.Equal(t, "the full verdict", string(got))
 
 	missing := "grd" + strings.Repeat("0", 16)
-	_, err = m.PayloadByRef(missing)
+	_, err = m.PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.Contains(t, err.Error(), m.CacheDir())
 	assert.Contains(t, err.Error(), primaryCache)
 
 	opened, err = Inspect(context.Background(), primary)
 	require.NoError(t, err)
-	_, err = opened.(*Magus).PayloadByRef(missing)
+	_, err = opened.(*Magus).PayloadByRef(context.Background(), missing)
 	require.ErrorIs(t, err, fs.ErrNotExist)
 	assert.NotContains(t, err.Error(), m.CacheDir(), "the primary checkout reads its own store alone")
 }

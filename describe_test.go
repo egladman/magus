@@ -9,7 +9,8 @@ import (
 
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/register"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +22,7 @@ import (
 // DependsOn, so it counts toward the affected set without a separate project-level
 // depends_on.
 func TestDeriveCrossProjectDeps(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
 	files := map[string]string{
 		"gopherbuzz/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
 		"web/magusfile.buzz": `import "magus";
@@ -31,13 +32,9 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	}
-	for rel, body := range files {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	w.WriteTree(files)
 
-	ws, err := Inspect(context.Background(), root)
+	ws, err := Inspect(context.Background(), w.Root())
 	require.NoError(t, err, "Inspect")
 	graph, err := ws.TargetGraph(context.Background())
 	require.NoError(t, err, "TargetGraph")
@@ -62,9 +59,9 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 
 	declares := func(t *testing.T, magusfile string) bool {
 		t.Helper()
-		root := t.TempDir()
-		require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(magusfile), 0o644))
-		ws, err := Inspect(context.Background(), root)
+		w := testkit.NewWorkspace(t)
+		w.Magusfile(magusfile)
+		ws, err := Inspect(context.Background(), w.Root())
 		require.NoError(t, err, "Inspect")
 		has, scanErr := anyProjectDeclaresCI(ws.All())
 		require.NoError(t, scanErr, "anyProjectDeclaresCI scan error")
@@ -88,8 +85,9 @@ func TestAnyProjectDeclaresCI(t *testing.T) {
 // returns it after applying opts. The root project has an empty magusfile.buzz.
 func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository {
 	t.Helper()
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	ws, err := Inspect(context.Background(), root, opts...)
 	require.NoError(t, err, "Inspect")
 	return ws
@@ -97,10 +95,7 @@ func newWorkspaceCustom(t *testing.T, opts ...Option) types.WorkspaceRepository 
 
 func TestListSpells_ShapeAndOrder(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const name = "zzz-describe-spells-test"
-	spell := spells.NewSpell(name, spells.WithTargets("build", "test"))
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+	name := register.Spell(t, "zzz-describe-spells-test", spells.WithTargets("build", "test"))
 
 	out, err := ListSpells(context.Background())
 	require.NoError(t, err, "ListSpells")
@@ -122,16 +117,14 @@ func TestListSpells_ShapeAndOrder(t *testing.T) {
 
 func TestListSpells_CarriesTheLanguageRecord(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const name = "zzz-describe-language-test"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(name,
+	name := register.Spell(t, "zzz-describe-language-test",
 		spells.WithLanguage("demo"),
 		spells.WithLanguageExtensions([]string{".demo"}),
 		spells.WithSyntax(&spells.Syntax{
 			Comments: &spells.CommentSyntax{LineComments: []string{"//"}},
 			Stubs:    &spells.StubSyntax{Kinds: []string{"Function"}, BodyStyle: spells.StubBodyBrace, Body: "{ todo }"},
 		}),
-	))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
+	)
 
 	inventory, err := ListSpells(context.Background())
 	require.NoError(t, err)
@@ -170,8 +163,7 @@ func TestSpellToolchainsDeriveFromResolvedCommands(t *testing.T) {
 
 func TestListSpells_DescribesTypedSpell(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const name = "zzz-spell-inventory-test"
-	spell := spells.NewSpell(name,
+	name := register.Spell(t, "zzz-spell-inventory-test",
 		spells.WithSources("**/*.demo"),
 		spells.WithOutputs("out/**"),
 		spells.WithTargets("build", "check", "dynamic"),
@@ -191,8 +183,6 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 			}
 		}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(name) })
 
 	inventory, err := ListSpells(context.Background())
 	require.NoError(t, err, "ListSpells")
@@ -226,10 +216,7 @@ func TestListSpells_DescribesTypedSpell(t *testing.T) {
 
 func TestListTargets_CanonicalCIFirst(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const spellName = "zzz-targets-spell"
-	spell := spells.NewSpell(spellName, spells.WithTargets("zzz-target-a", "zzz-target-b"))
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-targets-spell", spells.WithTargets("zzz-target-a", "zzz-target-b"))
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -255,13 +242,10 @@ func TestListTargets_CanonicalCIFirst(t *testing.T) {
 }
 
 func TestEvaluateTarget_Charms(t *testing.T) {
-	const spellName = "zzz-charm-spell"
-	s := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-charm-spell",
 		spells.WithTargets("lint"),
 		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -280,13 +264,10 @@ func TestEvaluateTarget_Charms(t *testing.T) {
 
 func TestListCharms_InverseIndex(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const spellName = "zzz-describe-charms-spell"
-	s := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-describe-charms-spell",
 		spells.WithTargets("lint"),
 		spells.WithTargetCharms(map[string][]string{"lint": {"write", "debug"}}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(s)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -392,28 +373,20 @@ func TestListProjects_Inventory(t *testing.T) {
 // are all absent reports no manifest at all.
 func TestListProjects_Manifests(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const hasSpell, noneSpell = "zzz-manifest-has", "zzz-manifest-none"
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(hasSpell, spells.WithManifests(
-			spells.Manifest{Value: "pyproject.toml"},
-			spells.Manifest{Value: "setup.py"},
-			spells.Manifest{Value: "setup.cfg"})))
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(noneSpell, spells.WithManifests(spells.Manifest{Value: "Cargo.toml"})))
-	t.Cleanup(func() {
-		project.DefaultSpellRegistry().UnregisterSpell(hasSpell)
-		project.DefaultSpellRegistry().UnregisterSpell(noneSpell)
-	})
+	hasSpell := register.Spell(t, "zzz-manifest-has", spells.WithManifests(
+		spells.Manifest{Value: "pyproject.toml"},
+		spells.Manifest{Value: "setup.py"},
+		spells.Manifest{Value: "setup.cfg"}))
+	noneSpell := register.Spell(t, "zzz-manifest-none", spells.WithManifests(spells.Manifest{Value: "Cargo.toml"}))
 
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "has/magusfile.buzz", "none/magusfile.buzz"} {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+		w.Write(rel, "")
 	}
 	// "has" carries setup.py, NOT pyproject.toml (the first-declared candidate).
 	// Manifests must report the first EXISTING candidate, not the first declared one.
-	require.NoError(t, os.WriteFile(filepath.Join(root, "has", "setup.py"), []byte(""), 0o644))
+	w.Write("has/setup.py", "")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".")
@@ -447,23 +420,17 @@ func TestListProjects_Manifests(t *testing.T) {
 // root's pnpm-lock.yaml even though pnpm-lock.yaml is the earlier-declared candidate.
 func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const nodeSpell = "zzz-lock-node"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(nodeSpell, spells.WithManifests(
-		spells.Manifest{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}})))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(nodeSpell) })
+	nodeSpell := register.Spell(t, "zzz-lock-node", spells.WithManifests(
+		spells.Manifest{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}}))
 
-	root := t.TempDir()
-	write := func(rel string) {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
-	}
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{
 		"magusfile.buzz", "pnpm-lock.yaml",
 		"apps/member/magusfile.buzz", "apps/member/package.json",
 		"solo/magusfile.buzz", "solo/package.json", "solo/yarn.lock",
 	} {
-		write(rel)
+		w.Write(rel, "")
 	}
 
 	reg := NewWorkspaceRegistry()
@@ -507,25 +474,19 @@ func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
 // package manager with.
 func TestListProjects_LockfilesAbsent(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const noLocks, missingLocks = "zzz-lock-none", "zzz-lock-missing"
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(noLocks,
-		spells.WithManifests(spells.Manifest{Value: "setup.py"})))
-	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(missingLocks, spells.WithManifests(
-		spells.Manifest{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}})))
-	t.Cleanup(func() {
-		project.DefaultSpellRegistry().UnregisterSpell(noLocks)
-		project.DefaultSpellRegistry().UnregisterSpell(missingLocks)
-	})
+	noLocks := register.Spell(t, "zzz-lock-none",
+		spells.WithManifests(spells.Manifest{Value: "setup.py"}))
+	missingLocks := register.Spell(t, "zzz-lock-missing", spells.WithManifests(
+		spells.Manifest{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}}))
 
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{
 		"magusfile.buzz", "pnpm-lock.yaml",
 		"py/magusfile.buzz", "py/setup.py",
 		"rs/magusfile.buzz", "rs/Cargo.toml",
 	} {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+		w.Write(rel, "")
 	}
 
 	reg := NewWorkspaceRegistry()
@@ -589,14 +550,10 @@ func TestEvaluateTarget_UnknownProject(t *testing.T) {
 
 func TestEvaluateTarget_WithSpellAndPolicy(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const spellName = "zzz-dt-spell"
-	spell := spells.NewSpell(
-		spellName,
+	spellName := register.Spell(t, "zzz-dt-spell",
 		spells.WithTargets("my-target"),
 		spells.WithSources("**/*.zzz"),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(
@@ -646,17 +603,13 @@ func TestEvaluateProjects_Shape(t *testing.T) {
 
 func TestEvaluateProjects_WorkspaceRootedSources(t *testing.T) {
 	// Not parallel: mutates global spell registry.
-	const spellName = "zzz-ep-spell"
-	spell := spells.NewSpell(spellName, spells.WithSources("**/*.ep"))
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-ep-spell", spells.WithSources("**/*.ep"))
 
 	// Build workspace with root + api project.
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "api/magusfile.buzz"} {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+		w.Write(rel, "")
 	}
 
 	reg := NewWorkspaceRegistry()
@@ -702,21 +655,13 @@ func TestWorkspace_SingleWorkspace(t *testing.T) {
 // them through.
 func TestClassifyFiles_Classification(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const rootSpell, webSpell = "zzz-df-root", "zzz-df-web"
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(rootSpell, spells.WithSources("docs/**/*.md"), spells.WithOutputs("GEN.md", "gen/**")))
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(webSpell, spells.WithSources("**/*.ts"), spells.WithOutputs("dist/**")))
-	t.Cleanup(func() {
-		project.DefaultSpellRegistry().UnregisterSpell(rootSpell)
-		project.DefaultSpellRegistry().UnregisterSpell(webSpell)
-	})
+	rootSpell := register.Spell(t, "zzz-df-root", spells.WithSources("docs/**/*.md"), spells.WithOutputs("GEN.md", "gen/**"))
+	webSpell := register.Spell(t, "zzz-df-web", spells.WithSources("**/*.ts"), spells.WithOutputs("dist/**"))
 
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	for _, rel := range []string{"magusfile.buzz", "web/magusfile.buzz"} {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+		w.Write(rel, "")
 	}
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(rootSpell))
@@ -777,15 +722,12 @@ func TestClassifyFiles_Classification(t *testing.T) {
 func classifyExistsWorkspace(t *testing.T) (types.WorkspaceRepository, string) {
 	t.Helper()
 	// Not parallel: mutates the global spell registry.
-	const spellName = "zzz-df-exists"
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(spellName, spells.WithSources("**/*.go")))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-df-exists", spells.WithSources("**/*.go"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "present.go"), []byte("package cmd\n"), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
+	w.Write("cmd/present.go", "package cmd\n")
 
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
@@ -869,13 +811,11 @@ func TestClassifyFiles_PathShapesAgree(t *testing.T) {
 // that legitimately declares one of these paths would stop being told it is keyed.
 func TestClassifyFiles_DeclaredBeatsMaintained(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
-	const spellName = "zzz-df-attrs"
-	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(spellName, spells.WithSources(".gitattributes")))
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
+	spellName := register.Spell(t, "zzz-df-attrs", spells.WithSources(".gitattributes"))
 
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(""), 0o644))
+	w := testkit.NewWorkspace(t)
+	w.Magusfile("")
+	root := w.Root()
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
@@ -920,15 +860,12 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 	// spell, or their per-project walk contributes nothing even when it runs to
 	// completion, making the live case pass by coincidence rather than because the
 	// walk executed.
-	const spellName = "zzz-ctx-cancel-spell"
 	const customTarget = "zzz-ctx-cancel-target"
 	const customCharm = "zzz-ctx-cancel-charm"
-	spell := spells.NewSpell(spellName,
+	spellName := register.Spell(t, "zzz-ctx-cancel-spell",
 		spells.WithTargets(customTarget),
 		spells.WithTargetCharms(map[string][]string{customTarget: {customCharm}}),
 	)
-	project.DefaultSpellRegistry().RegisterSpell(spell)
-	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(spellName) })
 	reg := NewWorkspaceRegistry()
 	reg.RegisterProject(".", WithSpell(spellName))
 	spellWs := newWorkspaceCustom(t, WithWorkspaceRegistry(reg))
@@ -1102,13 +1039,14 @@ func TestInspectorMethods_HonorCancelledContext(t *testing.T) {
 // snapshots, which is the one thing this command exists to show.
 func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("GEN.md");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -1317,13 +1255,14 @@ fun probe() > str { return "x"; }
 // repo's own root MAGUS.md is declared exactly this way.
 func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	const mf = `import "magus";
 export fun generate(ctx: magus\Context, args: [str]) > void {
     ctx.writesFiles("GEN.md");
 }
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(mf), 0o644))
+	w.Magusfile(mf)
 
 	m, err := Open(context.Background(), root)
 	require.NoError(t, err, "Open")
@@ -1358,7 +1297,8 @@ export fun generate(ctx: magus\Context, args: [str]) > void {
 // magusfile.buzz's own generate gate declines magus.diagnoseDrift citing this exact
 // symptom, which is how long it went unfixed.
 func TestDescribeFileSeesCrossProjectReads(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	files := map[string]string{
 		"skills/note.md":        "# a source another project renders\n",
 		"skills/magusfile.buzz": "import \"magus\";\nexport fun build(ctx: magus\\Context, args: [str]) > void {}\n",
@@ -1370,11 +1310,7 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	}
-	for rel, body := range files {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	w.WriteTree(files)
 
 	ws, err := Inspect(context.Background(), root)
 	require.NoError(t, err, "Inspect")
@@ -1396,7 +1332,8 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 // in. It also pins the two dependency edges a cross-project ref creates, in
 // opposite directions.
 func TestClassifyFiles_Claims(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	// Three projects, because a target may not both read from and write into one
 	// other project (MGS1012): site reads skills and writes dist.
 	files := map[string]string{
@@ -1418,11 +1355,7 @@ export fun stamp(ctx: magus\Context, args: [str]) > void {
 }
 `,
 	}
-	for rel, body := range files {
-		abs := filepath.Join(root, rel)
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
-		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
-	}
+	w.WriteTree(files)
 
 	ws, err := Inspect(context.Background(), root)
 	require.NoError(t, err, "Inspect")

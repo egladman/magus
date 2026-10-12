@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/secret"
 	"github.com/egladman/magus/internal/spell"
 	"github.com/egladman/magus/internal/symbols"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -41,10 +42,11 @@ func (w rootOnlyWS) Root() string          { return w.root }
 func (w rootOnlyWS) All() []*types.Project { return nil }
 
 func TestLoadLocalBuzzLibraryUsesProjectRootImports(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "lib/text.buzz", `export fun value() > str { return "root-import-spell"; }`)
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("lib/text.buzz", `export fun value() > str { return "root-import-spell"; }`)
 	path := filepath.Join(root, "lib", "helper.buzz")
-	writeFile(t, root, "lib/helper.buzz", `import "lib/text" as text;
+	w.Write("lib/helper.buzz", `import "lib/text" as text;
 export fun mgs_getName() > str { return text\value(); }`)
 
 	ctx := interp.WithSource(context.Background(), &interp.Source{Dir: root})
@@ -56,9 +58,10 @@ export fun mgs_getName() > str { return text\value(); }`)
 // A module that never names mgs_getName cannot export it, so it is refused as not a
 // spell without being executed: its import runs once, as the library it is.
 func TestLoadLocalBuzzLibraryIsNotExecutedAsASpell(t *testing.T) {
-	root := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
 	path := filepath.Join(root, "lib", "helper.buzz")
-	writeFile(t, root, "lib/helper.buzz", `import "lib/does-not-exist" as missing;
+	w.Write("lib/helper.buzz", `import "lib/does-not-exist" as missing;
 export fun helper() > str { return missing\value(); }`)
 
 	_, _, err := loadBuzzSpell(interp.WithSource(context.Background(), &interp.Source{Dir: root}), path)
@@ -71,15 +74,16 @@ export fun helper() > str { return missing\value(); }`)
 // without error, whether or not a workspace is on the context (a bare script degrades
 // to a cleaned relative path rather than failing).
 func TestProjectImportFileResolver(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("a/magusfile.buzz", `import "magus";
 import "project/../b";
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles(b.file("go.mod"));
 }`)
-	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+	w.Write("b/magusfile.buzz", `import "magus";
 export fun compile(ctx: magus\Context, args: [str]) > void {}`)
-	writeFile(t, root, "b/go.mod", "module b\n")
+	w.Write("b/go.mod", "module b\n")
 
 	src, err := interp.Find(filepath.Join(root, "a"))
 	require.NoError(t, err)
@@ -104,8 +108,9 @@ export fun compile(ctx: magus\Context, args: [str]) > void {}`)
 // which was the coverage gap: an absent host-owned mirror surfaced only when the
 // renderer actually loaded.
 func TestMagusGraphReturnTypesMatchMirrors(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	w.Magusfile(`import "magus";
 export fun preflight(ctx: magus\Context, args: [str]) > void {
     final _targets: TargetGraph = null;
     final _graph: Graph = null;
@@ -113,14 +118,6 @@ export fun preflight(ctx: magus\Context, args: [str]) > void {
 
 	_, err := interp.RunDir(context.Background(), dir, "preflight", nil)
 	require.NoError(t, err)
-}
-
-// writeFile writes content under dir/rel, creating parent dirs.
-func writeFile(t testing.TB, dir, rel, content string) {
-	t.Helper()
-	path := filepath.Join(dir, rel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
-	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
 // parseMagusfile evaluates the magusfile in dir in parse mode, which fires
@@ -144,17 +141,18 @@ func parseMagusfile(t *testing.T, dir string) error {
 // under the basename (widget), and binding it via magus.project registers
 // the spell by value.
 func TestBuzzLocalSpellImport(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
+	w.Write("spells/widget.buzz", `import "magus/spell";
 export fun mgs_getName() > str { return "widgetimport"; }
 export fun mgs_listRequiredGlobs() > [Path] { return [Path{value = "**/*.ts"}]; }
 export fun mgs_listTargets() > any {
     return {"build": {"bin": "npm", "args": ["run", "build"]}};
 }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 magus\project(".", {"spells": [widget]});`)
 
@@ -173,10 +171,11 @@ magus\project(".", {"spells": [widget]});`)
 // `import "magus/spell/<name>"` in a Buzz magusfile, binding the spell handle
 // under its basename (go, docker, etc.) with the expected name and callable ops.
 func TestBuzzSpellImport(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "magus/spell/go";
 import "magus/spell/docker";
 
@@ -193,12 +192,13 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 // TestBuzzSpellImportNoOps verifies that a Buzz spell with no ops still registers
 // successfully — ops is optional; the spell is registered with an empty target list.
 func TestBuzzSpellImportNoOps(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/noops.buzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
+	w.Write("spells/noops.buzz", `export fun mgs_getName() > str { return "noopsbuzzspell"; }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/noops";
 magus\project(".", {"spells": [noops]});`)
 
@@ -213,18 +213,19 @@ magus\project(".", {"spells": [noops]});`)
 // docker.build({cwd: "..", args: [...]})) through the spell instead of proc.exec. It
 // also checks listTargets() still exposes the op names for introspection.
 func TestBuzzSpellMethodForwardsOpts(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
 	// The "capture" target writes its forwarded args ($@) into captured.txt in the
 	// process cwd, so the test can assert both the args and the working directory.
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "optswidget"; }
+	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "optswidget"; }
 export fun mgs_listTargets() > any {
     return {"capture": {"bin": "sh", "args": ["-c", "printf '%s ' \"$@\" > captured.txt", "sh"]}};
 }
 `)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "sub"), 0o755))
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final names = widget.listTargets();
@@ -249,15 +250,16 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // needs. The capture target echoes $MYVAR into out.txt; the call sets it via withEnv,
 // proving the overlay reached the subprocess.
 func TestBuzzSpellMethodEnv(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "envwidget"; }
+	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "envwidget"; }
 export fun mgs_listTargets() > any {
     return {"capture": {"bin": "sh", "args": ["-c", "printf \"$MYVAR\" > out.txt"]}};
 }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void {
     widget.capture(ctx.withEnv({"MYVAR": "overridden"}));
@@ -275,15 +277,16 @@ export fun build(ctx: magus\Context, args: [str]) > void {
 // {stdout, stderr, code, ok} object, accessed with dot syntax the way a
 // magusfile reads proc.exec(...).stdout.
 func TestBuzzSpellCaptureReturnsObject(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
+	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "capbuzzwidget"; }
 export fun mgs_listTargets() > any {
     return {"hash": {"bin": "sh", "args": ["-c", "printf abc123"], "capture": true}};
 }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final r = widget.hash(ctx);
@@ -297,10 +300,11 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 }
 
 func TestBuzzSpellQuietCaptureReturnsObject(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `import "magus/spell";
+	w.Write("spells/widget.buzz", `import "magus/spell";
 export fun mgs_getName() > str { return "quietbuzzwidget"; }
 fun modJSON(target: Target) > Command {
     return Command{bin = "sh", args = ["-c", "printf abc123"], capture = true, quiet = true};
@@ -309,7 +313,7 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
     return {"mod-json": modJSON};
 }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final r = widget["mod-json"](ctx);
@@ -323,10 +327,11 @@ export fun build(ctx: magus\Context, args: [str]) > void !> any {
 // Quiet without capture would neither stream nor return the output, so the spell
 // fails to load, naming the op.
 func TestBuzzSpellQuietWithoutCaptureFailsToLoad(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "quietnocapturewidget"; }
+	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "quietnocapturewidget"; }
 export fun mgs_listTargets() > any {
     return {"mod-json": {"bin": "go", "args": ["mod", "edit", "-json"], "quiet": true}};
 }
@@ -341,10 +346,11 @@ export fun mgs_listTargets() > any {
 // TestBuzzSpellPipeStdin verifies pipe-style chaining: a captured target's stdout
 // is fed as the stdin of the next target via opts.stdin — the Unix-pipe primitive.
 func TestBuzzSpellPipeStdin(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
 
-	writeFile(t, dir, "spells/widget.buzz", `export fun mgs_getName() > str { return "pipewidget"; }
+	w.Write("spells/widget.buzz", `export fun mgs_getName() > str { return "pipewidget"; }
 export fun mgs_listTargets() > any {
     return {
         "emit": {"bin": "sh", "args": ["-c", "printf alpha"], "capture": true},
@@ -352,7 +358,7 @@ export fun mgs_listTargets() > any {
     };
 }
 `)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "spells/widget";
 export fun build(ctx: magus\Context, args: [str]) > void !> any {
     final a = widget.emit(ctx);
@@ -371,22 +377,13 @@ func TestVcsCommitFacadeBuzz(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not in PATH")
 	}
-	dir := t.TempDir()
+	repo := testkit.NewRepo(t, nil)
+	dir := repo.Root()
 	t.Chdir(dir)
-	for _, args := range [][]string{
-		{"git", "init"},
-		{"git", "config", "user.email", "a@b.c"},
-		{"git", "config", "user.name", "A"},
-		{"git", "config", "commit.gpgsign", "false"},
-		{"git", "commit", "--allow-empty", "-m", "hello"},
-	} {
-		cmd := exec.Command(args[0], args[1:]...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, "%v: %s", args, out)
-	}
+	repo.Git("config", "user.name", "A")
+	repo.Commit("hello", nil)
 
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	repo.Magusfile(`import "magus";
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void !> any {
     final c = vcs\commit();
@@ -411,9 +408,10 @@ export fun check(ctx: magus\Context, args: [str]) > void !> any {
 // check optional: every call site had to remember it, and a magusfile that forgot
 // interpolated an empty commit into a version string with nothing to surface it.
 func TestVcsCommitRaisesOutsideRepo(t *testing.T) {
-	dir := t.TempDir() // a bare temp dir, not under version control
+	w := testkit.NewWorkspace(t) // a bare temp dir, not under version control
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "vcs";
 export fun check(ctx: magus\Context, args: [str]) > void {
     var raised = false;
@@ -446,10 +444,11 @@ export fun mgs_listTargets() > any {
 
 	bindBuzzSpell := func(t *testing.T, src string) {
 		t.Helper()
-		dir := t.TempDir()
+		w := testkit.NewWorkspace(t)
+		dir := w.Root()
 		t.Chdir(dir)
-		writeFile(t, dir, "spells/parity.buzz", src)
-		writeFile(t, dir, "magusfile.buzz", `import "magus";
+		w.Write("spells/parity.buzz", src)
+		w.Magusfile(`import "magus";
 import "spells/parity";
 magus\project(".", {"spells": [parity]});`)
 		require.NoError(t, parseMagusfile(t, dir), "parse")
@@ -520,9 +519,10 @@ func TestCheckSpellImports(t *testing.T) {
 // wrong handle fails at load with the suggestion, before the handle surfaces as a
 // disconnected "undefined" error.
 func TestSpellImportSuggestionOnParse(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "magus/spell/javascript";
 magus\project({"spells": [javascript]});
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
@@ -540,9 +540,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 // handle list would come back empty, and the bad handle would slip through to the
 // disconnected "undefined" error the check exists to replace.
 func TestSpellImportCaughtWithTopLevelControlFlow(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "magus/spell/javascript";
 if (1 > 0) {}
 magus\project({"spells": [javascript]});
@@ -557,9 +558,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 // TestSpellImportValidOnParse guards against false positives: a correct built-in
 // import loads cleanly.
 func TestSpellImportValidOnParse(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "magus/spell/go";
 magus\project({"spells": [go]});
 export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
@@ -576,11 +578,12 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 // runs (not just parses) a target whose magusfile imports a sibling project; it
 // must load without error.
 func TestProjectImportResolvesInRunMode(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("a/magusfile.buzz", `import "magus";
 import "project/../b";
 export fun go(ctx: magus\Context, args: [str]) > void {}`)
-	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+	w.Write("b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	_, runErr := interp.RunDir(context.Background(), filepath.Join(root, "a"), "go", nil)
@@ -597,14 +600,15 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 // identity-recognition, and direct-invocation paths all load and run without error
 // (a bad target name in either form would fail at load).
 func TestProjectImportHandleNeedsAndDirectCall(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root, "a/magusfile.buzz", `import "magus";
+	w := testkit.NewWorkspace(t)
+	root := w.Root()
+	w.Write("a/magusfile.buzz", `import "magus";
 import "project/../b";
 export fun go(ctx: magus\Context, args: [str]) > void {
     ctx.needs(b.build);
     b.build();
 }`)
-	writeFile(t, root, "b/magusfile.buzz", `import "magus";
+	w.Write("b/magusfile.buzz", `import "magus";
 export fun build(ctx: magus\Context, args: [str]) > void {}`)
 
 	_, runErr := interp.RunDir(context.Background(), filepath.Join(root, "a"), "go", nil)
@@ -615,9 +619,10 @@ export fun build(ctx: magus\Context, args: [str]) > void {}`)
 // TestSpellImportIgnoresComments is the payoff of reading the AST rather than the
 // raw text: a wrong handle that appears only in a comment must not be flagged.
 func TestSpellImportIgnoresComments(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	writeFile(t, dir, "magusfile.buzz", `import "magus";
+	w.Magusfile(`import "magus";
 import "magus/spell/go";
 // for a TS project you would instead: import "magus/spell/typescript";
 magus\project({"spells": [go]});
@@ -626,19 +631,15 @@ export fun build(ctx: magus\Context, args: [str]) > void { go["go-build"](); }`)
 	require.NoError(t, parseMagusfile(t, dir), "a bad handle in a comment must not be flagged")
 }
 
-func writeSpellMagusfile(t *testing.T, dir, content string) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte(content), 0o644))
-}
-
 // TestSpellModuleForkTarget verifies that a fork target (which has no function
 // in the compiled spell table — only a spells.json data entry) is still
 // callable programmatically. registerSpells overlays a Go-backed function for
 // each fork target; here go-vet is a fork no-op that must resolve to
 // a function and run without error.
 func TestSpellModuleForkTarget(t *testing.T) {
-	dir := t.TempDir()
-	writeSpellMagusfile(t, dir, `
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	w.Magusfile(`
 import "magus";
 import "magus/spell/go";
 
@@ -655,8 +656,9 @@ export fun check(ctx: magus\Context, _args: [str]) > void {
 // typed module: import "magus/spell/docker" binds the handle under its basename
 // (docker), and the resolved value is the live spell handle (docker-build is callable).
 func TestSpellModuleRequireBuiltin(t *testing.T) {
-	dir := t.TempDir()
-	writeSpellMagusfile(t, dir, `
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	w.Magusfile(`
 import "magus";
 import "magus/spell/docker";
 
@@ -672,8 +674,9 @@ export fun check(ctx: magus\Context, _args: [str]) > void !> any {
 // TestSpellModuleRequireUnknownFailsToCompile verifies a misspelled built-in
 // module is a compile error — the point of typed import — not a silent runtime nil.
 func TestSpellModuleRequireUnknownFailsToCompile(t *testing.T) {
-	dir := t.TempDir()
-	writeSpellMagusfile(t, dir, `
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	w.Magusfile(`
 import "magus";
 import "magus/spell/dockr";
 magus\project(".", {"spells": [dockr]});
@@ -686,16 +689,16 @@ magus\project(".", {"spells": [dockr]});
 // importable by path — import "spells/locreq" resolves ./spells/locreq.buzz,
 // binds the handle under the basename (locreq), so its target dispatches.
 func TestSpellModuleRequireLocal(t *testing.T) {
-	dir := t.TempDir()
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
 	t.Chdir(dir)
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "spells"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "spells", "locreq.buzz"), []byte(`
+	w.Write("spells/locreq.buzz", `
 export fun mgs_getName() > str { return "locreq"; }
 export fun mgs_listTargets() > any {
     return {"build": {"bin": "true"}};
 }
-`), 0o644))
-	writeSpellMagusfile(t, dir, `
+`)
+	w.Magusfile(`
 import "magus";
 import "spells/locreq";
 
@@ -711,8 +714,9 @@ magus\project(".", {"spells": [locreq]});
 // TestSpellMultipleFields verifies that the spell handle for the go spell has
 // the expected fork-target methods beyond just name.
 func TestSpellMultipleFields(t *testing.T) {
-	dir := t.TempDir()
-	writeSpellMagusfile(t, dir, `
+	w := testkit.NewWorkspace(t)
+	dir := w.Root()
+	w.Magusfile(`
 import "magus";
 import "magus/spell/go";
 

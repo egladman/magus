@@ -373,8 +373,8 @@ func producedKeyInputs(t *testing.T, c *Cache, step *Step) []string {
 //
 // Every fixture below is a verbatim producer shape, taken from the writeLine calls in
 // hash.go's hashStepInputs: src (:147), env set and unset (:155, :157), tool (:191, whose
-// value run.go's probeTools joins at :842), keyVersion (:85), spellDefVersion (:185) and
-// arch (:109).
+// value run.go's probeTools joins at :842), keyVersion (:85), spellDefVersion (:185),
+// magus and arch (:109).
 func TestFirstKeyInputChangePairsInputsByIdentity(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -423,6 +423,12 @@ func TestFirstKeyInputChangePairsInputsByIdentity(t *testing.T) {
 			recorded: []string{"spellDefVersion:aaa111"},
 			live:     []string{"spellDefVersion:bbb222"},
 			want:     KeyInputChange{Class: "spellDefVersion", Input: "spellDefVersion", Recorded: "aaa111", Live: "bbb222"},
+		},
+		{
+			name:     "binary build",
+			recorded: []string{"binary:0123456789abcdef"},
+			live:     []string{"binary:fedcba9876543210"},
+			want:     KeyInputChange{Class: "binary", Input: "binary", Recorded: "0123456789abcdef", Live: "fedcba9876543210"},
 		},
 		{
 			name:     "host arch",

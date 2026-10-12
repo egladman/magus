@@ -211,15 +211,15 @@ func TestRuntimeRecordsRoundTripDedupAndCap(t *testing.T) {
 	assert.Len(t, LoadRuntimeEvents(dir), 2)
 }
 
-// fakeRemote is an in-memory RemoteShards for tests: content-addressed by key.
-type fakeRemote struct {
+// memoryRemote is an in-memory RemoteShards for tests: content-addressed by key.
+type memoryRemote struct {
 	mu    sync.Mutex
 	blobs map[string][]byte
 }
 
-func newFakeRemote() *fakeRemote { return &fakeRemote{blobs: map[string][]byte{}} }
+func newMemoryRemote() *memoryRemote { return &memoryRemote{blobs: map[string][]byte{}} }
 
-func (f *fakeRemote) PutShard(_ context.Context, key string, r io.Reader) error {
+func (f *memoryRemote) PutShard(_ context.Context, key string, r io.Reader) error {
 	b, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -230,7 +230,7 @@ func (f *fakeRemote) PutShard(_ context.Context, key string, r io.Reader) error 
 	return nil
 }
 
-func (f *fakeRemote) GetShard(_ context.Context, key string) (io.ReadCloser, error) {
+func (f *memoryRemote) GetShard(_ context.Context, key string) (io.ReadCloser, error) {
 	f.mu.Lock()
 	b, ok := f.blobs[key]
 	f.mu.Unlock()
@@ -254,7 +254,7 @@ func evictAllShardFiles(t *testing.T, cacheDir string) {
 func TestRemoteShardPushPullRoundTrip(t *testing.T) {
 	in := sampleInputs() // deterministic shards only (no runtime)
 	dir := t.TempDir()
-	rem := newFakeRemote()
+	rem := newMemoryRemote()
 	ctx := context.Background()
 
 	built, err := Build(ctx, dir, BuildOptions{Remote: rem}, in, nil)
@@ -275,7 +275,7 @@ func TestRuntimeShardNotPushed(t *testing.T) {
 	in := sampleInputs()
 	in.Runtime = []types.DiagnosticEvent{{Unit: "pkg/a:build", Code: types.ExecDenied}}
 	dir := t.TempDir()
-	rem := newFakeRemote()
+	rem := newMemoryRemote()
 	ctx := context.Background()
 
 	_, err := Build(ctx, dir, BuildOptions{Remote: rem}, in, nil)
@@ -658,7 +658,7 @@ func TestReadStoreExportWithoutAStore(t *testing.T) {
 // gatedRemote parks the first PutShard until released, which stops its Sync after the
 // shard file is written and before the manifest is.
 type gatedRemote struct {
-	*fakeRemote
+	*memoryRemote
 	entered, release chan struct{}
 	once             sync.Once
 }
@@ -668,7 +668,7 @@ func (g *gatedRemote) PutShard(ctx context.Context, key string, r io.Reader) err
 		close(g.entered)
 		<-g.release
 	})
-	return g.fakeRemote.PutShard(ctx, key, r)
+	return g.memoryRemote.PutShard(ctx, key, r)
 }
 
 // Two processes Sync one store with different content for a shard. Unlocked, the
@@ -680,7 +680,7 @@ func TestStoreConcurrentSyncsLeaveManifestAndShardsAgreeing(t *testing.T) {
 	shard := func(label string) []Shard {
 		return []Shard{{Name: "project:x", Nodes: []types.KnowledgeNode{{ID: "project:x", Label: label}}}}
 	}
-	remote := &gatedRemote{fakeRemote: newFakeRemote(), entered: make(chan struct{}), release: make(chan struct{})}
+	remote := &gatedRemote{memoryRemote: newMemoryRemote(), entered: make(chan struct{}), release: make(chan struct{})}
 
 	slow := make(chan error, 1)
 	go func() {

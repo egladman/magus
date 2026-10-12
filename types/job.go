@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // errInvalidJob opens every error a job record's validation returns.
@@ -286,6 +288,17 @@ func (c LeaseCheck) String() string {
 	return line
 }
 
+// SameLeaseCheck reports whether a and b declare the same check. Two nil checks are the
+// same, and a nil check is not the same as any declared one. A function over pointers
+// rather than a method, because a row's Check is optional and either side may be nil.
+func SameLeaseCheck(a, b *LeaseCheck) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Target == b.Target && a.Script == b.Script && a.Project == b.Project &&
+		a.NoDefaultCharms == b.NoDefaultCharms && slices.Equal(a.Args, b.Args)
+}
+
 // ParseLeaseCheck reads `<target> <project> [-- args]`, the shape a person types and the
 // shape a record is written in. The project defaults to ".".
 //
@@ -455,7 +468,8 @@ const JobSchemaVersion = 11
 const JobResultSchemaVersion = 2
 
 // JobWriteProof is what the fork could prove about a job's write paths against the other
-// live jobs bound to the SAME CHECKOUT at the moment it was declared.
+// live jobs bound to the SAME CHECKOUT, or not bound to any yet, at the moment it was
+// declared.
 //
 // Recorded rather than enforced, with one exception (write paths covering a workspace-load
 // file, which is refused outright). Two workers overlapping is a call only the
@@ -465,11 +479,11 @@ const JobResultSchemaVersion = 2
 type JobWriteProof string
 
 const (
-	// WriteProofAlone is a fork made in a checkout no other live job with write paths was
-	// bound to. There was nothing to be disjoint FROM, which is not the same claim as
-	// disjoint and is why it is its own value.
+	// WriteProofAlone is a fork made when no other live job with write paths was bound to
+	// the checkout or still waiting to be taken in it. There was nothing to be disjoint
+	// FROM, which is not the same claim as disjoint and is why it is its own value.
 	WriteProofAlone JobWriteProof = "alone"
-	// WriteProofDisjoint is a job whose write paths intersect no other bound job's here.
+	// WriteProofDisjoint is a job whose write paths intersect no other such job's here.
 	WriteProofDisjoint JobWriteProof = "disjoint"
 	// WriteProofOverlapping is one whose write paths intersect another's. The fork stands;
 	// the row says so.
@@ -576,6 +590,16 @@ type JobAttempt struct {
 	Target      string `json:"target,omitempty" yaml:"target,omitempty"`
 	Spell       string `json:"spell,omitempty" yaml:"spell,omitempty"`
 	Failed      bool   `json:"failed,omitempty" yaml:"failed,omitempty"`
+	// AttemptID names this execution alone, where Ref may name its step, which a later run
+	// of the same step takes over.
+	AttemptID string `json:"attempt_id,omitempty" yaml:"attempt_id,omitempty"`
+	// DurationMs is how long the run took; TimestampMs is when it ENDED, so the run started
+	// at TimestampMs-DurationMs.
+	DurationMs int64 `json:"duration_ms,omitempty" yaml:"duration_ms,omitempty"`
+	// Revision is the VCS revision the run read its inputs at, empty when unknown. Dirty says
+	// the tree also held uncommitted changes then, so Revision alone does not name what it read.
+	Revision string `json:"revision,omitempty" yaml:"revision,omitempty"`
+	Dirty    bool   `json:"dirty,omitempty" yaml:"dirty,omitempty"`
 }
 
 // JobGateAttempt is the stored output record for one goal.
@@ -784,6 +808,17 @@ type Job struct {
 	// beside State rather than moving it: a job that passed where it was written and fails
 	// once merged is two facts, and one field could hold only the later.
 	Integration *JobIntegration `json:"integration,omitempty" yaml:"integration,omitempty"`
+	// WaiterEvidence names the goals whose passing run came from the waiter's checkout
+	// rather than the holder's, nil unless `magus job wait --evidence` took some. It sits
+	// beside GateAttempts, which keep the holder's own attempts untouched: a goal that
+	// failed where the work was written and passed once re-run here is two facts. Each
+	// Gates entry is one goal, the ref taken for it and its verdict; Checkout and At say
+	// where and when.
+	//
+	// A JobIntegration because the record is the same one --integration keeps: goals graded
+	// against runs in another checkout. What differs is only that these verdicts moved the
+	// job's state, so the record exists only for a job that passed.
+	WaiterEvidence *JobIntegration `json:"waiter_evidence,omitempty" yaml:"waiter_evidence,omitempty"`
 }
 
 // JobIntegration is a job's check goals graded against runs recorded in Checkout, the tree
@@ -1725,12 +1760,72 @@ func pathsShareGround(a, b string) bool {
 	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
 		return false
 	}
+	if lit, glob, ok := literalAgainstGlob(a, b); ok {
+		return globReaches(glob, lit)
+	}
 	a, b = LiteralPrefix(a), LiteralPrefix(b)
 	if a == "" || b == "" {
 		// A pattern with no literal prefix ("**/*.go") claims the whole tree.
 		return true
 	}
 	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+// literalAgainstGlob returns the cleaned literal and the cleaned glob, and true, when
+// exactly one of a and b holds a glob metacharacter and the literal is not the root. Any
+// other pair reports false: two literals and two globs keep the prefix rule, since deciding
+// whether two globs share a path is a solver and a missed collision costs more than a pair
+// read and dismissed.
+func literalAgainstGlob(a, b string) (lit, glob string, ok bool) {
+	a, _ = SplitClaim(a)
+	b, _ = SplitClaim(b)
+	a, b = path.Clean(a), path.Clean(b)
+	switch aMeta, bMeta := IsGlobMeta(a), IsGlobMeta(b); {
+	case aMeta && !bMeta && b != ".":
+		return b, a, true
+	case bMeta && !aMeta && a != ".":
+		return a, b, true
+	}
+	return "", "", false
+}
+
+// globReaches reports whether glob can match lit, an ancestor of lit, or a path beneath
+// lit, segment by segment, so "internal/guard/*_test.go" reaches "internal/guard" and not
+// "internal/guard/guard.go". A `**` segment can absorb anything below it and so answers
+// true, as does a glob that cannot be split on "/" (see [unsplittableGlob]): the answer
+// errs toward overlapping.
+func globReaches(glob, lit string) bool {
+	if unsplittableGlob(glob) {
+		return true
+	}
+	litSegs := strings.Split(lit, "/")
+	for i, seg := range strings.Split(glob, "/") {
+		if strings.Contains(seg, "**") || i >= len(litSegs) {
+			return true
+		}
+		if ok, err := doublestar.Match(seg, litSegs[i]); err == nil && !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// unsplittableGlob reports whether glob cannot be read one "/" segment at a time: a "/"
+// sits inside a {...} alternation, or the braces do not balance, so no split is sure to
+// keep an alternation whole.
+func unsplittableGlob(glob string) bool {
+	depth, slash := 0, false
+	for _, r := range glob {
+		switch {
+		case r == '{':
+			depth++
+		case r == '}':
+			depth--
+		case r == '/' && depth > 0:
+			slash = true
+		}
+	}
+	return slash || depth != 0
 }
 
 // LiteralPrefix is the part of a declared path that names actual directories: the
@@ -1789,13 +1884,20 @@ func (u Job) Clone() Job {
 		run := *u.LastRun
 		c.LastRun = &run
 	}
-	if u.Integration != nil {
-		integration := *u.Integration
-		integration.Gates = slices.Clone(u.Integration.Gates)
-		for i := range integration.Gates {
-			integration.Gates[i].Violations = slices.Clone(integration.Gates[i].Violations)
-		}
-		c.Integration = &integration
-	}
+	c.Integration = cloneIntegration(u.Integration)
+	c.WaiterEvidence = cloneIntegration(u.WaiterEvidence)
 	return c
+}
+
+// cloneIntegration is a deep copy of g, nil for nil.
+func cloneIntegration(g *JobIntegration) *JobIntegration {
+	if g == nil {
+		return nil
+	}
+	c := *g
+	c.Gates = slices.Clone(g.Gates)
+	for i := range c.Gates {
+		c.Gates[i].Violations = slices.Clone(c.Gates[i].Violations)
+	}
+	return &c
 }

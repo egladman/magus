@@ -79,8 +79,20 @@ The host's id for the subagent making this call, empty for the main conversation
 \fB\-\-agent\-name\fR \fIstring\fR
 Name of the agent host this invocation came from (attribution only); required with \-\-transport
 .TP
+\fB\-\-call\-background\fR
+The host runs this shell command in the background, as the call asked; a leased worker's magus run is then refused
+.TP
+\fB\-\-call\-timeout\-ms\fR \fIint\fR
+The timeout in milliseconds the call gave its shell command; 0 or absent means the host's foreground default
+.TP
 \fB\-\-event\fR \fIstring\fR
 The host's hook event name (e.g. PreToolUse)
+.TP
+\fB\-\-foreground\-default\-ms\fR \fIint\fR
+The timeout in milliseconds the host gives a shell command that names none, declared by the wiring; without it the run\-timeout advice stands down
+.TP
+\fB\-\-foreground\-max\-ms\fR \fIint\fR
+The longest timeout in milliseconds the host lets a foreground shell command wait, declared by the wiring; without it the run\-timeout advice stands down
 .TP
 \fB\-\-lease\fR \fIstring\fR
 The lease this call is acting as, graded against the ledger's declared write boundary; outranks the spawn record, the checkout's marker and magus.lease in $BAGGAGE

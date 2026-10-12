@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/libs/diagnostics"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/types"
@@ -162,6 +163,10 @@ func TestExplainStaleBinary_AnnotatesAMissingObjectMember(t *testing.T) {
 
 func TestIsStaleBinary(t *testing.T) {
 	missingMember := errors.New(`magusfile: exec magusfile.buzz: object guard has no field or method "builtins"`)
+	unknownRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`magus\guard.builtins: "architecture-unbriefed": unknown built-in rule "architecture-unbriefed"`)
+	typoedRule := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
 	for name, tc := range map[string]struct {
 		err  error
 		want bool
@@ -172,6 +177,9 @@ func TestIsStaleBinary(t *testing.T) {
 		"an undefined type":            {buzzErr("BZZ1002", `undefined type "Secret"`), true},
 		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
 		"a missing object member":      {missingMember, true},
+		"an unknown built-in rule":     {unknownRule, true},
+		"a typoed built-in rule":       {typoedRule, false},
+		"another misdeclared rule":     {types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"), false},
 		"one stale branch of a join":   {errors.Join(errors.New("other"), missingMember), true},
 		"no stale branch in a join":    {errors.Join(errors.New("a"), errors.New("b")), false},
 		"an already annotated failure": {types.DiagnosticErrorf(types.WorkspaceNeedsNewerMagus, "old"), true},
@@ -180,6 +188,51 @@ func TestIsStaleBinary(t *testing.T) {
 			assert.Equal(t, tc.want, IsStaleBinary(tc.err))
 		})
 	}
+}
+
+// An unknown built-in rule is the same binary-older-than-tree skew as a missing type, so it
+// must annotate as MGS1021 and name the rebuild instead of reading as a typo.
+func TestExplainStaleBinary_AnnotatesAnUnknownBuiltinRule(t *testing.T) {
+	err := fmt.Errorf("magusfile: exec magusfile.buzz: %w", types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "architecture-unbriefed"; `+"`magus describe rules` lists every name"))
+
+	got := ExplainStaleBinary(err, "v0.5.0", "")
+	require.ErrorIs(t, got, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, got.Error(), "this magus is out of date")
+	assert.Contains(t, got.Error(), "Fix it:")
+	assert.True(t, IsStaleBinary(err))
+}
+
+// The messages are builtin's own, so a rewording there fails here instead of silently
+// turning every unknown rule stale, or none.
+func TestStaleShapedReadsTheBuiltinComplaint(t *testing.T) {
+	for name, tc := range map[string]struct {
+		declared string
+		want     bool
+	}{
+		"a name nothing is near": {"frobnicate", true},
+		"a typo with a near one": {"read-navigaton", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := builtin.Resolve(map[string]builtin.Setting{tc.declared: {Decision: builtin.Deny}})
+			require.Error(t, err)
+			assert.Equal(t, tc.want, IsStaleBinary(err), err.Error())
+		})
+	}
+}
+
+// A misspelled rule gets a near-name suggestion from the build, and a rebuild reports it
+// the same way, so the stale-binary deny would trap the edit that fixes it.
+func TestExplainStaleBinary_LeavesATypoedBuiltinRuleAlone(t *testing.T) {
+	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+		`unknown built-in rule "read-navigaton"; did you mean "read-navigation"?`)
+	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
+	assert.False(t, IsStaleBinary(err))
+}
+
+func TestExplainStaleBinary_LeavesAnotherMisdeclaredRuleAlone(t *testing.T) {
+	err := types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty")
+	assert.Equal(t, error(err), ExplainStaleBinary(err, "v0.5.0", ""))
 }
 
 // TestExplainStaleBinary_LeavesEverythingElseAlone is the half that keeps this honest.
@@ -277,7 +330,7 @@ func TestStaleBuildAdvice(t *testing.T) {
 	t.Parallel()
 	const selfUpdate = "Fix it:\n  - released binary: magus self update"
 	const goBuild = "\n  - built from this checkout: ./magus run go-build ."
-	const bootstrap = "\n  - if that cannot load the tree either: mv magus magus.old, then GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
+	const bootstrap = "\n  - if that cannot load the tree either: GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache ."
 	for name, tc := range map[string]struct {
 		build StaleBuild
 		want  string

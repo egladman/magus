@@ -1,6 +1,7 @@
 package types
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -178,6 +179,35 @@ func TestPathsIntersectReadsTheClaimGrammar(t *testing.T) {
 		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
 	}
 	assert.Equal(t, "pkg/run.go", LiteralPrefix("pkg/run.go#A"), "a declaration is not a path segment")
+}
+
+func TestPathsIntersectMatchesALiteralAgainstAGlobPrecisely(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{"internal/guard/guard.go", "internal/guard/*_test.go", false},
+		{"internal/guard/guard_test.go", "internal/guard/*_test.go", true},
+		{"internal/guard/guard.go#A", "internal/guard/*.go", true},
+		{"internal/guard", "internal/guard/*_test.go", true},
+		{"internal", "internal/guard/*_test.go", true},
+		{"internal/guard/sub/x.go", "internal/guard/*.go", false},
+		{"internal/guard/sub/x.go", "internal/guard/**/*.go", true},
+		{"a/b/c", "a/b/*/d.go", true},
+		{"docs/x.md", "internal/**/*.go", false},
+		{"docs/x.md", "**/*.go", true},
+		{"pkg/run.go", "*.go", false},
+		{"internal/a/x.go", "internal/{a,b}/x.go", true},
+		{"internal/c/x.go", "internal/{a,b}/x.go", false},
+		{"internal/c/x.go", "internal/{a/b,c}/x.go", true},
+		{"internal/guard/guard.go", "internal/guard/*.go", true},
+		{"internal/guard/*.go", "internal/*/*_test.go", true},
+	} {
+		assert.Equal(t, tc.want, PathsIntersect(tc.a, tc.b), "%q and %q", tc.a, tc.b)
+		assert.Equal(t, tc.want, PathsIntersect(tc.b, tc.a), "%q and %q, reversed", tc.b, tc.a)
+	}
 }
 
 // A finished lease is not competing for anything. The skill has a worker RELEASE its
@@ -370,6 +400,41 @@ func TestDeclarationCarryingEnterDeclaresNothingElse(t *testing.T) {
 	require.NoError(t, Declaration{Schema: schema, ID: "worker", Enter: "a.go"}.Validate())
 	err := Declaration{Schema: schema, ID: "worker", Enter: "a.go", WritePaths: []string{"**"}}.Validate()
 	assert.ErrorContains(t, err, "carries only schema_version, id and enter")
+}
+
+func TestSameLeaseCheckComparesEveryField(t *testing.T) {
+	t.Parallel()
+
+	base := LeaseCheck{Target: "test", Script: "probe.buzz", Project: "p", Args: []string{"-run", "A"}, NoDefaultCharms: true}
+	assert.True(t, SameLeaseCheck(&base, &base))
+	same := base
+	same.Args = []string{"-run", "A"}
+	assert.True(t, SameLeaseCheck(&base, &same), "equal by value, not by identity")
+
+	for i := range reflect.TypeFor[LeaseCheck]().NumField() {
+		other := base
+		field := reflect.ValueOf(&other).Elem().Field(i)
+		switch field.Kind() {
+		case reflect.String:
+			field.SetString(field.String() + "x")
+		case reflect.Bool:
+			field.SetBool(!field.Bool())
+		case reflect.Slice:
+			field.Set(reflect.ValueOf([]string{"-run", "B"}))
+		default:
+			t.Fatalf("LeaseCheck.%s has kind %s, which this test does not know how to vary", reflect.TypeFor[LeaseCheck]().Field(i).Name, field.Kind())
+		}
+		assert.False(t, SameLeaseCheck(&base, &other), "a differing %s is a different check", reflect.TypeFor[LeaseCheck]().Field(i).Name)
+	}
+}
+
+func TestSameLeaseCheckTreatsNilAsNoCheck(t *testing.T) {
+	t.Parallel()
+
+	declared := &LeaseCheck{Target: "test", Project: "."}
+	assert.True(t, SameLeaseCheck(nil, nil))
+	assert.False(t, SameLeaseCheck(nil, declared))
+	assert.False(t, SameLeaseCheck(declared, nil))
 }
 
 // The parse is what makes a check comparable with a stored run, so the shapes it refuses

@@ -564,7 +564,7 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 
 	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
 	if err != nil {
-		return settleFailed(ctx, hook, op, settle.Outcome{}, fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err))
+		return settleFailed(ctx, hook, op, settle.Outcome{}, settleLoadFailure(err))
 	}
 	run := settle.Quietly(func(ctx context.Context, inv []string) error { return runTarget(ctx, root, rc, inv) }, console.WithRunSink)
 	out, err := settle.Hook(ctx, m, op, buildDefinesTarget(ctx, m), run)
@@ -579,6 +579,17 @@ func vcsResolveHook(ctx context.Context, root string, rc runConfig, hook string,
 		return errSilent{exitCode: 1}
 	}
 	return nil
+}
+
+// settleLoadFailure words a settle hook's failed workspace load. A ./magus older than the
+// merged tree cannot rebuild itself, and the hook never rebuilds it, so the message names
+// the one command that does.
+func settleLoadFailure(err error) error {
+	if ward.IsStaleBinary(err) {
+		return fmt.Errorf("the workspace did not load because this magus is older than the merged tree, so nothing regenerated: "+
+			"build a current ./magus with `%s`, alone on its line, then regenerate: %w", ward.BootstrapCommand, err)
+	}
+	return fmt.Errorf("the workspace did not load, so nothing regenerated: %w", err)
 }
 
 // settleOwedByHand is `magus vcs resolve` with nothing conflicted: it runs what the

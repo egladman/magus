@@ -298,6 +298,29 @@ func MarkerPath(cacheDir, session string, kind MarkerKind) string {
 	return filepath.Join(cacheDir, markerDir, key+"."+string(kind))
 }
 
+// Kinds lists the kinds this gate's session holds a marker for whose name starts with
+// prefix, sorted. Another session's markers share the directory and are never listed. An
+// unreadable directory lists none.
+func (g Gate) Kinds(prefix MarkerKind) []MarkerKind {
+	if g.cacheDir == "" {
+		return nil
+	}
+	path := g.markerPath(prefix)
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return nil
+	}
+	head := filepath.Base(path)
+	key := strings.TrimSuffix(head, string(prefix))
+	var kinds []MarkerKind
+	for _, e := range entries {
+		if name := e.Name(); strings.HasPrefix(name, head) && !e.IsDir() {
+			kinds = append(kinds, MarkerKind(strings.TrimPrefix(name, key)))
+		}
+	}
+	return kinds
+}
+
 // markerPath names one marker file for this gate.
 func (g Gate) markerPath(kind MarkerKind) string {
 	return MarkerPath(g.cacheDir, g.session, kind)

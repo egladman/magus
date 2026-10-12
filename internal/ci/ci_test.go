@@ -139,30 +139,16 @@ func assertIDWidth(t *testing.T, maxShards, wantWidth int) {
 	}
 }
 
-// stubForecaster is a ci.Forecaster that always returns a fixed
-// partition. Used to verify Build delegates correctly when the
-// forecaster option is set.
-type stubForecaster struct {
-	calls    int
-	maxSeen  int
-	override [][]*types.Project
-}
-
-func (s *stubForecaster) Plan(projects []*types.Project, maxShards int) [][]*types.Project {
-	s.calls++
-	s.maxSeen = maxShards
-	return s.override
-}
-
 func TestBuild_withForecaster_replacesCeilDivision(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b", "c", "d")
-	// Forecaster groups everything into one shard regardless of count.
-	f := &stubForecaster{override: [][]*types.Project{projects}}
+	// Forecaster groups everything into one shard regardless of count. Build clamps the 8
+	// requested shards to the 4 projects before it asks.
+	f := NewMockForecaster(t)
+	f.EXPECT().Plan(projects, 4).Return([][]*types.Project{projects}).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)
-	assert.Equal(t, 1, f.calls)
 	require.Len(t, plan.Shards, 1)
 	assert.Len(t, plan.Shards[0].Projects, 4)
 }
@@ -171,7 +157,8 @@ func TestBuild_withForecaster_emptyResultFallsBack(t *testing.T) {
 	t.Parallel()
 	projects := makeProjects("a", "b")
 	// Misbehaving forecaster: returns empty for non-empty input.
-	f := &stubForecaster{override: nil}
+	f := NewMockForecaster(t)
+	f.EXPECT().Plan(projects, 2).Return(nil).Once()
 
 	plan, err := Build(projects, "test", WithMaxShards(8), WithForecaster(f))
 	require.NoError(t, err)

@@ -42,7 +42,6 @@ func newCacheShard(t *testing.T) *cacheShard {
 		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
 	}
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("MAGUS_CACHE_DIR", t.TempDir())
 	emu := remotetest.NewGHA()

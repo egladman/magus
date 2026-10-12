@@ -362,7 +362,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 		return err
 	}
 	defer func() { _ = cleanup() }()
-	d, err := m.OutputDescriptorByRef(ref)
+	d, err := m.OutputDescriptorByRef(ctx, ref)
 	if err != nil {
 		// Not here yet, which is the ordinary case for a ref copied out of CI: ask the
 		// remote published store before giving up.

@@ -1,4 +1,5 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 const ROOT = '/w'
@@ -31,6 +32,11 @@ type Opts = {
   workspace?: boolean
   serverUp?: boolean
   files?: Record<string, string>
+  env?: Record<string, string>
+  // The prompt tokens the session reports; 182K unless a test needs another.
+  context?: number
+  // The model the engine resolves a spawn to; haiku unless a test needs another.
+  spawnedModel?: string
   run?: (argv: readonly string[]) => { exitCode: number; stdout: string } | undefined
 }
 
@@ -43,7 +49,8 @@ function engine(on: On, opts: Opts = {}): Seen {
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.root', () => ({ value: ROOT }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: 182_000, window: 1_000_000 }, rateLimits: [] } as never }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: opts.context ?? 182_000, window: 1_000_000 }, rateLimits: [] } as never }))
+  on('env.get', ($, e) => ({ value: opts.env?.[e.name] }))
   on('command.register', ($, e) => ({ value: { command: e.name } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('ui.panes', () => ({ value: [{ id: 'magus', title: 'magus', isFocused: true }] as never }))
@@ -61,7 +68,7 @@ function engine(on: On, opts: Opts = {}): Seen {
   })
   on('prompt.submit', ($, e) => ({ text: e.text }))
   on('turn.complete', () => ({ text: 'done' }) as never)
-  on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'ag1' }))
+  on('agent.spawn', () => ({ model: opts.spawnedModel ?? 'claude-haiku-5-5', agentId: 'ag1' }))
   on('fs.exists', ($, e) => ({ value: opts.workspace === true && [`${ROOT}/magusfile.buzz`, `${ROOT}/go.mod`, `${ROOT}/magus`].includes(e.path) }))
   on('fs.read', ($, e) => {
     const text = opts.files?.[e.path]
@@ -116,10 +123,10 @@ test('the status line stays empty until a response, then counts down the cache',
   expect(seen.statuses.at(-1)).toBeUndefined()
 
   await $.turn.complete(main(usage({ write: 182_000 })))
-  expect(seen.statuses.at(-1)).toBe('cache 5m')
+  expect(seen.statuses.at(-1)).toBe('cache 5m · $0.92')
   await clock.advance(3 * MIN)
   await clock.settle()
-  expect(seen.statuses.at(-1)).toBe('cache 2m')
+  expect(seen.statuses.at(-1)).toBe('cache 2m · $0.92')
 })
 
 test('the band warns inside the window, and the warn gate toasts after expiry but sends', async ($, on) => {
@@ -187,10 +194,10 @@ test('a cache hit after a 20-minute gap teaches the mod the TTL is an hour', asy
   await $.turn.complete(main(usage({ write: 182_000 })))
   await clock.advance(20 * MIN)
   await clock.settle()
-  expect(seen.statuses.at(-1)).toBe('cache expired')
+  expect(seen.statuses.at(-1)).toBe('cache expired · $0.92')
 
   await $.turn.complete(main(usage({ read: 182_000, write: 300 })))
-  expect(seen.statuses.at(-1)).toBe('cache 1h0m')
+  expect(seen.statuses.at(-1)).toBe('cache 1h0m · $0.97')
 })
 
 test('a subagent past its token budget is toasted once and flagged with its cost', async ($, on) => {
@@ -263,9 +270,237 @@ test('health issues join the cache in one status entry and draw in the band', as
   expect(seen.statuses.at(-1)).toBe('⚠ server down')
 
   await $.turn.complete(main(usage({ write: 182_000 })))
-  expect(seen.statuses.at(-1)).toBe('⚠ server down · cache 5m')
+  expect(seen.statuses.at(-1)).toBe('⚠ server down · cache 5m · $0.92')
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ type: 'Text', text: /No magus server/ })).toBeDefined()
   await ui.press({ key: 'hide' })
   expect(await ui.find({ type: 'Text', text: /No magus server/ })).toBeUndefined()
+})
+
+const HAIKU = 'claude-haiku-5-5'
+
+test('the price step gate warns past the step by default and still sends', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+
+  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
+  expect(seen.toasts).toEqual([
+    'Context is 182K tokens, past the 100K step: every request on claude-haiku-5-5 now pays $0.50 per MTok input and $2.50 output, up from $0.10 and $0.50. Consider /compact.',
+  ])
+})
+
+test('the price step gate speaks inside its margin', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, { context: 95_000 })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 95_000 }, HAIKU)))
+  await $.prompt.submit({ text: 'go on' } as never)
+  expect(seen.toasts).toHaveLength(1)
+  expect(seen.toasts[0]).toMatch(/5K under the 100K step where claude-haiku-5-5 rises from \$0\.10 to \$0\.50/)
+})
+
+test('the price step gate stays quiet further under the step than its margin', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, { context: 80_000 })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 80_000 }, HAIKU)))
+  expect(await $.prompt.submit({ text: 'go on' } as never)).toMatchObject({ text: 'go on' })
+  expect(seen.toasts).toEqual([])
+})
+
+test('the confirm price step gate holds the prompt once and names both rates', { options: { priceStepGate: 'confirm' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+
+  const held = await $.prompt.submit({ text: 'refactor the store' } as never)
+  expect(held).toMatchObject({
+    drop: expect.stringMatching(/^Held: Context is 182K tokens, past the 100K step.*\$0\.50 per MTok input.*up from \$0\.10.*Submit again to send it\.$/),
+  })
+  await clock.advance(1)
+  await clock.settle()
+  expect(seen.fills).toEqual(['refactor the store'])
+  expect(await $.prompt.submit({ text: 'refactor the store' } as never)).toMatchObject({ text: 'refactor the store' })
+})
+
+test('a model without a price step is never gated on prompt size', { options: { priceStepGate: 'confirm' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, { context: 900_000 })
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 900_000 })))
+  expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
+  expect(seen.toasts).toEqual([])
+})
+
+test('two confirm gates hold one prompt once, with both reasons', { options: { cacheGate: 'confirm', priceStepGate: 'confirm' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 182_000 }, HAIKU)))
+  await clock.advance(10 * MIN)
+  await clock.settle()
+
+  const held = await $.prompt.submit({ text: 'again' } as never)
+  expect(held).toMatchObject({ drop: expect.stringMatching(/Cache expired 5m ago.*past the 100K step/) })
+  expect(await $.prompt.submit({ text: 'again' } as never)).toMatchObject({ text: 'again' })
+})
+
+test('the budget gate counts the main session and its subagents', { options: { sessionBudgetUsd: 1, budgetGate: 'confirm' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'desktop', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 182_000 })))
+  expect(seen.statuses.at(-1)).toBe('cache 5m · $0.92/$1.00')
+  expect(await $.prompt.submit({ text: 'under budget' } as never)).toMatchObject({ text: 'under budget' })
+
+  await $.turn.complete(
+    ({ answer: 'done', durationMs: 1000, isAborted: false, turnId: 's', reason: 'answer', agentId: 'ag9', usage: usage({ input: 100_000, output: 10_000 }) }) as never,
+  )
+  expect(seen.statuses.at(-1)).toBe('cache 5m · $1.52/$1.00')
+
+  const held = await $.prompt.submit({ text: 'over budget' } as never)
+  expect(held).toMatchObject({ drop: 'Held: Session spend $1.52 has passed your $1.00 budget (main $0.92, subagents $0.60). Submit again to send it.' })
+  expect(await $.prompt.submit({ text: 'over budget' } as never)).toMatchObject({ text: 'over budget' })
+
+  await $.command.run(RUN_MAGUS)
+  const ui = await $.ui.mount(PANE)
+  expect(await ui.find({ type: 'Text', text: /Session spend \$1\.52\/\$1\.00 \(main \$0\.92, subagents \$0\.60\)/ })).toBeDefined()
+})
+
+test('no budget set means the budget gate never speaks', { options: { budgetGate: 'confirm' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ output: 400_000 })))
+  expect(await $.prompt.submit({ text: 'hi' } as never)).toMatchObject({ text: 'hi' })
+  expect(seen.toasts).toEqual([])
+})
+
+test('a response on an unpriced model makes the spend a floor', async ($, on) => {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  await $.turn.complete(main(usage({ write: 182_000 }, 'mystery-model')))
+  expect(seen.statuses.at(-1)).toBe('cache 5m · $0.00+')
+})
+
+const spawnOf = (over: Record<string, unknown> = {}) =>
+  ({
+    tool_use_id: 't1',
+    prompt: 'look it up',
+    description: 'look it up',
+    subagentType: 'general-purpose',
+    provider: { plugin: 'engine' },
+    parentModel: 'claude-opus-5-5',
+    background: false,
+    fork: false,
+    ...over,
+  }) as never
+
+// The engine, the mocked clock and a started session, for tests that need nothing else.
+async function boot($: Engine, on: On, opts: Opts = {}): Promise<Seen> {
+  const clock = mock.clock(on)
+  await clock.set(T0)
+  const seen = engine(on, opts)
+  await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
+  return seen
+}
+
+const OVER_OPUS ='Subagent will run on claude-opus-5-5 at $4.00 per MTok input, over your $2.00 cap.'
+
+describe('the spawn gate', () => {
+  test('warns by default when the model costs more than the cap, and the spawn goes ahead', async ($, on) => {
+    const seen = await boot($, on)
+    expect(await $.agent.spawn(spawnOf())).toMatchObject({ agentId: 'ag1' })
+    expect(seen.toasts).toEqual([OVER_OPUS])
+  })
+
+  test('an explicit model decides, whatever the parent runs on', async ($, on) => {
+    const seen = await boot($, on, { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'opus' } })
+    await $.agent.spawn(spawnOf({ model: 'haiku' }))
+    await $.agent.spawn(spawnOf({ model: 'sonnet' }))
+    expect(seen.toasts).toEqual([])
+    await $.agent.spawn(spawnOf({ model: 'claude-fable-5-1' }))
+    expect(seen.toasts).toEqual(['Subagent will run on claude-fable-5-1 at $10.00 per MTok input, over your $2.00 cap.'])
+  })
+
+  test('deny refuses the spawn before it starts and names the cheaper route', { options: { spawnGate: 'deny' } }, async ($, on) => {
+    const seen = await boot($, on)
+    const r = await $.agent.spawn(spawnOf())
+    expect(r).toMatchObject({ deny: expect.stringMatching(/^Subagent will run on claude-opus-5-5.*magus-scout.*model: haiku\.$/) })
+    expect(r.agentId).toBeUndefined()
+    expect(seen.toasts).toEqual([])
+    expect(await $.agent.spawn(spawnOf({ model: 'haiku' }))).toMatchObject({ agentId: 'ag1' })
+  })
+
+  test('a definition that sets a model decides; one that sets none inherits; the env fills in for it', async ($, on) => {
+    const seen = await boot($, on, {
+      files: {
+        [`${ROOT}/.claude/agents/magus-scout.md`]: '---\nname: "magus-scout"\nmodel: haiku\n---\nbody',
+        [`${ROOT}/.claude/agents/planner.md`]: '---\nname: planner\n---\nbody',
+        '/home/me/.claude/agents/archivist.md': '---\nmodel: claude-fable-5-1\n---\n',
+      },
+      env: { HOME: '/home/me' },
+    })
+    await $.agent.spawn(spawnOf({ subagentType: 'magus-scout' }))
+    expect(seen.toasts).toEqual([])
+    await $.agent.spawn(spawnOf({ subagentType: 'planner' }))
+    expect(seen.toasts).toEqual([OVER_OPUS])
+    await $.agent.spawn(spawnOf({ subagentType: 'archivist' }))
+    expect(seen.toasts.at(-1)).toMatch(/claude-fable-5-1 at \$10\.00/)
+  })
+
+  test('CLAUDE_CODE_SUBAGENT_MODEL replaces the parent for a definition with no model', async ($, on) => {
+    const seen = await boot($, on, { env: { CLAUDE_CODE_SUBAGENT_MODEL: 'haiku' } })
+    await $.agent.spawn(spawnOf())
+    expect(seen.toasts).toEqual([])
+  })
+
+  test('a fork runs on the parent model, so a model on the call does not save it', async ($, on) => {
+    const seen = await boot($, on)
+    await $.agent.spawn(spawnOf({ fork: true, model: 'haiku' }))
+    expect(seen.toasts).toEqual([OVER_OPUS])
+  })
+
+  test('a definition the mod cannot read is judged by the model the engine resolved, after the fact', async ($, on) => {
+    const seen = await boot($, on, { spawnedModel: 'claude-opus-5-5' })
+    await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
+    expect(seen.toasts).toEqual([OVER_OPUS])
+  })
+
+  test('an unreadable definition that resolves cheap says nothing', async ($, on) => {
+    const seen = await boot($, on)
+    await $.agent.spawn(spawnOf({ subagentType: 'Explore' }))
+    expect(seen.toasts).toEqual([])
+  })
+
+  test('a zero cap is off', { options: { spawnMaxInputUsdPerMTok: 0, spawnGate: 'deny' } }, async ($, on) => {
+    const seen = await boot($, on)
+    expect(await $.agent.spawn(spawnOf())).toMatchObject({ agentId: 'ag1' })
+    expect(seen.toasts).toEqual([])
+  })
+
+  test('the gate set to off does nothing', { options: { spawnGate: 'off' } }, async ($, on) => {
+    const seen = await boot($, on)
+    expect(await $.agent.spawn(spawnOf())).toMatchObject({ agentId: 'ag1' })
+    expect(seen.toasts).toEqual([])
+  })
+
+  test('a model the rates do not price is left alone', async ($, on) => {
+    const seen = await boot($, on)
+    await $.agent.spawn(spawnOf({ model: 'mystery-model' }))
+    expect(seen.toasts).toEqual([])
+  })
 })

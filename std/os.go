@@ -472,7 +472,11 @@ func looksLikeShellCommand(cmd string) bool {
 // captured; it returns {stdout, stderr, code, ok}, raising on a non-zero exit
 // unless opts.allow_failure is true. The optional dir runs cmd in that directory
 // (relative to the context cwd); omitted, it inherits the context (or process) cwd.
+// A VCS binary is refused before anything starts; see procVCSRefusal.
 func OsExec(ctx context.Context, cmd string, args []string, dir string, opts map[string]any) (types.ExecResult, error) {
+	if err := procVCSRefusal(cmd, args, dir); err != nil {
+		return types.ExecResult{}, err
+	}
 	warnIfMagusBinary(ctx, cmd, args)
 	wd := resolveDir(ctx, dir)
 	if wd != "" {

@@ -16,6 +16,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 )
 
@@ -23,17 +24,16 @@ import (
 // order however the registry was filled: they used to follow the built-ins' map order, so
 // `describe targets -o json` flipped between runs.
 func TestDescribeTargets_SpellsSorted(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	root := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte(`import "magus";
+	w := testkit.NewWorkspace(t)
+	w.Magusfile(`import "magus";
 import "magus/spell/typescript";
 import "magus/spell/go";
 import "magus/spell/bash";
 import "magus/spell/markdown";
 
 magus\project({"spells": [typescript, go, markdown, bash]})
-`), 0o644))
-	m, err := magus.Open(t.Context(), root)
+`)
+	m, err := magus.Open(t.Context(), w.Root())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -52,15 +52,13 @@ magus\project({"spells": [typescript, go, markdown, bash]})
 // TestDescribeWorkspacesOutput_MultiDeclared verifies that `describe workspaces`
 // enumerates every declared server workspace, not just the active one.
 func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
-	base := t.TempDir()
-	mkWorkspace := func(name string) string {
-		dir := filepath.Join(base, name)
-		require.NoError(t, os.MkdirAll(dir, 0o755))
+	mkWorkspace := func() string {
+		w := testkit.NewWorkspace(t)
 		// An empty magusfile.buzz marks the directory as a workspace root.
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), nil, 0o644))
-		return dir
+		w.Magusfile("")
+		return w.Root()
 	}
-	wsA, wsB := mkWorkspace("a"), mkWorkspace("b")
+	wsA, wsB := mkWorkspace(), mkWorkspace()
 
 	saved := globalCfg
 	t.Cleanup(func() { globalCfg = saved })
@@ -305,10 +303,7 @@ func newFocusFixture() focusFixture {
 // computation the guard grades with, surfaced where a caller can ask about a path
 // before reading it rather than after being advised.
 func TestMarkFileFocusStampsEachEntry(t *testing.T) {
-	// EvalSymlinks because a workspace Root is symlink-free and a macOS temp dir is
-	// not: comparing the two spellings literally puts every path outside the tree.
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	require.NoError(t, err)
+	root := testkit.NewWorkspace(t).Root()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "app"), 0o755))
 	t.Chdir(filepath.Join(root, "app"))
 

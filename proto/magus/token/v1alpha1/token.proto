@@ -17,8 +17,8 @@ syntax = "proto3";
 // buf-breaking gates this file: fields and RPCs may be ADDED, never renumbered or removed.
 package magus.token.v1alpha1;
 
-import "google/protobuf/timestamp.proto";
 import "buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
 
 // TokenService lists, mints and revokes stored tokens, and lists and revokes the active share
 // link. No response ever carries a secret except CreateTokenResponse, once.
@@ -56,8 +56,8 @@ message Grant {
 enum CredentialClass {
   CREDENTIAL_CLASS_UNSPECIFIED = 0;
   CREDENTIAL_CLASS_OPERATOR = 1; // mgo_; never listed here
-  CREDENTIAL_CLASS_STORED = 2;   // mgs_
-  CREDENTIAL_CLASS_SHARE = 3;    // mgl_
+  CREDENTIAL_CLASS_STORED = 2; // mgs_
+  CREDENTIAL_CLASS_SHARE = 3; // mgl_
   CREDENTIAL_CLASS_EXCHANGE = 4; // mgx_, a console link's one-time code
 }
 
@@ -71,8 +71,8 @@ message TokenInfo {
   reserved 2, 3, 4, 6;
   reserved "identifier", "scope", "created", "last_used";
 
-  string name = 1;             // the token's name, or a label for the share link
-  string id = 8;               // the 8-hex id; a Revoke key
+  string name = 1; // the token's name, or a label for the share link
+  string id = 8; // the 8-hex id; a Revoke key
   CredentialClass class = 9;
   Grant grant = 7;
   google.protobuf.Timestamp expire_time = 5;

@@ -18,7 +18,7 @@ import (
 )
 
 func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
-	src := fakeSource{report: types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}}
+	src := cannedSnapshot{report: types.StatusSnapshot{Pool: &types.StatusOutput{Capacity: 4, Running: 1}}}
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1.2.3", Commit: "abc1234"}, nil)
 
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
@@ -37,7 +37,7 @@ func TestConnectGetStatusReportsLiveSnapshot(t *testing.T) {
 // deprecated JSON route onto the GetStatus response envelope: observing_since and the resolved config.
 func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	since := time.Date(2026, 7, 21, 10, 0, 0, 0, time.UTC)
-	src := fakeSource{report: types.StatusSnapshot{
+	src := cannedSnapshot{report: types.StatusSnapshot{
 		ObservingSince: since,
 		Config:         types.StatusConfig{DefaultCharms: []string{"rw"}, Concurrency: types.StatusConcurrency{Configured: 8}, Sandbox: true},
 	}}
@@ -56,7 +56,7 @@ func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 
 // A non-server report leaves observing_since zero, so GetStatus must omit it (not stamp epoch).
 func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
-	svc := NewConnectService(fakeSource{}, types.BuildInfo{}, nil)
+	svc := NewConnectService(cannedSnapshot{}, types.BuildInfo{}, nil)
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
 	require.NoError(t, err)
 	assert.Nil(t, resp.Msg.GetObserveStartTime(), "zero observing-since must be omitted, not epoch")

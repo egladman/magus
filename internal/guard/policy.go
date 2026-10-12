@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"os"
 	"path/filepath"
@@ -52,6 +53,9 @@ type PolicyState struct {
 	SpawnRule   bool
 	CommandRule bool
 	WriteRule   bool
+	// Files are the files the load read, the root magusfile and every source it imports, as
+	// the load named them. Cheap, unlike Sources: they are what the load already logged.
+	Files []string
 	// Sources resolves each policy source's approved id. It can run a process per file, so
 	// it is called only when the record can change; nil when there is no approval authority.
 	Sources func(ctx context.Context) []PolicySource
@@ -64,6 +68,9 @@ type policyMarker struct {
 	CommandRule bool   `json:"command_rule,omitempty"`
 	WriteRule   bool   `json:"write_rule,omitempty"`
 	Pending     bool   `json:"pending"`
+	// Files is PolicyState.Files, kept so a call whose own load ran out of time still knows
+	// which files the guard loads.
+	Files []string `json:"files,omitempty"`
 }
 
 // policyEvent is the guard_policy blob: refs and ids, never a source body.
@@ -100,7 +107,7 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	switch {
 	case !seen && now.Digest == "":
 		return now.Digest
-	case seen && prev.Digest == now.Digest && (!recheck || !prev.Pending):
+	case seen && prev.Digest == now.Digest && (!recheck || !prev.Pending) && slices.Equal(prev.Files, now.Files):
 		return now.Digest
 	}
 	var sources []PolicySource
@@ -109,7 +116,7 @@ func RecordPolicy(ctx context.Context, cacheDir, workspace string, now PolicySta
 	}
 	pending := slices.ContainsFunc(sources, func(s PolicySource) bool { return s.Worktree != s.Approved })
 	action := classifyPolicy(prev, seen, now, pending)
-	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, Pending: pending}
+	next := policyMarker{Digest: now.Digest, ShellRules: now.ShellRules, SpawnRule: now.SpawnRule, CommandRule: now.CommandRule, WriteRule: now.WriteRule, Pending: pending, Files: now.Files}
 	if action != "" {
 		body, _ := json.Marshal(policyEvent{SchemaVersion: 1, Action: action, Digest: now.Digest, Previous: prev.Digest, Sources: sources})
 		ref, size := trail.WriteBlob(ctx, cacheDir, "policy", body)
@@ -193,4 +200,29 @@ func writePolicyMarker(path string, m policyMarker) {
 		return
 	}
 	_ = file.ReplaceFile(path, body, 0o600)
+}
+
+// isGuardSource reports whether path is a file the guard's own policy load reads: the
+// workspace's root magusfile, or a source the policy loaded on this call or, when this
+// call's load did not finish, the last one recorded. A relative path is the calling
+// directory's, since the write it names lands there; a relative source is the workspace's.
+// Paths compare with symlinks resolved, so /var and /private/var name one file.
+func isGuardSource(deps Dependencies, at location, path string) bool {
+	if at.workspace == "" || path == "" {
+		return false
+	}
+	target := resolveFrom(cmp.Or(at.dir, at.workspace), path)
+	if samePath(target, filepath.Join(at.workspace, "magusfile.buzz")) {
+		return true
+	}
+	var files []string
+	if deps.Policy != nil {
+		files = deps.Policy().Files
+	}
+	if files == nil && at.cacheDir != "" {
+		if m, ok := readPolicyMarker(filepath.Join(at.cacheDir, policyMarkerFile)); ok {
+			files = m.Files
+		}
+	}
+	return slices.ContainsFunc(files, func(f string) bool { return samePath(resolveFrom(at.workspace, f), target) })
 }

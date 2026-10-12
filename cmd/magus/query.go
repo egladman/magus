@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -367,7 +368,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.open {
 		// The viewer ingests a magus.viewer.v1alpha1 Journal, so hand it the ref's display events:
 		// the browser renders pretty from structure.
-		data, desc, err := m.OutputByRef(ref)
+		data, desc, err := m.OutputByRef(ctx, ref)
 		if err != nil {
 			return reportRefLookupError(ctx, m, ref, err)
 		}
@@ -383,7 +384,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		// machine-vs-machine key comparison. Best-effort: a run predating key-input
 		// persistence just opens without them.
 		var keyDigests string
-		if lines, lerr := m.OutputKeyInputs(ref); lerr == nil {
+		if lines, lerr := m.OutputKeyInputs(ctx, ref); lerr == nil {
 			pairs := make([]console.KeyClassDigest, 0, len(cache.ClassDigests(lines)))
 			for _, c := range cache.ClassDigests(lines) {
 				pairs = append(pairs, console.KeyClassDigest{Class: c.Class, Digest: c.Digest})
@@ -417,7 +418,26 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		interactive.Hint(ctx, "reproduce this invocation here with `"+hint.X.With(ref)+"`")
 	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
+	if err == nil && desc.Failed && desc.ErrMsg != "" {
+		// A failure's reason often lives only in the descriptor (a drift check prints
+		// nothing), and only json showed it. It follows the bytes as a notice on stderr,
+		// neutralized as an imported record's is, so stdout stays exactly what the run wrote.
+		msg, _ := cache.NeutralizeTerminal([]byte(strings.TrimRight(desc.ErrMsg, "\n")), false)
+		slog.ErrorContext(ctx, string(msg), attr.Notice(""), attr.Component("magus query output"))
+		noticeFailedNeed(ctx, desc)
+	}
 	return err
+}
+
+// noticeFailedNeed names the ctx.needs member a composed target failed on and the command
+// that reads its output, which holds the findings the parent's own output and error only
+// restate. It says nothing for a descriptor that records no member.
+func noticeFailedNeed(ctx context.Context, d magus.OutputDescriptor) {
+	if d.FailedNeedRef == "" {
+		return
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("the failing step is %s, a ctx.needs member; its output is under its own ref:", d.FailedNeedTarget),
+		attr.Notice(""), attr.Component("magus query output"), attr.Next(hint.QueryOutput.With(d.FailedNeedRef)))
 }
 
 // trailPayloadRecord is the -o json/yaml projection of a stored payload: no run stands
@@ -440,7 +460,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 	if err != nil {
 		return err
 	}
-	data, err := m.PayloadByRef(ref)
+	data, err := m.PayloadByRef(ctx, ref)
 	if errors.Is(err, fs.ErrNotExist) {
 		msg := err.Error() + "; the activity trail may have rotated it out, or the ref is mistyped"
 		slog.ErrorContext(ctx, "", attr.Notice("magus query output"), attr.Error(types.DiagnosticErrorf(types.OutputRefMissing, "%s", msg)))
@@ -465,7 +485,7 @@ func queryTrailPayload(ctx context.Context, root, ref string, out OutputOptions)
 // execution-unique handle, and passing a full attempt id to `magus query output`
 // retrieves that exact execution's bytes.
 func listOutputAttempts(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
-	list, err := m.OutputAttempts(ref)
+	list, err := m.OutputAttempts(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
@@ -602,7 +622,12 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 			continue // the captured bytes belong to `query output <ref>`, not here
 		}
 		detail := e.Text
-		if e.Status != "" {
+		if e.Kind == journal.KindResult {
+			// A result is the line a reader acts on: which target, and the ref that reads
+			// its output, so a failure never needs a second lookup to find its log.
+			first, _, _ := strings.Cut(e.Text, "\n")
+			detail = strings.Join(slices.DeleteFunc([]string{e.Status, e.Project, e.Target, e.Ref, first}, func(s string) bool { return s == "" }), " ")
+		} else if e.Status != "" {
 			detail = strings.TrimSpace(e.Status + " " + detail)
 		}
 		fmt.Printf("  %s  %-9s %s\n", time.UnixMilli(e.Ts).Format("15:04:05"), e.Kind, detail)
@@ -622,12 +647,12 @@ type outputIdentityRecord struct {
 // (two machines compare digests to learn WHICH class disagrees; `describe target
 // --cache --against` then names the exact line).
 func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out OutputOptions) error {
-	desc, err := m.OutputDescriptorByRef(ref)
+	desc, err := m.OutputDescriptorByRef(ctx, ref)
 	if err != nil {
 		return reportRefLookupError(ctx, m, ref, err)
 	}
 	var digests []cache.ClassDigest
-	lines, lerr := m.OutputKeyInputs(ref)
+	lines, lerr := m.OutputKeyInputs(ctx, ref)
 	switch {
 	case lerr == nil:
 		digests = cache.ClassDigests(lines)
@@ -662,6 +687,9 @@ func showOutputIdentity(ctx context.Context, m *magus.Magus, ref string, out Out
 		time.UnixMilli(desc.TimestampMs).Format("2006-01-02 15:04:05"))
 	if desc.ErrMsg != "" {
 		fmt.Printf("error:   %s\n", desc.ErrMsg)
+	}
+	if desc.FailedNeedRef != "" {
+		fmt.Printf("failed:  ctx.needs %s, read it with %s\n", desc.FailedNeedTarget, hint.QueryOutput.With(desc.FailedNeedRef))
 	}
 	if desc.Attempt != "" {
 		fmt.Printf("attempt: %s\n", desc.Attempt)

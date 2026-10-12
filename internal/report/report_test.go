@@ -18,7 +18,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/trail"
+	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -353,7 +353,7 @@ func TestCacheRunOptions(t *testing.T) {
 // unchanged; this is the structural half, and it is absent on a pass so a consumer
 // counting uptake can tell "nothing to suggest" from "suggested and ignored".
 func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
+	testkit.Isolate(t)
 	path := filepath.Join(t.TempDir(), "run.jsonl")
 	w := openFileWriter(t, path, WithBlockOnFull())
 
@@ -422,8 +422,7 @@ func TestTargetResultCarriesNextOnlyOnAFailure(t *testing.T) {
 // the family survives every role. The filter runs regardless: a template added to the
 // family later meets it without this site changing.
 func TestServedInFiltersForTheActingRole(t *testing.T) {
-	t.Setenv(trail.EnvBaggage, "")
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testkit.Isolate(t)
 	cacheDir := t.TempDir()
 	next := []hint.Next{
 		{ID: "run-output", Run: "magus query output out1a2b3c", Argv: []string{"magus", "query", "output", "out1a2b3c"}},

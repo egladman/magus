@@ -3,8 +3,8 @@ title: magus-multi-agent
 generated_from: internal/agent/skills/magus-multi-agent/SKILL.md
 description: "Load BEFORE your first subagent spawn in a magus workspace: an Agent or Task tool call, a background worker, parallel workers, fanning out, or delegating part of a task."
 tags: [agents, skills, magus-multi-agent]
-skill_full_bytes: 25822
-skill_short_bytes: 19549
+skill_full_bytes: 25918
+skill_short_bytes: 19645
 ---
 
 # magus-multi-agent
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `118` |
+| `agent-skill-version` | `120` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `ac96774e28ff` |
+| `skill-content` | `7344cf003a5f` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -379,7 +379,7 @@ any cap the user set for the tree. Require the worker to:
 - export `BAGGAGE=magus.lease=<its id>` before it works: the guard grades its writes only when that is
   set;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
-- run only its assigned magus target.
+- run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never
@@ -880,7 +880,7 @@ any cap the user set for the tree. Require the worker to:
   and the label as CLAIMS, so `magus session ls` can show who spawned whom, and no
   verdict is ever keyed on them;
 - preserve unrelated changes, stay inside write paths, and avoid generated outputs;
-- run only its assigned magus target.
+- run only its assigned magus target, in the foreground with a timeout that covers it, and never end its turn while a run is pending.
 
 End every brief with the step that files the result, as the worker's LAST act before
 it reports back. A brief that leaves it out gets a prose report and a row that never

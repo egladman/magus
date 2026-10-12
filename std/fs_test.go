@@ -12,8 +12,10 @@ import (
 
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
+	"github.com/egladman/magus/std/gen/mocks"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -471,26 +473,27 @@ func TestFsWriteFileAllowsEqualOrOlderStamps(t *testing.T) {
 	require.NoError(t, FsWriteFile(ctx, absent, "fresh"), "a file that does not exist yet carries no stamp")
 }
 
-// covWalkCallback records what FsWalk visits and answers with stop to end the walk
-// early. err, when set, is what the predicate raises instead of answering.
-type covWalkCallback struct {
+// visits is what FsWalk passed its callback: every path, and the ones that were dirs.
+type visits struct {
 	seen []string
 	dirs []string
-	stop bool
-	err  error
 }
 
-func (c *covWalkCallback) Call(_ context.Context, args ...any) ([]any, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-	path, _ := args[0].(string)
-	isDir, _ := args[1].(bool)
-	c.seen = append(c.seen, path)
-	if isDir {
-		c.dirs = append(c.dirs, path)
-	}
-	return []any{c.stop}, nil
+// recordVisits is a Callback that records each (path, isDir) FsWalk visits and answers
+// stop, which ends the walk when true.
+func recordVisits(t *testing.T, stop bool) (*mocks.MockCallback, *visits) {
+	v := &visits{}
+	cb := mocks.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).RunAndReturn(
+		func(_ context.Context, args ...any) ([]any, error) {
+			path, _ := args[0].(string)
+			v.seen = append(v.seen, path)
+			if isDir, _ := args[1].(bool); isDir {
+				v.dirs = append(v.dirs, path)
+			}
+			return []any{stop}, nil
+		})
+	return cb, v
 }
 
 func TestFsDirnameBasenameJoin(t *testing.T) {
@@ -544,13 +547,13 @@ func TestFsWalk(t *testing.T) {
 
 	ctx := WithCwd(context.Background(), dir)
 
-	cb := &covWalkCallback{}
+	cb, v := recordVisits(t, false)
 	require.NoError(t, FsWalk(ctx, ".", cb))
 
-	sort.Strings(cb.seen)
-	assert.Equal(t, []string{".", "a.txt", "sub", filepath.Join("sub", "b.txt")}, cb.seen)
-	sort.Strings(cb.dirs)
-	assert.Equal(t, []string{".", "sub"}, cb.dirs)
+	sort.Strings(v.seen)
+	assert.Equal(t, []string{".", "a.txt", "sub", filepath.Join("sub", "b.txt")}, v.seen)
+	sort.Strings(v.dirs)
+	assert.Equal(t, []string{".", "sub"}, v.dirs)
 }
 
 // TestFsWalkStopsEarly: a truthy callback ends the whole walk, not just the
@@ -561,18 +564,21 @@ func TestFsWalkStopsEarly(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "sub", "b.txt"), []byte("b"), 0o644))
 
-	cb := &covWalkCallback{stop: true}
+	cb, v := recordVisits(t, true)
 	require.NoError(t, FsWalk(WithCwd(context.Background(), dir), ".", cb))
-	assert.Len(t, cb.seen, 1, "the first truthy answer ends the walk")
+	assert.Len(t, v.seen, 1, "the first truthy answer ends the walk")
 }
 
 func TestFsWalkPropagatesACallbackFailure(t *testing.T) {
 	boom := errors.New("callback failed")
-	err := FsWalk(context.Background(), t.TempDir(), &covWalkCallback{err: boom})
+	cb := mocks.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything, mock.Anything, mock.Anything).Return(nil, boom).Once()
+	err := FsWalk(context.Background(), t.TempDir(), cb)
 	assert.ErrorIs(t, err, boom)
 }
 
 func TestFsWalkOnAMissingRoot(t *testing.T) {
-	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), &covWalkCallback{})
+	// No expectation: the callback must not be called.
+	err := FsWalk(context.Background(), filepath.Join(t.TempDir(), "absent"), mocks.NewMockCallback(t))
 	assert.Error(t, err, "walking a root that does not exist raises rather than visiting nothing")
 }

@@ -168,6 +168,13 @@ type Step struct {
 	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
 	// targets always replayed.
 	OutputsDeclared bool
+	// ForeignOutputs are globs another target declares with ctx.writesFiles that this
+	// step's inherited Outputs can overlap. They are carved out of what a snapshot records
+	// and a hit writes, so a target that only reads a generated tree (a lint over a
+	// project whose baseline claims gen/**) never records it as found and never replays
+	// that copy over a regeneration. Unhashed, and still in Outputs for the source walk,
+	// so no key moves.
+	ForeignOutputs []types.Glob
 
 	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
 	// Outputs, and hashing either would change every existing key. They exist so
@@ -199,8 +206,14 @@ type Step struct {
 	// so a compile-only go::go-build must not satisfy (or be satisfied by) the
 	// go-build target's entry.
 	Spell           string
-	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
-	ToolVersions    []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
+	SpellDefVersion string // built-in spell registry fingerprint; forces miss on a spell change
+	// BinaryBuild identifies the running binary's build (proc.BinaryBuild), set only for a
+	// step whose body asks that binary for its answer (a magus\describe call, a nested
+	// magus). Such an answer moves when the binary is rebuilt from changed code, with no
+	// file in the tree to key on. Empty writes no key line, so every other step keeps its
+	// key across rebuilds.
+	BinaryBuild  string
+	ToolVersions []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
 	// false (the default) keys the platform. See types.PlatformSensitivity.
@@ -214,10 +227,18 @@ type Step struct {
 	// filed after it. Instead the entry records each stamp's digest as the run left it,
 	// and a hit replays only while every stamp still reads the same. A stamped entry
 	// describes one local tree, so it is never fetched from or pushed to a remote.
-	Stamps     []string
-	NoCache    bool // when true, always run fn; never replay or snapshot (long-running targets)
-	SkipReplay bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
-	Slots      int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
+	Stamps []string
+	// VerifyOutputs makes a hit replay only while every file Outputs match reads as the
+	// entry recorded it, mode included; a moved, missing or extra one is a miss. It is for
+	// a target that COMPARES its outputs (a drift gate run without rw), whose hit would
+	// otherwise restore fresh outputs over stale committed ones and pass without looking.
+	// A tree that still matches replays, so a gate keyed on a costly generator still skips
+	// it. Unhashed, and unlike Stamps it leaves the remote tier on: the entry records every
+	// output's digest, so any tier's copy can be checked.
+	VerifyOutputs bool
+	NoCache       bool // when true, always run fn; never replay or snapshot (long-running targets)
+	SkipReplay    bool // when true, never replay a hit (always run fn), but still snapshot on success: a forced rebuild that refreshes the entry, unlike NoCache which never snapshots either (magus run --no-cache)
+	Slots         int  // RunAll only: concurrency slots held while running (0 or 1 = one slot); clamped to the limiter's capacity. Never hashed.
 	// MemoryMB is RunAll only: the declared peak memory this step will reach,
 	// including every target it composes, carried alongside the slot count Slots
 	// derives from the same figure. Slots throttle peers inside THIS process; the
@@ -247,6 +268,26 @@ type Step struct {
 	VCSName  string
 	Revision string
 	Dirty    bool
+}
+
+// withoutForeignOutputs is s with every ForeignOutputs pattern added to the exclusions
+// of each output glob it can overlap: the set a snapshot records and a hit replays.
+func (s Step) withoutForeignOutputs() Step {
+	if len(s.ForeignOutputs) == 0 {
+		return s
+	}
+	outs := make([]types.Glob, len(s.Outputs))
+	for i, g := range s.Outputs {
+		g.Except = slices.Clone(g.Except)
+		for _, f := range s.ForeignOutputs {
+			if types.GlobsOverlap(g.Pattern, f.Pattern) && !slices.Contains(g.Except, f.Pattern) {
+				g.Except = append(g.Except, f.Pattern)
+			}
+		}
+		outs[i] = g
+	}
+	s.Outputs = outs
+	return s
 }
 
 // Result is the outcome of a Cache.Run call.
@@ -504,7 +545,7 @@ func (c *Cache) probeLocal(ctx context.Context, s *Step) (string, bool, error) {
 		return "", false, err
 	}
 	manifest, mErr := c.readManifest(s.ProjectPath, hash)
-	return hash, mErr == nil && len(c.movedStamps(ctx, s.WorkspaceRoot, s.Stamps, manifest.Stamps)) == 0, nil
+	return hash, mErr == nil && !c.treeMoved(ctx, s, manifest), nil
 }
 
 // errLocalEntryGone is what Run returns under replayLocal when the entry the probe found
@@ -674,7 +715,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 func (c *Cache) replayHit(ctx context.Context, rc *runCtx, s Step, hash string, e *entry, start time.Time, netRec *httpx.Recorder) (Result, bool) {
 	result := Result{ProjectPath: s.ProjectPath, Hash: hash}
 	replayCtx, endReplay := tracerFromContext(ctx).StartSpan(ctx, "magus.cache.replay")
-	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s), s.WorkspaceRoot, e.root)
+	paths, err := c.replayFrom(replayCtx, ownedOutputs(e.manifest, s.withoutForeignOutputs()), s.WorkspaceRoot, e.root)
 	endReplay(err)
 	result.Duration = time.Since(start)
 	if err != nil {
@@ -866,7 +907,7 @@ func (c *Cache) runMiss(ctx context.Context, rc *runCtx, s Step, hash string, fn
 	var snap *Manifest
 	if storable {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
-		m, outs, err := c.snapshot(ctx, s, hash, time.Since(start))
+		m, outs, err := c.snapshot(ctx, s.withoutForeignOutputs(), hash, time.Since(start))
 		endSnap(err)
 		if err != nil {
 			// Reported like the sibling runErr path: fn already succeeded, so without
@@ -961,8 +1002,12 @@ func (c *Cache) emitUnchangedFailureHint(ctx context.Context, hash string) strin
 	if len(msg) > maxHintErrChars {
 		msg = msg[:maxHintErrChars] + "..."
 	}
+	read := hint.QueryOutput.With(d.Attempt)
+	if d.FailedNeedRef != "" {
+		read = hint.QueryOutput.With(d.FailedNeedRef) + " (" + d.FailedNeedTarget + ", the ctx.needs member that failed)"
+	}
 	interactive.Hint(ctx, fmt.Sprintf("inputs unchanged since %s, which failed: %s; running it again, read that failure with %s",
-		d.Attempt, msg, hint.QueryOutput.With(d.Attempt)))
+		d.Attempt, msg, read))
 	return HintUnchangedFailure
 }
 
@@ -998,6 +1043,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
+		d.FailedNeedTarget, d.FailedNeedRef = asNeedFailure(runErr)
 	}
 
 	var ref string
@@ -1135,19 +1181,36 @@ func (c *Cache) claimMachine(ctx context.Context, s Step, slots int) (context.Co
 // step is put on: counted, logged as cache.error, and handed to the result observers.
 // Run's fail does that for a step that ran; a refusal never reaches Run, and the CLI
 // prints no error of its own for an ExitError, so this is the only place it is said.
-func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s Step, err error) {
+func (c *Cache) reportRefusal(ctx context.Context, rc *runCtx, s *Step, err error) {
 	c.errs.Add(1)
 	c.log.ErrorContext(ctx,
 		"cache.error",
 		withWhy(err,
 			slog.String("project", s.ProjectPath),
 			slog.String("label", s.Label),
-			slog.String("target", reproTarget(s)),
+			slog.String("target", reproTarget(*s)),
 			slog.String("error", types.CauseText(err)),
 			slog.Bool("refused", true),
 		)...,
 	)
-	rc.fireResults(&s, &Result{ProjectPath: s.ProjectPath}, err)
+	rc.fireResults(s, &Result{ProjectPath: s.ProjectPath}, err)
+	emitRefusal(ctx, s, err)
+}
+
+// emitRefusal journals a refusal as a failed result carrying its MGS code, so the
+// invocation's facts, `magus session` and its brief show a run that did nothing. There is
+// no ref: nothing ran, so nothing was captured. Callers journal only a refusal made while
+// ctx was live: one that is the run's own cancellation is not a finding.
+func emitRefusal(ctx context.Context, s *Step, err error) {
+	var code string
+	var coded *types.DiagnosticError
+	if errors.As(err, &coded) {
+		code = string(coded.Code)
+	}
+	journal.Emit(ctx, journal.Event{
+		Project: s.ProjectPath, Target: reproTarget(*s), Kind: journal.KindResult,
+		Level: "error", Status: journal.StatusFail, Text: types.CauseText(err), DiagnosticCode: code,
+	})
 }
 
 // ReportedError is a step failure the cache already logged as a cache.error record, so a
@@ -1292,6 +1355,9 @@ func (c *Cache) RunAside(ctx context.Context, s Step, fn func(context.Context) e
 	}
 	ctx, releaseMachine, err := c.claimMachine(ctx, s, stepSlots(s, lim))
 	if err != nil {
+		if ctx.Err() == nil {
+			emitRefusal(ctx, &s, err)
+		}
 		return Result{ProjectPath: s.ProjectPath}, err
 	}
 	defer releaseMachine()
@@ -1527,7 +1593,7 @@ func (c *Cache) RunAll(ctx context.Context, steps []Step, fn func(context.Contex
 					// did nothing reports success.
 					ran = gctx.Err() == nil
 					if ran {
-						c.reportRefusal(gctx, rc, s, machineErr)
+						c.reportRefusal(gctx, rc, &s, machineErr)
 					}
 					return fail(machineErr)
 				}

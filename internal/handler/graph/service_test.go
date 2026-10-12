@@ -35,10 +35,10 @@ func fixture() *knowledge.Graph {
 	return g
 }
 
-// fakeResolver hands back one canned graph for every resolution path, so the RPCs are
+// cannedResolver hands back one canned graph for every resolution path, so the RPCs are
 // unit-testable through the seam without a real workspace. probed=false models the coverage
 // probe itself failing, which must not read as verified coverage.
-type fakeResolver struct {
+type cannedResolver struct {
 	g      *knowledge.Graph
 	err    error
 	gaps   []types.KnowledgeSymbolGap
@@ -47,23 +47,23 @@ type fakeResolver struct {
 	affErr error
 }
 
-func (f fakeResolver) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
+func (f cannedResolver) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
 	return f.g, f.err
 }
 
-func (f fakeResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
+func (f cannedResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Graph, error) {
 	return f.g, f.err
 }
 
-func (f fakeResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
+func (f cannedResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return f.gaps, f.probed
 }
 
-func (f fakeResolver) Affected(context.Context, string) (*types.AffectedResult, error) {
+func (f cannedResolver) Affected(context.Context, string) (*types.AffectedResult, error) {
 	return f.aff, f.affErr
 }
 
-func newService() *Service { return NewService(fakeResolver{g: fixture(), probed: true}) }
+func newService() *Service { return NewService(cannedResolver{g: fixture(), probed: true}) }
 
 func TestQueryNodesMapsMatchesAndNeighborhood(t *testing.T) {
 	resp, err := newService().QueryNodes(context.Background(),
@@ -109,7 +109,7 @@ func TestQueryNodesReportsSymbolsNotLoaded(t *testing.T) {
 // a verified absence. Reporting it as unknown would point the reader at a layer that could
 // not have held the answer.
 func TestQueryNodesKindFilteredMissIsAbsentNotUnknown(t *testing.T) {
-	svc := NewService(fakeResolver{
+	svc := NewService(cannedResolver{
 		g:      fixture(),
 		probed: true,
 		gaps:   []types.KnowledgeSymbolGap{{Project: types.ProjectRef{Path: "libs/api"}, State: types.SymbolIndexNotBuilt}},
@@ -125,7 +125,7 @@ func TestQueryNodesKindFilteredMissIsAbsentNotUnknown(t *testing.T) {
 // A probe that could not run must not come back as an empty gap list: that reads as verified
 // coverage and asserts the very fact the probe failed to establish.
 func TestQueryNodesUnprobedCoverageIsUnknownNotAbsent(t *testing.T) {
-	svc := NewService(fakeResolver{g: fixture(), probed: false})
+	svc := NewService(cannedResolver{g: fixture(), probed: false})
 	resp, err := svc.QueryNodes(context.Background(),
 		connect.NewRequest(&graphv1.QueryNodesRequest{Query: "nothingmatchesthis"}))
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestQueryNodesUnprobedCoverageIsUnknownNotAbsent(t *testing.T) {
 }
 
 func TestQueryNodesFlattensSymbolGapProject(t *testing.T) {
-	svc := NewService(fakeResolver{
+	svc := NewService(cannedResolver{
 		g:      fixture(),
 		probed: true,
 		gaps: []types.KnowledgeSymbolGap{{
@@ -199,7 +199,7 @@ func TestFindPathReturnsTheWalkedChain(t *testing.T) {
 func TestFindPathDistinguishesNoChainFromNoSuchNode(t *testing.T) {
 	g := fixture()
 	g.AddNode(types.KnowledgeNode{ID: "target:pkg/z:lonely", Kind: types.KindTarget, Label: "lonely"})
-	svc := NewService(fakeResolver{g: g, probed: true})
+	svc := NewService(cannedResolver{g: g, probed: true})
 
 	resp, err := svc.FindPath(context.Background(),
 		connect.NewRequest(&graphv1.FindPathRequest{From: "target:pkg/a:test", To: "target:pkg/z:lonely"}))
@@ -239,7 +239,7 @@ func TestFindDependentsIgnoresNonDependsOnEdges(t *testing.T) {
 		Source: "target:pkg/a:build", Target: "spell:go", Relation: types.RelationUses,
 		Confidence: types.ConfidenceExtracted, Score: 1,
 	})
-	svc := NewService(fakeResolver{g: g, probed: true})
+	svc := NewService(cannedResolver{g: g, probed: true})
 	resp, err := svc.FindDependents(context.Background(),
 		connect.NewRequest(&graphv1.FindDependentsRequest{Name: "spell:go"}))
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestEmptyRequestFieldsAreInvalidArgument(t *testing.T) {
 }
 
 func TestFindAffectedMapsProjectPathsToNodeIds(t *testing.T) {
-	svc := NewService(fakeResolver{probed: true, aff: &types.AffectedResult{
+	svc := NewService(cannedResolver{probed: true, aff: &types.AffectedResult{
 		Base:     "main",
 		Changed:  []string{"console/src/a.ts", "console/src/b.ts"},
 		Affected: []string{"console", "docs"},
@@ -298,7 +298,7 @@ func TestFindAffectedMapsProjectPathsToNodeIds(t *testing.T) {
 // A diff that reaches nothing and a diff that could not be computed are different answers, so the
 // fallback has to survive as data rather than collapsing into an error code.
 func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
-	svc := NewService(fakeResolver{probed: true,
+	svc := NewService(cannedResolver{probed: true,
 		affErr: fmt.Errorf("shallow clone: %w", types.ErrAffectedFallback)})
 	resp, err := svc.FindAffected(context.Background(),
 		connect.NewRequest(&graphv1.FindAffectedRequest{}))
@@ -306,7 +306,7 @@ func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetIds())
 	assert.Contains(t, resp.Msg.GetFallback(), "shallow clone")
 
-	empty := NewService(fakeResolver{probed: true, aff: &types.AffectedResult{Base: "main"}})
+	empty := NewService(cannedResolver{probed: true, aff: &types.AffectedResult{Base: "main"}})
 	resp, err = empty.FindAffected(context.Background(),
 		connect.NewRequest(&graphv1.FindAffectedRequest{}))
 	require.NoError(t, err)
@@ -315,7 +315,7 @@ func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
 }
 
 func TestFindAffectedOtherErrorsAreInternal(t *testing.T) {
-	svc := NewService(fakeResolver{probed: true, affErr: errors.New("no workspace")})
+	svc := NewService(cannedResolver{probed: true, affErr: errors.New("no workspace")})
 	_, err := svc.FindAffected(context.Background(),
 		connect.NewRequest(&graphv1.FindAffectedRequest{}))
 	require.Error(t, err)
@@ -323,7 +323,7 @@ func TestFindAffectedOtherErrorsAreInternal(t *testing.T) {
 }
 
 func TestGraphResolutionFailureIsInternal(t *testing.T) {
-	svc := NewService(fakeResolver{err: errors.New("no workspace"), probed: true})
+	svc := NewService(cannedResolver{err: errors.New("no workspace"), probed: true})
 	_, err := svc.GetGraphStats(context.Background(),
 		connect.NewRequest(&graphv1.GetGraphStatsRequest{}))
 	require.Error(t, err)
