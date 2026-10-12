@@ -3254,6 +3254,36 @@ func TestGitUnpublishedRevisions(t *testing.T) {
 	require.Error(t, err)
 }
 
+// A worker's change has landed once every path it touched reads the same in the root's
+// HEAD, whatever ids carried it there and whatever else came with them.
+func TestGitUnlandedPaths(t *testing.T) {
+	root := testkit.NewRepo(t, map[string]string{"a.txt": "a\n", "b.txt": "b\n"})
+	worker := root.AddWorktree("worker")
+	require.NoError(t, os.Remove(worker.Path("b.txt")))
+	picked := worker.Commit("work", map[string]string{"a.txt": "a2\n", "c.txt": "c\n"})
+	var g types.LandingReporter = gitVCS{}
+
+	got, err := g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a.txt", "b.txt", "c.txt"}, got, "nothing landed yet; the deletion counts")
+
+	root.Git("cherry-pick", "--no-commit", picked)
+	root.Commit("pick", map[string]string{"d.txt": "extra\n"})
+	objects := root.Git("count-objects")
+	got, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Empty(t, got, "a pick under a new id with an extra file landed")
+	assert.Equal(t, objects, root.Git("count-objects"), "the comparison writes no object")
+
+	root.Commit("edit", map[string]string{"c.txt": "changed\n"})
+	got, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "HEAD")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c.txt"}, got)
+
+	_, err = g.UnlandedPaths(t.Context(), root.Root(), picked, "")
+	require.Error(t, err)
+}
+
 // A checkout reached through a symlink that lands inside the repository is inside it.
 func TestCreateCheckoutResolvesSymlinksBeforeRefusingAPathInside(t *testing.T) {
 	dir := testkit.NewRepo(t, map[string]string{"a.txt": "a\n"}).Root()

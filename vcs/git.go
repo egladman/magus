@@ -3569,10 +3569,10 @@ func lockFetches(dir string) (unlock func()) {
 	return mu.Unlock
 }
 
-// checkoutLockReason is the lock reason CreateCheckout records on each worktree it adds.
+// CheckoutLockReason is the lock reason CreateCheckout records on each worktree it adds.
 // It marks the checkouts CheckoutProvisioner manages, and the lock keeps `git worktree prune`
 // from dropping one whose directory went missing before RemoveCheckout ran.
-const checkoutLockReason = "magus checkout"
+const CheckoutLockReason = "magus checkout"
 
 // realPath resolves p's symlinks, resolving the nearest existing ancestor when p itself
 // does not exist yet, so a path is compared by where it really lands.
@@ -3678,7 +3678,7 @@ func recordCheckout(ctx context.Context, root, dir string) (*gitCheckout, error)
 }
 
 // CreateCheckout implements types.CheckoutProvisioner with a detached linked worktree,
-// locked with checkoutLockReason, and records it for gitExec.
+// locked with CheckoutLockReason, and records it for gitExec.
 func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error {
 	if err := checkRequiredRev(rev); err != nil {
 		return err
@@ -3706,7 +3706,7 @@ func (v gitVCS) CreateCheckout(ctx context.Context, root, dir, rev string) error
 	worktreeAdmin.Lock()
 	defer worktreeAdmin.Unlock()
 	if _, err := gitOutput(ctx, root, gitOpts{Isolated: true}, "worktree", "add", "--quiet", "--detach",
-		"--lock", "--reason", checkoutLockReason, "--", dir, rev); err != nil {
+		"--lock", "--reason", CheckoutLockReason, "--", dir, rev); err != nil {
 		return fmt.Errorf("git worktree add %s: %w", dir, err)
 	}
 	co, err := recordCheckout(ctx, root, dir)
@@ -3782,7 +3782,7 @@ func gitCheckouts(ctx context.Context, root string) (map[string]string, error) {
 	}
 	owned := map[string]string{}
 	for _, co := range all {
-		if co.Locked && co.LockReason == checkoutLockReason {
+		if co.Locked && co.LockReason == CheckoutLockReason {
 			owned[realPath(co.Root)] = co.Root
 		}
 	}
@@ -3844,6 +3844,31 @@ func (gitVCS) UnpublishedRevisions(ctx context.Context, dir, rev string, bases .
 		return nil, fmt.Errorf("git rev-list %s: %w", rev, err)
 	}
 	return splitLines([]byte(out)), nil
+}
+
+// UnlandedPaths implements types.LandingReporter with two `diff-tree` reads, which compare
+// trees git already stores; a merge-tree would write the merged tree to answer the same.
+func (v gitVCS) UnlandedPaths(ctx context.Context, dir, rev, into string) ([]string, error) {
+	changed, err := v.RangeFiles(ctx, dir, into, rev, nil)
+	if err != nil || len(changed) == 0 {
+		return nil, err
+	}
+	differs, err := gitDiffTree(ctx, dir, rev, into, nil)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(changed))
+	for _, p := range changed {
+		set[p] = true
+	}
+	var unlanded []string
+	for _, p := range differs {
+		if set[p] {
+			unlanded = append(unlanded, p)
+		}
+	}
+	slices.Sort(unlanded)
+	return unlanded, nil
 }
 
 // checkConfiguredRemote refuses a remote name the repository has not configured. git
