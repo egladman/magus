@@ -903,6 +903,11 @@ func TestKnowledgeStampsInvalidateExactlyTheirClasses(t *testing.T) {
 	write(filepath.Join(root, "pkg", "a", "a.go"), "package a\n")
 	repo.Git("add", "-A")
 	repo.Git("commit", "-q", "-m", "c")
+	// git init wrote this ignore source, which the domain stamp folds, at the real time.
+	exclude := filepath.Join(root, ".git", "info", "exclude")
+	if _, err := os.Stat(exclude); err == nil {
+		require.NoError(t, os.Chtimes(exclude, settled, settled))
+	}
 
 	projects, spells := goWorkspace("pkg/a")
 	cfg := config.Config{

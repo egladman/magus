@@ -2,8 +2,11 @@ package knowledge
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -259,4 +262,51 @@ func TestInputHashPathSeesAbsenceAndChange(t *testing.T) {
 	assert.NotEqual(t, absent, present)
 	require.NoError(t, os.WriteFile(p, []byte("[1]"), 0o644))
 	assert.NotEqual(t, present, sum())
+}
+
+// movedInfo reports an mtime of its own over a real file's other attributes.
+type movedInfo struct {
+	fs.FileInfo
+	mtime time.Time
+}
+
+func (i movedInfo) ModTime() time.Time { return i.mtime }
+
+// /dev/null serves as core.excludesFile, and every write anyone makes to it moves its
+// mtime, so a stamp over it moved whenever any process on the machine wrote there.
+func TestInputHashFoldsACharDeviceByItsKindAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the null device is not a file on Windows")
+	}
+	info, err := os.Stat(os.DevNull)
+	require.NoError(t, err)
+	require.NotZero(t, info.Mode()&fs.ModeCharDevice)
+	sum := func(mtime time.Time) string {
+		h := NewInputHash("t")
+		h.file(os.DevNull, movedInfo{FileInfo: info, mtime: mtime})
+		return h.Sum()
+	}
+	old := time.Now().Add(-time.Hour)
+	assert.Equal(t, sum(old), sum(old.Add(time.Minute)), "a write moves the device's mtime, not what reading it yields")
+	assert.Equal(t, sum(old), sum(time.Now()), "nor is a recent one read")
+}
+
+func TestInputHashFoldsAPipeByItsKindAlone(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("named pipes are not files on Windows")
+	}
+	p := filepath.Join(t.TempDir(), "fifo")
+	// The mkfifo command rather than syscall.Mkfifo, which does not compile on Windows.
+	require.NoError(t, exec.CommandContext(t.Context(), "mkfifo", p).Run())
+	sum := func(mtime time.Time) string {
+		t.Helper()
+		require.NoError(t, os.Chtimes(p, mtime, mtime))
+		h := NewInputHash("t")
+		h.Path(p)
+		return h.Sum()
+	}
+	old := time.Now().Add(-time.Hour)
+	require.Equal(t, sum(old), sum(old.Add(time.Minute)), "a write moves a pipe's mtime, not what reading it yields")
+	// Opening the pipe would block here, with no writer ever coming.
+	assert.Equal(t, sum(old), sum(time.Now()), "nor is a recent one opened")
 }
