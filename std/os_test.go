@@ -19,8 +19,10 @@ import (
 	"github.com/egladman/magus/internal/sandbox"
 	"github.com/egladman/magus/internal/sandbox/filesystem"
 	buzzstd "github.com/egladman/magus/libs/gopherbuzz/std"
+	"github.com/egladman/magus/std/gen/mocks"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -589,23 +591,15 @@ func TestOsExecDefaultsToNotQuiet(t *testing.T) {
 	assert.Equal(t, "shown", res.Stdout)
 }
 
-// covRetryCallback fails its first failures attempts and then answers with ret.
-type covRetryCallback struct {
-	calls    int
-	failures int
-	ret      []any
-	err      error
-}
-
-func (c *covRetryCallback) Call(context.Context, ...any) ([]any, error) {
-	c.calls++
-	if c.calls <= c.failures {
-		if c.err != nil {
-			return nil, c.err
-		}
-		return nil, errors.New("attempt failed")
+// failThenAnswer is a Callback that fails its first failures calls and then answers once
+// with ret. A call past those fails the test.
+func failThenAnswer(t *testing.T, failures int, ret ...any) *mocks.MockCallback {
+	cb := mocks.NewMockCallback(t)
+	if failures > 0 {
+		cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Times(failures)
 	}
-	return c.ret, nil
+	cb.EXPECT().Call(mock.Anything).Return(ret, nil).Once()
+	return cb
 }
 
 // covFastRetry keeps the backoff below a millisecond so exercising the retry loop
@@ -613,38 +607,35 @@ func (c *covRetryCallback) Call(context.Context, ...any) ([]any, error) {
 var covFastRetry = map[string]any{"backoff_ms": 0.1, "max_backoff_ms": 1.0}
 
 func TestOsRetryReturnsTheFirstSuccess(t *testing.T) {
-	cb := &covRetryCallback{ret: []any{"answer"}}
-	got, err := OsRetry(context.Background(), 3, cb, nil)
+	// Once: a success must not be retried.
+	got, err := OsRetry(context.Background(), 3, failThenAnswer(t, 0, "answer"), nil)
 	require.NoError(t, err)
 	assert.Equal(t, "answer", got)
-	assert.Equal(t, 1, cb.calls, "a success must not be retried")
 }
 
 func TestOsRetryRetriesUntilItSucceeds(t *testing.T) {
-	cb := &covRetryCallback{failures: 2, ret: []any{42}}
-	got, err := OsRetry(context.Background(), 5, cb, covFastRetry)
+	got, err := OsRetry(context.Background(), 5, failThenAnswer(t, 2, 42), covFastRetry)
 	require.NoError(t, err)
 	assert.Equal(t, 42, got)
-	assert.Equal(t, 3, cb.calls)
 }
 
 // TestOsRetryWithNoReturnValue: a callback that returns nothing succeeded, so the
 // result is the no-value result rather than an error.
 func TestOsRetryWithNoReturnValue(t *testing.T) {
-	got, err := OsRetry(context.Background(), 2, &covRetryCallback{}, nil)
+	got, err := OsRetry(context.Background(), 2, failThenAnswer(t, 0), nil)
 	require.NoError(t, err)
 	assert.Nil(t, got)
 }
 
 func TestOsRetryExhaustsAndReportsTheLastError(t *testing.T) {
 	boom := errors.New("still broken")
-	cb := &covRetryCallback{failures: 99, err: boom}
+	cb := mocks.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything).Return(nil, boom).Times(3)
 
 	_, err := OsRetry(context.Background(), 3, cb, covFastRetry)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, boom, "the caller needs the reason, not just the count")
 	assert.Contains(t, err.Error(), `os\retry: 3 attempt(s)`)
-	assert.Equal(t, 3, cb.calls)
 }
 
 func TestOsRetryRejectsANilCallback(t *testing.T) {
@@ -669,8 +660,7 @@ func TestOsRetryReadsIntegerBackoffOptions(t *testing.T) {
 		{"unusable values fall back to the defaults", map[string]any{"backoff_ms": "not a number", "max_backoff_ms": nil}, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := &covRetryCallback{failures: tc.failures, ret: []any{"ok"}}
-			got, err := OsRetry(context.Background(), 2, cb, tc.opts)
+			got, err := OsRetry(context.Background(), 2, failThenAnswer(t, tc.failures, "ok"), tc.opts)
 			require.NoError(t, err)
 			assert.Equal(t, "ok", got)
 		})
@@ -683,10 +673,11 @@ func TestOsRetryHonorsCancellationDuringBackoff(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	cb := &covRetryCallback{failures: 99}
+	// Once: the cancellation must land in the first backoff.
+	cb := mocks.NewMockCallback(t)
+	cb.EXPECT().Call(mock.Anything).Return(nil, errors.New("attempt failed")).Once()
 	_, err := OsRetry(ctx, 3, cb, map[string]any{"backoff_ms": 60000.0})
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.Equal(t, 1, cb.calls, "the cancellation must land in the first backoff")
 }
 
 // TestOsWithEnv: the overrides ride the context so subprocesses started inside the
