@@ -284,15 +284,26 @@ fun olderThanWindow(marker: str) > bool {
     return os\time() - mtime! > minutes * 60000.0;
 }
 
+// tempBase is the directory fs\tempDir makes its directories in. No std member
+// names it, so a probe is made and removed.
+fun tempBase() > str {
+    final probe = fs\tempDir("magus-guard-notices-") catch "";
+    if (probe == "") { return envOr("TMPDIR", fallback: "/tmp"); }
+    fs\removeAll(probe) catch void;
+    return fs\dirname(probe);
+}
+
 // noticeOnce holds a broken-installation notice to one firing per session.
 //
 // The notices report a broken installation. That is a fact for the person, and
 // there is nothing in it an agent can act on, so a repeat is noise: measured at
 // 2,741 firings over recent sessions, 99% of them same-session repeats.
 //
-// The marker lives under TMPDIR, per user, because a world-writable /tmp lets
-// anyone pre-create someone else's marker and silence their notices. This runs
-// when magus cannot be asked for a place to put it. A host that reports no
+// The marker lives in the temp dir fs\tempDir uses, per user, because a
+// world-writable /tmp lets anyone pre-create someone else's marker and silence
+// their notices. Under the sandbox that is the policy's private temp dir, fixed per
+// workspace: the shared TMPDIR is granted to no sandboxed run. This runs when
+// magus cannot be asked for a place to put it. A host that reports no
 // session id shares one marker, aged out after __MAGUS_NOTICE_WINDOW minutes, so
 // the first session cannot silence every later one.
 //
@@ -300,8 +311,7 @@ fun olderThanWindow(marker: str) > bool {
 // line with the entry's matcher at best, and a reader with several entries
 // needs to know which file said it.
 export fun noticeOnce(session: str, family: str, file: str) > bool {
-    final tmp = envOr("TMPDIR", fallback: "/tmp");
-    final dir = "{tmp}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
+    final dir = "{tempBase()}/magus-guard-notices-{fileSafe(envOr("USER", fallback: "anon"))}";
     var key = session;
     if (key == "") { key = "anon"; }
     final marker = "{dir}/{fileSafe(key)}.{fileSafe(family)}";
