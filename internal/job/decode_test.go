@@ -209,7 +209,7 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, []string{"internal/job"}, rows[0].WritePaths)
-	assert.Equal(t, types.JobState("declared"), rows[0].State)
+	assert.Empty(t, rows[0].State, "the status a described row prints is the store's, and apply never writes one")
 
 	typo := strings.Replace(stored, `"write_paths"`, `"write_pathz"`, 1)
 	_, err = DecodeDeclarations(strings.NewReader(typo))

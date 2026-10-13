@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/internal/json"
@@ -136,9 +137,10 @@ var storeStamped = []string{
 	"waiter_evidence",
 }
 
-// dropStoreStamped is raw without the members in storeStamped, and without `validation`
-// beside a `check`: a stored row renders its check into that line, and a declaration
-// carrying both is refused. A record that is not an object comes back as it was, for
+// dropStoreStamped is raw without the members in storeStamped; without `state`, the
+// status a described row prints and apply never writes; and without `validation` beside a
+// `check`: a stored row renders its check into that line, and a declaration carrying both
+// is refused. A record that is not an object comes back as it was, for
 // [DecodeDeclaration] to refuse in its own words.
 func dropStoreStamped(raw []byte) ([]byte, error) {
 	var members map[string]json.RawMessage
@@ -146,7 +148,7 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 		return raw, nil
 	}
 	dropped := false
-	for _, name := range storeStamped {
+	for _, name := range append(slices.Clone(storeStamped), "state") {
 		if _, ok := members[name]; ok {
 			delete(members, name)
 			dropped = true
