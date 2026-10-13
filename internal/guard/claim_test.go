@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -68,7 +69,10 @@ func TestGradeClaimedDeclarations(t *testing.T) {
 		{name: "every edit of a sequence is placed", lease: "own-b", fields: writeFields{Edits: []textEdit{
 			{OldText: "b()", NewText: "b2()"}, {OldText: "a()", NewText: "a2()"},
 		}}, denied: true},
-		{name: "a whole-file write keeps the path verdict", lease: "own-b", fields: writeFields{Content: "package run\n"}},
+		{name: "a whole-file write inside its own claim", lease: "own-b", fields: writeFields{Content: strings.Replace(claimedGo, "b()", "b2()", 1)}},
+		{name: "a whole-file write changing another job's declaration", lease: "own-b", fields: writeFields{Content: strings.Replace(claimedGo, "a()", "a2()", 1)}, denied: true},
+		{name: "a whole-file write deleting another job's declaration", lease: "own-b", fields: writeFields{Content: "package run\n"}, denied: true},
+		{name: "a whole-file write leaving the file as it is", lease: "own-b", fields: writeFields{Content: claimedGo}},
 		{name: "an edit that does not apply keeps the path verdict", lease: "own-b", fields: edit("absent()", "x()")},
 		{name: "an ambiguous edit keeps the path verdict", lease: "own-b", fields: edit("()", "(x)")},
 		{name: "a writer holding the whole file", lease: "own-file", fields: edit("a()", "a2()")},
@@ -111,8 +115,10 @@ func TestJudgeDeniesAnEditIntoAnotherJobsDeclaration(t *testing.T) {
 	assert.Equal(t, "deny", multi.Decision, "every edit of a list is placed")
 
 	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "old_string": "b()", "new_string": "b2()"}).Decision)
-	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
-		"a whole-file write carries no edit to place, and the writer's claim covers the file")
+	assert.NotEqual(t, "deny", judge(map[string]any{"file_path": run, "content": strings.Replace(claimedGo, "b()", "b2()", 1)}).Decision,
+		"a whole-file write that changes only the writer's declaration is placed like an edit and passes")
+	assert.Equal(t, "deny", judge(map[string]any{"file_path": run, "content": "package run\n"}).Decision,
+		"a whole-file write that drops another job's declaration is placed like an edit and denied")
 }
 
 func TestApplyEdits(t *testing.T) {
