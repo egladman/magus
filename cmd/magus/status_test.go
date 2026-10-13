@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/config"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/interactive/tty"
@@ -120,6 +121,32 @@ func TestPrintStatusCompact(t *testing.T) {
 			RunningTargets: []types.StatusRunningTarget{{Args: []string{}, Workspace: "/w", StartedAt: at(100 * time.Millisecond)}},
 		}},
 		"no broker · server up · pool 1/4 running · ?:?(0.1s)\n")
+}
+
+func TestPrintWorkByOwnerGroupsWhatRunsAndSaysWhatWasStopped(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	var out bytes.Buffer
+	printWorkByOwner(&out, broker.WorkReport{
+		Running: []broker.Work{
+			{Kind: broker.WorkRun, Lease: "plan/a", PID: 10, Command: "magus run go-test .", Dir: "/w/a", Since: now.Add(-12 * time.Minute), Slots: 4},
+			{Kind: broker.WorkExec, PID: 11, Command: "rg -l TODO", Dir: "/w", Since: now.Add(-3 * time.Minute), Slots: 1, Deadline: now.Add(7 * time.Minute)},
+			{Kind: broker.WorkExec, Lease: "plan/a", PID: 12, Command: "sleep 600", Dir: "/w/a", Since: now.Add(-time.Hour), Deadline: now.Add(-time.Second)},
+		},
+		Ended: []broker.Ended{{Work: broker.Work{Kind: broker.WorkExec, Lease: "plan/b", Command: "rg x"}, Reason: "passed its deadline (2026-10-13T11:58:00Z)", At: now.Add(-2 * time.Minute)}},
+	}, now)
+	text := out.String()
+
+	assert.Contains(t, text, "work by owner")
+	assert.Less(t, strings.Index(text, "  plan/a\n"), strings.Index(text, "  unleased\n"), "owners in the order their oldest work started")
+	assert.Equal(t, 1, strings.Count(text, "  plan/a\n"), "one heading per owner")
+	assert.Regexp(t, `run\s+pid 10\s+up 12m0s\s+slots 4\s+no deadline\s+magus run go-test \.\s+/w/a`, text)
+	assert.Regexp(t, `exec\s+pid 11\s+up 3m0s\s+slots 1\s+deadline in 7m0s\s+rg -l TODO`, text)
+	assert.Contains(t, text, "past its deadline")
+	assert.Regexp(t, `plan/b\s+exec\s+2m0s ago\s+rg x\s+passed its deadline`, text)
+
+	out.Reset()
+	printWorkByOwner(&out, broker.WorkReport{}, now)
+	assert.Empty(t, out.String(), "nothing runs, nothing to say")
 }
 
 func TestClampStatusWatch(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/internal/cache"
 	internalci "github.com/egladman/magus/internal/ci"
 	"github.com/egladman/magus/internal/config"
@@ -1209,11 +1211,23 @@ func printJobEntries(out io.Writer, entries []types.JobEntry) {
 // believes it is on is a holder reporting a belief; the divergence this records is only
 // worth anything if the value comes from the tree.
 func jobExec(ctx context.Context, root string, args []string) error {
-	var base string
+	var (
+		base    string
+		timeout time.Duration
+		slots   int
+	)
+	var command []string
+	sep := slices.Index(args, "--")
+	if sep >= 0 {
+		args, command = args[:sep], args[sep+1:]
+	}
 	pos, err := cmdParse("job exec", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&base, "base", "", "The base this checkout landed on, as `magus vcs checkpoint -o name` prints it (default: read from this checkout)")
+		fs.DurationVar(&timeout, "timeout", 0, "Run the command after -- and stop its whole process group once this long has passed (exit 124)")
+		fs.IntVar(&slots, "slots", 1, "The machine budget slots the command after -- takes while it runs")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus job exec <job> [flags]")
+			fmt.Fprintln(os.Stderr, "       magus job exec --timeout <duration> [--slots N] -- <command> [args...]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Take a job here: record the base this tree is on beside the checkpoint the job")
 			fmt.Fprintln(os.Stderr, "was handed, with the divergence between them as a fact rather than a refusal,")
@@ -1231,10 +1245,19 @@ func jobExec(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "already, and exec only records its base.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Taking a different job is refused while the one held is still declared or")
-			fmt.Fprintln(os.Stderr, "running; once it has exited or ended, exec takes the next one.")
+			fmt.Fprintln(os.Stderr, "running; once it has exited or ended, exec takes the next one. A job that ended")
+			fmt.Fprintln(os.Stderr, "because its holder's session did is taken back by exec in the same checkout.")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Example:")
+			fmt.Fprintln(os.Stderr, "With --timeout and a command after --, exec takes no job: it runs the command in")
+			fmt.Fprintln(os.Stderr, "its own process group, owned by your lease (BAGGAGE magus.lease or this checkout's")
+			fmt.Fprintln(os.Stderr, "binding) or by nobody, and stops the whole group once the timeout passes. The")
+			fmt.Fprintln(os.Stderr, "broker records the command with its owner, deadline and slots for `magus status`,")
+			fmt.Fprintln(os.Stderr, "stops the group if this process dies first, and files one attention row for")
+			fmt.Fprintln(os.Stderr, "each command it stops. The exit status is the command's, or 124 at the deadline.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "Examples:")
 			fmt.Fprintln(os.Stderr, "  magus job exec refactor/pricing   # in the worktree you will edit")
+			fmt.Fprintln(os.Stderr, "  magus job exec --timeout 20m -- rg -l TODO ~/src")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			printOwnDefaults(fs)
@@ -1242,6 +1265,9 @@ func jobExec(ctx context.Context, root string, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+	if sep >= 0 || timeout != 0 {
+		return jobExecCommand(ctx, root, pos, base, timeout, slots, command)
 	}
 	if len(pos) != 1 {
 		return usagef("magus job exec: requires exactly one job (`%s` lists them)", hint.LsJobs)
@@ -1279,6 +1305,109 @@ func jobExec(ctx context.Context, root string, args []string) error {
 		return nil
 	default:
 		return emitFormatted(opts, stored)
+	}
+}
+
+// jobExecGrace is how long a command asked to stop at its deadline has before its group
+// is killed.
+const jobExecGrace = 10 * time.Second
+
+// jobExecCommand is `magus job exec --timeout D -- cmd`: it runs cmd as the leader of its
+// own process group, owned by the caller's lease, and stops the whole group at the
+// deadline. The broker is told what runs, so `magus status` shows it by owner and the
+// broker stops the group if this process dies first; this process enforces the deadline
+// itself too, so the bound holds with no broker (broker: off, or none answered).
+//
+// Nothing about it is for agents only: a person bounds a long search the same way.
+func jobExecCommand(ctx context.Context, root string, pos []string, base string, timeout time.Duration, slots int, command []string) error {
+	switch {
+	case len(pos) > 0 || base != "":
+		return usagef("magus job exec: a command after -- runs under your own lease and takes no job; drop %q",
+			strings.Join(append(pos, base), " "))
+	case timeout <= 0:
+		return usagef("magus job exec: a command after -- needs --timeout, a positive duration such as 10m: nothing else ends it")
+	case len(command) == 0:
+		return usagef("magus job exec: --timeout bounds the command after --, and none follows it")
+	case slots < 1:
+		return usagef("magus job exec: --slots is %d; a running command takes at least 1", slots)
+	}
+	root = resolveRootOrEmpty(root)
+	spawn := trail.SpawnFromEnv()
+	lease := spawn.Lease
+	if root != "" {
+		if cacheDir, err := magus.ResolveCacheDir(root, magus.WithLoadedConfig(globalCfg)); err == nil {
+			lease, _ = job.ActingLease(cacheDir, spawn.Lease)
+		}
+	}
+
+	cmd := exec.Command(command[0], command[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	broker.InOwnGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("magus job exec: %w", err)
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	h := broker.Hold{
+		Lease: lease, Spawner: spawn.Spawner, PGID: cmd.Process.Pid, Command: strings.Join(command, " "),
+		Root: root, Slots: slots, Deadline: time.Now().Add(timeout),
+	}
+	release := holdWithBroker(ctx, h)
+	defer release()
+
+	timer := time.NewTimer(time.Until(h.Deadline))
+	defer timer.Stop()
+	select {
+	case err := <-exited:
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) {
+			return err
+		}
+		// A command a signal ended has no status of its own; it failed.
+		return types.ExitError{Code: max(exit.ExitCode(), 1)}
+	case <-ctx.Done():
+		stopGroup(h.PGID, exited)
+		return ctx.Err()
+	case <-timer.C:
+		stopGroup(h.PGID, exited)
+		job.NoteEnded(ctx, root, lease, broker.EndedMessage(h, h.DeadlineReason()))
+		return types.ExitError{Code: 124, Err: fmt.Errorf("magus job exec: `%s` ran past its %s timeout, so its process group was stopped",
+			h.Command, timeout)}
+	}
+}
+
+// holdWithBroker hands h to the broker and returns what releases it. A broker that is
+// off or does not answer leaves the deadline to this process alone, and says so once.
+func holdWithBroker(ctx context.Context, h broker.Hold) func() {
+	if globalCfg.Broker.Resolved() == types.BrokerOff {
+		return func() {}
+	}
+	hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	client := processBrokerClient()
+	id, err := client.Hold(hctx, h)
+	if err != nil {
+		slog.WarnContext(ctx, "the broker is not watching this command, so `magus status` will not show it; this process still stops it at its deadline",
+			attr.Error(err))
+		return func() {}
+	}
+	return func() {
+		rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		client.ReleaseHold(rctx, id)
+	}
+}
+
+// stopGroup asks group pgid to stop, kills it if its leader has not exited within
+// jobExecGrace, and returns once the leader has.
+func stopGroup(pgid int, exited <-chan error) {
+	_ = broker.SignalGroup(pgid, false)
+	select {
+	case <-exited:
+	case <-time.After(jobExecGrace):
+		_ = broker.SignalGroup(pgid, true)
+		<-exited
 	}
 }
 

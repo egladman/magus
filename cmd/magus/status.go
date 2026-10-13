@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/broker"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
@@ -80,7 +81,16 @@ func status(ctx context.Context, args []string) error {
 	}
 
 	if f.Watch == 0 {
-		return printStatus(buildStatusSnapshot(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
+		snapshot := buildStatusSnapshot(ctx, f.Socket, f.Symbols)
+		if err := printStatus(snapshot, opts, 0, f.Compact); err != nil {
+			return err
+		}
+		if snapshot.Broker != nil && opts.Format == outputText && !f.Compact {
+			if work, err := queryWork(ctx); err == nil {
+				printWorkByOwner(os.Stdout, work, time.Now())
+			}
+		}
+		return nil
 	}
 	f.Watch = clampStatusWatch(f.Watch)
 
@@ -594,6 +604,60 @@ func printBrokerRows(w io.Writer, st types.StatusBroker, policy types.BrokerPoli
 		fmt.Fprintf(tw, "draining\t-\tseats nothing new; exits once what it holds is released\n")
 	case st.IdleExitSeconds > 0:
 		fmt.Fprintf(tw, "idle\t-\texits after %s holding nothing\n", formatDur(time.Duration(st.IdleExitSeconds)*time.Second))
+	}
+	_ = tw.Flush()
+}
+
+// queryWork asks the broker what runs against it and who owns each piece.
+func queryWork(ctx context.Context) (broker.WorkReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	return broker.QueryWork(ctx, broker.DefaultAddr())
+}
+
+// printWorkByOwner renders what runs against the broker grouped by owner (a job lease,
+// or unleased for a person or a root session), each with its kind, pid, age, slots and
+// deadline, then the work the broker stopped lately and why. It prints nothing when
+// nothing runs and nothing was stopped.
+func printWorkByOwner(w io.Writer, r broker.WorkReport, now time.Time) {
+	if len(r.Running) == 0 && len(r.Ended) == 0 {
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	if len(r.Running) > 0 {
+		fmt.Fprintln(tw, "\nwork by owner")
+		byOwner := map[string][]broker.Work{}
+		var owners []string
+		for _, work := range r.Running {
+			o := work.Owner()
+			if _, seen := byOwner[o]; !seen {
+				owners = append(owners, o)
+			}
+			byOwner[o] = append(byOwner[o], work)
+		}
+		for _, o := range owners {
+			fmt.Fprintf(tw, "  %s\n", o)
+			for _, work := range byOwner[o] {
+				deadline := "no deadline"
+				switch left := work.Deadline.Sub(now).Round(time.Second); {
+				case work.Deadline.IsZero():
+				case left > 0:
+					deadline = "deadline in " + formatDur(left)
+				default:
+					deadline = "past its deadline"
+				}
+				fmt.Fprintf(tw, "    %s\tpid %d\tup %s\tslots %d\t%s\t%s\t%s\n", work.Kind, work.PID,
+					cmp.Or(formatDur(now.Sub(work.Since).Round(time.Second)), "0s"), max(work.Slots, 1), deadline,
+					truncate(work.Command, 60), work.Dir)
+			}
+		}
+	}
+	if len(r.Ended) > 0 {
+		fmt.Fprintln(tw, "\nstopped by the broker")
+		for _, e := range r.Ended {
+			fmt.Fprintf(tw, "  %s\t%s\t%s ago\t%s\t%s\n", e.Owner(), e.Kind,
+				cmp.Or(formatDur(now.Sub(e.At).Round(time.Second)), "0s"), truncate(e.Command, 60), e.Reason)
+		}
 	}
 	_ = tw.Flush()
 }

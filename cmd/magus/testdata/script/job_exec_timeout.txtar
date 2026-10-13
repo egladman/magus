@@ -1,0 +1,27 @@
+# `magus job exec --timeout D -- cmd` runs a command under a deadline: a command that ends
+# in time keeps its own output and status, and one that runs past it has its whole
+# process group stopped, exits 124, and leaves one attention row for the root. The
+# scripts run with the broker off, so this is the bound the process enforces itself.
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+cd shop
+
+exec magus job exec --timeout 30s -- sh -c 'echo ran'
+stdout '^ran$'
+
+! exec magus job exec --timeout 30s -- sh -c 'exit 3'
+
+! exec magus job exec --timeout 1s -- sh -c 'sleep 60 & sleep 60'
+stderr 'ran past its 1s timeout, so its process group was stopped'
+exec magus session attention
+stdout 'magus stopped .*sleep 60'
+
+! exec magus job exec -- echo unbounded
+stderr 'needs --timeout'
+! exec magus job exec --timeout 30s
+stderr 'none follows it'
+! exec magus job exec shop/a --timeout 30s -- echo x
+stderr 'takes no job'
+
+-- shop/magus.yaml --
+-- shop/magusfile.buzz --
