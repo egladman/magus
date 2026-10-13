@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -151,7 +152,7 @@ func TestVoiceBuildExitsTwoOnInputItCannotUse(t *testing.T) {
 		args        []string
 		want        string
 	}{
-		{"no subcommand", "", []string{"voice"}, "proofread: voice takes one subcommand, build\n"},
+		{"no subcommand", "", []string{"voice"}, "proofread: voice takes a subcommand, build or eval\n"},
 		{"no kind", "It works.", []string{"voice", "build"},
 			"proofread: name the texts' kind with -kind, or with -kind-field for JSON lines\n"},
 		{"a kind field alone", "It works.", []string{"voice", "build", "-kind-field", "type"},
@@ -167,6 +168,127 @@ func TestVoiceBuildExitsTwoOnInputItCannotUse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			if code, _, stderr := runVoiceArgs(t, tc.stdin, tc.args...); code != exitError || stderr != tc.want {
 				t.Errorf("run: code %d stderr %q, want code 2 stderr %q", code, stderr, tc.want)
+			}
+		})
+	}
+}
+
+// jsonLines is a JSON-lines file in dir holding each text under "text" and,
+// when kind is not empty, its kind under "kind".
+func jsonLines(t *testing.T, dir, name, kind string, texts []string) string {
+	t.Helper()
+
+	var b strings.Builder
+
+	for _, text := range texts {
+		record := map[string]string{"text": text}
+		if kind != "" {
+			record["kind"] = kind
+		}
+
+		line, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		b.Write(append(line, '\n'))
+	}
+
+	return writeFile(t, dir, name, b.String())
+}
+
+func evalFiles(t *testing.T) (owner, other string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	semis := make([]string, 5)
+	commas := make([]string, 5)
+
+	// The two sets differ only in the mark joining the clauses.
+	for i := range semis {
+		semis[i] = fmt.Sprintf("Case %d builds; the cache holds it.", i)
+		commas[i] = fmt.Sprintf("Case %d builds, the cache holds it.", i)
+	}
+
+	return jsonLines(t, dir, "owner.jsonl", "review-reply", semis), jsonLines(t, dir, "other.jsonl", "", commas)
+}
+
+func TestVoiceEvalPrintsEachFeatureBySeparation(t *testing.T) {
+	owner, other := evalFiles(t)
+
+	code, stdout, stderr := runVoiceArgs(t, "", "voice", "eval", "-owner", owner, "-other", other, "-kind", "review-reply")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("voice eval: code %d stderr %q", code, stderr)
+	}
+
+	lines := strings.Split(stdout, "\n")
+	if lines[0] != "review-reply: 5 owner texts, 5 other texts" {
+		t.Errorf("header = %q", lines[0])
+	}
+
+	rows := map[string][]string{}
+
+	for _, line := range lines[1:] {
+		if fields := strings.Fields(line); len(fields) > 0 {
+			rows[fields[0]] = fields[1:]
+		}
+	}
+
+	want := map[string][]string{
+		"punctuation.comma":     {"0.000", "5", "5", "owner", "lower"},
+		"punctuation.semicolon": {"1.000", "5", "5", "owner", "higher"},
+		"layout.bold":           {"0.500", "5", "5", "no", "difference"},
+	}
+	for feature, w := range want {
+		if !slices.Equal(rows[feature], w) {
+			t.Errorf("%s = %q, want %q", feature, rows[feature], w)
+		}
+	}
+}
+
+func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
+	owner, other := evalFiles(t)
+
+	code, stdout, stderr := runVoiceArgs(t, "", "voice", "eval", "-owner", owner, "-other", other, "-kind", "review-reply",
+		"-format", "json")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("voice eval: code %d stderr %q", code, stderr)
+	}
+
+	var got map[proofread.Kind][]proofread.Separation
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("decode %q: %v", stdout, err)
+	}
+
+	semicolon := proofread.Separation{Feature: "punctuation.semicolon", AUC: 1, Owner: 5, Other: 5}
+	if len(got) != 1 || !slices.Contains(got[proofread.KindReviewReply], semicolon) {
+		t.Errorf("separations = %+v, want review-reply alone, holding %+v", got, semicolon)
+	}
+}
+
+func TestVoiceEvalExitsTwoOnInputItCannotUse(t *testing.T) {
+	owner, other := evalFiles(t)
+
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no other file", []string{"-owner", owner}, "proofread: voice eval needs -owner and -other\n"},
+		{"an operand", []string{"-owner", owner, "-other", other, "x.md"}, "proofread: voice eval reads -owner and -other, not x.md\n"},
+		{"an unknown format", []string{"-owner", owner, "-other", other, "-format", "sarif"},
+			"proofread: unknown format \"sarif\": write text or json\n"},
+		{"no kind for a line", []string{"-owner", owner, "-other", other},
+			fmt.Sprintf("proofread: %s:1: no string field \"kind\" names a kind, and -kind gives none\n", other)},
+		{"an unknown kind", []string{"-owner", owner, "-other", other, "-kind", "poem"},
+			fmt.Sprintf("proofread: %s: unknown kind \"poem\"\n", other)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			code, stdout, stderr := runVoiceArgs(t, "", append([]string{"voice", "eval"}, tc.args...)...)
+			if code != exitError || stdout != "" || stderr != tc.want {
+				t.Errorf("run: code %d stdout %q stderr %q, want code 2 stderr %q", code, stdout, stderr, tc.want)
 			}
 		})
 	}

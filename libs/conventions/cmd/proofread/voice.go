@@ -8,20 +8,31 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/egladman/magus/libs/conventions/proofread"
 )
 
-// runVoice runs `proofread voice build`, the one voice subcommand.
-func runVoice(args []string, stdin io.Reader, stderr io.Writer) int {
-	if len(args) == 0 || args[0] != "build" {
-		return failure(stderr, errors.New("voice takes one subcommand, build"))
+// runVoice runs `proofread voice build` or `proofread voice eval`.
+func runVoice(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		switch args[0] {
+		case "build":
+			return runVoiceBuild(args[1:], stdin, stderr)
+		case "eval":
+			return runVoiceEval(args[1:], stdout, stderr)
+		}
 	}
 
+	return failure(stderr, errors.New("voice takes a subcommand, build or eval"))
+}
+
+func runVoiceBuild(args []string, stdin io.Reader, stderr io.Writer) int {
 	fs := flag.NewFlagSet("proofread voice build", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	kind := fs.String("kind", "", "the `kind` of every text, or of every JSON line naming none")
@@ -29,7 +40,7 @@ func runVoice(args []string, stdin io.Reader, stderr io.Writer) int {
 	kindField := fs.String("kind-field", "", "with -field, take each text's kind from this `field`")
 	out := fs.String("o", "", "write the voice file to this `path` (default $XDG_CONFIG_HOME/proofread/voice.json)")
 
-	if err := fs.Parse(args[1:]); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
 
@@ -62,6 +73,134 @@ func runVoice(args []string, stdin io.Reader, stderr io.Writer) int {
 	fmt.Fprint(stderr, voiceSummary(v, path))
 
 	return exitOK
+}
+
+// runVoiceEval scores, per kind, how far each shape feature separates the
+// owner's texts from the other texts. It reads the two files and writes
+// nothing else.
+func runVoiceEval(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("proofread voice eval", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	owner := fs.String("owner", "", "read the owner's texts as JSON lines from this `file`")
+	other := fs.String("other", "", "read the texts to tell them from as JSON lines from this `file`")
+	kind := fs.String("kind", "", "the `kind` of every JSON line naming none")
+	field := fs.String("field", "text", "take each text from this `field`")
+	kindField := fs.String("kind-field", "kind", "take each text's kind from this `field`")
+	format := fs.String("format", "text", "write the separations as `text` or json")
+
+	if err := fs.Parse(args); err != nil {
+		return exitError
+	}
+
+	switch {
+	case *owner == "" || *other == "":
+		return failure(stderr, errors.New("voice eval needs -owner and -other"))
+	case fs.NArg() > 0:
+		return failure(stderr, fmt.Errorf("voice eval reads -owner and -other, not %s", strings.Join(fs.Args(), " ")))
+	case *format != "text" && *format != "json":
+		return failure(stderr, fmt.Errorf("unknown format %q: write text or json", *format))
+	case *field == "":
+		return failure(stderr, errors.New("voice eval reads JSON lines: name the text's field with -field"))
+	}
+
+	read := func(path string) (map[proofread.Kind][]proofread.Shape, error) {
+		texts, err := voiceTexts(proofread.Kind(*kind), *field, *kindField, []string{path}, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		out := map[proofread.Kind][]proofread.Shape{}
+
+		for k, list := range texts {
+			if !slices.ContainsFunc(subcommands, func(s subcommand) bool { return s.kind == k }) {
+				return nil, fmt.Errorf("%s: unknown kind %q", path, k)
+			}
+
+			for _, text := range list {
+				out[k] = append(out[k], proofread.MeasureShape(text, k))
+			}
+		}
+
+		return out, nil
+	}
+
+	owners, err := read(*owner)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	others, err := read(*other)
+	if err != nil {
+		return failure(stderr, err)
+	}
+
+	kinds := slices.Collect(maps.Keys(owners))
+	for k := range others {
+		if _, ok := owners[k]; !ok {
+			kinds = append(kinds, k)
+		}
+	}
+
+	slices.Sort(kinds)
+
+	seps := make(map[proofread.Kind][]proofread.Separation, len(kinds))
+	for _, k := range kinds {
+		seps[k] = proofread.Separate(owners[k], others[k])
+	}
+
+	if *format == "json" {
+		data, err := json.MarshalIndent(seps, "", "  ")
+		if err != nil {
+			return failure(stderr, fmt.Errorf("encode the separations: %w", err))
+		}
+
+		fmt.Fprintf(stdout, "%s\n", data)
+
+		return exitOK
+	}
+
+	for i, k := range kinds {
+		if i > 0 {
+			fmt.Fprintln(stdout)
+		}
+
+		fmt.Fprint(stdout, separationTable(k, len(owners[k]), len(others[k]), seps[k]))
+	}
+
+	return exitOK
+}
+
+// separationTable is a header naming kind and its counts, then one aligned
+// line per separation.
+func separationTable(kind proofread.Kind, owner, other int, seps []proofread.Separation) string {
+	var b strings.Builder
+
+	fmt.Fprintf(&b, "%s: %d owner texts, %d other texts\n", kind, owner, other)
+
+	if len(seps) == 0 {
+		fmt.Fprintf(&b, "  no feature measured on 5 texts on each side\n")
+
+		return b.String()
+	}
+
+	tw := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+
+	for _, s := range seps {
+		direction := "no difference"
+
+		switch {
+		case s.AUC > 0.5:
+			direction = "owner higher"
+		case s.AUC < 0.5:
+			direction = "owner lower"
+		}
+
+		fmt.Fprintf(tw, "  %s\t%.3f\t%d\t%d\t%s\n", s.Feature, s.AUC, s.Owner, s.Other, direction)
+	}
+
+	_ = tw.Flush()
+
+	return b.String()
 }
 
 // voiceTexts reads the texts to measure, keyed by kind. With field, every

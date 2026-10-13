@@ -34,6 +34,13 @@
 // (under the OS config directory when unset), and refuses a default path
 // inside a git work tree.
 //
+// voice eval reads two files of JSON lines, the owner's texts in -owner and
+// the texts to tell them from in -other, measures each text's shape under its
+// kind, and prints per kind every feature's AUC: the chance an owner text
+// measures higher than an other text. Each text is in -field, "text" by
+// default, and its kind in -kind-field, "kind" by default, or -kind. -format
+// json writes the scores per kind as JSON. It writes no file.
+//
 // commit-message reads the message from stdin, or from the file its argument
 // names, as a VCS hook passes it: lines starting with "#" and the scissors line
 // with everything after it are not part of the message, and a finding's line is
@@ -153,7 +160,8 @@ var subcommands = []subcommand{
 	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
 	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
-	{"voice", "", "build [FILE...]", "measure your own texts into the voice file -voice reads"},
+	{"voice build", "", "[FILE...]", "measure your own texts into the voice file -voice reads"},
+	{"voice eval", "", "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
@@ -210,7 +218,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "stats":
 		return runStats(rest, stdout, stderr)
 	case "voice":
-		return runVoice(rest, stdin, stderr)
+		return runVoice(rest, stdin, stdout, stderr)
 	}
 
 	for _, s := range subcommands {
