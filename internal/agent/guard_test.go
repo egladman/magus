@@ -202,8 +202,6 @@ var templateDirScaffolding = map[string]bool{
 	"pnpm-lock.yaml":          true,
 	"magusfile.buzz":          true,
 	"opencode-plugin.test.ts": true,
-	"host-e2e.ts":             true,
-	"host-e2e.test.ts":        true,
 	// Emits testdata/hosts/cursor/gen from @cursor/sdk's published zod. A generator
 	// magus runs, not an artifact a reader installs into a host, so it owes the parity
 	// gates nothing: no guide embeds it and no host wires it.

@@ -163,7 +163,7 @@ Claude Code is the reference contract: parity means every supported adapter
 exercises the same guard decision cells and preserves the verdict semantics.
 It does not mean vendors expose the same tools, payloads, or lifecycle events.
 
-## Manual host end-to-end harness
+## Host end-to-end suite
 
 The ordinary checks are deterministic: vendored schemas validate configuration
 and reply shapes, and the fixture-driven transport cases execute every guard
@@ -171,47 +171,56 @@ decision cell against the shipped adapters. That proves the guard's decision
 and adapter behavior for controlled events; it does not prove that a locally
 installed vendor client discovers configuration or dispatches a real hook.
 
-That separate, opt-in end-to-end check currently proves one narrow boundary:
-host discovery and delivery of a **denied command**. It is not a general host
-certification or a replacement for the deterministic cases:
+The Go suite in `internal/hoste2e` proves that part. It sits behind the `e2e`
+build tag, so a normal `go test` never compiles it, and it spends model tokens
+and the local logins of every host it drives. Run it on demand through the
+`go-test` target:
 
 ```sh
-MAGUS_HOST_E2E=1 magus run host-integration docs/guides/integrations/agents -- \
-  host-e2e/claude-code.json host-e2e/codex.json host-e2e/opencode.json
+magus run go-test . -- -tags e2e -run TestHosts -count=1 -v
 ```
 
-It is deliberately not part of `ci` or `magus affected ci`. The runner makes a
-temporary Magus workspace and applies each supplied descriptor's isolated host
-configuration, then asks the host to use Bash for the denied command. The guard must
-intercept that call and render a deny; a broken hook can affect only the
-temporary workspace. A missing selected host is reported as a structured skip,
-while an installed host that never dispatches its hook is a failure. A run in
-which every selected host skips is inconclusive and exits nonzero
-rather than looking like a pass. Failures retain their workspace with the trace,
-generated configuration, and capped host stdout/stderr logs for inspection.
-Successful workspaces are deleted by default; set `MAGUS_HOST_E2E_KEEP=1` to
-retain them deliberately.
+It is not part of `ci` or `magus affected ci`. For each of Claude Code, Codex,
+Cursor and OpenCode it finds the installed CLI, builds a temporary workspace
+the way a user wires one (the harness spell, the shipped hook templates, the
+merge `magus describe harness` prints, the skills), and drives the host
+headless through scripted turns. The scenarios cover a shell deny and advise,
+a judged read, a write to a declared output, a denied write, an MCP call, the
+recorded prompt, the reply check, the checkpoint, a skill load, a judged spawn
+with its child and context size, and the brief after a compaction. Each one
+asserts on what magus recorded and on what the model said back, so a verdict
+that never reached the model fails.
 
-It can use local authentication and quota, so the environment variable is a
-second explicit confirmation. The descriptor is the extension seam: a user can
-add a host without changing the runner by declaring its binary, isolated setup,
-launch command, and evidence contract. A descriptor must represent a real host
-dispatch path; the runner never substitutes a fixture and calls that an
-end-to-end pass.
+The suite never installs, upgrades or logs in a host. A host that is not on
+`PATH` skips, and so does every scenario of a host that refuses a turn for want
+of a login; the skip names the login the host reads. Claude Code reads its
+keychain login or `CLAUDE_CODE_OAUTH_TOKEN`, which the suite passes through.
+Every run writes a version report naming each host's binary, version and model
+beside each scenario's result.
 
-|             | command rules | declared-output rule | deny | advise | manual E2E: command discovery and block dispatch | MCP call rules                               |
-| ----------- | ------------- | -------------------- | ---- | ------ | ------------------------------------------------ | -------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                                              | wired, rule-empty; live pending              |
-| Codex       | yes           | yes                  | yes  | yes    | yes                                              | wired, fixture-verified; live pending        |
-| Cursor      | yes           | yes                  | yes  | yes    | undocumented                                     | gated: `beforeMCPExecution` (advise unwired) |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                                              | not wired: sees call, tool name unconfirmed  |
+| variable                    | effect                                                    |
+| --------------------------- | --------------------------------------------------------- |
+| `MAGUS_E2E_HOSTS`           | comma-separated host ids to drive; all four by default    |
+| `MAGUS_E2E_<HOST>_BIN`      | the host binary to use before the one on `PATH`           |
+| `MAGUS_E2E_<HOST>_MODEL`    | the model the host runs                                   |
+| `MAGUS_E2E_TIMEOUT`         | the bound on one host invocation                          |
+| `MAGUS_E2E_MAGUS`           | the magus binary to wire; `./magus` by default            |
+| `MAGUS_E2E_KEEP=1`          | keep each temporary workspace                             |
+| `MAGUS_E2E_REPORT`          | the version report's path                                 |
+
+|             | command rules | declared-output rule | deny | advise | host E2E: shell deny | MCP call rules                               |
+| ----------- | ------------- | -------------------- | ---- | ------ | -------------------- | -------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                  | wired, rule-empty; live pending              |
+| Codex       | yes           | yes                  | yes  | yes    | yes                  | wired, fixture-verified; live pending        |
+| Cursor      | yes           | yes                  | yes  | yes    | not yet run          | gated: `beforeMCPExecution` (advise unwired) |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | not wired: sees call, tool name unconfirmed  |
 
 "Fixture-verified" means the adapter executed against this binary with a
-controlled host event on stdin. "Manual-E2E-proven" means a locally installed
-host discovered an isolated configuration, dispatched the `git stash` command
-hook, and delivered its deny. Neither label proves filesystem-path delivery,
-MCP delivery, or lifecycle delivery unless that cell says so; those remain
-pending. "Wired, rule-empty" means the transport carries a verdict end to end
+controlled host event on stdin. "Host E2E: shell deny" means a locally
+installed host discovered the workspace's configuration, dispatched the
+command hook, and delivered its deny to the model. Neither label proves
+filesystem-path delivery, MCP delivery, or lifecycle delivery unless that cell
+says so; the suite's report holds those. "Wired, rule-empty" means the transport carries a verdict end to end
 but the guard has no MCP-specific rule yet, so every call passes, not because
 the channel is silent, but because nothing has been asked of it.
 
@@ -226,9 +235,9 @@ twice, leaving two rows in the activity trail where the other hosts leave one.
 
 One row per job magus does through a host event. A cell names the event that
 carries it, or the reason nothing does. This is the intended host capability
-mapping, not a claim that the manual command/deny E2E run has proven delivery of
-each row. Path, MCP, and lifecycle delivery remain pending unless the evidence
-matrix above explicitly marks them proven.
+mapping, not a claim that the host E2E suite has proven delivery of each row.
+Path, MCP, and lifecycle delivery remain pending unless the evidence matrix
+above explicitly marks them proven.
 
 | job                         | Claude Code                                | Codex                                                            | Cursor                                                                  | OpenCode                          |
 | --------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------- |

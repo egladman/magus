@@ -1859,6 +1859,9 @@ It declares no `magus-guard-coverage` line, for the reason
 //                the reason as a new prompt, once: the next Stop carries stop_hook_active.
 //   cursor       stop: {"followup_message": ...}. Cursor submits it as another turn. It
 //                cannot block, and the hook's loop_limit caps the chain.
+//   opencode     {"prompt": ...}. OpenCode has no stop hook; opencode-plugin.ts calls this on a
+//                root session's idle event, with the codex envelope (last_assistant_message,
+//                stop_hook_active), and sends the prompt back with session.promptAsync.
 //
 // Cursor's stop event carries no reply, so the hook reads it from the conversation's
 // transcript_path: the last assistant message that has text, stopping at the last user
@@ -1911,6 +1914,7 @@ final PROOFREAD_FLAG = "--proofread";
 final CLAUDE_CODE = "claude-code";
 final CODEX = "codex";
 final CURSOR = "cursor";
+final OPENCODE = "opencode";
 
 // MAX_FINDINGS caps the findings handed back for one reply, in proofread's order.
 final MAX_FINDINGS = 5;
@@ -1923,7 +1927,7 @@ fun warn(message: str) > void {
 
 // knownHost is a host this file has an output shape for.
 fun knownHost(host: str) > bool {
-    return host == CLAUDE_CODE or host == CODEX or host == CURSOR;
+    return host == CLAUDE_CODE or host == CODEX or host == CURSOR or host == OPENCODE;
 }
 
 // Stop is what this hook reads of a stop envelope: the reply, and whether the agent is
@@ -2037,8 +2041,8 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
     return parseFindings(run!.stdout);
 }
 
-// lead opens the advice. claude-code keeps the reply it already sent; codex and cursor start
-// another turn, so the agent is told to send the reply again.
+// lead opens the advice. claude-code keeps the reply it already sent; codex, cursor and
+// opencode start another turn, so the agent is told to send the reply again.
 fun lead(host: str) > str {
     if (host == CLAUDE_CODE) {
         return "proofread judged your last reply as agent-reply. These advise; the stop "
@@ -2076,6 +2080,9 @@ fun shaped(host: str, text: str) > str {
     if (host == CURSOR) {
         return json\stringify({"followup_message": text}) catch "";
     }
+    if (host == OPENCODE) {
+        return json\stringify({"prompt": text}) catch "";
+    }
     return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
 }
 
@@ -2107,7 +2114,7 @@ fun main(args: [str]) > void {
         return;
     }
     if (!knownHost(host)) {
-        warn("no reply shape for host \"{host}\"; this hook answers {CLAUDE_CODE}, {CODEX} and {CURSOR}.");
+        warn("no reply shape for host \"{host}\"; this hook answers {CLAUDE_CODE}, {CODEX}, {CURSOR} and {OPENCODE}.");
         return;
     }
     var decisions = parsed!.values[DECISIONS_FLAG] ?? "";
@@ -2169,8 +2176,22 @@ test "cursor findings go back as a followup message" {
     std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null, message: printed);
 }
 
+test "opencode findings go back as a prompt to send again" {
+    final printed = output(Stop{ reply = "Done.", again = false }, host: OPENCODE, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    final prompt: str = doc["prompt"] ?? "";
+    std\assert(prompt.indexOf("- closing-offer (line 3): End on the result") != null, message: printed);
+    std\assert(prompt.indexOf("Send the reply again") != null, message: prompt);
+    std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null and doc["followup_message"] == null, message: printed);
+}
+
+test "an opencode idle envelope is read like codex's stop" {
+    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}", host: OPENCODE);
+    std\assert(stop.reply == "Done." and stop.again, message: "{stop.reply} {stop.again}");
+}
+
 test "a reply made while continuing is not judged, so the agent cannot loop" {
-    foreach (host in [CLAUDE_CODE, CODEX, CURSOR]) {
+    foreach (host in [CLAUDE_CODE, CODEX, CURSOR, OPENCODE]) {
         final printed = output(Stop{ reply = "Done.", again = true }, host: host, judged: judging([offer]));
         std\assert(printed == "", message: "{host}: {printed}");
     }
@@ -2204,8 +2225,8 @@ test "a binary that is missing or fails finds nothing" {
 }
 
 test "only the hosts with a reply shape are known" {
-    std\assert(knownHost(CLAUDE_CODE) and knownHost(CODEX) and knownHost(CURSOR), message: "wired hosts");
-    std\assert(!knownHost("opencode") and !knownHost(""), message: "OpenCode's idle event cannot feed text back");
+    std\assert(knownHost(CLAUDE_CODE) and knownHost(CODEX) and knownHost(CURSOR) and knownHost(OPENCODE), message: "wired hosts");
+    std\assert(!knownHost("windsurf") and !knownHost(""), message: "a host with no shape");
 }
 
 test "a cursor stop that is a follow-up or did not complete judges nothing" {
