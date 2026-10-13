@@ -136,8 +136,10 @@ var storeStamped = []string{
 	"waiter_evidence",
 }
 
-// dropStoreStamped is raw without the members in storeStamped. A record that is not an
-// object comes back as it was, for [DecodeDeclaration] to refuse in its own words.
+// dropStoreStamped is raw without the members in storeStamped, and without `validation`
+// beside a `check`: a stored row renders its check into that line, and a declaration
+// carrying both is refused. A record that is not an object comes back as it was, for
+// [DecodeDeclaration] to refuse in its own words.
 func dropStoreStamped(raw []byte) ([]byte, error) {
 	var members map[string]json.RawMessage
 	if json.Unmarshal(raw, &members) != nil {
@@ -147,6 +149,12 @@ func dropStoreStamped(raw []byte) ([]byte, error) {
 	for _, name := range storeStamped {
 		if _, ok := members[name]; ok {
 			delete(members, name)
+			dropped = true
+		}
+	}
+	if _, ok := members["check"]; ok {
+		if _, ok := members["validation"]; ok {
+			delete(members, "validation")
 			dropped = true
 		}
 	}

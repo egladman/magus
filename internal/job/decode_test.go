@@ -219,6 +219,29 @@ func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
 	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
 }
 
+// A stored row prints its check twice, as the record and as the rendered line, and a
+// declaration naming both is refused; the line is the store's rendering, so it goes.
+func TestDecodeDeclarationsDropsTheRenderedLineBesideACheck(t *testing.T) {
+	t.Parallel()
+
+	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],`+
+		`"check":{"target":"go-test","project":"."},"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].Check)
+	assert.Equal(t, "go-test", rows[0].Check.Target)
+	assert.Empty(t, rows[0].Validation)
+
+	line := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job/store.go"],"validation":"magus run go-test ."}`, types.JobSchemaVersion)
+	rows, err = DecodeDeclarations(strings.NewReader(line))
+	require.NoError(t, err)
+	assert.Equal(t, "magus run go-test .", rows[0].Validation, "a line alone is the declaration's own check")
+
+	_, err = DecodeDeclaration(strings.NewReader(stored))
+	require.ErrorContains(t, err, "not both", "fork's decoder stays strict")
+}
+
 // An empty stdin is the shape of a pipeline that produced nothing, and reading it as an
 // empty record would record a row that erases the one it names.
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
