@@ -326,7 +326,7 @@ func voiceDrift(in input) []Finding {
 		return nil
 	}
 
-	kind := voiceOf(in.kind)
+	kind := heldKind(in.kind)
 
 	k, ok := in.opts.voice.Kinds[kind]
 	if !ok {
@@ -431,7 +431,7 @@ func driftMessage(kind Kind, words int, parts []voicePart, reference map[Feature
 	}
 
 	return fmt.Sprintf("This %s reads further from your own %s than 95%% of your writing does (%d words): %s. "+
-		"Read it against how you write.", voiceDraftNames[kind], voicePlurals[voiceOf(kind)], words, strings.Join(named, "; "))
+		"Read it against how you write.", voiceDraftNames[kind], voicePlurals[heldKind(kind)], words, strings.Join(named, "; "))
 }
 
 // ownerRange is the 10th to 90th percentile of sorted, "none" when both are

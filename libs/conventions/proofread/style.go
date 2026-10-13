@@ -47,10 +47,10 @@ var voiceKinds = []Kind{KindChangeDescription, KindReviewReply, KindCommitMessag
 // voiceJudged are the kinds held to a voice: voiceKinds and every review text.
 var voiceJudged = slices.Concat(voiceKinds, []Kind{KindReviewSummary, KindReviewInline})
 
-// voiceOf is the kind whose measures in a [Voice] k is held to. A person writes
+// heldKind is the kind whose measures in a [Voice] k is held to. A person writes
 // a review's summary, its inline comments and its replies in one voice, which a
 // voice keeps under review-reply.
-func voiceOf(k Kind) Kind {
+func heldKind(k Kind) Kind {
 	if isReview(k) {
 		return KindReviewReply
 	}
