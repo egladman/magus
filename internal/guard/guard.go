@@ -2262,6 +2262,7 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 	if input == "" || location.cacheDir == "" {
 		return
 	}
+	cost := observeCall(ctx, location, input, who, tool, lease, verdict)
 	command := trail.AgentCommand{
 		PolicyDigest: policyDigest,
 		DecidedBy:    cmp.Or(rule.decidedBy, decidedBy(verdict)),
@@ -2288,6 +2289,13 @@ func appendHookActivity(ctx context.Context, location location, input string, wh
 		BinaryVersion:   by.version,
 		Cwd:             by.cwd,
 		Phases:          judgmentPhases(ctx).phases(),
+		Thread:          cost.thread,
+		Billing:         cost.billing,
+		DelegableClass:  cost.class,
+		Shadow:          cost.shadow,
+	}
+	if cost.context != nil {
+		command.ContextTokens, command.ContextModel = cost.context.Tokens, cost.context.Model
 	}
 	if tool == hookToolCommand {
 		command.Command = input
@@ -2321,7 +2329,12 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 	if location.cacheDir == "" {
 		return
 	}
-	trail.AppendAgentSpawn(ctx, location.cacheDir, trail.AgentSpawn{
+	facts := hint.NewGate(location.cacheDir, who.factsKey())
+	lease, _ := resolveActingLease(who, location, "")
+	thread, _ := callerThread(location.cacheDir, who, lease)
+	cost := callFacts{thread: thread, billing: accountAt(location.workspace).billing, context: callerContext(location, who, thread, facts)}
+	recordAgentCalls(ctx, cost, nil)
+	spawn := trail.AgentSpawn{
 		VerdictRef:    rec.verdictRef,
 		PolicyDigest:  rec.policyDigest,
 		DecidedBy:     rec.decidedBy,
@@ -2342,7 +2355,13 @@ func appendHookSpawn(ctx context.Context, deps Dependencies, req hookRequest, wh
 		BinaryVersion: deps.BinaryVersion,
 		Cwd:           req.Cwd,
 		Phases:        judgmentPhases(ctx).phases(),
-	})
+		Thread:        cost.thread,
+		Billing:       cost.billing,
+	}
+	if cost.context != nil {
+		spawn.ContextTokens, spawn.ContextModel = cost.context.Tokens, cost.context.Model
+	}
+	trail.AppendAgentSpawn(ctx, location.cacheDir, spawn)
 }
 
 // hookLocation resolves the local workspace cache because a hook runs as a short-lived

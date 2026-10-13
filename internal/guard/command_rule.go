@@ -58,7 +58,11 @@ type commandRuleInput struct {
 //
 // A command magus itself served stays served: the rule's advice stands down on it as every
 // advisory does, while its deny still holds, like the other workspace-wide denies.
+//
+// The cost and stall rules are graded first: they too only add, and they read the
+// verdict every compiled rule reached.
 func gradeWorkspaceCommand(ctx context.Context, deps Dependencies, verdict Verdict, in commandRuleInput, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+	verdict = gradeStall(deps, gradeMainCommand(deps, verdict, in, who, at), in.lease, at)
 	if deps.CommandRule == nil && deps.ApprovedCommandRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
@@ -168,7 +172,11 @@ func magusStateWrite(args []string) string {
 // inferred from the host.
 func commandRequest(ctx context.Context, in commandRuleInput, who hookAttribution, at location, facts hint.Gate) types.CommandRequest {
 	role, lease := actingRole(ctx, at, in.lease)
+	thread, known, reported := callerCost(at, who, in.lease, facts)
 	return types.CommandRequest{
+		Thread:      thread,
+		ThreadKnown: known,
+		Context:     reported,
 		Host:        who.Host,
 		Session:     who.Session,
 		Command:     in.command,

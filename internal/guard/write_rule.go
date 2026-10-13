@@ -45,6 +45,7 @@ type textEdit struct {
 // built-in rules did not deny, strengthen only, the way gradeWorkspaceCommand asks about a
 // command.
 func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict, path string, fields writeFields, lease string, who hookAttribution, at location) (Verdict, workspaceRuleRecord) {
+	verdict = gradeStall(deps, verdict, lease, at)
 	if deps.WriteRule == nil && deps.ApprovedWriteRule == nil && deps.LoadFailure == nil {
 		return verdict, workspaceRuleRecord{}
 	}
@@ -53,18 +54,22 @@ func gradeWorkspaceWrite(ctx context.Context, deps Dependencies, verdict Verdict
 	}
 	facts := hint.NewGate(at.cacheDir, who.factsKey())
 	role, row := actingRole(ctx, at, lease)
+	thread, known, reported := callerCost(at, who, lease, facts)
 	req := types.WriteRequest{
-		Host:      who.Host,
-		Session:   who.Session,
-		Agent:     who.Agent,
-		Parent:    spawnedAs(facts, who.Agent),
-		Role:      role,
-		Lease:     row,
-		Path:      path,
-		Workspace: writeWorkspace(path, at),
-		Content:   fields.Content,
-		OldText:   fields.OldText,
-		NewText:   fields.NewText,
+		Host:        who.Host,
+		Session:     who.Session,
+		Agent:       who.Agent,
+		Parent:      spawnedAs(facts, who.Agent),
+		Role:        role,
+		Lease:       row,
+		Thread:      thread,
+		ThreadKnown: known,
+		Context:     reported,
+		Path:        path,
+		Workspace:   writeWorkspace(path, at),
+		Content:     fields.Content,
+		OldText:     fields.OldText,
+		NewText:     fields.NewText,
 	}
 	bind := func(rule workspace.WriteRule) ruleCall {
 		if rule == nil {

@@ -873,6 +873,58 @@ var ruleDocGuardUnfinished = adviseDoc(types.RuleDoc{ //nolint:unused // read th
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns a guard check of its own judged nothing.",
 }, false)
 
+var ruleDocRootContextBudget = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleRootContextBudget),
+	Catches: "a session's main thread whose context has grown past its level's size",
+	Why: "Every call of a session re-sends its whole context, mostly as cache reads, so its cost grows with the square of its length, and a main thread that does its own reading pays for each result on every call after it. " +
+		"The size is the last usage the main transcript recorded, read after each call. At light it advises once at half the model's window, and says nothing for a model the table does not know; at standard it advises once at a fixed size, lower when the account bills per token than on a subscription quota; at strict it advises lower still and refuses the delegable commands (a recursive search, a whole-file read of source, a full diff, a target run, a web fetch) past a second size. " +
+		"A tokens parameter replaces the level's sizes with one, at the rule's decision. It judges only the unleased main thread, and a thread magus inferred rather than one its host named is only advised.",
+})
+
+var ruleDocRootHeavyCommand = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleRootHeavyCommand),
+	Catches: "a main thread running delegable commands one after another without spawning",
+	Why: "A recursive search, a whole-file read of source, a full diff, a target run or a web fetch is work a subagent does from a small context, returning only what matters. " +
+		"Each delegable call since the main thread last spawned or continued a subagent counts; at standard it advises once at the eighth, and at strict it advises at the fifth and refuses from the eighth. " +
+		"Spawning, the job verbs, reading a run's output by its ref, the final gate, loading a skill, reading Markdown and editing never count. A calls parameter replaces the level's count.",
+})
+
+var ruleDocRootResultCap = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(denyRuleRootResultCap),
+	Catches: "one tool result too large for a main thread's context, said on its next call",
+	Why: "A tool result stays in the context every later call re-sends. The main transcript is read after each call for the results it gained, and one past the level's size is said on the next call: once a session at light, once per tool at standard and strict, with lower sizes at each. " +
+		"It never refuses, since the result has already arrived. A chars parameter replaces the level's size.",
+}, false)
+
+var ruleDocRootRepeat = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleRootRepeat),
+	Catches: "a main thread running the same delegable command again with no write since",
+	Why: "An identical search, read, diff, run or fetch with no file written since returns what the context already holds. " +
+		"At standard the second run is advised once; at strict it is advised and the third is refused. A file write starts the count over. A calls parameter replaces the level's count.",
+})
+
+var ruleDocSpawnNamesModel = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleSpawnNamesModel),
+	Catches: "a main thread spawning a subagent without naming the model it runs on",
+	Why: "A spawn that names no model runs the child on the session's own, usually the costliest it uses. " +
+		"At standard it advises once; at strict it refuses, and also refuses a spawn whose model and its job's model both name rows of the model table and differ.",
+})
+
+var ruleDocSpawnPrincipalForEconomy = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(denyRuleSpawnPrincipalForEconomy),
+	Catches: "a read-only job's subagent spawned on one of the costliest models",
+	Why: "A job marked read-only gathers evidence, which a cheaper model does as well. The spawn's model, or the session's own when it names none, counts as costly when its input price is above the median of the model table. " +
+		"At standard it advises once; at strict it also advises on a spawn of the host's read-only explore agent type. It keys on declared facts, never on the prompt, and never refuses, since a read-only design job can need the strongest model.",
+}, false)
+
+var ruleDocStall = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(denyRuleStall),
+	Catches: "a leased worker refused by something only the root can clear",
+	Why: "A worker blocked on its lease's boundary or on a magus that cannot load the tree waits and reports again, and the root hears late. " +
+		"When lease-write, lease-vcs, lease-harness, lease-rebind, lease-undeclared or stale-binary refuses a leased worker, the refusal's verdict line ends with the job's exit, the block named as an unresolved risk, and one attention row per lease and rule states the facts: the job, the rule, the model it ran on and how often it was refused. It names no remedy, and never refuses anything itself. " +
+		"A refusal repeating the last one, and a run of refused calls (a calls parameter sets its length), are recorded per lease and said to no one.",
+}, false)
+
 // Rules returns the whole catalog, denies first and each tier sorted by name: the order a
 // reader scans, with the tier that blocks them at the top. Each row's Decision is the
 // rule's compiled default; a workspace's own setting is applied where the rule fires.

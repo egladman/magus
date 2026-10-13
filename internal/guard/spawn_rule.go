@@ -130,6 +130,13 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 			decided = decidedByBuiltin
 		}
 	}
+	actingLease, _ := resolveActingLease(who, at, req.Lease)
+	if verdict.Decision != decisionDeny {
+		verdict = gradeMainSpawn(ctx, deps, verdict, env, who, at, actingLease)
+		if verdict.Decision != decisionPass && decided == "" {
+			decided = decidedByBuiltin
+		}
+	}
 	// Strengthen only, and so asked only when there is something left to strengthen: a
 	// workspace allow can never lift a built-in deny.
 	if verdict.Decision != decisionDeny {
@@ -151,7 +158,6 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 		failures = asked.failures
 		// A continuation hands a running child more work; only a spawn creates one the rule
 		// exists to bind.
-		actingLease, _ := resolveActingLease(who, at, req.Lease)
 		call := judgedCall{seam: seamSpawn, what: "a subagent spawn", lease: actingLease}
 		if env.IsSpawn {
 			call.verb, call.changes = call.what, true
@@ -181,9 +187,9 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	})
 	if verdict.Decision != decisionDeny {
 		markAgentSeen(facts, env)
+		noteMainSpawn(at, who, actingLease)
 		if env.IsSpawn {
-			spawner, _ := resolveActingLease(who, at, req.Lease)
-			recordPendingSpawn(facts, env, spawner, time.Now())
+			recordPendingSpawn(facts, env, actingLease, time.Now())
 		}
 	}
 	return verdict
@@ -249,6 +255,7 @@ func spawnRequest(ctx context.Context, env hookRequest, who hookAttribution, at 
 	// disagree about who is acting.
 	lease, _ := resolveActingLease(who, at, explicitLease)
 	req.Role, req.Lease = actingRole(ctx, at, lease)
+	req.Thread, req.ThreadKnown, req.Context = callerCost(at, who, lease, facts)
 	return req
 }
 
@@ -778,18 +785,23 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 // turn and only its last usage record is wanted.
 const agentUsageTail = 512 << 10
 
-// transcriptUsage is the shapes read from a transcript line: a message's token usage, or
-// the token_count event another host's rollout records after each model call.
+// transcriptUsage is the shapes read from a transcript line: a message's token usage, model
+// and content, or the token_count event and function call items another host's rollout
+// records.
 type transcriptUsage struct {
 	Message struct {
+		Model string `json:"model"`
 		Usage *struct {
 			Input      int64 `json:"input_tokens"`
 			CacheRead  int64 `json:"cache_read_input_tokens"`
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
+		Content json.RawMessage `json:"content"`
 	} `json:"message"`
-	Type    string `json:"type"`
-	Payload struct {
+	// IsSidechain marks a subagent's line written into its parent's transcript.
+	IsSidechain bool   `json:"isSidechain"`
+	Type        string `json:"type"`
+	Payload     struct {
 		Type string `json:"type"`
 		// Info is null on a token_count event that reports only rate limits.
 		Info *struct {
@@ -798,6 +810,10 @@ type transcriptUsage struct {
 			} `json:"last_token_usage"`
 			Window int64 `json:"model_context_window"`
 		} `json:"info"`
+		Name      string          `json:"name"`
+		Arguments string          `json:"arguments"`
+		CallID    string          `json:"call_id"`
+		Output    json.RawMessage `json:"output"`
 	} `json:"payload"`
 }
 
