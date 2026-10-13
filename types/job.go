@@ -780,7 +780,8 @@ type Job struct {
 	Updated int64 `json:"updated" yaml:"updated"`
 	// Deadline is unix seconds past which the guard denies this lease's writes, zero for no
 	// bound. The store stamps it from a fork's timeout and no door accepts it, for the reason
-	// Created is not accepted. Nothing transitions a row that passes it.
+	// Created is not accepted. A taken row that passes it ends as no_return on the next read
+	// of the store, and an untaken one is ended by `magus job prune`.
 	Deadline int64 `json:"deadline,omitempty" yaml:"deadline,omitempty"`
 	// Result is what the holder filed when it exited, and Attempt is the run record behind
 	// that result's output ref, resolved in the holder's OWN checkout.
@@ -1112,6 +1113,18 @@ func ParseJobTimeout(s string) (time.Duration, error) {
 // terminal row has no writes left to bound, so it is never overdue.
 func (u Job) Overdue(now int64) bool {
 	return u.Deadline > 0 && u.State.Live() && now >= u.Deadline
+}
+
+// EndReasonSessionEnded opens the end_reason of a row the store ended because the agent
+// session holding it ended. It is the one ending `magus job exec` takes back: a host may
+// resume a session it reported over, and the resumed session's next exec of the row
+// rebinds it.
+const EndReasonSessionEnded = "its holder's session ended"
+
+// EndedWithSession reports whether the row is no_return only because its holder's
+// session ended (see [EndReasonSessionEnded]).
+func (u Job) EndedWithSession() bool {
+	return u.State == StateNoReturn && strings.HasPrefix(u.EndReason, EndReasonSessionEnded)
 }
 
 // StaleAt reports whether the row was last updated at least after ago as of now, in unix

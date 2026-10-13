@@ -71,16 +71,22 @@ func (s *Store) Exec(ctx context.Context, id, reportedBase string) (types.Job, e
 				" check the declared ids with `%s` and exec under the id the"+
 				" orchestrator handed you", ErrUnknownJob, id, hint.LsJobs)
 		}
-		if cur.State.Terminal() {
-			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
-				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
-		}
 		// Relative would be resolved against whichever process sweeps the row later.
 		here := ""
 		if s.root != "" {
 			if abs, err := filepath.Abs(s.root); err == nil {
 				here = abs
 			}
+		}
+		// A row that ended only because its holder's session did is taken back by a
+		// session resuming that work in the same checkout.
+		resumed := cur.EndedWithSession() && (cur.CheckoutRoot == "" || cur.CheckoutRoot == here)
+		if cur.State.Terminal() && !resumed {
+			return fmt.Errorf("job: %s already ended %s, so there is nothing left to take,"+
+				" `%s` lists the live ones", id, cur.State, hint.LsJobs)
+		}
+		if resumed {
+			cur.State = types.StateRunning
 		}
 		// Held means running: an exec moves a declared row there. A declared row may carry a
 		// checkout already, the forker's or one a hook recorded before anyone took the job,

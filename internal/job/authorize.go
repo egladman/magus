@@ -165,7 +165,7 @@ func refuse(actor Actor, id, rule string) error {
 // worker to the tool; this is what makes that mean "ask the orchestrator".
 //
 // An UNBOUND actor passes everything. A BOUND one may, on its own row, register the base
-// it landed on (which starts a declared row running), SHRINK its write paths (which is how
+// it landed on (which starts a declared row running, or one its ended session held), SHRINK its write paths (which is how
 // the skill has it release one), and end itself in fail, no_return, or exited. On any other
 // row it may only CREATE a child of itself inside its own boundary, or, as an [asVerdict]
 // write, pass a row below it. Widening a
@@ -196,7 +196,7 @@ func authorizeRow(actor Actor, id string, kind grading, prev, next types.Job, ex
 			}
 		case "state":
 			// Taking a declared job is what starts it, so the exec carries that move.
-			if kind == asExec && prev.State == types.StateDeclared && next.State == types.StateRunning {
+			if kind == asExec && next.State == types.StateRunning && (prev.State == types.StateDeclared || prev.EndedWithSession()) {
 				continue
 			}
 			// StatePass stays refused here on purpose: pass is the claim that the work

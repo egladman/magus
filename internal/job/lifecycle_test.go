@@ -358,6 +358,20 @@ func TestListEndsProvablyDeadJobs(t *testing.T) {
 			ended: map[string]string{"forked": "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 		},
 		{
+			name: "a taken job past its deadline ends, and so does its tree; an untaken or returned one stays",
+			rows: []types.Job{
+				{ID: "late", State: types.StateRunning, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "late/c", Parent: "late", State: types.StateRunning, Registered: fresh, Updated: fresh},
+				{ID: "untaken", State: types.StateDeclared, Deadline: now - 600, Updated: fresh},
+				{ID: "returned", State: types.StateExited, Registered: fresh, Deadline: now - 600, Updated: fresh},
+				{ID: "in-time", State: types.StateRunning, Registered: fresh, Deadline: now + 600, Updated: fresh},
+			},
+			ended: map[string]string{
+				"late":   "overdue: its deadline passed 10m0s ago",
+				"late/c": "parent late ended as no_return, and its tree ends with it",
+			},
+		},
+		{
 			name: "a zero stale_after ends nothing for age",
 			rows: []types.Job{{ID: "untaken", State: types.StateDeclared, Updated: 1}},
 		},
@@ -873,6 +887,7 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 	defaults := []Ending{
 		{ID: "exited", Reason: exited},
 		{ID: "late", Reason: overdue},
+		{ID: "late-held", Reason: overdue},
 		{ID: "late-idle", Reason: overdue},
 		{ID: "done", Reason: "exited 1m0s ago and nobody collected its result with `magus job wait`"},
 		{ID: "done/c", Reason: "parent done ended as no_return, and its tree ends with it"},
@@ -886,11 +901,11 @@ func TestJobPruneEndsOnlyRowsNobodyIsWorking(t *testing.T) {
 		{
 			name: "all also ends a taken job nobody touched, and the root above it",
 			all:  true,
-			want: append(slices.Clone(defaults[:3]),
+			want: append(slices.Clone(defaults[:4]),
 				Ending{ID: "idle", Reason: taken},
 				Ending{ID: "old-plan", Reason: "declared and never taken, untouched for 3h0m0s (jobs.stale_after is 2h0m0s)"},
 				Ending{ID: "old-plan/w", Reason: taken},
-				defaults[3], defaults[4],
+				defaults[4], defaults[5],
 			),
 		},
 	}

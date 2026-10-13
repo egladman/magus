@@ -751,7 +751,9 @@ type landing struct {
 //     a row queued on a live dependency is waiting, and its clock starts when the last
 //     one ends (see [types.JobIdleSince]);
 //  4. its holder exited, its work landed on the base branch (see [Store.landedOnBase]),
-//     and no live child hangs under it.
+//     and no live child hangs under it;
+//  5. a holder took it and its deadline passed (see [types.Job.Overdue]): the declared
+//     bound is obeyed, not only reported.
 //
 // A landed row ends as no_return rather than pass: landing is not grading, and pass
 // stays the verdict only `magus job wait` records from the job's own evidence. Its
@@ -838,6 +840,9 @@ func (w *sweeper) reason(x rowIndex, rows []types.Job, row types.Job) (string, e
 	if row.State != types.StateExited && w.checkoutGone(row.CheckoutRoot) {
 		return fmt.Sprintf("taken in %s, which no longer exists", row.CheckoutRoot), nil
 	}
+	if Editing(row) && row.Registered != 0 && row.Overdue(w.now) {
+		return overdueReason(row, w.now), nil
+	}
 	// Only a registration says a holder took it; a checkout_root without one names no holder.
 	if row.Registered != 0 || row.State != types.StateDeclared {
 		return "", nil
@@ -923,6 +928,9 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	}
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
+		if strings.HasPrefix(e.reason, overdueReasonPrefix) {
+			s.noteEnded(e.id, e.reason)
+		}
 	}
 	return f, len(dead) > 0, nil
 }
@@ -1046,8 +1054,7 @@ func (w *sweeper) worked(rows []types.Job, window time.Duration, all bool) map[s
 		if !Editing(row) || row.Registered == 0 {
 			continue
 		}
-		touched := !row.StaleAt(w.now, window)
-		if !touched && (all || row.Overdue(w.now)) {
+		if row.Overdue(w.now) || (all && row.StaleAt(w.now, window)) {
 			continue
 		}
 		kept[row.ID] = true
@@ -1065,7 +1072,7 @@ func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.
 	case row.State == types.StateExited:
 		return fmt.Sprintf("exited %s ago and nobody collected its result with `magus job wait`", idle)
 	case slices.Contains(flagged.Overdue, row.ID):
-		return fmt.Sprintf("overdue: its deadline passed %s ago", time.Duration(w.now-row.Deadline)*time.Second)
+		return overdueReason(row, w.now)
 	case !slices.Contains(flagged.Stale, row.ID):
 		return ""
 	case row.Registered == 0:
@@ -1074,6 +1081,13 @@ func (w *sweeper) pruneReason(row types.Job, flagged types.JobList, window time.
 	default:
 		return fmt.Sprintf("taken, then untouched for %s (jobs.stale_after is %s)", idle, window)
 	}
+}
+
+// overdueReasonPrefix opens the end_reason of a row ended for passing its deadline.
+const overdueReasonPrefix = "overdue: its deadline passed "
+
+func overdueReason(row types.Job, now int64) string {
+	return fmt.Sprintf("%s%s ago", overdueReasonPrefix, time.Duration(now-row.Deadline)*time.Second)
 }
 
 // resolveStaleAfter is jobs.stale_after from the workspace's own magus.yaml. Workspace
