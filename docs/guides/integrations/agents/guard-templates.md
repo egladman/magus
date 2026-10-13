@@ -542,6 +542,20 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     });
 }
 
+// UNKNOWN_FLAG is how magus's flag parser refuses a flag it does not define.
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag reports an attempt refused for a flag the binary predates, the one failure
+// that asking with fewer flags recovers. A deny exits non-zero with the verdict on stdout,
+// and a timeout kill or a crash leaves stdout empty too; asking again judges the call a
+// second time, which a host already out of time cannot afford.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
 // recordMessage hands a message the person typed to `magus shell --message` and reads
 // nothing back. Every failure is silence: a binary missing, or too old for --message, costs
 // the record and never the message, and nothing printed here could be anything but noise in
@@ -778,15 +792,10 @@ fun main(args: [str]) > void {
     // --agent-name, --session and --agent postdate the current magus release, and this template is
     // downloaded and run against whatever binary a reader already has. Passing them
     // unconditionally does not degrade the guard, it BREAKS it: an older binary rejects the
-    // unknown flag, prints its usage to stdout, and exits non-zero, so the host receives no
+    // unknown flag, prints its usage to stderr, and exits non-zero, so the host receives no
     // verdict at all and every deny and advise rule silently stops being enforced.
     //
-    // A DENY exits non-zero (2) with the verdict on stdout, so retrying on a non-zero status
-    // alone would judge every blocked command twice, unattributed and recorded twice in the
-    // activity trail. Emptiness alone cannot tell the cases apart either, because a pass
-    // renders empty on purpose. Both together can: a rejected flag prints its usage to
-    // STDERR and leaves stdout empty, while any real verdict that is not a pass leaves
-    // something on stdout.
+    // Only that refusal is asked again: see rejectedFlag.
     //
     // --renders-ask rides the attributed call only. A binary too old for it is too old to
     // ask, so the retry dropping it loses nothing.
@@ -817,10 +826,10 @@ fun main(args: [str]) > void {
         foreach (word in newest) { newer.append(word); }
         result = judge(guard, extra: newer) catch null;
     }
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (newest.len() == 0 or rejectedFlag(result)) {
         result = judge(guard, extra: attributed) catch null;
     }
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 
@@ -970,6 +979,16 @@ fun judge(guard: Guard, extra: [str]) > proc\ExecResult !> any {
     });
 }
 
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag is magus-command.buzz's: only a flag the binary predates is asked again.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and result!.stdout.trim() == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
 fun adviseBranch() > str {
     final suppressed = env\get("__MAGUS_NO_ADVISE") catch "";
     if (suppressed != "") { return ""; }
@@ -1079,13 +1098,11 @@ fun main(args: [str]) > void {
 
     // Attribution is BEST EFFORT; the verdict is not. --agent-name, --session and --agent postdate
     // the current magus release, and an older binary rejects the unknown flag outright,
-    // printing usage to stdout and exiting non-zero, which leaves the host with no verdict
+    // printing usage to stderr and exiting non-zero, which leaves the host with no verdict
     // rather than an unattributed one. Try with attribution, fall back to the call this
     // script made before it existed.
     //
-    // The retry tests status AND emptiness together, for the same reason as the command
-    // template now that a file-write rule can deny: a DENY exits non-zero (2) with the verdict
-    // on stdout, so retrying on status alone would judge every blocked write twice.
+    // Only that refusal is asked again: see rejectedFlag.
     //
     // The entry's own flags ride the attributed call only, as in magus-command.buzz: a
     // binary too old for one cannot report a skill load either.
@@ -1096,7 +1113,7 @@ fun main(args: [str]) > void {
     }
     foreach (flag in rendersAsk) { attributed.append(flag); }
     var result = judge(guard, extra: attributed) catch null;
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+    if (rejectedFlag(result)) {
         result = judge(guard, extra: [<str>]) catch null;
     }
 
