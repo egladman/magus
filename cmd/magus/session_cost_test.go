@@ -17,8 +17,8 @@ var costEpoch = time.Date(2026, time.October, 13, 9, 0, 0, 0, time.UTC)
 
 func at(sec int) time.Time { return costEpoch.Add(time.Duration(sec) * time.Second) }
 
-func mainCall(sec int, tokens int64, mdl string) costCall {
-	return costCall{At: at(sec), Thread: types.AgentThreadMain, ContextTokens: tokens, ContextModel: mdl}
+func mainCall(sec int, tokens int64, mdl string) trail.SessionCall {
+	return trail.SessionCall{At: at(sec), Thread: types.AgentThreadMain, ContextTokens: tokens, ContextModel: mdl}
 }
 
 func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
@@ -26,7 +26,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		{Child: "Explore", At: at(5), DeclaredModel: "claude-sonnet-5-5"},
 		{Child: "Explore", At: at(100), DeclaredModel: ""},
 	}}
-	var calls []costCall
+	var calls []trail.SessionCall
 	for sec := 1; sec <= 30; sec++ {
 		c := mainCall(sec, 300_000, "claude-opus-5-5")
 		c.Billing = types.AgentBillingMetered
@@ -49,10 +49,12 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 		calls = append(calls, c)
 	}
 	calls = append(calls,
-		costCall{At: at(2), Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"},
-		costCall{At: at(3), Thread: types.AgentThreadUnknown, ContextTokens: 50_000})
+		trail.SessionCall{At: at(2), Thread: types.AgentThreadSub, ContextTokens: 900_000, ContextModel: "claude-haiku-5-5"},
+		trail.SessionCall{At: at(3), Thread: types.AgentThreadUnknown, ContextTokens: 50_000})
 
-	got := summarizeCost(tr, calls, model.Shipped())
+	tr.Calls = calls
+
+	got := summarizeCost(tr, model.Shipped())
 
 	assert.Equal(t, &rootContext{Peak: 600_000, P50: 300_000, Samples: 30, Models: []string{"claude-opus-5-5"}}, got.RootContext)
 	assert.Equal(t, &delegableShare{
@@ -73,7 +75,7 @@ func TestSummarizeCostMeasuresEverySectionFromACompleteTrail(t *testing.T) {
 }
 
 func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
-	got := summarizeCost(nil, nil, model.Shipped())
+	got := summarizeCost(nil, model.Shipped())
 
 	assert.Nil(t, got.RootContext)
 	assert.Nil(t, got.Dollars)
@@ -83,7 +85,7 @@ func TestSummarizeCostSaysNothingWasMeasuredWithoutATrail(t *testing.T) {
 func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 	tr := &trail.SessionTrail{Commands: 3, Spawns: []trail.SessionSpawn{{Child: "Explore", At: at(1), DeclaredModel: "claude-sonnet-5-5"}}}
 
-	got := summarizeCost(tr, nil, model.Shipped())
+	got := summarizeCost(tr, model.Shipped())
 
 	assert.Equal(t, &spawnTally{Total: 1, ByModel: []countedName{{Name: "claude-sonnet-5-5", Count: 1}}}, got.Spawns)
 	assert.Nil(t, got.RootContext)
@@ -92,22 +94,57 @@ func TestSummarizeCostCountsSpawnsFromATrailWithNoPerCallFacts(t *testing.T) {
 	assert.NotContains(t, got.NotMeasured, costSpawns)
 }
 
-func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
-	calls := []costCall{{At: at(1), Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}
+func TestSummarizeCostCarriesASpawnsContextIntoThePriceStep(t *testing.T) {
+	tr := &trail.SessionTrail{Commands: 1, Spawns: []trail.SessionSpawn{
+		{Child: "Explore", At: at(1), DeclaredModel: "claude-haiku-5-5", ContextTokens: 120_000},
+	}}
 
-	got := summarizeCost(&trail.SessionTrail{Commands: 1}, calls, model.Shipped())
+	got := summarizeCost(tr, model.Shipped())
+
+	assert.Equal(t, []costSpawn{{At: at(1), Model: "claude-haiku-5-5", ContextTokens: 120_000}}, spawnsOf(tr))
+	require.NotNil(t, got.PastPriceStep)
+	assert.Equal(t, 1, *got.PastPriceStep)
+	assert.NotContains(t, got.NotMeasured, costPriceStep)
+}
+
+// The path `session show` takes: calls written by the hook, folded by ForSession, summarized.
+func TestSummarizeCostReadsTheFactsAHookRecorded(t *testing.T) {
+	base := t.TempDir()
+	for range 2 {
+		trail.AppendAgentCommand(t.Context(), base, trail.AgentCommand{
+			Session: "s1", Tool: "shell.command", Command: "grep -r x .", Decision: "pass",
+			Thread: types.AgentThreadMain, ContextTokens: 250_000, ContextModel: "claude-opus-5-5",
+			Billing: types.AgentBillingMetered, DelegableClass: "search", ResultChars: 4000,
+			Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny},
+		})
+	}
+	tr := trail.ForSession(base, "s1", 100)
+
+	got := summarizeCost(&tr, model.Shipped())
+
+	assert.Equal(t, &rootContext{Peak: 250_000, P50: 250_000, Samples: 2, Models: []string{"claude-opus-5-5"}}, got.RootContext)
+	assert.Equal(t, int64(8000), got.Delegable.Chars)
+	assert.Equal(t, []shadowTally{{Profile: types.GuardProfileStrict, Deny: 2}}, got.Shadow)
+	require.NotNil(t, got.Dollars)
+	assert.Equal(t, types.AgentBillingMetered, got.Dollars.Billing)
+}
+
+func TestSummarizeCostNeverCountsAnUnknownThreadAsTheRoot(t *testing.T) {
+	calls := []trail.SessionCall{{At: at(1), Thread: types.AgentThreadUnknown, ContextTokens: 700_000, ContextModel: "claude-opus-5-5"}}
+
+	got := summarizeCost(&trail.SessionTrail{Commands: 1, Calls: calls}, model.Shipped())
 
 	assert.Nil(t, got.RootContext)
 	assert.Equal(t, "no call is known to be on the main thread (1 of unknown thread)", got.NotMeasured[costRootContext])
 }
 
 func TestDollarsPriceTheCacheReadFloorOnceForEachModelCall(t *testing.T) {
-	metered := func(sec int, tokens int64, mdl string) costCall {
+	metered := func(sec int, tokens int64, mdl string) trail.SessionCall {
 		c := mainCall(sec, tokens, mdl)
 		c.Billing = types.AgentBillingMetered
 		return c
 	}
-	calls := []costCall{
+	calls := []trail.SessionCall{
 		metered(1, 500_000, "claude-opus-5-5"),
 		metered(2, 500_000, "claude-opus-5-5"), // a second tool of the same model call
 		metered(3, 600_000, "claude-opus-5-5"),
@@ -135,7 +172,7 @@ func TestDollarsAreWithheldWhenTheyWouldBeAGuess(t *testing.T) {
 			c := mainCall(1, 400_000, tc.model)
 			c.Billing = tc.billing
 
-			est, why := dollarsOf([]costCall{c}, model.Shipped())
+			est, why := dollarsOf([]trail.SessionCall{c}, model.Shipped())
 
 			assert.Nil(t, est)
 			assert.Equal(t, tc.want, why)
@@ -147,7 +184,7 @@ func TestDollarsAreWithheldWhenOneCallLacksBilling(t *testing.T) {
 	billed := mainCall(1, 400_000, "claude-opus-5-5")
 	billed.Billing = types.AgentBillingMetered
 
-	est, why := dollarsOf([]costCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, model.Shipped())
+	est, why := dollarsOf([]trail.SessionCall{billed, mainCall(2, 410_000, "claude-opus-5-5")}, model.Shipped())
 
 	assert.Nil(t, est)
 	assert.Contains(t, why, "billing is unknown")
@@ -170,7 +207,7 @@ func TestPastPriceStepCountsChildrenOverTheirModelsStep(t *testing.T) {
 func TestAdvisoryFollowEndsAfterTheWindow(t *testing.T) {
 	adv := mainCall(0, 1, "m")
 	adv.Decision, adv.Rule = "advise", "root-heavy-command"
-	main := []costCall{adv}
+	main := []trail.SessionCall{adv}
 	for i := 1; i <= followWithin+2; i++ {
 		main = append(main, mainCall(i, 1, "m"))
 	}
@@ -189,7 +226,8 @@ func TestRenderCostPrintsMeasuredAndUnmeasuredSections(t *testing.T) {
 	c1.Billing = types.AgentBillingMetered
 	c1.ResultChars = 1000
 	c1.DelegableClass = "search"
-	got := summarizeCost(tr, []costCall{c1}, model.Shipped())
+	tr.Calls = []trail.SessionCall{c1}
+	got := summarizeCost(tr, model.Shipped())
 
 	var buf bytes.Buffer
 	renderCost(&buf, got)

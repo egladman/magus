@@ -953,7 +953,7 @@ func sessionShow(root string, args []string) error {
 
 	out := summarizeSession(rest[0], events)
 	out.Trail = sessionTrailHere(root, rest[0])
-	out.Cost = summarizeCost(out.Trail, nil, model.Shipped().Merge(globalCfg.Agents.ModelOverrides()))
+	out.Cost = summarizeCost(out.Trail, model.Shipped().Merge(globalCfg.Agents.ModelOverrides()))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err

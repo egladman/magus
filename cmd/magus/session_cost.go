@@ -49,21 +49,6 @@ var costSectionLabels = []struct{ key, label string }{
 	{costDollars, "dollars"},
 }
 
-// costCall is one guard observation of a call, with the cost facts recorded beside it.
-// The root is the main thread; a call of unknown thread is never counted as the root's.
-type costCall struct {
-	At             time.Time
-	Thread         types.AgentThread
-	Decision       string
-	Rule           string
-	ContextTokens  int64
-	ContextModel   string
-	Billing        types.AgentBilling
-	DelegableClass string
-	ResultChars    int
-	Shadow         map[types.GuardProfile]types.GuardDecision
-}
-
 // costSpawn is one subagent the session started. ContextTokens is its last reported
 // context, 0 when none was.
 type costSpawn struct {
@@ -138,7 +123,7 @@ const noCallFacts = "the trail holds no per-call facts for this session"
 
 // summarizeCost folds one session's trail into the cost sections. tr is nil when this
 // checkout's trail holds nothing for the session, in which case no section is measured.
-func summarizeCost(tr *trail.SessionTrail, calls []costCall, table model.Table) *sessionCost {
+func summarizeCost(tr *trail.SessionTrail, table model.Table) *sessionCost {
 	c := &sessionCost{NotMeasured: map[string]string{}}
 	if tr == nil {
 		for _, s := range costSectionLabels {
@@ -149,8 +134,10 @@ func summarizeCost(tr *trail.SessionTrail, calls []costCall, table model.Table) 
 	spawns := spawnsOf(tr)
 	c.Spawns = spawnsByModel(spawns)
 
-	slices.SortStableFunc(calls, func(a, b costCall) int { return a.At.Compare(b.At) })
-	var main []costCall
+	// The root is the main thread; a call of unknown thread is never counted as the root's.
+	calls := slices.Clone(tr.Calls)
+	slices.SortStableFunc(calls, func(a, b trail.SessionCall) int { return a.At.Compare(b.At) })
+	var main []trail.SessionCall
 	unknown := 0
 	for _, call := range calls {
 		switch call.Thread {
@@ -213,7 +200,7 @@ func summarizeCost(tr *trail.SessionTrail, calls []costCall, table model.Table) 
 func spawnsOf(tr *trail.SessionTrail) []costSpawn {
 	out := make([]costSpawn, 0, len(tr.Spawns))
 	for _, sp := range tr.Spawns {
-		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel})
+		out = append(out, costSpawn{At: sp.At, Model: sp.DeclaredModel, ContextTokens: sp.ContextTokens})
 	}
 	return out
 }
@@ -226,7 +213,7 @@ func spawnsByModel(spawns []costSpawn) *spawnTally {
 	return &spawnTally{Total: len(spawns), ByModel: counted(tally)}
 }
 
-func rootContextOf(main []costCall) *rootContext {
+func rootContextOf(main []trail.SessionCall) *rootContext {
 	var sizes []int64
 	models := map[string]bool{}
 	for _, call := range main {
@@ -249,7 +236,7 @@ func rootContextOf(main []costCall) *rootContext {
 	return rc
 }
 
-func delegableOf(main []costCall) *delegableShare {
+func delegableOf(main []trail.SessionCall) *delegableShare {
 	var total, delegable int64
 	byClass := map[string]int{}
 	for _, call := range main {
@@ -265,7 +252,7 @@ func delegableOf(main []costCall) *delegableShare {
 	return &delegableShare{Chars: delegable, Total: total, Share: float64(delegable) / float64(total), ByClass: counted(byClass)}
 }
 
-func advisoriesOf(main []costCall, spawns []costSpawn) *advisoryOutcome {
+func advisoriesOf(main []trail.SessionCall, spawns []costSpawn) *advisoryOutcome {
 	out := &advisoryOutcome{Within: followWithin}
 	for i, call := range main {
 		if call.Decision != string(types.GuardAdvise) || !slices.Contains(costAdviceRules, call.Rule) {
@@ -286,7 +273,7 @@ func advisoriesOf(main []costCall, spawns []costSpawn) *advisoryOutcome {
 	return out
 }
 
-func shadowOf(main []costCall) []shadowTally {
+func shadowOf(main []trail.SessionCall) []shadowTally {
 	byProfile := map[types.GuardProfile]*shadowTally{}
 	for _, call := range main {
 		for p, d := range call.Shadow {
@@ -339,8 +326,8 @@ func pastPriceStep(spawns []costSpawn, table model.Table) *int {
 // reason instead when it would be a guess: billing that is not metered on every call, or
 // a model the table does not know. Consecutive calls reporting the same context are one
 // model call that ran several tools, so they are priced once.
-func dollarsOf(main []costCall, table model.Table) (*dollarEstimate, string) {
-	var samples []costCall
+func dollarsOf(main []trail.SessionCall, table model.Table) (*dollarEstimate, string) {
+	var samples []trail.SessionCall
 	for _, call := range main {
 		if call.ContextTokens > 0 {
 			samples = append(samples, call)
@@ -359,7 +346,7 @@ func dollarsOf(main []costCall, table model.Table) (*dollarEstimate, string) {
 		}
 	}
 	est := &dollarEstimate{Billing: types.AgentBillingMetered}
-	var prev costCall
+	var prev trail.SessionCall
 	for i, call := range samples {
 		facts, ok := table.Lookup(call.ContextModel)
 		if !ok || facts.CacheRead == 0 {
