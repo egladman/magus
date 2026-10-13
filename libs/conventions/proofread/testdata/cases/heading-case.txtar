@@ -11,7 +11,7 @@ A title-cased heading.
 ## Run the Buzz formatter
 ## The `Magus Run` Command
 Handling Stale Cache Entries
--- fp/reference whole --
+-- pass/reference whole was=fp:round1:c0332 --
 ### S3, MinIO, Spaces, Wasabi Cloud
 
 Any store that speaks the bucket protocol works.
