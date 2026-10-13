@@ -64,7 +64,7 @@ wire the guard hook. Both are on your host's page.
 | ------------------------------------ | ----------------------------- | -------------------------------------------------------- |
 | [Claude Code](agents/claude-code.md) | `.claude/skills/`             | shipped `PreToolUse` scripts via harness spell           |
 | [Codex](agents/codex.md)             | `.agents/skills/` + AGENTS.md | shipped `PreToolUse` scripts via harness spell           |
-| [Cursor](agents/cursor.md)           | AGENTS.md only                | one self-contained script                                |
+| [Cursor](agents/cursor.md)           | `.agents/skills/` + AGENTS.md | one self-contained script                                |
 | [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | TypeScript plugin (harness spell is skills-only)         |
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
@@ -154,9 +154,10 @@ event your host fires after compaction: `SessionStart` with matcher `compact` on
 `--format json` wraps the text in the reply Codex parses.
 [OpenCode](agents/opencode.md) has no hook to point at a file, and its plugin
 leaves the compaction prompt alone, so a compacted OpenCode session gets no brief.
-[Cursor](agents/cursor.md) cannot either: `preCompact` returns a message for the
-person and nothing for the model. On both, run the command yourself and read the
-same thing.
+On [Cursor](agents/cursor.md) `preCompact` returns a message for the person and
+nothing for the model, so the guard marks the conversation and the next
+`postToolUse` carries the brief again. On OpenCode, run the command yourself and
+read the same thing.
 The review belongs here rather than in a `Stop` hook: a stop event can record
 evidence, but cannot reliably inject an actionable message into the model's next
 context.
@@ -204,22 +205,22 @@ keychain login or `CLAUDE_CODE_OAUTH_TOKEN`, which the suite passes through.
 Every run writes a version report naming each host's binary, version and model
 beside each scenario's result.
 
-| variable                    | effect                                                    |
-| --------------------------- | --------------------------------------------------------- |
-| `MAGUS_E2E_HOSTS`           | comma-separated host ids to drive; all four by default    |
-| `MAGUS_E2E_<HOST>_BIN`      | the host binary to use before the one on `PATH`           |
-| `MAGUS_E2E_<HOST>_MODEL`    | the model the host runs                                   |
-| `MAGUS_E2E_TIMEOUT`         | the bound on one host invocation                          |
-| `MAGUS_E2E_MAGUS`           | the magus binary to wire; `./magus` by default            |
-| `MAGUS_E2E_KEEP=1`          | keep each temporary workspace                             |
-| `MAGUS_E2E_REPORT`          | the version report's path                                 |
+| variable                 | effect                                                 |
+| ------------------------ | ------------------------------------------------------ |
+| `MAGUS_E2E_HOSTS`        | comma-separated host ids to drive; all four by default |
+| `MAGUS_E2E_<HOST>_BIN`   | the host binary to use before the one on `PATH`        |
+| `MAGUS_E2E_<HOST>_MODEL` | the model the host runs                                |
+| `MAGUS_E2E_TIMEOUT`      | the bound on one host invocation                       |
+| `MAGUS_E2E_MAGUS`        | the magus binary to wire; `./magus` by default         |
+| `MAGUS_E2E_KEEP=1`       | keep each temporary workspace                          |
+| `MAGUS_E2E_REPORT`       | the version report's path                              |
 
-|             | command rules | declared-output rule | deny | advise | host E2E: shell deny | MCP call rules                               |
-| ----------- | ------------- | -------------------- | ---- | ------ | -------------------- | -------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                  | wired, rule-empty; live pending              |
-| Codex       | yes           | yes                  | yes  | yes    | yes                  | wired, fixture-verified; live pending        |
-| Cursor      | yes           | yes                  | yes  | yes    | not yet run          | gated: `beforeMCPExecution` (advise unwired) |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | wired; live-probed on 1.18.30                |
+|             | command rules | declared-output rule | deny | advise | host E2E: shell deny | MCP call rules                                       |
+| ----------- | ------------- | -------------------- | ---- | ------ | -------------------- | ---------------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                  | wired, rule-empty; live pending                      |
+| Codex       | yes           | yes                  | yes  | yes    | yes                  | wired, fixture-verified; live pending                |
+| Cursor      | yes           | yes                  | yes  | yes    | not yet run          | gated: `beforeMCPExecution`; advise on `postToolUse` |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | wired; live-probed on 1.18.30                        |
 
 "Fixture-verified" means the adapter executed against this binary with a
 controlled host event on stdin. "Host E2E: shell deny" means a locally
@@ -234,8 +235,10 @@ Both decisions now reach the model everywhere, which they did not until recently
 one host was sent no advisory at all, one delivered it to the person on stderr,
 and one logged it. What still differs is WHEN. A host whose gating event carries a
 message only with a denial has to send the explanation on its post-tool event
-instead, which means the call has already run and that magus was asked about it
-twice, leaving two rows in the activity trail where the other hosts leave one.
+instead, which means the call has already run. Cursor is that host: its gating
+event judges the call once and files the verdict, and the post-tool event answers
+from the file without asking magus again, so one call leaves one row in the
+activity trail, as on the other hosts.
 
 ### What each host carries
 
@@ -245,19 +248,23 @@ mapping, not a claim that the host E2E suite has proven delivery of each row.
 Path, MCP, and lifecycle delivery remain pending unless the evidence matrix
 above explicitly marks them proven.
 
-| job                         | Claude Code                                | Codex                                                            | Cursor                                                                  | OpenCode                          |
-| --------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------- |
-| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                                              | `beforeShellExecution`                                                  | `tool.execute.before`             |
-| command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
-| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                                            | `tool.execute.before`             |
-| write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
-| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)                     | `tool.execute.before` `magus_*`   |
-| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible after compact; `sessionStart` sets env + budgeted brief | not wired: only a PRE hook exists |
-| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                                            | root `session.idle` bus event     |
-| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                                       | `tool.execute.before` `task`      |
-| read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                               | not wired                         |
-| tool-failure hint           | not wired                                  | not wired                                                        | not expressible: no response fields                                     | not wired                         |
-| session-load adapter        | ships one                                  | ships one                                                        | none written                                                            | ships one                         |
+| job                         | Claude Code                                | Codex                                                              | Cursor                                                                    | OpenCode                          |
+| --------------------------- | ------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------- | --------------------------------- |
+| command guard, deny         | `PreToolUse` `Bash`                        | `PreToolUse` `Bash`                                                | `preToolUse` `Shell` (`beforeShellExecution` for a command it never saw)  | `tool.execute.before`             |
+| command guard, advise       | `additionalContext`                        | `additionalContext`                                                | `postToolUse.additional_context`                                          | `tool.execute.after`              |
+| write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                     | `preToolUse`                                                              | `tool.execute.before`             |
+| write guard, advise         | `additionalContext`                        | `additionalContext`                                                | `postToolUse.additional_context`                                          | `tool.execute.after`              |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending)   | `beforeMCPExecution` (`failClosed`); advise on `postToolUse` (`MCP:`)     | `tool.execute.before` `magus_*`   |
+| post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                           | `preCompact` marks it; the next `postToolUse` carries the brief again     | not wired: only a PRE hook exists |
+| checkpoint                  | `Stop`                                     | `Stop`                                                             | `sessionEnd`                                                              | root `session.idle` bus event     |
+| lease provenance            | `PreToolUse` on the sub-agent tool         | `PreToolUse` on `spawn_agent`, `collaborationspawn_agent`, `Agent` | `preToolUse` `Task`; `subagentStart` never fires on cursor-agent          | `tool.execute.before` `task`      |
+| subagent id                 | `PostToolUse` on the sub-agent tool        | `PostToolUse` on the spawn names the child                         | not expressible: no `postToolUse` for `Task`, no parent id on child calls | `tool.execute.after` `task`       |
+| subagent brief              | not wired                                  | `SubagentStart` (`additionalContext`)                              | not expressible: `subagentStart` never fires                              | not wired                         |
+| subagent context size       | `SubagentStop`                             | `SubagentStop`                                                     | not expressible: `subagentStop` names no subagent id                      | not wired                         |
+| read observation            | `PreToolUse` `Read`                        | not wired                                                          | not wired                                                                 | not wired                         |
+| tool-failure hint           | not wired                                  | not wired                                                          | `postToolUseFailure.additional_context`                                   | not wired                         |
+| skill load                  | `PreToolUse` `Skill`                       | not expressible: no hook on a skill load                           | `preToolUse` `Read` of a `SKILL.md`, with `--reports-skills`              | not wired                         |
+| session-load adapter        | ships one                                  | ships one                                                          | ships one (`magus-session-load-cursor.buzz`)                              | ships one                         |
 
 Two kinds of blank belong in that table and they are not the same. **Not
 expressible** is a host contract magus cannot reach through, and it is named
