@@ -46,7 +46,7 @@ fun codex_named_command(script: str) > str {
     return codex_buzz_command(script, flags: ["--agent-name", mgs_getName()]);
 }
 
-// One command serves the Bash, Read, MCP and PermissionRequest matchers: the glue reads
+// One command serves the Bash, MCP, spawn and PermissionRequest matchers: the glue reads
 // off the event whether to forward it whole, so an MCP call needs nothing on its entry.
 fun codex_guard_command() > str {
     return codex_named_command("magus-command");
@@ -56,12 +56,8 @@ fun codex_path_command() > str {
     return codex_named_command("magus-path");
 }
 
-fun codex_observe_command() > str {
-    return codex_named_command("magus-observe");
-}
-
-// Codex parses a SessionStart hook's stdout as a reply, so the brief has to arrive as
-// JSON, and its instruction file is AGENTS.md.
+// Codex parses a SessionStart or SubagentStart hook's stdout as a reply, so the brief has
+// to arrive as JSON, and its instruction file is AGENTS.md.
 fun codex_rehydrate_command() > str {
     return codex_buzz_command("magus-rehydrate", flags: ["--format", "json", "--rules", "AGENTS.md"]);
 }
@@ -84,7 +80,10 @@ fun codex_command_hook(cmd: str, status: str) > {str: any} {
     };
 }
 
-final SPAWN_MATCHER = "spawn_agent";
+// A matcher made only of letters, digits and underscores is an exact list of tool names,
+// so each spelling of the spawn tool needs its own member: v1 models call it spawn_agent,
+// v2 models collaborationspawn_agent, and Agent is the documented alias.
+final SPAWN_MATCHER = "spawn_agent|collaborationspawn_agent|Agent";
 
 fun codex_pretool_entry(matcher: str, cmd: str, status: str) > {str: any} {
     return {
@@ -101,16 +100,38 @@ fun codex_entries() > [any] {
             "entries": [
                 codex_pretool_entry("Bash", codex_guard_command(), "magus guard: checking command"),
                 codex_pretool_entry("Edit|Write", codex_path_command(), "magus guard: checking file"),
-                codex_pretool_entry("Read", codex_observe_command(), "magus: recording read"),
-                // The glue restates a Read as the `cat` or `sed -n` line it stands for, so
-                // the read rules judge it like the shell read it replaces.
-                codex_pretool_entry("Read", codex_guard_command(), "magus guard: checking read"),
                 codex_pretool_entry("mcp__.*", codex_guard_command(), "magus guard: checking MCP tool call"),
-                // The spawn tool's name; Codex's docs say the matcher also matches the alias
-                // Agent. Neither entry here declares --reports-skills: Codex documents no hook
-                // on a skill load, so a rule that requires one has nothing to read and must
-                // stand down.
+                // No entry declares --reports-skills: Codex has no skill tool to match, so a
+                // rule that requires a skill load has nothing to read and must stand down.
                 codex_pretool_entry(SPAWN_MATCHER, codex_guard_command(), "magus guard: checking subagent spawn"),
+            ],
+        },
+        {
+            // Judges nothing. The finished spawn is how magus learns the child's name: a v2
+            // spawn answers with its task_name path, a v1 spawn with the agent id.
+            "path": ["hooks", "PostToolUse"],
+            "entries": [
+                codex_pretool_entry(SPAWN_MATCHER, codex_guard_command(), "magus: recording the subagent"),
+            ],
+        },
+        {
+            // The v2 spawn message is encrypted, so nothing the parent wrote can carry a
+            // brief to the child. This hook's context is the child's first instruction.
+            "path": ["hooks", "SubagentStart"],
+            "entries": [
+                {
+                    "hooks": [codex_command_hook(codex_rehydrate_command(), "magus: briefing the subagent")],
+                },
+            ],
+        },
+        {
+            // Judges nothing. The payload names the child's transcript, whose last
+            // token_count record is the context size a later continuation reads.
+            "path": ["hooks", "SubagentStop"],
+            "entries": [
+                {
+                    "hooks": [codex_command_hook(codex_guard_command(), "magus: recording the subagent's context")],
+                },
             ],
         },
         {
@@ -369,7 +390,6 @@ test "every glue command names this host on its argv, and rehydrate takes none" 
     final named = " --agent-name {mgs_getName()}";
     assert\isTrue(codex_guard_command().endsWith(named), "command hook");
     assert\isTrue(codex_path_command().endsWith(named), "path hook");
-    assert\isTrue(codex_observe_command().endsWith(named), "read hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
     assert\isTrue(codex_proofread_command().endsWith(named), "Stop proofread, which picks its output shape by host");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
@@ -378,11 +398,10 @@ test "every glue command names this host on its argv, and rehydrate takes none" 
 test "guard commands name the Buzz glue as a plain argv" {
     assert\isTrue(codex_guard_command().indexOf("magus-command.buzz") != null, "command hook");
     assert\isTrue(codex_path_command().indexOf("magus-path.buzz") != null, "path hook");
-    assert\isTrue(codex_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
-    assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart needs JSON stdout and AGENTS.md");
+    assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart and SubagentStart need JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
     assert\isTrue(codex_proofread_command().indexOf("proofread-reply.buzz") != null, "Stop proofread");
-    foreach (cmd in [codex_guard_command(), codex_path_command(), codex_observe_command(),
+    foreach (cmd in [codex_guard_command(), codex_path_command(),
             codex_rehydrate_command(), codex_checkpoint_command(), codex_proofread_command()]) {
         assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
@@ -404,11 +423,30 @@ test "harness_prompts prompts for every backend's push" {
     assert\isTrue(rules.indexOf("[\"jj\", \"git\", \"push\"]") != null, "Jujutsu push");
 }
 
+// codex_block is the managed block for one event, null when none is wired.
+fun codex_block(event: str) > {str: any}? {
+    foreach (block in codex_entries()) {
+        final path = block["path"] as [str];
+        if (path[1] == event) { return block as {str: any}; }
+    }
+    return null;
+}
+
+// codex_commands is the command of each entry in the block for one event.
+fun codex_commands(event: str) > [str] {
+    final commands: mut [str] = mut [];
+    final block = codex_block(event);
+    if (block == null) { return commands; }
+    foreach (entry in block!["entries"] as [any]) {
+        foreach (hook in entry["hooks"] as [any]) {
+            commands.append("{hook["command"]}");
+        }
+    }
+    return commands;
+}
+
 test "PermissionRequest answers Codex's approval with the shared command template" {
-    final entries = codex_entries();
-    final pr = entries[1];
-    final pr_path = pr["path"] as [str];
-    assert\equal(pr_path[1], "PermissionRequest", "the event raised before the prompt");
+    final pr = codex_block("PermissionRequest")!;
     final pr_entries = pr["entries"] as [any];
     assert\equal(pr_entries.len(), 1, "Bash only");
     assert\equal("{pr_entries[0]["matcher"]}", "Bash", "the push rule matches shell commands");
@@ -416,45 +454,45 @@ test "PermissionRequest answers Codex's approval with the shared command templat
     assert\equal("{hooks[0]["command"]}", codex_guard_command(), "same template as PreToolUse");
 }
 
-test "harness_entries covers PreToolUse PermissionRequest SessionStart Stop and UserPromptSubmit" {
+test "the spawn matcher lists every spelling of Codex's spawn tool" {
+    assert\equal(SPAWN_MATCHER, "spawn_agent|collaborationspawn_agent|Agent", "an alphanumeric matcher is an exact list of tool names");
+}
+
+test "harness_entries covers the tool, subagent, session, Stop and message events" {
     final entries = codex_entries();
-    assert\equal(entries.len(), 5, "five managed path blocks");
-    final pre = entries[0];
-    final pre_path = pre["path"] as [str];
-    assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
+    assert\equal(entries.len(), 8, "eight managed path blocks");
+    final pre = codex_block("PreToolUse")!;
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 6, "Bash EditWrite Read-observe Read-guard mcp and spawn matchers");
+    assert\equal(pre_entries.len(), 4, "Bash, EditWrite, mcp and spawn matchers: Codex has no Read tool");
     var spawn = "";
     foreach (entry in pre_entries) {
+        assert\isTrue("{entry["matcher"]}" != "Read", "a matcher no Codex tool carries never fires");
         if ("{entry["matcher"]}" == SPAWN_MATCHER) {
             spawn = "{(entry["hooks"] as [any])[0]["command"]}";
         }
     }
     assert\equal(spawn, codex_guard_command(), "a spawn reaches the same glue as a command");
-    var judged = false;
-    foreach (entry in pre_entries) {
-        final hooks = entry["hooks"] as [any];
-        if ("{entry["matcher"]}" == "Read" and "{hooks[0]["command"]}" == codex_guard_command()) { judged = true; }
-    }
-    assert\isTrue(judged, "a Read is judged as the read it stands for");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");
         assert\equal("{hooks[0]["type"]}", "command", "Codex hook type");
         assert\isTrue("{entry["matcher"]}".len() > 0, "matcher present");
     }
-    final start = entries[2];
-    final start_path = start["path"] as [str];
-    assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
-    final stop = entries[3];
-    final stop_path = stop["path"] as [str];
-    assert\equal(stop_path[1], "Stop", "checkpoint, then the reply check");
-    final stop_entries = stop["entries"] as [any];
+    final post = codex_block("PostToolUse")!;
+    final post_entries = post["entries"] as [any];
+    assert\equal(post_entries.len(), 1, "the finished spawn only");
+    assert\equal("{post_entries[0]["matcher"]}", SPAWN_MATCHER, "the child's name rides the spawn's response");
+    assert\equal(codex_commands("PostToolUse")[0], codex_guard_command(), "recorded by the command glue");
+    assert\equal(codex_commands("SubagentStart")[0], codex_rehydrate_command(), "the child is briefed through additionalContext");
+    assert\equal(codex_commands("SubagentStop")[0], codex_guard_command(), "the child's context size is filed by the command glue");
+    assert\equal(codex_commands("SessionStart")[0], codex_rehydrate_command(), "rehydrate on compact");
+    final start_entries = codex_block("SessionStart")!["entries"] as [any];
+    assert\equal("{start_entries[0]["matcher"]}", "compact", "only the moment state was lost");
+    final stop_entries = codex_block("Stop")!["entries"] as [any];
     assert\equal(stop_entries.len(), 2, "the checkpoint entry and the proofread entry");
-    assert\equal("{(stop_entries[0]["hooks"] as [any])[0]["command"]}", codex_checkpoint_command(), "records where the work stands");
-    assert\equal("{(stop_entries[1]["hooks"] as [any])[0]["command"]}", codex_proofread_command(), "judges the reply");
-    final message = entries[4];
-    assert\equal((message["path"] as [str])[1], "UserPromptSubmit", "the person's message, recorded and never answered");
+    assert\equal(codex_commands("Stop")[0], codex_checkpoint_command(), "records where the work stands");
+    assert\equal(codex_commands("Stop")[1], codex_proofread_command(), "judges the reply");
+    final message = codex_block("UserPromptSubmit")!;
     final message_entries = message["entries"] as [any];
     assert\equal(message_entries.len(), 1, "one message entry");
     assert\isTrue(message_entries[0]["matcher"] == null, "Codex ignores a matcher on this event");

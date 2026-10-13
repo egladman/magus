@@ -32,6 +32,10 @@
 //
 //   {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"..."}}
 //
+// A subagent starts with none of its parent's history, which is the same loss, so the
+// event may also be SubagentStart: the reply then names that event, and the child reads
+// the brief before its first step. Any other event is answered as SessionStart.
+//
 // The rules line is the one host-shaped part, which is why the entry names it rather
 // than magus printing it: magus names the files it ships and can see (AGENTS.md, the
 // installed skill directories), and the file YOUR host reads is yours to name. It
@@ -56,6 +60,7 @@ import "lib/hook" as hook;
 
 final RULES_FLAG = "--rules";
 final FORMAT_FLAG = "--format";
+final SUBAGENT_START = "SubagentStart";
 
 // warn names the file; see magus-command.buzz. STDERR, so it never joins the reply this
 // file writes on stdout.
@@ -88,7 +93,10 @@ fun main(args: [str]) > void {
     }
     // The event's cwd names the checkout to brief, for the reason magus-command.buzz's
     // Guard gives. The working directory stands in when the event names none.
-    final cwd = hook\field(json\parse(io\stdin.readAll() catch "") catch null, dotPath: "cwd");
+    final event = json\parse(io\stdin.readAll() catch "") catch null;
+    final cwd = hook\field(event, dotPath: "cwd");
+    var eventName = "SessionStart";
+    if (hook\field(event, dotPath: "hook_event_name") == SUBAGENT_START) { eventName = SUBAGENT_START; }
     var root = "";
     if (cwd != "") { root = hook\workspaceRootAt(cwd); }
     if (root == "") { root = hook\workspaceRoot(); }
@@ -125,7 +133,7 @@ fun main(args: [str]) > void {
     if (format == "json") {
         final context = json\stringify(brief + "\n") catch "";
         if (context == "") { return; }
-        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"SessionStart","additionalContext":`
+        io\stdout.write(`\{"hookSpecificOutput":\{"hookEventName":"{eventName}","additionalContext":`
             + context + "}}") catch void;
         return;
     }

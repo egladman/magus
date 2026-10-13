@@ -32,32 +32,46 @@
         ]
       },
       {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-observe.buzz -- --agent-name codex",
-            "statusMessage": "magus: recording read"
-          }
-        ]
-      },
-      {
-        "matcher": "Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
-            "statusMessage": "magus guard: checking read"
-          }
-        ]
-      },
-      {
-        "matcher": "spawn_agent",
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent",
         "hooks": [
           {
             "type": "command",
             "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
             "statusMessage": "magus guard: checking subagent spawn"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "spawn_agent|collaborationspawn_agent|Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-rehydrate.buzz -- --format json --rules AGENTS.md",
+            "statusMessage": "magus: briefing the subagent"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: recording the subagent's context"
           }
         ]
       }

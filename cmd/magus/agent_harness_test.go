@@ -275,7 +275,11 @@ grep 'cursor-hook.buzz' .cursor/hooks.json
 grep 'proofread-reply.buzz -- --agent-name claude-code' .claude/settings.json
 grep 'proofread-reply.buzz -- --agent-name codex' .codex/hooks.json
 grep 'proofread-reply.buzz -- --agent-name cursor' .cursor/hooks.json
-grep '"matcher": "spawn_agent"' .codex/hooks.json
+grep '"matcher": "spawn_agent\|collaborationspawn_agent\|Agent"' .codex/hooks.json
+grep '"PostToolUse"' .codex/hooks.json
+grep '"SubagentStart"' .codex/hooks.json
+grep '"SubagentStop"' .codex/hooks.json
+! grep '"matcher": "Read"' .codex/hooks.json
 grep '"UserPromptSubmit"' .codex/hooks.json
 grep '"beforeSubmitPrompt"' .cursor/hooks.json
 grep '"loop_limit": 1' .cursor/hooks.json
@@ -289,7 +293,8 @@ exec sh merge.sh
 grep -count=1 'proofread-reply.buzz' .claude/settings.json
 grep -count=1 'proofread-reply.buzz' .codex/hooks.json
 grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
-grep -count=1 'spawn_agent' .codex/hooks.json
+grep -count=2 'collaborationspawn_agent' .codex/hooks.json
+grep -count=2 'magus-rehydrate.buzz' .codex/hooks.json
 exec magus describe harness claude-code
 stdout '^claude-code harness: current$'
 exec magus describe harness codex

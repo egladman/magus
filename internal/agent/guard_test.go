@@ -93,6 +93,8 @@ var hookConfigExemptions = map[string]map[string]string{
 		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
 			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
 			"checkout root on PATH for later shell commands",
+		"magus-observe": "Codex has no read tool: a file is read through a shell command, which the command " +
+			"rules already judge, so no PreToolUse matcher exists for the read record to ride",
 	},
 }
 
