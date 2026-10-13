@@ -828,7 +828,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	case req.DryRun:
 		ctx = withRegisteredBase(ctx, deps, location, binding.Job)
 	case registerAgentBase(ctx, deps, location, binding.Job):
-		ctx = withJobStoreRows(ctx, location)
+		ctx = rereadJobStoreRows(ctx, location)
 	}
 	tool := hookToolCommand
 	switch {
@@ -2001,14 +2001,22 @@ type locationKey struct{}
 // read is the job_rows phase underway while it runs, so a judgment that stalls in it names
 // it; one that answers leaves no row, and one that runs out pins the deadline's error and is
 // recorded lapsed, which askWorkspaceRules reports as a lapse. Once one has run out in a
-// judgment the rest answer at once. A dry run waits as long as ctx allows.
+// judgment the rest answer at once. A dry run waits as long as ctx allows, and its sweep
+// writes nothing.
+//
+// A caller that already swept the store, as a fork grading its check has, pins its rows
+// rather than have the judgment decode and sweep the same file again.
 func withJobStoreRows(ctx context.Context, at location) context.Context {
-	if at.cacheDir == "" {
+	if job.HasSnapshot(ctx) {
 		return ctx
 	}
-	// A caller that already swept the store, as a fork grading its check has, pins its
-	// rows rather than have the judgment decode and sweep the same file again.
-	if job.HasSnapshot(ctx) {
+	return rereadJobStoreRows(ctx, at)
+}
+
+// rereadJobStoreRows is withJobStoreRows over any rows already pinned, for a judgment
+// that has just written the store.
+func rereadJobStoreRows(ctx context.Context, at location) context.Context {
+	if at.cacheDir == "" {
 		return ctx
 	}
 	log := judgmentPhases(ctx)
@@ -2027,8 +2035,9 @@ func withJobStoreRows(ctx context.Context, at location) context.Context {
 	wait, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	start := time.Now()
-	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
-	rows, err := awaitDeadline(wait, func() ([]types.Job, error) { return listJobRows(store) })
+	dryRun := isDryRun(ctx)
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace, DryRun: dryRun})
+	rows, err := awaitDeadline(wait, func() ([]types.Job, error) { return listJobRows(store, dryRun) })
 	if err != nil && wait.Err() != nil {
 		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
 	} else {
@@ -2109,9 +2118,9 @@ func (m jobRowsMemo) fresh(info os.FileInfo, now time.Time) bool {
 //	never memoized.
 //
 // A memo is written only when the store file is the same before and after the List, which
-// is how it is known nothing was ended and no writer interleaved. Any memo problem falls
-// back to List: the memo can cost a read, never a verdict.
-func listJobRows(store *job.Store) ([]types.Job, error) {
+// is how it is known nothing was ended and no writer interleaved, and never by a dry run.
+// Any memo problem falls back to List: the memo can cost a read, never a verdict.
+func listJobRows(store *job.Store, dryRun bool) ([]types.Job, error) {
 	path, err := store.Path()
 	if err != nil {
 		return store.List()
@@ -2129,7 +2138,7 @@ func listJobRows(store *job.Store) ([]types.Job, error) {
 		}
 	}
 	rows, err := store.List()
-	if err != nil {
+	if err != nil || dryRun {
 		return rows, err
 	}
 	if after, err := os.Stat(path); err == nil && after.Size() == before.Size() && after.ModTime().Equal(before.ModTime()) &&
