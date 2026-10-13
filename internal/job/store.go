@@ -87,6 +87,8 @@ type Store struct {
 	clock      func() time.Time
 	staleAfter *time.Duration
 	notices    io.Writer
+	// retain is the retention window's seam; nil means [DefaultRetain].
+	retain *time.Duration
 	// outputs is Location.Outputs.
 	outputs func(root string) AttemptResolver
 	// landed is the sweep's landing probe, nil for [Store.landedOnBase]; see [sweeper.landed].
@@ -254,7 +256,9 @@ func (s *Store) Path() (string, error) { return s.path, s.err }
 // break no row-level requirement can express, and a reader lacking one refuses the file.
 type jobsFile struct {
 	types.Schema
-	Jobs []types.Job `json:"jobs"`
+	// Retained is when the last retention pass ran, in unix seconds; see [Store.retainDue].
+	Retained int64       `json:"retained,omitempty"`
+	Jobs     []types.Job `json:"jobs"`
 }
 
 // readOnly refuses a write to row when it requires a feature this magus lacks. The row
@@ -631,9 +635,6 @@ func (s *Store) mutate(ctx context.Context, id string, kind grading, apply func(
 // for the rules. The sweep is the one write a read makes, and only when a row is dead, so
 // a plan with nothing to end is still read without either lock.
 func (s *Store) List() ([]types.Job, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	f, err := s.read()
 	if err != nil {
 		return nil, err
@@ -688,9 +689,9 @@ func (s *Store) Clear(ctx context.Context) (int, error) {
 	return dropped, nil
 }
 
-// archive writes the rows a clear is about to drop beside the ledger, named for the
-// moment they were dropped. A second clear within the same second overwrites the first
-// archive rather than growing a suffix scheme: two plans wiped in one second is one
+// archive writes the rows a clear or a delete is about to drop beside the ledger, named
+// for the moment they were dropped. A second drop within the same second overwrites the
+// first archive rather than growing a suffix scheme: two plans wiped in one second is one
 // mistake being repeated, and the rows worth keeping are the ones there now.
 func (s *Store) archive(f jobsFile) error {
 	raw, err := json.MarshalIndent(f, "", "  ")
@@ -854,22 +855,49 @@ func (s *Store) declarationDigest(ctx context.Context, p, decl string) string {
 // is from the reader's side.
 const maxDigestBytes = 32 << 20
 
-// doc is the ledger file. Every rewrite goes through its Update, under the OS file lock
-// beside jobs.json, so a read-modify-write cannot interleave with one from another magus
-// process. The lock wait is BOUNDED, where the workspace project locks (magus/lock.go)
-// wait forever with a heartbeat: their holder is a build that may run for hours, and a
-// ledger write is a small file rewrite, so a longer wait means a stuck holder.
+// doc is the ledger file. Every rewrite goes through [Store.update], under the OS file
+// lock beside jobs.json, so a read-modify-write cannot interleave with one from another
+// magus process. The lock wait is BOUNDED, where the workspace project locks
+// (magus/lock.go) wait forever with a heartbeat: their holder is a build that may run for
+// hours, and a ledger write is a small file rewrite, so a longer wait means a stuck holder.
 func (s *Store) doc() file.Doc[jobsFile] {
-	return file.Doc[jobsFile]{Path: s.path, Decode: s.decode, Encode: encodeJobs}
+	return file.Doc[jobsFile]{Path: s.path, Decode: s.decode}
 }
 
 // update runs fn over the ledger as it stands under the file lock and writes what fn
-// leaves. fn returning an error, file.ErrSkipWrite included, writes nothing.
+// leaves, with a retention pass when one is due (see [Store.retainDue]). fn returning an
+// error, file.ErrSkipWrite included, writes nothing.
 func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 	if s.err != nil {
 		return s.err
 	}
-	return s.doc().Update(ctx, fn)
+	doc := s.doc()
+	return s.locked(ctx, func() error {
+		f, err := doc.Load()
+		if err != nil {
+			return err
+		}
+		if err := fn(&f); err != nil {
+			if errors.Is(err, file.ErrSkipWrite) {
+				return nil
+			}
+			return err
+		}
+		s.retainDue(&f, s.now())
+		raw, err := encodeJobs(f)
+		if err != nil {
+			return err
+		}
+		return file.WriteFileAtomic(s.path, raw, 0o644)
+	})
+}
+
+// now is the Store's clock.
+func (s *Store) now() time.Time {
+	if s.clock != nil {
+		return s.clock()
+	}
+	return time.Now()
 }
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
@@ -924,8 +952,9 @@ func encodeJobs(f jobsFile) ([]byte, error) {
 // destroys the only account of it, and the caller who wants that says so with force. A
 // live row is the opposite case: nothing has happened yet, so there is nothing to lose.
 //
-// Archived first, exactly as Clear archives, so a delete is recoverable from the sibling
-// file rather than only from whatever the caller remembers.
+// The dropped row is archived first, as Clear archives, so a delete is recoverable from
+// the sibling file rather than only from whatever the caller remembers. Archives last
+// [DefaultRetain]; see [Store.dropExpiredFiles].
 func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
 	id = strings.TrimSpace(id)
 	if err := authorizeDelete(s.Actor(), id); err != nil {
@@ -949,7 +978,7 @@ func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, e
 				" delete it anyway with --force, or leave it where a later reader can find it",
 				id, dropped.State)
 		}
-		if err := s.archive(*f); err != nil {
+		if err := s.archive(jobsFile{Schema: f.Schema, Jobs: []types.Job{dropped}}); err != nil {
 			return err
 		}
 		f.Jobs = slices.Delete(f.Jobs, i, i+1)

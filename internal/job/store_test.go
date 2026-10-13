@@ -646,6 +646,7 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	t.Parallel()
 
 	s := tmpStore(t, t.TempDir())
+	s.clock = func() time.Time { return time.Unix(1_700_000_000, 0) }
 	path := plantRaw(t, s, `{"schema_version":99,"plan":"p1","jobs":[]}`)
 	seed(t, s, lease("a"))
 	_, err := s.Clear(t.Context())
@@ -655,7 +656,8 @@ func TestStoreKeepsTheFileEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	var f map[string]any
 	require.NoError(t, json.Unmarshal(raw, &f))
-	assert.Equal(t, map[string]any{"schema_version": float64(99), "plan": "p1", "jobs": nil}, f)
+	assert.Equal(t, map[string]any{"schema_version": float64(99), "plan": "p1", "jobs": nil, "retained": float64(1_700_000_000)}, f,
+		"the store's own retention stamp rides beside it")
 }
 
 // compat: see the legacy fields on Row. A plan written before the rename keeps its
