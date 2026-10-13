@@ -365,7 +365,7 @@ final UNKNOWN_FLAG = "flag provided but not defined";
 fun rejectedFlag(result: proc\ExecResult?) > bool {
     return result != null
         and result!.code != 0
-        and hook\trimTrailingNewlines(result!.stdout) == ""
+        and result!.stdout.trim() == ""
         and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
 }
 
