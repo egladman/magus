@@ -268,12 +268,12 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
 	if !ended && s.recordsSwept(w.now, rows) {
 		return
 	}
-	defer s.writeRecordsSwept(w.now, rows)
 	dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return
 	}
+	defer s.writeRecordsSwept(w.now, rows)
 	for _, e := range entries {
 		path := filepath.Join(dir, e.Name())
 		b := readBinding(path)

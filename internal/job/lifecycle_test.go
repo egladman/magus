@@ -966,10 +966,41 @@ func TestJobPruneDryRunEndsNothing(t *testing.T) {
 
 	got, err := s.Prune(t.Context(), PruneOptions{DryRun: true})
 	require.NoError(t, err)
-	assert.Len(t, got, 5, "a dry run lists what a prune would end")
+	assert.Len(t, got, 6, "a dry run lists what a prune would end")
 	after, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after))
+}
+
+// A dry-run store's read reports the rows its sweep would end, and writes nothing.
+func TestDryRunListEndsRowsOnlyInWhatItReturns(t *testing.T) {
+	const now = int64(100_000)
+	s, notices := sweepStore(t, now, 2*time.Hour)
+	s.landed = func(context.Context, types.Job) string { return "" }
+	plant(t, s, types.Job{ID: "late", State: types.StateRunning, Registered: now - 60, Deadline: now - 600, Updated: now - 60})
+	path, err := s.Path()
+	require.NoError(t, err)
+	dir := func() map[string]string {
+		entries, err := os.ReadDir(filepath.Dir(path))
+		require.NoError(t, err)
+		out := map[string]string{}
+		for _, e := range entries {
+			body, err := os.ReadFile(filepath.Join(filepath.Dir(path), e.Name()))
+			require.NoError(t, err)
+			out[e.Name()] = string(body)
+		}
+		return out
+	}
+	before := dir()
+
+	s.dryRun = true
+	rows, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, types.StateNoReturn, rows[0].State)
+	assert.Contains(t, rows[0].EndReason, overdueReasonPrefix)
+	assert.Equal(t, before, dir())
+	assert.Empty(t, notices.String())
 }
 
 func TestJobPruneRefusesABoundWorker(t *testing.T) {

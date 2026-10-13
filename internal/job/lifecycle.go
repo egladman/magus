@@ -878,6 +878,7 @@ func (w *sweeper) checkoutGone(root string) bool {
 
 // sweep ends every row in f the [sweeper] proves dead, tombstones the binding records
 // whose job's checkout is gone (see [Store.sweepRecords]), and returns the plan as written.
+// A dry-run store ends the rows in the returned plan only.
 func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	clock := s.clock
 	if clock == nil {
@@ -885,6 +886,14 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	}
 	w := &sweeper{now: clock().Unix(), window: sync.OnceValues(s.resolveStaleAfter), gone: map[string]bool{}}
 	w.landed = s.landings(f.Jobs, w.now)
+	if s.dryRun {
+		dead, err := w.dead(f.Jobs)
+		if err != nil {
+			return jobsFile{}, err
+		}
+		endRows(f.Jobs, dead, w.now)
+		return f, nil
+	}
 	f, ended, err := s.endDead(w, f)
 	if err != nil {
 		return jobsFile{}, err
@@ -907,12 +916,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		if dead, err = w.dead(cur.Jobs); err != nil {
 			return err
 		}
-		for _, e := range dead {
-			i := slices.IndexFunc(cur.Jobs, func(r types.Job) bool { return r.ID == e.id })
-			cur.Jobs[i].State = types.StateNoReturn
-			cur.Jobs[i].EndReason = e.reason
-			cur.Jobs[i].Updated = w.now
-		}
+		endRows(cur.Jobs, dead, w.now)
 		f = *cur
 		if len(dead) == 0 {
 			return file.ErrSkipWrite
@@ -933,6 +937,16 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 		}
 	}
 	return f, len(dead) > 0, nil
+}
+
+// endRows ends each of dead in rows as no_return at now.
+func endRows(rows []types.Job, dead []ending, now int64) {
+	for _, e := range dead {
+		i := slices.IndexFunc(rows, func(r types.Job) bool { return r.ID == e.id })
+		rows[i].State = types.StateNoReturn
+		rows[i].EndReason = e.reason
+		rows[i].Updated = now
+	}
 }
 
 // Ending is one live row [Store.Prune] ends, and the end_reason it records.
@@ -1168,7 +1182,7 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	for _, row := range due {
 		next[row.ID] = landingProbe{At: now, Updated: row.Updated}
 	}
-	if read && !maps.Equal(history, next) {
+	if read && !s.dryRun && !maps.Equal(history, next) {
 		s.writeLandingProbes(next)
 	}
 	out := map[string]landing{}

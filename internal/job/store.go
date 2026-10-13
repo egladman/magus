@@ -95,6 +95,8 @@ type Store struct {
 	landed func(context.Context, types.Job) string
 	// grader is Location.Grader.
 	grader CheckGrader
+	// dryRun is Location.DryRun.
+	dryRun bool
 }
 
 // Location is where a Store lives: the repository whose rows these are, and the state
@@ -133,6 +135,10 @@ type Location struct {
 	// nothing: the guard lives above this package, so only a door that can reach it
 	// supplies one.
 	Grader CheckGrader
+	// DryRun makes [Store.List]'s sweep write nothing: a row it proves dead reads as
+	// ended, and no row, notice, probe history or binding record is written. It governs
+	// reads only; a write method still writes.
+	DryRun bool
 }
 
 // NewStore returns the ledger for loc's repository, adopting the legacy cache-dir
@@ -147,7 +153,7 @@ type Location struct {
 // A resolution failure is held rather than returned: every operation reports it, so a
 // caller cannot mistake an unplaceable ledger for an empty one.
 func NewStore(loc Location) *Store {
-	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader}
+	s := &Store{root: loc.Root, actor: loc.Actor, cacheDir: loc.CacheDir, outputs: loc.Outputs, grader: loc.Grader, dryRun: loc.DryRun}
 	s.path, s.err = jobsPath(loc)
 	return s
 }
