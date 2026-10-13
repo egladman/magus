@@ -1,0 +1,350 @@
+// magus session load adapter: turns Cursor's agent transcripts into the magus session
+// event contract, one JSON object per line.
+//
+// This file is the source of truth. The docs site embeds it, and you can download
+// it and run it yourself. Its Claude Code sibling carries the full contract; the
+// fields are identical, less the agent object this host cannot fill.
+//
+// Run it as `magus buzz -s magus-session-load-cursor.buzz` to pipe the stream into
+// `magus session load`; add `-- --stdout` to read the stream yourself. Override any
+// of:
+//
+//   HOST_REPO_ROOT      the Magus workspace to scope to; default is the active
+//                       workspace of the current directory. A workspace UNDER it
+//                       counts, which keeps nested project sessions in
+//   HOST_SESSION_STORE  where Cursor keeps its projects
+//   HOST_PROJECT_DIRS   the project directories to read, space separated. Default is
+//                       every one whose workspace is the root or under it
+//   SESSION_STATE_DIR   where the per-file offsets live
+//   SESSION_MAGUS_BIN   path to the binary, when it is not on PATH
+//
+// Cursor keeps one directory per workspace under ~/.cursor/projects, named after its
+// path with every run of other characters than [A-Za-z0-9] made one dash, and
+// shortened with a hash suffix when the path is long. Its .workspace-trusted file
+// names the workspace path, and is read first; the name is matched only when that
+// file is absent. Each conversation is agent-transcripts/<id>/<id>.jsonl, a subagent's
+// included, each line one message: {role, message.content[text | tool_use{name, input}]}
+// or {type: "turn_ended"}.
+//
+// A line carries no timestamp, no tool id and no tool result. An event's ts is the
+// <timestamp> Cursor writes into the user message that opened its turn, to the
+// minute; ref is the conversation id, the line and the item, which stay put because
+// the file only grows. There is no exit status, no hook output, no model and no
+// version, and the coverage line says so. A skill load is the Read of its SKILL.md.
+// A Task call may be recorded as CallDynamicTool{namespace: "cursor", toolName:
+// "Task", arguments}, and an MCP call as CallDynamicTool{namespace: <server>}.
+// magus-guard-template: 24
+// magus-session-coverage: schema=2 host=cursor commands=yes exit=none skills=yes hook-output=none spawn=yes session-id=yes model=none host-version=none
+
+// EVERY call that can fail is caught: a transcript this run cannot read is not a
+// reason to abandon the rest.
+
+import "std";
+import "io";
+import "env";
+import "flags";
+import "fs";
+import "proc";
+import "crypto";
+import "time";
+import "strings";
+import "encoding/json";
+import "lib/hook" as hook;
+
+final HOST = "cursor";
+final STDOUT_FLAG = "--stdout";
+final TIMESTAMP_OPEN = "<timestamp>";
+final TIMESTAMP_CLOSE = "</timestamp>";
+
+// warn says why nothing was extracted; see the Claude Code adapter.
+fun warn(message: str) > void {
+    io\stderr.write("magus session load: {message}\n") catch void;
+}
+
+// render writes the contract's fields in the contract's order, which a map would not.
+fun render(session: str, ts: int, cwd: str, kind: str, ref: str, text: str, transcript: str) > str {
+    fun s(v: any?) > str { return json\stringify(v) catch "null"; }
+    return "\{\"host\":{s(HOST)},\"session\":{s(session)},\"ts\":{ts},\"cwd\":{s(cwd)},"
+        + "\"kind\":{s(kind)},\"ref\":{s(ref)},\"text\":{s(text)},\"transcript\":{s(transcript)},"
+        + "\"outcome\":\{\"exit\":null,\"denied\":false,\"interrupted\":false}}";
+}
+
+// offsetMs reads the zone Cursor prints after UTC ("-4", "+5:30", "") as milliseconds
+// east of UTC.
+fun offsetMs(zone: str) > int {
+    if (zone == "") { return 0; }
+    var sign = 1;
+    var rest = zone;
+    if (rest.startsWith("-")) { sign = -1; }
+    if (rest.startsWith("-") or rest.startsWith("+")) { rest = rest.sub(1); }
+    final parts = rest.split(":");
+    final hours = std\parseInt(parts[0]) ?? 0;
+    var minutes = 0;
+    if (parts.len() > 1) { minutes = std\parseInt(parts[1]) ?? 0; }
+    return sign * (hours * 60 + minutes) * 60000;
+}
+
+// turnTime is the <timestamp> in a user message as Unix milliseconds, 0 when it has
+// none: "Tuesday, Oct 13, 2026, 8:10 AM (UTC-4)".
+fun turnTime(text: str) > int {
+    final open = text.indexOf(TIMESTAMP_OPEN);
+    final close = text.indexOf(TIMESTAMP_CLOSE);
+    if (open == null or close == null or close! <= open!) { return 0; }
+    final start = open! + TIMESTAMP_OPEN.len();
+    final stamp = text.sub(start, len: close! - start);
+    var local = stamp;
+    var zone = "";
+    final paren = stamp.indexOf(" (UTC");
+    if (paren != null) {
+        local = stamp.sub(0, len: paren!);
+        zone = stamp.sub(paren! + 5).replace(")", with: "");
+    }
+    final parsed = time\parse("Monday, Jan 2, 2006, 3:04 PM", value: local) catch -1.0;
+    if (parsed < 0.0) { return 0; }
+    return std\toInt(parsed) - offsetMs(zone);
+}
+
+fun inScope(path: str, root: str) > bool {
+    return path == root or path.startsWith(root + "/");
+}
+
+// skillName is the <name> of a .../skills/<name>/SKILL.md path, "" for any other path.
+fun skillName(path: str) > str {
+    final parts = path.split("/");
+    final n = parts.len();
+    if (n < 3 or parts[n - 1] != "SKILL.md" or parts[n - 3] != "skills") { return ""; }
+    return parts[n - 2];
+}
+
+object Call {
+    name: str,
+    input: any?,
+}
+
+// unwrap returns the call a CallDynamicTool stands for: Task by its own name, and an
+// MCP tool as mcp__<server>__<tool>, the name the other hosts record it under.
+fun unwrap(name: str, input: any?) > Call {
+    if (name != "CallDynamicTool") { return Call{ name = name, input = input }; }
+    final server = hook\field(input, dotPath: "namespace");
+    final tool = hook\field(input, dotPath: "toolName");
+    final args = hook\dig(input, dotPath: "arguments");
+    if (server == "cursor") { return Call{ name = tool, input = args }; }
+    return Call{ name = "mcp__{server}__{tool}", input = args };
+}
+
+fun pathOf(input: any?) > str {
+    final path = hook\field(input, dotPath: "path");
+    if (path != "") { return path; }
+    return hook\field(input, dotPath: "file_path");
+}
+
+object Found {
+    kind: str,
+    text: str,
+}
+
+// found lists the events one call is: a SKILL.md Read is both the read and the load.
+fun found(call: Call) > [Found] {
+    final name = call.name;
+    if (name == "Shell") { return [Found{ kind = "shell.command", text = hook\field(call.input, dotPath: "command") }]; }
+    if (name == "Read") {
+        final path = pathOf(call.input);
+        final skill = skillName(path);
+        if (skill != "") {
+            return [Found{ kind = "file.read", text = path }, Found{ kind = "skill.load", text = skill }];
+        }
+        return [Found{ kind = "file.read", text = path }];
+    }
+    if (name == "Write" or name == "StrReplace" or name == "Edit" or name == "MultiEdit" or name == "Delete" or name == "NotebookEdit") {
+        return [Found{ kind = "file.write", text = pathOf(call.input) }];
+    }
+    if (name == "Task") { return [Found{ kind = "spawn", text = hook\field(call.input, dotPath: "subagent_type") }]; }
+    if (name.startsWith("mcp__magus__")) { return [Found{ kind = "magus.call", text = name }]; }
+    return [<Found>];
+}
+
+// extract reads one transcript whole, because the turn a line belongs to is dated by an
+// earlier line, and returns contract lines for the lines from `first` on.
+fun extract(lines: [str], first: int, session: str, cwd: str, transcript: str, fallback: int) > [str] {
+    final emitted = mut [<str>];
+    var ts = fallback;
+    foreach (i, line in lines) {
+        if (line == "") { continue; }
+        final r = json\parse(line) catch null;
+        if (r == null) { continue; }
+        final role = hook\field(r, dotPath: "role");
+        final items = (hook\dig(r, dotPath: "message.content") as? [any]) ?? [<any>];
+        if (role == "user") {
+            foreach (item in items) {
+                final at = turnTime(hook\field(item, dotPath: "text"));
+                if (at > 0) { ts = at; }
+            }
+            continue;
+        }
+        if (role != "assistant" or i < first) { continue; }
+        foreach (j, item in items) {
+            if (hook\field(item, dotPath: "type") != "tool_use") { continue; }
+            final call = unwrap(hook\field(item, dotPath: "name"), input: hook\dig(item, dotPath: "input"));
+            foreach (event in found(call)) {
+                emitted.append(render(session, ts: ts, cwd: cwd, kind: event.kind,
+                    ref: "{session}:{i}:{j}", text: event.text, transcript: transcript));
+            }
+        }
+    }
+    return emitted;
+}
+
+// wholeLines is the prefix of chunk that ends at its last line break, so a record
+// the host is still appending is read whole on the next run.
+fun wholeLines(chunk: str) > str {
+    var end = chunk.len();
+    while (end > 0) {
+        final b = chunk.byte(end - 1) catch -1;
+        if (b == 10) { break; }
+        end = end - 1;
+    }
+    return chunk.sub(0, len: end);
+}
+
+fun parseOffset(mark: str) > int {
+    final text = (fs\readFile(mark) catch "").trim();
+    if (text == "") { return 0; }
+    return std\parseInt(text) ?? 0;
+}
+
+// encodeRoot names a project directory the way Cursor does: each run of bytes outside
+// [A-Za-z0-9] becomes one dash, with none leading.
+fun encodeRoot(root: str) > str {
+    final encoded = mut [<str>];
+    var dash = false;
+    foreach (i in 0..root.len()) {
+        final b = root.byte(i) catch 0;
+        final ok = (b >= 48 and b <= 57) or (b >= 65 and b <= 90) or (b >= 97 and b <= 122);
+        if (ok) {
+            if (dash and encoded.len() > 0) { encoded.append("-"); }
+            encoded.append(root.sub(i, len: 1));
+            dash = false;
+        } else {
+            dash = true;
+        }
+    }
+    return encoded.join("");
+}
+
+// workspaceOf is the workspace path a project directory's .workspace-trusted names, ""
+// when it names none.
+fun workspaceOf(dir: str) > str {
+    final body = fs\readFile("{dir}/.workspace-trusted") catch "";
+    if (body == "") { return ""; }
+    return hook\field(json\parse(body) catch null, dotPath: "workspacePath");
+}
+
+object Project {
+    dir: str,
+    cwd: str,
+}
+
+fun projects(store: str, root: str) > [Project] {
+    final found = mut [<Project>];
+    final declared = env\get("HOST_PROJECT_DIRS") catch "";
+    if (declared != "") {
+        foreach (dir in strings\fields(declared)) {
+            var cwd = workspaceOf(dir);
+            if (cwd == "") { cwd = root; }
+            found.append(Project{ dir = dir, cwd = cwd });
+        }
+        return found;
+    }
+    final encoded = encodeRoot(root);
+    foreach (name in fs\listDir(store) catch [<str>]) {
+        final dir = "{store}/{name}";
+        if (!(fs\isDir(dir) catch false)) { continue; }
+        final workspace = workspaceOf(dir);
+        if (workspace != "" and inScope(workspace, root: root)) {
+            found.append(Project{ dir = dir, cwd = workspace });
+        } else if (workspace == "" and name == encoded) {
+            found.append(Project{ dir = dir, cwd = root });
+        }
+    }
+    return found;
+}
+
+fun transcripts(dir: str) > [str] {
+    final found = mut [<str>];
+    fs\walk("{dir}/agent-transcripts", callback: fun (path: str, isDir: bool) > bool {
+        if (!isDir and path.endsWith(".jsonl")) { found.append(path); }
+        return false;
+    }) catch void;
+    return found;
+}
+
+fun repoRoot(bin: str) > str {
+    final declared = env\get("HOST_REPO_ROOT") catch "";
+    if (declared != "" or bin == "" or !hook\isExecutable(bin)) { return declared; }
+    final result = proc\exec(bin, args: ["describe", "projects", "-o", "template=\{\{.workspace}}"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null or result!.code != 0) { return ""; }
+    return hook\trimTrailingNewlines(result!.stdout);
+}
+
+fun main(args: [str]) > int {
+    final parsed = flags\parse(args, switches: [STDOUT_FLAG], valued: [<str>]) catch null;
+    final toStdout = parsed != null and parsed!.values[STDOUT_FLAG] != null;
+    final bin = hook\envOr("SESSION_MAGUS_BIN", fallback: hook\resolveBin());
+    final root = repoRoot(bin);
+    if (root == "") {
+        warn("no Magus workspace here, so there is nothing to scope events to. Run this inside a workspace, or set HOST_REPO_ROOT.");
+        return 0;
+    }
+    if (!toStdout and (bin == "" or !hook\isExecutable(bin))) {
+        warn("magus is not on PATH, so the extracted events were dropped rather than loaded. Set SESSION_MAGUS_BIN, or pass --stdout to read the stream yourself.");
+        return 0;
+    }
+
+    final home = env\get("HOME") catch "";
+    final store = hook\envOr("HOST_SESSION_STORE", fallback: "{home}/.cursor/projects");
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    final stateDir = hook\envOr("SESSION_STATE_DIR", fallback: "{stateHome}/magus/session-load/{HOST}");
+
+    final events = mut [<str>];
+    final marks = mut {<str: int>};
+    foreach (project in projects(store, root: root)) {
+        foreach (transcript in transcripts(project.dir)) {
+            final mark = "{stateDir}/{crypto\sha256Hex(transcript).sub(0, len: 16)}";
+            final content = fs\readFile(transcript) catch null;
+            if (content == null) { continue; }
+            var offset = parseOffset(mark);
+            if (content!.len() < offset) { offset = 0; }
+            final whole = wholeLines(content!);
+            if (whole.len() <= offset) { continue; }
+            // The checkpoint is a byte offset; the lines before it were emitted already.
+            final first = whole.sub(0, len: offset).split("\n").len() - 1;
+            final session = fs\basename(transcript).replace(".jsonl", with: "");
+            final info = fs\stat(transcript) catch null;
+            var modified = 0;
+            if (info != null) { modified = std\toInt((info!.mtime as? double) ?? 0.0); }
+            foreach (line in extract(whole.split("\n"), first: first, session: session, cwd: project.cwd, transcript: transcript, fallback: modified)) {
+                events.append(line);
+            }
+            marks[mark] = whole.len();
+        }
+    }
+
+    var stream = events.join("\n");
+    if (events.len() > 0) { stream = stream + "\n"; }
+    if (toStdout) {
+        io\stdout.write(stream) catch void;
+    } else {
+        final loaded = proc\exec(bin, args: ["session", "load"], opts: {"stdin": stream, "allow_failure": true}) catch null;
+        if (loaded == null or loaded!.code != 0) { return 1; }
+    }
+
+    // Committed only once the stream has been delivered, so a failed load is retried.
+    fs\mkdirAll(stateDir) catch void;
+    foreach (mark, position in marks) {
+        fs\writeFile(mark, content: "{position}") catch void;
+    }
+    return 0;
+}

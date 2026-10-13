@@ -54,6 +54,7 @@ var hookTemplates = []string{
 	// parity gate below instead.
 	"magus-session-load-claude-code.buzz",
 	"magus-session-load-codex.buzz",
+	"magus-session-load-cursor.buzz",
 	"magus-session-load-opencode.buzz",
 }
 
