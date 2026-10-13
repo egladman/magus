@@ -124,8 +124,8 @@ them and magus describe job prints one job's terms.
 
 ### job apply options
 
-**-f** *string*
-: The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line
+**-f** *-*
+: The records to apply: a file, or \`-\` for stdin; one JSON job, a JSON array, or one job per line
 
 ### job exec options
 

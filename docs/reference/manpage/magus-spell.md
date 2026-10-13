@@ -1,7 +1,7 @@
 ---
 title: magus spell
 generated_from: internal/cli/registry.go
-description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the magus.lock pins of the remote spells magus.yaml declares."
+description: "Pack a spell directory's tracked files as an OCI artifact with provenance annotations. Push it under one or more tags, pull and verify a published spell, list its tags, and check or rewrite the magus.lock pins of remote spells."
 tags: [cli, magus spell, spell, publish, pull, oci, registry, digest, remote spells, credentials, magus.lock, lock, update]
 ---
 

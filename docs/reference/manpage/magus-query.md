@@ -62,7 +62,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 : Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace
 
 **--identity**
-: output \<ref\>: show the run's identity - descriptor, lineage, cache key, component digests
+: output \<ref\>: show the run's identity (descriptor, lineage, cache key, component digests)
 
 **--kind** *string*
 : Restrict matches to these node kinds (comma-separated)

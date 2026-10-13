@@ -126,7 +126,7 @@ step at a time.`,
 		{
 			Name:        "job",
 			Short:       "Print one job's terms: its criteria, paths, check and dependencies",
-			Description: "Print what one job grants its holder: the criteria, the write and read paths, the one check, its goals, the dependencies, the paths this workspace puts out of reach, the graph's blast radius for each write path, and where each goal stands graded against the evidence magus holds now.",
+			Description: "Print what one job grants its holder: the criteria, the write and read paths, the check, its goals, its dependencies, and the paths out of reach. It adds each write path's blast radius and each goal's grade against current evidence.",
 			Long: `Print one job's terms, which is what a holder reads on arrival.
 
 It carries no procedure. Taking a job is ` + "`magus job exec`" + `'s work to DO, and a
@@ -267,7 +267,7 @@ plan renders more than once without being computed again.`,
 		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
-		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
+		{Name: "race", Kind: FlagString, Doc: "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time."},
 		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
 		{Name: "stdin", Kind: FlagBool, Doc: "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects"},
 		// A STRING, not an int: the shard id is passed through as a label (it reaches
@@ -428,7 +428,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 		{Name: "detach", Kind: FlagBool, Doc: detachDoc},
 		{Name: "open", Kind: FlagBool, Doc: "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)"},
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
-		{Name: "race", Kind: FlagString, Doc: "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock."},
+		{Name: "race", Kind: FlagString, Doc: "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time."},
 		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
 		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the affected scope instead of executing"},
 		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
@@ -437,7 +437,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 		{Name: "plan", Kind: FlagCustom, Doc: "Emit a provider-neutral JSON CI shard plan for the affected set"},
 		{Name: "max-shards", Kind: FlagInt, Default: 8, DefaultAtBind: true, Modes: []string{"plan"}, Doc: "With --plan: maximum CI shards (-1 = unlimited)"},
 		{Name: "max-parallel-budget", Kind: FlagInt, DefaultAtBind: true, Modes: []string{"plan"}, Doc: "With --plan: cross-shard concurrency cap; 0 = unlimited"},
-		{Name: "detail", Kind: FlagBool, Modes: []string{"plan"}, Doc: "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to"},
+		{Name: "detail", Kind: FlagBool, Modes: []string{"plan"}, Doc: "With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to"},
 		{Name: "bisect", Kind: FlagString, Modes: []string{"bisect"}, Doc: "Drive VCS bisect to find the commit that broke <project>"},
 		{Name: "good", Kind: FlagString, Modes: []string{"bisect"}, Doc: "With --bisect: known-good commit SHA (auto-detected from history when empty)"},
 		{Name: "target", Kind: FlagString, Default: "test", Modes: []string{"bisect"}, Doc: "With --bisect: magus target to bisect"},
@@ -508,7 +508,7 @@ changed are rebuilt, so a query is cheap to repeat; --refresh forces a full rebu
 		{Name: "kind", Kind: FlagString, Doc: "Restrict matches to these node kinds (comma-separated)"},
 		{Name: "refresh", Kind: FlagBool, Doc: "Force a full graph rebuild before querying"},
 		{Name: "global", Kind: FlagBool, Doc: "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace"},
-		{Name: "identity", Kind: FlagBool, Doc: "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests"},
+		{Name: "identity", Kind: FlagBool, Doc: "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)"},
 		{Name: "attempts", Kind: FlagBool, Doc: "output <ref>: list the ref's stored attempts (newest first)"},
 		{Name: "publish", Kind: FlagBool, Doc: "output <ref>: upload this run's output to the remote cache as a signed bundle"},
 		{Name: "stdin", Kind: FlagBool, Doc: "output: print records `-o jsonl` wrote, from stdin; writes nothing"},
@@ -728,7 +728,7 @@ Subcommands (the first argument):
 var spellCommand = Command{
 	Name:        "spell",
 	Short:       "Build, publish, pull and list spells as OCI artifacts, and pin them in magus.lock",
-	Description: "Pack a spell directory's tracked files as an OCI artifact with the standard provenance annotations, push it under one or more tags, pull and verify a published spell, list a repository's tags, and check or rewrite the magus.lock pins of the remote spells magus.yaml declares.",
+	Description: "Pack a spell directory's tracked files as an OCI artifact with provenance annotations. Push it under one or more tags, pull and verify a published spell, list its tags, and check or rewrite the magus.lock pins of remote spells.",
 	Tags:        []string{"cli", "magus spell", "spell", "publish", "pull", "oci", "registry", "digest", "remote spells", "credentials", "magus.lock", "lock", "update"},
 	Long: `A spell as an artifact: what one workspace publishes so another imports it
 by registry path, pinned by digest in magus.lock and versioned apart from the
@@ -826,7 +826,7 @@ its owner makes it public in the package settings; magus never changes it.`,
 var eventsCommand = Command{
 	Name:        "events",
 	Short:       "Stream workspace events as JSONL for an integration to consume",
-	Description: "Stream magus events as JSONL - one event per line - so an editor plugin, a status bar, or any other integration can react to runs and results.",
+	Description: "Stream magus events as JSONL, one event per line, so an editor plugin, a status bar, or any other integration can react to runs and results.",
 	Tags:        []string{"cli", "magus events", "events", "integration", "editor", "plugin", "jsonl", "subscribe"},
 	Long: `Stream workspace events as JSONL, one event per line. This is the stream
 third-party integrations build against: an Emacs or Vim plugin, a status bar,
@@ -965,7 +965,7 @@ without running any, so the name can be looked up rather than provoked.`,
 	Flags: []Flag{
 		{Name: "probe", Kind: FlagBool, Doc: "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)"},
 		{Name: "fix", Kind: FlagBool, Doc: "Run the remedy each finding names, where one exists (see --dry-run to list them first)"},
-		{Name: "list", Kind: FlagBool, Doc: "Print every check magus would run - name, subject, and MGS code - without running any of them"},
+		{Name: "list", Kind: FlagBool, Doc: "Print every check magus would run (name, subject, and MGS code) without running any of them"},
 	},
 	Examples: []Example{
 		{"Run all checks", "magus doctor"},
@@ -1624,10 +1624,10 @@ global --dry-run resolves and grades every site and prints them, writing
 nothing. The inverse is the same command with the two names swapped.`,
 	Flags: []Flag{
 		{Name: "refresh", Kind: FlagBool, Doc: "Re-ingest the SCIP index before answering"},
-		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in"},
+		{Name: "occurrences", Kind: FlagBool, Doc: "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in."},
 		{Name: "definition", Kind: FlagBool, Doc: "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed"},
 		{Name: "source", Kind: FlagBool, Doc: "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n"},
-		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace"},
+		{Name: "text", Kind: FlagBool, Doc: "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace"},
 		// Custom, not Bool: bound by refsCmd itself alongside gen.BindRefs, the
 		// same reason watch's --ignore is (see that entry above).
 		{Name: "no-generated", Kind: FlagCustom, Doc: "In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match"},
@@ -1879,7 +1879,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 			Short: "Check approval, find stacks, drop what conflicts with the base, and partition by affected set",
 			Usage: "magus queue plan --provider <provider> --out <file> [flags]",
 			Flags: append(append([]Flag{
-				{Name: "changes", Kind: FlagString, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or - for stdin"},
+				{Name: "changes", Kind: FlagString, Default: "-", Doc: "The mergequeue.changes/v1 `document`, or `-` for stdin"},
 				{Name: "provider", Kind: FlagString, Doc: "`provider` approval at each head is checked with"},
 				{Name: "out", Kind: FlagString, Doc: "`file` the mergequeue.plan/v1 document is written to"},
 				{Name: "depth", Kind: FlagInt, Default: 3, Doc: "Candidates of one partition that validate at once"},
@@ -1897,7 +1897,7 @@ the provider reads (github: GITHUB_TOKEN or MERGEQUEUE_TOKEN).
 				{Name: "verdicts", Kind: FlagString, Doc: "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>"},
 				{Name: "only", Kind: FlagString, Doc: "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated"},
 				{Name: "parallel", Kind: FlagInt, Doc: "Candidates built or gated at once across every partition; 0 is one per CPU"},
-				{Name: "remote-cache-read", Kind: FlagBool, Doc: "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key"},
+				{Name: "remote-cache-read", Kind: FlagBool, Doc: "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key"},
 			}, queueFacts...), queueCheckout...),
 		},
 		{
@@ -1941,7 +1941,7 @@ cache it withholds, is refused.`,
 				{Name: "interval", Kind: FlagDuration, Default: 10 * time.Second, Doc: "How often <source> is read while following it"},
 				{Name: "committer", Kind: FlagString, Doc: "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops"},
 				{Name: "app", Kind: FlagString, Doc: "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)"},
-				{Name: "regenerate", Kind: FlagString, Doc: "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `--` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it"},
+				{Name: "regenerate", Kind: FlagString, Doc: "The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `--`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest."},
 				{Name: "reproduce-gate", Kind: FlagString, Doc: "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict"},
 				{Name: "reproduce-regenerate", Kind: FlagString, Doc: "The `command` validate's --regenerate is given, shown beside --reproduce-gate"},
 			}, queueFacts...), queueCheckout...),
@@ -2355,7 +2355,7 @@ them and magus describe job prints one job's terms.`,
 				"left. Widening is the orchestrator's; a session holding a lease may apply only a spec that releases some " +
 				"of its own paths. The global --dry-run prints the spec diff and writes nothing.",
 			Flags: []Flag{
-				{Name: "f", Kind: FlagString, Doc: "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line"},
+				{Name: "f", Kind: FlagString, Doc: "The records to apply: a file, or `-` for stdin; one JSON job, a JSON array, or one job per line"},
 			},
 			Usage: "magus job apply -f <file|->",
 		},

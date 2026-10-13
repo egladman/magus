@@ -68,7 +68,7 @@ nothing. The inverse is the same command with the two names swapped.
 : In the fallback text search shown beside a symbol miss, or with --text, exclude declared-output files entirely instead of searching them and marking the ones that match
 
 **--occurrences**
-: Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in
+: Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.
 
 **--refresh**
 : Re-ingest the SCIP index before answering
@@ -80,7 +80,7 @@ nothing. The inverse is the same command with the two names swapped.
 : With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n
 
 **--text**
-: Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace
+: Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace
 
 ## Examples
 

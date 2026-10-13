@@ -67,7 +67,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 : Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server
 
 **--detail**
-: With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to
+: With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to
 
 **--explain** *string*
 : Show why \<project\> is in the affected set instead of executing
@@ -106,7 +106,7 @@ that way: magus affected generate --no-default-charms | magus affected ci --plan
 : Emit a provider-neutral JSON CI shard plan for the affected set
 
 **--race** *string*
-: Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when \>=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.
+: Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.
 
 **--stdin**
 : Read changed file paths from stdin instead of running a VCS diff

@@ -70,7 +70,7 @@ Version control `backend` of the checkout at \-\-root
 .RS
 .TP
 \fB\-\-changes\fR \fIdocument\fR (default: \-)
-The mergequeue.changes/v1 `document`, or \- for stdin
+The mergequeue.changes/v1 `document`, or `\-` for stdin
 .TP
 \fB\-\-depth\fR \fIint\fR (default: 3)
 Candidates of one partition that validate at once
@@ -118,7 +118,7 @@ Candidates built or gated at once across every partition; 0 is one per CPU
 Name of the configured `remote` changes and the base are fetched from
 .TP
 \fB\-\-remote\-cache\-read\fR
-Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand\-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
+Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand\-in token. Refused without runner credentials or a trusted key
 .TP
 \fB\-\-stdin\fR
 Read the mergequeue.plan/v1 document from stdin; required
@@ -172,7 +172,7 @@ Apply what <source> holds now and stop, rather than following it until it is com
 `provider`: a built\-in name (github) or a .buzz file
 .TP
 \fB\-\-regenerate\fR \fIcommand\fR
-The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `\-\-` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
+The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `\-\-`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.
 .TP
 \fB\-\-remote\fR \fIremote\fR (default: origin)
 Name of the configured `remote` changes and the base are fetched from
