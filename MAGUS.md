@@ -74,7 +74,7 @@ magus graph export -o json  # the whole graph
 
 | Project                                                                     | Targets | Scope a query                                         | Key targets                                              |
 | --------------------------------------------------------------------------- | ------: | ----------------------------------------------------- | -------------------------------------------------------- |
-| [.](MAGUS.md)                                                               |      59 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
+| [.](MAGUS.md)                                                               |      60 | `magus query project=.`                               | `lint-rules`, `buzz-test`, `test`                        |
 | [console](console/MAGUS.md)                                                 |      10 | `magus query project=console`                         | `build`, `install`, `lint`                               |
 | [docs](docs/MAGUS.md)                                                       |      20 | `magus query project=docs`                            | `content-generate`, `site-generate`, `diagrams-generate` |
 | [docs/guides/integrations/agents](docs/guides/integrations/agents/MAGUS.md) |       8 | `magus query project=docs/guides/integrations/agents` | `generate`, `format`, `install`                          |
@@ -92,6 +92,7 @@ magus graph export -o json  # the whole graph
 | Target                   | What it does                                                                                                                                                                                                                   |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `go-build`               | Compiles the version-stamped magus binary.                                                                                                                                                                                     |
+| `go-test`                | go's go-test over the root module.                                                                                                                                                                                             |
 | `image-registries`       | Reports where image-build under the same charms pushes and, with `verify`, fails when a credential does not resolve.                                                                                                           |
 | `image-scan`             | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.                                                                                                                                              |
 | `security`               | Runs govulncheck and gates on dependency license terms.                                                                                                                                                                        |
