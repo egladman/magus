@@ -151,7 +151,7 @@ func stepFinding(body string) (Finding, bool) {
 
 		return Finding{
 			Message: fmt.Sprintf("Put the verb before '%s': a step opens with the action it is the object of, "+
-				"as in Run `magus init`.", m),
+				"as in Run `make test`.", m),
 			Match: m,
 		}, true
 	}
@@ -316,7 +316,7 @@ func condescension(in input) []Finding {
 			m := para.text[at[0]:at[1]]
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Drop '%s': it tells the reader how hard a step should feel or what they "+
-					"should already know; state the step or the fact, as in 'Run `magus init`.'", m),
+					"should already know; state the step or the fact, as in 'Run `make test`.'", m),
 				Match: m, Line: para.lineAt(at[0]),
 			})
 		}

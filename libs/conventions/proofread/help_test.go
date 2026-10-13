@@ -109,7 +109,7 @@ func TestCLIHelpMeetsTheWordRules(t *testing.T) {
 			want: []Finding{{
 				Rule: RuleCondescension,
 				Message: "Drop 'of course': it tells the reader how hard a step should feel or what they should " +
-					"already know; state the step or the fact, as in 'Run `magus init`.'",
+					"already know; state the step or the fact, as in 'Run `make test`.'",
 				Match: "of course", Line: 1,
 			}},
 		},

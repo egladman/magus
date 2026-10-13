@@ -1,6 +1,6 @@
 ### Added
 
-- **`proofread review-reply -anchored` judges an inline comment as one.** A comment
-  posted on a line of the diff, or a reply in its thread, refers to that line, so
-  `nonspecific` leaves it alone and judges top-level comments only. The guard passes the
-  flag for the `pulls/N/comments` and `.../replies` endpoints.
+- **`proofread` judges review text as three kinds.** `review-summary` is a review's body,
+  `review-inline` a comment on a line of the diff, and `review-reply` a reply in a thread.
+  `nonspecific` leaves inline comments alone, since the line they sit on is their referent.
+  `review-reply -anchored` still judges as `review-inline`.
