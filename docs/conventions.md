@@ -399,16 +399,16 @@ and links to that page.
 
 A rule judges text by what the text is for.
 
-| Kind                          | Text                                                            |
-| ----------------------------- | --------------------------------------------------------------- |
-| `reference`                   | a hand-written page a reader looks things up in                 |
-| `guide`                       | a procedural page, under `docs/guides/`                         |
-| `change-description`          | a pull request: its title on the first line, its description    |
-| `review-reply`                | a review comment, a review's body or a reply in a thread        |
-| `agent-brief`                 | Markdown an agent loads as written, such as AGENTS.md           |
-| `agent-compact`               | grammar-free text only an agent reads: a skill's short form     |
-| `skill-template`              | a template that renders a short and a full form of a skill      |
-| `doc-comment`                 | one symbol's doc comment, read from the symbol index            |
+| Kind                 | Text                                                         |
+| -------------------- | ------------------------------------------------------------ |
+| `reference`          | a hand-written page a reader looks things up in              |
+| `guide`              | a procedural page, under `docs/guides/`                      |
+| `change-description` | a pull request: its title on the first line, its description |
+| `review-reply`       | a review comment, a review's body or a reply in a thread     |
+| `agent-brief`        | Markdown an agent loads as written, such as AGENTS.md        |
+| `agent-compact`      | grammar-free text only an agent reads: a skill's short form  |
+| `skill-template`     | a template that renders a short and a full form of a skill   |
+| `doc-comment`        | one symbol's doc comment, read from the symbol index         |
 
 ### Decisions
 
