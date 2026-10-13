@@ -205,7 +205,14 @@ var guardInputs = []string{"command", "path", "mcp"}
 // without a word. cursor-hook.buzz answers beforeSubmitPrompt with a
 // continue reply and records the message through `magus shell --message`. Under a config
 // written for 24, a 23 copy prints nothing for beforeSubmitPrompt, which records no message.
-const GuardTemplateVersion = 24
+//
+// 25: cursor-hook.buzz accepts --reports-skills, gates the shell on preToolUse and files
+// each verdict for the event after the call. magus-command.buzz answers PostToolUse and
+// SubagentStop in their own shapes, and magus-rehydrate.buzz answers SubagentStart.
+// proofread-reply.buzz answers opencode. Under a config written for 25, a 24 copy reports
+// --reports-skills as unsupported, so a skill load goes unseen; and answers a Codex
+// PostToolUse in the PreToolUse shape, which the host discards.
+const GuardTemplateVersion = 25
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

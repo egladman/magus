@@ -1582,10 +1582,11 @@ func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
 		t.Run(config, func(t *testing.T) {
 			requireWired(t, config, "Stop", "", reply)
 			requireWired(t, config, "UserPromptSubmit", "", guard)
-			requireWired(t, config, "PreToolUse", "spawn_agent", guard)
-			assert.Empty(t, wiredOn(t, config, "SubagentStop"),
-				"Codex's SubagentStop payload is readable, but its transcript carries no message.usage record, so the hook would run on every subagent and record nothing")
-			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse"} {
+			requireWired(t, config, "PreToolUse", "collaborationspawn_agent", guard)
+			requireWired(t, config, "PostToolUse", "collaborationspawn_agent", guard)
+			requireWired(t, config, "SubagentStart", "", "magus-rehydrate.buzz")
+			requireWired(t, config, "SubagentStop", "", guard)
+			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop"} {
 				for _, h := range wiredOn(t, config, event) {
 					assert.NotContains(t, h.Command, "--reports-skills",
 						"Codex documents no hook on a skill load, so a rule that requires one would deny forever")
@@ -1600,6 +1601,14 @@ func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
 		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
 		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
 		requireWired(t, config, "preToolUse", "Task", "cursor-hook.buzz")
+		requireWired(t, config, "preToolUse", "Shell", "cursor-hook.buzz")
+		requireWired(t, config, "postToolUseFailure", "Shell", "cursor-hook.buzz")
+		for _, event := range []string{"preToolUse", "postToolUse", "postToolUseFailure"} {
+			for _, h := range wiredOn(t, config, event) {
+				assert.Contains(t, h.Command, "--reports-skills",
+					"Cursor installs the skills, so each tool event reports which one loaded")
+			}
+		}
 		assert.Empty(t, wiredOn(t, config, "subagentStop"),
 			"Cursor's subagentStop names no subagent id, which the usage record is filed under")
 	})
