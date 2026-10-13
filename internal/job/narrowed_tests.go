@@ -30,8 +30,9 @@ import (
 // Pure path math: the packages are the directories of the .go write paths (globs
 // expanded), the tests are the top-level `func TestXxx(*testing.T)` declarations of the
 // _test.go files go test builds there (see [testNames]), and a pattern is read the way go
-// test reads it, by the first element of each top-level alternative. Only the go-test
-// target is read: another tool's -run says nothing about Go tests. A pattern that does not
+// test reads it, by the first element of each top-level alternative. Only the go-test and
+// test targets are read (see [runsGoTest]): another tool's -run says nothing about Go
+// tests. A pattern that does not
 // compile is left to go test, which refuses it itself. The paths are relative to the
 // store's workspace root; a nil store, or one with no root, has no tree to read.
 func RefuseNarrowedTests(store *Store, row types.Job) error {
@@ -114,10 +115,26 @@ func refuseNarrowedCheck(root, named string, check types.LeaseCheck, writePaths 
 		named, check.String(), strings.Join(packages, " and "), strings.Join(fixes, " and "))
 }
 
-// runsGoTest reports whether check is the go-test target, the one whose -run and -skip
-// select Go tests.
+// runsGoTest reports whether check's -run and -skip select Go tests: the go spell's go-test
+// op, or the workspace's test target, which forwards its `--` arguments to the go-test it
+// composes. Both are read so the same narrowing gets one answer whichever name the check
+// uses; a charm suffix does not change what the run selects.
 func runsGoTest(check types.LeaseCheck) bool {
-	return check.Script == "" && (check.Target == "go-test" || check.Target == "go::go-test")
+	if check.Script != "" {
+		return false
+	}
+	spell, target, qualified := strings.Cut(check.Target, "::")
+	if !qualified {
+		spell, target = "", check.Target
+	}
+	name, _, _ := strings.Cut(target, ":")
+	switch types.Normalize(name) {
+	case "go-test":
+		return spell == "" || spell == "go"
+	case "test":
+		return spell == ""
+	}
+	return false
 }
 
 // maxListedTests is how many test names the refusal prints per package, and maxPastedPattern

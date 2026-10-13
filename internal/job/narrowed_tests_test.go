@@ -113,6 +113,10 @@ func TestRefuseNarrowedTestsReadsPatternsAsGoTestDoes(t *testing.T) {
 		{"a whole-test alternative first skips it", goTestCheck("-skip", "Beta|Beta/case"), "TestBeta"},
 		{"another tool's -run is not go test's", &types.LeaseCheck{Target: "cargo-test", Project: ".", Args: []string{"-run", "Alpha"}}, ""},
 		{"the spell-qualified go test", &types.LeaseCheck{Target: "go::go-test", Project: ".", Args: []string{"-run", "Alpha"}}, "TestBeta"},
+		{"the test target forwards -run to go test", &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha"}}, "TestBeta"},
+		{"the test target under a charm", &types.LeaseCheck{Target: "test:extended", Project: ".", Args: []string{"-skip", "Beta"}}, "TestBeta"},
+		{"the test target covering every test", &types.LeaseCheck{Target: "test", Project: ".", Args: []string{"-run", "Alpha|Beta|Gamma"}}, ""},
+		{"another spell's go-test op", &types.LeaseCheck{Target: "bazel::go-test", Project: ".", Args: []string{"-run", "Alpha"}}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
