@@ -101,6 +101,7 @@ func Serve(ctx context.Context, ln net.Listener, opts ...Option) error {
 		executable: exe,
 		started:    time.Now(),
 		conns:      map[net.Conn]*session{},
+		seats:      map[string]map[string]int{},
 		watches:    map[*os.File]struct{}{},
 		stop:       make(chan struct{}),
 		released:   make(chan struct{}, 1),
@@ -180,6 +181,11 @@ type server struct {
 
 	mu    sync.Mutex
 	conns map[net.Conn]*session
+	// seats is each job tree's validation seats: the runs seated in it, each with how many
+	// connections hold that run's seat.
+	seats map[string]map[string]int
+	// ended is the work this broker stopped, newest last, at most endedKeep of it.
+	ended []Ended
 	// watches holds the crash report pipe of every process watched for a crash. A watch
 	// outlives its connection: the report arrives only once the process is gone.
 	watches    map[*os.File]struct{}
@@ -199,9 +205,15 @@ type server struct {
 // session is what one connection holds. It is released whole when the connection
 // closes.
 type session struct {
-	hello    hello
-	claims   map[string]struct{}
+	hello hello
+	since time.Time
+	// claims is each claim this connection holds, by id, with the slots it takes.
+	claims   map[string]int
 	services map[string]int
+	// holds is the commands this connection runs under a deadline, by id.
+	holds map[string]*heldWork
+	// seat is the run this connection holds a validation seat for in hello.Tree, "" for none.
+	seat string
 	// files hands over the descriptors the connection has passed so far.
 	files func() []*os.File
 }
@@ -329,7 +341,7 @@ func (s *server) handle(conn net.Conn) {
 		return
 	}
 	_ = conn.SetReadDeadline(time.Time{})
-	sess := &session{hello: h, claims: map[string]struct{}{}, services: map[string]int{}, files: files}
+	sess := &session{hello: h, since: time.Now(), claims: map[string]int{}, services: map[string]int{}, holds: map[string]*heldWork{}, files: files}
 	s.mu.Lock()
 	s.conns[conn] = sess
 	s.mu.Unlock()
@@ -344,7 +356,7 @@ func (s *server) handle(conn net.Conn) {
 			}
 			break
 		}
-		if f.Type != typeStatus {
+		if f.Type != typeStatus && f.Type != typeWork {
 			s.touch()
 		}
 		s.mu.Lock()
@@ -373,14 +385,19 @@ func (s *server) forget(conn net.Conn, sess *session) {
 	delete(s.conns, conn)
 	var claims []string
 	var services map[string]int
+	var holds map[string]*heldWork
 	if sess != nil {
 		for id := range sess.claims {
 			claims = append(claims, id)
 		}
-		services = sess.services
-		sess.claims, sess.services = map[string]struct{}{}, map[string]int{}
+		services, holds = sess.services, sess.holds
+		sess.claims, sess.services, sess.holds = map[string]int{}, map[string]int{}, map[string]*heldWork{}
+		s.unseatLocked(sess)
 	}
 	s.mu.Unlock()
+	for _, h := range holds {
+		s.reapOrphan(h)
+	}
 	for _, id := range claims {
 		s.budget.Release(id)
 	}
@@ -389,10 +406,11 @@ func (s *server) forget(conn net.Conn, sess *session) {
 			s.opts.services.Release(key)
 		}
 	}
-	if len(claims) > 0 || len(services) > 0 {
+	if len(claims) > 0 || len(services) > 0 || len(holds) > 0 {
 		s.noteRelease()
 		s.opts.log.InfoContext(s.ctx, "released a closed connection's hold",
-			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("services", len(services)))
+			slog.Int("pid", sess.hello.PID), slog.Int("claims", len(claims)), slog.Int("services", len(services)),
+			slog.Int("commands", len(holds)))
 	}
 }
 
@@ -431,16 +449,24 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 		s.mu.Lock()
 		switch {
 		case req.Reassert:
+			s.seatLocked(sess, c, true)
 			v = types.MachineVerdict{Granted: true, Fits: true, ID: s.budget.Assert(c)}
 		case s.draining:
 			s.mu.Unlock()
 			_ = w.write(typeError, f.ID, s.drainingError())
 			return
 		default:
+			// A run kept out by its tree's validation cap waits, as one kept out by its own
+			// run's steps does, and the reply says whose run holds the seat.
+			if wait := s.seatLocked(sess, c, false); wait != nil {
+				s.mu.Unlock()
+				_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: types.MachineVerdict{Fits: true, OwnRun: true}, Seat: wait})
+				return
+			}
 			v = s.budget.Request(c)
 		}
 		if v.Granted {
-			sess.claims[v.ID] = struct{}{}
+			sess.claims[v.ID] = max(c.Slots, 1)
 		}
 		s.mu.Unlock()
 		_ = w.write(typeClaimReply, f.ID, claimReply{Verdict: v})
@@ -460,6 +486,34 @@ func (s *server) dispatch(sess *session, w *frameWriter, f frame) {
 			s.noteRelease()
 		}
 		_ = w.write(typeReleaseReply, f.ID, nil)
+
+	case typeHold:
+		var req holdRequest
+		if err := decodeBody(f, &req); err != nil || req.Hold.PGID <= 0 || req.Hold.Deadline.IsZero() {
+			fail(CodeMalformed, "broker: a hold needs a process group and a deadline")
+			return
+		}
+		s.mu.Lock()
+		if s.draining {
+			s.mu.Unlock()
+			_ = w.write(typeError, f.ID, s.drainingError())
+			return
+		}
+		id := s.holdLocked(sess, req.Hold)
+		s.mu.Unlock()
+		_ = w.write(typeHoldReply, f.ID, holdReply{ID: id})
+
+	case typeHoldRelease:
+		var req holdReleaseRequest
+		if err := decodeBody(f, &req); err != nil {
+			fail(CodeMalformed, "broker: decode hold release: %v", err)
+			return
+		}
+		s.releaseHold(sess, req.ID)
+		_ = w.write(typeHoldReply, f.ID, holdReply{ID: req.ID})
+
+	case typeWork:
+		_ = w.write(typeWorkReply, f.ID, s.work())
 
 	case typeServiceAcquire:
 		var req serviceAcquireRequest

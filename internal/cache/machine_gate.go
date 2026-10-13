@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -113,6 +114,11 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 	for {
 		v, err := g.admit.Request(ctx, c)
 		if err != nil {
+			// An admitter that answers with an exit status refused the step itself (its
+			// workspace's admission config does not read), which no broker policy excuses.
+			if exit := (types.ExitError{}); errors.As(err, &exit) {
+				return nil, err
+			}
 			if g.required {
 				return nil, brokerUnavailableError(c, err)
 			}
@@ -133,8 +139,8 @@ func (g *machineGate) acquire(ctx context.Context, c types.MachineClaim) (func()
 			return nil, machineBusyError(c, v)
 		}
 		// The holders are this run's own steps, whose progress feeds the stall watchdog,
-		// or another invocation of this process, whose progress does not; beat for the
-		// latter, or a run queued in the server trips MGS3012.
+		// or another invocation of this process or of this job tree holding its validation
+		// seat, whose progress does not; beat for the latter, or a queued run trips MGS3012.
 		ProgressFromContext(ctx).Beat()
 		select {
 		case <-ctx.Done():

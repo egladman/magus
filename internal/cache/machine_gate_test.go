@@ -98,6 +98,29 @@ func TestMachineGateAwaitStopsWithItsContext(t *testing.T) {
 	require.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+// refusingAdmitter answers every request with err.
+type refusingAdmitter struct{ err error }
+
+func (a refusingAdmitter) Request(context.Context, types.MachineClaim) (types.MachineVerdict, error) {
+	return types.MachineVerdict{}, a.err
+}
+
+func (refusingAdmitter) Release(context.Context, string) {}
+
+// An admitter that refuses with an exit status refused the step: best-effort admits a
+// step only when nothing answered.
+func TestMachineGateRefusesWhatTheAdmitterRefused(t *testing.T) {
+	refusal := types.ExitError{Code: ExitCodeMachineDeclaration, Err: errors.New("jobs.max_validations is -1")}
+	g := &machineGate{admit: refusingAdmitter{err: refusal}, log: newLogger("", 0)}
+	_, err := g.acquire(t.Context(), types.MachineClaim{Target: "test"})
+	require.ErrorIs(t, err, refusal.Err)
+
+	g = &machineGate{admit: refusingAdmitter{err: errors.New("dial: no such file")}, log: newLogger("", 0)}
+	release, err := g.acquire(t.Context(), types.MachineClaim{Target: "test"})
+	require.NoError(t, err, "an unreachable broker still admits under best-effort")
+	release()
+}
+
 func TestMachineBusyRefusalNamesTheWaitPipe(t *testing.T) {
 	b, _ := testBudget(t, 10_000, 8)
 	g, _ := testGate(t, b)

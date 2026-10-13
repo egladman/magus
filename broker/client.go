@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -76,6 +77,13 @@ type Client struct {
 	done      chan struct{}
 
 	nextID atomic.Uint64
+
+	// scopeOnce resolves the hello's job tree and validation cap; see resolveScope.
+	scopeOnce sync.Once
+	scopeErr  error
+	// seatWaiting is set while a claim waits on its job tree's validation seat, so the
+	// wait is said once.
+	seatWaiting atomic.Bool
 }
 
 // heldClaim is a claim this client holds, and the id the current broker knows it by;
@@ -89,9 +97,10 @@ type heldClaim struct {
 // does not dial; the first request does.
 func NewClient(addr string, opts ...ClientOption) *Client {
 	dir, _ := os.Getwd()
+	lease := trail.SpawnFromEnv().Lease
 	c := &Client{
 		addr:  addr,
-		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args},
+		hello: hello{Magic: helloMagic, Protocol: ProtocolVersion, PID: os.Getpid(), Dir: dir, Argv: os.Args, Lease: lease},
 		held:  map[string]*heldClaim{},
 		done:  make(chan struct{}),
 	}
@@ -146,6 +155,7 @@ func (c *Client) Request(ctx context.Context, claim types.MachineClaim) (types.M
 	if err := cn.roundTrip(ctx, c.next(), typeClaim, claimRequest{Claim: claim}, typeClaimReply, &reply, late); err != nil {
 		return types.MachineVerdict{}, err
 	}
+	c.noteSeat(ctx, reply.Seat)
 	if reply.Verdict.Granted {
 		c.mu.Lock()
 		c.held[reply.Verdict.ID] = &heldClaim{claim: claim, remote: reply.Verdict.ID}
@@ -299,6 +309,9 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	c.mu.Unlock()
 	if closed {
 		return nil, fmt.Errorf("%w: client closed", ErrUnavailable)
+	}
+	if err := c.resolveScope(); err != nil {
+		return nil, err
 	}
 
 	ep, err := endpoint.Parse(c.addr)
