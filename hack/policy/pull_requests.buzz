@@ -36,7 +36,6 @@ import "std";
 import "magus";
 import "vcs";
 import "proc";
-import "env";
 import "fs";
 import "path";
 import "encoding/json";
@@ -682,51 +681,6 @@ export object Judged {
     url: str = "",
 }
 
-// VoiceRoots are the environment facts that place the owner's voice profile: HOME, and
-// XDG_CONFIG_HOME as the shell has it, which may be empty or relative.
-export object VoiceRoots {
-    home: str,
-    xdg: str,
-}
-
-export fun voiceRoots() > VoiceRoots {
-    var home = env\getOr("HOME", def: "") catch "";
-    if (home == "") {
-        home = env\home() catch "";
-    }
-    return VoiceRoots{ home = home, xdg = env\getOr("XDG_CONFIG_HOME", def: "") catch "" };
-}
-
-// voiceFile is the profile `proofread voice build` wrote, "" when there is none. It looks
-// where the CLI writes it: an absolute XDG_CONFIG_HOME, else ~/.config, else the macOS
-// config directory Go's os.UserConfigDir falls back to.
-export fun voiceFile(roots: VoiceRoots) > str {
-    var bases = [<str>];
-    if (roots.xdg != "" and path\isAbs(roots.xdg)) {
-        bases = [roots.xdg];
-    } else if (roots.home != "") {
-        bases = [roots.home + "/.config", roots.home + "/Library/Application Support"];
-    }
-    foreach (base in bases) {
-        final file = path\clean(base + "/proofread/voice.json");
-        if (fs\isFile(file) catch false) {
-            return file;
-        }
-    }
-    return "";
-}
-
-// judgeArgs are the arguments after the binary: the kind's words, the decisions table, and
-// the voice profile when voice names one. The thread length is not passed: the command a
-// guard judges names a thread's reply, not how many the author already posted in it.
-export fun judgeArgs(words: [str], table: str, voice: str) > [str] {
-    final args = words + ["-decisions", table];
-    if (voice == "") {
-        return args;
-    }
-    return args + ["-voice", voice];
-}
-
 // judgeRunner returns a judge that runs the built libs/conventions/cmd/proofread over text
 // of a kind, under this repository's decisions table, and then each of OUTSIDE_JUDGES that
 // judges the kind. The judge lives in Go, where the Markdown lint and the CI step reach the
@@ -752,7 +706,7 @@ export fun judgeRunner(workspace: str) > fun (text: str, kind: str) > [Judged] {
         final bin = "{dir}/{proofread\binary}";
         final found = mut [<Judged>];
         final words = kind.split(" ");
-        final run = proc\exec(bin, args: judgeArgs(words, table: table, voice: voiceFile(voiceRoots())),
+        final run = proc\exec(bin, args: words + ["-decisions", table],
             opts: {"stdin": text, "quiet": true, "allow_failure": true}) catch null;
         fs\remove(table) catch void;
         if (run == null or run!.code != 0) {
@@ -2091,30 +2045,6 @@ test "proofread runs from a relative workspace and its absence is a finding" {
     std\assert(ran.len() == 1 and ran[0].rule == "hedge" and ran[0].line == 2 and ran[0].decision == "advise",
         message: if (ran.len() > 0) ran[0].message else "no finding");
     fs\removeAll(ws) catch void;
-}
-
-test "the voice profile is found where the CLI writes it, and passed only when it exists" {
-    final home = fs\tempDir("voice-home") catch "";
-    final xdg = fs\tempDir("voice-xdg") catch "";
-    std\assert(home != "" and xdg != "", message: "temp dirs");
-    std\assert(voiceFile(VoiceRoots{ home = home, xdg = "" }) == "", message: "no profile");
-
-    fs\mkdirAll("{home}/.config/proofread") catch void;
-    fs\writeFile("{home}/.config/proofread/voice.json", content: "\{}") catch void;
-    std\assert(voiceFile(VoiceRoots{ home = home, xdg = "" }) == "{home}/.config/proofread/voice.json", message: "default dir");
-    std\assert(voiceFile(VoiceRoots{ home = home, xdg = "relative" }) == "{home}/.config/proofread/voice.json", message: "relative xdg ignored");
-    std\assert(voiceFile(VoiceRoots{ home = home, xdg = xdg }) == "", message: "an absolute xdg is the only dir searched");
-
-    fs\mkdirAll("{xdg}/proofread") catch void;
-    fs\writeFile("{xdg}/proofread/voice.json", content: "\{}") catch void;
-    std\assert(voiceFile(VoiceRoots{ home = home, xdg = xdg }) == "{xdg}/proofread/voice.json", message: "xdg dir");
-
-    final words = ["review-summary", "-event", "APPROVE"];
-    std\assert(judgeArgs(words, table: "t.json", voice: "").join(" ") == "review-summary -event APPROVE -decisions t.json", message: "no voice");
-    std\assert(judgeArgs(words, table: "t.json", voice: "v.json").join(" ") == "review-summary -event APPROVE -decisions t.json -voice v.json",
-        message: "voice");
-    fs\removeAll(home) catch void;
-    fs\removeAll(xdg) catch void;
 }
 
 test "an outside judge's findings take this repository's decisions" {
