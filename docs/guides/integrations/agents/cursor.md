@@ -6,38 +6,47 @@ tags: [agents, cursor, AGENTS.md, guard, hooks]
 
 # Cursor
 
-Cursor does not read Agent Skills directories. It reads an `AGENTS.md` at the
-repository root, and it runs hooks as programs with the event on stdin. One
-self-contained script covers every event magus uses bar `stop`, which runs the
-separate reply check, so installing the guard is a single download.
+Cursor reads an `AGENTS.md` at the repository root and Agent Skills from
+`.agents/skills`, `.cursor/skills` and `.claude/skills`, and it runs hooks as
+programs with the event on stdin. One self-contained script covers every event
+magus uses bar `stop`, which runs the separate reply check, so installing the
+guard is a single download.
 
-| what            | where                                                                      |
-| --------------- | -------------------------------------------------------------------------- |
-| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                   |
-| guard wiring    | `.cursor/hooks.json`                                                       |
-| quiet output    | not set: Cursor documents no way; set `MAGUS_LOG_SILENT=true` yourself     |
-| shell commands  | deny and advise both reach the model                                       |
-| file writes     | deny and advise both reach the model                                       |
-| MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
-| session start   | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
-| checkpoint      | `sessionEnd`                                                               |
-| your messages   | `beforeSubmitPrompt`, recorded and always let through                      |
-| subagent spawns | `preToolUse` (`Task`), judged as a spawn; `subagentStart` records it too   |
-| reply check     | `stop`, a `followup_message` that Cursor submits as another turn           |
-| scout agent     | `.cursor/agents/magus-scout.md`, `readonly: true`                          |
-| lease           | `subagentStart` (unverified live, see below)                               |
-| MCP             | [MCP](../mcp.md)                                                           |
+| what            | where                                                                          |
+| --------------- | ------------------------------------------------------------------------------ |
+| always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                       |
+| skills          | `.agents/skills`, short and full forms                                         |
+| guard wiring    | `.cursor/hooks.json`                                                           |
+| quiet output    | the guard prefixes each shell command it passes with `MAGUS_LOG_SILENT=true`   |
+| shell commands  | `preToolUse`: deny and advise reach the model; stdin closed on a pass          |
+| file writes     | deny and advise both reach the model                                           |
+| MCP calls       | `beforeMCPExecution` (deny/ask), advise on `postToolUse`                       |
+| failed calls    | `postToolUseFailure` carries the call's advice                                 |
+| session start   | `sessionStart` (`env` + size-budgeted `session --brief`)                       |
+| compaction      | `preCompact`; the next `postToolUse` carries the brief again                   |
+| checkpoint      | `sessionEnd`                                                                   |
+| your messages   | `beforeSubmitPrompt`, recorded and always let through (not under `-p`)         |
+| skill loads     | the `Read` of a `SKILL.md` on `preToolUse`, with `--reports-skills`            |
+| subagent spawns | `preToolUse` (`Task`), judged as a spawn                                       |
+| reply check     | `stop`, a `followup_message` that Cursor submits as another turn (not `-p`)    |
+| scout agent     | `.cursor/agents/magus-scout.md`, `readonly: true`                              |
+| session load    | [`magus-session-load-cursor.buzz`](session-load.md#cursor)                     |
+| MCP             | [MCP](../mcp.md)                                                               |
 
 ## Skills
 
-There is no skills directory to install into. Run `magus agent install` anyway:
-it prints the managed magus block when your `AGENTS.md` is missing it or
-carrying a stale one, and you paste it in. [Skills](skills.md) covers the block,
-its stamp, and the drift check that grades it.
+`magus agent install` writes the skills to `.agents/skills` in both forms, the
+short skill and its full twin, as for Codex. cursor-agent 2026.10.01 read a
+`SKILL.md` from each of `.agents/skills`, `.cursor/skills` and `.claude/skills`
+in a probe, so the one install serves Cursor and Codex. It also prints the managed
+magus block when your `AGENTS.md` is missing it or carrying a stale one, and you
+paste it in. [Skills](skills.md) covers the block, its stamp, and the drift check
+that grades it.
 
-Because Cursor has no Agent Skills support, it cannot enforce a short-versus-full
-skill-form choice. Keep that repository guidance explicit and user-owned in
-`AGENTS.md`; do not claim a model or provider setting selects it automatically.
+Cursor has no skill tool: an agent loads a skill by reading its `SKILL.md`. That
+`Read` reaches `preToolUse`, and the script hands it to `magus shell` as the read
+it is, which magus records as the load. So the entry passes `--reports-skills`, and
+the rules that require a skill load hold here as they do on Claude Code.
 
 An `advise` verdict reaches the model here too, on `postToolUse` rather than at
 the moment the call is gated; that guidance being in `AGENTS.md` as well is the
@@ -65,15 +74,12 @@ start Magus solely to obtain tools.
 ## Quiet output
 
 `MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
-without each reason or a wait note under a minute. Cursor documents no setting for the environment of the commands its agent runs:
-the `env` a `sessionStart` reply carries reaches later hooks, and nothing
-documents it reaching the agent's shell. So `.cursor/hooks.json` sets nothing, and
-`magus describe harness cursor` says so. Set it yourself in the environment you
-start Cursor from:
-
-```sh
-MAGUS_LOG_SILENT=true cursor .
-```
+without each reason or a wait note under a minute. Cursor has no setting for the
+environment of the commands its agent runs, and the `env` a `sessionStart` reply
+carries reaches later hooks only. So `.cursor/hooks.json` sets nothing; instead
+the guard's `preToolUse` reply rewrites every shell command it passes to start
+with `export MAGUS_LOG_SILENT=true;`. Cursor runs the rewritten command:
+probed on cursor-agent 2026.10.01, where `echo $MAGUS_LOG_SILENT` printed `true`.
 
 ## Guard hook
 
@@ -115,7 +121,7 @@ magus agent harness verify --id cursor
 ```
 
 That prints opaque fragments naming
-`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor`.
+`magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor --reports-skills`.
 The script takes the host's name from that argument and nowhere else, and refuses a call
 without it ([MGS3024](../../../reference/codes/sandbox/MGS3024.md)). It needs neither a
 POSIX shell nor `jq`. A portable install copies the script to `.cursor/hooks/cursor-hook.buzz`
@@ -125,16 +131,20 @@ and points every event at that copy, name included:
 {
   "version": 1,
   "hooks": {
-    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "failClosed": true, "timeout": 10 }],
+    "preToolUse": [{ "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "postToolUse": [
-      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }
     ],
-    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "postToolUseFailure": [
+      { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch|MCP:.*", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }
+    ],
+    "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
+    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "stop": [{ "command": "magus buzz -s .cursor/hooks/proofread-reply.buzz -- --agent-name cursor", "timeout": 10, "loop_limit": 1 }]
   }
 }
@@ -150,14 +160,29 @@ carries, so one file serves all of them.
 
 Cursor splits across two events what every other host delivers from one, and
 that is the thing to read before changing this wiring. A gating event
-(`beforeShellExecution`, `preToolUse`) carries a `deny`, because Cursor sends
-`user_message` and `agent_message` only with a denial. An `advise` therefore has
-no channel there and needs `postToolUse.additional_context`, which arrives after
-the call. So a judged call runs magus twice on this host and leaves two rows in
-the activity trail, where every other host leaves one.
+(`preToolUse`, `beforeShellExecution`, `beforeMCPExecution`) carries a `deny`,
+because Cursor sends `user_message` and `agent_message` only with a denial. An
+`advise` therefore has no channel there and needs the `additional_context` of
+`postToolUse` or `postToolUseFailure`, which arrive after the call. So the gating
+event judges the call once and files the verdict under the conversation, the
+`tool_use_id` and the tool name, in `$XDG_STATE_HOME/magus/cursor-hook`
+(`CURSOR_HOOK_STATE_DIR` overrides it), and the after-call event answers from that
+file without asking magus again. One call leaves one row in the activity trail,
+as on every other host. The tool name is part of the key because Cursor reuses one
+`tool_use_id` for a `Read` and the `Write` after it (probed on cursor-agent
+2026.10.01). A filed verdict whose after-call event never came is removed after a
+day.
+
+The shell is gated on `preToolUse`, because that reply can rewrite the command and
+`beforeShellExecution`'s cannot. A command that passes comes back as
+`export MAGUS_LOG_SILENT=true; exec </dev/null; <command>` in `updated_input`, the
+stdin rewrite Claude Code gets, and Cursor runs that line; three commands in a row
+ran in one probe, so the persistent shell survives the `exec`. `beforeShellExecution`
+then sees the rewritten line, recognizes it as already judged, and allows it; it
+judges only a command `preToolUse` never saw, which keeps it as the fallback.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and
-`beforeShellExecution` answers `permission: "ask"`: Cursor shows you the reason,
+`preToolUse` answers `permission: "ask"`: Cursor shows you the reason,
 which names the commit and the gate state, and approving publishes it. A push the
 gate covers is allowed without a prompt. A session bound to a job lease is denied,
 because workers do not publish. Any decision the script does not know is denied,
@@ -166,8 +191,9 @@ never allowed.
 The `matcher` values are a regex (Cursor's own validator: outside `""` and `"*"`
 the string must compile). One entry per event is enough: the script is the same
 file on every arm by design, and it branches on payload shape. Scope the regex
-to tools that carry a command, a path, a Grep/Glob pattern, a Read path, or a
-WebSearch / WebFetch query; a postToolUse with none of those returns `{}`. Grep,
+to tools that carry a command, a path, a Grep/Glob pattern, a Read path, a
+WebSearch / WebFetch query, or an MCP call (`MCP:.*`, the name Cursor gives an MCP
+tool after the call); a postToolUse with none of those returns `{}`. Grep,
 Glob, and Read never reach `beforeShellExecution`. They are restated as the
 shell shapes the rules already know (`rg …`, `find <dir> -name …`, `cat …` for
 an unbounded Read, `sed -n 'a,bp'` when Read already carries a limit) and gated
@@ -182,10 +208,10 @@ script also accepts `file_path`.
 ```buzz
 // magus guard for Cursor. One file, every event.
 //
-// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor`. `-s` is
-// load-bearing: without it a BZZ advisory on stderr reads to the host as a hook
-// error. The command is an argv. Cursor splits it and runs magus itself, so there
-// is no shell and no jq. Flags after `--` are this file's argv.
+// Run it as `magus buzz -s cursor-hook.buzz -- --agent-name cursor --reports-skills`.
+// `-s` is load-bearing: without it a BZZ advisory on stderr reads to the host as a hook
+// error. The command is an argv. Cursor splits it and runs magus itself, so there is no
+// shell and no jq. Flags after `--` are this file's argv.
 //
 // It imports no magus module. A script that reads a workspace member opens the
 // workspace, and that costs roughly 700ms on every tool call; this file starts
@@ -193,12 +219,23 @@ script also accepts `file_path`.
 //
 // The host name is `--agent-name` and nowhere else: never the event's shape,
 // never the environment, never a default. Without it the gating events are
-// denied (MGS3024).
+// denied (MGS3024). `--reports-skills` is passed on to `magus shell`: Cursor loads a
+// skill by reading its SKILL.md, and that Read reaches preToolUse, where this file hands
+// it over as the load it is.
 //
-// Cursor splits across two events what every other host delivers from one.
-// A deny needs a gating event, because user_message and agent_message arrive
-// only with a denial. An advise needs postToolUse.additional_context, which
-// arrives after the call. So a judged call runs magus twice here.
+// Cursor splits across two events what every other host delivers from one. A deny
+// needs a gating event (preToolUse, beforeShellExecution, beforeMCPExecution), because
+// user_message and agent_message arrive only with a denial. An advise needs
+// postToolUse or postToolUseFailure additional_context, which arrives after the call.
+// So the gating event judges the call once and files the verdict under the
+// conversation, the tool_use_id and the tool name (Cursor reuses one tool_use_id for a
+// Read and the Write after it), and the after-call event answers from that file without
+// asking magus again: one call, one row in the activity trail.
+//
+// The shell is gated on preToolUse, whose updated_input Cursor applies: a command
+// that passes runs with stdin closed and MAGUS_LOG_SILENT set, the same rewrite Claude
+// Code gets. beforeShellExecution then sees the rewritten line and lets it through
+// unjudged; it judges only a command preToolUse never saw.
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
@@ -207,29 +244,26 @@ script also accepts `file_path`.
 // A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
 // is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
 // spawn by, so a workspace spawn rule can deny it. subagentStart records the same spawn
-// again from the child's side, which is why the trail holds two spawn rows per subagent.
-// Cursor documents no Task tool_input fields; a call with no prompt in it has nothing to
-// judge and is allowed.
+// again from the child's side where Cursor fires it; cursor-agent never has.
 //
 // beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
 // the topics it raises and judges nothing; the reply only says to go on.
 //
-// beforeMCPExecution carries tool_name, tool_input and mcp_server_name. Magus
-// grades MCP as mcp__<server>__<tool>, so this file rewrites the envelope before
-// judging. afterMCPExecution is observation-only, and postToolUse still has no
-// server identity, so MCP advise stays unwired here.
+// beforeMCPExecution carries tool_name, tool_input (a JSON string) and mcp_server_name.
+// Magus grades MCP as mcp__<server>__<tool>, so this file rewrites the envelope before
+// judging. postToolUse names the call MCP:<tool> with its input as an object and no
+// server, so the verdict is filed under the tool and the input in a canonical form.
 //
-// sessionStart sets PATH / __MAGUS_BIN for later hooks and may inject a brief.
-// The brief is size-budgeted: a nested `magus session --brief` has been measured
-// (MAGUS_PPROF=mem, buzz --profile) at tens of MB of workspace Buzz load on this
-// tree, so a reply over SESSION_BRIEF_MAX_BYTES keeps env and drops the context.
-// Cursor has also raced additional_context away before; env is the half that sticks.
-// Compaction still has no model-facing rehydrate event.
+// sessionStart sets PATH / __MAGUS_BIN for later hooks and may inject a brief. preCompact
+// marks the conversation, and the next postToolUse carries the brief again, since a
+// compacted context lost the first one. The brief is size-budgeted: a nested `magus
+// session --brief` has been measured (MAGUS_PPROF=mem, buzz --profile) at tens of MB of
+// workspace Buzz load on this tree, so a brief over SESSION_BRIEF_MAX_BYTES is dropped.
 //
 // magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
-// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
+// magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=model pass=none ask=human
 
 import "std";
 import "flags";
@@ -238,27 +272,10 @@ import "encoding/json";
 import "env";
 import "fs";
 import "math";
+import "os";
 import "proc";
+import "crypto";
 import "lib/hook" as hook;
-
-// Cursor's gating reply. An ask is Cursor's own approval prompt. Pass and advise
-// both allow, because a gating event has no context field: an advise sent here
-// would collapse into a bare allow and drop the text. A decision this file does
-// not know is refused, so a copy older than the guard contract cannot read a new
-// verdict as consent.
-final PERMISSION_DENY = `{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}`;
-final PERMISSION_ASK = `{"permission":"ask","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}`;
-final PERMISSION_ALLOW = `{"permission":"allow"}`;
-final GATE_UNKNOWN = `{{else}}{"permission":"deny","user_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.")}},"agent_message":{{toJson (print "magus guard returned the decision " .decision ", which this hook does not know, so it refuses the call rather than allow it.")}}}{{end}}`;
-final GATE = `{{if eq .decision "deny"}}` + PERMISSION_DENY
-    + `{{else if eq .decision "ask"}}` + PERMISSION_ASK
-    + `{{else if eq .decision "pass"}}` + PERMISSION_ALLOW
-    + `{{else if eq .decision "advise"}}` + PERMISSION_ALLOW
-    + GATE_UNKNOWN;
-
-// postToolUse is the advise channel. Anything else renders an empty object,
-// which Cursor accepts as no opinion.
-final ADVISE = `{{if eq .decision "advise"}}{"additional_context":{{toJson .context}}}{{else}}{}{{end}}`;
 
 // SESSION_BRIEF_MAX_BYTES caps additional_context from session --brief. Measured
 // post-lease-cap briefs on this tree are a few KB; anything larger is a store that
@@ -276,6 +293,18 @@ final UNREADABLE = "magus guard is NOT running for this call: the hook event on 
 final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was judged. Merge what 'magus describe harness' prints into the host's hook configuration; the commands it prints name the host.";
 
 final AGENT_NAME = "--agent-name";
+final REPORTS_SKILLS = "--reports-skills";
+
+// Prefixed to every shell command that passes. An export rather than a `NAME=value`
+// prefix, which would reach only the first command of the line.
+final SILENT_PREFIX = "export MAGUS_LOG_SILENT=true; ";
+
+// How Cursor names an MCP call on preToolUse and postToolUse.
+final MCP_TOOL_PREFIX = "MCP:";
+
+// A filed verdict whose after-call event never came (an interrupted call, a crashed
+// session) is removed after a day, in milliseconds.
+final STATE_MAX_AGE_MS = 86400000.0;
 
 // One judgment. The attributed call and the unattributed retry share it, so the
 // payload cannot differ between them.
@@ -284,6 +313,22 @@ object Guard {
     payload: str,
 }
 
+// Verdict is the part of `magus shell -o json` this file renders.
+object Verdict {
+    decision: str,
+    reason: str,
+    context: str,
+    updatedCommand: str,
+}
+
+// Scope is the attribution one event shares across every judgment it makes.
+object Scope {
+    bin: str,
+    agent: str,
+    session: str,
+    transcript: str,
+    reportsSkills: bool,
+}
 
 fun firstField(node: any?, keys: [str]) > str {
     foreach (key in keys) {
@@ -314,13 +359,19 @@ fun warn(message: str) > void {
     io\stderr.write("cursor-hook.buzz: {message}\n") catch void;
 }
 
-fun readAgentName(args: [str]) > str {
-    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_NAME]) catch null;
-    if (parsed == null) { return ""; }
+// Entry is what the hook entry's argv declares: the host name, "" when it names none.
+object Entry {
+    agent: str,
+    reportsSkills: bool,
+}
+
+fun readArgs(args: [str]) > Entry {
+    final parsed = flags\parse(args, switches: [REPORTS_SKILLS], valued: [AGENT_NAME]) catch null;
+    if (parsed == null) { return Entry{ agent = "", reportsSkills = false }; }
     foreach (word in parsed!.unknown) {
         warn("unsupported argument {word}; this call was judged WITHOUT it");
     }
-    return parsed!.values[AGENT_NAME] ?? "";
+    return Entry{ agent = parsed!.values[AGENT_NAME] ?? "", reportsSkills = parsed!.values[REPORTS_SKILLS] != null };
 }
 
 fun unavailableNotice(text: str) > str {
@@ -333,6 +384,73 @@ fun denyBoth(message: str) > str {
         "user_message": message,
         "agent_message": message,
     }) catch ALLOW;
+}
+
+// stateDir holds the verdicts a gating event files for the event after it. It is under
+// the person's home rather than the shared temp dir, where another user could plant a
+// verdict and put words in front of the model.
+fun stateDir() > str {
+    final declared = env\get("CURSOR_HOOK_STATE_DIR") catch "";
+    if (declared != "") { return declared; }
+    final home = env\get("HOME") catch "";
+    final stateHome = hook\envOr("XDG_STATE_HOME", fallback: "{home}/.local/state");
+    return "{stateHome}/magus/cursor-hook";
+}
+
+fun statePath(kind: str, parts: [str]) > str {
+    final digest = crypto\sha256Hex(parts.join("\n")) catch "";
+    return "{stateDir()}/{kind}-{digest.sub(0, len: 32)}";
+}
+
+// remember is best effort: a record that cannot be written leaves the after-call event
+// to judge the call itself, which costs a second row and loses nothing else.
+fun remember(kind: str, parts: [str], value: str) > void {
+    fs\mkdirAll(stateDir()) catch void;
+    fs\writeFile(statePath(kind, parts: parts), content: value) catch void;
+}
+
+// recall consumes a record, so a later call that happens to share its key cannot read it.
+fun recall(kind: str, parts: [str]) > str? {
+    final path = statePath(kind, parts: parts);
+    final held = fs\readFile(path) catch null;
+    if (held == null) { return null; }
+    fs\remove(path) catch void;
+    return held;
+}
+
+fun prune() > void {
+    final dir = stateDir();
+    final now = os\time();
+    foreach (name in fs\listDir(dir) catch [<str>]) {
+        final info = fs\stat("{dir}/{name}") catch null;
+        if (info == null) { continue; }
+        final mtime = info!.mtime as? double;
+        if (mtime != null and now - mtime! > STATE_MAX_AGE_MS) {
+            fs\remove("{dir}/{name}") catch void;
+        }
+    }
+}
+
+// canonical renders a value as JSON with every object's keys sorted, so the input
+// beforeMCPExecution sends as a string and the one postToolUse sends as an object key
+// the same record.
+fun canonical(value: any?) > str {
+    if (value is {str: any}) {
+        final node = value as {str: any};
+        final keys = node.keys().cloneMutable();
+        keys.sort(fun (left: str, right: str) > bool => left < right);
+        final parts = mut [<str>];
+        foreach (key in keys) {
+            parts.append((json\stringify(key) catch "\"\"") + ":" + canonical(node[key]));
+        }
+        return "\{" + parts.join(",") + "}";
+    }
+    if (value is [any]) {
+        final parts = mut [<str>];
+        foreach (item in value as [any]) { parts.append(canonical(item)); }
+        return "[" + parts.join(",") + "]";
+    }
+    return json\stringify(value) catch "null";
 }
 
 fun grepLine(input: any?) > str {
@@ -376,6 +494,14 @@ fun searchCommand(event: any?) > str {
     return "";
 }
 
+// skillRead reports whether path is a .../skills/<name>/SKILL.md, the file whose Read
+// is how Cursor loads a skill.
+fun skillRead(path: str) > bool {
+    final parts = path.split("/");
+    final n = parts.len();
+    return n >= 3 and parts[n - 1] == "SKILL.md" and parts[n - 3] == "skills" and parts[n - 2] != "";
+}
+
 fun linkTerms(event: any?) > str {
     final tool = hook\field(event, dotPath: "tool_name");
     final input = hook\dig(event, dotPath: "tool_input");
@@ -408,11 +534,10 @@ fun linkBias(bin: str, terms: str) > str {
     if (urls.len() == 0) { return ""; }
     final rows = mut [<str>];
     foreach (url in urls) { rows.append("  - {url}"); }
-    final text = "This workspace already cites related docs (kind=link). Prefer these over a broad web search so results stay on packages and references this tree depends on:\n"
+    return "This workspace already cites related docs (kind=link). Prefer these over a broad web search so results stay on packages and references this tree depends on:\n"
         + rows.join("\n") + "\n"
         + "Refine the next search with site:<host> from those URLs, or WebFetch one directly. List them again: ./magus query kind=link "
         + quote(terms) + " -o name";
-    return json\stringify({"additional_context": text}) catch "";
 }
 
 fun judge(guard: Guard, extra: [str]) > proc\ExecResult? {
@@ -442,15 +567,16 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         + "Rebuild or update THAT binary to restore the guard.";
 }
 
-// judged returns the rendered reply, or "" when the binary could not answer.
-// A non-zero status with a reply is a deny, which Cursor reads from stdout;
-// retrying that would judge the call twice. Empty stdout with a non-zero status
-// is a binary that rejected a flag, and the retry drops the attribution so an
-// older binary can still answer.
-fun judged(guard: Guard, extra: [str], family: str, session: str) > str {
-    var result = judge(guard, extra: extra);
-    if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-        result = judge(guard, extra: [<str>]) catch null;
+// judged returns magus's answer, or "" when the binary could not give one. Each attempt
+// drops flags an older binary may reject, newest first. A non-zero status with a reply
+// is a deny; retrying that would judge the call twice. Empty stdout with a non-zero
+// status is a binary that rejected a flag.
+fun judged(guard: Guard, attempts: [[str]], family: str, session: str) > str {
+    var result: proc\ExecResult? = null;
+    foreach (extra in attempts) {
+        if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
+            result = judge(guard, extra: extra);
+        }
     }
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         if (hook\noticeOnce(session, family: family, file: "cursor-hook.buzz")) {
@@ -461,29 +587,118 @@ fun judged(guard: Guard, extra: [str], family: str, session: str) > str {
     return hook\trimTrailingNewlines(result!.stdout);
 }
 
-fun shellArgs(agent: str, session: str, transcript: str, template: str, ask: bool, asPath: bool) > [str] {
+fun parseVerdict(stdout: str) > Verdict? {
+    final parsed = json\parse(stdout) catch null;
+    final decision = hook\field(parsed, dotPath: "decision");
+    if (decision == "") { return null; }
+    return Verdict{
+        decision = decision,
+        reason = hook\field(parsed, dotPath: "reason"),
+        context = hook\field(parsed, dotPath: "context"),
+        updatedCommand = hook\field(parsed, dotPath: "updated_command"),
+    };
+}
+
+fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
     final extra = mut [<str>];
     if (asPath) { extra.append("--path"); }
     if (ask) { extra.append("--renders-ask"); }
-    extra.append("-o");
-    extra.append("template={template}");
-    foreach (word in [AGENT_NAME, agent, "--transport", "buzz", "--session", session, "--transcript", transcript]) {
+    if (scope.reportsSkills) { extra.append(REPORTS_SKILLS); }
+    foreach (word in ["-o", "json", AGENT_NAME, scope.agent, "--transport", "buzz", "--session", scope.session, "--transcript", scope.transcript]) {
         extra.append(word);
     }
     return extra;
 }
 
-// Scope is the attribution one event shares across every judgment it makes.
-object Scope {
-    bin: str,
-    agent: str,
-    session: str,
-    transcript: str,
+// verdict asks magus about one call, or returns null when it could not answer. ask is
+// whether the reply can put an ask in front of the person, which only a gating event can;
+// rewrites is whether the reply hands Cursor an updated command.
+fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, rewrites: bool, family: str) > Verdict? {
+    final guard = Guard{ bin = scope.bin, payload = payload };
+    final attributed = shellArgs(scope, asPath: asPath, ask: ask);
+    final newest = mut [<str>];
+    foreach (word in attributed) { newest.append(word); }
+    if (rewrites) { newest.append("--rewrites-input"); }
+    final bare = mut ["-o", "json"];
+    if (asPath) { bare.append("--path"); }
+    final answer = judged(guard, attempts: [newest, attributed, bare], family: family, session: scope.session);
+    if (answer == "") { return null; }
+    final got = parseVerdict(answer);
+    if (got == null and hook\noticeOnce(scope.session, family: "unreadable-verdict", file: "cursor-hook.buzz")) {
+        io\stderr.write("magus guard is NOT running for this call: {scope.bin} answered something that is not a verdict, so its deny and advise rules were not applied. Update that binary.\n") catch void;
+    }
+    return got;
 }
 
-fun verdict(scope: Scope, payload: str, template: str, ask: bool, asPath: bool, family: str) > str {
-    final guard = Guard{ bin = scope.bin, payload = payload };
-    return judged(guard, extra: shellArgs(scope.agent, session: scope.session, transcript: scope.transcript, template: template, ask: ask, asPath: asPath), family: family, session: scope.session);
+// gateReply renders a verdict for a gating event. An ask is Cursor's own approval
+// prompt. Pass and advise both allow, because a gating event has no context field; the
+// advice waits for the after-call event. A decision this file does not know is refused,
+// so a copy older than the guard contract cannot read a new verdict as consent.
+fun gateReply(v: Verdict, updated: {str: any}?) > str {
+    if (v.decision == "deny" or v.decision == "ask") {
+        return json\stringify({
+            "permission": v.decision,
+            "user_message": v.reason,
+            "agent_message": v.reason,
+        }) catch ALLOW;
+    }
+    if (v.decision == "pass" or v.decision == "advise") {
+        if (updated == null) { return ALLOW; }
+        return json\stringify({"permission": "allow", "updated_input": updated!}) catch ALLOW;
+    }
+    return json\stringify({
+        "permission": "deny",
+        "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
+        "agent_message": "magus guard returned the decision {v.decision}, which this hook does not know, so it refuses the call rather than allow it.",
+    }) catch ALLOW;
+}
+
+// fileVerdict keeps what the after-call event owes the model. A denied call has no
+// postToolUse, but it may have a postToolUseFailure, which must not judge it again.
+fun fileVerdict(scope: Scope, event: any?, v: Verdict) > void {
+    final id = hook\field(event, dotPath: "tool_use_id");
+    if (id == "") { return; }
+    var context = "";
+    if (v.decision == "advise") { context = v.context; }
+    remember("verdict", parts: [scope.session, id, hook\field(event, dotPath: "tool_name")], value: context);
+}
+
+fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, rewrites: false, family: family);
+    if (v == null) { return ALLOW; }
+    fileVerdict(scope, event: event, v: v!);
+    return gateReply(v!, updated: null);
+}
+
+// gateShell judges a shell command on preToolUse and, when it passes, hands Cursor the
+// command it runs instead. The line beforeShellExecution will see is marked as judged.
+fun gateShell(scope: Scope, event: any?) > str {
+    final input = (hook\dig(event, dotPath: "tool_input") as? {str: any}) ?? {<str: any>};
+    final command = hook\field(input, dotPath: "command");
+    if (command == "") { return ALLOW; }
+    final v = verdict(scope, payload: command, asPath: false, ask: true, rewrites: true, family: "failed-command");
+    if (v == null) { return ALLOW; }
+    fileVerdict(scope, event: event, v: v!);
+    if (v!.decision == "ask") {
+        // A person who approves it is not asked twice: the approved command reaches
+        // beforeShellExecution as typed.
+        remember("shell", parts: [scope.session, command], value: "");
+    }
+    if (v!.decision != "pass" and v!.decision != "advise") { return gateReply(v!, updated: null); }
+    var line = command;
+    if (v!.updatedCommand != "") { line = v!.updatedCommand; }
+    if (!line.startsWith(SILENT_PREFIX)) { line = SILENT_PREFIX + line; }
+    final updated = mut {<str: any>};
+    foreach (name, value in input) { updated[name] = value; }
+    updated["command"] = line;
+    remember("shell", parts: [scope.session, line], value: "");
+    return gateReply(v!, updated: updated);
+}
+
+fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, rewrites: false, family: family);
+    if (v == null or v!.decision != "advise") { return ""; }
+    return v!.context;
 }
 
 fun gates(eventName: str) > bool {
@@ -491,6 +706,16 @@ fun gates(eventName: str) > bool {
         or eventName == "beforeMCPExecution"
         or eventName == "preToolUse"
         or eventName == "subagentStart";
+}
+
+fun mcpInput(event: any?) > any? {
+    final input = hook\dig(event, dotPath: "tool_input");
+    if (input is str) { return json\parse(input as str) catch input; }
+    return input;
+}
+
+fun mcpKey(scope: Scope, tool: str, event: any?) > [str] {
+    return [scope.session, tool, canonical(mcpInput(event))];
 }
 
 // mcpPayload rewrites Cursor's beforeMCPExecution into the mcp__<server>__<tool>
@@ -503,10 +728,9 @@ fun mcpPayload(event: any?) > str {
     if (!tool.startsWith("mcp__")) {
         tool = "mcp__{server}__{tool}";
     }
-    final input = hook\dig(event, dotPath: "tool_input");
     final envelope = {
         "tool_name": tool,
-        "tool_input": input ?? {<str: any>},
+        "tool_input": mcpInput(event) ?? {<str: any>},
         "session_id": readSession(event),
         "cwd": firstField(event, keys: ["cwd"]),
         "hook_event_name": "beforeMCPExecution",
@@ -514,11 +738,43 @@ fun mcpPayload(event: any?) > str {
     return json\stringify(envelope) catch "";
 }
 
-// sessionStartReply puts this checkout's magus first for later hook runs, and
-// may hand the model a brief under SESSION_BRIEF_MAX_BYTES. Env always; context
-// only when the brief fits. The nested session --brief claims host capacity; a
-// full budget (exit 75) or an oversized brief keeps env only. Profile a suspect
-// run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz --profile on the outer hook).
+fun gateMcp(scope: Scope, event: any?) > str {
+    final payload = mcpPayload(event);
+    if (payload == "") {
+        return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
+    }
+    final v = verdict(scope, payload: payload, asPath: false, ask: true, rewrites: false, family: "failed-mcp");
+    if (v == null) { return ALLOW; }
+    var context = "";
+    if (v!.decision == "advise") { context = v!.context; }
+    remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
+    return gateReply(v!, updated: null);
+}
+
+// brief is the capped `magus session --brief`, or "" when there is none or it is over
+// SESSION_BRIEF_MAX_BYTES. The nested call claims host capacity; a full budget (exit 75)
+// answers nothing. Profile a suspect run with MAGUS_PPROF=mem:/tmp/s.mem (and buzz
+// --profile on the outer hook).
+fun brief(bin: str, root: str) > str {
+    final result = proc\exec(bin, args: ["session", "--brief"], opts: {
+        "quiet": true,
+        "allow_failure": true,
+    }) catch null;
+    if (result == null) { return ""; }
+    var context = hook\trimTrailingNewlines(result!.stdout);
+    if (context == "") { return ""; }
+    if (root != "" and (fs\isFile("{root}/AGENTS.md") catch false)) {
+        context = context + "\nstanding rules: AGENTS.md; re-read it, the summary above is not it";
+    }
+    if (context.len() <= SESSION_BRIEF_MAX_BYTES) { return context; }
+    if (hook\noticeOnce("", family: "brief-budget", file: "cursor-hook.buzz")) {
+        io\stderr.write("magus guard: session --brief was {context.len()} bytes, over SESSION_BRIEF_MAX_BYTES={SESSION_BRIEF_MAX_BYTES}; dropping it\n") catch void;
+    }
+    return "";
+}
+
+// sessionStartReply puts this checkout's magus first for later hook runs, and may hand
+// the model the brief. Env always; context only when the brief fits.
 fun sessionStartReply(bin: str) > str {
     final root = hook\workspaceRoot();
     if (root == "") { return EMPTY; }
@@ -538,27 +794,47 @@ fun sessionStartReply(bin: str) > str {
     final reply = mut {<str: any>};
     reply["env"] = envMap;
     if (bin != "" and hook\isExecutable(bin)) {
-        final result = proc\exec(bin, args: ["session", "--brief"], opts: {
-            "quiet": true,
-            "allow_failure": true,
-        }) catch null;
-        var context = "";
-        if (result != null) {
-            context = hook\trimTrailingNewlines(result!.stdout);
-        }
-        if (context != "") {
-            final hasRules = fs\isFile("{root}/AGENTS.md") catch false;
-            if (hasRules) {
-                context = context + "\nstanding rules: AGENTS.md; re-read it, the summary above is not it";
-            }
-            if (context.len() <= SESSION_BRIEF_MAX_BYTES) {
-                reply["additional_context"] = context;
-            } else if (hook\noticeOnce("", family: "brief-budget", file: "cursor-hook.buzz")) {
-                io\stderr.write("magus guard: session --brief was {context.len()} bytes, over SESSION_BRIEF_MAX_BYTES={SESSION_BRIEF_MAX_BYTES}; keeping env only\n") catch void;
-            }
-        }
+        final context = brief(bin, root: root);
+        if (context != "") { reply["additional_context"] = context; }
     }
     return json\stringify(reply) catch EMPTY;
+}
+
+// afterCall is what the model is owed after a call: the verdict its gating event filed,
+// or, for a call no gating event saw, a judgment made now.
+fun afterCall(scope: Scope, event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    if (tool.startsWith(MCP_TOOL_PREFIX)) {
+        final mcpTool = tool.sub(MCP_TOOL_PREFIX.len());
+        return recall("mcp", parts: mcpKey(scope, tool: mcpTool, event: event)) ?? "";
+    }
+    final id = hook\field(event, dotPath: "tool_use_id");
+    if (id != "") {
+        final held = recall("verdict", parts: [scope.session, id, tool]);
+        if (held != null) { return held!; }
+    }
+    var command = hook\field(event, dotPath: "tool_input.command");
+    if (command.startsWith(SILENT_PREFIX)) { command = command.sub(SILENT_PREFIX.len()); }
+    if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
+    final search = searchCommand(event);
+    if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }
+    final terms = linkTerms(event);
+    if (terms != "") { return linkBias(scope.bin, terms: terms); }
+    final writePath = toolPath(event);
+    if (writePath != "") { return advice(scope, payload: writePath, asPath: true, family: "failed-path"); }
+    return "";
+}
+
+// afterCallReply adds the brief to the first after-call reply following a compaction.
+fun afterCallReply(scope: Scope, event: any?) > str {
+    var context = afterCall(scope, event: event);
+    if (recall("compact", parts: [scope.session]) != null) {
+        final rebrief = brief(scope.bin, root: hook\workspaceRoot());
+        if (rebrief != "" and context != "") { context = context + "\n\n" + rebrief; }
+        if (rebrief != "" and context == "") { context = rebrief; }
+    }
+    if (context == "") { return EMPTY; }
+    return json\stringify({"additional_context": context}) catch EMPTY;
 }
 
 fun readEventName(event: any?) > str {
@@ -617,20 +893,24 @@ fun recordMessage(scope: Scope, event: any?) > void {
     }) catch void;
 }
 
+// envelope restates a tool call in the shape magus shell reads a host's call by.
+fun envelope(scope: Scope, event: any?, tool: str, input: any) > str {
+    return json\stringify({
+        "tool_name": tool,
+        "tool_input": input,
+        "session_id": scope.session,
+        "cwd": firstField(event, keys: ["cwd"]),
+        "transcript_path": scope.transcript,
+        "hook_event_name": "preToolUse",
+    }) catch "";
+}
+
 // taskPayload restates a Task call as the envelope magus recognizes a spawn by, or "" when
 // the call carries no prompt to hand it.
-fun taskPayload(event: any?) > str {
+fun taskPayload(scope: Scope, event: any?) > str {
     final input = hook\dig(event, dotPath: "tool_input");
     if (hook\field(input, dotPath: "prompt") == "") { return ""; }
-    final envelope = {
-        "tool_name": "Task",
-        "tool_input": input,
-        "session_id": readSession(event),
-        "cwd": firstField(event, keys: ["cwd"]),
-        "transcript_path": hook\field(event, dotPath: "transcript_path"),
-        "hook_event_name": "preToolUse",
-    };
-    return json\stringify(envelope) catch "";
+    return envelope(scope, event: event, tool: "Task", input: input);
 }
 
 fun unnamed(eventName: str) > void {
@@ -650,30 +930,33 @@ fun readSession(event: any?) > str {
     return firstField(event, keys: ["session_id", "conversation_id"]);
 }
 
-fun gate(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final got = verdict(scope, payload: payload, template: GATE, ask: true, asPath: asPath, family: family);
-    if (got == "") { return ALLOW; }
-    return got;
+fun gateTool(scope: Scope, event: any?) > str {
+    final tool = hook\field(event, dotPath: "tool_name");
+    if (tool == "Task") {
+        final spawn = taskPayload(scope, event: event);
+        if (spawn == "") { return ALLOW; }
+        return gateCall(scope, event: event, payload: spawn, asPath: false, family: "failed-spawn");
+    }
+    if (tool == "Shell") { return gateShell(scope, event: event); }
+    final path = toolPath(event);
+    if (tool == "Read" and skillRead(path)) {
+        final load = envelope(scope, event: event, tool: "Read", input: {"file_path": path});
+        return gateCall(scope, event: event, payload: load, asPath: false, family: "failed-skill");
+    }
+    final search = searchCommand(event);
+    if (search != "") { return gateCall(scope, event: event, payload: search, asPath: false, family: "failed-search"); }
+    if (path == "") { return ALLOW; }
+    return gateCall(scope, event: event, payload: path, asPath: true, family: "failed-path");
 }
 
-fun advise(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final got = verdict(scope, payload: payload, template: ADVISE, ask: false, asPath: asPath, family: family);
-    if (got == "") { return EMPTY; }
-    return got;
-}
-
-fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
-    final scope = Scope{
-        bin = bin,
-        agent = agent,
-        session = readSession(event),
-        transcript = hook\field(event, dotPath: "transcript_path"),
-    };
+fun dispatch(event: any?, eventName: str, scope: Scope) > str {
     if (eventName == "sessionStart") {
-        return sessionStartReply(bin);
+        prune();
+        return sessionStartReply(scope.bin);
     }
     if (eventName == "sessionEnd") {
         checkpoint(scope.bin, agent: scope.agent, session: scope.session, transcript: scope.transcript);
+        prune();
         return "";
     }
     if (eventName == "subagentStart") {
@@ -684,43 +967,18 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         recordMessage(scope, event: event);
         return SUBMIT_CONTINUE;
     }
-    if (eventName == "beforeMCPExecution") {
-        final payload = mcpPayload(event);
-        if (payload == "") {
-            return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
-        }
-        return gate(scope, payload: payload, asPath: false, family: "failed-mcp");
-    }
-    if (eventName == "beforeShellExecution") {
-        return gate(scope, payload: hook\field(event, dotPath: "command"), asPath: false, family: "failed-command");
-    }
-    if (eventName == "preToolUse") {
-        if (hook\field(event, dotPath: "tool_name") == "Task") {
-            final spawn = taskPayload(event);
-            if (spawn == "") { return ALLOW; }
-            return gate(scope, payload: spawn, asPath: false, family: "failed-spawn");
-        }
-        final search = searchCommand(event);
-        if (search != "") { return gate(scope, payload: search, asPath: false, family: "failed-search"); }
-        final writePath = toolPath(event);
-        if (writePath == "") { return ALLOW; }
-        return gate(scope, payload: writePath, asPath: true, family: "failed-path");
-    }
-    if (eventName == "postToolUse") {
-        final command = hook\field(event, dotPath: "tool_input.command");
-        if (command != "") { return advise(scope, payload: command, asPath: false, family: "failed-command"); }
-        final search = searchCommand(event);
-        if (search != "") { return advise(scope, payload: search, asPath: false, family: "failed-search"); }
-        final terms = linkTerms(event);
-        if (terms != "") {
-            final bias = linkBias(scope.bin, terms: terms);
-            if (bias != "") { return bias; }
-            return EMPTY;
-        }
-        final writePath = toolPath(event);
-        if (writePath != "") { return advise(scope, payload: writePath, asPath: true, family: "failed-path"); }
+    if (eventName == "preCompact") {
+        remember("compact", parts: [scope.session], value: "");
         return EMPTY;
     }
+    if (eventName == "beforeMCPExecution") { return gateMcp(scope, event: event); }
+    if (eventName == "beforeShellExecution") {
+        final command = hook\field(event, dotPath: "command");
+        if (recall("shell", parts: [scope.session, command]) != null) { return ALLOW; }
+        return gateCall(scope, event: event, payload: command, asPath: false, family: "failed-command");
+    }
+    if (eventName == "preToolUse") { return gateTool(scope, event: event); }
+    if (eventName == "postToolUse" or eventName == "postToolUseFailure") { return afterCallReply(scope, event: event); }
     return "";
 }
 
@@ -736,8 +994,8 @@ fun main(args: [str]) > void {
         return;
     }
     final eventName = readEventName(event);
-    final agent = readAgentName(args);
-    if (agent == "") {
+    final entry = readArgs(args);
+    if (entry.agent == "") {
         unnamed(eventName);
         return;
     }
@@ -750,7 +1008,14 @@ fun main(args: [str]) > void {
         if (eventName == "beforeSubmitPrompt") { io\stdout.write(SUBMIT_CONTINUE) catch void; }
         return;
     }
-    io\stdout.write(dispatch(event, eventName: eventName, bin: bin, agent: agent)) catch void;
+    final scope = Scope{
+        bin = bin,
+        agent = entry.agent,
+        session = readSession(event),
+        transcript = hook\field(event, dotPath: "transcript_path"),
+        reportsSkills = entry.reportsSkills,
+    };
+    io\stdout.write(dispatch(event, eventName: eventName, scope: scope)) catch void;
 }
 ```
 
@@ -797,104 +1062,106 @@ produces a follow-up before relying on it.
 
 ## Lease capture
 
-`subagentStart` fires when Cursor hands work to a subagent, and carries the
-handed `task`, the `subagent_type`, and `parent_conversation_id` for the parent
-side. That is everything magus records as a spawn, under different names, so the
-script reshapes the payload into the canonical envelope before piping it: magus
-recognizes a spawn by a `tool_input` carrying a `prompt`, never by a tool name it
-would have to enumerate per host.
+`preToolUse` on `Task` is the spawn row. Its `tool_input` carries `description`,
+`prompt`, `subagent_type`, `run_in_background` and, when the agent picked one,
+`model` (probed on cursor-agent 2026.10.01). The script restates the call as the
+envelope magus recognizes a spawn by, a `tool_input` carrying a `prompt`, and gates
+it, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md) rule can
+deny it and a title of the form `<parent>/<role> <job>` names the job. One with no
+`prompt` has nothing to judge and is allowed. To join a subagent's own calls to a
+job, write the marker line documented in [Any other host](any-host.md#lease-capture)
+at the top of the prompt you hand the subagent.
 
-It records; it does not judge. A lease prompt is prose, so the verdict is always
-a pass and the arm always allows.
-
-`preToolUse` on `Task` is the other side of the same spawn, and it does judge: the
-script restates the call as the envelope magus recognizes a spawn by, a `tool_input`
-carrying a `prompt`, and gates it, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)
-rule can deny it. Cursor documents no fields for a `Task` call's `tool_input`; one
-with no `prompt` has nothing to judge and is allowed. Both events record the spawn,
-so the trail holds two `agent_spawn` rows for one subagent, the same price judged
-calls pay here. Neither entry declares `--reports-skills`, because Cursor documents
-no hook on a skill load. To join those events to a job, write the
-marker line documented in [Any other host](any-host.md#lease-capture) at the top
-of the prompt you hand the subagent.
-
-This one is **unverified live**. An open Cursor forum report says
-`subagentStart` and `subagentStop` never fire while `beforeShellExecution` from
-the same `hooks.json` works normally. The wiring ships anyway, because a hook that
-never fires costs nothing and a missing one cannot be found; check
-`magus session` for `agent_spawn` events before relying on it.
+`subagentStart` is wired too, and records the same spawn from the child's side,
+reshaped from its `task`, `subagent_type` and `parent_conversation_id`; it never
+judges, and always allows. **cursor-agent never fires it**: in a probe on 2026.10.01
+with `subagentStart` and `subagentStop` both hooked, a `Task` ran a child to
+completion and neither event fired, nor did `postToolUse` for the `Task` call. The
+child's own calls arrive on `preToolUse` and `postToolUse` under a new
+`conversation_id` that names no parent, so nothing a hook sees links a child to
+its spawn or reports the child's context size. The wiring stays for a Cursor build
+that fires it.
 
 ## Coverage and limits
 
-**Nine of Cursor's twenty-one hook events are wired.** `sessionStart`,
+Every claim below that cites a probe was run against cursor-agent 2026.10.01
+(`~/.local/bin/cursor-agent -p`) with logging hooks in a scratch workspace; the rest
+cite [Cursor hooks](https://cursor.com/docs/agent/hooks).
+
+**Eleven of Cursor's twenty-one hook events are wired.** `sessionStart`,
 `beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, `postToolUse`,
-`subagentStart`, `sessionEnd`, `beforeSubmitPrompt` and `stop`. The rest are not,
-for these reasons:
+`postToolUseFailure`, `preCompact`, `subagentStart`, `sessionEnd`,
+`beforeSubmitPrompt` and `stop`. The rest are not, for these reasons:
 
 - `subagentStop` carries `summary`, `modified_files` and `agent_transcript_path`
-  and names no subagent id, which the context size magus files for a subagent is
-  keyed on, and Cursor reports no per-agent token usage in its transcript.
+  and names no subagent id (Cursor hooks), and it never fired in the probe below.
 - `afterShellExecution`, `afterMCPExecution`, `afterFileEdit`, `afterTabFileEdit`,
-  `afterAgentResponse` and `afterAgentThought` are observation only, and `postToolUse`
-  already carries the advise.
+  `afterAgentResponse` and `afterAgentThought` are observation only (Cursor hooks),
+  and `postToolUse` already carries the advise.
 - `beforeReadFile` and `beforeTabFileRead` would gate a read the `preToolUse`
-  `Read` matcher already gates.
-- `postToolUseFailure` has no response fields, see below.
-- `preCompact`, `workspaceOpen`: nothing in magus consumes them.
+  `Read` matcher already gates; in the probe `beforeReadFile` fired after
+  `preToolUse` for every `Read`.
+- `workspaceOpen`: nothing in magus consumes it.
+
+**Hook all eighteen agent events at once and a run can die.** With every agent
+event hooked, cursor-agent runs sometimes ended `Connection lost ...
+WritableIterable is closed` (probed); the eleven above have not shown it.
+
+**`-p` fires no turn events.** Under `cursor-agent -p`, `sessionStart` and
+`sessionEnd` fired and `beforeSubmitPrompt`, `stop` and `afterAgentResponse` did
+not (probed). So a headless run records none of your messages and gets no reply
+check; an interactive session does both.
+
+**`subagentStart` never fires in the CLI.** With `subagentStart` and `subagentStop`
+hooked, a `Task` ran a child to completion and neither fired; neither did
+`postToolUse` for the `Task` call (probed). The child's calls reach `preToolUse` under
+its own `conversation_id`, which names no parent. So the spawn row is the parent's
+`preToolUse` `Task`, and magus learns no child id, which leaves the child's calls
+unattributed to its spawn and its context size unfiled.
+
+**No per-agent context size.** A Cursor transcript line carries no token usage
+(probed: `{role, message.content}` and `{type: "turn_ended"}` only), and no hook
+names a subagent's usage. `preCompact` carries `context_tokens` for the conversation
+compacting (Cursor hooks), which the script does not file.
+
+**Compaction re-briefs on the next tool call, not at once.** `preCompact` answers
+`user_message` only (Cursor hooks), which the person sees and the model does not. So
+it marks the conversation, and the next `postToolUse` or `postToolUseFailure`
+carries the capped `magus session --brief` beside its own advice. A compaction
+followed by no tool call gets no brief. `preCompact` was not exercised live: `-p`
+cannot be made to compact on demand.
+
+**Session start is wired.** `sessionStart` sets `env.PATH` / `__MAGUS_BIN` and
+hands the model `magus session --brief` via `additional_context` when the brief is
+at most `SESSION_BRIEF_MAX_BYTES` (16KiB); a code word sent that way reached the
+model under `-p` (probed). Profile a heavy run with `MAGUS_PPROF=mem:/tmp/s.mem` and
+`magus buzz --profile` on the outer hook: the Buzz compile of the hook itself is
+milliseconds; the nested brief pays the workspace load. Every hook entry carries
+`"timeout": 10`, so a brief slower than that is lost with the reply.
+
+**MCP calls are gated on `beforeMCPExecution`, and advised on `postToolUse`.**
+`beforeMCPExecution` carries `tool_name`, `mcp_server_name` and `tool_input` as a
+JSON string; the script parses it and rewrites the call to `mcp__<server>__<tool>`
+before `magus shell` grades it. `postToolUse` names the same call `MCP:<tool>`, with
+`tool_input` as an object and no server (probed), so the verdict is filed under the
+tool and the input with its keys sorted, and the advice an MCP call earns reaches
+the model there. `failClosed` is set so a hook crash blocks the tool.
+
+**A failed call keeps its advice.** `postToolUseFailure` carries `error_message`,
+`failure_type`, `is_interrupt` and `tool_use_id`, and its `additional_context`
+reached the model (probed), so the advice its gating event filed is delivered there.
 
 **Reading the reply out of the transcript** (above) is the one arm that rests on an
-undocumented file format.
-
-**MCP calls are gated on `beforeMCPExecution`.** Cursor publishes
-`tool_name`, `tool_input`, and `mcp_server_name` on that event; the script
-rewrites them to `mcp__<server>__<tool>` before `magus shell` grades the call.
-`failClosed` is set so a hook crash blocks the tool. Advise stays unwired:
-`afterMCPExecution` is observation-only, and `postToolUse` still carries no
-server identity, so this host cannot form the graded name after the call.
-
-**Shell commands and file writes now reach the model on both decisions.** That is new, and it cost
-two events per judged call: the write gate moved from `afterFileEdit`, which
-fires once the write has landed, to `preToolUse`, which blocks it; and the
-advisory moved from stderr prose to `postToolUse.additional_context`. Reporting a
-declared-output edit after the call is not a concession, since that rule only ever
-explains, on every host. Reporting it to the PERSON was, and that is what changed.
-
-**Judging twice is the price.** A gating event carries no message on an allow, so
-the explanation has to come from a second event, and magus is asked about the same
-call twice. The activity trail therefore carries two rows per judged call here.
-
-**Session start is wired; post-compaction rehydration is still not.**
-`sessionStart` sets `env.PATH` / `__MAGUS_BIN` and may inject
-`magus session --brief` via `additional_context` when the brief is at most
-`SESSION_BRIEF_MAX_BYTES` (16KiB). Profile a heavy run with
-`MAGUS_PPROF=mem:/tmp/s.mem` and `magus buzz --profile` on the outer hook: the
-Buzz compile of the hook itself is milliseconds; the nested brief pays the
-workspace load. Cursor has raced `additional_context` away before (env sticks).
-Compaction still has no model-facing event. Every hook entry carries
-`"timeout": 10`.
-
-**A tool failure carries no hint.** `postToolUseFailure` has no response fields at
-all, so the one place a host could explain a failing command is closed here.
-
-**Shell commands keep their stdin.** On Claude Code the guard hands the command
-back with stdin closed, so a stray stdin reader cannot hang the call. Cursor
-takes a rewrite (`updated_input`) only at `preToolUse`; `beforeShellExecution`,
-where this script gates a shell command, answers `permission` and messages only.
-So no rewrite is sent here; give a reader its input explicitly.
+undocumented file format, and `stop` does not fire under `-p`, so it is unverified
+live.
 
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
 `failClosed`. The script above matches that stance instead of pretending to be
 stricter than the surrounding contract. For strict behavior, set `failClosed` on
 the hook and change its missing-binary branch to a deny.
 
-The magus half is verified: the verdict shape this script parses is checked
-against this repository's binary. The Cursor half is written against the
-product's published hook documentation and has not been executed here, so
-confirm it against [Cursor hooks](https://cursor.com/docs/agent/hooks).
-
-There is also no session-load adapter for this host, where the other three ship
-one. Nothing in Cursor prevents it; that remains separate from the hook parity
-above.
+A [session-load adapter](session-load.md#cursor) reads Cursor's transcripts into
+`magus session load`, as the other hosts' adapters do.
 
 ## Verify
 

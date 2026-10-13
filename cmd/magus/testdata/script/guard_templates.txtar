@@ -529,12 +529,140 @@ env HOME=/no-home
 env XDG_STATE_HOME=
 rm $WORK/home/state
 
-# A preToolUse on a tool carrying neither field allows without asking magus
-# anything. Cursor's preToolUse fires for every tool, and the shell tool in
-# particular is beforeShellExecution's to judge, and twice would record two verdicts.
+# A Grep with nothing to restrict passes on its gating event.
 stdin cursor-pre-other.json
 exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
 stdout '"permission":"allow"'
+
+# --- cursor-hook.buzz: the shell on preToolUse, one judgment per call ----------
+#
+# preToolUse is the shell's gate because its reply can rewrite the command, which Cursor
+# applies (probed on cursor-agent 2026.10.01): a command that passes runs with stdin
+# closed and MAGUS_LOG_SILENT exported, as it does under Claude Code.
+env CURSOR_HOOK_STATE_DIR=$WORK/cursor-state
+
+# case: command/pass
+stdin cursor-pre-shell-pass.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"permission":"allow"'
+stdout '"updated_input":\{"command":"export MAGUS_LOG_SILENT=true; exec </dev/null; ls -la"'
+stdout '"timeout":30000'
+
+# case: command/deny
+# A refused command is never rewritten: it does not run.
+stdin cursor-pre-shell-deny.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"permission":"deny"'
+stdout 'whole-tree git stash'
+! stdout 'updated_input'
+
+# case: mcp/deny
+# beforeMCPExecution sends tool_input as a JSON string, not an object. Judged as the
+# string, the call reached no MCP rule.
+cd notes-ws
+env HOME=$WORK/home
+env XDG_STATE_HOME=$WORK/home/state
+exec magus job fork harness/cursor-mcp-string --read-only --criteria 'the cursor MCP string-input case, held so the rebind rule has a job to read'
+stdin $WORK/cursor-exec-mcp-string.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdin $WORK/cursor-mcp-call-string.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor
+stdout '"permission":"deny"'
+stdout 'would drop every job'
+cd $WORK
+env HOME=/no-home
+env XDG_STATE_HOME=
+rm $WORK/home/state
+
+# The rest of this section counts calls, so it runs against a stand-in magus that logs
+# each one and advises on every call. The gating event judges the call and files the
+# verdict; the event after it answers from the file. One call, one `magus shell`, one row.
+chmod 0755 $WORK/counting-magus
+env __MAGUS_BIN=$WORK/counting-magus
+env COUNTING_MAGUS_LOG=$WORK/calls.log
+
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"updated_input":\{"command":"export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi"'
+grep 'shell .*rewrites-input' $WORK/calls.log
+grep 'shell .*reports-skills' $WORK/calls.log
+
+# beforeShellExecution sees the rewritten line, and lets it through unjudged.
+stdin cursor-before-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"permission":"allow"'
+
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=1 '^shell ' $WORK/calls.log
+
+# The verdict is spent: a second after-call event for the same id judges afresh.
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+grep -count=2 '^shell ' $WORK/calls.log
+
+# A failed call gets its advice on postToolUseFailure, again from the filed verdict.
+stdin cursor-pre-shell-failing.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdin cursor-post-shell-failing.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=3 '^shell ' $WORK/calls.log
+
+# Cursor reuses one tool_use_id for a Read and the Write after it, so the tool name is
+# part of the key: the Write's postToolUse does not answer from the Read's verdict.
+stdin cursor-pre-read-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdin cursor-pre-write-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdin cursor-post-write-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"additional_context":"COUNTED-ADVICE"'
+stdin cursor-post-read-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=5 '^shell ' $WORK/calls.log
+
+# A Read of a SKILL.md is how Cursor loads a skill, so it goes to magus as the Read it
+# is, which magus records as the load, rather than as the `cat` the other reads become.
+stdin cursor-pre-skill-read.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"permission":"allow"'
+grep '"tool_name":"Read"' $WORK/calls.log.stdin
+grep 'skills/magus-run/SKILL.md' $WORK/calls.log.stdin
+
+# beforeMCPExecution files the verdict under the tool and the input, which it sends as a
+# JSON string; postToolUse names the same call MCP:<tool>, its input an object with the
+# keys in another order and no server.
+stdin cursor-mcp-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"permission":"allow"'
+grep '"tool_name":"mcp__magus__client"' $WORK/calls.log.stdin
+grep '"tool_input":\{"' $WORK/calls.log.stdin
+stdin cursor-post-mcp-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '"additional_context":"COUNTED-ADVICE"'
+grep -count=7 '^shell ' $WORK/calls.log
+
+# preCompact marks the conversation, and the next after-call reply carries the brief
+# with the call's own advice. Only the next: the mark is spent.
+stdin cursor-pre-compact.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout '\{\}'
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdout 'COUNTED-ADVICE\\n\\nCOUNTED-BRIEF'
+stdin cursor-pre-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+stdin cursor-post-shell-counted.json
+exec magus buzz -s $__MAGUS_TEMPLATES/cursor-hook.buzz -- --agent-name cursor --reports-skills
+! stdout 'COUNTED-BRIEF'
+env __MAGUS_BIN=
+env COUNTING_MAGUS_LOG=
+env CURSOR_HOOK_STATE_DIR=
 
 # sessionEnd records where the work stopped and says nothing at all. A checkpoint
 # is not a verdict, so any reply here would be one the host has to interpret.
@@ -1508,3 +1636,48 @@ not json at all
 {"hook_event_name": "sessionEnd", "session_id": "c1", "reason": "completed", "transcript_path": "/tmp/t.jsonl"}
 -- cursor-subagent.json --
 {"hook_event_name": "subagentStart", "conversation_id": "child", "parent_conversation_id": "c1", "subagent_type": "explore", "task": "lease: L-1\nfind every caller"}
+-- cursor-pre-shell-pass.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-pass", "tool_input": {"command": "ls -la", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-pre-shell-deny.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c1", "session_id": "c1", "tool_name": "Shell", "tool_use_id": "s-deny", "tool_input": {"command": "git stash", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-exec-mcp-string.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c3", "command": "magus job exec harness/cursor-mcp-string", "cwd": ".", "sandbox": false}
+-- cursor-mcp-call-string.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c3", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"import \\\"magus\\\"; magus\\\\job.clear();\"}", "command": "./magus mcp", "cwd": "."}
+-- counting-magus --
+#!/bin/sh
+# Stands in for magus: logs each call and its stdin, advises on every judgment, and
+# hands back a brief.
+echo "$*" >> "$COUNTING_MAGUS_LOG"
+cat > "$COUNTING_MAGUS_LOG.stdin"
+case "$1" in
+  shell) printf '%s\n' '{"schema_version":2,"decision":"advise","context":"COUNTED-ADVICE","rule":"counted","updated_command":"exec </dev/null; echo hi"}' ;;
+  session) echo COUNTED-BRIEF ;;
+esac
+exit 0
+-- cursor-pre-shell-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "echo hi", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-before-shell-counted.json --
+{"hook_event_name": "beforeShellExecution", "conversation_id": "c2", "session_id": "c2", "command": "export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi", "cwd": "", "sandbox": false}
+-- cursor-post-shell-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-1", "tool_input": {"command": "export MAGUS_LOG_SILENT=true; exec </dev/null; echo hi", "cwd": "", "timeout": 30000}, "tool_output": "{\"output\":\"hi\\n\",\"exitCode\":0}", "cwd": ""}
+-- cursor-pre-shell-failing.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "ls /not/here", "cwd": "", "timeout": 30000}, "cwd": ""}
+-- cursor-post-shell-failing.json --
+{"hook_event_name": "postToolUseFailure", "conversation_id": "c2", "session_id": "c2", "tool_name": "Shell", "tool_use_id": "s-2", "tool_input": {"command": "export MAGUS_LOG_SILENT=true; exec </dev/null; ls /not/here", "cwd": "", "timeout": 30000}, "error_message": "ls: /not/here: No such file or directory", "failure_type": "error", "is_interrupt": false, "cwd": ""}
+-- cursor-pre-read-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md"}}
+-- cursor-pre-write-counted.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Write", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md", "contents": "x\n"}}
+-- cursor-post-write-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Write", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md", "contents": "x\n"}, "tool_output": "{\"success\":true}"}
+-- cursor-post-read-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-1\nfc_1", "tool_input": {"file_path": "README.md"}, "tool_output": "{\"content_length\":2}"}
+-- cursor-pre-skill-read.json --
+{"hook_event_name": "preToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "Read", "tool_use_id": "call-2\nfc_2", "tool_input": {"file_path": "/ws/.agents/skills/magus-run/SKILL.md"}}
+-- cursor-mcp-counted.json --
+{"hook_event_name": "beforeMCPExecution", "conversation_id": "c2", "session_id": "c2", "mcp_server_name": "magus", "tool_name": "client", "tool_input": "{\"script\":\"x\",\"args\":{\"b\":1,\"a\":2}}", "command": "./magus mcp"}
+-- cursor-post-mcp-counted.json --
+{"hook_event_name": "postToolUse", "conversation_id": "c2", "session_id": "c2", "tool_name": "MCP:client", "tool_use_id": "m-1", "tool_input": {"args": {"a": 2, "b": 1}, "script": "x"}, "tool_output": "{}"}
+-- cursor-pre-compact.json --
+{"hook_event_name": "preCompact", "conversation_id": "c2", "session_id": "c2", "trigger": "auto", "context_tokens": 180000, "context_window_size": 200000}
