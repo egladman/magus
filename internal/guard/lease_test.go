@@ -12,9 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/guard/builtin"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/types/gen/mocks"
 	"github.com/stretchr/testify/assert"
@@ -182,6 +185,81 @@ func TestAdviseRepeatGateIsSilentWithoutARunLog(t *testing.T) {
 	assert.Empty(t, missing)
 }
 
+// gateRepeatRepo is a git workspace on main whose run log holds runs gate invocations and
+// whose session store holds a gate verdict of outcome at HEAD, recorded now.
+func gateRepeatRepo(t *testing.T, runs int, outcome string) (context.Context, *testkit.Repo) {
+	t.Helper()
+	testkit.Isolate(t)
+	repo := testkit.NewRepo(t, map[string]string{".gitignore": ".magus/\n", "a.go": "package a\n"})
+	cacheDir := filepath.Join(repo.Root(), ".magus")
+	runsDir := filepath.Join(cacheDir, "runs")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	now := time.Now()
+	for i := range runs {
+		writeRun(t, runsDir, "gate-"+strconv.Itoa(i), now.Add(-time.Duration(30-i)*time.Minute), time.Minute, "affected", "ci")
+	}
+	dir, err := sessions.Dir(repo.Root())
+	require.NoError(t, err)
+	require.NoError(t, sessions.RecordGate(dir, sessions.GateResult{
+		Target: types.TargetCI, Ref: "main", Commit: repo.Head(), Outcome: outcome,
+	}, sessions.InvocationStart{Workspace: repo.Root()}))
+	return context.WithValue(t.Context(), locationKey{}, location{cacheDir: cacheDir, workspace: repo.Root()}), repo
+}
+
+// From the third gate in the window, a gate over a tree its newest verdict passed and that
+// nothing changed since is refused: it can only pass again, and the advisory that only said
+// so was gated past again and again. A change after the verdict, a red verdict, fewer runs
+// or a command that is not the gate refuse nothing.
+func TestDenyRepeatGate(t *testing.T) {
+	const gate = "./magus affected ci"
+
+	t.Run("a third gate over an unchanged green tree", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		// Dirty before the verdict: the tree the gate passed already held it.
+		repo.Write("a.go", "package a\n\nvar x = 1\n")
+		before := time.Now().Add(-time.Hour)
+		require.NoError(t, os.Chtimes(repo.Path("a.go"), before, before))
+
+		d := denyRepeatGate(ctx, Dependencies{}, "", gate)
+		require.NotEmpty(t, d)
+		assert.Contains(t, d.Say, "`ci` passed on this branch")
+		assert.Contains(t, d.Say, "nothing changed since")
+		assert.Contains(t, d.Why, repo.Head(), "the rationale names the verdict's commit")
+		assert.Contains(t, d.Why, "--plan", "and the command that sizes the risk")
+
+		raised := Judge(ctx, Dependencies{Builtins: map[string]builtin.Setting{string(advisoryGateRepeat): {Decision: builtin.Deny}}}, Request{Input: gate})
+		assert.Equal(t, "deny", raised.Decision, "Judge reaches the rule through the role-scoped list")
+		assert.Equal(t, string(advisoryGateRepeat), raised.Rule)
+	})
+	t.Run("a file written after the verdict", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		repo.Write("b.go", "package a\n")
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(repo.Path("b.go"), after, after))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a commit after the verdict", func(t *testing.T) {
+		ctx, repo := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		repo.Commit("more", map[string]string{"c.go": "package a\n"})
+		after := time.Now().Add(time.Minute)
+		require.NoError(t, os.Chtimes(repo.Path("c.go"), after, after))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a red verdict", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomeFail)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("the second gate", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 1, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", gate))
+	})
+	t.Run("a command that is not the gate", func(t *testing.T) {
+		ctx, _ := gateRepeatRepo(t, 2, sessions.OutcomePass)
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus run test ."))
+		assert.Empty(t, denyRepeatGate(ctx, Dependencies{}, "", "./magus affected ci --plan"))
+	})
+}
+
 func TestWorkspaceRunsDirNeedsAResolvedCacheDir(t *testing.T) {
 	root := t.TempDir()
 	assert.Empty(t, workspaceRunsDir(""),
@@ -307,7 +385,150 @@ func figuresWorkspace(t *testing.T) Dependencies {
 		Path: "docs/gen/figures/flow.svg", Project: "docs", Role: "output",
 		Claims: []types.FileClaim{{Project: "docs", Target: "figures-generate", Role: "output", Glob: "gen/figures/*.svg"}},
 	}}, nil).Maybe()
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{}, nil).Maybe()
 	return Dependencies{Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil }}
+}
+
+// testCheckLease is a worker whose check is the root's composite test target.
+func testCheckLease() types.Job {
+	return types.Job{
+		ID:         "guard/fix",
+		Criteria:   "fix a guard rule",
+		WritePaths: []string{"internal/guard/**"},
+		Check:      &types.LeaseCheck{Target: "test", Project: "."},
+		State:      types.StateRunning,
+		Registered: 1,
+	}
+}
+
+// composingWorkspace is a root whose test target needs format and runs go's go-test op,
+// and needs proofread-build in libs/conventions; go-build in the root declares ./magus.
+func composingWorkspace(t *testing.T) Dependencies {
+	t.Helper()
+	ws := mocks.NewMockWorkspaceRepository(t)
+	ws.EXPECT().TargetGraph(mock.Anything).Return(types.TargetGraphOutput{Projects: []types.TargetGraphProject{
+		{Path: ".", Nodes: []types.TargetGraphNode{
+			{Name: "test", Dependencies: []string{"format"},
+				CrossDependencies: []types.CrossTargetRef{{Project: "libs/conventions", Target: "proofread-build"}},
+				Spells:            []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-test"}}}},
+			{Name: "format", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"go-fmt"}}}},
+			{Name: "lint", Spells: []types.TargetSpellUse{{Spell: "go", Ops: []string{"golangci-lint"}}}},
+		}},
+		{Path: "libs/conventions", Nodes: []types.TargetGraphNode{{Name: "proofread-build"}}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, []string{checkoutBinary}).Return([]types.FileEntry{{
+		Path: "magus", Project: ".", Role: "output",
+		Claims: []types.FileClaim{{Project: ".", Target: "go-build", Role: "output", Glob: "magus"}},
+	}}, nil).Maybe()
+	ws.EXPECT().ClassifyFiles(mock.Anything, mock.Anything).Return(nil, nil).Maybe()
+	return Dependencies{
+		Inspect: func(context.Context, string) (types.WorkspaceRepository, error) { return ws, nil },
+		Spells:  spellCatalog,
+	}
+}
+
+// TestWorkerCheckOnlyLetsASliceOfTheCheckRun pins the iteration a check exists to end in: a
+// run of any target the check composes, through ctx.needs or a spell op, narrowed however
+// its forwarded arguments narrow it, and a dependency install. A worker refused these ran
+// `go test` raw instead. A target the check does not compose is still refused.
+func TestWorkerCheckOnlyLetsASliceOfTheCheckRun(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+
+	install := ""
+	for _, s := range spellCatalog() {
+		for _, name := range s.Targets() {
+			if op, _ := s.Op(name); op.Kind == spells.OpKindInstall && install == "" {
+				install = s.Name() + "::" + name
+			}
+		}
+	}
+	require.NotEmpty(t, install, "the built-in spells declare an install op")
+
+	for _, tt := range []struct {
+		name, command string
+		deny          bool
+	}{
+		{"the check", "./magus run test .", false},
+		{"a narrowed check", "./magus run test . -- -run TestLease", false},
+		{"the op it runs, narrowed", "./magus run go-test . -- -run TestLease", false},
+		{"the spell-qualified op", "./magus run go::go-test . -- -run 'Lease|Gate'", false},
+		{"a target it needs", "./magus run format .", false},
+		{"an op that target runs", "./magus run go-fmt .", false},
+		{"a target it needs in another project", "./magus run proofread-build libs/conventions", false},
+		{"the install target", "./magus run install .", false},
+		{"the install target on every project", "./magus run install /", false},
+		{"a spell's install op", "./magus run " + install + " docs", false},
+		{"an install that re-resolves", "./magus run install:update .", true},
+		{"a target it does not compose", "./magus run lint .", true},
+		{"an op it does not compose", "./magus run golangci-lint .", true},
+		{"its op on another project", "./magus run go-test docs", true},
+		{"affected of its op", "./magus affected go-test", true},
+	} {
+		reason := denyWorkerCheckOnly(ctx, deps, row.ID, tt.command)
+		if !tt.deny {
+			assert.Empty(t, reason, tt.name)
+			continue
+		}
+		require.NotEmpty(t, reason, tt.name)
+		assert.Contains(t, reason.Say, "run test .`.", tt.name)
+	}
+}
+
+// A worker never builds ./magus: the orchestrator builds one per base and places it. The
+// refusal says so and names the placement, rather than a check the build has nothing to do
+// with, so an integrating worker whose own changes reach the binary knows who builds it.
+func TestWorkerCheckOnlyNamesThePlacementForTheBinary(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+
+	reason := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build .")
+	require.NotEmpty(t, reason)
+	assert.Equal(t, "magus workspace: `go-build` builds ./magus, the binary judging lease guard/fix's calls; "+workerBuildVerdict+".", reason.Say)
+	assert.Contains(t, reason.Why, onePerBase)
+	assert.Contains(t, reason.Why, strings.Join(placementArgv(row.ID), " "), "the rationale names the placement")
+	assert.Contains(t, reason.Why, "at this branch's commit", "the binary is built at the commit carrying the unit's changes")
+
+	other := denyWorkerCheckOnly(ctx, composingWorkspace(t), row.ID, "./magus run go-build docs")
+	require.NotEmpty(t, other)
+	assert.NotContains(t, other.Say, "builds ./magus", "only the target declaring ./magus, in its own project, builds it")
+}
+
+// TestWorkerRawTool pins the other half of the slice rule: a bound worker's raw tool that a
+// spell op covers is refused with its check named, where raw-tool alone only advises. The
+// refusal names the narrower run when the check composes the op.
+func TestWorkerRawTool(t *testing.T) {
+	row := testCheckLease()
+	ctx, _ := fleetFixture(t, row)
+	deps := composingWorkspace(t)
+
+	v := Judge(ctx, Dependencies{Spells: spellCatalog}, Request{Input: bashCall(t, "s1", "a1", "go test ./internal/guard"), Host: "claude-code", Lease: row.ID})
+	assert.Equal(t, "deny", v.Decision, "Judge reaches the rule: %s", v.Reason)
+	assert.Equal(t, string(denyRuleWorkerCheckOnly), v.Rule)
+
+	reason := denyWorkerRawTool(ctx, deps, row.ID, "go test ./internal/guard")
+	require.NotEmpty(t, reason)
+	assert.Contains(t, reason.Say, "runs go::go-test outside magus; run lease guard/fix's check: `")
+	assert.True(t, strings.HasSuffix(reason.Say, " run test .`."), reason.Say)
+	assert.Contains(t, reason.Why, "run go::go-test .`", "the check composes go-test, so the narrower run is named")
+
+	lint := denyWorkerRawTool(ctx, deps, row.ID, "golangci-lint run ./...")
+	require.NotEmpty(t, lint)
+	assert.Contains(t, lint.Why, "unresolved risks", "an op the check does not compose is named as a risk, not a slice")
+
+	for name, command := range map[string]string{
+		"a tool no spell covers": "jq . x.json",
+		"a magus run":            "./magus run go-test . -- -run TestLease",
+		"a help request":         "go help test",
+	} {
+		assert.Empty(t, denyWorkerRawTool(ctx, deps, row.ID, command), name)
+	}
+	assert.Empty(t, denyWorkerRawTool(ctx, deps, "", "go test ./..."), "an unbound caller keeps raw-tool's advice")
+	owner := row
+	owner.ID, owner.Check = "root", &types.LeaseCheck{Target: "ci", Project: "."}
+	ownsGate, _ := fleetFixture(t, owner)
+	assert.Empty(t, denyWorkerRawTool(ownsGate, deps, owner.ID, "go test ./..."), "the orchestrator keeps raw-tool's advice")
 }
 
 // TestWorkerCheckOnly pins what a bound worker may run and what the refusal hands back: the
@@ -585,11 +806,31 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 	} {
 		reason := denyLeaseScopedVCS(ctx, deps, worker.ID, command)
 		require.NotEmpty(t, reason, "%q", command)
-		assert.Contains(t, reason, "A worker may commit, with any backend, on its own branch in "+wt, "%q", command)
+		assert.Contains(t, reason, "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt, "%q", command)
 		assert.Contains(t, reason, "a worker under orchestrator", "%q", command)
 	}
 	assert.Contains(t, denyLeaseScopedVCS(ctx, from(r.main), worker.ID, "git commit -m done"),
 		"It commits in "+r.main+", and the lease was taken in "+wt+".")
+}
+
+// A cherry-pick and a diff applied and committed land the same change, so lease-vcs gives
+// them one answer: both pass on the worker's own branch, both are refused anywhere else.
+func TestDenyLeaseScopedVCSGradesACherryPickAsTheCommitItRecords(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	from := func(dir string) Dependencies { return Dependencies{callDir: dir} }
+	for _, command := range []string{
+		"git cherry-pick abc123",
+		"git cherry-pick -x abc123..def456",
+		"git cherry-pick --continue",
+		"git diff abc123 def456 | git apply -3 && git commit -C def456",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, command), "own branch: %q", command)
+		reason := denyLeaseScopedVCS(ctx, from(r.main), worker.ID, command)
+		assert.Contains(t, reason, "It commits in "+r.main+", and the lease was taken in "+wt+".", "another checkout: %q", command)
+	}
+	onBase := Dependencies{callDir: wt, VCS: types.VCSOptions{BaseRef: "origin/lease-job"}}
+	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git cherry-pick abc123"), "the base branch")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from(wt), worker.ID, "git cherry-pick abc123 && git push"), "`git push` stays with the orchestrator")
 }
 
 // TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout pins every spelling of an init
@@ -751,7 +992,9 @@ func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
 	assert.Contains(t, denyLeaseScopedVCS(ctx, onBase, worker.ID, "git commit -m done"), "is on lease-job, the base branch")
 
 	r.git(wt, "checkout", "-q", "--detach")
-	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"), "has no branch checked out")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, Dependencies{callDir: wt}, worker.ID, "git commit -m done"),
+		"has no branch checked out; run `git switch "+worker.ID+"`, or `git switch -c "+worker.ID+"` when no such branch exists.",
+		"a detached HEAD names the line that puts it on the job's branch")
 
 	primary := worker
 	primary.ID = "harness/primary"
@@ -786,7 +1029,7 @@ func TestVCSCmdRefusalDecidesAsTheShellRuleDoes(t *testing.T) {
 		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil)
 		require.Error(t, err, "%s %v", c.backend, c.args)
 		assert.Contains(t, err.Error(), "`vcs\\cmd(", "%s %v", c.backend, c.args)
-		assert.Contains(t, err.Error(), "A worker may commit, with any backend, on its own branch in "+wt)
+		assert.Contains(t, err.Error(), "A worker may commit, with any backend, cherry-pick or apply a patch, on its own branch in "+wt)
 	}
 }
 

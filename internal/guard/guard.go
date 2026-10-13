@@ -1402,10 +1402,13 @@ type roleScopedRule struct {
 }
 
 // roleScopedCommandRules are the command rules a served next stands down, so each is
-// asked of a remedy before it is served.
+// asked of a remedy before it is served. gate-repeat reads the run log rather than a row,
+// and is here because a gate magus itself served is not a repeat the caller chose.
 func roleScopedCommandRules() []roleScopedRule {
 	return []roleScopedRule{
 		{denyRuleLeaseGate, denyLeaseScopedGate},
+		{denyRuleWorkerCheckOnly, denyWorkerRawTool},
+		{denyRuleName(advisoryGateRepeat), denyRepeatGate},
 		{denyRuleLeaseVCS, oneString(denyLeaseScopedVCS)},
 		{denyRuleLeaseRebind, denyLeaseScopedRebind},
 		{denyRuleLeaseHarness, denyLeaseScopedHarness},

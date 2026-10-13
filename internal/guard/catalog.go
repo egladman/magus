@@ -443,9 +443,11 @@ var ruleDocLeaseUndeclared = denyDoc(types.RuleDoc{ //nolint:unused // read thro
 var ruleDocLeaseVcs = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleLeaseVCS),
 	Catches: "a worker lease mutating version control, or committing outside its own branch and checkout",
-	Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges, cherry-picks or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
+	Why: "The orchestrator lands every unit from the worker's tree, so a worker that pushes, stashes, reverts, resets, cleans, rebases, merges or removes a worktree changes the state it is integrated from, and a whole-tree revert destroys a sibling's uncommitted work. " +
 		"A worker may run only what reads the repository or touches its own index and branch: status, diff, log and the other reads, add, restore of named paths, switch or checkout without a force, branch creation, a fetch into remote-tracking refs; any other verb, an alias from config included, is refused. " +
 		"A commit is the one exception beyond those: allowed only in the lease's checkout_root, when that is a secondary checkout on a named branch other than the base, with any backend. " +
+		"A git cherry-pick and a git apply are graded as a commit is, since `git diff | git apply -3 && git commit -C` lands the same change as the cherry-pick. " +
+		"On a detached HEAD the refusal names `git switch <job>`, or `git switch -c <job>` when the orchestrator made no branch for the job. " +
 		"Every spelling is placed alike: `git -C <dir>`, `--git-dir`, `GIT_DIR=`, a `cd` before it, and vcs\\cmd from a Buzz script under the lease. " +
 		"Paths compare by device and inode, so a case variant or a firmlinked spelling of a checkout is that checkout. " +
 		"A commit whose checkout cannot be read is refused, since it cannot be shown to be the worker's own. " +
@@ -589,10 +591,13 @@ var ruleDocFocus = adviseDoc(types.RuleDoc{ //nolint:unused // read through the 
 	Catches: "a read or write outside the paths the running job declared",
 }, true)
 
-var ruleDocGateRepeat = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+var ruleDocGateRepeat = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(advisoryGateRepeat),
-	Catches: "the gate run again soon after it passed, repeating work already done",
-}, true)
+	Catches: "the gate run a third time over a tree its last green verdict already covers",
+	Why: "From the third gate run inside two hours, the run is refused when the newest verdict the branch recorded passed and no file that differs from that verdict's commit was written after it: such a gate can only pass again. " +
+		"Short of that, the rule states what the gate has cost so far and the command that sizes the risk, once per session, and refuses nothing. " +
+		"A run log, a session store or version control it cannot read refuses nothing.",
+})
 
 var ruleDocGeneratedWrite = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(advisoryGeneratedWrite),
