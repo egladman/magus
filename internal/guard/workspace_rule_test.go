@@ -279,6 +279,73 @@ func TestRuleFailureNoteNamesTheJudgingBinary(t *testing.T) {
 	})
 }
 
+// skewedSpellLoad is what a ./magus built after the vale spell was removed reported for a
+// tree that still imported it, on 10-07.
+var skewedSpellLoad = errors.New(`magusfile: magusfile: magusfile.buzz: no spell "vale" to import as "magus/spell/vale", ` +
+	`did you mean "bash" (import "magus/spell/bash") (built-in spells: bash, buf, buzz)`)
+
+// The two skews seen in the wild, a ./magus built on either side of the commit that removed
+// the vale spell and added magus\guard.builtins, are an error on every call: a call that
+// changes state is denied with the cause and the fix, the first other call is told both in
+// full, and every later one says the workspace rule is still failing. A spell import neither
+// this build nor the tree knows is a misspelling, which leaves calls on the built-in rules.
+func TestSkewedBinaryIsAWorkspaceRuleErrorEveryCall(t *testing.T) {
+	const version = "v0.5.0-rc.3-48-gf01f3de8e"
+	skewedSay := `./magus was built from another commit than this tree: it ships no spell "vale", which the tree carries, ` +
+		"so it cannot load its guard policy; rebuild ./magus with `./magus run go-build .`."
+	cases := map[string]struct {
+		loadErr error
+		say     string
+		judged  string
+	}{
+		"a ./magus built after the tree's spell was removed": {
+			skewedSpellLoad, skewedSay,
+			`It ships no spell "vale", which the tree carries, so it was built from another commit. Fix: rebuild ./magus with ` + "`./magus run go-build .`.",
+		},
+		"a ./magus built before the tree's guard API": {
+			errMissingMember, staleOwnSay, "Fix: rebuild ./magus with `./magus run go-build .`.",
+		},
+		"a misspelled spell import": {
+			errors.New(`magusfile: magusfile.buzz: no spell "vlae" to import as "magus/spell/vlae"`), "", "",
+		},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cacheDir := spawnFixture(t)
+			recordLoadedPolicy(t, cacheDir)
+			root := ownCheckout(t, ctx, true)
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "vale"), 0o755))
+			deps := unloadedDepsFor(c.loadErr)
+			deps.Binary, deps.BinaryVersion = filepath.Join(root, "magus"), version
+
+			change := Judge(ctx, deps, Request{Input: "touch NOTES.md", Host: "claude-code", Session: "change"})
+			if c.say == "" {
+				assert.NotEqual(t, "deny", change.Decision)
+			} else {
+				shortDeny(t, cacheDir, change, denyRuleStaleBinary, c.say)
+			}
+
+			first := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+			assert.Equal(t, verdictWithRule("advise", string(advisoryCommandRuleFailed)), unworded(first))
+			assert.Contains(t, first.Context, "Judged by "+deps.Binary+" ("+version+"), this checkout's ./magus.")
+			if c.judged != "" {
+				assert.Contains(t, first.Context, c.judged)
+			} else {
+				assert.NotContains(t, first.Context, "Fix:")
+			}
+			repeat := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+			assert.Contains(t, repeat.Context, "A workspace command rule is still failing, as told earlier in this session.")
+		})
+	}
+
+	t.Run("outside magus's own checkout a spell this build lacks may be misspelled", func(t *testing.T) {
+		ctx, _ := spawnFixture(t)
+		root := hookLocation(ctx, Dependencies{}).workspace
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "spells", "vale"), 0o755))
+		assert.Empty(t, skewedSpell(skewedSpellLoad, root))
+	})
+}
+
 // A caller that does not know its binary path leaves the note out, as every pinned note
 // above shows; a lease is told to ask the main session rather than to build.
 func TestJudgingBinaryNoteForAWorkerAsksTheMainSession(t *testing.T) {
