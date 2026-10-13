@@ -51,11 +51,10 @@ export fun harness_entries(target: Target, cb: fun(any)) > [any] {
 }
 
 // opencode_env_hint is what the printed config says about MAGUS_LOG_SILENT. opencode.json
-// documents no key for the environment of the commands the agent runs. The plugin API's
-// shell.env hook can set one, but that is the plugin's code, not config this harness
-// prints, and the shipped plugin does not set it.
+// documents no key for the environment of the commands the agent runs. The shipped plugin's
+// shell.env hook sets it, which is the plugin's code and not config this harness prints.
 fun opencode_env_hint() > str {
-    return "OpenCode's config documents no setting for the environment of the commands its agent runs, so this config sets none: set MAGUS_LOG_SILENT=true in the environment you start OpenCode from yourself, so magus prints its quiet output there.";
+    return "OpenCode's config documents no setting for the environment of the commands its agent runs, so this config sets none: the guard plugin's shell.env hook exports MAGUS_LOG_SILENT=true into them unless you already set it in the environment you start OpenCode from.";
 }
 
 fun opencode_mcp() > {str: any} {
