@@ -37,7 +37,7 @@ exec git status --porcelain --untracked-files=no
 
 # --- deferred across two batches -----------------------------------------------
 exec git checkout -b deferred main
-exec git -c magus.settle=defer cherry-pick side~3
+exec git -c magus.settle=defer cherry-pick side~2
 stderr 'magus.settle is defer, so this operation was not regenerated'
 ! stderr 'changed generator inputs'
 exec git -c magus.settle=defer cherry-pick side~2..side
