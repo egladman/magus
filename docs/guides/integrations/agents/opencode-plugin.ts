@@ -30,8 +30,9 @@
 //
 // Beyond verdicts it carries four jobs: a message the person types is recorded, the shell env
 // gets MAGUS_LOG_SILENT, a checkpoint is recorded when a root session goes idle (OpenCode has
-// no session-end event; idle is the proxy its own docs name), and the reply that ends a turn
-// is proofread, with the findings sent back as a follow-up prompt.
+// no session-end event; idle is the proxy its own docs name), and, only when you point
+// __PROOFREAD_REPLY_BUZZ at a copy of proofread-reply.buzz, the reply that ends a turn is
+// proofread, with the findings sent back as a follow-up prompt.
 //
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
@@ -52,13 +53,12 @@
 // brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own settings.
 //
-// The reply check runs proofread-reply.buzz: the path in __PROOFREAD_REPLY_BUZZ when that is
-// set, else the copy beside this file, else the workspace's docs/guides/integrations/agents
-// one. With none of them (or no proofread binary) the check is silent.
+// The reply check is off until you turn it on: it runs the proofread-reply.buzz at the path
+// in __PROOFREAD_REPLY_BUZZ. With that unset, naming a file that does not exist, or with
+// no proofread binary, the check is silent.
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -219,19 +219,14 @@ function magusTool(tool: string, servers: readonly string[]): string | null {
 }
 
 /**
- * Where proofread-reply.buzz lives for this install, or null when no copy exists.
- * __PROOFREAD_REPLY_BUZZ, when set, is the only place looked: a path that does not exist
- * turns the reply check off.
+ * The proofread-reply.buzz a person turned the reply check on with, or null. The check
+ * judges how an agent writes, which is a choice, so nothing is looked for: only
+ * __PROOFREAD_REPLY_BUZZ names a copy, and a path that does not exist leaves it off.
  */
 function replyScript(): string | null {
   const named = process.env.__PROOFREAD_REPLY_BUZZ;
-  if (named !== undefined && named !== "") return existsSync(named) ? named : null;
-  const root = nearestWith("magus.yaml", process.cwd());
-  const candidates = [
-    join(dirname(fileURLToPath(import.meta.url)), "proofread-reply.buzz"),
-    root === null ? "" : join(root, "docs/guides/integrations/agents/proofread-reply.buzz"),
-  ];
-  return candidates.find((path) => path !== "" && existsSync(path)) ?? null;
+  if (named === undefined || named === "") return null;
+  return existsSync(named) ? named : null;
 }
 
 /** The session a call acts in: the root's id, plus the child's when a subagent made it. */

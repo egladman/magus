@@ -1,6 +1,6 @@
 ---
 title: OpenCode
-description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries the shell-command, file-write, MCP and subagent rules, the idle checkpoint, and the reply check).
+description: Wiring magus into OpenCode (skills in .opencode/skills, the TypeScript plugin that carries the shell-command, file-write, MCP and subagent rules, the idle checkpoint, and the opt-in reply check).
 tags: [agents, opencode, skills, guard, plugin]
 ---
 
@@ -23,7 +23,7 @@ window. One file carries all of it. Everything below was checked against OpenCod
 | subagent spawns | the `task` tool: judged before, the child's id recorded after; a child's calls name their root |
 | typed messages  | the `chat.message` hook records them with `magus shell --message`                              |
 | checkpoint      | the `session.idle` bus event, root sessions only                                               |
-| reply check     | the same idle event: findings go back as a follow-up prompt (see below)                        |
+| reply check     | opt-in, on the same idle event: findings go back as a follow-up prompt (see below)             |
 | scout agent     | `.opencode/agents/magus-scout.md`, `permission: edit: deny`                                    |
 | rehydration     | not wired: the plugin does not use `experimental.session.compacting` (see below)               |
 | MCP config      | [MCP](../mcp.md)                                                                               |
@@ -138,8 +138,9 @@ other templates.
 //
 // Beyond verdicts it carries four jobs: a message the person types is recorded, the shell env
 // gets MAGUS_LOG_SILENT, a checkpoint is recorded when a root session goes idle (OpenCode has
-// no session-end event; idle is the proxy its own docs name), and the reply that ends a turn
-// is proofread, with the findings sent back as a follow-up prompt.
+// no session-end event; idle is the proxy its own docs name), and, only when you point
+// __PROOFREAD_REPLY_BUZZ at a copy of proofread-reply.buzz, the reply that ends a turn is
+// proofread, with the findings sent back as a follow-up prompt.
 //
 // An ASK puts the call in front of the person, and a plugin cannot prompt: throwing is
 // the only answer tool.execute.before has. So the prompt is OpenCode's own. The opencode
@@ -160,13 +161,12 @@ other templates.
 // brew, asdf, ~/.local/bin), set __MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own settings.
 //
-// The reply check runs proofread-reply.buzz: the path in __PROOFREAD_REPLY_BUZZ when that is
-// set, else the copy beside this file, else the workspace's docs/guides/integrations/agents
-// one. With none of them (or no proofread binary) the check is silent.
+// The reply check is off until you turn it on: it runs the proofread-reply.buzz at the path
+// in __PROOFREAD_REPLY_BUZZ. With that unset, naming a file that does not exist, or with
+// no proofread binary, the check is silent.
 
 import { existsSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -327,19 +327,14 @@ function magusTool(tool: string, servers: readonly string[]): string | null {
 }
 
 /**
- * Where proofread-reply.buzz lives for this install, or null when no copy exists.
- * __PROOFREAD_REPLY_BUZZ, when set, is the only place looked: a path that does not exist
- * turns the reply check off.
+ * The proofread-reply.buzz a person turned the reply check on with, or null. The check
+ * judges how an agent writes, which is a choice, so nothing is looked for: only
+ * __PROOFREAD_REPLY_BUZZ names a copy, and a path that does not exist leaves it off.
  */
 function replyScript(): string | null {
   const named = process.env.__PROOFREAD_REPLY_BUZZ;
-  if (named !== undefined && named !== "") return existsSync(named) ? named : null;
-  const root = nearestWith("magus.yaml", process.cwd());
-  const candidates = [
-    join(dirname(fileURLToPath(import.meta.url)), "proofread-reply.buzz"),
-    root === null ? "" : join(root, "docs/guides/integrations/agents/proofread-reply.buzz"),
-  ];
-  return candidates.find((path) => path !== "" && existsSync(path)) ?? null;
+  if (named === undefined || named === "") return null;
+  return existsSync(named) ? named : null;
 }
 
 /** The session a call acts in: the root's id, plus the child's when a subagent made it. */
@@ -892,9 +887,11 @@ If you would rather not have the plugin do it, running
 
 ## The reply check and the scout
 
-The reply check that Claude Code, Codex and Cursor run when a turn ends has no stop
-hook to ride on here, and `session.idle` is on a read-only bus: a subscriber cannot
-return text from it. The plugin reaches the agent another way. On a root session's
+The reply check judges your agent's replies with the `proofread` binary, which is a
+choice about how your agent writes and not part of the guard, so the plugin does
+nothing about replies until you turn it on. It has no stop hook to ride on here, and
+`session.idle` is on a read-only bus: a subscriber cannot return text from it. The
+plugin reaches the agent another way. With the check on, on a root session's
 idle event it reads the last assistant reply with the SDK's `session.messages`, runs
 [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) with
 `--agent-name opencode` over it, and when proofread has findings sends them back with
@@ -904,11 +901,10 @@ idle event it reads the last assistant reply with the SDK's `session.messages`, 
 - One follow-up per turn. The idle after the follow-up is the follow-up's own reply
   and is not judged; a message you type clears that, so your next turn is checked
   again.
-- The plugin looks for `proofread-reply.buzz` at `__PROOFREAD_REPLY_BUZZ` when that is
-  set, else beside the plugin file, else under the workspace's
-  `docs/guides/integrations/agents`. With none of them, or without the `proofread`
-  binary, the check is silent. Copy the script next to the plugin when you copy the
-  plugin.
+- To turn it on, download `proofread-reply.buzz` and set `__PROOFREAD_REPLY_BUZZ` to
+  its path in the environment that starts OpenCode. The plugin looks nowhere else:
+  with the variable unset or naming a file that does not exist, or without the
+  `proofread` binary, the check is silent.
 - A headless `opencode run` exits at the first idle, before the follow-up is
   answered: the follow-up is accepted and never runs. The check does work when the
   session lives in a server: start `opencode serve` and drive it with
