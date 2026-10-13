@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/job"
 	"github.com/egladman/magus/internal/json"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -105,6 +107,34 @@ func judgeStop(deps Dependencies, raw string, now time.Time) (Verdict, bool) {
 		Context: fmt.Sprintf("magus workspace: %s this session ran in the background %s still running; stop any nothing waits on:\n%s",
 			plural(len(tasks), "a shell command", "shell commands"), plural(len(tasks), "is", "are"), listing),
 	}, true
+}
+
+// sessionEnded reports whether raw ends its caller's agent session: a subagent's stop
+// (Claude Code's and Codex's SubagentStop) or Claude Code's SessionEnd. A root session's
+// Stop ends a turn, not the session. Cursor fires neither under `-p`, and OpenCode's
+// session.idle is a pause, so on those hosts a job ends with its checkout or its deadline.
+func sessionEnded(raw string) bool {
+	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		return false
+	}
+	var env struct {
+		HookEventName string `json:"hook_event_name"`
+	}
+	if json.Unmarshal([]byte(raw), &env) == nil && env.HookEventName == "SessionEnd" {
+		return true
+	}
+	stop, ok := decodeStop(raw)
+	return ok && stop.AgentID != ""
+}
+
+// endStoppedSession ends the job caller c's session held when raw ends that session and
+// the guard did not refuse the stop: a refused stop leaves the agent running.
+func endStoppedSession(ctx context.Context, store *job.Store, c job.Caller, raw string, v Verdict) (bool, error) {
+	if v.Decision == decisionDeny || !sessionEnded(raw) {
+		return false, nil
+	}
+	_, ended, err := store.EndSession(ctx, c)
+	return ended, err
 }
 
 func plural(n int, one, many string) string {
@@ -382,9 +412,10 @@ func (r *taskReader) result(now time.Time) []backgroundTask {
 
 // denyUnboundedBackground refuses a shell command the host runs in the background when
 // nothing in the line ends it: a backgrounded command outlives the agent that started it,
-// and the host stops it only when asked. A `timeout N` in front bounds it; a magus target
-// run is bounded by its target's timeout. A line that does not parse is left to the host,
-// which will not run it.
+// and the host stops it only when asked. `magus job exec --timeout D -- cmd` bounds it, and
+// so does a `timeout N` in front; a magus target run is bounded by its target's timeout. A
+// line that does not parse is left to the host, which will not run it. The refusal names
+// the bound; it never rewrites the command.
 func denyUnboundedBackground(command string, background bool, d Dialect) denial {
 	if !background {
 		return denial{}
@@ -398,9 +429,10 @@ func denyUnboundedBackground(command string, background bool, d Dialect) denial 
 		return denial{}
 	}
 	return denial{
-		Say: fmt.Sprintf("magus workspace: `%s` runs in the background with nothing to end it; put `timeout --kill-after=10 <seconds>` in front of it (`gtimeout` where only coreutils from a package manager has it), or run it in the foreground.", program),
+		Say: fmt.Sprintf("magus workspace: `%s` runs in the background with nothing to end it; run it as `magus job exec --timeout <duration> -- <command>`, put `timeout --kill-after=10 <seconds>` in front of it (`gtimeout` where only coreutils from a package manager has it), or run it in the foreground.", program),
 		Why: "A backgrounded command outlives the agent that started it: the host stops it only when asked, and an agent that finishes first leaves it running with nobody told. " +
-			"`timeout N` or `gtimeout N` in front of each command that can run long bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +
+			"`magus job exec --timeout D -- cmd` runs it in its own process group under the broker, which names its owner (your lease) in `magus status`, stops the whole group at the deadline or when the wrapper dies, and files one attention row when it does. " +
+			"`timeout N` or `gtimeout N` in front of each command that can run long also bounds it; stock macOS ships neither, and Homebrew's coreutils installs `gtimeout`. " +
 			"timeout signals its own process group, so a child that starts its own session (setsid, a daemon) escapes it, and `--foreground` narrows it to the direct child; `--kill-after` sends KILL to a command that ignores TERM. " +
 			"A magus target run is bounded by its target's timeout and passes, and so do builtins that return at once (cd, export, echo). A pipeline is bounded by its first command, since the rest end with its output.",
 	}
@@ -500,7 +532,8 @@ func unboundedCall(words []string, d Dialect) string {
 	case name == "eval":
 		return unboundedLine(strings.Join(words[1:], " "), d)
 	case name == "magus":
-		if _, ok := parseTargetRun(peelWrappers(words, d)[0]); ok {
+		inv := peelWrappers(words, d)[0]
+		if _, ok := parseTargetRun(inv); ok || boundedByJobExec(inv.Args) {
 			return ""
 		}
 		return name
@@ -530,6 +563,32 @@ func boundedByTimeout(args []string) bool {
 		return false
 	}
 	return strings.Trim(strings.TrimRight(args[0], "smhd"), "0.") != ""
+}
+
+// boundedByJobExec reports whether magus's arguments are `job exec --timeout D -- cmd`
+// with a positive D and a command after the separator. Global flags may come first.
+func boundedByJobExec(args []string) bool {
+	sep := slices.Index(args, "--")
+	if sep < 0 || sep == len(args)-1 {
+		return false
+	}
+	head := args[:sep]
+	verb := slices.Index(head, "job")
+	if verb < 0 || verb+1 >= len(head) || head[verb+1] != "exec" {
+		return false
+	}
+	for i, a := range head {
+		name, value, joined := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") || name != "timeout" {
+			continue
+		}
+		if !joined && i+1 < len(head) {
+			value = head[i+1]
+		}
+		d, err := time.ParseDuration(value)
+		return err == nil && d > 0
+	}
+	return false
 }
 
 // unboundedLine parses script and reports its first unbounded program; a script that does

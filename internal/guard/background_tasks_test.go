@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/guard/builtin"
+	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -158,6 +160,10 @@ func TestDenyUnboundedBackground(t *testing.T) {
 		{`timeout 0 grep -r x .`, "timeout"},
 		{`timeout grep -r x .`, "timeout"},
 		{`$RUNNER test`, "a command named by a parameter"},
+		{`magus job exec -- rg x`, "magus"},
+		{`magus job exec --timeout 0s -- rg x`, "magus"},
+		{`magus job exec --timeout 10m --`, "magus"},
+		{`magus job wait w --timeout 10m -- rg x`, "magus"},
 
 		{`timeout 600 grep -r x .`, ""},
 		{`gtimeout --kill-after=10 300 rg x`, ""},
@@ -167,6 +173,9 @@ func TestDenyUnboundedBackground(t *testing.T) {
 		{`./magus run go-test .`, ""},
 		{`BAGGAGE=magus.lease=x ./magus run test . -- -run TestX`, ""},
 		{`bash -c 'timeout 5 grep -r x .'`, ""},
+		{`magus job exec --timeout 10m -- rg x`, ""},
+		{`./magus -C /repo job exec --timeout=90s -- python3 scan.py`, ""},
+		{`BAGGAGE=magus.lease=w magus job exec --timeout 1h -- go test ./...`, ""},
 		{`for f in a b; do timeout 5 grep x $f; done`, ""},
 		{`export A=1`, ""},
 		{`if (( 1 )`, ""},
@@ -181,7 +190,43 @@ func TestDenyUnboundedBackground(t *testing.T) {
 			require.True(t, d.refused())
 			assert.Contains(t, d.Say, "`"+tc.want+"` runs in the background")
 			assert.Contains(t, d.Say, "timeout --kill-after=10 <seconds>")
+			assert.Less(t, strings.Index(d.Say, "magus job exec --timeout <duration> -- <command>"), strings.Index(d.Say, "timeout --kill-after"),
+				"the wrapper is the first remedy")
+			assert.Contains(t, d.Say, "magus job exec --timeout <duration> -- <command>")
 		})
 	}
 	assert.False(t, denyUnboundedBackground(`grep -r x .`, false, DialectBash).refused(), "a foreground call is the host's to time out")
+}
+
+func TestSessionEndedIsASubagentStopOrASessionEnd(t *testing.T) {
+	assert.True(t, sessionEnded(subagentStop(t, "a05d44b006f8f68af", "/x/agent.jsonl")))
+	assert.True(t, sessionEnded(hookJSON(t, map[string]any{"session_id": "8f2c6a1e", "hook_event_name": "SessionEnd", "reason": "prompt_input_exit"})))
+	assert.False(t, sessionEnded(rootStop(t, "/x/root.jsonl")), "a root's Stop ends a turn")
+	assert.False(t, sessionEnded(hookJSON(t, map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}})))
+	assert.False(t, sessionEnded("ls"))
+}
+
+// A subagent whose stop the guard lets through ends the job it held; one it refuses is
+// still running, so its job stays.
+func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
+	store := job.NewStore(job.Location{Root: t.TempDir(), CacheDir: t.TempDir(), Actor: &job.Actor{}})
+	_, err := store.Update(t.Context(), "w", func(row *types.Job) { *row = types.Job{ID: "w", State: types.StateDeclared} })
+	require.NoError(t, err)
+	_, err = store.Exec(t.Context(), "w", "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678")
+	require.NoError(t, err)
+	worker := job.Caller{Host: "claude-code", Session: "8f2c6a1e", Agent: "a05d44b006f8f68af"}
+	require.NoError(t, store.Bind(worker, "w"))
+	stop := subagentStop(t, worker.Agent, "/x/agent.jsonl")
+
+	ended, err := endStoppedSession(t.Context(), store, worker, stop, Verdict{Decision: decisionDeny})
+	require.NoError(t, err)
+	assert.False(t, ended)
+
+	ended, err = endStoppedSession(t.Context(), store, worker, stop, Verdict{})
+	require.NoError(t, err)
+	assert.True(t, ended)
+	rows, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
 }
