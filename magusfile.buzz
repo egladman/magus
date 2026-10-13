@@ -286,6 +286,13 @@ export fun go_build(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
+// go's go-test over the root module. The guard's pull-request-text test runs the proofread
+// binary, so a fresh worktree builds it first, as `test` does.
+export fun go_test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(conventions\proofread_build);
+    go["go-test"](ctx);
+}
+
 // host is what login authenticates against and repository is where a push goes;
 // they differ per provider. user_ref and token_ref are secret references.
 object Registry {
