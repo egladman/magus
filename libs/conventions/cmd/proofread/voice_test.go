@@ -266,6 +266,114 @@ func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
 	}
 }
 
+// markedTexts are n ten-word texts, each opening with a marker no other holds.
+func markedTexts(n int) []string {
+	out := make([]string, n)
+
+	for i := range out {
+		out[i] = fmt.Sprintf("mark%02d one two three four five six seven eight nine.", i)
+	}
+
+	return out
+}
+
+func TestPoolTextsChunksTheSameForTheSameSeed(t *testing.T) {
+	texts := markedTexts(12)
+
+	a := poolTexts(proofread.KindReviewReply, texts, 30, 13)
+	b := poolTexts(proofread.KindReviewReply, texts, 30, 13)
+
+	if len(a) != 4 || !slices.Equal(a, b) {
+		t.Errorf("one seed gave %q then %q, want the same 4 chunks", a, b)
+	}
+
+	if c := poolTexts(proofread.KindReviewReply, texts, 30, 14); slices.Equal(a, c) {
+		t.Errorf("seeds 13 and 14 gave the same chunks %q", a)
+	}
+
+	if !slices.Equal(texts, markedTexts(12)) {
+		t.Error("poolTexts reordered its input")
+	}
+}
+
+func TestPoolTextsUsesEachTextOnceAndDropsTheRemainder(t *testing.T) {
+	chunks := poolTexts(proofread.KindReviewReply, markedTexts(11), 30, 13)
+
+	if len(chunks) != 3 {
+		t.Fatalf("11 texts of 10 words in chunks of 30+ made %d chunks, want 3", len(chunks))
+	}
+
+	used := 0
+
+	for i, text := range markedTexts(11) {
+		marker := fmt.Sprintf("mark%02d", i)
+
+		n := 0
+		for _, chunk := range chunks {
+			n += strings.Count(chunk, marker)
+		}
+
+		if n > 1 {
+			t.Errorf("%s is in %d chunks, want at most 1", text, n)
+		}
+
+		used += n
+	}
+
+	if used != 9 {
+		t.Errorf("chunks hold %d texts, want 9: the last 2 are a chunk under 30 words", used)
+	}
+
+	for _, chunk := range chunks {
+		if got := proofread.Measure(chunk, proofread.KindReviewReply).Words; got < 30 {
+			t.Errorf("chunk %q has %d words, want 30 or more", chunk, got)
+		}
+
+		if !strings.Contains(chunk, "\n\n") {
+			t.Errorf("chunk %q joins its texts without a blank line", chunk)
+		}
+	}
+}
+
+func TestPoolTextsKeepsEveryCommitSubject(t *testing.T) {
+	texts := make([]string, 12)
+	for i := range texts {
+		texts[i] = fmt.Sprintf("fix the cache key for target %02d", i)
+	}
+
+	chunks := poolTexts(proofread.KindCommitMessage, texts, 20, 13)
+	if len(chunks) != 4 {
+		t.Fatalf("pooled 12 seven-word subjects into %d chunks of 20+ words, want 4", len(chunks))
+	}
+
+	for _, chunk := range chunks {
+		if got := strings.Count(chunk, "fix the cache key"); got != 3 {
+			t.Errorf("chunk %q holds %d subjects, want 3", chunk, got)
+		}
+	}
+}
+
+func TestVoiceEvalPoolsTextsIntoChunks(t *testing.T) {
+	owner, other := evalFiles(t)
+
+	// Seven words a text: chunks of 14 or more take two, so 5 texts make 2 chunks.
+	code, stdout, stderr := runVoiceArgs(t, "", "voice", "eval", "-owner", owner, "-other", other, "-kind", "review-reply",
+		"-pool", "14", "-seed", "5")
+	if code != exitOK || stderr != "" {
+		t.Fatalf("voice eval: code %d stderr %q", code, stderr)
+	}
+
+	if first, _, _ := strings.Cut(stdout, "\n"); first != "review-reply: 2 owner chunks, 2 other chunks, chunks of 14+ words" {
+		t.Errorf("header = %q", first)
+	}
+
+	_, again, _ := runVoiceArgs(t, "", "voice", "eval", "-owner", owner, "-other", other, "-kind", "review-reply",
+		"-pool", "14", "-seed", "5")
+	if again != stdout {
+		t.Errorf("one seed wrote\n%s\nthen\n%s", stdout, again)
+	}
+}
+
 func TestVoiceEvalExitsTwoOnInputItCannotUse(t *testing.T) {
 	owner, other := evalFiles(t)
 
@@ -280,6 +388,8 @@ func TestVoiceEvalExitsTwoOnInputItCannotUse(t *testing.T) {
 			"proofread: unknown format \"sarif\": write text or json\n"},
 		{"no kind for a line", []string{"-owner", owner, "-other", other},
 			fmt.Sprintf("proofread: %s:1: no string field \"kind\" names a kind, and -kind gives none\n", other)},
+		{"a negative pool", []string{"-owner", owner, "-other", other, "-pool", "-1"},
+			"proofread: -pool is -1: name a word count, or 0 to pool nothing\n"},
 		{"an unknown kind", []string{"-owner", owner, "-other", other, "-kind", "poem"},
 			fmt.Sprintf("proofread: %s: unknown kind \"poem\"\n", other)},
 	}

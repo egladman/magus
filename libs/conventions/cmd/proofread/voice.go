@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -87,12 +88,16 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	field := fs.String("field", "text", "take each text from this `field`")
 	kindField := fs.String("kind-field", "kind", "take each text's kind from this `field`")
 	format := fs.String("format", "text", "write the separations as `text` or json")
+	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
+	seed := fs.Uint64("seed", 13, "shuffle the texts under this `seed` before pooling")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
 	}
 
 	switch {
+	case *pool < 0:
+		return failure(stderr, fmt.Errorf("-pool is %d: name a word count, or 0 to pool nothing", *pool))
 	case *owner == "" || *other == "":
 		return failure(stderr, errors.New("voice eval needs -owner and -other"))
 	case fs.NArg() > 0:
@@ -114,6 +119,10 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 		for k, list := range texts {
 			if !slices.ContainsFunc(subcommands, func(s subcommand) bool { return s.kind == k }) {
 				return nil, fmt.Errorf("%s: unknown kind %q", path, k)
+			}
+
+			if *pool > 0 {
+				list = poolTexts(k, list, *pool, *seed)
 			}
 
 			for _, text := range list {
@@ -164,21 +173,75 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stdout)
 		}
 
-		fmt.Fprint(stdout, separationTable(k, len(owners[k]), len(others[k]), seps[k]))
+		fmt.Fprint(stdout, separationTable(k, len(owners[k]), len(others[k]), *pool, seps[k]))
 	}
 
 	return exitOK
 }
 
+// poolTexts shuffles texts under seed, then joins them in that order, a blank
+// line apart, into chunks of at least minWords words. Each text lands in at
+// most one chunk, and a last chunk under minWords is dropped. The shuffle is
+// Eder's random sampling: chunks cut from the file in order would each stand
+// for one stretch of writing.
+func poolTexts(kind proofread.Kind, texts []string, minWords int, seed uint64) []string {
+	order := slices.Clone(texts)
+	rng := rand.New(rand.NewPCG(seed, 0))
+	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+
+	var chunks []string
+
+	var chunk strings.Builder
+
+	words := 0
+
+	for _, text := range order {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+
+		// A later text's title stays as a paragraph of its own: a paragraph
+		// ends its sentence, and most commits are a subject alone.
+		if chunk.Len() > 0 {
+			chunk.WriteString("\n\n")
+		}
+
+		chunk.WriteString(text)
+
+		words += proofread.Measure(text, kind).Words
+		if words >= minWords {
+			chunks = append(chunks, chunk.String())
+			chunk.Reset()
+
+			words = 0
+		}
+	}
+
+	return chunks
+}
+
 // separationTable is a header naming kind and its counts, then one aligned
-// line per separation.
-func separationTable(kind proofread.Kind, owner, other int, seps []proofread.Separation) string {
+// line per separation. A pool above 0 counts chunks of at least that many
+// words instead of texts.
+func separationTable(kind proofread.Kind, owner, other, pool int, seps []proofread.Separation) string {
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "%s: %d owner texts, %d other texts\n", kind, owner, other)
+	unit := "texts"
+	if pool > 0 {
+		unit = "chunks"
+	}
+
+	fmt.Fprintf(&b, "%s: %d owner %s, %d other %s", kind, owner, unit, other, unit)
+
+	if pool > 0 {
+		fmt.Fprintf(&b, ", chunks of %d+ words", pool)
+	}
+
+	b.WriteString("\n")
 
 	if len(seps) == 0 {
-		fmt.Fprintf(&b, "  no feature measured on 5 texts on each side\n")
+		fmt.Fprintf(&b, "  no feature measured on 5 %s on each side\n", unit)
 
 		return b.String()
 	}

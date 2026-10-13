@@ -39,7 +39,12 @@
 // kind, and prints per kind every feature's AUC: the chance an owner text
 // measures higher than an other text. Each text is in -field, "text" by
 // default, and its kind in -kind-field, "kind" by default, or -kind. -format
-// json writes the scores per kind as JSON. It writes no file.
+// json writes the scores per kind as JSON. -pool N measures chunks of at least
+// N words instead of single texts: per kind and side the texts are shuffled
+// under -seed (13 by default) and joined, a blank line apart, each text used
+// once, a last chunk under N words dropped. A titled kind keeps the first
+// text's title alone. Most texts are too short for the measures that need 100
+// or 200 words, which pooling lets them reach. It writes no file.
 //
 // commit-message reads the message from stdin, or from the file its argument
 // names, as a VCS hook passes it: lines starting with "#" and the scissors line
@@ -161,7 +166,7 @@ var subcommands = []subcommand{
 	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
 	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
 	{"voice build", "", "[FILE...]", "measure your own texts into the voice file -voice reads"},
-	{"voice eval", "", "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind"},
+	{"voice eval", "", "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind; -pool N measures chunks of N+ words, -seed S shuffles them"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
