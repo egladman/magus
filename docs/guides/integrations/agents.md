@@ -68,6 +68,11 @@ wire the guard hook. Both are on your host's page.
 | [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | TypeScript plugin (harness spell is skills-only)         |
 | [Any other host](agents/any-host.md) | wherever it reads them        | a collaborator-owned harness descriptor or small adapter |
 
+The optional [Claude Code mod](agents/claude-code.md#the-magus-mod) is installed
+per person: enabling it in `.claude/settings.json` installs it for nobody, and
+`magus agent harness verify claude-code-mod` and `magus doctor` report an error
+naming the install line until each person runs it.
+
 What you wire is yours. Prefer a harness spell selected from the root magusfile
 (`import "ghcr.io/egladman/magus/spells/<id>";` then `magus\harness.provider(<id>)`,
 with the spell declared in `magus.yaml` and pinned in `magus.lock`;
@@ -147,10 +152,11 @@ magus prints it and your host places it. Wire
 event your host fires after compaction: `SessionStart` with matcher `compact` on
 [Claude Code](agents/claude-code.md) and on [Codex](agents/codex.md), where
 `--format json` wraps the text in the reply Codex parses.
-[OpenCode](agents/opencode.md) has no hook to point at a file, so its plugin pushes
-the same brief into the compaction prompt itself. [Cursor](agents/cursor.md) is
-the one host that cannot: `preCompact` returns a message for the person and
-nothing for the model, so there run the command yourself and read the same thing.
+[OpenCode](agents/opencode.md) has no hook to point at a file, and its plugin
+leaves the compaction prompt alone, so a compacted OpenCode session gets no brief.
+[Cursor](agents/cursor.md) cannot either: `preCompact` returns a message for the
+person and nothing for the model. On both, run the command yourself and read the
+same thing.
 The review belongs here rather than in a `Stop` hook: a stop event can record
 evidence, but cannot reliably inject an actionable message into the model's next
 context.
@@ -213,7 +219,7 @@ beside each scenario's result.
 | Claude Code | yes           | yes                  | yes  | yes    | yes                  | wired, rule-empty; live pending              |
 | Codex       | yes           | yes                  | yes  | yes    | yes                  | wired, fixture-verified; live pending        |
 | Cursor      | yes           | yes                  | yes  | yes    | not yet run          | gated: `beforeMCPExecution` (advise unwired) |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | not wired: sees call, tool name unconfirmed  |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | wired; live-probed on 1.18.30                |
 
 "Fixture-verified" means the adapter executed against this binary with a
 controlled host event on stdin. "Host E2E: shell deny" means a locally
@@ -245,10 +251,10 @@ above explicitly marks them proven.
 | command guard, advise       | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
 | write guard, deny           | `PreToolUse` on the edit tools             | `PreToolUse` on the edit tools                                   | `preToolUse`                                                            | `tool.execute.before`             |
 | write guard, advise         | `additionalContext`                        | `additionalContext`                                              | `postToolUse.additional_context`                                        | `tool.execute.after`              |
-| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)                     | not wired: tool name unconfirmed  |
+| MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending) | `beforeMCPExecution` (advise unwired; `failClosed`)                     | `tool.execute.before` `magus_*`   |
 | post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                         | not expressible after compact; `sessionStart` sets env + budgeted brief | not wired: only a PRE hook exists |
-| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                                            | the `session.idle` bus event      |
-| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                                       | not wired: no confirmed tool id   |
+| checkpoint                  | `Stop`                                     | `Stop`                                                           | `sessionEnd`                                                            | root `session.idle` bus event     |
+| lease provenance            | `PreToolUse` on the sub-agent tool         | no event carries the handed prompt                               | `subagentStart` (unverified live)                                       | `tool.execute.before` `task`      |
 | read observation            | `PreToolUse` `Read`                        | not wired                                                        | not wired                                                               | not wired                         |
 | tool-failure hint           | not wired                                  | not wired                                                        | not expressible: no response fields                                     | not wired                         |
 | session-load adapter        | ships one                                  | ships one                                                        | none written                                                            | ships one                         |
