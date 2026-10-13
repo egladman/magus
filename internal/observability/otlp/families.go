@@ -1,6 +1,7 @@
 package otlp
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -8,6 +9,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/types"
 )
 
 // reg threads the first instrument-creation error through a constructor, so each one reads as
@@ -309,4 +311,46 @@ func (p *otelProvider) RecordReviewPublish(ctx context.Context, verdict string, 
 func (p *otelProvider) RecordReviewMergedWhileReading(ctx context.Context, secs float64) {
 	p.agent.reviewMergedWhileReading.Add(ctx, 1)
 	p.agent.reviewMergedWhileReadingDuration.Record(ctx, secs)
+}
+
+// agentCostInstruments is the magus.agent.* family: what an agent session's calls cost in
+// context. thread, model, class, billing, profile and decision are bounded enums or model
+// names; a session id, a command and a path are not here.
+type agentCostInstruments struct {
+	contextTokens metric.Int64Histogram
+	delegable     metric.Int64Counter
+	billing       metric.Int64Counter
+	shadow        metric.Int64Counter
+}
+
+func newAgentCostInstruments(m metric.Meter) (agentCostInstruments, error) {
+	r := reg{m: m}
+	ci := agentCostInstruments{
+		contextTokens: r.i64h("magus.agent.context.tokens", "Context size a caller reported on a tool call, in tokens.", "{token}"),
+		delegable:     r.i64c("magus.agent.delegable.chars", "Result characters of tool calls a subagent could have made in the caller's place.", "{char}"),
+		billing:       r.i64c("magus.agent.billing", "Tool calls, by the billing mode in effect.", "{call}"),
+		shadow:        r.i64c("magus.agent.shadow.verdicts", "Tool calls, by what each guard profile would have decided.", "{call}"),
+	}
+	return ci, r.err
+}
+
+func (p *otelProvider) RecordAgentCall(ctx context.Context, c observability.AgentCall) {
+	if c.ContextTokens > 0 {
+		p.agentCost.contextTokens.Record(ctx, c.ContextTokens, metric.WithAttributes(
+			attribute.String("thread", c.Thread.String()),
+			attribute.String("model", cmp.Or(c.Model, "unknown")),
+		))
+	}
+	if c.DelegableClass != "" && c.ResultChars > 0 {
+		p.agentCost.delegable.Add(ctx, c.ResultChars, metric.WithAttributes(attribute.String("class", c.DelegableClass)))
+	}
+	if c.Billing != "" {
+		p.agentCost.billing.Add(ctx, 1, metric.WithAttributes(attribute.String("mode", string(c.Billing))))
+	}
+	for profile, decision := range c.Shadow {
+		p.agentCost.shadow.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("profile", profile.String()),
+			attribute.String("decision", string(cmp.Or(decision, types.GuardAllow))),
+		))
+	}
 }

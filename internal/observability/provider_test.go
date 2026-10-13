@@ -97,6 +97,8 @@ func (r *recorder) RecordPoolWaiting(_ context.Context, _ int64) {}
 
 func (r *recorder) RecordMCPCall(_ context.Context, _ MCPCall) {}
 
+func (r *recorder) RecordAgentCall(_ context.Context, _ AgentCall) {}
+
 func (r *recorder) RecordSandboxApply(_ context.Context, _ float64, _, _ string) {}
 
 func (r *recorder) RecordSandboxRules(_ context.Context, _ SandboxRules) {}

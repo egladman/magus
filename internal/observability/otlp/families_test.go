@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/types"
 )
 
 // collectLocal builds a LocalCollect provider and returns a Collector over its in-process
@@ -229,4 +230,74 @@ func TestBuzzFamiliesCollect(t *testing.T) {
 	calls, ok := sumInt64(t, rm, "magus.mcp.tool.calls")
 	require.True(t, ok, "magus.mcp.tool.calls missing")
 	assert.Equal(t, int64(1), calls)
+}
+
+// sumAttrs returns each data point of an Int64 sum named name as its attribute set and value.
+func sumAttrs(t *testing.T, rm metricdata.ResourceMetrics, name string) map[attribute.Set]int64 {
+	t.Helper()
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != name {
+				continue
+			}
+			s, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok, "%s is not an Int64 sum", name)
+			out := map[attribute.Set]int64{}
+			for _, dp := range s.DataPoints {
+				out[dp.Attributes] = dp.Value
+			}
+			return out
+		}
+	}
+	require.Failf(t, "instrument missing", "%s", name)
+	return nil
+}
+
+// TestAgentCostFamilyCollects reads back the value and the attribute set of each
+// magus.agent.* instrument, since a stray unbounded attribute is the failure mode a metric
+// fed from a session's calls is most exposed to.
+func TestAgentCostFamilyCollects(t *testing.T) {
+	p, coll := collectLocal(t)
+	ctx := context.Background()
+
+	p.RecordAgentCall(ctx, observability.AgentCall{
+		Thread: types.AgentThreadMain, Model: "claude-opus-5-5", ContextTokens: 300_000,
+		Billing: types.AgentBillingMetered, DelegableClass: "search", ResultChars: 4000,
+		Shadow: map[types.GuardProfile]types.GuardDecision{types.GuardProfileStrict: types.GuardDeny, types.GuardProfileLight: types.GuardAllow},
+	})
+	p.RecordAgentCall(ctx, observability.AgentCall{ContextTokens: 5000, DelegableClass: "search", ResultChars: 1000, Billing: types.AgentBillingMetered})
+	p.RecordAgentCall(ctx, observability.AgentCall{})
+
+	rm, err := coll.Collect(ctx)
+	require.NoError(t, err)
+
+	var tokens metricdata.Histogram[int64]
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name == "magus.agent.context.tokens" {
+				var ok bool
+				tokens, ok = m.Data.(metricdata.Histogram[int64])
+				require.True(t, ok)
+			}
+		}
+	}
+	got := map[attribute.Set]int64{}
+	for _, dp := range tokens.DataPoints {
+		got[dp.Attributes] = dp.Sum
+	}
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("thread", "main"), attribute.String("model", "claude-opus-5-5")): 300_000,
+		attribute.NewSet(attribute.String("thread", "unknown"), attribute.String("model", "unknown")):      5000,
+	}, got)
+
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("class", "search")): 5000,
+	}, sumAttrs(t, rm, "magus.agent.delegable.chars"))
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("mode", "metered")): 2,
+	}, sumAttrs(t, rm, "magus.agent.billing"))
+	assert.Equal(t, map[attribute.Set]int64{
+		attribute.NewSet(attribute.String("profile", "strict"), attribute.String("decision", "deny")): 1,
+		attribute.NewSet(attribute.String("profile", "light"), attribute.String("decision", "allow")): 1,
+	}, sumAttrs(t, rm, "magus.agent.shadow.verdicts"))
 }

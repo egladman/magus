@@ -138,6 +138,10 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 	if err != nil {
 		return nil, err
 	}
+	agentCost, err := newAgentCostInstruments(meter)
+	if err != nil {
+		return nil, err
+	}
 
 	return &otelProvider{
 		mp:              mp,
@@ -168,6 +172,7 @@ func New(ctx context.Context, cfg observability.Config) (observability.Provider,
 		sandbox:         sandbox,
 		buzz:            buzz,
 		agent:           agent,
+		agentCost:       agentCost,
 	}, nil
 }
 
@@ -203,6 +208,8 @@ type otelProvider struct {
 	sandbox sandboxInstruments
 	buzz    buzzInstruments
 	agent   agentInstruments
+
+	agentCost agentCostInstruments
 }
 
 func (*otelProvider) Enabled() bool { return true }
@@ -331,6 +338,7 @@ func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)
 func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                          {}
 func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                          {}
 func (disabledProvider) RecordMCPCall(_ context.Context, _ observability.MCPCall)              {}
+func (disabledProvider) RecordAgentCall(_ context.Context, _ observability.AgentCall)            {}
 func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)          {}
 func (disabledProvider) RecordSandboxRules(_ context.Context, _ observability.SandboxRules)    {}
 func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                  {}
