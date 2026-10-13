@@ -937,6 +937,13 @@ export object Job {
     waiterEvidence: JobIntegration? = null,
 }
 
+export object AgentContext {
+    tokens: int = 0,
+    window: int = 0,
+    model: str = "",
+    source: str = "",
+}
+
 export object SpawnTarget {
     agent: str = "",
     idleMs: int? = null,
@@ -961,6 +968,9 @@ export object SpawnRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    thread: str = "",
+    threadKnown: bool = false,
+    context: AgentContext? = null,
     target: SpawnTarget? = null,
 }
 
@@ -994,6 +1004,9 @@ export object CommandRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    thread: str = "",
+    threadKnown: bool = false,
+    context: AgentContext? = null,
     checkout: CheckoutState? = null,
     dir: str = "",
     workspace: str = "",
@@ -1006,6 +1019,9 @@ export object WriteRequest {
     parent: str = "",
     role: str = "",
     lease: Job? = null,
+    thread: str = "",
+    threadKnown: bool = false,
+    context: AgentContext? = null,
     path: str = "",
     workspace: str = "",
     content: str = "",
@@ -1629,6 +1645,7 @@ export object guard {
     static extern fun count(key: str) > int;
     static extern fun deny(text: str, opts: {str: any} = {<str: any>}) > GuardVerdict;
     static extern fun once(key: str) > bool;
+    static extern fun profile(level: str) > void;
     static extern fun shell(rule: {str: any}) > void;
     static extern fun spawn(rule: fun (req: SpawnRequest) > GuardVerdict !> any) > void;
     static extern fun write(rule: fun (req: WriteRequest) > GuardVerdict !> any) > void;

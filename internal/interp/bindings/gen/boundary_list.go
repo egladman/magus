@@ -14,6 +14,7 @@ import (
 var RuntimeBoundaryTypes = []ffi.BoundaryType{
 	{Name: "Affected", Zero: types.AffectedResult{}, Encode: func(v any) vm.Value { return ObjectAffectedResult(v.(types.AffectedResult)) }},
 	{Name: "Affinity", Zero: types.AffinityOutput{}, Encode: func(v any) vm.Value { return ObjectAffinityOutput(v.(types.AffinityOutput)) }},
+	{Name: "AgentContext", Zero: types.AgentContext{}, Encode: func(v any) vm.Value { return ObjectAgentContext(v.(types.AgentContext)) }},
 	{Name: "ArchiveEntry", Zero: types.ArchiveEntry{}, Encode: func(v any) vm.Value { return ObjectArchiveEntry(v.(types.ArchiveEntry)) }},
 	{Name: "Artifact", Zero: types.TargetArtifact{}, Encode: func(v any) vm.Value { return ObjectTargetArtifact(v.(types.TargetArtifact)) }},
 	{Name: "ArtifactVersion", Zero: types.ArtifactVersion{}, Encode: func(v any) vm.Value { return ObjectArtifactVersion(v.(types.ArtifactVersion)) }},

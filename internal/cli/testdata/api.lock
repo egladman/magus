@@ -1,3 +1,5 @@
+config agents.billing
+config agents.profile
 config broker
 config cache.dir
 config cache.include.arch.enabled
