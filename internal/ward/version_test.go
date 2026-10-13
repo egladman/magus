@@ -177,6 +177,7 @@ func TestIsStaleBinary(t *testing.T) {
 		"an undefined type":            {buzzErr("BZZ1002", `undefined type "Secret"`), true},
 		"an unresolved import":         {buzzErr("BZZ2001", "module not found"), true},
 		"a missing object member":      {missingMember, true},
+		"a missing object field":       {errors.New(`magusfile: exec magusfile.buzz: object guard has no field "builtins"`), true},
 		"an unknown built-in rule":     {unknownRule, true},
 		"a typoed built-in rule":       {typoedRule, false},
 		"another misdeclared rule":     {types.DiagnosticErrorf(types.GuardRuleMisdeclared, "name must not be empty"), false},
