@@ -745,6 +745,8 @@ type glueArrangement struct {
 	ownResponse bool
 	// wantsAsk marks an arrangement whose ask must render as the host's own prompt.
 	wantsAsk bool
+	// stub is the script standing in for magus; empty means glueTemplateEcho.
+	stub string
 }
 
 var glueArrangements = []glueArrangement{
@@ -767,6 +769,10 @@ var glueArrangements = []glueArrangement{
 const glueTemplateEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\n" +
 	"while [ $# -gt 0 ]; do\n  if [ \"$1\" = -o ]; then printf '%s' \"${2#template=}\"; exit 0; fi\n  shift\ndone\nexit 1\n"
 
+// glueVerdictEcho stands in for magus on a glue that asks for `-o json` and renders the
+// reply itself: it prints the verdict named by $GLUE_VERDICT and nothing else.
+const glueVerdictEcho = "#!/bin/sh\nclaim=no\nfor a in \"$@\"; do [ \"$a\" = --renders-ask ] && claim=yes; done\nprintf '%s' \"$claim\" > \"$RENDERS_ASK_RECORD\"\nprintf '%s' \"$GLUE_VERDICT\"\n"
+
 func glueLoadSchema(t *testing.T, rel string) *jsonschema.Resolved {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(glueHostSchemaDir, rel))
@@ -788,7 +794,7 @@ func glueDecode(t *testing.T, label, body string) any {
 }
 
 // runGlue runs one shipped glue file under `magus buzz`, as a host config wires it,
-// against event, with magus replaced by glueTemplateEcho. It returns what the glue
+// against event, with magus replaced by the arrangement's stub. It returns what the glue
 // printed and whether its call to magus claimed --renders-ask. Call it from a subtest:
 // it sets the environment and working directory for the rest of the test it runs in.
 func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
@@ -802,7 +808,11 @@ func runGlue(t *testing.T, name string, a glueArrangement) (string, bool) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(rules), 0o755))
 		require.NoError(t, os.WriteFile(rules, []byte("prefix_rule(pattern = [\"git\", \"push\"], decision = \"prompt\")\n"), 0o644))
 	}
-	bin := testkit.NewWorkspace(t).WriteExecutable("magus", glueTemplateEcho)
+	stub := a.stub
+	if stub == "" {
+		stub = glueTemplateEcho
+	}
+	bin := testkit.NewWorkspace(t).WriteExecutable("magus", stub)
 	record := filepath.Join(dir, "renders-ask")
 	t.Setenv("__MAGUS_BIN", bin)
 	t.Setenv("RENDERS_ASK_RECORD", record)
@@ -1011,22 +1021,24 @@ func glueSchemaPropertyNames(t *testing.T, rel string) map[string]any {
 // rest, so a reply naming additional_context_v2 is accepted, ignored, and carries no
 // advisory at all.
 func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
-	funcs := templateFuncs()
 	for name, ev := range glueCursorEvents {
-		t.Run(name, func(t *testing.T) {
-			body, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{label: name, host: "cursor", event: ev.event})
-			require.NotEmpty(t, body, "cursor-hook.buzz handed magus no template on its %s event", name)
-			schema := glueLoadSchema(t, ev.schema)
-			named := glueSchemaPropertyNames(t, ev.schema)
-
-			tmpl, err := template.New(name).Funcs(funcs).Parse(body)
-			require.NoError(t, err, "the %s template carries the reply, so it must parse", name)
-			for _, verdict := range glueVerdicts {
-				var out strings.Builder
-				require.NoError(t, tmpl.Execute(&out, verdict), "the %s template on a %s", name, verdict["decision"])
-				reply, isObject := glueDecode(t, name, out.String()).(map[string]any)
-				require.True(t, isObject, "the %s template must render a JSON object", name)
-				if name == "gate" {
+		schema := glueLoadSchema(t, ev.schema)
+		named := glueSchemaPropertyNames(t, ev.schema)
+		for i, verdict := range glueVerdicts {
+			t.Run(fmt.Sprintf("%s/%d-%s", name, i, verdict["decision"]), func(t *testing.T) {
+				verdictJSON, err := json.Marshal(verdict)
+				require.NoError(t, err)
+				out, _ := runGlue(t, "cursor-hook.buzz", glueArrangement{
+					label: name, host: "cursor", event: ev.event, stub: glueVerdictEcho,
+					env: map[string]string{
+						"GLUE_VERDICT":          string(verdictJSON),
+						"CURSOR_HOOK_STATE_DIR": t.TempDir(),
+					},
+				})
+				reply, isObject := glueDecode(t, name, out).(map[string]any)
+				require.True(t, isObject, "the %s reply must be a JSON object: %s", name, out)
+				switch name {
+				case "gate":
 					switch verdict["decision"] {
 					case "ask":
 						assert.Equal(t, "ask", reply["permission"], "an ask is Cursor's own approval prompt")
@@ -1035,17 +1047,23 @@ func TestCursorGlueRepliesValidateAgainstTheEventThatReadsThem(t *testing.T) {
 					default:
 						assert.Equal(t, "deny", reply["permission"], "only pass and advise may allow; %s must not", verdict["decision"])
 					}
+				case "advise":
+					if verdict["decision"] == "advise" {
+						assert.Equal(t, verdict["context"], reply["additional_context"], "the advice must reach the model")
+					} else {
+						assert.NotContains(t, reply, "additional_context", "only an advise carries context")
+					}
 				}
 				require.NoError(t, schema.Validate(reply),
-					"the %s template renders %s, which Cursor would not accept, per %s", name, out.String(), ev.schema)
+					"the %s reply is %s, which Cursor would not accept, per %s", name, out, ev.schema)
 				for field := range reply {
 					assert.Contains(t, named, field,
-						"the %s template names %q, which %s does not. Cursor ignores a field it has never\n"+
+						"the %s reply names %q, which %s does not. Cursor ignores a field it has never\n"+
 							"heard of rather than rejecting it, so a rename costs the verdict in silence.",
 						name, field, ev.schema)
 				}
-			}
-		})
+			})
+		}
 	}
 }
 
