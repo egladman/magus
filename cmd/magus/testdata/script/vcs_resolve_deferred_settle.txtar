@@ -11,7 +11,9 @@ exec git config commit.gpgsign false
 exec git checkout -b main
 exec git add magus.yaml magusfile.buzz .gitignore .gitattributes IN.txt IN2.txt OUT.txt
 exec git commit -m initial
+env HOME=$WORK/home
 env XDG_CONFIG_HOME=$WORK/xdg
+env XDG_STATE_HOME=$WORK/home/state
 exec magus init -vcs git
 exists .git/hooks/post-commit
 
@@ -104,8 +106,10 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile("OUT.txt", "generated: " + fs\readLines("IN.txt")[0] + "+" + fs\readLines("IN2.txt")[0] + "\n");
 }
 // holdslow holds the project until a release file appears, bounded so a stuck script
-// cannot hang CI.
+// cannot hang CI. The cherry-pick it holds back rewrites IN.txt and IN2.txt mid-run;
+// declaring them keeps that from reading as holdslow editing its own sources.
 export fun holdslow(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.modifiesExistingFiles("IN.txt", "IN2.txt");
     proc\exec("sh", ["-c", "touch ready; for i in $(seq 1200); do [ -f release ] && exit 0; sleep 0.05; done"]);
 }
 -- IN.txt --
