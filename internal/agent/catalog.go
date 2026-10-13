@@ -368,7 +368,12 @@ import (
 // 121: magus-test-design and magus-context-audit state their claims as verbs, and the
 // descriptions of magus-diagram, magus-context-audit and magus-run shorten their lead
 // sentence and name what not to use them for.
-const SkillVersion = 121
+//
+// 122: the short form of every skill is compressed further: grammar words dropped,
+// tables written as lists, and each passage both forms carry split into a full and a
+// short arm. The full form is byte-identical to 121's. magus-multi-agent's reference.md
+// carries short arms too, which no install renders while Render keeps references full.
+const SkillVersion = 122
 
 const skillLicense = "GPL-3.0-or-later"
 

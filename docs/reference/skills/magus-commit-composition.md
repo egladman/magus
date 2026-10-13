@@ -4,7 +4,7 @@ generated_from: internal/agent/skills/magus-commit-composition/SKILL.md
 description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths."
 tags: [agents, skills, magus-commit-composition]
 skill_full_bytes: 4402
-skill_short_bytes: 3394
+skill_short_bytes: 2839
 ---
 
 # magus-commit-composition
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `121` |
+| `agent-skill-version` | `122` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `bd8aea338bdd` |
+| `skill-content` | `7a967e1cdfb5` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -54,32 +54,28 @@ magus agent install --tar | tar -xO -f - magus-commit-composition/SKILL.md
 ```
 
 ````markdown
-# Composing unpushed commits into reviewable chunks
+# Commit composition
 
-A reviewer reads commits, not diffs. This skill decides
-what belongs in each commit, so every commit is one idea a reviewer can accept or
-reject alone. The workspace models its own boundaries: use them, not directory
-names.
+Reviewer reads commits, not diffs.
+Decide what belongs in each commit: every commit one idea, accepted or rejected alone.
+Use workspace's own boundaries, not directory names.
+magus does not rewrite history: shows seams, proves afterwards nothing lost; your VCS edits.
 
-magus does not rewrite history for you. It shows the seams and proves afterwards that
-nothing was lost; your VCS performs the edit.
+## Two constraints
 
-## Two constraints that decide most groupings
+Only unpushed work eligible; published commits fixed.
+Establish unpushed set before planning.
 
-**Only unpushed work is eligible.** Published commits are fixed. Establish what is
-unpushed before planning.
-
-**Generated output belongs with the source that moved it.** Split them and the
-source commit fails its own drift gate.
+Generated output belongs with source that moved it; split -> source commit fails drift gate.
 
 ```sh
 magus describe file <changed-path>...
 ```
 
-Every `output` path joins the `source` change that invalidated it. A commit that is
-all regeneration missed that pairing: fold it into the change that caused it.
+Every `output` path joins `source` change that invalidated it.
+Commit of all regeneration missed pairing -> fold into causing change.
 
-## Ask the workspace where the seams are
+## Ask workspace for seams
 
 ```sh
 magus ls                             # the projects: the coarsest real boundary
@@ -89,71 +85,61 @@ magus refs <symbol> --occurrences    # every site of a rename, uncapped
 ```
 
 Three signals, strongest first:
+- Project ownership: projects with no dependency edge between them -> separate commits; edges from `magus describe project`.
+- Blast radius: groups reaching disjoint project sets -> separable; same set -> usually one commit.
+- Symbol coupling: rename's sites together, however many directories.
 
-- **Project ownership.** Changes in projects with no dependency edge between them
-  are separate commits. Read the edges from `magus describe project`.
-- **Blast radius.** Groups that reach disjoint project sets are separable; groups
-  that reach the same set usually want one commit.
-- **Symbol coupling.** A rename's sites belong together, however many directories
-  they span.
+## Limits
 
-## Where this stops
+Two changes inside one file cannot be separated by path.
+File with rename and behavior fix -> hunk-level work, or ship together; recognize while planning.
 
-**Two changes inside one file cannot be separated by path.** A file carrying a
-rename and a behavior fix needs hunk-level work, or they ship together. Recognize it
-while planning.
-
-Prefer the cheapest operation that makes the branch reviewable. In rising order of
-risk:
-
-1. Reword a message.
-2. Fold a regeneration into its neighbor.
-3. Drop a commit whose content the final tree does not keep.
+Prefer cheapest operation making branch reviewable. Rising risk:
+1. Reword message.
+2. Fold regeneration into neighbor.
+3. Drop commit whose content final tree does not keep.
 4. Reorder independent commits.
 5. Split one commit into several.
 
-## Before you start, and after you finish
+## Before start, after finish
 
-Record the identity of the state you are about to rewrite:
+Record state identity before rewriting:
 
 ```sh
 magus vcs checkpoint          # revision, branch, dirty flag, patch digest; writes nothing
 ```
 
-Restructure with your VCS. When it stops on a conflicted generated file, settle it
-with magus, not by hand:
+Restructure with your VCS.
+When it stops on conflicted generated file -> settle with magus, not by hand:
 
 ```sh
 magus vcs resolve             # settles the conflicted declared outputs, regenerates once
 ```
 
-**Prove the content survived.** A restructure changes history and nothing else, and
-a lost commit still leaves a tree that builds:
+Prove content survived: restructure changes history and nothing else; lost commit still leaves building tree.
 
 ```sh
 magus graph diff --rev <checkpoint-revision>
 ```
 
-Everything it reports must be a change you intended. Missing nodes you did not
-remove mean the restructure dropped work: return to the recorded revision and start
-again, never reconcile by hand.
+Everything reported must be intended change.
+Missing nodes you did not remove -> work dropped -> return to recorded revision, restart; never reconcile by hand.
 
-Finish by staging through the workspace's declarations and re-running the gate:
+Finish: stage through workspace declarations, re-run gate:
 
 ```sh
 magus vcs add
 magus affected ci
 ```
 
-## What does not belong in a commit at all
+## Not commit content at all
 
-Session notes and scratch plans are not repository content unless the repository
-already tracks them. Untracked session state belongs in your harness's
-memory, not the branch.
+Session notes, scratch plans: not repository content unless repository already tracks them.
+Untracked session state: harness memory, not branch.
 
 ## See also
 
-- magus-vcs-hygiene covers classifying paths and staging one commit safely.
+- magus-vcs-hygiene: classifying paths, staging one commit safely.
 ````
 
 
