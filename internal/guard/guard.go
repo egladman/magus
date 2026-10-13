@@ -725,14 +725,18 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if who.Agent == "" {
 			who.Agent = env.Who.Agent
 		}
-		if req.DryRun && (env.LoadedSkill != "" || env.NothingToJudge) {
+		if req.DryRun && env.NothingToJudge {
 			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
 		}
-		if env.LoadedSkill != "" {
-			// Recorded, never judged. The gate is built here rather than reusing the one
-			// below because this arm returns before it: same cacheDir, same session.
+		if env.LoadedSkill != "" && !req.DryRun {
+			// Recorded here, ahead of the arm below that returns. The gate is built here
+			// rather than reusing the one further down for that reason: same cacheDir,
+			// same session.
 			recordSkillLoad(hint.NewGate(hookLocation(ctx, deps).cacheDir, who.skillsKey()), env.LoadedSkill)
-			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+		}
+		if env.ChildStarted != "" && !req.DryRun {
+			at := hookLocation(ctx, deps)
+			joinStartedChild(withJobStoreRows(ctx, at), at, hint.NewGate(at.cacheDir, who.factsKey()), who, env.ChildStarted, time.Now())
 		}
 		if env.NothingToJudge {
 			// A host envelope whose tool_input carries no command, path or prompt (a todo
@@ -751,7 +755,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		description = env.Description
 		write = env.Write
 		hasInput = input != ""
-		if env.IsPath {
+		switch {
+		case env.LoadedSkill != "" && !req.Observe:
+			// A skill loaded by reading its file is still a read, judged as the line a
+			// host's read tool is restated as.
+			input, isPath = "cat "+shellWord(input), false
+		case env.IsPath:
 			isPath = true
 		}
 		if env.IsSpawn || env.IsContinue {
@@ -1053,6 +1062,16 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		pending.speak(markers, &verdict, whys)
 		// The workspace's magus\guard.write rule, last because it may only add.
 		verdict, ruleRecord = gradeWorkspaceWrite(ctx, deps, verdict, input, write, actingLease, who, stateAt)
+		// A patch writes every file it names, and each is held to what a write of it alone
+		// would meet; the call itself was judged by the first.
+		if len(env.Patch) > 1 && verdict.Decision != decisionDeny {
+			switch rest := judgePatchRest(ctx, deps, req, who, callDir, actingLease, env.Patch); {
+			case rest.Decision == decisionDeny:
+				verdict.Decision, verdict.Reason, verdict.Context, verdict.Rule = decisionDeny, rest.Reason, "", rest.Rule
+			case rest.Decision == decisionAdvise && verdict.Decision == decisionPass:
+				verdict.Decision, verdict.Context, verdict.Rule = decisionAdvise, rest.Context, rest.Rule
+			}
+		}
 		// A denied write never happens, so it never touched anything.
 		if verdict.Decision != decisionDeny {
 			drift.record()
@@ -1071,6 +1090,31 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		// Outside judgeShellLine: it reads session state (which skills have loaded) rather
 		// than the line alone, and a remedy graded by that function never writes Buzz.
 		v = deps.rankGraded(v, denyBuzzUnbriefed, denyBuzzAuthorWithoutSkill(skills, req.ReportsSkills, location.workspace, input, shellD), rankBuzzAuthor)
+		// The rules below read and spend the caller's own session record, which is why they
+		// sit here rather than in the pure rule set a remedy is graded by.
+		now := time.Now()
+		// readVerdictAt lets this caller's next whole read of the file through.
+		if v.Deny != "" && v.Rule.Name == denyRuleReadNavigation {
+			facts.MarkFired(readNavigationKind(who.Agent, v.Rule.Arg))
+		}
+		if v.Deny == "" {
+			v = stronger(v, deps.grade(gradeReadPaging(deps, facts, who.Agent, callDir, input, shellD)))
+		}
+		waiter, waits := waiterCall(ctx, deps, facts, env, req.CallBackground, actingLease, who.Agent, input, shellD, now)
+		if waits {
+			w := deps.grade(gradeWatch(facts, who.Agent, waiter.worker, waiter.watchCall, now))
+			// A timer the workspace only advises against yields to the pile's own word, which
+			// says more: how many are already live.
+			if waiter.timer {
+				if t := deps.grade(ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); t.Deny != "" || w.Deny == "" && w.Context == "" {
+					w = stronger(w, t)
+				}
+			}
+			v = stronger(v, w)
+		}
+		if v.Deny == "" {
+			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
+		}
 		switch v = deps.rankGraded(v, denyArchitectureUnbriefed, denyArchitectureWithoutSkill(facts, skills, req.ReportsSkills, location.workspace, ""), rankArchitectureUnbriefed); {
 		case v.Deny != "":
 			// These are the denies that hold for everyone, so a pre-authorization does not
@@ -1252,6 +1296,12 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		if !req.DryRun && (verdict.Decision == decisionPass || verdict.Decision == decisionAdvise) {
 			bindOnExec(ctx, location, who, input)
 			releaseOnEnd(location, who, input)
+			if waits {
+				recordWatch(facts, who.Agent, waiter.watchCall, now)
+			}
+			if req.CallBackground && !env.IsWatch {
+				recordBackground(facts, who.Agent, input)
+			}
 		}
 	}
 	// The two notices about the acting lease ITSELF: a row that has finished and an id
@@ -1341,6 +1391,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			next = servableRemedy(ctx, deps, location, callDir, standing, actingLease, verdict.Next)
 		}
 		verdict.Reason, verdictRef, verdict.Next = shapeDeny(ctx, shapeGate, verdict.Rule, verdict.Reason, why, note, next, req.DryRun)
+	}
+	if verdict.Decision == decisionAdvise && !req.Observe && adviceRepeated(markers, who.Agent, verdict.Rule, verdict.Context) {
+		verdict.Decision, verdict.Context, verdict.Rule = decisionPass, "", ""
 	}
 	if verdict.Decision == decisionAdvise && !req.Observe {
 		verdict.Context, verdictRef = shapeAdvice(ctx, markers, verdict.Rule, verdict.Context, whys, req.DryRun)
@@ -1637,6 +1690,7 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		}
 		req.Value, req.IsPath = files[0].Path, true
 		req.Write = writeFields{Content: patchContent(files)}
+		req.Patch = files
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
@@ -1644,6 +1698,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.CallBackground = env.ToolInput["run_in_background"] == true
 		if ms, ok := env.ToolInput["timeout"].(float64); ok && ms > 0 {
 			req.CallTimeout = time.Duration(ms) * time.Millisecond
+		}
+		// A watcher always runs in the background, so a rule about backgrounded work holds
+		// on it too.
+		if d, ok := envelopeWatch(env.ToolInput); ok {
+			req.IsWatch, req.WatchFor, req.CallBackground = true, d, true
 		}
 	case env.Command != "":
 		req.Value = env.Command
@@ -1670,6 +1729,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// host config, the way `command` and `file_path` are; the host's tool name stays
 		// in its own matcher.
 		req.LoadedSkill = envelopeString(env.ToolInput, "skill")
+		req.NothingToJudge = true
+	case envelopeSchedules(env.ToolInput):
+		// A prompt queued for a later turn of this session, not a brief for a new agent.
 		req.NothingToJudge = true
 	case isSpawn || env.Task != "":
 		req.Value = cmp.Or(spawnPrompt, env.Task)
@@ -1733,6 +1795,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.NothingToJudge = true
 		if env.AgentID != "" {
 			req.AgentTranscript = env.AgentTranscriptPath
+		}
+		// An event naming a subagent and no tool call, and carrying no log of a finished
+		// one, reports the child starting.
+		if env.AgentID != "" && env.ToolName == "" && env.AgentTranscriptPath == "" && len(env.ToolInput) == 0 {
+			req.ChildStarted = env.AgentID
 		}
 	}
 	return req, true
@@ -1820,7 +1887,17 @@ type hookRequest struct {
 	// AgentTranscript is the log of the subagent a nothing-to-judge envelope reports on,
 	// "" when it names none. Its last usage record is the subagent's context size.
 	AgentTranscript string
-	Who             hookAttribution
+	// ChildStarted is the id of a subagent whose start this nothing-to-judge envelope
+	// reports, "" for any other: the event names the child and no tool call.
+	ChildStarted string
+	// Patch is every file a patch writes, in patch order; Value is the first. Nil for any
+	// other request.
+	Patch []patchFile
+	// IsWatch is a shell command a watcher runs in the background, waking the agent on
+	// each line it prints until WatchFor has passed.
+	IsWatch  bool
+	WatchFor time.Duration
+	Who      hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be

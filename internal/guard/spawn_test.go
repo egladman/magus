@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -292,4 +293,62 @@ func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
 		require.True(t, recordSkillLoad(g, req.LoadedSkill))
 		assert.True(t, skillLoaded(g, multiAgentSkill))
 	})
+}
+
+// A skill read is a read too: the load is recorded and the read meets the read rules, where
+// it used to pass before any of them ran.
+func TestSkillReadIsRecordedAndJudged(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	root := hookLocation(ctx, Dependencies{}).workspace
+	skill := filepath.Join(root, ".cursor", "skills", "magus-run", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skill), 0o755))
+	require.NoError(t, os.WriteFile(skill, []byte("# magus-run\n"), 0o644))
+	read := hookJSON(t, map[string]any{"conversation_id": "c1", "session_id": "c1", "cwd": root, "hook_event_name": "preToolUse",
+		"tool_name": "Read", "tool_input": map[string]any{"file_path": skill}})
+	var judged []types.CommandRequest
+	deps := Dependencies{CommandRule: func(_ context.Context, req types.CommandRequest, _ hint.Gate) (types.GuardVerdict, error) {
+		judged = append(judged, req)
+		return types.GuardVerdict{Decision: types.GuardAllow}, nil
+	}}
+	v := Judge(ctx, deps, Request{Input: read, Host: "cursor", ReportsSkills: true})
+	assert.Equal(t, "pass", v.Decision)
+	assert.True(t, skillLoaded(hint.NewGate(cacheDir, hookAttribution{Host: "cursor", Session: "c1"}.skillsKey()), agent.MustSkill("magus-run")))
+	require.Len(t, judged, 1, "the read reaches the command rules")
+	assert.Equal(t, "cat "+skill, judged[0].Command)
+}
+
+func TestAScheduledPromptIsNoSpawn(t *testing.T) {
+	t.Parallel()
+	for _, input := range []map[string]any{
+		{"delaySeconds": float64(270), "prompt": "check the run", "reason": "waiting on CI"},
+		{"cron": "*/5 * * * *", "prompt": "check the run", "recurring": true},
+	} {
+		req, ok := decodeHookEnvelope(hookJSON(t, map[string]any{"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "ScheduleWakeup", "tool_input": input}))
+		require.True(t, ok)
+		assert.False(t, req.IsSpawn, "%v", input)
+		assert.True(t, req.NothingToJudge, "%v", input)
+	}
+}
+
+// A host whose spawn answers with a name and whose child's calls carry an id: the child's
+// start joins the id to the spawn before it, so the child is graded under the spawn's job.
+func TestAChildsStartJoinsItToTheSpawnBeforeIt(t *testing.T) {
+	row := types.Job{ID: "guard-facts", State: types.StateDeclared, WritePaths: []string{"internal/guard/**"}}
+	ctx, root := fleetFixture(t, row)
+	target := filepath.Join(root, "internal", "guard", "guard.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte("package guard\n"), 0o644))
+	codex := func(env map[string]any) Verdict {
+		env["session_id"], env["cwd"] = "codex-s", root
+		return Judge(ctx, Dependencies{}, Request{Input: hookJSON(t, env), Host: "codex"})
+	}
+
+	spawn := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "spawn_agent",
+		"tool_input": map[string]any{"message": "gAAAAencrypted", "task_name": "worker", "agent_type": "default", "description": "orchestrator/impl guard-facts"}})
+	require.NotEqual(t, "deny", spawn.Decision, spawn.Reason)
+	codex(map[string]any{"hook_event_name": "SubagentStart", "agent_id": "019e-child"})
+
+	write := codex(map[string]any{"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "agent_id": "019e-child",
+		"tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + target + "\n@@\n-package guard\n+package guard // x\n*** End Patch\n"}})
+	assert.Equal(t, "guard-facts", write.Lease, "the child acts under the job its spawn named")
 }

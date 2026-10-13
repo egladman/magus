@@ -15,6 +15,31 @@ import (
 	"github.com/egladman/magus/types"
 )
 
+func TestBriefForAnIsolatedWorkerHoldsItToPlainCommands(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		brief    string
+		isolated bool
+		want     bool
+	}{
+		{"says it", "Fix the bug. Run one plain command per call; no `$()`, loops or exec.", true, false},
+		{"says it in other words", "Use plain commands only.", true, false},
+		{"never says it", "Fix the bug and report the sha.", true, true},
+		{"teaches a substitution", "Run one command per call. Then `git log $(git merge-base HEAD main)..HEAD`.", true, true},
+		{"teaches a loop", "Run one command per call:\n```bash\nfor f in a b; do ./magus describe file $f; done\n```\n", true, true},
+		{"a shared checkout", "Fix the bug and report the sha.", false, false},
+	} {
+		v := judgeBriefPlainCommands(briefInput{text: tt.brief, isolated: tt.isolated})
+		if tt.want {
+			assert.Equal(t, denyRuleBriefPlainCommands, v.Rule.Name, tt.name)
+			assert.NotEmpty(t, v.Deny, tt.name)
+		} else {
+			assert.Empty(t, v.Deny, tt.name)
+		}
+	}
+}
+
 // TestBriefThatTeachesADeniedCommandIsRefused: a worker runs its brief's commands as
 // written. Measured 2026-09-24, 33 briefs seeded 462 prefixes of a retired variable. A
 // command the brief presents as one to run is graded like a shell line; a command it

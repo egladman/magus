@@ -3,6 +3,7 @@ package guard
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 
 	"github.com/egladman/magus/internal/hint"
 )
@@ -91,6 +92,21 @@ const (
 func advisoryFocusPath(rel string) hint.MarkerKind {
 	sum := sha256.Sum256([]byte(rel))
 	return advisoryFocus + "-" + hint.MarkerKind(hex.EncodeToString(sum[:6]))
+}
+
+// adviceRepeated reports whether this caller was already given this exact advice in this
+// session, marking it given. An advisory enrolled in the gate is held by it instead, and
+// degrades to its brief rather than going quiet.
+//
+// Keyed on the text as well as the rule, so the same rule saying something new (another
+// declaration, another count) still speaks; and on the agent, since a host's subagents
+// share their root's session and each is told for itself.
+func adviceRepeated(markers hint.Gate, agent, rule, text string) bool {
+	if rule == "" || slices.Contains(enrolledAdvisories(), rule) {
+		return false
+	}
+	sum := sha256.Sum256([]byte(agent + "\x00" + rule + "\x00" + text))
+	return markers.MarkFired(hint.MarkerKind("said-" + hex.EncodeToString(sum[:8])))
 }
 
 // leasedPathKey holds the leased-path advisory once per session per LEASE, hashed for the

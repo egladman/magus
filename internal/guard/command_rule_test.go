@@ -258,6 +258,8 @@ func TestCommandRuleFailureFailsOpen(t *testing.T) {
 	repeat := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
 	assert.Equal(t, "advise", repeat.Decision)
 	assert.NotContains(t, repeat.Context, "boom", "the repeat is one line")
+	again := Judge(ctx, deps, Request{Input: "ls", Host: "claude-code", Session: "s1"})
+	assert.Equal(t, "pass", again.Decision, "the one line is said once to a caller, not on every command")
 
 	commands := trailEvents(t, cacheDir, trail.KindAgentCommand)
 	require.NotEmpty(t, commands)

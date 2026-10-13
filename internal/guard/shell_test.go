@@ -2092,7 +2092,7 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.NotEmpty(t, v.Deny, "should be denied: %s", cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "you are told when it finishes", cmd)
+		assert.Contains(t, v.Deny, "announces when it ends", cmd)
 	}
 	// A loop that works each pass, or a for loop over a list, is not waiting.
 	for _, cmd := range []string{
@@ -2105,7 +2105,9 @@ func TestGuardDeniesBusyWait(t *testing.T) {
 
 // TestBusyWaitOnAForeignProcessSaysWhatItProves pins the probe split: a loop over a pid,
 // the process table or magus's own pool and job rows waits on something nothing will
-// announce to the caller, so its deny drops that claim and names the held tool slot.
+// announce to the caller, so its deny drops that claim and names the record magus keeps of
+// that work. It never sends the reader to a host's watcher, which runs the same loop: that
+// remedy once built a pile of eleven.
 func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 	for _, cmd := range []string{
 		`while kill -0 4242 2>/dev/null; do sleep 30; done`,
@@ -2116,11 +2118,14 @@ func TestBusyWaitOnAForeignProcessSaysWhatItProves(t *testing.T) {
 	} {
 		v := Evaluate(strict(testDependencies()), cmd)
 		assert.Equal(t, denyRuleBusyWait, v.Rule.Name, cmd)
-		assert.Contains(t, v.Deny, "holds your tool slot for the whole wait on a process you did not start", cmd)
-		assert.NotContains(t, v.Deny, "you are told when it finishes", cmd)
+		assert.Contains(t, v.Deny, "waits on work you did not start", cmd)
+		assert.Contains(t, v.Deny, hint.JobWait.With("<job>"), cmd)
+		assert.Contains(t, v.Deny, hint.Status.With("--watch=15s"), cmd)
+		assert.NotContains(t, v.Deny, "monitor", cmd)
+		assert.NotContains(t, v.Deny, "announces when it ends", cmd)
 	}
 	own := Evaluate(strict(testDependencies()), `until grep -q "^summary:" out.log; do sleep 25; done`)
-	assert.Contains(t, own.Deny, "you are told when it finishes", "a probe of the caller's own output keeps the claim")
+	assert.Contains(t, own.Deny, "announces when it ends", "a probe of the caller's own output keeps the claim")
 }
 
 // TestOutputPipeServesOnlyAnExactRemedy pins which pipes carry a next: the tail of a run,

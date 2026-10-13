@@ -99,7 +99,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	why := ""
 	verdictRef := ""
 	if env.IsSpawn {
-		verdict, verdictRef = spawnBuiltIns(ctx, req, who, at)
+		verdict, verdictRef = spawnBuiltIns(ctx, deps, req, env, who, at)
 		if verdict.Decision == decisionDeny {
 			if _, refused := held.hold(deps, ShellVerdict{Deny: verdict.Reason, Rule: denyRule{Name: denyRuleName(verdict.Rule)}}); !refused {
 				verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -112,7 +112,7 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	// A continuation carries a brief as much as a spawn does, so both are graded.
 	if verdict.Decision != decisionDeny {
 		deps.scope = scopeAt(at)
-		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description})); refused {
+		if v, refused := held.hold(deps, judgeBriefCommand(deps, briefInput{text: env.Value, title: env.Spawn.Description, isolated: env.IsSpawn && env.Spawn.Isolated})); refused {
 			verdict = Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: v.Deny, Rule: v.RuleName()}
 			why, decided = v.Why, decidedByBuiltin
 		} else if v.Context != "" && verdict.Decision == decisionPass {
@@ -181,23 +181,45 @@ func judgeAgentEvent(ctx context.Context, deps Dependencies, req Request, env ho
 	})
 	if verdict.Decision != decisionDeny {
 		markAgentSeen(facts, env)
+		if env.IsSpawn {
+			spawner, _ := resolveActingLease(who, at, req.Lease)
+			recordPendingSpawn(facts, env, spawner, time.Now())
+		}
 	}
 	return verdict
 }
 
 // spawnBuiltIns is the compiled half of a spawn's verdict, which reads session state and
 // never the prompt.
-func spawnBuiltIns(ctx context.Context, req Request, who hookAttribution, at location) (Verdict, string) {
+func spawnBuiltIns(ctx context.Context, deps Dependencies, req Request, env hookRequest, who hookAttribution, at location) (Verdict, string) {
+	refused := func(rule denyRuleName, d denial) Verdict {
+		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: d.Say, Rule: string(rule)}
+	}
 	// Whether the multi-agent brief was read before work was handed out: a marker file,
 	// no prose, which is what lets it live on this path.
 	if reason := denySpawnWithoutBrief(hint.NewGate(at.cacheDir, who.skillsKey()), req.ReportsSkills, at.workspace); reason != "" {
-		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionDeny, Reason: reason, Rule: string(denySpawnUnbriefed)}, ""
+		return refused(denySpawnUnbriefed, denial{Say: reason}), ""
+	}
+	facts := hint.NewGate(at.cacheDir, who.factsKey())
+	if row, ok := spawnDuplicate(ctx, at, facts, env.Spawn.Description); ok {
+		return refused(denyRuleSpawnDuplicate, denySpawnDuplicate(row)), ""
+	}
+	if spawnWaitsFires(env.Spawn.Description, env.Value) {
+		return refused(denyRuleSpawnWaiter, denySpawnWaiter()), ""
 	}
 	// Whether this checkout is already somebody's, asked the same way and for the same reason.
 	gate := hint.NewGate(at.cacheDir, who.callerKey())
 	if note := adviseSharedCheckoutSpawn(ctx, gate, at); note.Say != "" {
 		shown, ref := shapeAdvice(ctx, gate, string(advisorySharedCheckout), note.Say, map[string]string{note.Say: note.Why}, false)
 		return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySharedCheckout)}, ref
+	}
+	// A subagent handing waiting to a helper of its own, said once a session.
+	if who.Agent != "" && spawnNestedWordRe.MatchString(env.Spawn.Description+"\n"+env.Value[:min(len(env.Value), spawnWaiterHead)]) {
+		note := adviseSpawnNestedWaiter()
+		if said := deps.heldBy(gate, string(advisorySpawnNestedWaiter)).Once(advisorySpawnNestedWaiter, note.Say); said != "" {
+			shown, ref := shapeAdvice(ctx, gate, string(advisorySpawnNestedWaiter), said, map[string]string{note.Say: note.Why}, false)
+			return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionAdvise, Context: shown, Rule: string(advisorySpawnNestedWaiter)}, ref
+		}
 	}
 	return Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}, ""
 }

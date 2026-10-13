@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/types"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // A spawn brief that teaches a command the guard denies. The worker copies commands from
@@ -46,6 +47,8 @@ var briefPlaceholderRe = regexp.MustCompile(`<[A-Za-z][^<>\n]*>`)
 type briefInput struct {
 	text  string
 	title string
+	// isolated is a spawn whose worker runs in a worktree of its own.
+	isolated bool
 }
 
 // lazyProducers finds, once and on demand, whether a target regenerates a row's write
@@ -81,7 +84,72 @@ func judgeBriefCommand(deps Dependencies, brief briefInput) ShellVerdict {
 			Rule: denyRule{Name: denyRuleBriefCommand, Arg: v.RuleName()},
 		}
 	}
+	if v := judgeBriefPlainCommands(brief); v.Deny != "" {
+		return v
+	}
 	return judgeBriefOffCheck(deps, brief)
+}
+
+// denyRuleBriefPlainCommands is a brief for an isolated worker that does not hold it to
+// plain commands.
+const denyRuleBriefPlainCommands denyRuleName = "brief-plain-commands"
+
+// briefPlainLineRe is a brief saying its worker runs one plain command per call, in the
+// words a brief would use.
+var briefPlainLineRe = regexp.MustCompile(`(?i)\bone\s+(?:plain\s+|simple\s+)?command\s+(?:per|a|each)\s+(?:tool\s+)?call\b|\bplain\s+commands?\b`)
+
+const briefPlainLine = "one plain command per call; no `$()`, loops or exec"
+
+// judgeBriefPlainCommands refuses a brief for a worker in its own worktree that teaches a
+// compound command, or that never says to run one plain command per call. A host that
+// isolates a worker refuses the commands it cannot prove stay inside the worktree, and a
+// worker copies the style of the commands its brief shows. Briefs for a shared checkout
+// pass.
+func judgeBriefPlainCommands(brief briefInput) ShellVerdict {
+	if !brief.isolated {
+		return ShellVerdict{}
+	}
+	why := "A host that isolates a worker in its own worktree refuses any command it cannot prove stays inside it, and a substitution, a loop or an exec is one it cannot; each refusal costs the worker a turn. " +
+		"A worker writes its commands the way its brief shows them."
+	for _, cmd := range briefCommands(brief.text) {
+		if compoundCommand(cmd) {
+			return ShellVerdict{
+				Deny: "this brief, for a worker in its own worktree, teaches `" + elideCommand(cmd) + "`, which that worker's host refuses as too complex; split it into plain commands.",
+				Why:  why,
+				Rule: denyRule{Name: denyRuleBriefPlainCommands},
+			}
+		}
+	}
+	if briefPlainLineRe.MatchString(brief.text) {
+		return ShellVerdict{}
+	}
+	return ShellVerdict{
+		Deny: "this brief, for a worker in its own worktree, never says how to write its commands; add: \"" + briefPlainLine + "\".",
+		Why:  why,
+		Rule: denyRule{Name: denyRuleBriefPlainCommands},
+	}
+}
+
+// compoundCommand reports a command line holding a substitution, a loop or an exec: the
+// shapes an isolating host cannot follow.
+func compoundCommand(cmd string) bool {
+	f, err := parseFile(cmd, DialectBash)
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(f, func(n syntax.Node) bool {
+		switch n := n.(type) {
+		case *syntax.CmdSubst, *syntax.ProcSubst, *syntax.WhileClause, *syntax.ForClause:
+			found = true
+		case *syntax.CallExpr:
+			if words := literalWords(n.Args); len(words) > 0 && words[0] == "exec" {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 // briefJobRe finds the job a brief hands its worker: the lease it exports, the job it takes,

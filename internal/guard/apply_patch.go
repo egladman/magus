@@ -1,6 +1,10 @@
 package guard
 
-import "strings"
+import (
+	"context"
+	"path/filepath"
+	"strings"
+)
 
 // patchFile is one file section of an apply_patch body.
 type patchFile struct {
@@ -108,8 +112,40 @@ func patchWritePaths(files []patchFile) []string {
 // nothing else, so a content rule can read it as it reads a whole-file write. Any other
 // patch yields "": its added lines are fragments of files magus has not read.
 func patchContent(files []patchFile) string {
-	if len(files) != 1 || !files[0].IsAdd || len(files[0].Added) == 0 {
+	if len(files) != 1 {
 		return ""
 	}
-	return strings.Join(files[0].Added, "\n") + "\n"
+	return files[0].addedContent()
+}
+
+// addedContent is the text an add section creates its file with, "" for any other section.
+func (f patchFile) addedContent() string {
+	if !f.IsAdd || len(f.Added) == 0 {
+		return ""
+	}
+	return strings.Join(f.Added, "\n") + "\n"
+}
+
+// judgePatchRest judges every file of a patch after its first, which the call itself is
+// judged by, as the write a host's write tool would make of each: the first refusal wins,
+// named by its path, then the first advice. A pass when every one passes.
+func judgePatchRest(ctx context.Context, deps Dependencies, req Request, who hookAttribution, callDir, lease string, files []patchFile) Verdict {
+	advised := Verdict{Decision: decisionPass}
+	for _, f := range files[min(1, len(files)):] {
+		target := f.Path
+		if !filepath.IsAbs(target) && callDir != "" {
+			target = filepath.Join(callDir, target)
+		}
+		switch v := judgeFileWrite(ctx, deps, req, who, callDir, lease, target, f.addedContent()); v.Decision {
+		case decisionDeny:
+			v.Reason = f.Path + ": " + v.Reason
+			return v
+		case decisionAdvise:
+			if advised.Decision == decisionPass {
+				v.Context = f.Path + ": " + v.Context
+				advised = v
+			}
+		}
+	}
+	return advised
 }

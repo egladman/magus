@@ -102,6 +102,39 @@ func splitLine(line string) []string {
 	return words
 }
 
+func TestHooksOffRefusesSkippingTheRepositorysHooks(t *testing.T) {
+	t.Parallel()
+	off := []string{
+		"git -c core.hooksPath=/dev/null commit -m x",
+		"git -c core.hookspath= commit -m x",
+		"git commit --no-verify -m x",
+		"git commit -n -m x",
+		"git commit -anm x",
+		"git push --no-verify origin main",
+		"git status && git commit --no-verify -m wip",
+		"git -c core.hooksPath=/dev/null status",
+	}
+	on := []string{
+		"git commit -m 'skip with --no-verify'",
+		"git commit -mn",
+		"git push -n origin main",
+		"git -c core.hooksPath=.githooks commit -m x",
+		"git commit -m x -- --no-verify",
+		"echo git commit --no-verify",
+		"git log --oneline -n 3",
+	}
+	for i, command := range append(off, on...) {
+		want := i < len(off)
+		v := Evaluate(testDependencies(), command)
+		if want {
+			assert.Equal(t, denyRuleHooksOff, v.Rule.Name, "%q", command)
+			assert.NotEmpty(t, v.Deny, "%q", command)
+		} else {
+			assert.NotEqual(t, denyRuleHooksOff, v.Rule.Name, "%q", command)
+		}
+	}
+}
+
 // TestGitGuardReadsPastGlobalOptions pins that no global option in front of a subcommand
 // hides it from the rule it triggers: each of these passed before parseGit, every git rule
 // read Args[0] as the subcommand.
@@ -140,7 +173,7 @@ func TestGitGuardReadsPastGlobalOptions(t *testing.T) {
 		"git --no-pager -C . push origin x":           advisoryPushGate,
 		"git -C . checkout -- a.go":                   advisoryRevertClassify,
 		"git --literal-pathspecs restore a":           advisoryRevertClassify,
-		"git -c core.hooksPath=/dev/null commit -m x": denyRuleName(advisoryStageClassify),
+		"git -c core.hooksPath=.githooks commit -m x": denyRuleName(advisoryStageClassify),
 		"git -C . add a.go":                           denyRuleName(advisoryStageClassify),
 		"git --no-pager describe":                     advisoryCheckpointState,
 		"git -C . rev-parse HEAD":                     advisoryCheckpointState,

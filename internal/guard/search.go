@@ -1356,13 +1356,14 @@ func staleSymbolVerdict(deps Dependencies, c hint.Invocation, js searchJudgment,
 }
 
 // noGraphVerdict advises a search for a name in a workspace with no symbol index to route
-// it to: the one case the rule fails open, since a deny there would route nowhere.
+// it to: the one case the rule fails open, since a deny there would route nowhere. It
+// carries no brief: a repeat saying the index is still missing changes nothing for a
+// reader already told how to build one.
 func noGraphVerdict(ident string) ShellVerdict {
 	return ShellVerdict{
 		Context: fmt.Sprintf(precedentSearchAdvice, ident, ident),
 		Why:     precedentSearchAdviceWhy,
 		Kind:    advisoryPrecedent,
-		Brief:   "magus workspace: no symbol index exists yet and this search runs; `" + hint.GraphBuild.With("--silent") + "` builds one.",
 	}
 }
 

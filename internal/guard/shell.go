@@ -1934,14 +1934,17 @@ var (
 	denySedInPlaceWhy = "Your editor tool reads the file first and reports what it changed. Whole-tree mechanical edit? `" + hint.Refs.With("<symbol>", "--occurrences") + "` gives column-precise sites.\n" +
 		"GNU reads `sed -i 's/x/y/' f` as an edit, macOS reads that script as the BACKUP SUFFIX. Reading with sed, or editing under a scratch path, is untouched."
 
-	denyBusyWait    = "this loop polls for work you started, and you are told when it finishes; start it and do something else."
+	denyBusyWait    = "this loop polls for work you started, which the host announces when it ends; background the work and wait for that notice."
 	denyBusyWaitWhy = "Past the tool timeout this loop is BACKGROUNDED rather than killed, and keeps polling a condition a failed run never prints.\n" +
-		"Waiting on something outside this machine is what your host's monitor is for."
+		"A watcher running the same loop is the same poll, and it wakes you again each time it fires or expires."
 
 	// Says only what the guard can prove about a probe of someone else's process: nothing
-	// here announces that process's end to the caller, so the other text would be false.
-	denyBusyWaitForeign    = "this loop holds your tool slot for the whole wait on a process you did not start; wait with your host's monitor."
-	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on."
+	// here announces that process's end to the caller, so it is sent to the record magus
+	// keeps of that work instead. Sending it to "your host's monitor" built piles of
+	// watchers, each running this loop.
+	denyBusyWaitForeign    = "this loop waits on work you did not start; wait on its record: `" + hint.JobWait.With("<job>") + "` for a job, `" + hint.Status.With("--watch=15s") + "` for the project lock."
+	denyBusyWaitForeignWhy = "Past the tool timeout it is backgrounded rather than killed, and polls on. " +
+		"A watcher running the same loop is the same poll; if nothing else records the work, one watcher, armed once, is the most it earns."
 
 	denyProcessPoll    = "`pgrep`, `pidof` and `ps` poll for what the project lock already records; read it: `" + hint.Status.With("--watch=15s") + "`."
 	denyProcessPollWhy = "Status reads the project lock continuously (holder PID, command, age), where the process table invents an unbounded poll."
@@ -2642,6 +2645,12 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			hint.NextForDenyRemedy(string(denyRuleProcessPoll), hint.Status.Argv(),
 				"status reads the live pool once and exits, where the process table only guesses at it."))
 		if v, ok := held.ends(deps, poll); ok {
+			return v
+		}
+	}
+	// The same poll with the loop left to the caller's next call.
+	if parsed && sleepPollFires(work) {
+		if v, ok := held.ends(deps, ShellVerdict{Deny: denySleepPoll, Why: denySleepPollWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); ok {
 			return v
 		}
 	}

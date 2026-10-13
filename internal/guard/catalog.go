@@ -69,9 +69,9 @@ var ruleDocBusyWait = denyDoc(types.RuleDoc{ //nolint:unused // read through the
 	Name:    string(denyRuleBusyWait),
 	Catches: "a loop that only sleeps between polls, holding a tool slot for its whole wait",
 	Why: "A backgrounded command is tracked and announces its own completion, so starting it and doing something else is strictly better than watching it. " +
-		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, and its deny says only what holds for it: the loop occupies a tool slot for the whole wait. " +
+		"A loop probing a process the caller did not start (`kill -0`, the process table, `magus status` or a job row) gets no such announcement, so its deny names the record magus keeps of that work instead: `magus job wait <job>` for a job, `magus status --watch` for the project lock. " +
 		"The loop also has no bound of its own: past the tool timeout it is BACKGROUNDED rather than killed, and goes on polling a condition that may never arrive, because a run that failed early never prints the line being grepped for. " +
-		"Several have had to be killed by hand. Waiting on something OUTSIDE this machine, a remote queue or a deploy nobody here started, is what a host's monitor is for." +
+		"Several have had to be killed by hand. A host's watcher running the same loop is judged the same way, since it is the same poll that also wakes the agent on every line and at expiry. " +
 		"A shell script is judged by its content, so `bash wait.sh` and a write of wait.sh get the verdict the loop would get typed inline; so do the output-pipe, output-redirect and unknown-env rules.",
 })
 
@@ -517,7 +517,86 @@ var ruleDocReadNavigation = denyDoc(types.RuleDoc{ //nolint:unused // read throu
 		"A Go declaration spans its doc comment to its closing brace, each member of a grouped var, const or type is its own entry, and a method is named `Type.Method`. A Buzz entry is a top-level fun, test, object or enum, from its doc comment to the line before the next statement. " +
 		"Every file a `cat` or `nl` prints is judged, so `cat a.go b.go` is refused for whichever mapped file is over the threshold. A host's read tool is restated as the same line (`cat <file>`, or `sed -n` over its offset and limit, a limit over 300 counting as whole) and judged the same way. " +
 		"The size worth flagging is the rule's `lines` setting, which a workspace sets: the binary ships no number for it. " +
-		"Silent on a short file, TypeScript (no parser here), SKILL.md, AGENTS.md and a host's own instruction file (written to be read whole), a generated output, a path outside the workspace, a file that does not parse, and a read feeding a pipe or redirect.",
+		"Silent on a short file, TypeScript (no parser here), SKILL.md, AGENTS.md and a host's own instruction file (written to be read whole), a generated output, a path outside the workspace, a file that does not parse, and a read feeding a pipe or redirect. " +
+		"It refuses each caller once per file: the same caller asking for the same file again has the map in hand and chose the whole read, so that read passes.",
+})
+
+var ruleDocSleepPoll = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleSleepPoll),
+	Catches: "a sleep before a one-shot status read, or a backgrounded call that only sleeps",
+	Why: "Both are a wait whose loop is the caller's own next call. A sleep of ten seconds or more followed on the same line by a status read (`kill -0`, the process table, `magus status` or a job row, a pull request's checks, a CI run) looks once and leaves the next look to the next call. " +
+		"A backgrounded call that only sleeps and prints is a timer: its notice says only that time passed, where the work's own backgrounded call is announced with its result. " +
+		"A watch (`--watch`) is not a status read, and a loop is busy-wait's. " +
+		"It cannot tell a one-off settle before a single check from the tenth look of a poll; the served watch answers both.",
+})
+
+var ruleDocReadPaging = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleReadPaging),
+	Catches: "a mapped file read window by window, past two windows of it",
+	Why: "read-navigation refuses a whole read and serves the file's map; paging through the file instead spends the same lines over several calls. " +
+		"Each caller's windows of each Go, Buzz or Markdown file are counted, and the third distinct one is refused with the map. " +
+		"A window inside one declaration or heading is a targeted read and never counts, nor does a repeat of a window already read, a whole read, or a file short enough for read-navigation to pass whole. " +
+		"It cannot tell a walk through the file from reads of three spans that each cross a declaration's edge.",
+})
+
+var ruleDocHeredocWrite = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleHeredocWrite),
+	Catches: "a here-document written to a file, judged as the file write it is",
+	Why: "`cat > f.go <<'EOF'` and `tee f.go <<'EOF'` write a file the way a host's write tool does, so the body is judged as that write: the comment, lease and workspace write rules hold on either channel. " +
+		"A refused write refuses the line under this name, with the write rule's own in brackets, and advice about the write rides the line. " +
+		"Only a literal body is judged: one that expands a parameter or runs a substitution is text nobody can read before it runs. A target in /dev, a stderr redirect and a heredoc feeding a command's stdin are not writes. " +
+		"It cannot tell a scratch file the same line deletes from a file meant to stay.",
+})
+
+var ruleDocHooksOff = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleHooksOff),
+	Catches: "a git call with the repository's hooks switched off",
+	Why: "Hooks are the checks a repository puts in front of a commit or push, and `--no-verify`, `git commit -n` and `-c core.hooksPath=/dev/null` (or an empty path) skip every one of them. " +
+		"A hooks path naming a directory is a different set of hooks rather than none, so it passes; `-n` counts only on commit, where it means `--no-verify`. " +
+		"It cannot tell a repository with no hooks installed, where the flag skips nothing, from one where it skips them all.",
+})
+
+var ruleDocBriefPlainCommands = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleBriefPlainCommands),
+	Catches: "a brief for an isolated worker that does not hold it to one plain command per call",
+	Why: "A host that runs a worker in a worktree of its own refuses each command it cannot prove stays inside that worktree, and a substitution, a loop or an exec is one it cannot. " +
+		"So a spawn into its own worktree must say \"one plain command per call; no `$()`, loops or exec\" (any wording naming one command per call, or plain commands), and must not itself show a command of those shapes. " +
+		"A spawn into a shared checkout passes. It cannot tell a brief that says the same thing in other words from one that never says it.",
+})
+
+var ruleDocMonitorDuplicate = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleMonitorDuplicate),
+	Catches: "a second live watcher on one subject, or one on work the agent backgrounded itself",
+	Why: "A watcher is a host tool that runs a command in the background and wakes the agent on each line it prints, and again when it expires. " +
+		"Its subject is what its command reads: a process pattern, a pid, a file, a job, the project lock, a CI run; a command naming none is its own subject. " +
+		"A second watcher while the first is live wakes the agent twice per event; one on a host task capture, or on the process of a command this agent backgrounded, repeats the notice the host already gives. " +
+		"A backgrounded call that watches without end (`magus status --watch`, `tail -f`, `watch`) is judged the same way, and a leased worker is refused one outright, since its waits are its own runs. " +
+		"Re-arming a watcher that expired passes. It cannot tell a process pattern that also matches someone else's run from one matching only the agent's own.",
+})
+
+var ruleDocMonitorPile = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleMonitorPile),
+	Catches: "an agent arming a waiter while several of its own are already live",
+	Why: "Every live waiter, a watcher, a backgrounded sleep or an endless backgrounded watch, wakes its agent on its own schedule, and the ones still armed after the work ends wake a finished agent until they expire. " +
+		"The third live waiter of one agent is advised against and the fifth refused. " +
+		"A waiter counts from when it is armed until its own timeout, so it cannot tell a watcher whose command already exited from one still running.",
+})
+
+var ruleDocSpawnWaiter = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleSpawnWaiter),
+	Catches: "a spawn whose child exists to wait on, poll or watch other work",
+	Why: "A host tells a parent when each child ends, and a root waits on a job with `magus job wait`, so an agent spawned to wait spends a context on a notice that already comes. " +
+		"It reads only the title and the opening of the brief: one that opens on wait, poll, monitor, watch or babysit, or says to wait for, on or until an agent, worker or job. " +
+		"It cannot tell a brief opening on a feature named for watching (\"Monitor endpoint: add a route\") from one whose child only waits.",
+})
+
+var ruleDocSpawnDuplicate = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleSpawnDuplicate),
+	Catches: "a spawn for a job that already has a worker",
+	Why: "A spawn titled `<parent>/<role> <job>` hands that job to its child. When an earlier spawn in this session was already attributed to that job and its row is still declared or running, a second worker would write the same paths from a second context. " +
+		"Continue the worker with a message instead, or stop it first. " +
+		"A running row alone does not fire it, since a row stays running after its worker dies; another session's worker is not this rule's to see. " +
+		"It cannot tell this session's worker that died from one still alive.",
 })
 
 var ruleDocCaptureFilter = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
@@ -666,7 +745,15 @@ var ruleDocNewSourceDir = adviseDoc(types.RuleDoc{ //nolint:unused // read throu
 var ruleDocPrecedentSearch = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
 	Name:    string(advisoryPrecedent),
 	Catches: "a hunt for one distinctive name, which refs answers with verified sites",
-	Why:     "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits.",
+	Why: "A precedent hunt is a search for one distinctive name, and it is the search the graph answers best: refs lists verified sites, so you land on working code instead of assembling it from grep hits. " +
+		"In a workspace with no symbol index yet it advises once and stays quiet after: a repeat saying the index is still missing changes nothing.",
+}, true)
+
+var ruleDocSpawnNestedWaiter = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
+	Name:    string(advisorySpawnNestedWaiter),
+	Catches: "a subagent spawning a helper whose title or brief opening speaks of waiting or watching",
+	Why: "Waiting belongs to whoever spawned the work: the host tells a parent when its child ends. A worker handing that to a helper of its own stacks a third context on a notice two already get. " +
+		"It advises, once a session, because a worker may also spawn a child to build a watch feature, which the words alone cannot tell apart.",
 }, true)
 
 var ruleDocPushGate = adviseDoc(types.RuleDoc{ //nolint:unused // read through the registry adviseDoc fills
@@ -733,6 +820,7 @@ var ruleDocWorkspaceCommandFailed = adviseDoc(types.RuleDoc{ //nolint:unused // 
 	Why: "A workspace command rule that fails to load or errors judges nothing, and a command reaching a verdict without it must say so rather than read as fully judged. " +
 		"The first notice in a session names each failing side and its error; a repeat is one line naming what applied. " +
 		"It stands alone only when the built-in rules passed the command; on any other verdict the note is appended to that verdict. " +
+		"Standing alone, the one line is said once per caller: like every advisory not held by its own marker, the same text is not repeated to the same caller in a session. " +
 		"A workspace cannot set it: magus\\guard.builtins refuses the name, since the notice is how the workspace learns its own rule judged nothing.",
 }, false)
 

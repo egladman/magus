@@ -345,7 +345,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: `isolation: "worktree"`},
 		{rule: "change-role-spawn-not-isolated", name: "a feat worker in its own worktree", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Build it.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Build it. Run one plain command per call.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "worker-builds-magus", name: "a worker rebuilds the binary", input: bash("./magus run go-build ."),
 			lease: "footprint", jobs: []types.Job{{ID: "footprint", State: types.StateRunning}}, decision: "deny", reason: "a worker does not build magus"},
@@ -356,7 +356,7 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 			"description": "root/feat footprint", "prompt": "Implement it, then run `./magus run go-build .` first.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "deny", reason: "tells the worker to build magus"},
 		{rule: "brief-builds-magus", name: "a brief that names the build only to forbid it", input: agentSpawn(map[string]any{
-			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed.", "model": "sonnet", "isolation": "worktree",
+			"description": "root/feat footprint", "prompt": "Never run `./magus run go-build .`; use the binary already placed. Run plain commands.", "model": "sonnet", "isolation": "worktree",
 		}), jobs: []types.Job{{ID: "footprint", State: types.StateDeclared}}, decision: "pass"},
 		{rule: "worker-bootstrap", name: "a subagent runs the bootstrap", input: bash("go run -trimpath ./cmd/magus run go-build --no-cache ."),
 			worker: "root/feat footprint", decision: "deny", reason: "a worker does not build magus"},
@@ -451,6 +451,13 @@ func TestWorkspacePolicyJudgesRealHookInputs(t *testing.T) {
 		v := shellIn(t, "trim-key", ws)("cat " + capture)
 		assert.Equal(t, verdictWithRule("deny", workspaceCommandRule), unworded(v), "the policy decided, not a built-in: %s", v.Reason)
 		assert.Contains(t, v.Reason, "`magus query output out1afa17d04e90`")
+
+		// A backgrounded command that is not a magus run leaves a capture with no ref, and
+		// reading it is the only way to see its output.
+		plain := filepath.Join(tasks, "b7plain00.output")
+		require.NoError(t, os.WriteFile(plain, []byte("go version go1.26 darwin/arm64\n"), 0o644))
+		v = shellIn(t, "plain-capture", ws)("cat " + plain)
+		assert.NotEqual(t, "deny", v.Decision, v.Reason)
 	})
 
 	covered["commit-subject"] = true

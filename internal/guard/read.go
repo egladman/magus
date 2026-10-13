@@ -590,6 +590,11 @@ func readVerdictAt(deps Dependencies, dir, command string, d Dialect) (ShellVerd
 			if nav.Lines > 0 && m.lines <= nav.Lines || generatedOutput(deps, rel) {
 				continue
 			}
+			// This caller was refused this file once and served its map, so asking again is
+			// a whole read it chose with the map in hand. Judge marks the refusal.
+			if deps.facts.AlreadyFired(readNavigationKind(deps.caller.Agent, rel)) {
+				continue
+			}
 			d := denyReadNavigation(m)
 			if v := (ShellVerdict{Deny: d.Say, Why: d.Why, Rule: denyRule{Name: denyRuleReadNavigation, Arg: rel}}); walk.settles(deps, v) {
 				return v, true

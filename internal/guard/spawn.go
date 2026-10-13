@@ -4,14 +4,18 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/job"
+	"github.com/egladman/magus/internal/json"
 )
 
 // The multi-agent skill is the one piece of guidance a spawn cannot be written well
@@ -120,6 +124,84 @@ func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
 		return "", false
 	}
 	return text, true
+}
+
+// pendingSpawnPrefix starts the kind of a spawn that passed and has not yet been joined to
+// the child it started, named by when it was judged.
+const pendingSpawnPrefix = "spawn-pending-"
+
+// pendingSpawnJoined ends the kind marking a pending spawn as joined to its child.
+const pendingSpawnJoined = "-joined"
+
+// pendingSpawnWindow is how long after its spawn a child's start is still paired with it.
+// A host starts the child as the spawn runs, so a start later than this is another spawn's.
+const pendingSpawnWindow = 2 * time.Minute
+
+// pendingSpawn is what a spawn handed its child, kept until the child's start names it.
+type pendingSpawn struct {
+	Record  spawnedAgent `json:"record"`
+	Spawner string       `json:"spawner,omitempty"`
+}
+
+// recordPendingSpawn files a spawn that passed, for the start of the child it makes to be
+// joined to it. A host whose finished spawn already names the child never reads it.
+func recordPendingSpawn(facts hint.Gate, env hookRequest, spawner string, now time.Time) {
+	body, err := json.Marshal(pendingSpawn{
+		Record:  spawnedAgent{Description: env.Spawn.Description, Name: env.Spawn.Name, Model: env.DeclaredModel},
+		Spawner: spawner,
+	})
+	if err != nil {
+		return
+	}
+	writeAgentMarker(facts, hint.MarkerKind(pendingSpawnPrefix+strconv.FormatInt(now.UnixNano(), 10)), body)
+}
+
+// joinStartedChild pairs a child whose start names only its own id with the oldest spawn
+// in this session still waiting for one, and files the child under that spawn as a
+// finished spawn call would: its title's job, its name and its model. A host whose spawn
+// is answered by a name, and whose child's own calls carry an id, joins the two here.
+// Nothing is joined to a child magus already has a record of, or to a spawn older than
+// pendingSpawnWindow.
+func joinStartedChild(ctx context.Context, at location, facts hint.Gate, who hookAttribution, child string, now time.Time) {
+	if _, known := readSpawnedAgent(facts, child); known {
+		return
+	}
+	for _, kind := range facts.Kinds(pendingSpawnPrefix) {
+		if strings.HasSuffix(string(kind), pendingSpawnJoined) {
+			continue
+		}
+		nanos, err := strconv.ParseInt(strings.TrimPrefix(string(kind), pendingSpawnPrefix), 10, 64)
+		if err != nil || now.Sub(time.Unix(0, nanos)) > pendingSpawnWindow {
+			continue
+		}
+		if facts.MarkFired(kind + pendingSpawnJoined) {
+			continue
+		}
+		body, err := os.ReadFile(hint.MarkerPath(facts.CacheDir(), facts.Session(), kind))
+		var p pendingSpawn
+		if err != nil || json.Unmarshal(body, &p) != nil {
+			continue
+		}
+		recordSpawnedAgent(ctx, at, facts, who, hookRequest{
+			SpawnedAgent:  child,
+			DeclaredModel: p.Record.Model,
+			Spawn:         spawnFields{Description: p.Record.Description, Name: p.Record.Name},
+		}, p.Spawner)
+		return
+	}
+}
+
+// scheduleShapeKeys are the tool_input fields of a call that queues a prompt for a later
+// turn of the same session: a delay, or a cron expression.
+var scheduleShapeKeys = []string{"cron", "delaySeconds", "delay_seconds"}
+
+// envelopeSchedules reports a prompt queued for later in this session, which carries a
+// prompt as a spawn does and briefs no new agent.
+func envelopeSchedules(input map[string]any) bool {
+	return envelopeString(input, "prompt") != "" && slices.ContainsFunc(scheduleShapeKeys, func(k string) bool {
+		_, present := input[k]
+		return present
+	})
 }
 
 // envelopeTarget is the agent a call addresses: `to` on one host, `target` on another.

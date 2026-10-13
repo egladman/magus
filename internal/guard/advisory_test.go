@@ -43,8 +43,21 @@ func TestSymbolSearchRefusesWhateverTheIndexState(t *testing.T) {
 	unwired := Evaluate(strict(Dependencies{}), "grep -r HandleRequest internal/")
 	assert.Empty(t, unwired.Deny, "with no index at all a deny would route nowhere")
 	assert.Equal(t, advisoryPrecedent, unwired.Kind)
-	assert.Contains(t, unwired.Brief, "no symbol index exists yet")
-	assert.Contains(t, unwired.Brief, hint.GraphBuild.With("--silent"))
+	assert.Empty(t, unwired.Brief, "a repeat saying the index is still missing changes nothing, so it goes quiet")
+}
+
+// An advisory not held by its own marker is still not repeated word for word to one
+// caller, and the subagents of a session are each their own caller.
+func TestAdviceRepeatedOncePerCaller(t *testing.T) {
+	t.Parallel()
+	g := hint.NewGate(t.TempDir(), "s")
+	rule := string(advisoryEchoOnSuccess)
+	assert.False(t, adviceRepeated(g, "", rule, "drop the echo"))
+	assert.True(t, adviceRepeated(g, "", rule, "drop the echo"))
+	assert.False(t, adviceRepeated(g, "", rule, "drop the other echo"), "new text is a new fact")
+	assert.False(t, adviceRepeated(g, "a1", rule, "drop the echo"), "a subagent is told for itself")
+	assert.False(t, adviceRepeated(g, "", string(advisorySourceRead), "x"), "an enrolled advisory is its gate's to hold")
+	assert.False(t, adviceRepeated(g, "", string(advisorySourceRead), "x"))
 }
 
 // The property nothing may erode: a DENY carries its whole reason on every invocation,
