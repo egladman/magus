@@ -1,4 +1,4 @@
-package testscript
+package script
 
 import (
 	"os"
@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMain keeps the variables TestAgentRecordsAFailingScript instructs its helper with.
+// TestMain keeps the variables the helper-process tests instruct their helpers with.
 func TestMain(m *testing.M) { testkit.Main(m, "TESTSCRIPT_HELPER_*") }
 
 // fakeClaude records its arguments and prints a canned result; a prompt holding "fail"
@@ -51,17 +51,17 @@ func onPath(t *testing.T, tools map[string]string) {
 	t.Setenv("PATH", strings.Join([]string{w.Root(), "/usr/bin", "/bin"}, string(os.PathListSeparator)))
 }
 
-func readResults(t *testing.T, path string) []Result {
+func readRecords(t *testing.T, path string) []Record {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	var rows []Result
+	var rows []Record
 	for _, line := range strings.Split(strings.TrimSuffix(string(data), "\n"), "\n") {
-		var r Result
+		var r Record
 		require.NoError(t, json.Unmarshal([]byte(line), &r), line)
 		rows = append(rows, r)
 	}
-	slices.SortFunc(rows, func(a, b Result) int { return strings.Compare(a.Task, b.Task) })
+	slices.SortFunc(rows, func(a, b Record) int { return strings.Compare(a.Task, b.Task) })
 	return rows
 }
 
@@ -91,17 +91,17 @@ stdout '^first:home,second$'
 		}))
 }
 
-func TestWithCmdsAddsACommand(t *testing.T) {
+func TestWithCommandsAddsACommand(t *testing.T) {
 	Run(t, scripts(t, map[string]string{"cmd": "hello world\nstdout '^hello world$'\n"}),
-		WithCmds(map[string]func(*TestScript, bool, []string){
-			"hello": func(ts *TestScript, _ bool, args []string) {
-				_, err := ts.Stdout().Write([]byte("hello " + strings.Join(args, " ") + "\n"))
-				ts.Check(err)
+		WithCommands(map[string]Command{
+			"hello": func(s *State, _ bool, args []string) {
+				_, err := s.Stdout().Write([]byte("hello " + strings.Join(args, " ") + "\n"))
+				s.Check(err)
 			},
 		}))
 }
 
-func TestAgentRecordsAPassingScript(t *testing.T) {
+func TestRecorderRecordsAPassingScript(t *testing.T) {
 	onPath(t, map[string]string{"claude": fakeClaude})
 	results := filepath.Join(t.TempDir(), "results.jsonl")
 	dir := scripts(t, map[string]string{"pass": `
@@ -126,20 +126,20 @@ project
 haiku
 `})
 	t.Run("scripts", func(t *testing.T) {
-		Run(t, dir, WithAgent(Agent{Variant: "short", Rep: 2, Results: results}))
+		Run(t, dir, WithAgent(Recorder{Variant: "short", Repetition: 2, File: results}))
 	})
-	assert.Equal(t, []Result{{
-		Variant: "short", Task: "pass", Rep: 2, Pass: true,
+	assert.Equal(t, []Record{{
+		Variant: "short", Task: "pass", Repetition: 2, Pass: true,
 		InputTokens: 20, OutputTokens: 40, CacheReadInputTokens: 60, CacheCreationInputTokens: 80,
 		CostUSD: 0.5, Turns: 6,
-	}}, readResults(t, results))
+	}}, readRecords(t, results))
 }
 
-// TestAgentRecordsAFailingScript runs its failing scripts in a helper process, which
+// TestRecorderRecordsAFailingScript runs its failing scripts in a helper process, which
 // re-runs this binary, so their failure is the helper's and not this test's.
-func TestAgentRecordsAFailingScript(t *testing.T) {
+func TestRecorderRecordsAFailingScript(t *testing.T) {
 	if results := os.Getenv("TESTSCRIPT_HELPER_RESULTS"); results != "" {
-		Run(t, os.Getenv("TESTSCRIPT_HELPER_DIR"), WithAgent(Agent{Variant: "full", Rep: 1, Results: results}))
+		Run(t, os.Getenv("TESTSCRIPT_HELPER_DIR"), WithAgent(Recorder{Variant: "full", Repetition: 1, File: results}))
 		return
 	}
 	onPath(t, map[string]string{"claude": fakeClaude})
@@ -149,27 +149,27 @@ func TestAgentRecordsAFailingScript(t *testing.T) {
 		"claudefails": "agent prompt.txt\nagent-pass\n-- prompt.txt --\nfail the task\n",
 		"neverran":    "exists answer.txt\nagent prompt.txt\nagent-pass\n-- prompt.txt --\ndo the task\n",
 	})
-	cmd := exec.Command(os.Args[0], "-test.run=^TestAgentRecordsAFailingScript$")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestRecorderRecordsAFailingScript$")
 	cmd.Env = append(os.Environ(), "TESTSCRIPT_HELPER_RESULTS="+results, "TESTSCRIPT_HELPER_DIR="+dir)
 	out, err := cmd.CombinedOutput()
 	require.Error(t, err, "%s", out)
 	assert.Contains(t, string(out), "agent: exit status 1")
-	assert.Equal(t, []Result{
+	assert.Equal(t, []Record{
 		{
-			Variant: "full", Task: "checkfails", Rep: 1,
+			Variant: "full", Task: "checkfails", Repetition: 1,
 			InputTokens: 10, OutputTokens: 20, CacheReadInputTokens: 30, CacheCreationInputTokens: 40,
 			CostUSD: 0.25, Turns: 3,
 		},
 		{
-			Variant: "full", Task: "claudefails", Rep: 1,
+			Variant: "full", Task: "claudefails", Repetition: 1,
 			InputTokens: 1, OutputTokens: 2, CacheReadInputTokens: 3, CacheCreationInputTokens: 4,
 			CostUSD: 0.5, Turns: 1,
 		},
-		{Variant: "full", Task: "neverran", Rep: 1},
-	}, readResults(t, results))
+		{Variant: "full", Task: "neverran", Repetition: 1},
+	}, readRecords(t, results))
 }
 
-func TestInstallSkillsCopiesADirectory(t *testing.T) {
+func TestSkillsCopiesADirectory(t *testing.T) {
 	skills := testkit.NewWorkspace(t)
 	skills.Write("magus-run/SKILL.md", "name: magus-run\n")
 	Run(t, scripts(t, map[string]string{"copied": `
@@ -177,10 +177,10 @@ cmp .claude/skills/magus-run/SKILL.md want.md
 
 -- want.md --
 name: magus-run
-`}), WithSetup(InstallSkills(skills.Root())))
+`}), WithSetup(Skills(skills.Root())))
 }
 
-func TestInstallSkillsRunsMagusAgentInstallInWork(t *testing.T) {
+func TestSkillsRunsMagusAgentInstallInWork(t *testing.T) {
 	onPath(t, map[string]string{"magus": "#!/bin/sh\nprintf '%s\\n' \"$@\" > magus.args\n"})
 	Run(t, scripts(t, map[string]string{"installed": `
 cmp magus.args want.args
@@ -191,5 +191,67 @@ install
 --skill-form
 short
 .claude/skills
-`}), WithSetup(InstallSkills("short")))
+`}), WithSetup(Skills("short")))
+}
+
+func TestSkillsCopiesAnExplicitlyRelativeDirectory(t *testing.T) {
+	cwd := testkit.NewWorkspace(t)
+	cwd.Write("skills/magus-run/SKILL.md", "name: magus-run\n")
+	t.Chdir(cwd.Root())
+	Run(t, scripts(t, map[string]string{"copied": `
+cmp .claude/skills/magus-run/SKILL.md want.md
+
+-- want.md --
+name: magus-run
+`}), WithSetup(Skills("./skills")))
+}
+
+// TestSkillsTreatsABareWordAsASkillForm keeps a directory beside the test, named like
+// a skill form, from being copied in its place.
+func TestSkillsTreatsABareWordAsASkillForm(t *testing.T) {
+	cwd := testkit.NewWorkspace(t)
+	cwd.Write("short/magus-run/SKILL.md", "name: magus-run\n")
+	t.Chdir(cwd.Root())
+	onPath(t, map[string]string{"magus": "#!/bin/sh\nprintf '%s\\n' \"$@\" > magus.args\n"})
+	Run(t, scripts(t, map[string]string{"installed": `
+exists magus.args
+! exists .claude/skills/magus-run
+`}), WithSetup(Skills("short")))
+}
+
+func TestRecorderRunsCLAUDE_CODE_EXECPATH(t *testing.T) {
+	onPath(t, nil)
+	cli := testkit.NewWorkspace(t)
+	cli.WriteExecutable("claude-desktop", fakeClaude)
+	results := filepath.Join(t.TempDir(), "results.jsonl")
+	dir := scripts(t, map[string]string{"execpath": "agent prompt.txt\nagent-pass\n-- prompt.txt --\ndo the task\n"})
+	t.Run("scripts", func(t *testing.T) {
+		Run(t, dir,
+			WithSetup(func(e *Env) error {
+				e.Setenv("CLAUDE_CODE_EXECPATH", filepath.Join(cli.Root(), "claude-desktop"))
+				return nil
+			}),
+			WithAgent(Recorder{Variant: "short", Repetition: 1, File: results}))
+	})
+	assert.Equal(t, []Record{{
+		Variant: "short", Task: "execpath", Repetition: 1, Pass: true,
+		InputTokens: 10, OutputTokens: 20, CacheReadInputTokens: 30, CacheCreationInputTokens: 40,
+		CostUSD: 0.25, Turns: 3,
+	}}, readRecords(t, results))
+}
+
+// TestWithAgentRefusesACommandNamedAgent runs Run in a helper process, which re-runs
+// this binary, so the refusal fails the helper and not this test.
+func TestWithAgentRefusesACommandNamedAgent(t *testing.T) {
+	if os.Getenv("TESTSCRIPT_HELPER_COLLIDE") != "" {
+		Run(t, t.TempDir(),
+			WithCommands(map[string]Command{"agent": func(*State, bool, []string) {}}),
+			WithAgent(Recorder{File: filepath.Join(t.TempDir(), "results.jsonl")}))
+		return
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWithAgentRefusesACommandNamedAgent$")
+	cmd.Env = append(os.Environ(), "TESTSCRIPT_HELPER_COLLIDE=1")
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "%s", out)
+	assert.Contains(t, string(out), `script: WithAgent and WithCommands both define the "agent" command`)
 }

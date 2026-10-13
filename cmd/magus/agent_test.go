@@ -17,7 +17,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/libs/testkit"
-	"github.com/egladman/magus/libs/testkit/testscript"
+	"github.com/egladman/magus/libs/testkit/script"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -623,8 +623,9 @@ func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
 }
 
 // agentEvalEnv is read at package initialization because TestMain replaces the
-// environment with an isolated one before any test runs. The claude credentials are
-// the only variables the agent gets from the caller's environment.
+// environment with an isolated one before any test runs. The claude credentials and
+// CLAUDE_CODE_EXECPATH are the only variables the agent gets from the caller's
+// environment.
 var agentEvalEnv = func() map[string]string {
 	env := map[string]string{}
 	for _, name := range []string{
@@ -634,6 +635,7 @@ var agentEvalEnv = func() map[string]string {
 		"MAGUS_AGENT_EVAL_RESULTS",
 		"CLAUDE_CODE_OAUTH_TOKEN",
 		"ANTHROPIC_API_KEY",
+		"CLAUDE_CODE_EXECPATH",
 	} {
 		if v, ok := os.LookupEnv(name); ok {
 			env[name] = v
@@ -643,25 +645,43 @@ var agentEvalEnv = func() map[string]string {
 }()
 
 // TestAgentEval runs every testdata/agenteval task with a real claude, once per skill
-// variant and rep, and appends one row per run to MAGUS_AGENT_EVAL_RESULTS (default
-// magus-agenteval.jsonl in the temp dir). It spends tokens, so it skips unless
-// MAGUS_AGENT_EVAL=1.
+// variant and repetition, and appends one row per run to MAGUS_AGENT_EVAL_RESULTS, an
+// absolute path (default magus-agenteval.jsonl in the temp dir). It spends tokens, so it
+// skips unless MAGUS_AGENT_EVAL=1.
 //
-// MAGUS_AGENT_EVAL_VARIANTS is a comma-separated list of skill forms or skills
+// MAGUS_AGENT_EVAL_VARIANTS is a comma-separated list of skill forms or absolute skills
 // directories (default full,short); MAGUS_AGENT_EVAL_REPS is the runs per variant
-// (default 1).
+// (default 1). The test runs in cmd/magus, so it refuses a relative path rather than
+// resolve it there.
 func TestAgentEval(t *testing.T) {
 	if agentEvalEnv["MAGUS_AGENT_EVAL"] != "1" {
 		t.Skip("MAGUS_AGENT_EVAL=1 runs the agent eval, which spends tokens")
 	}
-	variants := strings.Split(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_VARIANTS"], "full,short"), ",")
+	var variants []string
+	for _, v := range strings.Split(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_VARIANTS"], "full,short"), ",") {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if strings.ContainsRune(v, filepath.Separator) && !filepath.IsAbs(v) {
+			t.Fatalf("MAGUS_AGENT_EVAL_VARIANTS: %q: a skills directory must be an absolute path", v)
+		}
+		variants = append(variants, v)
+	}
+	require.NotEmpty(t, variants, "MAGUS_AGENT_EVAL_VARIANTS names no variant")
 	reps, err := strconv.Atoi(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_REPS"], "1"))
 	require.NoError(t, err, "MAGUS_AGENT_EVAL_REPS")
+	if reps <= 0 {
+		t.Fatalf("MAGUS_AGENT_EVAL_REPS: %d: want at least 1", reps)
+	}
 	results := cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_RESULTS"], filepath.Join(os.TempDir(), "magus-agenteval.jsonl"))
+	if !filepath.IsAbs(results) {
+		t.Fatalf("MAGUS_AGENT_EVAL_RESULTS: %q: want an absolute path", results)
+	}
 	t.Logf("results: %s", results)
 
-	auth := testscript.WithSetup(func(e *testscript.Env) error {
-		for _, name := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"} {
+	passEnv := script.WithSetup(func(e *script.Env) error {
+		for _, name := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_EXECPATH"} {
 			if v := agentEvalEnv[name]; v != "" {
 				e.Setenv(name, v)
 			}
@@ -671,10 +691,10 @@ func TestAgentEval(t *testing.T) {
 	for _, variant := range variants {
 		for rep := 1; rep <= reps; rep++ {
 			t.Run(fmt.Sprintf("%s/%d", filepath.Base(variant), rep), func(t *testing.T) {
-				testscript.Run(t, filepath.Join("testdata", "agenteval"),
-					auth,
-					testscript.WithSetup(testscript.InstallSkills(variant)),
-					testscript.WithAgent(testscript.Agent{Variant: variant, Rep: rep, Results: results}))
+				script.Run(t, filepath.Join("testdata", "agenteval"),
+					passEnv,
+					script.WithSetup(script.Skills(variant)),
+					script.WithAgent(script.Recorder{Variant: variant, Repetition: rep, File: results}))
 			})
 		}
 	}
