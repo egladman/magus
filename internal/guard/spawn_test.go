@@ -1,6 +1,7 @@
 package guard
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -151,5 +152,144 @@ func TestSpawnIsAdvisedWhenTheCheckoutIsAlreadyHeld(t *testing.T) {
 	t.Run("it fires once per session", func(t *testing.T) {
 		again := adviseSharedCheckoutSpawn(ctx, gate, at).Say
 		assert.NotEqual(t, note, again, "the full text is spent once; a brief line is what repeats")
+	})
+}
+
+// A spawn_agent call reaches the guard as the payload a Codex PreToolUse writes: the
+// prompt is `message` (or text `items`), and there is no `prompt` key.
+func TestDecodeHookEnvelopeSpawnCodex(t *testing.T) {
+	t.Parallel()
+
+	const envelope = `{"session_id":"019e4c21-7d5a-7c11-9a0e-3f5b1c2d4e60","turn_id":"019e4c21-8a10-7a52-b6a1-0d2e9c1f7b33",` +
+		`"transcript_path":"/Users/dev/.codex/sessions/2026/10/13/rollout-2026-10-13T09-14-02-019e4c21.jsonl","cwd":"/Users/dev/repo",` +
+		`"hook_event_name":"PreToolUse","model":"gpt-5.5","permission_mode":"default","tool_name":"spawn_agent",` +
+		`"tool_input":%s,"tool_use_id":"call_Qx8aTz1uJm"}`
+
+	for name, tc := range map[string]struct {
+		input string
+		want  hookRequest
+	}{
+		"v1 message": {
+			`{"message":"Read internal/guard/spawn.go and report the exported names.","agent_type":"explorer","model":"gpt-5.5","reasoning_effort":"low","fork_context":false}`,
+			hookRequest{
+				Value: "Read internal/guard/spawn.go and report the exported names.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "explorer", DeclaredModel: "gpt-5.5", Spawn: spawnFields{AgentType: "explorer"},
+			},
+		},
+		"v1 items": {
+			`{"items":[{"type":"text","text":"Run the tests."},{"type":"skill","name":"magus-run","path":"/skills/magus-run/SKILL.md"},{"type":"text","text":"Report failures."}],"agent_type":"worker"}`,
+			hookRequest{
+				Value: "Run the tests.\nReport failures.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "worker", Spawn: spawnFields{AgentType: "worker"},
+			},
+		},
+		"v2 task_name": {
+			`{"task_name":"audit_guard","message":"Audit internal/guard.","agent_type":"explorer","fork_turns":"none"}`,
+			hookRequest{
+				Value: "Audit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "explorer", Spawn: spawnFields{AgentType: "explorer", Name: "audit_guard"},
+			},
+		},
+		"v2 named only": {
+			`{"task_name":"audit_guard","message":"Audit internal/guard."}`,
+			hookRequest{
+				Value: "Audit internal/guard.", IsSpawn: true, Tool: "spawn_agent",
+				Child: "audit_guard", Spawn: spawnFields{Name: "audit_guard"},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, ok := decodeHookEnvelope(fmt.Sprintf(envelope, tc.input))
+			require.True(t, ok)
+			tc.want.Cwd = "/Users/dev/repo"
+			tc.want.Who = hookAttribution{
+				Session:    "019e4c21-7d5a-7c11-9a0e-3f5b1c2d4e60",
+				Transcript: "/Users/dev/.codex/sessions/2026/10/13/rollout-2026-10-13T09-14-02-019e4c21.jsonl",
+				Event:      "PreToolUse",
+			}
+			assert.Equal(t, tc.want, req)
+		})
+	}
+
+	t.Run("a bare message is not a spawn", func(t *testing.T) {
+		req, ok := decodeHookEnvelope(fmt.Sprintf(envelope, `{"message":"hello"}`))
+		require.True(t, ok)
+		assert.False(t, req.IsSpawn)
+		assert.True(t, req.NothingToJudge)
+	})
+}
+
+// send_input, send_message and followup_task name their addressee `target`.
+func TestDecodeHookEnvelopeContinueTarget(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		toolInput, message string
+	}{
+		"send_input":    {`{"target":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","message":"Also check the tests.","interrupt":false}`, "Also check the tests."},
+		"followup_task": {`{"target":"/root/audit_guard","message":"Now the hook path."}`, "Now the hook path."},
+		"items":         {`{"target":"/root/audit_guard","items":[{"type":"text","text":"Now the hook path."}]}`, "Now the hook path."},
+		"to":            {`{"to":"brisk-heron","message":"Carry on."}`, "Carry on."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			req, ok := decodeHookEnvelope(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"x","tool_input":` + tc.toolInput + `}`)
+			require.True(t, ok)
+			assert.True(t, req.IsContinue)
+			assert.False(t, req.IsSpawn)
+			assert.Equal(t, tc.message, req.Value)
+			assert.NotEmpty(t, req.Target)
+		})
+	}
+
+	t.Run("a target with no message is not a continuation", func(t *testing.T) {
+		req, ok := decodeHookEnvelope(`{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"close_agent","tool_input":{"target":"/root/audit_guard"}}`)
+		require.True(t, ok)
+		assert.False(t, req.IsContinue)
+		assert.True(t, req.NothingToJudge)
+	})
+}
+
+// Cursor loads a skill by reading its SKILL.md, so the read is the load, and a write to
+// the same path is not.
+func TestDecodeHookEnvelopeSkillRead(t *testing.T) {
+	t.Parallel()
+
+	const skillPath = "/Users/dev/repo/.cursor/skills/magus-multi-agent/SKILL.md"
+	decode := func(t *testing.T, toolInput string) hookRequest {
+		t.Helper()
+		req, ok := decodeHookEnvelope(`{"conversation_id":"c1","session_id":"c1","hook_event_name":"preToolUse","tool_name":"Read","tool_input":` + toolInput + `}`)
+		require.True(t, ok)
+		return req
+	}
+
+	t.Run("a read of a SKILL.md", func(t *testing.T) {
+		req := decode(t, `{"file_path":"`+skillPath+`"}`)
+		assert.Equal(t, "magus-multi-agent", req.LoadedSkill)
+		assert.Equal(t, skillPath, req.Value)
+	})
+	t.Run("a bounded read", func(t *testing.T) {
+		assert.Equal(t, "magus-run", decode(t, `{"file_path":"/Users/dev/.agents/skills/magus-run/SKILL.md","offset":1,"limit":40}`).LoadedSkill)
+	})
+	t.Run("a relative path", func(t *testing.T) {
+		assert.Equal(t, "magus-run", decode(t, `{"file_path":"skills/magus-run/SKILL.md"}`).LoadedSkill)
+	})
+	for name, toolInput := range map[string]string{
+		"a write":            `{"file_path":"` + skillPath + `","content":"x"}`,
+		"an edit":            `{"file_path":"` + skillPath + `","old_string":"a","new_string":"b"}`,
+		"a file not named":   `{"file_path":"/Users/dev/repo/.cursor/skills/magus-run/notes.md"}`,
+		"outside skills":     `{"file_path":"/Users/dev/repo/docs/magus-run/SKILL.md"}`,
+		"an invalid name":    `{"file_path":"/Users/dev/repo/skills/Magus Run/SKILL.md"}`,
+		"a nested directory": `{"file_path":"/Users/dev/repo/skills/a/b/SKILL.md"}`,
+	} {
+		t.Run(name+" loads nothing", func(t *testing.T) {
+			assert.Empty(t, decode(t, toolInput).LoadedSkill)
+		})
+	}
+
+	t.Run("it records the load for the session", func(t *testing.T) {
+		g := hint.NewGate(t.TempDir(), "c1")
+		req := decode(t, `{"file_path":"`+skillPath+`"}`)
+		require.True(t, recordSkillLoad(g, req.LoadedSkill))
+		assert.True(t, skillLoaded(g, multiAgentSkill))
 	})
 }

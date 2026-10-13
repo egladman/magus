@@ -1509,7 +1509,13 @@ func envelopeEdits(input map[string]any) []textEdit {
 // their other editors, so the fallback is any `*_path` key rather than a list magus would
 // have to grow per host: `transcript_path` and `cwd` live on the envelope itself, not in
 // tool_input, so nothing here can pick them up.
+//
+// A patch names its files in its own text, so the first of those wins over any key; the
+// rest are [patchWritePaths]'s.
 func envelopeWritePath(input map[string]any) string {
+	if paths := patchWritePaths(envelopePatch(input)); len(paths) > 0 {
+		return paths[0]
+	}
 	if p := envelopeString(input, "file_path"); p != "" {
 		return p
 	}
@@ -1581,6 +1587,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		Agent:      env.AgentID,
 	}}
 	tool := magusToolCall(env.ToolName)
+	spawnPrompt, isSpawn := envelopeSpawn(env.ToolInput)
+	continueTarget, continueMessage, continuesAgent := envelopeContinuation(env.ToolInput)
 	switch {
 	case tool != "":
 		// An MCP call to one of magus's own tools, normalized to the one shape every
@@ -1591,6 +1599,16 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// client and status among them, reaching no rule at all.
 		req.Value = buildCall(tool, env.ToolInput, env.Cwd)
 		req.MCPTool, req.ReadOnlyTool = tool, mcpReadsOnly(tool, env.ToolInput)
+	case envelopeHoldsPatch(env.ToolInput):
+		// A patch is a write, whichever field the host put it in. Ahead of the command arm
+		// because one host sends it as `command`, where it would be judged as a shell line.
+		files := envelopePatch(env.ToolInput)
+		if len(files) == 0 {
+			req.NothingToJudge = true
+			break
+		}
+		req.Value, req.IsPath = files[0].Path, true
+		req.Write = writeFields{Content: patchContent(files)}
 	case envelopeString(env.ToolInput, "command") != "":
 		req.Value = envelopeString(env.ToolInput, "command")
 		req.Description = envelopeString(env.ToolInput, "description")
@@ -1616,6 +1634,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 			ReplaceAll: env.ToolInput["replace_all"] == true,
 			Edits:      envelopeEdits(env.ToolInput),
 		}
+		// A host with no skill tool loads a skill by opening its SKILL.md.
+		req.LoadedSkill = envelopeSkillRead(env.ToolInput)
 	case envelopeString(env.ToolInput, "skill") != "":
 		// A skill load carries nothing to judge; it is recorded so a later spawn can ask
 		// whether the session read the brief. The FIELD name is magus's contract with the
@@ -1623,12 +1643,8 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// in its own matcher.
 		req.LoadedSkill = envelopeString(env.ToolInput, "skill")
 		req.NothingToJudge = true
-	case envelopeString(env.ToolInput, "prompt") != "" || env.Task != "":
-		if p := envelopeString(env.ToolInput, "prompt"); p != "" {
-			req.Value = p
-		} else {
-			req.Value = env.Task
-		}
+	case isSpawn || env.Task != "":
+		req.Value = cmp.Or(spawnPrompt, env.Task)
 		req.IsSpawn = true
 		req.Tool = env.ToolName
 		// The caller's own model choice, when it named one. Absent when the spawn
@@ -1637,9 +1653,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		// all, not so an answer can be graded.
 		req.DeclaredModel = envelopeString(env.ToolInput, "model")
 		req.Spawn = spawnFields{
-			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType),
+			AgentType:   cmp.Or(envelopeString(env.ToolInput, "subagent_type"), env.SubagentType, envelopeString(env.ToolInput, "agent_type")),
 			Description: envelopeString(env.ToolInput, "description"),
-			Name:        envelopeString(env.ToolInput, "name"),
+			Name:        cmp.Or(envelopeString(env.ToolInput, "name"), envelopeString(env.ToolInput, "task_name")),
 			// Only an explicit true: a host whose default is to background agents still
 			// reports false here, because a default is not something the caller asked for.
 			Background: env.ToolInput["run_in_background"] == true,
@@ -1657,7 +1673,9 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		for _, label := range []string{
 			envelopeString(env.ToolInput, "subagent_type"),
 			env.SubagentType,
+			envelopeString(env.ToolInput, "agent_type"),
 			envelopeString(env.ToolInput, "description"),
+			envelopeString(env.ToolInput, "task_name"),
 			env.ToolName,
 		} {
 			if label != "" {
@@ -1665,15 +1683,14 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 				break
 			}
 		}
-	case envelopeString(env.ToolInput, "to") != "" && env.ToolInput["message"] != nil:
+	case continuesAgent:
 		// A message addressed to an agent that already exists: the continuation of a
 		// subagent. Read by shape like every arm above, so a host's name for the tool
 		// stays in its own matcher. The message goes unjudged for the reason a spawn
 		// prompt does, and a structured message has no text to hand the rule.
 		req.IsContinue = true
 		req.Tool = env.ToolName
-		req.Target = envelopeString(env.ToolInput, "to")
-		req.Value = envelopeString(env.ToolInput, "message")
+		req.Target, req.Value = continueTarget, continueMessage
 	default:
 		// A payload that identifies itself as a host hook is an envelope even when its
 		// tool_input holds nothing this guard reads. Reporting "not an envelope" here sent

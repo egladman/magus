@@ -1,8 +1,11 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -90,4 +93,93 @@ func adviseSharedCheckoutSpawn(ctx context.Context, markers hint.Gate, at locati
 			"half-saved, it stops the workspace loading for everybody here at once. " +
 			"A worktree of its own skips the proof, and it is the answer whenever the write paths touch workspace configuration.",
 	}
+}
+
+// spawnShapeKeys are the tool_input fields only a spawn carries. A message with none of
+// them could be any tool's, so it is not read as a spawn.
+var spawnShapeKeys = []string{"agent_type", "task_name", "fork_context", "fork_turns", "reasoning_effort", "model"}
+
+// envelopeSpawn reads the prompt of a spawn by shape, and reports whether tool_input is one.
+//
+// `prompt` is the spelling most hosts use. Another host names it `message`, or sends
+// `items` of text parts, and tells a spawn from a continuation by the absence of an
+// addressee: a call with a target is [envelopeContinuation]'s.
+func envelopeSpawn(input map[string]any) (prompt string, ok bool) {
+	if p := envelopeString(input, "prompt"); p != "" {
+		return p, true
+	}
+	if envelopeTarget(input) != "" {
+		return "", false
+	}
+	_, hasItems := input["items"].([]any)
+	text := cmp.Or(envelopeString(input, "message"), envelopeItemsText(input))
+	if text == "" && !hasItems {
+		return "", false
+	}
+	if !hasItems && !slices.ContainsFunc(spawnShapeKeys, func(k string) bool { _, present := input[k]; return present }) {
+		return "", false
+	}
+	return text, true
+}
+
+// envelopeTarget is the agent a call addresses: `to` on one host, `target` on another.
+func envelopeTarget(input map[string]any) string {
+	return cmp.Or(envelopeString(input, "to"), envelopeString(input, "target"))
+}
+
+// envelopeContinuation reads a message to an agent that already exists, with the text it
+// carries. A structured message has no text to hand a rule, so it yields "".
+func envelopeContinuation(input map[string]any) (target, message string, ok bool) {
+	target = envelopeTarget(input)
+	if target == "" {
+		return "", "", false
+	}
+	_, hasItems := input["items"].([]any)
+	if input["message"] == nil && !hasItems {
+		return "", "", false
+	}
+	return target, cmp.Or(envelopeString(input, "message"), envelopeItemsText(input)), true
+}
+
+// envelopeItemsText joins the text parts of an `items` list, the form a host uses to hand
+// a prompt as parts rather than as one string. A part that is not text carries none.
+func envelopeItemsText(input map[string]any) string {
+	list, _ := input["items"].([]any)
+	var parts []string
+	for _, item := range list {
+		fields, _ := item.(map[string]any)
+		if text := envelopeString(fields, "text"); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// writeShapeKeys are the tool_input fields only a write carries. The envelope cannot tell
+// a read from a write by tool, so a call holding any of them is never a read.
+var writeShapeKeys = []string{
+	"content", "contents", "old_string", "new_string", "old_str", "new_str", "edits",
+	"replace_all", "patch", "patchText", "command", "text", "insert_text",
+}
+
+// envelopeSkillRead is the skill a call reads by opening its SKILL.md, or "".
+//
+// A host that loads a skill by reading the file has no skill tool to report it, so the
+// read is the load. Only `.../skills/<name>/SKILL.md` counts, and only from a call that
+// names nothing to write: a write to that path loads nothing.
+func envelopeSkillRead(input map[string]any) string {
+	for _, key := range writeShapeKeys {
+		if _, present := input[key]; present {
+			return ""
+		}
+	}
+	rest, ok := strings.CutSuffix(filepath.ToSlash(envelopeWritePath(input)), "/SKILL.md")
+	if !ok {
+		return ""
+	}
+	dir, name := path.Split(rest)
+	if !strings.HasSuffix("/"+dir, "/skills/") || !isSkillName(name) {
+		return ""
+	}
+	return name
 }
