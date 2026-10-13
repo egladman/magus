@@ -1,17 +1,17 @@
 ---
 title: "voice-drift"
-description: "An advisory by default: it explains, and blocks nothing, on a text whose style measures outside its author's own range on two or more features of a voice file."
+description: "An advisory by default: it explains, and blocks nothing, on a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's."
 tags: [proofread, rules, voice-drift, advise]
 aliases: [reference/prose/voice-drift]
 ---
 
 # voice-drift
 
-An advisory by default: it explains, and blocks nothing, on a text whose style measures outside its author's own range on two or more features of a voice file.
+An advisory by default: it explains, and blocks nothing, on a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's.
 
 ## What it catches
 
-A text whose style measures outside its author's own range on two or more features of a voice file.
+A draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's.
 
 ## Dimension
 
@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Runs only with a voice file, which proofread voice build measures from the author's own texts. A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one text in five drifts on any one feature by construction, and a finding needs two. A study of one author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 commits: two or more features over p90 fired on 9 percent of that author's descriptions against 66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of commits. Those rates are in-sample and count only features over p90, while the rule counts a feature under p10 too, so on the same texts it fires at least that often, on the author's and the agent's alike. No firing has been labeled, so the rule advises.
+Runs only with a voice file, which proofread voice build measures from the author's own texts, 1,000 words or more of a kind, shuffled and pooled into windows of 200 words or more. A draft of 200 words or more is ranked against those windows on commas, parentheses, colons, semicolons, "I", "and", repeated part-of-speech 4-grams, part-of-speech compression and participial clauses, each only in the direction agent drafts move, and the ranks combine by Fisher's method. The cut lets 5 percent of the author's own windows, each scored against the rest, past it. A commit message is held to its subject's length instead. A study of one author, 2026-10-13, flagged 96 to 100 percent of agent drafts at 0 to 6 percent false alarms on the author's held-out 2018-24 text, and the subject rule 84.8 percent of agent commits at 6.0 percent. It caught 11 to 32 percent of light agent edits of the author's own text, so the rule detects agent drafts, not edits. No firing has been labeled, so the rule advises.
 
 ## Default decision
 

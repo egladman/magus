@@ -1,6 +1,7 @@
 package proofread
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,79 +10,32 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
-
-// RuleVoiceDrift reports a text whose style measures outside its author's own
-// range on two or more features of a [Voice].
-const RuleVoiceDrift Rule = "voice-drift"
 
 // VoiceSchema names the shape of a voice file, so a file written by another
 // version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/1"
+const VoiceSchema = "proofread-voice/2"
 
-// MinVoiceTexts is the fewest texts of one kind a [Voice] sets ranges from.
-// Under it the kind keeps its counts, and voice-drift stays silent on it.
+// olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
+// in one is refused with the command that rebuilds it.
+var olderVoiceSchemas = []string{"proofread-voice/1"}
+
+// MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
+// rule from.
 const MinVoiceTexts = 30
 
-// minFeatureTexts is the fewest texts that must measure a feature for its range
-// to be kept: a feature with a guard, such as one that needs 30 words, may be
-// measured on few of a kind's texts.
-const minFeatureTexts = 10
+// MinVoiceWords is the fewest words of one kind a [Voice] builds a reference
+// from. Under it the kind keeps its counts, and voice-drift abstains on it.
+const MinVoiceWords = 1000
 
-// Feature names one measurement of a text's style. Every feature is a number
-// computed from the text alone: no feature records a word the text chose,
-// its spelling or its casing.
+// Feature names one measurement voice-drift ranks a draft on, by its JSON
+// path in [Shape]: a number by its name, a map entry as "<map>.<key>".
 type Feature string
 
-const (
-	// FeatureWords counts the prose words.
-	FeatureWords Feature = "words"
-	// FeatureSentenceWords is the mean words per sentence, over texts of three
-	// sentences or more.
-	FeatureSentenceWords Feature = "sentence_words"
-	// FeatureParagraphWords counts the words of the longest paragraph or list
-	// item, over texts of two paragraphs or more: in one paragraph it is
-	// [FeatureWords] again.
-	FeatureParagraphWords Feature = "paragraph_words"
-	// FeaturePunctuation is colons, opening parentheses and dashes per 100
-	// words, over texts of 30 words or more. Semicolons are left out: a commit
-	// subject joins its clauses with one by house rule.
-	FeaturePunctuation Feature = "punctuation"
-	// FeatureCodeSpans is backticked spans per 100 words, over texts of 30
-	// words or more.
-	FeatureCodeSpans Feature = "code_spans"
-	// FeatureContractions is contractions per 100 words, over texts of 60
-	// words or more.
-	FeatureContractions Feature = "contractions"
-	// FeatureFormatting counts headings and bold spans.
-	FeatureFormatting Feature = "formatting"
-	// FeatureMarkerWords is its, every, one, with, all, and, the per 100
-	// words, over texts of 30 words or more: the function words agent text
-	// leans on.
-	FeatureMarkerWords Feature = "marker_words"
-	// FeatureSubjectChars counts a commit subject's characters.
-	FeatureSubjectChars Feature = "subject_chars"
+var (
+	boldSpan   = regexp.MustCompile(`\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__`)
+	spacedDash = regexp.MustCompile(`\s--?\s|\x{2014}|\x{2013}`)
 )
-
-// features is every feature in the order a finding names them.
-var features = []Feature{
-	FeatureWords, FeatureSubjectChars, FeatureSentenceWords, FeatureParagraphWords, FeaturePunctuation,
-	FeatureCodeSpans, FeatureContractions, FeatureFormatting, FeatureMarkerWords,
-}
-
-var featureLabels = map[Feature]string{
-	FeatureWords:          "words",
-	FeatureSubjectChars:   "subject characters",
-	FeatureSentenceWords:  "words per sentence",
-	FeatureParagraphWords: "words in the longest paragraph",
-	FeaturePunctuation:    "colons, parentheses and dashes per 100 words",
-	FeatureCodeSpans:      "code spans per 100 words",
-	FeatureContractions:   "contractions per 100 words",
-	FeatureFormatting:     "headings and bold",
-	FeatureMarkerWords:    "its/every/one/with/all/and/the per 100 words",
-}
 
 // labelAuthor marks a case file section of an author's own texts. It holds no
 // case: its texts build the [Voice] every case in its file is judged with.
@@ -104,16 +58,9 @@ func voiceOf(k Kind) Kind {
 	return k
 }
 
-var voicePlurals = map[Kind]string{
-	KindChangeDescription: "change descriptions",
-	KindReviewReply:       "review comments",
-	KindCommitMessage:     "commit messages",
-	KindIssue:             "issues",
-}
-
 // Voice is one author's measured style per kind of text. It holds aggregates
-// alone: counts, rates and percentiles, never a text, a word the author chose
-// or a path.
+// alone: counts, rates and window measures, never a text, a word the author
+// chose or a path.
 type Voice struct {
 	Schema string             `json:"schema"`
 	Kinds  map[Kind]KindVoice `json:"kinds"`
@@ -128,17 +75,26 @@ type KindVoice struct {
 	// reports.
 	FirstPerson float64 `json:"first_person_per_1000"`
 	Future      float64 `json:"future_per_1000"`
-	// Ranges holds each feature measured on enough texts, and none when the
-	// kind has under [MinVoiceTexts] texts.
-	Ranges map[Feature]Range `json:"ranges,omitempty"`
+	// Windows is the reference voice-drift ranks a draft of the kind against.
+	// It is nil on commit messages, under [MinVoiceWords] words, and when no
+	// window measured two features.
+	Windows *Windows `json:"windows,omitempty"`
+	// SubjectP95 is the 95th percentile, in characters, of the author's
+	// commit subjects. It is set on commit messages of [MinVoiceWords] words
+	// or more, and 0 otherwise.
+	SubjectP95 float64 `json:"subject_chars_p95,omitempty"`
 }
 
-// Range is a feature's spread over the texts that measured it.
-type Range struct {
-	Texts int     `json:"texts"`
-	P10   float64 `json:"p10"`
-	P50   float64 `json:"p50"`
-	P90   float64 `json:"p90"`
+// Windows is what an author's texts of one kind measure when shuffled and
+// pooled into windows of 200 words or more.
+type Windows struct {
+	Count int `json:"count"`
+	// Values holds each feature's value on every window that measured it,
+	// sorted ascending.
+	Values map[Feature][]float64 `json:"values"`
+	// Cut is the Fisher statistic a draft must exceed to drift. Each window
+	// scored against the others exceeds it on 5% of the windows or fewer.
+	Cut float64 `json:"cut"`
 }
 
 // The rates per 1000 words at which a voice relaxes the tense rule: an author
@@ -152,10 +108,12 @@ const (
 	tenseFutureFloor      = 2.0
 )
 
-// BuildVoice measures texts, keyed by kind, into a [Voice]. A kind outside
-// change-description, review-reply, commit-message and issue is an error, and
-// so are texts with no prose word among them. A text with no prose word is not
-// counted.
+// BuildVoice measures texts, keyed by kind, into a [Voice]. A kind of
+// [MinVoiceWords] words or more gets a reference: the commit subjects' 95th
+// percentile for commit messages, and [Windows] for the other kinds. A kind
+// outside change-description, review-reply, commit-message and issue is an
+// error, and so are texts with no prose word among them. A text with no prose
+// word is not counted.
 func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{}}
 
@@ -164,24 +122,23 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 			return nil, fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
 		}
 
-		k, measured := KindVoice{}, map[Feature][]float64{}
-
-		var firstPerson, future int
+		var (
+			k                   KindVoice
+			kept                []string
+			firstPerson, future int
+		)
 
 		for _, text := range list {
-			s := measureStyle(text, kind)
-			if s.words == 0 {
+			words, fp, fut := tenseCounts(text, kind)
+			if words == 0 {
 				continue
 			}
 
 			k.Texts++
-			k.Words += s.words
-			firstPerson += s.firstPerson
-			future += s.future
-
-			for f, value := range s.features {
-				measured[f] = append(measured[f], value)
-			}
+			k.Words += words
+			firstPerson += fp
+			future += fut
+			kept = append(kept, text)
 		}
 
 		if k.Texts == 0 {
@@ -191,8 +148,12 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 		k.FirstPerson = round2(1000 * float64(firstPerson) / float64(k.Words))
 		k.Future = round2(1000 * float64(future) / float64(k.Words))
 
-		if k.Texts >= MinVoiceTexts {
-			k.Ranges = ranges(measured)
+		switch {
+		case k.Words < MinVoiceWords:
+		case kind == KindCommitMessage:
+			k.SubjectP95 = subjectP95(kept)
+		default:
+			k.Windows = buildWindows(kind, kept)
 		}
 
 		v.Kinds[kind] = k
@@ -205,24 +166,27 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 	return v, nil
 }
 
-func ranges(measured map[Feature][]float64) map[Feature]Range {
-	out := map[Feature]Range{}
+// tenseCounts returns text's prose words and its counts of the first-person
+// singular and the future tense, read as kind.
+func tenseCounts(text string, kind Kind) (words, firstPersons, futures int) {
+	paras := readKind(text, kind)
 
-	for f, values := range measured {
-		if len(values) < minFeatureTexts {
+	words = measure(paras).Words
+	if words == 0 {
+		return 0, 0, 0
+	}
+
+	for _, para := range paras {
+		if para.head.heading {
 			continue
 		}
 
-		slices.Sort(values)
-		out[f] = Range{
-			Texts: len(values),
-			P10:   round2(percentile(values, 0.1)),
-			P50:   round2(percentile(values, 0.5)),
-			P90:   round2(percentile(values, 0.9)),
-		}
+		prose := maskSpans(para.text)
+		firstPersons += len(firstPerson.FindAllString(prose, -1))
+		futures += len(future.FindAllString(prose, -1))
 	}
 
-	return out
+	return words, firstPersons, futures
 }
 
 // percentile interpolates between the closest ranks of sorted, which holds at
@@ -238,11 +202,35 @@ func percentile(sorted []float64, p float64) float64 {
 	return sorted[lo] + (rank-float64(lo))*(sorted[lo+1]-sorted[lo])
 }
 
-// ReadVoice decodes a voice file. A schema other than [VoiceSchema], a field,
-// kind or feature proofread does not know, or a range whose p10 exceeds its
-// p90 is an error.
+// ReadVoice decodes a voice file. A schema an earlier proofread wrote is an
+// error that names `proofread voice build`, which rebuilds the file. So is
+// any other schema than [VoiceSchema], a field, kind or feature proofread does
+// not know, a feature voice-drift does not rank on its kind, unsorted window
+// values, more of them than windows, a negative cut or subject length, and a
+// reference on a kind that cannot hold it.
 func ReadVoice(r io.Reader) (*Voice, error) {
-	dec := json.NewDecoder(r)
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var head struct {
+		Schema string `json:"schema"`
+	}
+
+	if err := json.Unmarshal(data, &head); err != nil {
+		return nil, err
+	}
+
+	switch {
+	case slices.Contains(olderVoiceSchemas, head.Schema):
+		return nil, fmt.Errorf("schema %q is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file",
+			head.Schema)
+	case head.Schema != VoiceSchema:
+		return nil, fmt.Errorf("schema %q is not %s", head.Schema, VoiceSchema)
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 
 	var v Voice
@@ -250,27 +238,45 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 		return nil, err
 	}
 
-	if v.Schema != VoiceSchema {
-		return nil, fmt.Errorf("schema %q is not %s", v.Schema, VoiceSchema)
-	}
-
 	for kind, k := range v.Kinds {
-		if !slices.Contains(voiceKinds, kind) {
-			return nil, fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
-		}
-
-		for f, r := range k.Ranges {
-			if !slices.Contains(features, f) {
-				return nil, fmt.Errorf("%s: unknown feature %q", kind, f)
-			}
-
-			if r.P10 > r.P90 {
-				return nil, fmt.Errorf("%s: %s has p10 %v over p90 %v", kind, f, r.P10, r.P90)
-			}
+		if err := checkKindVoice(kind, k); err != nil {
+			return nil, err
 		}
 	}
 
 	return &v, nil
+}
+
+func checkKindVoice(kind Kind, k KindVoice) error {
+	switch {
+	case !slices.Contains(voiceKinds, kind):
+		return fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
+	case k.SubjectP95 < 0:
+		return fmt.Errorf("%s: subject length %v is negative", kind, k.SubjectP95)
+	case k.SubjectP95 > 0 && kind != KindCommitMessage:
+		return fmt.Errorf("%s: only commit messages keep a subject length", kind)
+	case k.Windows == nil:
+		return nil
+	case kind == KindCommitMessage:
+		return fmt.Errorf("%s: commit messages keep no windows", kind)
+	case k.Windows.Cut < 0:
+		return fmt.Errorf("%s: cut %v is negative", kind, k.Windows.Cut)
+	}
+
+	ranked := rankedFeatures(kind)
+
+	for f, values := range k.Windows.Values {
+		switch {
+		case !slices.ContainsFunc(ranked, func(r voiceFeature) bool { return r.name == f }):
+			return fmt.Errorf("%s: unknown feature %q", kind, f)
+		case len(values) > k.Windows.Count:
+			return fmt.Errorf("%s: %s has %d values for %d windows", kind, f, len(values), k.Windows.Count)
+		case !slices.IsSorted(values):
+			return fmt.Errorf("%s: %s values are not sorted", kind, f)
+		}
+	}
+
+	return nil
 }
 
 // RelaxesTense reports whether v holds the tense rule to advice on change
@@ -295,167 +301,6 @@ func WithVoice(v *Voice) Option { return func(o *options) { o.voice = v } }
 // relaxes reports whether v turns rule's deny into advice on kind.
 func (v *Voice) relaxes(rule Rule, kind Kind) bool {
 	return rule == RuleTense && kind == KindChangeDescription && v.RelaxesTense()
-}
-
-var voiceChecks = []check{
-	{rule: RuleVoiceDrift, on: voiceJudged, advise: voiceJudged, judge: voiceDrift},
-}
-
-var voiceTexts = map[Rule]ruleText{
-	RuleVoiceDrift: {
-		code:      "PRF1040",
-		dimension: DimensionStance,
-		catches:   "a text whose style measures outside its author's own range on two or more features of a voice file",
-		why: "Runs only with a voice file, which proofread voice build measures from the author's own texts. " +
-			"A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one " +
-			"text in five drifts on any one feature by construction, and a finding needs two. A study of one " +
-			"author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 " +
-			"commits: two or more features over p90 fired on 9 percent of that author's descriptions against " +
-			"66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of " +
-			"commits. Those rates are in-sample and count only features over p90, while the rule counts a " +
-			"feature under p10 too, so on the same texts it fires at least that often, on the author's and the " +
-			"agent's alike. No firing has " +
-			"been labeled, so the rule advises.",
-	},
-}
-
-// voiceDrift reports, once per text, every feature that measures outside the
-// author's range, when two or more do.
-func voiceDrift(in input) []Finding {
-	if in.opts.voice == nil {
-		return nil
-	}
-
-	k, ok := in.opts.voice.Kinds[voiceOf(in.kind)]
-	if !ok || len(k.Ranges) == 0 {
-		return nil
-	}
-
-	s := measureStyle(strings.Join(in.source, "\n"), voiceOf(in.kind))
-
-	var drifts []string
-
-	for _, f := range features {
-		r, ranged := k.Ranges[f]
-		value, measured := s.features[f]
-
-		switch {
-		case !ranged || !measured:
-		case value > r.P90:
-			drifts = append(drifts, fmt.Sprintf("%s %s above your %s-%s", featureLabels[f], number(value), number(r.P10), number(r.P90)))
-		case value < r.P10:
-			drifts = append(drifts, fmt.Sprintf("%s %s below your %s-%s", featureLabels[f], number(value), number(r.P10), number(r.P90)))
-		}
-	}
-
-	if len(drifts) < 2 {
-		return nil
-	}
-
-	return []Finding{{
-		Message: fmt.Sprintf("Reads unlike your own %s: %s. Read it against how you write.",
-			voicePlurals[voiceOf(in.kind)], strings.Join(drifts, ", ")),
-	}}
-}
-
-func number(f float64) string { return fmt.Sprint(round2(f)) }
-
-// styleSample is what one text measures: its words, its counts of the first
-// person and the future tense, and each feature whose guard it meets.
-type styleSample struct {
-	words, firstPerson, future int
-	features                   map[Feature]float64
-}
-
-var (
-	boldSpan   = regexp.MustCompile(`\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__`)
-	spacedDash = regexp.MustCompile(`\s--?\s|\x{2014}|\x{2013}`)
-	// contraction counts n't, 're, 've, 'll, 'm and 'd, and 's only after a
-	// pronoun, where it is no possessive.
-	contraction = regexp.MustCompile(`(?i)\b(?:\w+n['\x{2019}]t|\w+['\x{2019}](?:re|ve|ll|m|d)|` +
-		`(?:it|that|there|here|what|who|he|she|let)['\x{2019}]s)\b`)
-	markerWords = wordSet("its", "every", "one", "with", "all", "and", "the")
-)
-
-// measureStyle measures text read as kind, from the prose [Measure] reads and
-// split into sentences as it splits them.
-func measureStyle(text string, kind Kind) styleSample {
-	paras := readKind(text, kind)
-	m := measure(paras)
-	s := styleSample{words: m.Words, features: map[Feature]float64{}}
-
-	if m.Words == 0 {
-		return s
-	}
-
-	var paragraphCount, longest, punctuation, spans, contractions, formatting, markers int
-
-	for _, para := range paras {
-		formatting += len(boldSpan.FindAllString(para.text, -1))
-
-		if para.head.heading {
-			formatting++
-
-			continue
-		}
-
-		spans += len(anySpan.FindAllString(para.text, -1))
-		prose := maskSpans(para.text)
-
-		n := 0
-
-		for _, token := range strings.Fields(prose) {
-			if !strings.ContainsFunc(token, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
-				continue
-			}
-
-			n++
-
-			if markerWords[strings.ToLower(strings.TrimFunc(token, func(r rune) bool { return !unicode.IsLetter(r) }))] {
-				markers++
-			}
-		}
-
-		if n > 0 {
-			paragraphCount++
-		}
-
-		longest = max(longest, n)
-		punctuation += strings.Count(prose, ":") + strings.Count(prose, "(") + len(spacedDash.FindAllString(prose, -1))
-		contractions += len(contraction.FindAllString(prose, -1))
-		s.firstPerson += len(firstPerson.FindAllString(prose, -1))
-		s.future += len(future.FindAllString(prose, -1))
-	}
-
-	per100 := func(n int) float64 { return round2(100 * float64(n) / float64(m.Words)) }
-
-	s.features[FeatureWords] = float64(m.Words)
-	s.features[FeatureFormatting] = float64(formatting)
-
-	if paragraphCount >= 2 {
-		s.features[FeatureParagraphWords] = float64(longest)
-	}
-
-	if kind == KindCommitMessage {
-		subject, _, _ := strings.Cut(text, "\n")
-		s.features[FeatureSubjectChars] = float64(utf8.RuneCountInString(strings.TrimSpace(subject)))
-	}
-
-	if m.Sentences >= 3 {
-		s.features[FeatureSentenceWords] = m.SentenceWordsMean
-	}
-
-	if m.Words >= 30 {
-		s.features[FeaturePunctuation] = per100(punctuation)
-		s.features[FeatureCodeSpans] = per100(spans)
-		s.features[FeatureMarkerWords] = per100(markers)
-	}
-
-	if m.Words >= 60 {
-		s.features[FeatureContractions] = per100(contractions)
-	}
-
-	return s
 }
 
 func kindList(kinds []Kind) string {

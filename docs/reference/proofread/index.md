@@ -27,22 +27,22 @@ Each rule also has a dimension, the cost its findings name to the reader:
 
 ## Shape
 
-| Rule                                        | Code    | Dimension   | Default        | Catches                                                                                               |
-| ------------------------------------------- | ------- | ----------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| [lead-context](lead-context.md)             | PRF1001 | structure   | deny           | a change description that does not open with a paragraph naming what a reader can now do              |
-| [reply-voice](reply-voice.md)               | PRF1002 | structure   | varies by kind | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label     |
-| [second-person](second-person.md)           | PRF1003 | conventions | off            | we, us, our or ours in a guide, which speaks to the reader as you                                     |
-| [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                |
-| [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making") |
-| [subject-length](subject-length.md)         | PRF1011 | structure   | deny           | a commit subject over 100 bytes                                                                       |
-| [subject-period](subject-period.md)         | PRF1012 | conventions | deny           | a commit subject ending in a period                                                                   |
-| [body-separator](body-separator.md)         | PRF1013 | structure   | deny           | a commit body that starts on the line after the subject                                               |
-| [issue-repro](issue-repro.md)               | PRF1020 | evidence    | off            | a bug report with neither what happened against what was expected, nor steps to reproduce it          |
-| [changelog-heading](changelog-heading.md)   | PRF1030 | conventions | off            | a changelog version heading that is not "## [version] - date" or "## [Unreleased]"                    |
-| [changelog-group](changelog-group.md)       | PRF1031 | conventions | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                |
-| [changelog-entry](changelog-entry.md)       | PRF1032 | stance      | advise         | a changelog entry that names a Go identifier and says little else                                     |
-| [voice-drift](voice-drift.md)               | PRF1040 | stance      | advise         | a text whose style measures outside its author's own range on two or more features of a voice file    |
-| [suppression-unused](suppression-unused.md) | PRF1090 | evidence    | deny           | a suppression comment that gives no reason or that matched no finding                                 |
+| Rule                                        | Code    | Dimension   | Default        | Catches                                                                                                                                                   |
+| ------------------------------------------- | ------- | ----------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [lead-context](lead-context.md)             | PRF1001 | structure   | deny           | a change description that does not open with a paragraph naming what a reader can now do                                                                  |
+| [reply-voice](reply-voice.md)               | PRF1002 | structure   | varies by kind | text that answers a prompt the reader never saw: a reply opener, a bold-label item, a stock label                                                         |
+| [second-person](second-person.md)           | PRF1003 | conventions | off            | we, us, our or ours in a guide, which speaks to the reader as you                                                                                         |
+| [step-verb](step-verb.md)                   | PRF1004 | structure   | deny           | a numbered step of a guide that does not open with its imperative verb                                                                                    |
+| [subject-mood](subject-mood.md)             | PRF1010 | conventions | advise         | a commit subject opening in the past tense, the third person or a gerund ("added", "fixes", "making")                                                     |
+| [subject-length](subject-length.md)         | PRF1011 | structure   | deny           | a commit subject over 100 bytes                                                                                                                           |
+| [subject-period](subject-period.md)         | PRF1012 | conventions | deny           | a commit subject ending in a period                                                                                                                       |
+| [body-separator](body-separator.md)         | PRF1013 | structure   | deny           | a commit body that starts on the line after the subject                                                                                                   |
+| [issue-repro](issue-repro.md)               | PRF1020 | evidence    | off            | a bug report with neither what happened against what was expected, nor steps to reproduce it                                                              |
+| [changelog-heading](changelog-heading.md)   | PRF1030 | conventions | off            | a changelog version heading that is not "## [version] - date" or "## [Unreleased]"                                                                        |
+| [changelog-group](changelog-group.md)       | PRF1031 | conventions | varies by kind | a changelog heading that is not Added, Changed, Deprecated, Removed, Fixed or Security                                                                    |
+| [changelog-entry](changelog-entry.md)       | PRF1032 | stance      | advise         | a changelog entry that names a Go identifier and says little else                                                                                         |
+| [voice-drift](voice-drift.md)               | PRF1040 | stance      | advise         | a draft that reads further from its author's own texts of its kind than 95 percent of them do, or a commit subject longer than 95 percent of the author's |
+| [suppression-unused](suppression-unused.md) | PRF1090 | evidence    | deny           | a suppression comment that gives no reason or that matched no finding                                                                                     |
 
 ## Tone
 

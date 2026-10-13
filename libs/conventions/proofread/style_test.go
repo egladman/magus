@@ -3,39 +3,45 @@ package proofread
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
 
+var authorSentences = []string{
+	"Let's merge it after the build.", "I can't see a problem.", "It's close.", "We'll see.", "I'd keep it.",
+	"That's fine by me, honestly.", "I'll fix the typo in the docs.", "It's already idempotent.",
+	"Can you share the log?", "I'll split it into two commits.", "I don't think it matters for now.",
+	"We can drop this once the server is gone.", "Good catch.", "I think the test is flaky, not the code.",
+}
+
 // authorReplies are n short replies in an invented author's voice: first
-// person, contracted, no markup, 9 to 25 words.
+// person, contracted, no markup, about 20 words each.
 func authorReplies(n int) []string {
-	extra := []string{"", " It's close.", " We'll see.", " I'd keep it.", " That's fine by me, honestly."}
 	out := make([]string, n)
 
 	for i := range out {
-		out[i] = fmt.Sprintf("I think this works for case %d. Let's merge it after the build.%s I can't see a problem.",
-			i, extra[i%len(extra)])
+		picked := []string{fmt.Sprintf("I think this works for case %d.", i)}
+		for j := 1; j <= 3; j++ {
+			picked = append(picked, authorSentences[(i*j+j*5)%len(authorSentences)])
+		}
+
+		out[i] = strings.Join(picked, " ")
 	}
 
 	return out
 }
 
-// draftedReply is a reply in the shape the voice study measured agent text in:
-// long, bold-labelled, colon-heavy and uncontracted.
-const draftedReply = "**Summary:** The change updates the cache layer so that every key is computed with the " +
-	"sorted inputs, and the test suite now covers the path. **Details:** The handler (in the server " +
-	"package) reads all of the inputs, sorts them, and hashes the result: this ensures that one key is " +
-	"produced for each distinct set of inputs, with the ordering no longer affecting the outcome. The " +
-	"existing behavior is preserved for all of the other callers, and the documentation reflects the " +
-	"new contract as well."
-
 func authorVoice(t *testing.T) *Voice {
 	t.Helper()
 
-	v, err := BuildVoice(map[Kind][]string{KindReviewReply: authorReplies(40)})
+	v, err := BuildVoice(map[Kind][]string{KindReviewReply: authorReplies(60)})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if v.Kinds[KindReviewReply].Windows == nil {
+		t.Fatalf("authorVoice has no windows: %+v", v.Kinds[KindReviewReply])
 	}
 
 	return v
@@ -54,7 +60,7 @@ func drifts(text string, kind Kind, opts ...Option) []Finding {
 }
 
 func TestBuildVoiceKeepsAggregatesAlone(t *testing.T) {
-	texts := authorReplies(40)
+	texts := authorReplies(60)
 	texts[3] = "Zanzibar ships the quokka build."
 
 	v, err := BuildVoice(map[Kind][]string{KindReviewReply: texts})
@@ -74,28 +80,74 @@ func TestBuildVoiceKeepsAggregatesAlone(t *testing.T) {
 	}
 
 	k := v.Kinds[KindReviewReply]
-	if v.Schema != VoiceSchema || k.Texts != 40 || k.FirstPerson == 0 {
-		t.Errorf("BuildVoice = %+v, want schema %s, 40 texts and a first-person rate", v, VoiceSchema)
+	if v.Schema != VoiceSchema || k.Texts != 60 || k.Words < MinVoiceWords || k.FirstPerson == 0 {
+		t.Fatalf("BuildVoice = %+v, want schema %s, 60 texts, %d words or more and a first-person rate", v, VoiceSchema,
+			MinVoiceWords)
 	}
 
-	words, ok := k.Ranges[FeatureWords]
-	if !ok || words.Texts != 40 || words.P10 >= words.P90 {
-		t.Errorf("words range = %+v, want one over 40 texts with p10 under p90", words)
+	if k.Windows == nil || k.Windows.Count < 5 || k.SubjectP95 != 0 {
+		t.Fatalf("review-reply = %+v, want 5 windows or more and no subject length", k)
+	}
+
+	for f, values := range k.Windows.Values {
+		if !slices.IsSorted(values) || len(values) > k.Windows.Count {
+			t.Errorf("%s = %v, want at most %d sorted values", f, values, k.Windows.Count)
+		}
+	}
+
+	if _, ok := k.Windows.Values["function_words.i"]; !ok {
+		t.Errorf("values = %v, want the rate of I", k.Windows.Values)
 	}
 }
 
-func TestBuildVoiceSetsNoRangesUnderTheMinimum(t *testing.T) {
-	v, err := BuildVoice(map[Kind][]string{KindReviewReply: authorReplies(MinVoiceTexts - 1)})
+func TestBuildVoiceSkipsAKindUnderMinVoiceWords(t *testing.T) {
+	v, err := BuildVoice(map[Kind][]string{KindReviewReply: authorReplies(10)})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if k := v.Kinds[KindReviewReply]; k.Ranges != nil || k.Texts != MinVoiceTexts-1 {
-		t.Errorf("kind = %+v, want its counts and no ranges", k)
+	if k := v.Kinds[KindReviewReply]; k.Windows != nil || k.Texts != 10 || k.Words >= MinVoiceWords {
+		t.Errorf("kind = %+v, want its counts and no windows", k)
 	}
 
-	if got := drifts(draftedReply, KindReviewReply, WithVoice(v)); got != nil {
-		t.Errorf("voice-drift under the minimum = %v, want none", got)
+	if got := drifts(agentDraft, KindReviewReply, WithVoice(v)); got != nil {
+		t.Errorf("voice-drift with no reference = %v, want none", got)
+	}
+}
+
+func TestBuildVoiceRanksEachKindOnItsOwnFeatures(t *testing.T) {
+	long := make([]string, 8)
+	for i := range long {
+		long[i] = strings.Join(authorReplies(12), " ")
+	}
+
+	v, err := BuildVoice(map[Kind][]string{KindIssue: long, KindReviewReply: long, KindChangeDescription: long})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		kind    Kind
+		feature Feature
+		want    bool
+	}{
+		{KindIssue, "punctuation.colon", false},
+		{KindIssue, "template_rate", true},
+		{KindReviewReply, "template_rate", false},
+		{KindReviewReply, "tag_compression", false},
+		{KindReviewReply, "punctuation.colon", true},
+		{KindChangeDescription, "tag_compression", true},
+	}
+
+	for _, tc := range cases {
+		w := v.Kinds[tc.kind].Windows
+		if w == nil {
+			t.Fatalf("%s has no windows", tc.kind)
+		}
+
+		if _, got := w.Values[tc.feature]; got != tc.want {
+			t.Errorf("%s ranks %s = %v, want %v", tc.kind, tc.feature, got, tc.want)
+		}
 	}
 }
 
@@ -118,48 +170,12 @@ func TestBuildVoiceRefusesWhatItCannotMeasure(t *testing.T) {
 	}
 }
 
-func TestVoiceDriftNeedsTwoFeaturesOutOfRange(t *testing.T) {
-	v := authorVoice(t)
-
-	if got := drifts(authorReplies(3)[2], KindReviewReply, WithVoice(v)); got != nil {
-		t.Errorf("the author's own reply drifts: %v", got)
-	}
-
-	if got := drifts("I think this **works** for case 9. Let's merge it after the build. We'll see. I can't see a problem.",
-		KindReviewReply, WithVoice(v)); got != nil {
-		t.Errorf("one feature out of range drifts: %v", got)
-	}
-
-	got := drifts(draftedReply, KindReviewReply, WithVoice(v))
-	if len(got) != 1 || got[0].Decision != DecisionAdvise || got[0].Code != "PRF1040" {
-		t.Fatalf("voice-drift = %+v, want one advise finding coded PRF1040", got)
-	}
-
-	for _, want := range []string{"Reads unlike your own review comments: ", "words 84 above your ", "headings and bold 2 above your 0-0"} {
-		if !strings.Contains(got[0].Message, want) {
-			t.Errorf("message %q does not name %q", got[0].Message, want)
-		}
-	}
-}
-
-func TestVoiceDriftNamesAFeatureBelowItsRange(t *testing.T) {
-	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{KindReviewReply: {Texts: 40, Ranges: map[Feature]Range{
-		FeatureWords:      {Texts: 40, P10: 30, P50: 40, P90: 50},
-		FeatureFormatting: {Texts: 40, P10: 1, P50: 1, P90: 2},
-	}}}}
-
-	got := drifts("It works.", KindReviewReply, WithVoice(v))
-	if len(got) != 1 || !strings.Contains(got[0].Message, "words 2 below your 30-50, headings and bold 0 below your 1-2") {
-		t.Errorf("voice-drift = %+v, want both features named below their range", got)
-	}
-}
-
 func TestVoiceDriftIsOffWithoutAVoice(t *testing.T) {
-	if got := drifts(draftedReply, KindReviewReply); got != nil {
+	if got := drifts(agentDraft, KindReviewReply); got != nil {
 		t.Errorf("voice-drift with no voice = %v, want none", got)
 	}
 
-	if got := drifts(draftedReply, KindReviewReply, WithOnly(RuleVoiceDrift)); got != nil {
+	if got := drifts(agentDraft, KindReviewReply, WithOnly(RuleVoiceDrift)); got != nil {
 		t.Errorf("voice-drift named by -only with no voice = %v, want none", got)
 	}
 }
@@ -233,19 +249,32 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 	}
 
 	v, err := ReadVoice(strings.NewReader(string(data)))
-	if err != nil || v.Kinds[KindReviewReply].Texts != 40 {
+	if err != nil || v.Kinds[KindReviewReply].Texts != 60 || v.Kinds[KindReviewReply].Windows == nil {
 		t.Fatalf("ReadVoice = %+v, %v, want the voice back", v, err)
 	}
 
+	issue := func(body string) string { return `{"schema":"proofread-voice/2","kinds":{"issue":` + body + `}}` }
+
 	cases := map[string]struct{ body, want string }{
-		"another schema": {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/1`},
-		"an unknown kind": {`{"schema":"proofread-voice/1","kinds":{"guide":{}}}`,
+		"an earlier version": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`,
+			"schema \"proofread-voice/1\" is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"},
+		"another schema": {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/2`},
+		"an unknown kind": {`{"schema":"proofread-voice/2","kinds":{"guide":{}}}`,
 			"a voice measures change-description, review-reply, commit-message and issue, not guide"},
-		"an unknown feature": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{"typos":{}}}}}`,
+		"an unknown feature": {issue(`{"windows":{"count":1,"values":{"typos":[1]},"cut":1}}`),
 			`issue: unknown feature "typos"`},
-		"an inverted range": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{"words":{"p10":9,"p90":1}}}}}`,
-			"issue: words has p10 9 over p90 1"},
-		"an unknown field": {`{"schema":"proofread-voice/1","text":"hi"}`, `json: unknown field "text"`},
+		"a feature off for the kind": {issue(`{"windows":{"count":1,"values":{"punctuation.colon":[1]},"cut":1}}`),
+			`issue: unknown feature "punctuation.colon"`},
+		"unsorted values": {issue(`{"windows":{"count":2,"values":{"punctuation.comma":[2,1]},"cut":1}}`),
+			"issue: punctuation.comma values are not sorted"},
+		"more values than windows": {issue(`{"windows":{"count":1,"values":{"punctuation.comma":[1,2]},"cut":1}}`),
+			"issue: punctuation.comma has 2 values for 1 windows"},
+		"a negative cut": {issue(`{"windows":{"count":1,"values":{},"cut":-1}}`), "issue: cut -1 is negative"},
+		"a subject length off commits": {issue(`{"subject_chars_p95":40}`),
+			"issue: only commit messages keep a subject length"},
+		"windows on commits": {`{"schema":"proofread-voice/2","kinds":{"commit-message":{"windows":{"count":0,"values":{},"cut":0}}}}`,
+			"commit-message: commit messages keep no windows"},
+		"an unknown field": {`{"schema":"proofread-voice/2","text":"hi"}`, `json: unknown field "text"`},
 	}
 
 	for name, tc := range cases {

@@ -56,7 +56,7 @@ func TestVoiceBuildMeasuresFilesIntoAPrivateFile(t *testing.T) {
 	dir := t.TempDir()
 	args := []string{"voice", "build", "-kind", "review-reply", "-o", filepath.Join(dir, "out", "voice.json")}
 
-	for i, text := range synthReplies(proofread.MinVoiceTexts) {
+	for i, text := range synthReplies(100) {
 		args = append(args, writeFile(t, dir, fmt.Sprintf("r%d.md", i), text))
 	}
 
@@ -66,7 +66,8 @@ func TestVoiceBuildMeasuresFilesIntoAPrivateFile(t *testing.T) {
 	}
 
 	path := filepath.Join(dir, "out", "voice.json")
-	if !strings.HasPrefix(stderr, "review-reply: 30 texts, ") || !strings.HasSuffix(stderr, "wrote "+path+"\n") {
+	if !strings.HasPrefix(stderr, "review-reply: 100 texts, ") || !strings.Contains(stderr, " windows, cut ") ||
+		!strings.HasSuffix(stderr, "wrote "+path+"\n") {
 		t.Errorf("stderr = %q", stderr)
 	}
 
@@ -75,8 +76,8 @@ func TestVoiceBuildMeasuresFilesIntoAPrivateFile(t *testing.T) {
 		t.Fatalf("voice file: %v, %v, want mode 0600", info, err)
 	}
 
-	if v := readVoice(t, path); v.Kinds[proofread.KindReviewReply].Ranges == nil {
-		t.Errorf("voice = %+v, want ranges for review-reply", v)
+	if v := readVoice(t, path); v.Kinds[proofread.KindReviewReply].Windows == nil {
+		t.Errorf("voice = %+v, want windows for review-reply", v)
 	}
 }
 
@@ -107,7 +108,8 @@ func TestVoiceBuildReadsJSONLinesAndNULSeparatedStdin(t *testing.T) {
 
 	nul := filepath.Join(dir, "nul.json")
 	if code, _, stderr := runVoiceArgs(t, "fix the build\n\nIt failed.\x00add a flag\x00\n", "voice", "build",
-		"-kind", "commit-message", "-o", nul); code != exitOK || !strings.Contains(stderr, "under 30") {
+		"-kind", "commit-message", "-o", nul); code != exitOK ||
+		!strings.Contains(stderr, "commit-message: 2 texts, 8 words, under 1000, so voice-drift skips it\n") {
 		t.Fatalf("voice build from stdin: code %d stderr %q", code, stderr)
 	}
 
@@ -266,93 +268,6 @@ func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
 	}
 }
 
-// markedTexts are n ten-word texts, each opening with a marker no other holds.
-func markedTexts(n int) []string {
-	out := make([]string, n)
-
-	for i := range out {
-		out[i] = fmt.Sprintf("mark%02d one two three four five six seven eight nine.", i)
-	}
-
-	return out
-}
-
-func TestPoolTextsChunksTheSameForTheSameSeed(t *testing.T) {
-	texts := markedTexts(12)
-
-	a := poolTexts(proofread.KindReviewReply, texts, 30, 13)
-	b := poolTexts(proofread.KindReviewReply, texts, 30, 13)
-
-	if len(a) != 4 || !slices.Equal(a, b) {
-		t.Errorf("one seed gave %q then %q, want the same 4 chunks", a, b)
-	}
-
-	if c := poolTexts(proofread.KindReviewReply, texts, 30, 14); slices.Equal(a, c) {
-		t.Errorf("seeds 13 and 14 gave the same chunks %q", a)
-	}
-
-	if !slices.Equal(texts, markedTexts(12)) {
-		t.Error("poolTexts reordered its input")
-	}
-}
-
-func TestPoolTextsUsesEachTextOnceAndDropsTheRemainder(t *testing.T) {
-	chunks := poolTexts(proofread.KindReviewReply, markedTexts(11), 30, 13)
-
-	if len(chunks) != 3 {
-		t.Fatalf("11 texts of 10 words in chunks of 30+ made %d chunks, want 3", len(chunks))
-	}
-
-	used := 0
-
-	for i, text := range markedTexts(11) {
-		marker := fmt.Sprintf("mark%02d", i)
-
-		n := 0
-		for _, chunk := range chunks {
-			n += strings.Count(chunk, marker)
-		}
-
-		if n > 1 {
-			t.Errorf("%s is in %d chunks, want at most 1", text, n)
-		}
-
-		used += n
-	}
-
-	if used != 9 {
-		t.Errorf("chunks hold %d texts, want 9: the last 2 are a chunk under 30 words", used)
-	}
-
-	for _, chunk := range chunks {
-		if got := proofread.Measure(chunk, proofread.KindReviewReply).Words; got < 30 {
-			t.Errorf("chunk %q has %d words, want 30 or more", chunk, got)
-		}
-
-		if !strings.Contains(chunk, "\n\n") {
-			t.Errorf("chunk %q joins its texts without a blank line", chunk)
-		}
-	}
-}
-
-func TestPoolTextsKeepsEveryCommitSubject(t *testing.T) {
-	texts := make([]string, 12)
-	for i := range texts {
-		texts[i] = fmt.Sprintf("fix the cache key for target %02d", i)
-	}
-
-	chunks := poolTexts(proofread.KindCommitMessage, texts, 20, 13)
-	if len(chunks) != 4 {
-		t.Fatalf("pooled 12 seven-word subjects into %d chunks of 20+ words, want 4", len(chunks))
-	}
-
-	for _, chunk := range chunks {
-		if got := strings.Count(chunk, "fix the cache key"); got != 3 {
-			t.Errorf("chunk %q holds %d subjects, want 3", chunk, got)
-		}
-	}
-}
-
 func TestVoiceEvalPoolsTextsIntoChunks(t *testing.T) {
 	owner, other := evalFiles(t)
 
@@ -407,7 +322,7 @@ func TestVoiceEvalExitsTwoOnInputItCannotUse(t *testing.T) {
 func TestRunJudgesWithAVoiceFile(t *testing.T) {
 	dir := t.TempDir()
 
-	v, err := proofread.BuildVoice(map[proofread.Kind][]string{proofread.KindReviewReply: synthReplies(40)})
+	v, err := proofread.BuildVoice(map[proofread.Kind][]string{proofread.KindReviewReply: synthReplies(120)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,9 +332,9 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	drafted := "**Summary:** The change updates the cache layer so that every key is computed with the sorted " +
-		"inputs, and the test suite now covers the path. **Details:** The handler reads all of the inputs, " +
-		"sorts them, and hashes the result, which ensures that one key is produced for each distinct set."
+	drafted := strings.Repeat("The change updates the cache layer (the part that keys every target) so that each key is "+
+		"computed from the sorted inputs, and the test suite covers the path: the handler reads all of the inputs, "+
+		"sorts them, and hashes the result; the ordering no longer affects the outcome, and the docs say so. ", 4)
 
 	code, stdout, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", path, "-only", "voice-drift")
 	if code != exitOK || !strings.Contains(stdout, `"rule":"voice-drift"`) || !strings.Contains(stdout, `"decision":"advise"`) {
@@ -432,7 +347,13 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 
 	bad := writeFile(t, dir, "bad.json", `{"schema":"other"}`)
 	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", bad); code != exitError ||
-		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/1\n" {
+		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/2\n" {
 		t.Errorf("a bad voice file: code %d stderr %q", code, stderr)
+	}
+
+	old := writeFile(t, dir, "old.json", `{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`)
+	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", old); code != exitError ||
+		!strings.Contains(stderr, "rerun `proofread voice build`") {
+		t.Errorf("a voice file from an earlier proofread: code %d stderr %q, want the command that rebuilds it", code, stderr)
 	}
 }

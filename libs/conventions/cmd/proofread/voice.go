@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
@@ -122,7 +121,9 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 			}
 
 			if *pool > 0 {
-				list = poolTexts(k, list, *pool, *seed)
+				out[k] = proofread.MeasureWindows(list, k, *pool, *seed)
+
+				continue
 			}
 
 			for _, text := range list {
@@ -177,48 +178,6 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	}
 
 	return exitOK
-}
-
-// poolTexts shuffles texts under seed, then joins them in that order, a blank
-// line apart, into chunks of at least minWords words. Each text lands in at
-// most one chunk, and a last chunk under minWords is dropped. The shuffle is
-// Eder's random sampling: chunks cut from the file in order would each stand
-// for one stretch of writing.
-func poolTexts(kind proofread.Kind, texts []string, minWords int, seed uint64) []string {
-	order := slices.Clone(texts)
-	rng := rand.New(rand.NewPCG(seed, 0))
-	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
-
-	var chunks []string
-
-	var chunk strings.Builder
-
-	words := 0
-
-	for _, text := range order {
-		text = strings.TrimSpace(text)
-		if text == "" {
-			continue
-		}
-
-		// A later text's title stays as a paragraph of its own: a paragraph
-		// ends its sentence, and most commits are a subject alone.
-		if chunk.Len() > 0 {
-			chunk.WriteString("\n\n")
-		}
-
-		chunk.WriteString(text)
-
-		words += proofread.Measure(text, kind).Words
-		if words >= minWords {
-			chunks = append(chunks, chunk.String())
-			chunk.Reset()
-
-			words = 0
-		}
-	}
-
-	return chunks
 }
 
 // separationTable is a header naming kind and its counts, then one aligned
@@ -439,25 +398,25 @@ func writeVoice(path string, v *proofread.Voice) error {
 	return nil
 }
 
-// voiceSummary says per kind how many texts and words v measured, which kinds
-// are too few for voice-drift to judge, whether v relaxes tense, and where v
-// went.
+// voiceSummary says per kind how many texts and words v measured and the
+// reference voice-drift judges it by, or that it skipped the kind and why,
+// then whether v relaxes tense and where v went.
 func voiceSummary(v *proofread.Voice, path string) string {
 	var b strings.Builder
 
-	kinds := make([]proofread.Kind, 0, len(v.Kinds))
-	for k := range v.Kinds {
-		kinds = append(kinds, k)
-	}
-
-	slices.Sort(kinds)
-
-	for _, k := range kinds {
+	for _, k := range slices.Sorted(maps.Keys(v.Kinds)) {
 		kv := v.Kinds[k]
 		fmt.Fprintf(&b, "%s: %d texts, %d words", k, kv.Texts, kv.Words)
 
-		if kv.Texts < proofread.MinVoiceTexts {
-			fmt.Fprintf(&b, ", under %d, so voice-drift does not judge it", proofread.MinVoiceTexts)
+		switch {
+		case kv.Words < proofread.MinVoiceWords:
+			fmt.Fprintf(&b, ", under %d, so voice-drift skips it", proofread.MinVoiceWords)
+		case kv.SubjectP95 > 0:
+			fmt.Fprintf(&b, ", subjects of %.0f characters or fewer 95%% of the time", kv.SubjectP95)
+		case kv.Windows != nil:
+			fmt.Fprintf(&b, ", %d windows, cut %.2f", kv.Windows.Count, kv.Windows.Cut)
+		default:
+			b.WriteString(", but no window measured two features, so voice-drift skips it")
 		}
 
 		b.WriteString("\n")
