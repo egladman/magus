@@ -617,8 +617,13 @@ magus\harness.provider(claudeMod);
 `magus describe harness claude-code-mod` then prints the two settings it keeps in
 `.claude/settings.json`, `extraKnownMarketplaces.magus` and
 `enabledPlugins["magus@magus"]`, with the command that merges them. Claude Code
-reads the marketplace only once the person trusts the folder, and each person still
-runs the install line above once.
+reads the marketplace only once the person trusts the folder. The settings do not
+install the mod: each person runs the install line above once, and until they do
+the mod never appears. `magus agent harness verify claude-code-mod` and
+`magus doctor` read what Claude Code recorded in `installed_plugins.json` under
+`CLAUDE_CONFIG_DIR` (`~/.claude` by default) and report an error that names the
+install line while the workspace enables the mod and the person has not
+installed it. A workspace that does not enable the mod is not checked.
 
 ## Coverage and limits
 
