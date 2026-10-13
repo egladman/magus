@@ -688,7 +688,7 @@ chmod 0755 $WORK/failing-proofread
 # through as -decisions, and the reply is judged as agent-reply.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --decisions $WORK/proofread-decisions.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --decisions $WORK/proofread-decisions.json
 stdout '"hookEventName":"Stop"'
 stdout 'closing-offer \(line 3\): argv agent-reply -format json -decisions'
 stdout 'and 2 more'
@@ -698,14 +698,14 @@ stdout 'and 2 more'
 # --proofread outranks the environment.
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --proofread $WORK/fake-proofread
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --proofread $WORK/fake-proofread
 stdout 'closing-offer'
 
 # A reply made while a stop hook has the agent continuing is never judged, so the context
 # this hook hands back cannot loop the agent.
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/proofread-again.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 ! stderr .
 
@@ -713,32 +713,48 @@ exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
 # exit 0: the hook fires on every turn, and none of them is worth a note.
 env __PROOFREAD_BIN=$WORK/nonexistent-proofread
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 ! stderr .
 
 env __PROOFREAD_BIN=$WORK/failing-proofread
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 ! stderr .
 
 env __PROOFREAD_BIN=$WORK/fake-proofread
 stdin $WORK/stop-event.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 ! stderr .
 
 stdin $WORK/observe-garbage.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code
 ! stdout .
 ! stderr .
 
 # An argument it does not take is reported on stderr and changes nothing else.
 stdin $WORK/proofread-stop.json
-exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST_NAME
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name claude-code --not-a-flag
 stdout 'closing-offer'
 stderr 'unsupported argument'
+env __PROOFREAD_BIN=
+
+# Without --agent-name nothing is judged, and the hook says which flag it was not given.
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz
+! stdout .
+stderr 'MGS3024'
+env __PROOFREAD_BIN=
+
+# A host it has no reply shape for is named on stderr and answered with nothing.
+env __PROOFREAD_BIN=$WORK/fake-proofread
+stdin $WORK/proofread-stop.json
+exec magus buzz -s $__MAGUS_TEMPLATES/proofread-reply.buzz -- --agent-name $HOST_NAME
+! stdout .
+stderr 'no reply shape for host'
 env __PROOFREAD_BIN=
 
 # --- fail-open: a missing magus must degrade the way each template promises ---

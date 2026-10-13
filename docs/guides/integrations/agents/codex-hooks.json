@@ -50,6 +50,16 @@
             "statusMessage": "magus guard: checking read"
           }
         ]
+      },
+      {
+        "matcher": "spawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus guard: checking subagent spawn"
+          }
+        ]
       }
     ],
     "PermissionRequest": [
@@ -83,6 +93,26 @@
             "type": "command",
             "command": "magus buzz -s docs/guides/integrations/agents/magus-checkpoint.buzz -- --agent-name codex",
             "statusMessage": "magus: recording where the work stands"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
+            "statusMessage": "magus: proofreading the reply"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: noting the request"
           }
         ]
       }

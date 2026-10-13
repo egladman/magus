@@ -70,6 +70,12 @@ fun codex_checkpoint_command() > str {
     return codex_named_command("magus-checkpoint");
 }
 
+// codex_proofread_command judges the reply a turn ends with. Codex's Stop reads back a
+// block decision, and its reason becomes the prompt of one more turn.
+fun codex_proofread_command() > str {
+    return codex_named_command("proofread-reply");
+}
+
 fun codex_command_hook(cmd: str, status: str) > {str: any} {
     return {
         "type": "command",
@@ -77,6 +83,8 @@ fun codex_command_hook(cmd: str, status: str) > {str: any} {
         "statusMessage": status,
     };
 }
+
+final SPAWN_MATCHER = "spawn_agent";
 
 fun codex_pretool_entry(matcher: str, cmd: str, status: str) > {str: any} {
     return {
@@ -98,6 +106,11 @@ fun codex_entries() > [any] {
                 // the read rules judge it like the shell read it replaces.
                 codex_pretool_entry("Read", codex_guard_command(), "magus guard: checking read"),
                 codex_pretool_entry("mcp__.*", codex_guard_command(), "magus guard: checking MCP tool call"),
+                // The spawn tool's name; Codex's docs say the matcher also matches the alias
+                // Agent. Neither entry here declares --reports-skills: Codex documents no hook
+                // on a skill load, so a rule that requires one has nothing to read and must
+                // stand down.
+                codex_pretool_entry(SPAWN_MATCHER, codex_guard_command(), "magus guard: checking subagent spawn"),
             ],
         },
         {
@@ -123,6 +136,19 @@ fun codex_entries() > [any] {
             "entries": [
                 {
                     "hooks": [codex_command_hook(codex_checkpoint_command(), "magus: recording where the work stands")],
+                },
+                {
+                    "hooks": [codex_command_hook(codex_proofread_command(), "magus: proofreading the reply")],
+                },
+            ],
+        },
+        // The person's message, which the glue hands to `magus shell --message` and answers
+        // with nothing. Codex ignores a matcher on this event.
+        {
+            "path": ["hooks", "UserPromptSubmit"],
+            "entries": [
+                {
+                    "hooks": [codex_command_hook(codex_guard_command(), "magus: noting the request")],
                 },
             ],
         },
@@ -242,12 +268,16 @@ fun codex_toml_multiline(text: str) > str {
 }
 
 // codex_agent renders one shipped agent as a Codex custom agent file. It sets no model, so
-// the agent runs on the person's agents.default_subagent_model. The file has no field to
-// restrict tools, so read_only is carried by the instructions alone.
+// the agent runs on the person's agents.default_subagent_model. A read-only agent runs in
+// Codex's read-only sandbox, which the instructions alone could not enforce.
 fun codex_agent(agent: {str: any}) > {str: any} {
     final name = "{agent["name"]}";
     final instructions = "{agent["instructions"]}".trim() + "\n";
-    final content = "name = " + codex_toml_basic(name) + "\ndescription = " + codex_toml_basic("{agent["description"]}") + "\ndeveloper_instructions = " + codex_toml_multiline(instructions) + "\n";
+    var content = "name = " + codex_toml_basic(name) + "\ndescription = " + codex_toml_basic("{agent["description"]}") + "\n";
+    if (agent["read_only"] == true) {
+        content = content + "sandbox_mode = \"read-only\"\n";
+    }
+    content = content + "developer_instructions = " + codex_toml_multiline(instructions) + "\n";
     return {
         "path": ".codex/agents/{name}.toml",
         "content": content,
@@ -282,15 +312,27 @@ fun codex_scout_fixture(instructions: str) > {str: any} {
     };
 }
 
-test "harness_agents renders name, description and instructions with no model" {
+test "harness_agents renders name, description, sandbox and instructions with no model" {
     final file = codex_agent(codex_scout_fixture("First line.\n\nUse `a\\b` and \"c\".\n"));
     assert\equal("{file["path"]}", ".codex/agents/magus-scout.toml", "Codex reads .codex/agents");
     assert\equal(
         "{file["content"]}",
-        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
+        "name = \"magus-scout\"\ndescription = \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nsandbox_mode = \"read-only\"\ndeveloper_instructions = '''\nFirst line.\n\nUse `a\\b` and \"c\".\n'''\n",
         "all three required fields, instructions as a literal",
     );
     assert\isTrue("{file["content"]}".indexOf("model") == null, "default_subagent_model applies");
+}
+
+test "harness_agents leaves the sandbox alone for a writable agent" {
+    final writable = {
+        "name": "magus-worker",
+        "description": "Edits files.",
+        "instructions": "First line.\n",
+        "read_only": false,
+        "class": "standard",
+    };
+    final content = "{codex_agent(writable)["content"]}";
+    assert\isTrue(content.indexOf("sandbox_mode") == null, "the person's default sandbox applies");
 }
 
 test "harness_agents escapes instructions that carry the literal delimiter" {
@@ -329,6 +371,7 @@ test "every glue command names this host on its argv, and rehydrate takes none" 
     assert\isTrue(codex_path_command().endsWith(named), "path hook");
     assert\isTrue(codex_observe_command().endsWith(named), "read hook");
     assert\isTrue(codex_checkpoint_command().endsWith(named), "Stop checkpoint");
+    assert\isTrue(codex_proofread_command().endsWith(named), "Stop proofread, which picks its output shape by host");
     assert\isTrue(codex_rehydrate_command().indexOf("--agent-name") == null, "rehydrate reads no host");
 }
 
@@ -338,8 +381,9 @@ test "guard commands name the Buzz glue as a plain argv" {
     assert\isTrue(codex_observe_command().indexOf("magus-observe.buzz") != null, "read observe");
     assert\isTrue(codex_rehydrate_command().endsWith(" -- --format json --rules AGENTS.md"), "SessionStart needs JSON stdout and AGENTS.md");
     assert\isTrue(codex_checkpoint_command().indexOf("magus-checkpoint.buzz") != null, "Stop checkpoint");
+    assert\isTrue(codex_proofread_command().indexOf("proofread-reply.buzz") != null, "Stop proofread");
     foreach (cmd in [codex_guard_command(), codex_path_command(), codex_observe_command(),
-            codex_rehydrate_command(), codex_checkpoint_command()]) {
+            codex_rehydrate_command(), codex_checkpoint_command(), codex_proofread_command()]) {
         assert\isTrue(cmd.startsWith("magus buzz -s "), "no environment prefix and no POSIX shell: {cmd}");
         assert\isTrue(cmd.indexOf(".sh") == null, "no entry wires a shell script: {cmd}");
     }
@@ -372,14 +416,21 @@ test "PermissionRequest answers Codex's approval with the shared command templat
     assert\equal("{hooks[0]["command"]}", codex_guard_command(), "same template as PreToolUse");
 }
 
-test "harness_entries covers PreToolUse PermissionRequest SessionStart and Stop" {
+test "harness_entries covers PreToolUse PermissionRequest SessionStart Stop and UserPromptSubmit" {
     final entries = codex_entries();
-    assert\equal(entries.len(), 4, "four managed path blocks");
+    assert\equal(entries.len(), 5, "five managed path blocks");
     final pre = entries[0];
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 5, "Bash EditWrite Read-observe Read-guard and mcp matchers");
+    assert\equal(pre_entries.len(), 6, "Bash EditWrite Read-observe Read-guard mcp and spawn matchers");
+    var spawn = "";
+    foreach (entry in pre_entries) {
+        if ("{entry["matcher"]}" == SPAWN_MATCHER) {
+            spawn = "{(entry["hooks"] as [any])[0]["command"]}";
+        }
+    }
+    assert\equal(spawn, codex_guard_command(), "a spawn reaches the same glue as a command");
     var judged = false;
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
@@ -397,7 +448,29 @@ test "harness_entries covers PreToolUse PermissionRequest SessionStart and Stop"
     assert\equal(start_path[1], "SessionStart", "rehydrate on compact");
     final stop = entries[3];
     final stop_path = stop["path"] as [str];
-    assert\equal(stop_path[1], "Stop", "checkpoint");
+    assert\equal(stop_path[1], "Stop", "checkpoint, then the reply check");
+    final stop_entries = stop["entries"] as [any];
+    assert\equal(stop_entries.len(), 2, "the checkpoint entry and the proofread entry");
+    assert\equal("{(stop_entries[0]["hooks"] as [any])[0]["command"]}", codex_checkpoint_command(), "records where the work stands");
+    assert\equal("{(stop_entries[1]["hooks"] as [any])[0]["command"]}", codex_proofread_command(), "judges the reply");
+    final message = entries[4];
+    assert\equal((message["path"] as [str])[1], "UserPromptSubmit", "the person's message, recorded and never answered");
+    final message_entries = message["entries"] as [any];
+    assert\equal(message_entries.len(), 1, "one message entry");
+    assert\isTrue(message_entries[0]["matcher"] == null, "Codex ignores a matcher on this event");
+    assert\equal("{(message_entries[0]["hooks"] as [any])[0]["command"]}", codex_guard_command(),
+        "the glue tells a message from a call by the event's shape");
+}
+
+test "no codex entry declares reports-skills, since Codex has no hook on a skill load" {
+    foreach (block in codex_entries()) {
+        foreach (entry in block["entries"] as [any]) {
+            foreach (hook in entry["hooks"] as [any]) {
+                assert\isTrue("{hook["command"]}".indexOf("--reports-skills") == null,
+                    "a rule that requires a skill would deny forever: {hook["command"]}");
+            }
+        }
+    }
 }
 
 test "harness_mcp is a stdio paste hint for Codex user config.toml" {

@@ -217,7 +217,7 @@ judges nothing while the agent is already continuing, so it cannot loop.
            "hooks": [
              {
                "type": "command",
-               "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz",
+               "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
                "timeout": 10
              }
            ]

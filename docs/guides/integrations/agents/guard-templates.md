@@ -246,7 +246,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 23
+// magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -902,7 +902,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 23
+// magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -1155,7 +1155,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1357,7 +1357,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1505,7 +1505,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1646,7 +1646,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -1843,54 +1843,74 @@ It declares no `magus-guard-coverage` line, for the reason
 
 ```buzz
 // proofread-reply hook: judges the reply an agent ends its turn with and hands the findings
-// back as context for the next step.
+// back so the next step can fix them.
 //
-// Run it as `magus buzz -s proofread-reply.buzz`; see magus-command.buzz for why `-s` is
-// load-bearing. It imports no magus module and no spell, so the workspace stays CLOSED, and
-// it needs only the proofread release binary: https://github.com/egladman/magus/releases
+// Run it as `magus buzz -s proofread-reply.buzz -- --agent-name <host>`; see
+// magus-command.buzz for why `-s` is load-bearing. It imports no magus module and no spell,
+// so the workspace stays CLOSED, and it needs only the proofread release binary:
+// https://github.com/egladman/magus/releases
 //
-// Wire it to your host's stop event. It reads the envelope's last assistant message and
-// stop_hook_active, runs `proofread agent-reply -format json` over the message, and prints
-// at most 5 findings as a Stop hook's hookSpecificOutput.additionalContext.
+// Wire it to your host's stop event. It reads the reply, runs `proofread agent-reply -format
+// json` over it, and hands back at most 5 findings in the shape the named host takes:
 //
-// Contract: ADVISE ONLY. It prints no decision and always exits 0, so it can never block
-// the stop. It prints nothing when
+//   claude-code  Stop: hookSpecificOutput.additionalContext. Advice only; the stop goes
+//                through and the findings ride into the next turn.
+//   codex        Stop: {"decision": "block", "reason": ...}. Codex continues the turn with
+//                the reason as a new prompt, once: the next Stop carries stop_hook_active.
+//   cursor       stop: {"followup_message": ...}. Cursor submits it as another turn. It
+//                cannot block, and the hook's loop_limit caps the chain.
 //
-//   - stop_hook_active is true, because the context this hook hands back is what keeps
-//     the agent going for one more step, and judging that step's reply would loop it;
-//   - the message is empty or the envelope is unreadable;
+// Cursor's stop event carries no reply, so the hook reads it from the conversation's
+// transcript_path: the last assistant message that has text, stopping at the last user
+// message. A host this file has no shape for is named on stderr and answered with nothing.
+//
+// It prints nothing when
+//
+//   - the stop is already a continuation (stop_hook_active on claude-code and codex,
+//     loop_count above 0 on cursor), because the findings this hook handed back are what
+//     started it, and judging that reply would loop;
+//   - the message is empty, the envelope is unreadable, or the turn did not complete;
 //   - proofread is missing, not executable, or exits non-zero;
 //   - proofread finds nothing.
 //
-// A missing proofread is silent because the hook fires on every turn: a note on each
-// would cost more than the advice.
+// It always exits 0. A missing proofread is silent because the hook fires on every turn: a
+// note on each would cost more than the advice.
 //
-// Arguments, all optional:
+// Arguments:
 //
+//   --agent-name HOST  REQUIRED: the host this entry is wired into, the harness spell's own
+//                      name. Without it nothing is judged and MGS3024 goes to stderr
 //   --decisions FILE   a JSON decisions table passed to proofread as -decisions:
 //                      {"rules": {"<rule>": "deny" | "advise" | "off"}}. Keep it to
 //                      "rules": proofread refuses a "paths" glob that matches no file
-//                      argument, and a reply is read from stdin.
+//                      argument, and a reply is read from stdin
 //   --proofread PATH   the proofread binary, ahead of the environment and PATH
 //
 // Override:
 //
-//   __PROOFREAD_BIN   path to the binary, ahead of PATH
+//   __PROOFREAD_BIN        path to the binary, ahead of PATH
+//   __PROOFREAD_DECISIONS  the decisions file, when --decisions is not given
 //
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 
 import "io";
+import "fs";
 import "flags";
 import "proc";
 import "std";
 import "encoding/json";
 import "lib/hook" as hook;
 
+final AGENT_FLAG = "--agent-name";
 final DECISIONS_FLAG = "--decisions";
 final PROOFREAD_FLAG = "--proofread";
+
+final CLAUDE_CODE = "claude-code";
+final CODEX = "codex";
+final CURSOR = "cursor";
 
 // MAX_FINDINGS caps the findings handed back for one reply, in proofread's order.
 final MAX_FINDINGS = 5;
@@ -1901,8 +1921,13 @@ fun warn(message: str) > void {
     io\stderr.write("proofread-reply.buzz: {message}\n") catch void;
 }
 
-// Stop is what this hook reads of a Stop envelope: the reply, and whether the agent is
-// already continuing because a Stop hook handed it something.
+// knownHost is a host this file has an output shape for.
+fun knownHost(host: str) > bool {
+    return host == CLAUDE_CODE or host == CODEX or host == CURSOR;
+}
+
+// Stop is what this hook reads of a stop envelope: the reply, and whether the agent is
+// already continuing because a stop hook handed it something.
 object Stop {
     reply: str,
     again: bool,
@@ -1916,9 +1941,55 @@ object Finding {
     message: str,
 }
 
-// readStop reads the envelope. One it cannot read is a stop with no reply.
-fun readStop(input: str) > Stop {
+// textOf joins the text parts of one transcript message's content, "" for any other shape.
+fun textOf(content: any?) > str {
+    final parts = content as? [any];
+    if (parts == null) { return ""; }
+    final texts = mut [<str>];
+    foreach (part in parts!) {
+        final text = hook\field(part, dotPath: "text");
+        if (hook\field(part, dotPath: "type") == "text" and text.trim() != "") {
+            texts.append(text);
+        }
+    }
+    return texts.join("\n\n");
+}
+
+// lastAssistantText is the last assistant message with text in a JSONL transcript, or ""
+// when the last user message comes first: a turn that has said nothing yet has no reply.
+fun lastAssistantText(transcript: str) > str {
+    if (transcript == "") { return ""; }
+    final lines = (fs\readFile(transcript) catch "").split("\n");
+    var i = lines.len() - 1;
+    while (i >= 0) {
+        final row: any? = json\parse(lines[i]) catch null;
+        i = i - 1;
+        if (row == null) { continue; }
+        final role = hook\field(row, dotPath: "role");
+        if (role == "user") { return ""; }
+        if (role == "assistant") {
+            final text = textOf(hook\dig(row, dotPath: "message.content"));
+            if (text != "") { return text; }
+        }
+    }
+    return "";
+}
+
+// readCursorStop reads Cursor's stop. loop_count above 0 means a follow-up message started
+// this turn, and a status other than completed means there is no finished reply to judge.
+fun readCursorStop(doc: {str: any}) > Stop {
+    final looped = (std\parseDouble(hook\field(doc, dotPath: "loop_count")) ?? 0.0) > 0.0;
+    final status = hook\field(doc, dotPath: "status");
+    if (looped or (status != "" and status != "completed")) {
+        return Stop{ reply = "", again = looped };
+    }
+    return Stop{ reply = lastAssistantText(hook\field(doc, dotPath: "transcript_path")), again = false };
+}
+
+// readStop reads the envelope host sent. One it cannot read is a stop with no reply.
+fun readStop(input: str, host: str) > Stop {
     final doc: {str: any} = json\parse(input) catch {<str: any>};
+    if (host == CURSOR) { return readCursorStop(doc); }
     final reply: str = doc["last_assistant_message"] ?? "";
     final again: bool = doc["stop_hook_active"] ?? false;
     return Stop{ reply = reply, again = again };
@@ -1966,13 +2037,23 @@ fun judge(bin: str, decisions: str, reply: str) > [Finding] {
     return parseFindings(run!.stdout);
 }
 
-// advice renders found as the context handed back, or "" when found is empty.
-fun advice(found: [Finding]) > str {
+// lead opens the advice. claude-code keeps the reply it already sent; codex and cursor start
+// another turn, so the agent is told to send the reply again.
+fun lead(host: str) > str {
+    if (host == CLAUDE_CODE) {
+        return "proofread judged your last reply as agent-reply. These advise; the stop "
+            + "went through. Apply them in your next reply to the person, and do not repost this one.";
+    }
+    return "proofread judged your last reply as agent-reply. Send the reply again with these "
+        + "fixed, and do not mention this check.";
+}
+
+// advice renders found as the text handed back, or "" when found is empty.
+fun advice(found: [Finding], host: str) > str {
     if (found.len() == 0) {
         return "";
     }
-    final lines = mut ["proofread judged your last reply as agent-reply. These advise; the stop "
-        + "went through. Apply them in your next reply to the person, and do not repost this one."];
+    final lines = mut [lead(host)];
     foreach (i, f in found) {
         if (i == MAX_FINDINGS) {
             lines.append("- and {found.len() - MAX_FINDINGS} more");
@@ -1987,34 +2068,58 @@ fun advice(found: [Finding]) > str {
     return lines.join("\n");
 }
 
-// output is what the hook prints for stop, or "" for a reply made while continuing, an
-// empty reply, or one with nothing to advise.
-fun output(stop: Stop, judged: fun (reply: str) > [Finding]) > str {
-    if (stop.again or stop.reply.trim() == "") {
-        return "";
+// shaped wraps text in the reply host takes from a stop hook.
+fun shaped(host: str, text: str) > str {
+    if (host == CODEX) {
+        return json\stringify({"decision": "block", "reason": text}) catch "";
     }
-    final text = advice(judged(stop.reply));
-    if (text == "") {
-        return "";
+    if (host == CURSOR) {
+        return json\stringify({"followup_message": text}) catch "";
     }
     return json\stringify({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": text}}) catch "";
 }
 
+// output is what the hook prints for stop, or "" for a reply made while continuing, an
+// empty reply, or one with nothing to advise.
+fun output(stop: Stop, host: str, judged: fun (reply: str) > [Finding]) > str {
+    if (stop.again or stop.reply.trim() == "") {
+        return "";
+    }
+    final text = advice(judged(stop.reply), host: host);
+    if (text == "") {
+        return "";
+    }
+    return shaped(host, text: text);
+}
+
 fun main(args: [str]) > void {
-    final parsed = flags\parse(args, switches: [<str>], valued: [DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
+    final parsed = flags\parse(args, switches: [<str>], valued: [AGENT_FLAG, DECISIONS_FLAG, PROOFREAD_FLAG]) catch null;
     if (parsed == null) { return; }
     foreach (word in parsed!.unknown) {
-        warn("unsupported argument \"{word}\"; this hook accepts only {DECISIONS_FLAG} and {PROOFREAD_FLAG}. "
+        warn("unsupported argument \"{word}\"; this hook accepts only {AGENT_FLAG}, {DECISIONS_FLAG} and {PROOFREAD_FLAG}. "
             + "Fix the hook command in your host config.");
     }
-    final decisions = parsed!.values[DECISIONS_FLAG] ?? "";
+    final host = parsed!.values[AGENT_FLAG] ?? "";
+    if (host == "") {
+        warn("[MGS3024] this hook was not given {AGENT_FLAG}, so nothing was judged. "
+            + "Merge what `magus describe harness` prints into the host's hook configuration; "
+            + "the commands it prints name the host.");
+        return;
+    }
+    if (!knownHost(host)) {
+        warn("no reply shape for host \"{host}\"; this hook answers {CLAUDE_CODE}, {CODEX} and {CURSOR}.");
+        return;
+    }
+    var decisions = parsed!.values[DECISIONS_FLAG] ?? "";
+    if (decisions == "") { decisions = hook\envOr("__PROOFREAD_DECISIONS", fallback: ""); }
 
-    final stop = readStop(io\stdin.readAll() catch "");
+    final stop = readStop(io\stdin.readAll() catch "", host: host);
     if (stop.again) { return; }
     final bin = resolveBin(parsed!.values[PROOFREAD_FLAG] ?? "");
     if (bin == "") { return; }
 
-    final printed = output(stop, judged: fun (reply: str) > [Finding] => judge(bin, decisions: decisions, reply: reply));
+    final printed = output(stop, host: host,
+        judged: fun (reply: str) > [Finding] => judge(bin, decisions: decisions, reply: reply));
     if (printed != "") {
         std\print(printed);
     }
@@ -2027,31 +2132,54 @@ fun judging(found: [Finding]) > fun (reply: str) > [Finding] {
 final offer = Finding{ rule = "closing-offer", line = 3, message = "End on the result instead of 'Want me to'." };
 
 test "a Stop envelope gives the reply and whether the agent is continuing" {
-    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}");
+    final stop = readStop("\{\"last_assistant_message\":\"Done.\",\"stop_hook_active\":true}", host: CLAUDE_CODE);
     std\assert(stop.reply == "Done." and stop.again, message: "{stop.reply} {stop.again}");
-    final empty = readStop("not json");
+    final codex = readStop("\{\"last_assistant_message\":null,\"stop_hook_active\":false}", host: CODEX);
+    std\assert(codex.reply == "" and !codex.again, message: "codex sends a null reply for a turn with no message");
+    final empty = readStop("not json", host: CLAUDE_CODE);
     std\assert(empty.reply == "" and !empty.again, message: "unreadable input is an empty stop");
 }
 
-test "findings go back as Stop context, never as a decision" {
-    final printed = output(Stop{ reply = "Done.", again = false }, judged: judging([offer]));
+test "claude-code findings go back as Stop context, never as a decision" {
+    final printed = output(Stop{ reply = "Done.", again = false }, host: CLAUDE_CODE, judged: judging([offer]));
     final doc: {str: any} = json\parse(printed) catch {<str: any>};
     std\assert(doc["decision"] == null, message: "no decision blocks the stop: {printed}");
     final hooked: {str: any} = doc["hookSpecificOutput"] ?? {<str: any>};
     std\assert(hooked["hookEventName"] == "Stop", message: printed);
     final context: str = hooked["additionalContext"] ?? "";
     std\assert(context.indexOf("- closing-offer (line 3): End on the result") != null, message: context);
+    std\assert(context.indexOf("the stop went through") != null, message: context);
+}
+
+test "codex findings continue the turn with a block decision and a reason" {
+    final printed = output(Stop{ reply = "Done.", again = false }, host: CODEX, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    std\assert(doc["decision"] == "block", message: printed);
+    std\assert(doc["hookSpecificOutput"] == null, message: "Codex's stop output takes no hookSpecificOutput: {printed}");
+    final reason: str = doc["reason"] ?? "";
+    std\assert(reason.indexOf("- closing-offer (line 3): End on the result") != null, message: reason);
+    std\assert(reason.indexOf("Send the reply again") != null, message: reason);
+}
+
+test "cursor findings go back as a followup message" {
+    final printed = output(Stop{ reply = "Done.", again = false }, host: CURSOR, judged: judging([offer]));
+    final doc: {str: any} = json\parse(printed) catch {<str: any>};
+    final message: str = doc["followup_message"] ?? "";
+    std\assert(message.indexOf("- closing-offer (line 3): End on the result") != null, message: printed);
+    std\assert(doc["decision"] == null and doc["hookSpecificOutput"] == null, message: printed);
 }
 
 test "a reply made while continuing is not judged, so the agent cannot loop" {
-    final printed = output(Stop{ reply = "Done.", again = true }, judged: judging([offer]));
-    std\assert(printed == "", message: printed);
+    foreach (host in [CLAUDE_CODE, CODEX, CURSOR]) {
+        final printed = output(Stop{ reply = "Done.", again = true }, host: host, judged: judging([offer]));
+        std\assert(printed == "", message: "{host}: {printed}");
+    }
 }
 
 test "nothing to advise prints nothing" {
-    std\assert(output(Stop{ reply = "Done.", again = false }, judged: judging([<Finding>])) == "",
+    std\assert(output(Stop{ reply = "Done.", again = false }, host: CODEX, judged: judging([<Finding>])) == "",
         message: "no findings");
-    std\assert(output(Stop{ reply = "  ", again = false }, judged: judging([offer])) == "", message: "no reply");
+    std\assert(output(Stop{ reply = "  ", again = false }, host: CODEX, judged: judging([offer])) == "", message: "no reply");
 }
 
 test "advice is capped at MAX_FINDINGS and counts the rest" {
@@ -2059,7 +2187,7 @@ test "advice is capped at MAX_FINDINGS and counts the rest" {
     for (var i = 0; i < MAX_FINDINGS + 2; i = i + 1) {
         many.append(offer);
     }
-    final text = advice(many);
+    final text = advice(many, host: CLAUDE_CODE);
     std\assert(text.split("\n").len() == MAX_FINDINGS + 2, message: text);
     std\assert(text.endsWith("- and 2 more"), message: text);
 }
@@ -2073,6 +2201,34 @@ test "proofread's findings are read with their line" {
 test "a binary that is missing or fails finds nothing" {
     std\assert(judge("/nonexistent/proofread", decisions: "", reply: "Done.").len() == 0, message: "missing binary");
     std\assert(resolveBin("/nonexistent/proofread") == "", message: "a path that is not executable");
+}
+
+test "only the hosts with a reply shape are known" {
+    std\assert(knownHost(CLAUDE_CODE) and knownHost(CODEX) and knownHost(CURSOR), message: "wired hosts");
+    std\assert(!knownHost("opencode") and !knownHost(""), message: "OpenCode's idle event cannot feed text back");
+}
+
+test "a cursor stop that is a follow-up or did not complete judges nothing" {
+    final looped = readStop("\{\"status\":\"completed\",\"loop_count\":1}", host: CURSOR);
+    std\assert(looped.again, message: "a follow-up turn is a continuation");
+    final aborted = readStop("\{\"status\":\"aborted\",\"loop_count\":0,\"transcript_path\":\"/nonexistent\"}", host: CURSOR);
+    std\assert(aborted.reply == "" and !aborted.again, message: "an aborted turn has no reply");
+}
+
+test "cursor's reply is the last assistant message with text, up to the last user message" {
+    final transcript = fs\tempFile("proofread-reply");
+    final rows = [
+        `{"role":"user","message":{"content":[{"type":"text","text":"question"}]}}`,
+        `{"role":"assistant","message":{"content":[{"type":"text","text":"Looking."},{"type":"tool_use","name":"Read"}]}}`,
+        `{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Read"}]}}`,
+        `{"role":"assistant","message":{"content":[{"type":"text","text":"Final answer."}]}}`,
+    ];
+    fs\writeFile(transcript, content: rows.join("\n") + "\n");
+    std\assert(lastAssistantText(transcript) == "Final answer.", message: lastAssistantText(transcript));
+    fs\writeFile(transcript, content: rows[0] + "\n");
+    std\assert(lastAssistantText(transcript) == "", message: "a turn with no assistant message has no reply");
+    std\assert(lastAssistantText("/nonexistent/t.jsonl") == "", message: "a missing transcript has no reply");
+    fs\remove(transcript);
 }
 ```
 

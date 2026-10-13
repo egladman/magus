@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1180,8 +1181,9 @@ func harnessSpellName(t *testing.T, id string) string {
 }
 
 // namedGlue matches a hook command that reaches glue which reads its host from the argv.
-// rehydrate reads none, and is left out on purpose.
-var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.buzz|cursor-hook\.buzz`)
+// rehydrate reads none, and is left out on purpose. proofread-reply picks its output shape
+// by host.
+var namedGlue = regexp.MustCompile(`magus-(command|path|observe|checkpoint)\.buzz|cursor-hook\.buzz|proofread-reply\.buzz`)
 
 // hookCommands collects every "command" string in a host's hook config.
 func hookCommands(t *testing.T, path string) []string {
@@ -1378,4 +1380,124 @@ func TestShortestForegroundMaxIsFalseWhenNoneDeclaresOne(t *testing.T) {
 	_, ok := ShortestForegroundMax([]HarnessDescriptor{{}, foregroundLimits(0)})
 
 	assert.False(t, ok)
+}
+
+func TestHarnessAcceptsAGroupOfOnlyTheReplyCheck(t *testing.T) {
+	registerHarnessSpell(t, "replycheck", `{
+  "schema_version": 2,
+  "id": "replycheck",
+  "display": {"name": "Reply check"},
+  "config": {"path": "replycheck/hooks.json"},
+  "skills": {"paths": [], "form": "short"},
+  "managed_entries": [{
+    "path": ["hooks", "stop"],
+    "entries": [{"command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name replycheck"}]
+  }]
+}`)
+	_, _, err := LoadHarness(context.Background(), t.TempDir(), "replycheck")
+
+	require.NoError(t, err, "the reply check is a shipped template, so a stop group holding only it is magus's own")
+	assert.True(t, runsAShippedTemplate("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex"))
+	assert.False(t, invokesMagus("magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz"),
+		"it judges nothing, so it is not guard coverage")
+}
+
+// wiredHook is one command a host config runs, with the matcher it runs under.
+type wiredHook struct {
+	Matcher, Command string
+	LoopLimit        any
+}
+
+// wiredOn collects what config runs on event, whether the host nests commands under an
+// entry's hooks (Claude Code, Codex) or puts one on the entry itself (Cursor).
+func wiredOn(t *testing.T, path, event string) []wiredHook {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	require.NoError(t, err, "read %s", path)
+	var doc struct {
+		Hooks map[string][]map[string]any `json:"hooks"`
+	}
+	require.NoError(t, decodeHarnessJSON(body, &doc), "parse %s", path)
+	var out []wiredHook
+	for _, entry := range doc.Hooks[event] {
+		matcher, _ := entry["matcher"].(string)
+		if command, ok := entry["command"].(string); ok {
+			out = append(out, wiredHook{Matcher: matcher, Command: command, LoopLimit: entry["loop_limit"]})
+		}
+		nested, _ := entry["hooks"].([]any)
+		for _, h := range nested {
+			command, _ := h.(map[string]any)["command"].(string)
+			out = append(out, wiredHook{Matcher: matcher, Command: command})
+		}
+	}
+	return out
+}
+
+func requireWired(t *testing.T, path, event, matcher, script string) wiredHook {
+	t.Helper()
+	for _, h := range wiredOn(t, path, event) {
+		if strings.Contains(h.Command, script) && (matcher == "" || strings.Contains(h.Matcher, matcher)) {
+			return h
+		}
+	}
+	require.Failf(t, "not wired", "%s runs no %s on %s (matcher %q)", path, script, event, matcher)
+	return wiredHook{}
+}
+
+// TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks pins what each host's harness
+// spell declares for the events that follow a turn: the reply check where the host has a
+// stop event, the person's message where it has a prompt event, and the spawn where it names
+// the spawn tool. The spell tests pin the same entries from the other side.
+func TestHarnessConfigsWireTheReplyCheckPromptAndSpawnHooks(t *testing.T) {
+	const reply, guard = "proofread-reply.buzz", "magus-command.buzz"
+
+	t.Run("claude-code", func(t *testing.T) {
+		config := dogfoodedHookConfig
+		requireWired(t, config, "Stop", "", reply)
+		requireWired(t, config, "UserPromptSubmit", "", guard)
+		requireWired(t, config, "PreToolUse", "Agent", guard)
+		requireWired(t, config, "SubagentStop", "", guard)
+	})
+
+	for _, config := range hostConfigFile["codex"] {
+		t.Run(config, func(t *testing.T) {
+			requireWired(t, config, "Stop", "", reply)
+			requireWired(t, config, "UserPromptSubmit", "", guard)
+			requireWired(t, config, "PreToolUse", "spawn_agent", guard)
+			assert.Empty(t, wiredOn(t, config, "SubagentStop"),
+				"Codex's SubagentStop payload is readable, but its transcript carries no message.usage record, so the hook would run on every subagent and record nothing")
+			for _, event := range []string{"Stop", "UserPromptSubmit", "PreToolUse"} {
+				for _, h := range wiredOn(t, config, event) {
+					assert.NotContains(t, h.Command, "--reports-skills",
+						"Codex documents no hook on a skill load, so a rule that requires one would deny forever")
+				}
+			}
+		})
+	}
+
+	t.Run("cursor", func(t *testing.T) {
+		config := hostConfigFile["cursor"][0]
+		stop := requireWired(t, config, "stop", "", reply)
+		assert.Equal(t, "1", fmt.Sprint(stop.LoopLimit), "the reply check chains one followup at most")
+		requireWired(t, config, "beforeSubmitPrompt", "", "cursor-hook.buzz")
+		requireWired(t, config, "preToolUse", "Task", "cursor-hook.buzz")
+		assert.Empty(t, wiredOn(t, config, "subagentStop"),
+			"Cursor's subagentStop names no subagent id, which the usage record is filed under")
+	})
+}
+
+// TestHarnessScoutIsReadOnlyByConfigWhereTheHostHasAKnob pins that the scout's read-only promise is
+// a setting each host enforces, and not only a sentence in its instructions.
+func TestHarnessScoutIsReadOnlyByConfigWhereTheHostHasAKnob(t *testing.T) {
+	read := func(rel string) string {
+		body, err := os.ReadFile(filepath.Join(repoRoot, rel))
+		require.NoError(t, err, rel)
+		return string(body)
+	}
+	assert.Contains(t, read(".codex/agents/magus-scout.toml"), "\nsandbox_mode = \"read-only\"\n")
+	assert.Contains(t, read(".cursor/agents/magus-scout.md"), "\nreadonly: true\n")
+	assert.Contains(t, read(".opencode/agents/magus-scout.md"), "\npermission:\n  edit: deny\n")
+	assert.Contains(t, read(".claude/agents/magus-scout.md"), "\ntools: Read, Grep, Glob, Bash\n")
+	assert.NotContains(t, read(".opencode/agents/magus-scout.md"), "bash:",
+		"the scout runs read-only magus commands, so bash stays at the session's setting")
 }

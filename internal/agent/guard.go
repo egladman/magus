@@ -198,7 +198,14 @@ var guardInputs = []string{"command", "path", "mcp"}
 // config written for 23 passes on the shell-command entry, and forwards the call's own
 // background request and timeout off the event. Under that config a 22 copy reports both
 // flags as unsupported, and a leased worker's backgrounded magus run goes unrefused.
-const GuardTemplateVersion = 23
+//
+// 24: proofread-reply.buzz requires --agent-name and answers each host in its own shape.
+// Under a config written for 24, a 23 copy reports --agent-name as unsupported and answers
+// every host in one shape, which the others do not act on, so their findings are lost
+// without a word. cursor-hook.buzz answers beforeSubmitPrompt with a
+// continue reply and records the message through `magus shell --message`. Under a config
+// written for 24, a 23 copy prints nothing for beforeSubmitPrompt, which records no message.
+const GuardTemplateVersion = 24
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

@@ -92,9 +92,6 @@ var hookConfigExemptions = map[string]map[string]string{
 		"magus-session": "SessionStart hands a codex hook no env file and reads back only additionalContext " +
 			"(testdata/hosts/codex/session-start.command.{input,output}.schema.json), so no hook can put the " +
 			"checkout root on PATH for later shell commands",
-		"proofread-reply": "Stop reads back no additionalContext, and its output schema " +
-			"(testdata/hosts/codex/stop.command.output.schema.json) refuses any key but continue, decision, " +
-			"reason, stopReason, suppressOutput and systemMessage, so the findings have no way to reach the agent",
 	},
 }
 
