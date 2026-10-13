@@ -60,21 +60,89 @@ func TestAMadeUpCheckpointIsRefusedAtForkAndAtApply(t *testing.T) {
 }
 
 // A real revision is stored as the full one it abbreviates, so the row compares with a
-// base exec reads from a checkout; a dirty token keeps its digest.
+// base exec reads from a checkout. A dirty token on an older revision keeps its digest:
+// the patch behind it is gone, so nothing can check it.
 func TestARealAbbreviatedCheckpointIsStoredExpanded(t *testing.T) {
 	t.Parallel()
 
-	root, head := committedRepo(t)
-	s := NewStore(tmpLoc(t, root))
+	repo := testkit.NewRepo(t, loadableFiles)
+	older := repo.Head()
+	repo.Commit("later", map[string]string{"later.txt": "later\n"})
+	head := repo.Head()
+	s := NewStore(tmpLoc(t, repo.Root()))
 	digest := strings.Repeat("0123456789abcdef", 2)
 
-	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(head[:9]+"+"+digest), config.Jobs{}, nil)
+	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(older[:9]+"+"+digest), config.Jobs{}, nil)
 	require.NoError(t, err)
-	assert.Equal(t, head+"+"+digest, forked.Checkpoint)
+	assert.Equal(t, older+"+"+digest, forked.Checkpoint)
 
 	applied, err := Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", head[:9])}, config.Jobs{}, nil, nil, false)
 	require.NoError(t, err)
 	assert.Equal(t, head, applied[0].Next.Checkpoint)
+}
+
+// A real commit the checkout's HEAD does not descend from names a tree no work here
+// started from, which is the made-up checkpoint's subtler twin: it resolves, and widens
+// the diff a job is graded against to other work's commits.
+func TestACheckpointOffTheCheckoutsHistoryIsRefused(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, loadableFiles)
+	repo.Git("switch", "-q", "-c", "elsewhere")
+	elsewhere := repo.Commit("elsewhere", map[string]string{"elsewhere.txt": "x\n"})
+	repo.Git("switch", "-q", "main")
+	s := NewStore(tmpLoc(t, repo.Root()))
+
+	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(elsewhere), config.Jobs{}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nor an ancestor")
+
+	_, err = Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", elsewhere[:9])}, config.Jobs{}, nil, nil, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nor an ancestor")
+
+	rows, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
+// At HEAD magus reproduces the digest, so a digest the tree does not hold is refused; the
+// clean tree's own revision, and the dirty tree's own token, are accepted.
+func TestACheckpointDigestAtHeadIsCheckedAgainstTheTree(t *testing.T) {
+	t.Parallel()
+
+	root, head := committedRepo(t)
+	s := NewStore(tmpLoc(t, root))
+	madeUp := head + "+" + strings.Repeat("0123456789abcdef", 2)
+
+	_, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(madeUp), config.Jobs{}, nil)
+	require.Error(t, err, "a clean tree reproduces no digest")
+	assert.Contains(t, err.Error(), madeUp)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
+	_, err = Apply(t.Context(), s, []types.Declaration{checkpointRecord("applied", madeUp)}, config.Jobs{}, nil, nil, false)
+	require.Error(t, err, "a dirty tree reproduces its own digest, not this one")
+	assert.Contains(t, err.Error(), dirtyToken(t, root))
+}
+
+// A writing row forked by merge with no checkpoint records the checkout's, as `magus job
+// fork` does, since a job with none could never be verified against its diff.
+func TestAForkByMergeNamingNoCheckpointRecordsTheCheckouts(t *testing.T) {
+	t.Parallel()
+
+	root, _ := committedRepo(t)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "new.go"), []byte("package new\n"), 0o644))
+	s := NewStore(tmpLoc(t, root))
+
+	forked, err := ForkMerge(t.Context(), s, "forked", checkpointMerge(""), config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, dirtyToken(t, root), forked.Checkpoint)
+
+	reader, err := ForkMerge(t.Context(), s, "reader", func(u *types.Job) {
+		u.State, u.ReadOnly = types.StateDeclared, true
+	}, config.Jobs{}, nil)
+	require.NoError(t, err)
+	assert.Empty(t, reader.Checkpoint, "a read-only job is graded on no diff")
 }
 
 // The digest says whether two trees match, so one of the wrong shape names no tree at all.
