@@ -81,7 +81,7 @@ func TestEveryRuleSiteNamesACataloguedRule(t *testing.T) {
 func assertCatalogued(t *testing.T, catalogued map[string]types.RuleDoc, by, name string) {
 	t.Helper()
 	doc, ok := catalogued[name]
-	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: add one to denyRuleDocs or advisoryDocs", by, name) {
+	if assert.Truef(t, ok, "%s names rule %q, which has no catalog row: declare a ruleDoc var with denyDoc or adviseDoc", by, name) {
 		assert.NotEmpty(t, doc.Catches, "%q must say what it fires on", name)
 	}
 	_, ok = builtin.Defaults()[name]
@@ -109,6 +109,79 @@ func TestCatalogMatchesBuiltinDefaults(t *testing.T) {
 	for name := range rows {
 		_, ok := defaults[name]
 		assert.Truef(t, ok, "catalog row %q is missing from builtin.Defaults", name)
+	}
+}
+
+// TestRuleDocsAreNamedAfterTheirRule pins the one naming every row follows, so a job
+// claiming `catalog.go#ruleDocLeaseGate` can derive the name from the rule's id:
+// ruleDoc plus the id in PascalCase. It also counts the declarations, which fails a row
+// filed from anywhere but a top-level var.
+func TestRuleDocsAreNamedAfterTheirRule(t *testing.T) {
+	t.Parallel()
+
+	src := ruleSourceOf(t)
+	f, err := parser.ParseFile(token.NewFileSet(), "catalog.go", nil, 0)
+	require.NoError(t, err)
+
+	seen := 0
+	for _, decl := range f.Decls {
+		gd, ok := decl.(*ast.GenDecl)
+		if !ok || gd.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gd.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok || len(vs.Values) != 1 {
+				continue
+			}
+			call, ok := vs.Values[0].(*ast.CallExpr)
+			if !ok {
+				continue
+			}
+			if fn, ok := call.Fun.(*ast.Ident); !ok || (fn.Name != "denyDoc" && fn.Name != "adviseDoc") {
+				continue
+			}
+			seen++
+			lit, ok := call.Args[0].(*ast.CompositeLit)
+			require.Truef(t, ok, "%s: the first argument is a types.RuleDoc literal", vs.Names[0].Name)
+			var constant string
+			for _, elt := range lit.Elts {
+				kv, ok := elt.(*ast.KeyValueExpr)
+				if !ok || kv.Key.(*ast.Ident).Name != "Name" {
+					continue
+				}
+				conv, ok := kv.Value.(*ast.CallExpr)
+				require.Truef(t, ok && len(conv.Args) == 1, "%s: Name is string(<rule constant>)", vs.Names[0].Name)
+				constant = conv.Args[0].(*ast.Ident).Name
+			}
+			name, ok := src.values[constant]
+			require.Truef(t, ok, "%s: %q is not a rule constant", vs.Names[0].Name, constant)
+			assert.Equal(t, "ruleDoc"+pascalCase(name), vs.Names[0].Name, "the var for rule %q", name)
+		}
+	}
+	assert.Len(t, ruleDocRegistry, seen, "every filed row is a top-level ruleDoc var")
+}
+
+// pascalCase joins the words of a kebab-case rule id, each capitalized.
+func pascalCase(id string) string {
+	var b strings.Builder
+	for _, word := range strings.Split(id, "-") {
+		b.WriteString(strings.ToUpper(word[:1]) + word[1:])
+	}
+	return b.String()
+}
+
+// TestEnrolledAdvisoriesAreMarkerKinds keeps the enrolled flag honest: only a
+// hint.MarkerKind constant can hold an advisory to one firing per session.
+func TestEnrolledAdvisoriesAreMarkerKinds(t *testing.T) {
+	t.Parallel()
+
+	src := ruleSourceOf(t)
+	enrolled := enrolledAdvisories()
+	require.NotEmpty(t, enrolled)
+	for _, name := range enrolled {
+		_, kind := src.kinds[name]
+		assert.Truef(t, kind, "%q is filed as enrolled but no hint.MarkerKind constant declares it", name)
 	}
 }
 
