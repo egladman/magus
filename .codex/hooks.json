@@ -107,6 +107,15 @@
             "type": "command"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: joining the subagent to its spawn",
+            "type": "command"
+          }
+        ]
       }
     ],
     "SubagentStop": [

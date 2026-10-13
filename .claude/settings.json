@@ -106,6 +106,16 @@
           }
         ],
         "matcher": "Agent|Task|SendMessage"
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "Monitor|TaskOutput|ScheduleWakeup|CronCreate"
       }
     ],
     "SessionStart": [
@@ -144,6 +154,15 @@
         "hooks": [
           {
             "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
+            "timeout": 10,
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name claude-code --reports-skills",
             "timeout": 10,
             "type": "command"
           }
