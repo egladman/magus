@@ -7,22 +7,21 @@ import (
 	"slices"
 )
 
-// minSeparationTexts is the fewest texts on either side that [Separate]
+// MinSeparationTexts is the fewest texts on either side that [Separate]
 // scores a feature from.
-const minSeparationTexts = 5
+const MinSeparationTexts = 5
 
 // Separation is how far one [Shape] feature separates two sets of texts.
 type Separation struct {
-	// Feature is the feature's JSON path in [Shape]: a number by its name, a
-	// map entry as "<map>.<key>".
-	Feature string `json:"feature"`
+	Feature Feature `json:"feature"`
 	// AUC is the probability that a random owner text measures higher than a
 	// random other text, ties counted half: 1 or 0 separates the sets
 	// completely, 0.5 not at all.
 	AUC float64 `json:"auc"`
-	// Owner and Other are the texts on each side the feature was measured on.
-	Owner int `json:"owner"`
-	Other int `json:"other"`
+	// OwnerTexts and OtherTexts are the texts on each side the feature was
+	// measured on.
+	OwnerTexts int `json:"owner"`
+	OtherTexts int `json:"other"`
 }
 
 // Separate scores every feature of [Shape] by how well it tells the owner's
@@ -43,11 +42,11 @@ func Separate(owner, other []Shape) []Separation {
 
 	for name, top := range names {
 		ov, xv := featureValues(ownerTexts, name, top), featureValues(otherTexts, name, top)
-		if len(ov) < minSeparationTexts || len(xv) < minSeparationTexts {
+		if len(ov) < MinSeparationTexts || len(xv) < MinSeparationTexts {
 			continue
 		}
 
-		out = append(out, Separation{Feature: name, AUC: auc(ov, xv), Owner: len(ov), Other: len(xv)})
+		out = append(out, Separation{Feature: Feature(name), AUC: auc(ov, xv), OwnerTexts: len(ov), OtherTexts: len(xv)})
 	}
 
 	slices.SortFunc(out, func(a, b Separation) int {

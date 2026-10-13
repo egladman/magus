@@ -87,7 +87,7 @@ func runCalibrate(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		return failure(stderr, err)
 	}
 
-	return 0
+	return exitOK
 }
 
 // replayCases prints the scores of the cases in dir, or with gates each
@@ -115,7 +115,7 @@ func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
 			return failure(stderr, err)
 		}
 
-		return 0
+		return exitOK
 	}
 
 	all := proofread.Gates(scores)
@@ -129,7 +129,7 @@ func replayCases(dir, format string, gates bool, stdout, stderr io.Writer) int {
 		}
 	}
 
-	return 0
+	return exitOK
 }
 
 func dirName(dir string) string {
@@ -147,10 +147,8 @@ func sampleKind(name string) (proofread.Kind, error) {
 		return "", errors.New("-sample needs -kind")
 	}
 
-	kind := proofread.ParseKind(name)
-
-	for _, s := range subcommands {
-		if s.kind != "" && s.kind == kind {
+	if kind, ok := proofread.ParseKind(name); ok {
+		if s, ok := kindCommand(kind); ok {
 			if s.kind == proofread.KindSkillTemplate {
 				return "", fmt.Errorf("-kind %s renders a template first and cannot be sampled", name)
 			}

@@ -31,7 +31,10 @@ func JudgeText(text string, kind Kind, opts ...Option) []Finding {
 }
 
 func judgeText(text string, kind Kind, o options) []Finding {
-	kind = ParseKind(string(kind)) // compat: see kindAliases
+	if k, ok := ParseKind(string(kind)); ok {
+		kind = k // compat: see kindAliases
+	}
+
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
 	switch kind {

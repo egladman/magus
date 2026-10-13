@@ -12,11 +12,12 @@ import (
 // TagCompression, their part-of-speech tags. Like [Metrics] it is
 // information: no rule reads it.
 //
-// Words, Sentences, SentenceWordsMean and SentenceWordsSD are [Measure]'s.
-// Rates are per [Shape.Words], where a code span counts one word. The lexical
-// measures (MATTR, WordEntropy, HapaxRatio, LexicalDensity, FunctionWords and
-// AdjacentOverlap) read the words outside code spans, lowercased, with the
-// punctuation around each trimmed.
+// Words, Sentences, SentenceWordsMean and SentenceWordsStdDev are
+// [Measure]'s. Rates are per [Shape.Words], where a code span counts one
+// word. The lexical measures (MATTR, WordEntropy, HapaxRatio, LexicalDensity,
+// FunctionWords and AdjacentOverlap) read the words outside code spans,
+// lowercased, with the punctuation around each trimmed; a word of
+// punctuation alone, such as a spaced dash, is not one.
 type Shape struct {
 	Words     int `json:"words"`
 	Sentences int `json:"sentences"`
@@ -32,9 +33,9 @@ type Shape struct {
 	LexicalDensity float64 `json:"lexical_density"`
 	// FunctionWords is each word of a fixed list of English function words
 	// per 1000 words, every word of the list present.
-	FunctionWords     map[string]float64 `json:"function_words,omitempty"`
-	SentenceWordsMean float64            `json:"sentence_words_mean"`
-	SentenceWordsSD   float64            `json:"sentence_words_sd"`
+	FunctionWords       map[string]float64 `json:"function_words,omitempty"`
+	SentenceWordsMean   float64            `json:"sentence_words_mean"`
+	SentenceWordsStdDev float64            `json:"sentence_words_sd"`
 	// ParagraphWordsMean is the mean words per paragraph or list item.
 	ParagraphWordsMean float64 `json:"paragraph_words_mean"`
 	// Punctuation is per 100 words: colon, semicolon, paren (opening), dash
@@ -45,12 +46,12 @@ type Shape struct {
 	// Triads are three-item lists, "X, Y, and Z" or "X, Y and Z", per 1000
 	// words.
 	Triads float64 `json:"triads_per_1000"`
-	// RhetoricalQuestions are questions answered by the next sentence of
-	// their paragraph, per 1000 words.
-	RhetoricalQuestions float64 `json:"rhetorical_questions_per_1000"`
-	// NotXButY is contrasts such as "not X but Y", "isn't X, it's Y" and
-	// "it's not just X", per 1000 words.
-	NotXButY float64 `json:"not_x_but_y_per_1000"`
+	// RhetoricalQuestionsPer1000 are questions answered by the next sentence
+	// of their paragraph, per 1000 words.
+	RhetoricalQuestionsPer1000 float64 `json:"rhetorical_questions_per_1000"`
+	// NotXButYPer1000 is contrasts such as "not X but Y", "isn't X, it's Y"
+	// and "it's not just X", per 1000 words.
+	NotXButYPer1000 float64 `json:"not_x_but_y_per_1000"`
 	// AdjacentOverlap is the mean Jaccard similarity of the content words of
 	// each sentence and the next.
 	AdjacentOverlap float64 `json:"adjacent_overlap"`
@@ -70,7 +71,7 @@ type Shape struct {
 	// which stays zero: MATTR, WordEntropy, HapaxRatio and LexicalDensity
 	// under 100 words outside code spans, FunctionWords, Grammar,
 	// TemplateRate and TagCompression under 200, and SentenceWordsMean,
-	// SentenceWordsSD and AdjacentOverlap under 5 sentences.
+	// SentenceWordsStdDev and AdjacentOverlap under 5 sentences.
 	Withheld []string `json:"withheld,omitempty"`
 }
 
@@ -92,6 +93,8 @@ var (
 		`\b(?:isn['\x{2019}]t|is\s+not|aren['\x{2019}]t|are\s+not|wasn['\x{2019}]t|was\s+not)\s+[^.!?;]{1,40}?` +
 		`(?:[,;]|\s--?|\s?[\x{2014}\x{2013}])\s*(?:it|they|that|this)(?:['\x{2019}](?:s|re)|\s+is|\s+are)\b|` +
 		`\bnot\s+[^.!?;:,]{1,40}?,?\s+but\b`)
+	boldSpan   = regexp.MustCompile(`\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__`)
+	spacedDash = regexp.MustCompile(`\s--?\s|\x{2014}|\x{2013}`)
 )
 
 // MeasureShape returns the shape of text read as kind, from the prose
@@ -148,8 +151,8 @@ func MeasureShape(text string, kind Kind) Shape {
 			}
 
 			for _, w := range sentence {
-				if w != codeWord {
-					words = append(words, lexical(w))
+				if l := lexical(w); w != codeWord && l != "" {
+					words = append(words, l)
 				}
 			}
 		}
@@ -172,8 +175,8 @@ func MeasureShape(text string, kind Kind) Shape {
 			"code_span": per(spans, 100),
 		}
 		s.Triads = per(triads, 1000)
-		s.RhetoricalQuestions = per(answered, 1000)
-		s.NotXButY = per(contrasts, 1000)
+		s.RhetoricalQuestionsPer1000 = per(answered, 1000)
+		s.NotXButYPer1000 = per(contrasts, 1000)
 		s.ParagraphWordsMean = round2(float64(m.Words) / float64(paragraphCount))
 	}
 
@@ -187,13 +190,14 @@ func MeasureShape(text string, kind Kind) Shape {
 
 	if len(words) >= minFunctionWords {
 		s.FunctionWords = functionWordRates(words)
-		s.Grammar, s.TemplateRate, s.TagCompression = measureGrammar(sentences, m.Words)
+		g := measureGrammar(sentences, m.Words)
+		s.Grammar, s.TemplateRate, s.TagCompression = g.rates, g.templateRate, g.tagCompression
 	} else {
 		withhold("function_words", "grammar_per_1000", "template_rate", "tag_compression")
 	}
 
 	if m.Sentences >= minShapeSentences {
-		s.SentenceWordsMean, s.SentenceWordsSD = m.SentenceWordsMean, m.SentenceWordsSD
+		s.SentenceWordsMean, s.SentenceWordsStdDev = m.SentenceWordsMean, m.SentenceWordsSD
 		s.AdjacentOverlap = round4(adjacentOverlap(sentences))
 	} else {
 		withhold("sentence_words_mean", "sentence_words_sd", "adjacent_overlap")
@@ -330,7 +334,7 @@ func adjacentOverlap(sentences [][]string) float64 {
 				continue
 			}
 
-			if l := lexical(w); !isShapeFunctionWord[l] {
+			if l := lexical(w); l != "" && !isShapeFunctionWord[l] {
 				set[l] = true
 			}
 		}
@@ -344,21 +348,11 @@ func adjacentOverlap(sentences [][]string) float64 {
 
 	for i := 0; i+1 < len(sentences); i++ {
 		a, b := content(sentences[i]), content(sentences[i+1])
-
-		shared := 0
-
-		for w := range a {
-			if b[w] {
-				shared++
-			}
-		}
-
-		union := len(a) + len(b) - shared
-		if union == 0 {
+		if len(a)+len(b) == 0 {
 			continue
 		}
 
-		sum += float64(shared) / float64(union)
+		sum += overlap(a, b)
 		pairs++
 	}
 

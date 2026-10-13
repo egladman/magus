@@ -2,9 +2,12 @@ package proofread
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -38,8 +41,8 @@ var compactChecks = []check{
 	{rule: RuleCompactDuplicate, on: compact, advise: compact, judge: compactDuplicate},
 }
 
-const compactEvidence = " The measurements are in the 2026-10-13 machine-text research " +
-	"(research-machine-text.md in the proofread roadmap)."
+const compactEvidence = " The measurements are in the machine-text research (research-machine-text.md in " +
+	"the proofread roadmap)."
 
 var compactTexts = map[Rule]ruleText{
 	RuleCompactFiller: {
@@ -50,9 +53,9 @@ var compactTexts = map[Rule]ruleText{
 		why: "Each of these words is one token in tiktoken o200k and cl100k (Claude's tokenizer is not " +
 			"public), so the saving is counted at one token a word. They are what the deletion-only " +
 			"compressors drop first: LLMLingua-2 (Pan et al., Findings ACL 2024) holds BBH at 70.02 against " +
-			"70.07 at 3x by deleting words alone. A 2026-10-13 eval over three magus tasks found the skills " +
-			"rewritten to this floor 14.9% shorter than the short form, and they passed 9 of 9 runs against " +
-			"the full form's 8 of 9. Stopword removal past that floor hurts code tasks (Yang et al., arXiv " +
+			"70.07 at 3x by deleting words alone. An eval over magus tasks ran the skills rewritten to this " +
+			"floor against their short and full forms: the rewrite was shorter than both and passed at least " +
+			"as often as the full form. Stopword removal past that floor hurts code tasks (Yang et al., arXiv " +
 			"2410.22793), so the rule names only these words and never a negation, an obligation, a scope, " +
 			"a condition or an order." + compactEvidence,
 	},
@@ -93,8 +96,8 @@ var compactTexts = map[Rule]ruleText{
 		why: "The floor is one fact per line. IFScale (Jaroslawicz et al., arXiv 2507.11538) found the best " +
 			"model follows 68% of 500 instructions, and an instruction packed beside another on one line " +
 			"is the easier one to miss. A line counts as more than one fact when it runs long and joins " +
-			"clauses; the length is the 90th percentile of the 1041 prose lines of the skills rewritten " +
-			"to the floor on 2026-10-13." + compactEvidence,
+			"clauses; the length is the 90th percentile of the prose line lengths of the skills magus " +
+			"ships once rewritten to the floor, a code span counted as one word." + compactEvidence,
 	},
 	RuleCompactDuplicate: {
 		code:      "PRF7015",
@@ -102,10 +105,10 @@ var compactTexts = map[Rule]ruleText{
 		catches: "a compact line that restates an earlier one: half or more of its content words and every " +
 			"negation, condition, scope and order word the same",
 		why: "Anthropic's skill guidance asks for the smallest set of high-signal tokens and one term per " +
-			"idea, and a restated line spends its tokens twice. The rewrite to the floor on 2026-10-13 " +
-			"merged lines like these by hand. A line restates another only when its negation, obligation, " +
-			"scope, condition and order words match too, since those are what a merge must keep. Over the " +
-			"1041 lines that rewrite left, it fires twice, both restatements the merges missed." +
+			"idea, and a restated line spends its tokens twice. The rewrite of the shipped skills to the " +
+			"floor merged lines like these by hand. A line restates another only when its negation, " +
+			"obligation, scope, condition and order words match too, since those are what a merge must " +
+			"keep. Run over the lines that rewrite left, it fired only on restatements the merges missed." +
 			compactEvidence,
 	},
 }
@@ -191,12 +194,14 @@ func compactMarkup(in input) []Finding {
 	for _, ln := range in.prose {
 		body := blankBackticks(ln.body())
 
-		for _, m := range compactBold.FindAllString(body, -1) {
-			out = append(out, markupFinding(m, 2, ln.line))
+		for _, at := range compactBold.FindAllStringIndex(body, -1) {
+			if !dunder(body, at) {
+				out = append(out, markupFinding(body[at[0]:at[1]], 2, ln.line))
+			}
 		}
 
-		for _, m := range compactItalic.FindAllStringSubmatch(compactBold.ReplaceAllString(body, ""), -1) {
-			out = append(out, markupFinding(m[1], 1, ln.line))
+		for _, m := range groupMatches(compactItalic, compactBold.ReplaceAllString(body, "")) {
+			out = append(out, markupFinding(m, 1, ln.line))
 		}
 	}
 
@@ -207,6 +212,52 @@ func compactMarkup(in input) []Finding {
 				Line:    i,
 			})
 		}
+	}
+
+	return out
+}
+
+// pythonDunders are the Python special names an agent text writes outside
+// code as often as in it.
+var pythonDunders = wordSet(
+	"init", "main", "name", "file", "doc", "dict", "class", "module", "all", "slots", "str", "repr", "call",
+	"len", "iter", "next", "enter", "exit", "eq", "hash", "new", "del", "getattr", "setattr", "getitem",
+	"setitem", "contains", "bool", "version", "package", "path", "spec", "future", "builtins", "annotations",
+)
+
+var dunderName = regexp.MustCompile(`^__([a-z][a-z0-9]*)__$`)
+
+// dunder reports whether the bold match at body[at[0]:at[1]] is a Python
+// special name such as __init__ rather than markup: a known name, or one
+// written as code is, after a dot or before a call or an extension.
+func dunder(body string, at []int) bool {
+	m := dunderName.FindStringSubmatch(body[at[0]:at[1]])
+	if m == nil {
+		return false
+	}
+
+	after := body[at[1]:]
+	ext, _ := utf8.DecodeRuneInString(strings.TrimPrefix(after, "."))
+	calledOrExtended := strings.HasPrefix(after, "(") || (strings.HasPrefix(after, ".") && unicode.IsLetter(ext))
+
+	return pythonDunders[m[1]] || strings.HasSuffix(body[:at[0]], ".") || calledOrExtended
+}
+
+// groupMatches returns group 1 of each match of re in s. Each search resumes
+// where the last group ended rather than where its match did, so the
+// delimiter one match consumes after its group can open the next: "w/ b/c"
+// yields both.
+func groupMatches(re *regexp.Regexp, s string) []string {
+	var out []string
+
+	for at := 0; at < len(s); {
+		m := re.FindStringSubmatchIndex(s[at:])
+		if m == nil {
+			break
+		}
+
+		out = append(out, s[at+m[2]:at+m[3]])
+		at += m[3]
 	}
 
 	return out
@@ -256,11 +307,11 @@ func compactCostlyAbbrev(in input) []Finding {
 	for _, ln := range in.prose {
 		body := mentionsMasked(ln.body())
 
-		for _, m := range costlyAbbrev.FindAllStringSubmatch(body, -1) {
+		for _, m := range groupMatches(costlyAbbrev, body) {
 			word := ""
 
 			for _, a := range costlyAbbrevs {
-				if strings.EqualFold(a.abbrev, m[1]) {
+				if strings.EqualFold(a.abbrev, m) {
 					word = a.word
 
 					break
@@ -269,8 +320,8 @@ func compactCostlyAbbrev(in input) []Finding {
 
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Write '%s', not '%s': the abbreviation costs more tokens than the word.",
-					word, m[1]),
-				Match: m[1], Line: ln.line, Replacements: []string{word},
+					word, m),
+				Match: m, Line: ln.line, Replacements: []string{word},
 			})
 		}
 	}
@@ -282,12 +333,12 @@ func compactCostlyAbbrev(in input) []Finding {
 var symbolWords = map[string]string{
 	"\u00ac": "not", "\u2260": "not equal", "\u2227": "and", "\u2228": "or", "\u2200": "every", "\u2203": "some",
 	"\u2208": "in", "\u2209": "not in", "\u2234": "so", "\u2235": "because", "\u21d2": "then",
-	"\u21d4": "if and only if", "\u2192": "->", "\u2282": "in", "\u2286": "in",
+	"\u21d4": "if and only if", "\u2192": "then", "\u2282": "in", "\u2286": "in",
 }
 
 var (
 	bangNot     = regexp.MustCompile(`(?:^|[\s(\[,;:])(![A-Za-z][\w-]*)`)
-	logicSymbol = regexp.MustCompile(`[\x{00ac}\x{2260}\x{2227}\x{2228}\x{2200}\x{2203}\x{2208}\x{2209}\x{2234}\x{2235}\x{21d2}\x{21d4}\x{2192}\x{2282}\x{2286}]`)
+	logicSymbol = regexp.MustCompile("[" + strings.Join(slices.Sorted(maps.Keys(symbolWords)), "") + "]")
 )
 
 func compactSymbolNegation(in input) []Finding {
@@ -358,10 +409,7 @@ const (
 	duplicateMinWords = 4
 )
 
-var (
-	functionWords  = wordSet(shapeFunctionWords...)
-	duplicateStops = wordSet("via", "per", "use", "uses", "using")
-)
+var duplicateStops = wordSet("via", "per", "use", "uses", "using")
 
 // lineWords are a line's content words, its code spans each one word, and the
 // keep words it holds.
@@ -385,7 +433,7 @@ func readLineWords(ln proseLine) lineWords {
 		switch w = strings.ToLower(w); {
 		case keepWords[w]:
 			keep = append(keep, w)
-		case len(w) > 1 && !functionWords[w] && !duplicateStops[w]:
+		case len(w) > 1 && !isShapeFunctionWord[w] && !duplicateStops[w]:
 			out.content[w] = true
 		}
 	}

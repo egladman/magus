@@ -3,7 +3,6 @@ package proofread
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -85,18 +84,14 @@ func TestBuildVoiceKeepsAggregatesAlone(t *testing.T) {
 			MinVoiceWords)
 	}
 
-	if k.Windows == nil || k.Windows.Count < 5 || k.SubjectP95 != 0 {
+	if len(k.Windows) < 5 || k.SubjectP95 != 0 {
 		t.Fatalf("review-reply = %+v, want 5 windows or more and no subject length", k)
 	}
 
-	for f, values := range k.Windows.Values {
-		if !slices.IsSorted(values) || len(values) > k.Windows.Count {
-			t.Errorf("%s = %v, want at most %d sorted values", f, values, k.Windows.Count)
+	for i, w := range k.Windows {
+		if _, ok := w["function_words.i"]; !ok || len(w) < minVoiceFeatures {
+			t.Errorf("window %d = %v, want the rate of I among %d features or more", i, w, minVoiceFeatures)
 		}
-	}
-
-	if _, ok := k.Windows.Values["function_words.i"]; !ok {
-		t.Errorf("values = %v, want the rate of I", k.Windows.Values)
 	}
 }
 
@@ -145,7 +140,7 @@ func TestBuildVoiceRanksEachKindOnItsOwnFeatures(t *testing.T) {
 			t.Fatalf("%s has no windows", tc.kind)
 		}
 
-		if _, got := w.Values[tc.feature]; got != tc.want {
+		if _, got := sortedValues(w)[tc.feature]; got != tc.want {
 			t.Errorf("%s ranks %s = %v, want %v", tc.kind, tc.feature, got, tc.want)
 		}
 	}
@@ -181,13 +176,13 @@ func TestVoiceDriftIsOffWithoutAVoice(t *testing.T) {
 }
 
 func TestAVoiceRelaxesTenseOnChangeDescriptionsAlone(t *testing.T) {
-	writesI := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{
+	writesI := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts, Words: 600, FirstPerson: 21, Future: 4},
 	}}
-	tooFew := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{
+	tooFew := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts - 1, Words: 600, FirstPerson: 21, Future: 4},
 	}}
-	noFuture := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{
+	noFuture := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{
 		KindChangeDescription: {Texts: MinVoiceTexts, Words: 600, FirstPerson: 21, Future: 1},
 	}}
 	deny := WithDecisions(map[Rule]Decision{RuleTense: DecisionDeny})
@@ -253,28 +248,30 @@ func TestReadVoiceRoundTripsAndRefusesBadFiles(t *testing.T) {
 		t.Fatalf("ReadVoice = %+v, %v, want the voice back", v, err)
 	}
 
-	issue := func(body string) string { return `{"schema":"proofread-voice/2","kinds":{"issue":` + body + `}}` }
+	issue := func(body string) string { return `{"schema":"proofread-voice/3","kinds":{"issue":` + body + `}}` }
+	rebuild := "is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"
 
 	cases := map[string]struct{ body, want string }{
-		"an earlier version": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`,
-			"schema \"proofread-voice/1\" is from an earlier proofread: rerun `proofread voice build` to rebuild the voice file"},
-		"another schema": {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/2`},
-		"an unknown kind": {`{"schema":"proofread-voice/2","kinds":{"guide":{}}}`,
+		"the first version": {`{"schema":"proofread-voice/1","kinds":{"issue":{"ranges":{}}}}`,
+			`schema "proofread-voice/1" ` + rebuild},
+		"one cut for every window": {
+			`{"schema":"proofread-voice/2","kinds":{"issue":{"windows":{"count":1,"values":{},"cut":1}}}}`,
+			`schema "proofread-voice/2" ` + rebuild,
+		},
+		"another schema": {`{"schema":"proofread-voice/9","kinds":{}}`, `schema "proofread-voice/9" is not proofread-voice/3`},
+		"an unknown kind": {`{"schema":"proofread-voice/3","kinds":{"guide":{}}}`,
 			"a voice measures change-description, review-reply, commit-message and issue, not guide"},
-		"an unknown feature": {issue(`{"windows":{"count":1,"values":{"typos":[1]},"cut":1}}`),
+		"an unknown feature": {issue(`{"windows":[{"punctuation.comma":1,"typos":1}]}`),
 			`issue: unknown feature "typos"`},
-		"a feature off for the kind": {issue(`{"windows":{"count":1,"values":{"punctuation.colon":[1]},"cut":1}}`),
+		"a feature off for the kind": {issue(`{"windows":[{"punctuation.comma":1,"punctuation.colon":1}]}`),
 			`issue: unknown feature "punctuation.colon"`},
-		"unsorted values": {issue(`{"windows":{"count":2,"values":{"punctuation.comma":[2,1]},"cut":1}}`),
-			"issue: punctuation.comma values are not sorted"},
-		"more values than windows": {issue(`{"windows":{"count":1,"values":{"punctuation.comma":[1,2]},"cut":1}}`),
-			"issue: punctuation.comma has 2 values for 1 windows"},
-		"a negative cut": {issue(`{"windows":{"count":1,"values":{},"cut":-1}}`), "issue: cut -1 is negative"},
+		"a window of one feature": {issue(`{"windows":[{"punctuation.comma":1,"punctuation.paren":0},{"punctuation.comma":1}]}`),
+			"issue: window 1 has 1 features, want 2 or more"},
 		"a subject length off commits": {issue(`{"subject_chars_p95":40}`),
 			"issue: only commit messages keep a subject length"},
-		"windows on commits": {`{"schema":"proofread-voice/2","kinds":{"commit-message":{"windows":{"count":0,"values":{},"cut":0}}}}`,
+		"windows on commits": {`{"schema":"proofread-voice/3","kinds":{"commit-message":{"windows":[{}]}}}`,
 			"commit-message: commit messages keep no windows"},
-		"an unknown field": {`{"schema":"proofread-voice/2","text":"hi"}`, `json: unknown field "text"`},
+		"an unknown field": {`{"schema":"proofread-voice/3","text":"hi"}`, `voice file: json: unknown field "text"`},
 	}
 
 	for name, tc := range cases {

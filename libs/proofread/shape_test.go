@@ -70,8 +70,8 @@ func TestMeasureShapeCountsContrasts(t *testing.T) {
 	got := shapeFixture(t, "contrasts.txt")
 
 	// 20 words: "not slow but", "isn't a bug, it's" and "It's not just".
-	if got.Words != 20 || got.NotXButY != 150 {
-		t.Errorf("MeasureShape = %d words, %v contrasts per 1000, want 20 and 150", got.Words, got.NotXButY)
+	if got.Words != 20 || got.NotXButYPer1000 != 150 {
+		t.Errorf("MeasureShape = %d words, %v contrasts per 1000, want 20 and 150", got.Words, got.NotXButYPer1000)
 	}
 }
 
@@ -81,9 +81,9 @@ func TestMeasureShapeCountsQuestionsItsParagraphAnswers(t *testing.T) {
 	// 18 words. "Why does it race?" and "Is it safe?" are answered; "Is it
 	// fast?" is followed by a question and "Why?" ends its paragraph: 2 in 18
 	// words is 111.11 per 1000.
-	if got.Words != 18 || got.RhetoricalQuestions != 111.11 {
+	if got.Words != 18 || got.RhetoricalQuestionsPer1000 != 111.11 {
 		t.Errorf("MeasureShape = %d words, %v rhetorical questions per 1000, want 18 and 111.11",
-			got.Words, got.RhetoricalQuestions)
+			got.Words, got.RhetoricalQuestionsPer1000)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestMeasureShapeAveragesAdjacentOverlap(t *testing.T) {
 	}
 
 	if got.Words != m.Words || got.Sentences != m.Sentences || got.SentenceWordsMean != m.SentenceWordsMean ||
-		got.SentenceWordsSD != m.SentenceWordsSD {
+		got.SentenceWordsStdDev != m.SentenceWordsSD {
 		t.Errorf("MeasureShape = %+v, want the words and sentences of Measure %+v", got, m)
 	}
 }
@@ -126,6 +126,8 @@ func TestMeasureShapeMeasuresLexicalRichness(t *testing.T) {
 		// Code spans are no word to the lexical measures, so ten of them
 		// change nothing.
 		"code spans among them": {repeat("the cat", 50) + " " + repeat("`x`", 10), 0.04, 1, 0, 0.5},
+		// A word of punctuation alone trims to nothing, which is no type.
+		"spaced dashes among them": {repeat("the cat --", 50), 0.04, 1, 0, 0.5},
 	}
 
 	for name, tc := range cases {
@@ -199,7 +201,7 @@ func TestMeasureShapeWithholdsWhatTheTextIsTooShortFor(t *testing.T) {
 func TestMeasureShapeOfFiveSentences(t *testing.T) {
 	// "one" is a function word, so each sentence's content is {two}.
 	got := MeasureShape(repeat("One two.", 5), KindReference)
-	if got.SentenceWordsMean != 2 || got.SentenceWordsSD != 0 || got.AdjacentOverlap != 1 {
+	if got.SentenceWordsMean != 2 || got.SentenceWordsStdDev != 0 || got.AdjacentOverlap != 1 {
 		t.Errorf("MeasureShape = %+v, want 2 words per sentence, no spread and full overlap", got)
 	}
 }

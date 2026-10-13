@@ -62,7 +62,7 @@ func TestTagAccuracy(t *testing.T) {
 			if got.UPOS.String() == s[i].upos {
 				upos++
 			}
-			if got.XPOS == s[i].xpos {
+			if string(got.XPOS) == s[i].xpos {
 				xpos++
 			}
 		}
@@ -94,7 +94,7 @@ func TestTagPunctuation(t *testing.T) {
 			t.Errorf("word %d: %v, want PUNCT", i, got[i])
 		}
 	}
-	want := map[int]string{1: ",", 4: "-LRB-", 6: "-RRB-", 7: "."}
+	want := map[int]XPOS{1: COMMA, 4: "-LRB-", 6: "-RRB-", 7: "."}
 	for i, xpos := range want {
 		if got[i].XPOS != xpos {
 			t.Errorf("word %d: XPOS %q, want %q", i, got[i].XPOS, xpos)
@@ -105,8 +105,8 @@ func TestTagPunctuation(t *testing.T) {
 func TestTagContractions(t *testing.T) {
 	got := Tag([]string{"I", "do", "n't", "think", "it", "'s", "ready", "."})
 	want := []Tagged{
-		{PRON, "PRP"}, {AUX, "VBP"}, {PART, "RB"}, {VERB, "VB"},
-		{PRON, "PRP"}, {AUX, "VBZ"}, {ADJ, "JJ"}, {PUNCT, "."},
+		{"I", PRON, "PRP"}, {"do", AUX, VBP}, {"n't", PART, "RB"}, {"think", VERB, VB},
+		{"it", PRON, "PRP"}, {"'s", AUX, VBZ}, {"ready", ADJ, "JJ"}, {".", PUNCT, "."},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -115,11 +115,11 @@ func TestTagContractions(t *testing.T) {
 
 func TestTagParticiples(t *testing.T) {
 	got := Tag([]string{"The", "report", "was", "written", "by", "the", "team", "."})
-	if got[3] != (Tagged{VERB, "VBN"}) {
+	if got[3] != (Tagged{"written", VERB, VBN}) {
 		t.Errorf("written: %v, want VERB VBN", got[3])
 	}
 	got = Tag([]string{"Running", "the", "tests", "takes", "time", "."})
-	if got[0] != (Tagged{VERB, "VBG"}) {
+	if got[0] != (Tagged{"Running", VERB, VBG}) {
 		t.Errorf("Running: %v, want VERB VBG", got[0])
 	}
 }

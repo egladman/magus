@@ -15,6 +15,16 @@ A list item that opens with another word class, or another verb tense, than the 
 - The key of each target.
 - Fast builds on every push.
 - Run the build.
+-- hit/reference whole --
+- A cache for each run.
+- The key of each target.
+- Fast builds on every push.
+- Don't run the build.
+-- hit/reference whole --
+- Re-run the build.
+- Re-open the page.
+- Save the key.
+- The cache for each run.
 -- pass/reference whole --
 - Run the build.
 - Open the page.

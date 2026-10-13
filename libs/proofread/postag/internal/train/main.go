@@ -6,12 +6,13 @@ import (
 	"compress/gzip"
 	"flag"
 	"fmt"
-	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"slices"
 	"time"
+
+	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
 func main() {
@@ -22,6 +23,7 @@ func main() {
 	// Tuned on dev: past 1024 levels and 10 passes, accuracy holds and the model grows.
 	levels := flag.Int("levels", 1024, "the largest quantized weight")
 	flag.Parse()
+
 	if err := run(*modelPath, *testPath, *iterations, *seed, *levels); err != nil {
 		fmt.Fprintf(os.Stderr, "train: %v\n", err)
 		os.Exit(1)
@@ -30,15 +32,19 @@ func main() {
 
 func run(modelPath, testPath string, iterations int, seed uint64, levels int) error {
 	splits := map[string][]sentence{}
+
 	var testRaw []byte
+
 	for _, split := range []string{"train", "dev", "test"} {
 		raw, err := fetch("en_ewt-ud-" + split + ".conllu")
 		if err != nil {
 			return err
 		}
+
 		if split == "test" {
 			testRaw = raw
 		}
+
 		if splits[split], err = parseCoNLLU(raw); err != nil {
 			return fmt.Errorf("%s: %w", split, err)
 		}
@@ -47,31 +53,41 @@ func run(modelPath, testPath string, iterations int, seed uint64, levels int) er
 	start := time.Now()
 	t := newTrainer(splits["train"])
 	t.train(splits["train"], iterations, seed)
-	q := t.p.quantize(levels)
-	elapsed := time.Since(start)
 
-	devTokens, devUPOS, devXPOS := t.evaluate(q, splits["dev"])
-	testTokens, testUPOS, testXPOS := t.evaluate(q, splits["test"])
-	model, err := gzipBytes(t.encode(q, [3]int{testTokens, testUPOS, testXPOS}))
+	q, err := t.p.quantize(levels)
 	if err != nil {
 		return err
 	}
+
+	elapsed := time.Since(start)
+
+	dev := t.evaluate(q, splits["dev"])
+	test := t.evaluate(q, splits["test"])
+
+	model, err := gzipBytes(t.encode(q, test))
+	if err != nil {
+		return err
+	}
+
 	testGz, err := gzipBytes(testRaw)
 	if err != nil {
 		return err
 	}
+
 	if err := writeFile(modelPath, model); err != nil {
 		return err
 	}
+
 	if err := writeFile(testPath, testGz); err != nil {
 		return err
 	}
 
 	fmt.Printf("trained %d passes in %s: %d classes, %d dictionary words, %d features\n",
 		iterations, elapsed.Round(time.Millisecond), len(t.classes), len(t.dict), len(q.weights))
-	fmt.Printf("dev:  UPOS %.4f XPOS %.4f over %d tokens\n", ratio(devUPOS, devTokens), ratio(devXPOS, devTokens), devTokens)
-	fmt.Printf("test: UPOS %.4f XPOS %.4f over %d tokens\n", ratio(testUPOS, testTokens), ratio(testXPOS, testTokens), testTokens)
+	fmt.Printf("dev:  UPOS %.4f XPOS %.4f over %d tokens\n", ratio(dev.upos, dev.tokens), ratio(dev.xpos, dev.tokens), dev.tokens)
+	fmt.Printf("test: UPOS %.4f XPOS %.4f over %d tokens\n", ratio(test.upos, test.tokens), ratio(test.xpos, test.tokens), test.tokens)
 	fmt.Printf("model: %d bytes\n", len(model))
+
 	return nil
 }
 
@@ -94,6 +110,7 @@ const (
 func newTrainer(train []sentence) *trainer {
 	t := &trainer{index: map[class]uint16{}, dict: map[string]uint16{}, p: newPerceptron()}
 	counts := map[string]map[class]int{}
+
 	for _, s := range train {
 		for _, tok := range s {
 			c := class{xpos: tok.xpos, upos: tok.upos}
@@ -101,30 +118,38 @@ func newTrainer(train []sentence) *trainer {
 				t.index[c] = 0
 				t.classes = append(t.classes, c)
 			}
+
 			if counts[tok.form] == nil {
 				counts[tok.form] = map[class]int{}
 			}
+
 			counts[tok.form][c]++
 		}
 	}
+
 	slices.SortFunc(t.classes, func(a, b class) int {
 		return cmp.Or(cmp.Compare(a.xpos, b.xpos), cmp.Compare(a.upos, b.upos))
 	})
+
 	for i, c := range t.classes {
 		t.index[c] = uint16(i)
 	}
+
 	for word, byClass := range counts {
 		total, top, topClass := 0, 0, class{}
+
 		for c, n := range byClass {
 			total += n
 			if n > top || n == top && cmp.Or(cmp.Compare(c.xpos, topClass.xpos), cmp.Compare(c.upos, topClass.upos)) < 0 {
 				top, topClass = n, c
 			}
 		}
+
 		if total >= dictMinCount && float64(top)/float64(total) >= dictMinShare {
 			t.dict[word] = t.index[topClass]
 		}
 	}
+
 	return t
 }
 
@@ -134,13 +159,17 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 	order := slices.Clone(train)
 	rng := rand.New(rand.NewPCG(seed, seed))
 	scores := make([]int64, len(t.classes))
+
 	var feats []feature.Hash
+
 	for range iterations {
 		rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+
 		for _, s := range order {
 			words := s.forms()
 			context := feature.Padded(words)
 			prev, prev2 := feature.Start, feature.Start2
+
 			for i, tok := range s {
 				guess, ok := t.dict[tok.form]
 				if !ok {
@@ -148,6 +177,7 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 					guess = t.p.predict(feats, scores)
 					t.p.update(t.index[class{xpos: tok.xpos, upos: tok.upos}], guess, feats)
 				}
+
 				prev, prev2 = guess, prev
 			}
 		}
@@ -156,30 +186,38 @@ func (t *trainer) train(train []sentence, iterations int, seed uint64) {
 
 // evaluate tags each sentence exactly as postag.Tag does and counts the
 // tokens, the UPOS matches and the XPOS matches.
-func (t *trainer) evaluate(q *quantized, sentences []sentence) (tokens, upos, xpos int) {
+func (t *trainer) evaluate(q *quantized, sentences []sentence) (counts testCounts) {
 	scores := make([]int64, len(t.classes))
+
 	var feats []feature.Hash
+
 	for _, s := range sentences {
 		words := s.forms()
 		context := feature.Padded(words)
 		prev, prev2 := feature.Start, feature.Start2
+
 		for i, tok := range s {
 			c, ok := t.dict[tok.form]
 			if !ok {
 				feats = feature.Extract(feats[:0], context, i, tok.form, prev, prev2)
 				c = q.predict(feats, scores)
 			}
-			tokens++
+
+			counts.tokens++
+
 			if t.classes[c].upos == tok.upos {
-				upos++
+				counts.upos++
 			}
+
 			if t.classes[c].xpos == tok.xpos {
-				xpos++
+				counts.xpos++
 			}
+
 			prev, prev2 = c, prev
 		}
 	}
-	return tokens, upos, xpos
+
+	return counts
 }
 
 func (s sentence) forms() []string {
@@ -199,12 +237,15 @@ func gzipBytes(b []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if _, err := zw.Write(b); err != nil {
 		return nil, err
 	}
+
 	if err := zw.Close(); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
 
@@ -212,5 +253,6 @@ func writeFile(path string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+
 	return os.WriteFile(path, b, 0o644)
 }

@@ -175,15 +175,25 @@ var kindAliases = map[string]Kind{
 	"agent-instructions-template": KindSkillTemplate,
 }
 
+// kinds is every kind proofread judges; ParseKind answers from it.
+var kinds = []Kind{
+	KindDocComment, KindReference, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
+	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindMessage, KindCommitMessage,
+	KindCLIHelp, KindIssue, KindReleaseNotes, KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
+}
+
 // ParseKind returns the kind name names. A former name of a kind parses to
-// that kind; any other name is returned as given, so a caller still checks it
-// against the kinds it accepts.
-func ParseKind(name string) Kind {
+// that kind. A name that is none of the kinds returns false and no kind.
+func ParseKind(name string) (Kind, bool) {
 	if k, ok := kindAliases[name]; ok {
-		return k
+		return k, true
 	}
 
-	return Kind(name)
+	if k := Kind(name); slices.Contains(kinds, k) {
+		return k, true
+	}
+
+	return "", false
 }
 
 // Decision is what a finding costs the caller that reads it, in the words a

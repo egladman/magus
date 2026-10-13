@@ -38,14 +38,12 @@ var skillTexts = map[Rule]ruleText{
 		catches: fmt.Sprintf("a skill description over %d words, or a full form's description sharing %d%% or "+
 			"more of its content words with the short form's", maxDescriptionWords, int(maxTwinRepeat*100)),
 		why: "A host lists every installed skill by its description, so each one loads into every session " +
-			"whether or not the skill is used, and a full twin's loads beside its short sibling's. Measured " +
-			"2026-10-13 over the 16 skills magus ships: 1444 words of authored description, 49 to 111 words " +
-			"each (p50 94, p75 101), 2396 words loaded in all with the twins and their back-references. The " +
-			"budget sits at p75, so the longest quarter advises. A twin that restated its sibling's " +
-			"description cost 10105 of 19113 description bytes before magus gave it a line of its own. " +
-			"Today's standalone twin lines share 44 to 62% of their content words with the short form's " +
-			"(back-references included), and each sibling's restated description plus a sentence shares 84 " +
-			"to 92%, so the line sits between them at 75%.",
+			"whether or not the skill is used, and a full twin's loads beside its short sibling's. The word " +
+			"budget is the 75th percentile of the authored descriptions of the skills magus ships, counted in " +
+			"words, so the longest quarter advises. A twin that restates its sibling's description loads the " +
+			"same words twice. The repeat line was set by comparing, over the same skills, the content words " +
+			"a twin's own line shares with its short form's against those a restated description plus a " +
+			"sentence shares; it sits between the two, so the first passes and the second advises.",
 	},
 	RuleSkillSetDescriptionBudget: {
 		code:      "PRF7022",
@@ -53,10 +51,10 @@ var skillTexts = map[Rule]ruleText{
 		catches: fmt.Sprintf("an installed set of skills whose descriptions sum past %d words, each skill's short "+
 			"and full form counted", maxSetDescriptionWords),
 		why: "A per-skill budget passes a set that grows one skill at a time, yet the host loads every " +
-			"description of the set into every session. Measured 2026-10-13 over the 16 skills magus ships " +
-			"with their full twins: 1780 words of short descriptions, back-references included, and 320 of " +
-			"twins at 20 words each, 2100 in all. The budget is that total, a ratchet: a skill added or a " +
-			"description grown advises until another description is cut to make room.",
+			"description of the set into every session. The budget is the words of every short and full " +
+			"description of the skills magus ships, back-references included, counted when the rule landed. " +
+			"It is a ratchet: a skill added or a description grown advises until another description is cut " +
+			"to make room.",
 	},
 	RuleInstructionPosition: {
 		code:      "PRF7021",
@@ -68,7 +66,7 @@ var skillTexts = map[Rule]ruleText{
 			"tokens up. IFScale (Jaroslawicz et al., arXiv 2507.11538) found frontier models favor early " +
 			"instructions only at very high instruction counts, so the rule judges the full form alone, " +
 			"the copy written for less capable models. Long is that 2000 tokens, about 1500 words at 1.3 " +
-			"tokens a word, near the median of the 16 full forms magus ships (479 to 4052 words, p50 1577).",
+			"tokens a word, near the median length of the full forms magus ships.",
 	},
 }
 
@@ -131,23 +129,46 @@ func judgeDescriptions(forms [2]skillForm, o options) []Finding {
 	var out []Finding
 
 	if d := o.decide(descriptionCheck, KindSkillTemplate); d != DecisionOff {
-		shorts, fulls := forms[0].entries(), forms[1].entries()
-
-		for i := range max(len(shorts), len(fulls)) {
-			var pair [2]skillEntry
-			if i < len(shorts) {
-				pair[0] = shorts[i]
-			}
-
-			if i < len(fulls) {
-				pair[1] = fulls[i]
-			}
-
+		for _, pair := range pairEntries(forms[0].entries(), forms[1].entries()) {
 			out = append(out, judgeDescription(forms, pair, d, o)...)
 		}
 	}
 
 	return append(out, judgeSetDescriptions(forms, o)...)
+}
+
+// pairEntries pairs each short entry with the full entry of the same skill
+// name, in the order the short form lists them, then each full entry left
+// over alone. A form that drops or reorders a skill still pairs the rest.
+// Entries of one name pair in the order each form lists them.
+func pairEntries(shorts, fulls []skillEntry) [][2]skillEntry {
+	byName := map[string][]int{}
+	for i, e := range fulls {
+		byName[e.name] = append(byName[e.name], i)
+	}
+
+	paired := make([]bool, len(fulls))
+
+	var out [][2]skillEntry
+
+	for _, e := range shorts {
+		pair := [2]skillEntry{e}
+
+		if at := byName[e.name]; len(at) > 0 {
+			pair[1], paired[at[0]] = fulls[at[0]], true
+			byName[e.name] = at[1:]
+		}
+
+		out = append(out, pair)
+	}
+
+	for i, e := range fulls {
+		if !paired[i] {
+			out = append(out, [2]skillEntry{{}, e})
+		}
+	}
+
+	return out
 }
 
 // judgeDescription judges one skill's short and full descriptions, pair[0]

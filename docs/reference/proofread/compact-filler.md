@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Each of these words is one token in tiktoken o200k and cl100k (Claude's tokenizer is not public), so the saving is counted at one token a word. They are what the deletion-only compressors drop first: LLMLingua-2 (Pan et al., Findings ACL 2024) holds BBH at 70.02 against 70.07 at 3x by deleting words alone. A 2026-10-13 eval over three magus tasks found the skills rewritten to this floor 14.9% shorter than the short form, and they passed 9 of 9 runs against the full form's 8 of 9. Stopword removal past that floor hurts code tasks (Yang et al., arXiv 2410.22793), so the rule names only these words and never a negation, an obligation, a scope, a condition or an order. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+Each of these words is one token in tiktoken o200k and cl100k (Claude's tokenizer is not public), so the saving is counted at one token a word. They are what the deletion-only compressors drop first: LLMLingua-2 (Pan et al., Findings ACL 2024) holds BBH at 70.02 against 70.07 at 3x by deleting words alone. An eval over magus tasks ran the skills rewritten to this floor against their short and full forms: the rewrite was shorter than both and passed at least as often as the full form. Stopword removal past that floor hurts code tasks (Yang et al., arXiv 2410.22793), so the rule names only these words and never a negation, an obligation, a scope, a condition or an order. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

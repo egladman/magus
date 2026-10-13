@@ -20,22 +20,25 @@ import (
 // unknown word by its suffix.
 func Tokenize(sentence string) []string {
 	var out []string
+
 	for _, field := range strings.Fields(sentence) {
-		if whole(field) {
+		if keptWhole(field) {
 			out = appendWhole(out, field)
 			continue
 		}
+
 		for _, piece := range splitInside(field) {
 			out = appendWord(out, piece)
 		}
 	}
+
 	return out
 }
 
 const (
-	opening = `([{"'` + "`“‘<$*"
-	closing = `)]}"'` + "”’>,;:%*"
-	ends    = ".!?…"
+	openingMarks   = `([{"'` + "`“‘<$*"
+	closingMarks   = `)]}"'` + "”’>,;:%*"
+	sentenceEnders = ".!?…"
 )
 
 // abbreviations end in a period that is part of the word, not the sentence's.
@@ -51,8 +54,11 @@ var clitics = []string{"n't", "'re", "'ve", "'ll", "'s", "'d", "'m"}
 // fused are the words EWT splits though no apostrophe marks the seam.
 var fused = map[string]int{"cannot": 3, "gonna": 3, "wanna": 3, "gotta": 3}
 
-func whole(field string) bool {
-	field = strings.TrimLeft(field, opening)
+// keptWhole reports whether field is a URL, path or email address, which
+// Tokenize keeps as one word.
+func keptWhole(field string) bool {
+	field = strings.TrimLeft(field, openingMarks)
+
 	return strings.Contains(field, "://") || strings.Contains(strings.Trim(field, "@"), "@") ||
 		strings.HasPrefix(field, "www.") || strings.HasPrefix(field, "/") || strings.HasPrefix(field, "./") ||
 		strings.HasPrefix(field, "../") || strings.HasPrefix(field, "~/")
@@ -64,9 +70,11 @@ func appendWhole(out []string, field string) []string {
 	lead, core := peelLeading(field)
 	out = append(out, lead...)
 	core, trail := peelTrailing(core, func(string) bool { return false })
+
 	if core != "" {
 		out = append(out, core)
 	}
+
 	return append(out, trail...)
 }
 
@@ -74,28 +82,35 @@ func appendWhole(out []string, field string) []string {
 // two words with no space, as in "ran—twice" and "point...lol".
 func splitInside(field string) []string {
 	var out []string
+
 	for field != "" {
 		at, size := strings.IndexAny(field, "—–"), 0
 		if at >= 0 {
 			_, size = utf8.DecodeRuneInString(field[at:])
 		}
+
 		for _, run := range []string{"--", ".."} {
 			j := strings.Index(field, run)
 			if j < 0 || (at >= 0 && j > at) {
 				continue
 			}
+
 			n := len(field[j:]) - len(strings.TrimLeft(field[j:], run[:1]))
 			if run == ".." && (j == 0 || j+n == len(field)) {
 				continue
 			}
+
 			at, size = j, n
 		}
+
 		if at < 0 {
 			return append(out, field)
 		}
+
 		out = append(out, field[:at], field[at:at+size])
 		field = field[at+size:]
 	}
+
 	return out
 }
 
@@ -103,23 +118,28 @@ func appendWord(out []string, word string) []string {
 	if word == "" {
 		return out
 	}
+
 	lead, core := peelLeading(word)
 	out = append(out, lead...)
 	core, trail := peelTrailing(core, abbreviation)
 	out = appendClitics(out, core)
+
 	return append(out, trail...)
 }
 
 func peelLeading(word string) ([]string, string) {
 	var lead []string
+
 	for word != "" {
 		r, size := utf8.DecodeRuneInString(word)
-		if !strings.ContainsRune(opening, r) || startsClitic(word) {
+		if !strings.ContainsRune(openingMarks, r) || startsClitic(word) {
 			break
 		}
+
 		lead = append(lead, word[:size])
 		word = word[size:]
 	}
+
 	return lead, word
 }
 
@@ -131,6 +151,7 @@ func startsClitic(word string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -139,26 +160,31 @@ func startsClitic(word string) bool {
 // to the word.
 func peelTrailing(word string, keep func(string) bool) (string, []string) {
 	var trail []string
+
 	for word != "" {
 		r, size := utf8.DecodeLastRuneInString(word)
+
 		switch {
-		case strings.ContainsRune(ends, r):
+		case strings.ContainsRune(sentenceEnders, r):
 			if r == '.' && keep(word) {
 				return word, trail
 			}
-			run := len(word) - len(strings.TrimRight(word, ends))
+
+			run := len(word) - len(strings.TrimRight(word, sentenceEnders))
 			if run == len(word) {
 				return "", append([]string{word}, trail...)
 			}
+
 			trail = append([]string{word[len(word)-run:]}, trail...)
 			word = word[:len(word)-run]
-		case strings.ContainsRune(closing, r) && size < len(word):
+		case strings.ContainsRune(closingMarks, r) && size < len(word):
 			trail = append([]string{word[len(word)-size:]}, trail...)
 			word = word[:len(word)-size]
 		default:
 			return word, trail
 		}
 	}
+
 	return word, trail
 }
 
@@ -170,9 +196,11 @@ func abbreviation(word string) bool {
 	if groups := strings.Split(stem, "."); len(groups) > 1 && !slices.ContainsFunc(groups, notInitials) {
 		return true
 	}
+
 	if r, size := utf8.DecodeRuneInString(stem); size == len(stem) && unicode.IsUpper(r) && r != 'I' {
 		return true
 	}
+
 	return abbreviations[strings.ToLower(stem)]
 }
 
@@ -184,16 +212,19 @@ func appendClitics(out []string, word string) []string {
 	if word == "" {
 		return out
 	}
+
 	lower := strings.ToLower(straight(word))
 	if n, ok := fused[lower]; ok {
 		return append(out, word[:n], word[n:])
 	}
+
 	for _, c := range clitics {
 		if len(lower) > len(c) && strings.HasSuffix(lower, c) {
 			cut := len(word) - suffixBytes(word, len(c))
 			return append(out, word[:cut], word[cut:])
 		}
 	}
+
 	return append(out, word)
 }
 
@@ -201,10 +232,12 @@ func appendClitics(out []string, word string) []string {
 // apostrophe is counted as the one rune it is.
 func suffixBytes(word string, n int) int {
 	i := len(word)
+
 	for range n {
 		_, size := utf8.DecodeLastRuneInString(word[:i])
 		i -= size
 	}
+
 	return len(word) - i
 }
 

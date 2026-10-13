@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-"Lost in the Middle" (Liu et al., TACL 2023) measured models using what sits at the start and the end of a long context better than the middle, from its shortest setting of about 2000 tokens up. IFScale (Jaroslawicz et al., arXiv 2507.11538) found frontier models favor early instructions only at very high instruction counts, so the rule judges the full form alone, the copy written for less capable models. Long is that 2000 tokens, about 1500 words at 1.3 tokens a word, near the median of the 16 full forms magus ships (479 to 4052 words, p50 1577).
+"Lost in the Middle" (Liu et al., TACL 2023) measured models using what sits at the start and the end of a long context better than the middle, from its shortest setting of about 2000 tokens up. IFScale (Jaroslawicz et al., arXiv 2507.11538) found frontier models favor early instructions only at very high instruction counts, so the rule judges the full form alone, the copy written for less capable models. Long is that 2000 tokens, about 1500 words at 1.3 tokens a word, near the median length of the full forms magus ships.
 
 ## Default decision
 

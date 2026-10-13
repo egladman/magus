@@ -66,7 +66,7 @@ func TestVoiceBuildMeasuresFilesIntoAPrivateFile(t *testing.T) {
 	}
 
 	path := filepath.Join(dir, "out", "voice.json")
-	if !strings.HasPrefix(stderr, "review-reply: 100 texts, ") || !strings.Contains(stderr, " windows, cut ") ||
+	if !strings.HasPrefix(stderr, "review-reply: 100 texts, ") || !strings.Contains(stderr, " windows\n") ||
 		!strings.HasSuffix(stderr, "wrote "+path+"\n") {
 		t.Errorf("stderr = %q", stderr)
 	}
@@ -115,6 +115,16 @@ func TestVoiceBuildReadsJSONLinesAndNULSeparatedStdin(t *testing.T) {
 
 	if v := readVoice(t, nul); v.Kinds[proofread.KindCommitMessage].Texts != 2 {
 		t.Errorf("voice from stdin = %+v, want two commit messages", v.Kinds)
+	}
+
+	named := filepath.Join(dir, "named.json")
+	if code, _, stderr := runVoiceArgs(t, "", "voice", "build", "-kind", "commit-message", "-o", named,
+		writeFile(t, dir, "stdin", "fix the build\n\nIt failed.\x00add a flag\x00\n")); code != exitOK {
+		t.Fatalf("voice build from a file named stdin: %s", stderr)
+	}
+
+	if v := readVoice(t, named); v.Kinds[proofread.KindCommitMessage].Texts != 1 {
+		t.Errorf("voice from a file named stdin = %+v, want one commit message: only stdin splits on NUL", v.Kinds)
 	}
 }
 
@@ -262,7 +272,7 @@ func TestVoiceEvalWritesJSONPerKind(t *testing.T) {
 		t.Fatalf("decode %q: %v", stdout, err)
 	}
 
-	semicolon := proofread.Separation{Feature: "punctuation.semicolon", AUC: 1, Owner: 5, Other: 5}
+	semicolon := proofread.Separation{Feature: "punctuation.semicolon", AUC: 1, OwnerTexts: 5, OtherTexts: 5}
 	if len(got) != 1 || !slices.Contains(got[proofread.KindReviewReply], semicolon) {
 		t.Errorf("separations = %+v, want review-reply alone, holding %+v", got, semicolon)
 	}
@@ -347,7 +357,7 @@ func TestRunJudgesWithAVoiceFile(t *testing.T) {
 
 	bad := writeFile(t, dir, "bad.json", `{"schema":"other"}`)
 	if code, _, stderr := runVoiceArgs(t, drafted, "review-reply", "-voice", bad); code != exitError ||
-		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/2\n" {
+		stderr != "proofread: voice "+bad+": schema \"other\" is not proofread-voice/3\n" {
 		t.Errorf("a bad voice file: code %d stderr %q", code, stderr)
 	}
 

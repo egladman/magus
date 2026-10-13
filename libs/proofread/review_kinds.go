@@ -37,7 +37,7 @@ const (
 var (
 	inlineOnly  = []Kind{KindReviewInline}
 	summaryOnly = []Kind{KindReviewSummary}
-	threadOnly  = []Kind{KindReviewReply}
+	replyOnly   = []Kind{KindReviewReply}
 )
 
 // reviewKindChecks are the rules for one review text in particular: an inline
@@ -49,9 +49,9 @@ var reviewKindChecks = []check{
 	{rule: RuleEmptyRequestChanges, on: summaryOnly, advise: summaryOnly, judge: emptyRequestChanges},
 	{rule: RuleApproveBlocker, on: summaryOnly, advise: summaryOnly, judge: ownWords(approveBlocker)},
 	{rule: RuleBareLGTM, on: summaryOnly, advise: summaryOnly, judge: bareLGTM},
-	{rule: RuleDeferralNoLink, on: threadOnly, advise: threadOnly, judge: ownWords(deferralNoLink)},
-	{rule: RuleDeclineNoReason, on: threadOnly, advise: threadOnly, judge: ownWords(declineNoReason)},
-	{rule: RuleImpatience, on: threadOnly, advise: threadOnly, judge: ownWords(impatience)},
+	{rule: RuleDeferralNoLink, on: replyOnly, advise: replyOnly, judge: ownWords(deferralNoLink)},
+	{rule: RuleDeclineNoReason, on: replyOnly, advise: replyOnly, judge: ownWords(declineNoReason)},
+	{rule: RuleImpatience, on: replyOnly, advise: replyOnly, judge: ownWords(impatience)},
 }
 
 var reviewKindTexts = map[Rule]ruleText{
@@ -114,7 +114,8 @@ var reviewKindTexts = map[Rule]ruleText{
 		catches:   "a review reply deferring to later, a follow-up or a TODO, with no issue link or number",
 		why: "Google's review guide (eng-practices, \"Handling pushback\") does not accept \"I'll clean it " +
 			"up later\": follow-ups rarely happen, so the author files a bug and may add a TODO naming it. " +
-			"A reply holding a URL, an issue number (#123) or a tracker key (ABC-123) passes. It is a " +
+			"A reply holding a URL, an issue number (#123) or a tracker key (ABC-123) passes; a standard's " +
+			"name written the same way (UTF-8, SHA-256, ISO-8601) is no tracker key. It is a " +
 			"convention, not a study, so it advises.",
 	},
 	RuleDeclineNoReason: {
@@ -266,7 +267,7 @@ func emptyRequestChanges(in input) []Finding {
 
 	whole := strings.Join(in.source, "\n")
 	if specific.MatchString(whole) || symptom.MatchString(whole) || pointsInline.MatchString(whole) ||
-		blockReason.MatchString(whole) || listed(in.prose) {
+		blockReason.MatchString(whole) || holdsListItem(in.prose) {
 		return nil
 	}
 
@@ -276,9 +277,9 @@ func emptyRequestChanges(in input) []Finding {
 	}}
 }
 
-// listed reports whether prose holds a list item, which a summary uses to
-// list what blocks.
-func listed(prose []proseLine) bool {
+// holdsListItem reports whether prose holds a list item, which a summary uses
+// to list what blocks.
+func holdsListItem(prose []proseLine) bool {
 	for _, ln := range prose {
 		if ln.item {
 			return true
@@ -338,32 +339,67 @@ func bareLGTM(in input) []Finding {
 		return nil
 	}
 
+	line := 1
+
+	for i, ln := range in.source {
+		if strings.TrimSpace(ln) != "" {
+			line = i + 1
+
+			break
+		}
+	}
+
 	return []Finding{{
 		Message: "Say what you checked, as in 'LGTM: ran the migration against a copy of the data; " +
 			"`TestRetry` covers the new path.'",
-		Match: text, Line: 1,
+		Match: text, Line: line,
 	}}
 }
 
 var (
-	// deferral puts the change off: to later, a follow-up or a TODO.
-	deferral = regexp.MustCompile(`(?i)\b(?:(?:will|'ll|can|could|should|going to|plan to|let's)\b[^.!?]*\blater\b|` +
+	// putOff puts the change off: to later, a follow-up or a TODO.
+	putOff = regexp.MustCompile(`(?i)\b(?:(?:will|'ll|can|could|should|going to|plan to|let's)\b[^.!?]*\blater\b|` +
 		`(?:in )?a (?:follow[- ]?up|separate|future|another|next|later) (?:pr|pull request|mr|change|commit|patch)\b|` +
 		`(?:as )?a follow[- ]?up\b|\bfollow[- ]?up (?:pr|pull request|mr|change|issue|work)\b|` +
 		`\b(?:separate|next|future|another) (?:pr|pull request|mr)\b|\bTODO\b)`)
-	// tracked names where the deferred work is tracked: a URL, an issue
-	// number, a tracker key.
-	tracked = regexp.MustCompile(`https?://|(?:^|[\s(])#\d+\b|\b[A-Z][A-Z0-9]+-\d+\b|\bissues?/\d+|\bgh-\d+\b`)
+	// issueLink is a URL, an issue number or a GitHub issue path.
+	issueLink = regexp.MustCompile(`https?://|(?:^|[\s(])#\d+\b|\bissues?/\d+|\bgh-\d+\b`)
+	// trackerKey is a tracker's project key and number, ABC-123, or a numbered
+	// standard written the same way.
+	trackerKey = regexp.MustCompile(`\b([A-Z][A-Z0-9]+)-\d+\b`)
 )
+
+// standardFamilies name encodings, hashes and standards whose numbered names
+// read as a tracker key: UTF-8, SHA-256, ISO-8601.
+var standardFamilies = map[string]bool{
+	"UTF": true, "UCS": true, "SHA": true, "SHA2": true, "SHA3": true, "MD": true, "CRC": true, "AES": true,
+	"RSA": true, "ISO": true, "IEC": true, "IEEE": true, "RFC": true, "ECMA": true, "ANSI": true,
+}
+
+// linksIssue reports whether text names where deferred work is tracked: a
+// URL, an issue number or a tracker key that is not a standard's name.
+func linksIssue(text string) bool {
+	if issueLink.MatchString(text) {
+		return true
+	}
+
+	for _, m := range trackerKey.FindAllStringSubmatch(text, -1) {
+		if !standardFamilies[m[1]] {
+			return true
+		}
+	}
+
+	return false
+}
 
 // deferralNoLink reports the first deferral in a reply that links nothing.
 func deferralNoLink(in input) []Finding {
-	if tracked.MatchString(strings.Join(in.source, "\n")) {
+	if linksIssue(strings.Join(in.source, "\n")) {
 		return nil
 	}
 
 	for _, para := range paragraphs(in.prose, mentionsMasked) {
-		if at := deferral.FindStringIndex(para.text); at != nil {
+		if at := putOff.FindStringIndex(para.text); at != nil {
 			m := para.text[at[0]:at[1]]
 
 			return []Finding{{
@@ -377,8 +413,8 @@ func deferralNoLink(in input) []Finding {
 	return nil
 }
 
-// decline turns the change down at the opening of a reply.
-var decline = regexp.MustCompile(`(?i)^\W*(?:won't fix|wontfix|will not fix|not going to|no,|nope\b|no\.)`)
+// declineOpener turns the change down at the opening of a reply.
+var declineOpener = regexp.MustCompile(`(?i)^\W*(?:won't fix|wontfix|will not fix|not going to|no,|nope\b|no\.)`)
 
 // declineNoReason reports a short decline: one paragraph, five words or fewer
 // after the decline, and no reason marker.
@@ -390,7 +426,7 @@ func declineNoReason(in input) []Finding {
 
 	text := strings.TrimSpace(paras[0].text)
 
-	at := decline.FindStringIndex(text)
+	at := declineOpener.FindStringIndex(text)
 	if at == nil || len(strings.Fields(text[at[1]:])) > 5 {
 		return nil
 	}

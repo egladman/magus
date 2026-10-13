@@ -5,6 +5,9 @@ I'll fix this later.
 Let's handle that in a follow-up PR.
 Good point, I added a TODO for it.
 Out of scope here, will do in a separate PR.
+I'll fix the UTF-8 handling later.
+We can move to SHA-256 later.
+I'll parse ISO-8601 dates later.
 -- pass/review-reply --
 I'll fix this later, tracked in #412.
 Filed https://github.com/o/r/issues/9 as a follow-up.

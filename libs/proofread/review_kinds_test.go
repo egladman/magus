@@ -82,3 +82,20 @@ func TestNitLabelNamesTheLabelAndTheWord(t *testing.T) {
 		{"a demand on a later line", KindReviewInline, "Nit: the name.\n\nIt is required by the linter.", []string{"3:required"}},
 	})
 }
+
+func TestBareLGTMReportsTheLineItSitsOn(t *testing.T) {
+	runTextCases(t, RuleBareLGTM, []textCase{
+		{"the first line", KindReviewSummary, "LGTM", []string{"1:LGTM"}},
+		{"after blank lines", KindReviewSummary, "\n\nLGTM!", []string{"3:LGTM!"}},
+	})
+}
+
+func TestDeferralNoLinkReadsAStandardsNameAsNoTrackerKey(t *testing.T) {
+	runTextCases(t, RuleDeferralNoLink, []textCase{
+		{"a tracker key", KindReviewReply, "I'll fix this later, see MAG-123.", nil},
+		{"an encoding", KindReviewReply, "I'll fix the UTF-8 handling later.", []string{"1:'ll fix the UTF-8 handling later"}},
+		{"a hash", KindReviewReply, "We can move to SHA-256 later.", []string{"1:can move to SHA-256 later"}},
+		{"a date standard", KindReviewReply, "I'll parse ISO-8601 later.", []string{"1:'ll parse ISO-8601 later"}},
+		{"a standard beside a key", KindReviewReply, "I'll switch to SHA-256 later, tracked in MAG-9.", nil},
+	})
+}

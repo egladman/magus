@@ -1,88 +1,3 @@
-// Command proofread judges written text against the proofread rules and
-// writes a JSON array of findings on stdout.
-//
-// Its first argument names what to do. A kind judges text of that kind:
-// doc-comment reads a JSON array of symbol records on stdin and judges each
-// one's doc, reporting in input order and then the order [proofread.Judge]
-// reports them. reference judges the Markdown files its arguments name, in
-// argument order; guide judges them as procedural pages, held to the guide
-// rules as well. agent-brief judges them as hand-written instructions an
-// agent loads as written, agent-compact as grammar-free text only an agent
-// reads, and skill-template as template bodies that render into a short and a
-// full form, each finding at its source line. The former names
-// agent-instructions and agent-instructions-template still name agent-brief
-// and skill-template.
-// change-description reads a pull request on stdin, the title on the first
-// line and the description after it. review-summary reads a review's body on
-// stdin, review-inline a comment on a line of the diff, and review-reply a
-// reply in a thread or a comment on the pull request. A finding from text names its file, or the kind
-// it read from stdin, and its line as source, `path:line`, the way a symbol's
-// index position reads; a finding about the whole text has the name alone. rules writes every rule as the docs render it, and
-// explain prints one rule, named by its name or its code.
-//
-// Each finding carries its rule's decision, advise or deny, its PRF code and
-// the page that documents the rule. -decisions names a JSON table that sets
-// rules off, advise or deny, for every file or for the files a glob matches;
-// house style runs only where it names it. -only takes comma-separated rule
-// names. A rule, a decision or a glob proofread cannot use is an error.
-// -thread-length N tells the review rules how many replies the author already
-// posted in the thread, and -event APPROVE, REQUEST_CHANGES or COMMENT the
-// verdict a review summary is posted with. review-reply -anchored judges as
-// review-inline. -voice FILE judges with a voice file, which runs the
-// voice-drift rule and may hold tense to advice on a change description. The
-// flags follow the kind.
-//
-// voice build measures the author's own texts into a voice file: each FILE is
-// one text of -kind, stdin holds texts separated by NUL bytes, and -field reads
-// JSON lines instead, each text in that field and its kind in -kind-field. It
-// writes to -o, by default $XDG_CONFIG_HOME/proofread/voice.json
-// (under the OS config directory when unset), and refuses a default path
-// inside a git work tree.
-//
-// voice eval reads two files of JSON lines, the owner's texts in -owner and
-// the texts to tell them from in -other, measures each text's shape under its
-// kind, and prints per kind every feature's AUC: the chance an owner text
-// measures higher than an other text. Each text is in -field, "text" by
-// default, and its kind in -kind-field, "kind" by default, or -kind. -format
-// json writes the scores per kind as JSON. -pool N measures chunks of at least
-// N words instead of single texts: per kind and side the texts are shuffled
-// under -seed (13 by default) and joined, a blank line apart, each text used
-// once, a last chunk under N words dropped. A titled kind keeps the first
-// text's title alone. Most texts are too short for the measures that need 100
-// or 200 words, which pooling lets them reach. It writes no file.
-//
-// commit-message reads the message from stdin, or from the file its argument
-// names, as a VCS hook passes it: lines starting with "#" and the scissors line
-// with everything after it are not part of the message, and a finding's line is
-// its line in the file.
-//
-// -format picks the output: json, the array of findings, sarif, a SARIF 2.1.0
-// log for code scanning, rdjson, reviewdog's diagnostic result with a
-// suggestion for each finding that has replacements, or text, one line
-// "path:line:col: CODE rule [decision] message" per finding on stdout and, when
-// there are findings, a count on stderr. -baseline names a JSON
-// file of finding counts per file and rule: a run writes only the findings
-// past those counts, and -prune rewrites the file to this run's counts and
-// writes none. A text silences a finding in place with a suppression that
-// gives its reason, "<!-- proofread off RULE: REASON -->" in Markdown or
-// "proofread:ignore RULE REASON" in a doc comment, and the suppression-unused
-// rule reports one that matched nothing.
-//
-// -fail-on deny|advise|never sets the bar for the exit code: 1 when a finding
-// at or above that decision remains after suppression and the baseline. The
-// default, never, keeps the exit code 0 for a caller that reads the JSON.
-// -record keeps, on this machine only, the fingerprints of this run's findings
-// under $XDG_STATE_HOME/proofread (~/.local/state/proofread when unset), so a
-// later run of the same file can count each as fixed, suppressed or reported;
-// stats prints those counts per rule with their not-useful rate.
-//
-// The exit code is 0 when judging succeeded and no finding reached the -fail-on
-// bar, 1 when one did, and 2 when the subcommand, the flags, the decisions or
-// the input cannot be used, so a caller can tell a finding from a failure.
-//
-// This repository's lint rules and its pull request guard and CI step run it.
-// The magus module never imports libs/proofread, so the rules stay this
-// repository's policy.
 package main
 
 import (
@@ -145,36 +60,61 @@ func main() {
 type subcommand struct {
 	name    string
 	kind    proofread.Kind
+	input   input
 	operand string
 	summary string
 }
 
+// input is where a subcommand's text comes from.
+type input int
+
+const (
+	inputNone    input = iota // not a kind: it reads no text to judge
+	inputSymbols              // a JSON array of symbol records on stdin
+	inputFiles                // the files named as arguments
+	inputStdin                // one text on stdin
+)
+
+// kindCommand returns the subcommand that judges kind.
+func kindCommand(kind proofread.Kind) (subcommand, bool) {
+	if kind == "" {
+		return subcommand{}, false
+	}
+
+	i := slices.IndexFunc(subcommands, func(s subcommand) bool { return s.kind == kind })
+	if i < 0 {
+		return subcommand{}, false
+	}
+
+	return subcommands[i], true
+}
+
 var subcommands = []subcommand{
-	{"doc-comment", proofread.KindDocComment, "", "judge the doc of each symbol in a JSON array on stdin"},
-	{"reference", proofread.KindReference, "FILE...", "judge Markdown pages a reader looks things up in"},
-	{"guide", proofread.KindGuide, "FILE...", "judge procedural pages, held to the guide rules too"},
-	{"agent-brief", proofread.KindAgentBrief, "FILE...", "judge hand-written instructions an agent loads as written"},
-	{"agent-compact", proofread.KindAgentCompact, "FILE...", "judge grammar-free text only an agent reads"},
-	{"skill-template", proofread.KindSkillTemplate, "FILE...", "judge skill template bodies that render into a short and a full form"},
-	{"change-description", proofread.KindChangeDescription, "", "judge a pull request on stdin, its title on the first line"},
-	{"review-summary", proofread.KindReviewSummary, "", "judge a review's body on stdin, its verdict in -event"},
-	{"review-inline", proofread.KindReviewInline, "", "judge a review comment on a line of the diff, on stdin"},
-	{"review-reply", proofread.KindReviewReply, "", "judge a reply in a review thread or a pull request comment, on stdin"},
-	{"message", proofread.KindMessage, "", "judge one message a program prints, on stdin"},
-	{"commit-message", proofread.KindCommitMessage, "[FILE]", "judge a commit message from FILE or stdin, its subject on the first line"},
-	{"cli-help", proofread.KindCLIHelp, "", "judge a command's or a flag's help text on stdin"},
-	{"issue", proofread.KindIssue, "", "judge an issue on stdin, its title on the first line"},
-	{"release-notes", proofread.KindReleaseNotes, "FILE...", "judge the notes a release ships with"},
-	{"changelog", proofread.KindChangelog, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
-	{"agent-reply", proofread.KindAgentReply, "", "judge what a coding agent writes back to its person, on stdin"},
-	{"tool-description", proofread.KindToolDescription, "", "judge a tool's or a skill's description, on stdin"},
-	{"stylesheet", proofread.KindStylesheet, "[FILE...]", "judge the comments of stylesheets, or of one on stdin"},
-	{"rules", "", "", "write every rule as the docs render it, as JSON"},
-	{"calibrate", "", "", "replay the labeled cases and print each rule's precision and recall"},
-	{"stats", "", "", "print each rule's recorded outcomes and not-useful rate"},
-	{"explain", "", "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
-	{"voice build", "", "[FILE...]", "measure your own texts into the voice file -voice reads"},
-	{"voice eval", "", "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind; -pool N measures chunks of N+ words, -seed S shuffles them"},
+	{"doc-comment", proofread.KindDocComment, inputSymbols, "", "judge the doc of each symbol in a JSON array on stdin"},
+	{"reference", proofread.KindReference, inputFiles, "FILE...", "judge Markdown pages a reader looks things up in"},
+	{"guide", proofread.KindGuide, inputFiles, "FILE...", "judge procedural pages, held to the guide rules too"},
+	{"agent-brief", proofread.KindAgentBrief, inputFiles, "FILE...", "judge hand-written instructions an agent loads as written"},
+	{"agent-compact", proofread.KindAgentCompact, inputFiles, "FILE...", "judge grammar-free text only an agent reads"},
+	{"skill-template", proofread.KindSkillTemplate, inputFiles, "FILE...", "judge skill template bodies that render into a short and a full form"},
+	{"change-description", proofread.KindChangeDescription, inputStdin, "", "judge a pull request on stdin, its title on the first line"},
+	{"review-summary", proofread.KindReviewSummary, inputStdin, "", "judge a review's body on stdin, its verdict in -event"},
+	{"review-inline", proofread.KindReviewInline, inputStdin, "", "judge a review comment on a line of the diff, on stdin"},
+	{"review-reply", proofread.KindReviewReply, inputStdin, "", "judge a reply in a review thread or a pull request comment, on stdin"},
+	{"message", proofread.KindMessage, inputStdin, "", "judge one message a program prints, on stdin"},
+	{"commit-message", proofread.KindCommitMessage, inputStdin, "[FILE]", "judge a commit message from FILE or stdin, its subject on the first line"},
+	{"cli-help", proofread.KindCLIHelp, inputStdin, "", "judge a command's or a flag's help text on stdin"},
+	{"issue", proofread.KindIssue, inputStdin, "", "judge an issue on stdin, its title on the first line"},
+	{"release-notes", proofread.KindReleaseNotes, inputFiles, "FILE...", "judge the notes a release ships with"},
+	{"changelog", proofread.KindChangelog, inputFiles, "FILE...", "judge a changelog or its fragments, in the Keep a Changelog shape"},
+	{"agent-reply", proofread.KindAgentReply, inputStdin, "", "judge what a coding agent writes back to its person, on stdin"},
+	{"tool-description", proofread.KindToolDescription, inputStdin, "", "judge a tool's or a skill's description, on stdin"},
+	{"stylesheet", proofread.KindStylesheet, inputStdin, "[FILE...]", "judge the comments of stylesheets, or of one on stdin"},
+	{"rules", "", inputNone, "", "write every rule as the docs render it, as JSON"},
+	{"calibrate", "", inputNone, "", "replay the labeled cases and print each rule's precision and recall"},
+	{"stats", "", inputNone, "", "print each rule's recorded outcomes and not-useful rate"},
+	{"explain", "", inputNone, "RULE|CODE", "print what a rule catches, why, its default decisions and its page"},
+	{"voice build", "", inputNone, "[FILE...]", "measure your own texts into the voice file -voice reads"},
+	{"voice eval", "", inputNone, "", "score which shape features tell -owner's JSON-lines texts from -other's, per kind; -pool N measures chunks of N+ words, -seed S shuffles them"},
 }
 
 // usage lists every subcommand and the flags a kind takes.
@@ -199,6 +139,10 @@ func usage() string {
 	b.WriteString("  -record            keep this run's findings on this machine, to count what later runs fix\n")
 	b.WriteString("  -baseline FILE     write only the findings past the counts FILE holds\n")
 	b.WriteString("  -prune             with -baseline, rewrite FILE to this run's counts and write no findings\n")
+	b.WriteString("  -metrics           write each text's readability metrics instead of its findings\n")
+	b.WriteString("\nvoice build flags: -kind, -field, -kind-field, -o; voice eval flags: -owner, -other, -kind, -field, -kind-field, -format, -pool, -seed\n")
+	b.WriteString("\nA text silences a finding with \"<!-- proofread off RULE: REASON -->\" in Markdown or \"proofread:ignore RULE REASON\" in a doc comment.\n")
+	b.WriteString("Findings are a JSON array on stdout. Exit codes: 0 judged with no finding at the -fail-on bar, 1 a finding at it, 2 unusable subcommand, flags, decisions or input.\n")
 
 	return b.String()
 }
@@ -235,10 +179,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runVoice(rest, stdin, stdout, stderr)
 	}
 
-	kind := proofread.ParseKind(name) // compat: see proofread's kindAliases
-
-	for _, s := range subcommands {
-		if s.kind != "" && s.kind == kind {
+	if kind, ok := proofread.ParseKind(name); ok { // compat: see proofread's kindAliases
+		if s, ok := kindCommand(kind); ok {
 			return runKind(s.kind, rest, stdin, stdout, stderr)
 		}
 	}
@@ -377,7 +319,7 @@ func runRules(args []string, stdout, stderr io.Writer) int {
 		return failure(stderr, fmt.Errorf("write the rules: %w", err))
 	}
 
-	return 0
+	return exitOK
 }
 
 func runExplain(args []string, stdout, stderr io.Writer) int {
@@ -389,7 +331,7 @@ func runExplain(args []string, stdout, stderr io.Writer) int {
 		if strings.EqualFold(string(doc.Name), args[0]) || strings.EqualFold(string(doc.Code), args[0]) {
 			writeExplanation(stdout, doc)
 
-			return 0
+			return exitOK
 		}
 	}
 
@@ -419,13 +361,9 @@ func writeExplanation(w io.Writer, doc proofread.RuleDoc) {
 // readsFiles reports whether kind is judged from files named as arguments
 // rather than from stdin.
 func readsFiles(kind proofread.Kind) bool {
-	switch kind {
-	case proofread.KindReference, proofread.KindGuide, proofread.KindAgentBrief, proofread.KindAgentCompact, proofread.KindSkillTemplate,
-		proofread.KindReleaseNotes, proofread.KindChangelog:
-		return true
-	default:
-		return false
-	}
+	s, ok := kindCommand(kind)
+
+	return ok && s.input == inputFiles
 }
 
 // onlyList reads -only. A rule proofread does not know is an error, and so is
@@ -460,17 +398,11 @@ func onlyList(list string, t table) ([]proofread.Rule, error) {
 	return out, nil
 }
 
-// stdinKinds are the kinds judged as one text read from stdin.
-var stdinKinds = []proofread.Kind{
-	proofread.KindChangeDescription, proofread.KindReviewSummary, proofread.KindReviewInline,
-	proofread.KindReviewReply, proofread.KindMessage,
-	proofread.KindCommitMessage, proofread.KindCLIHelp, proofread.KindIssue,
-	proofread.KindAgentReply, proofread.KindToolDescription, proofread.KindStylesheet,
-}
-
 func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts []proofread.Option) ([]finding, error) {
+	cmd, _ := kindCommand(kind)
+
 	switch {
-	case kind == proofread.KindDocComment:
+	case cmd.input == inputSymbols:
 		if len(paths) > 0 {
 			return nil, errors.New("a path needs the reference subcommand, since symbols are read from stdin")
 		}
@@ -480,7 +412,7 @@ func judge(kind proofread.Kind, paths []string, stdin io.Reader, t table, opts [
 		return nil, errors.New("commit-message takes one message file, or reads stdin")
 	case fromFiles(kind, paths):
 		return judgeFiles(paths, kind, t, opts)
-	case slices.Contains(stdinKinds, kind):
+	case cmd.input == inputStdin:
 		if len(paths) > 0 {
 			return nil, fmt.Errorf("a %s is read from stdin, not from a path", kind)
 		}

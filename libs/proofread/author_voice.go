@@ -7,18 +7,20 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"regexp"
 	"slices"
 	"strings"
 )
 
 // VoiceSchema names the shape of a voice file, so a file written by another
 // version of proofread is refused rather than misread.
-const VoiceSchema = "proofread-voice/2"
+const VoiceSchema = "proofread-voice/3"
 
 // olderVoiceSchemas are the schemas earlier proofread versions wrote. A file
 // in one is refused with the command that rebuilds it.
-var olderVoiceSchemas = []string{"proofread-voice/1"}
+//
+// compat(until: no voice file in proofread-voice/1 or /2 is still read):
+// naming the rebuild beats the bare "not proofread-voice/3" refusal.
+var olderVoiceSchemas = []string{"proofread-voice/1", "proofread-voice/2"}
 
 // MinVoiceTexts is the fewest change descriptions a [Voice] relaxes the tense
 // rule from.
@@ -28,14 +30,9 @@ const MinVoiceTexts = 30
 // from. Under it the kind keeps its counts, and voice-drift abstains on it.
 const MinVoiceWords = 1000
 
-// Feature names one measurement voice-drift ranks a draft on, by its JSON
-// path in [Shape]: a number by its name, a map entry as "<map>.<key>".
+// Feature names one measurement of a [Shape] by its JSON path: a number by
+// its name, a map entry as "<map>.<key>".
 type Feature string
-
-var (
-	boldSpan   = regexp.MustCompile(`\*\*[^*\s][^*]*\*\*|__[^_\s][^_]*__`)
-	spacedDash = regexp.MustCompile(`\s--?\s|\x{2014}|\x{2013}`)
-)
 
 // labelAuthor marks a case file section of an author's own texts. It holds no
 // case: its texts build the [Voice] every case in its file is judged with.
@@ -62,12 +59,12 @@ func heldKind(k Kind) Kind {
 // alone: counts, rates and window measures, never a text, a word the author
 // chose or a path.
 type Voice struct {
-	Schema string             `json:"schema"`
-	Kinds  map[Kind]KindVoice `json:"kinds"`
+	Schema string              `json:"schema"`
+	Kinds  map[Kind]VoiceStats `json:"kinds"`
 }
 
-// KindVoice is a [Voice] over the texts of one kind.
-type KindVoice struct {
+// VoiceStats is a [Voice] over the texts of one kind.
+type VoiceStats struct {
 	Texts int `json:"texts"`
 	Words int `json:"words"`
 	// FirstPerson and Future are the rates per 1000 words, pooled over the
@@ -78,7 +75,7 @@ type KindVoice struct {
 	// Windows is the reference voice-drift ranks a draft of the kind against.
 	// It is nil on commit messages, under [MinVoiceWords] words, and when no
 	// window measured two features.
-	Windows *Windows `json:"windows,omitempty"`
+	Windows Windows `json:"windows,omitempty"`
 	// SubjectP95 is the 95th percentile, in characters, of the author's
 	// commit subjects. It is set on commit messages of [MinVoiceWords] words
 	// or more, and 0 otherwise.
@@ -86,16 +83,12 @@ type KindVoice struct {
 }
 
 // Windows is what an author's texts of one kind measure when shuffled and
-// pooled into windows of 200 words or more.
-type Windows struct {
-	Count int `json:"count"`
-	// Values holds each feature's value on every window that measured it,
-	// sorted ascending.
-	Values map[Feature][]float64 `json:"values"`
-	// Cut is the Fisher statistic a draft must exceed to drift. Each window
-	// scored against the others exceeds it on 5% of the windows or fewer.
-	Cut float64 `json:"cut"`
-}
+// pooled into windows of 200 words or more: per window, each feature
+// voice-drift ranks the kind on that the window has data for. A window with
+// fewer than two is not kept. The cut a draft is held to is set when the
+// draft is judged, from the windows with data for every feature the draft
+// has.
+type Windows []map[Feature]float64
 
 // The rates per 1000 words at which a voice relaxes the tense rule: an author
 // who writes "I" and "will" this often in descriptions is held to tense as
@@ -115,7 +108,7 @@ const (
 // error, and so are texts with no prose word among them. A text with no prose
 // word is not counted.
 func BuildVoice(texts map[Kind][]string) (*Voice, error) {
-	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{}}
+	v := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{}}
 
 	for kind, list := range texts {
 		if !slices.Contains(voiceKinds, kind) {
@@ -123,7 +116,7 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 		}
 
 		var (
-			k                   KindVoice
+			k                   VoiceStats
 			kept                []string
 			firstPerson, future int
 		)
@@ -150,6 +143,7 @@ func BuildVoice(texts map[Kind][]string) (*Voice, error) {
 
 		switch {
 		case k.Words < MinVoiceWords:
+			// Too few words to rank a draft against: the tense counts alone stand.
 		case kind == KindCommitMessage:
 			k.SubjectP95 = subjectP95(kept)
 		default:
@@ -205,13 +199,13 @@ func percentile(sorted []float64, p float64) float64 {
 // ReadVoice decodes a voice file. A schema an earlier proofread wrote is an
 // error that names `proofread voice build`, which rebuilds the file. So is
 // any other schema than [VoiceSchema], a field, kind or feature proofread does
-// not know, a feature voice-drift does not rank on its kind, unsorted window
-// values, more of them than windows, a negative cut or subject length, and a
-// reference on a kind that cannot hold it.
+// not know, a feature voice-drift does not rank on its kind, a window with
+// fewer than two features, a negative subject length, and a reference on a
+// kind that cannot hold it.
 func ReadVoice(r io.Reader) (*Voice, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read: %w", err)
 	}
 
 	var head struct {
@@ -219,7 +213,7 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 	}
 
 	if err := json.Unmarshal(data, &head); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("voice file schema: %w", err)
 	}
 
 	switch {
@@ -235,11 +229,11 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 
 	var v Voice
 	if err := dec.Decode(&v); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("voice file: %w", err)
 	}
 
 	for kind, k := range v.Kinds {
-		if err := checkKindVoice(kind, k); err != nil {
+		if err := checkVoiceStats(kind, k); err != nil {
 			return nil, err
 		}
 	}
@@ -247,7 +241,7 @@ func ReadVoice(r io.Reader) (*Voice, error) {
 	return &v, nil
 }
 
-func checkKindVoice(kind Kind, k KindVoice) error {
+func checkVoiceStats(kind Kind, k VoiceStats) error {
 	switch {
 	case !slices.Contains(voiceKinds, kind):
 		return fmt.Errorf("a voice measures %s, not %s", kindList(voiceKinds), kind)
@@ -259,20 +253,19 @@ func checkKindVoice(kind Kind, k KindVoice) error {
 		return nil
 	case kind == KindCommitMessage:
 		return fmt.Errorf("%s: commit messages keep no windows", kind)
-	case k.Windows.Cut < 0:
-		return fmt.Errorf("%s: cut %v is negative", kind, k.Windows.Cut)
 	}
 
 	ranked := rankedFeatures(kind)
 
-	for f, values := range k.Windows.Values {
-		switch {
-		case !slices.ContainsFunc(ranked, func(r voiceFeature) bool { return r.name == f }):
-			return fmt.Errorf("%s: unknown feature %q", kind, f)
-		case len(values) > k.Windows.Count:
-			return fmt.Errorf("%s: %s has %d values for %d windows", kind, f, len(values), k.Windows.Count)
-		case !slices.IsSorted(values):
-			return fmt.Errorf("%s: %s values are not sorted", kind, f)
+	for i, w := range k.Windows {
+		if len(w) < minVoiceFeatures {
+			return fmt.Errorf("%s: window %d has %d features, want %d or more", kind, i, len(w), minVoiceFeatures)
+		}
+
+		for f := range w {
+			if !slices.ContainsFunc(ranked, func(r voiceFeature) bool { return r.name == f }) {
+				return fmt.Errorf("%s: unknown feature %q", kind, f)
+			}
 		}
 	}
 

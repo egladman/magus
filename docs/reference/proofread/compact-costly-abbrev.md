@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Measured in tiktoken o200k: "k8s" is 3 tokens and "Kubernetes" 1; "w/", "b/c", "e.g." and "i.e." each cost 1 more than the word; "cnfgrtn" is 4, "mssg" 3 and "cmmt" 2, against 1 each for the whole word. Telegraph English (Arbuzov et al., arXiv 2605.04426) ranks the most abbreviated versions last. An abbreviation earns its place only where it replaces a word of 2 or more tokens. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+Measured in tiktoken o200k: "k8s" is 3 tokens and "Kubernetes" 1; "w/", "b/c", "e.g." and "i.e." each cost 1 more than the word; "cnfgrtn" is 4, "mssg" 3 and "cmmt" 2, against 1 each for the whole word. Telegraph English (Arbuzov et al., arXiv 2605.04426) ranks the most abbreviated versions last. An abbreviation earns its place only where it replaces a word of 2 or more tokens. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

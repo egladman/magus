@@ -7,9 +7,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 	"io"
 	"sync"
+
+	"github.com/egladman/magus/libs/proofread/postag/internal/feature"
 )
 
 // The format is internal/train's encodeModel: a magic line, the classes, the
@@ -19,11 +20,9 @@ import (
 //go:embed gen/model.gz
 var modelGz []byte
 
-const modelMagic = "postag1\n"
-
 type class struct {
 	upos UPOS
-	xpos string
+	xpos XPOS
 }
 
 type classWeight struct {
@@ -38,7 +37,8 @@ type model struct {
 	dict    map[string]uint16
 	feats   map[feature.Hash]span
 	weights []classWeight
-	// The trainer's own test-split counts; TestTagAccuracy demands the same.
+	// The trainer's test-split counts, which TestTagAccuracy demands again. They
+	// are part of the format, so dropping them would change the model's bytes.
 	testTokens, testUPOS, testXPOS int
 }
 
@@ -47,6 +47,7 @@ var loadModel = sync.OnceValue(func() *model {
 	if err != nil {
 		panic(fmt.Sprintf("postag: embedded model: %v", err))
 	}
+
 	return m
 })
 
@@ -59,12 +60,15 @@ func (r *modelReader) uvarint() uint64 {
 	if r.err != nil {
 		return 0
 	}
+
 	v, n := binary.Uvarint(r.buf)
 	if n <= 0 {
 		r.err = errors.New("truncated varint")
 		return 0
 	}
+
 	r.buf = r.buf[n:]
+
 	return v
 }
 
@@ -72,13 +76,33 @@ func (r *modelReader) varint() int64 {
 	if r.err != nil {
 		return 0
 	}
+
 	v, n := binary.Varint(r.buf)
 	if n <= 0 {
 		r.err = errors.New("truncated varint")
 		return 0
 	}
+
 	r.buf = r.buf[n:]
+
 	return v
+}
+
+// count reads the length of a collection whose entries each take at least one
+// byte, so a count past the bytes left is corrupt and must not size an
+// allocation.
+func (r *modelReader) count() int {
+	n := r.uvarint()
+	if r.err != nil {
+		return 0
+	}
+
+	if n > uint64(len(r.buf)) {
+		r.err = fmt.Errorf("count %d past the %d bytes left", n, len(r.buf))
+		return 0
+	}
+
+	return int(n)
 }
 
 func (r *modelReader) str() string {
@@ -86,12 +110,15 @@ func (r *modelReader) str() string {
 	if r.err != nil {
 		return ""
 	}
+
 	if n > uint64(len(r.buf)) {
 		r.err = errors.New("truncated string")
 		return ""
 	}
+
 	s := string(r.buf[:n])
 	r.buf = r.buf[n:]
+
 	return s
 }
 
@@ -100,46 +127,68 @@ func decodeModel(gz []byte) (*model, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	raw, err := io.ReadAll(zr)
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(raw, []byte(modelMagic)) {
+
+	if !bytes.HasPrefix(raw, []byte(feature.ModelMagic)) {
 		return nil, errors.New("not a postag model")
 	}
-	r := &modelReader{buf: raw[len(modelMagic):]}
+
+	r := &modelReader{buf: raw[len(feature.ModelMagic):]}
 	m := &model{}
 
-	m.classes = make([]class, r.uvarint())
+	nClasses := r.count()
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	m.classes = make([]class, nClasses)
 	for i := range m.classes {
 		xpos, name := r.str(), r.str()
+
 		u, ok := parseUPOS(name)
 		if r.err == nil && !ok {
 			return nil, fmt.Errorf("class %d: unknown UPOS %q", i, name)
 		}
-		m.classes[i] = class{upos: u, xpos: xpos}
+
+		m.classes[i] = class{upos: u, xpos: XPOS(xpos)}
 	}
 
-	n := r.uvarint()
-	m.dict = make(map[string]uint16, n)
-	for range n {
+	nWords := r.count()
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	m.dict = make(map[string]uint16, nWords)
+	for range nWords {
 		word := r.str()
 		m.dict[word] = r.class(len(m.classes))
 	}
 
-	n = r.uvarint()
-	m.feats = make(map[feature.Hash]span, n)
+	nFeats := r.count()
+	if r.err != nil {
+		return nil, r.err
+	}
+
+	m.feats = make(map[feature.Hash]span, nFeats)
+
 	var h uint64
-	for range n {
+	for range nFeats {
 		h += r.uvarint()
-		k := r.uvarint()
+		k := r.count()
 		s := span{start: uint32(len(m.weights))}
+
 		for range k {
 			c := r.class(len(m.classes))
 			m.weights = append(m.weights, classWeight{class: c, weight: int32(r.varint())})
 		}
+
 		s.end = uint32(len(m.weights))
 		m.feats[feature.Hash(h)] = s
+
 		if r.err != nil {
 			break
 		}
@@ -149,9 +198,11 @@ func decodeModel(gz []byte) (*model, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
+
 	if len(r.buf) != 0 {
 		return nil, fmt.Errorf("%d trailing bytes", len(r.buf))
 	}
+
 	return m, nil
 }
 
@@ -160,26 +211,32 @@ func (r *modelReader) class(n int) uint16 {
 	if r.err == nil && c >= uint64(n) {
 		r.err = fmt.Errorf("class %d out of range", c)
 	}
+
 	return uint16(c)
 }
 
 // predict returns the highest-scoring class, the lowest index on a tie.
 func (m *model) predict(feats []feature.Hash, scores []int32) uint16 {
 	clear(scores)
+
 	for _, f := range feats {
 		s, ok := m.feats[f]
 		if !ok {
 			continue
 		}
+
 		for _, cw := range m.weights[s.start:s.end] {
 			scores[cw.class] += cw.weight
 		}
 	}
+
 	best := 0
+
 	for c, s := range scores {
 		if s > scores[best] {
 			best = c
 		}
 	}
+
 	return uint16(best)
 }

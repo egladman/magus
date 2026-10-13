@@ -16,7 +16,7 @@ func shapes(n int, build func(i int) Shape) []Shape {
 	return out
 }
 
-func separationNamed(t *testing.T, seps []Separation, feature string) Separation {
+func separationNamed(t *testing.T, seps []Separation, feature Feature) Separation {
 	t.Helper()
 
 	i := slices.IndexFunc(seps, func(s Separation) bool { return s.Feature == feature })
@@ -78,14 +78,14 @@ func TestSeparateLeavesOutWithheldTexts(t *testing.T) {
 	other := shapes(5, func(int) Shape { return Shape{MATTR: 0.5, FunctionWords: map[string]float64{"the": 40}} })
 	seps := Separate(owner, other)
 
-	for _, feature := range []string{"mattr", "function_words.the"} {
+	for _, feature := range []Feature{"mattr", "function_words.the"} {
 		if got := separationNamed(t, seps, feature); got != (Separation{feature, 1, 5, 5}) {
 			t.Errorf("%+v, want the withheld texts left out", got)
 		}
 	}
 
-	if got := separationNamed(t, seps, "triads_per_1000"); got.Owner != 7 {
-		t.Errorf("triads counted %d owner texts, want 7: withholding mattr withholds nothing else", got.Owner)
+	if got := separationNamed(t, seps, "triads_per_1000"); got.OwnerTexts != 7 {
+		t.Errorf("triads counted %d owner texts, want 7: withholding mattr withholds nothing else", got.OwnerTexts)
 	}
 }
 
@@ -116,9 +116,9 @@ func TestSeparateFlattensMaps(t *testing.T) {
 	})
 	seps := Separate(owner, other)
 
-	want := map[string]float64{"punctuation.semicolon": 1, "layout.bold": 1, "punctuation.comma": 0.5}
+	want := map[Feature]float64{"punctuation.semicolon": 1, "layout.bold": 1, "punctuation.comma": 0.5}
 	for feature, auc := range want {
-		if got := separationNamed(t, seps, feature); got.AUC != auc || got.Owner != 5 || got.Other != 5 {
+		if got := separationNamed(t, seps, feature); got.AUC != auc || got.OwnerTexts != 5 || got.OtherTexts != 5 {
 			t.Errorf("%+v, want AUC %v over 5 and 5", got, auc)
 		}
 	}

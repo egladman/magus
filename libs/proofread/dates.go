@@ -6,6 +6,10 @@ import (
 	"strings"
 )
 
+// RuleDateFormat reports a date written in another style than the text's
+// other dates: 2026-10-13, Oct 2026, October 2026, 10/13/2026.
+const RuleDateFormat Rule = "date-format"
+
 // dateStyle is a regexp group per style a text writes a date in. ISO 8601
 // is one style at day or month precision, as is a month name with or without
 // its day. May is both a full and an abbreviated name, so it takes no style.
@@ -56,24 +60,31 @@ func dateFormat(in input) []Finding {
 	}
 
 	return append(
-		dateFindings(dates, styles, "as the text's other %d dates are written, as in '%s': one text, one date style."),
-		dateFindings(dates, septembers, "with the abbreviation the text's other %d September dates use, as in '%s'.")...,
+		dateFindings(dates, styles, func(date string, n int, example string) string {
+			return fmt.Sprintf("Write '%s' as the text's other %d dates are written, as in '%s': one text, one "+
+				"date style.", date, n, example)
+		}),
+		dateFindings(dates, septembers, func(date string, n int, example string) string {
+			return fmt.Sprintf("Write '%s' with the abbreviation the text's other %d September dates use, as in "+
+				"'%s'.", date, n, example)
+		})...,
 	)
 }
 
 // dateFindings reports each date whose class differs from the most common
-// one, ties going to the class written first. Unlike [minority] it judges two
-// dates: two styles in one text already disagree.
-func dateFindings(dates []datedAt, classes []string, tail string) []Finding {
-	common, n, _, distinct := mostCommon(classes)
-	if distinct < 2 {
+// one, ties going to the class written first. message writes a finding from
+// the date, the common class's count and a date of that class. Unlike [minority] it judges two dates: two styles in one text already
+// disagree.
+func dateFindings(dates []datedAt, classes []string, message func(date string, n int, example string) string) []Finding {
+	common := mostCommon(classes)
+	if common.distinct < 2 {
 		return nil
 	}
 
 	example := ""
 
 	for i, c := range classes {
-		if c == common {
+		if c == common.class {
 			example = dates[i].text
 
 			break
@@ -83,12 +94,12 @@ func dateFindings(dates []datedAt, classes []string, tail string) []Finding {
 	var out []Finding
 
 	for i, d := range dates {
-		if classes[i] == "" || classes[i] == common {
+		if classes[i] == "" || classes[i] == common.class {
 			continue
 		}
 
 		out = append(out, Finding{
-			Message: fmt.Sprintf("Write '%s' "+tail, d.text, n, example),
+			Message: message(d.text, common.count, example),
 			Match:   d.text, Line: d.line,
 		})
 	}
@@ -113,8 +124,8 @@ var rangeWords = wordSet("present", "current", "now", "today", "ongoing")
 var monthWords = wordSet("jan", "january", "feb", "february", "mar", "march", "apr", "april", "may", "jun", "june",
 	"jul", "july", "aug", "august", "sep", "sept", "september", "oct", "october", "nov", "november", "dec", "december")
 
-// year is a year in a word: 2019, 2019-03, 03/2019.
-var year = regexp.MustCompile(`(?:^|\D)(?:19|20)\d{2}(?:\D|$)`)
+// yearInWord is a year in a word: 2019, 2019-03, 03/2019.
+var yearInWord = regexp.MustCompile(`(?:^|\D)(?:19|20)\d{2}(?:\D|$)`)
 
 // dateEnd reports whether word can end a date range: a word holding a year,
 // a month, or a word for now. Any other number is not enough: "step 2 --
@@ -122,5 +133,5 @@ var year = regexp.MustCompile(`(?:^|\D)(?:19|20)\d{2}(?:\D|$)`)
 func dateEnd(word string) bool {
 	w := strings.ToLower(strings.Trim(word, ".,;()"))
 
-	return year.MatchString(w) || rangeWords[w] || monthWords[w]
+	return yearInWord.MatchString(w) || rangeWords[w] || monthWords[w]
 }

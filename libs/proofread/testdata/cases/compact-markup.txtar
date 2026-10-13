@@ -3,6 +3,7 @@ Bold and italic markers, and Markdown tables, in text only an agent reads.
 - **cache:** keyed on inputs
 Run gate *once*.
 Read __every__ log.
+Run *once* *now*.
 -- hit/agent-compact whole --
 | flag | does |
 | --- | --- |
@@ -12,6 +13,8 @@ cache: keyed on inputs
 Run gate once.
 Set max_line_words.
 - run gate
+Call __init__ once.
+Edit __main__.py first.
 -- pass/agent-compact whole --
 flag -s: silence
 flag -o: output shape

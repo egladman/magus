@@ -111,7 +111,7 @@ var stepOpeners = wordSet(
 func stepVerb(in input) []Finding {
 	var out []Finding
 
-	for _, list := range lists(in.prose, asWritten) {
+	for _, list := range lists(in.prose, keep) {
 		if !list.numbered() || !slices.ContainsFunc(list.items, func(item paragraph) bool {
 			return imperatives[strings.ToLower(firstWord(stepBody(item.head)))]
 		}) {

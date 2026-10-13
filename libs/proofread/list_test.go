@@ -29,7 +29,7 @@ func TestListsGroupItemsByIndentAndMarker(t *testing.T) {
 
 			var got [][]int
 
-			for _, l := range lists(prose, asWritten) {
+			for _, l := range lists(prose, keep) {
 				var lines []int
 				for _, item := range l.items {
 					lines = append(lines, item.head.line)
@@ -83,5 +83,11 @@ func TestListParallelReportsAnItemOfAnotherShape(t *testing.T) {
 			"- Open the page.", nil},
 		{"two items are too few", KindReference, "- Run the build.\n- The cache for each run.", nil},
 		{"code openers are skipped", KindReference, "- Run the build.\n- `ls` lists them.\n- Open the page.", nil},
+		{"a contraction opens with its verb", KindReference,
+			"- A cache for each run.\n- The key of each target.\n- Fast builds on every push.\n- Don't run the build.",
+			[]string{"4:Don't"}},
+		{"a hyphenated opener stays one word", KindReference,
+			"- Re-run the build.\n- Re-open the page.\n- Save the key.\n- The cache for each run.",
+			[]string{"4:The"}},
 	})
 }

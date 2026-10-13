@@ -584,7 +584,10 @@ func (c *sampleConfig) readSource(s *sourceSpec) ([]*sampleText, error) {
 		t := &sampleText{source: s.Name, record: record, text: text, kind: c.kind}
 
 		if v, ok := rec[c.kindField].(string); ok && v != "" {
-			t.kind = proofread.ParseKind(v)
+			t.kind = proofread.Kind(v)
+			if k, ok := proofread.ParseKind(v); ok {
+				t.kind = k
+			}
 		}
 
 		// compat(until: no round source record carries "anchored"): records sampled before

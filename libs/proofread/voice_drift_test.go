@@ -57,9 +57,10 @@ func TestVoiceDriftPassesTheAuthorsOwnDraft(t *testing.T) {
 func TestVoiceDriftAbstains(t *testing.T) {
 	v := authorVoice(t)
 	words := strings.Fields(agentDraft)
-	oneFeature := &Voice{Schema: VoiceSchema, Kinds: map[Kind]KindVoice{KindReviewReply: {Windows: &Windows{
-		Count: 3, Values: map[Feature][]float64{"punctuation.paren": {0, 0, 0}}, Cut: 0.1,
-	}}}}
+	punctuationOnly := map[Feature]float64{"punctuation.paren": 0, "punctuation.comma": 1}
+	shortWindows := &Voice{Schema: VoiceSchema, Kinds: map[Kind]VoiceStats{KindReviewReply: {
+		Windows: Windows{punctuationOnly, punctuationOnly, punctuationOnly},
+	}}}
 
 	cases := []struct {
 		name, text string
@@ -69,7 +70,7 @@ func TestVoiceDriftAbstains(t *testing.T) {
 		{"on a kind the voice lacks", agentDraft, KindIssue, v},
 		{"under 15 words", "Summary: the key (sorted) is stable; and the tests, and docs, pass.", KindReviewReply, v},
 		{"under 200 words", strings.Join(words[:150], " "), KindReviewReply, v},
-		{"with fewer than 2 features with data", agentDraft, KindReviewReply, oneFeature},
+		{"with no window measuring every feature the draft does", agentDraft, KindReviewReply, shortWindows},
 	}
 
 	for _, tc := range cases {
@@ -128,65 +129,130 @@ func TestVoiceDriftHoldsACommitToItsSubjectLength(t *testing.T) {
 	}
 }
 
-// syntheticWindows are n windows' feature values drawn under seed.
-func syntheticWindows(n int, seed uint64) []map[Feature]float64 {
-	rng := rand.New(rand.NewPCG(seed, 0))
-	out := make([]map[Feature]float64, n)
+// drawWindow is one window's features drawn from rng. Under short, it keeps
+// only two to four of the punctuation features, as a window whose words are
+// mostly code withholds the rest.
+func drawWindow(rng *rand.Rand, short bool) map[Feature]float64 {
+	features := voiceFeatures
+	if short {
+		features = features[:2+rng.IntN(3)]
+	}
 
-	for i := range out {
-		out[i] = map[Feature]float64{}
-		for _, f := range voiceFeatures {
-			out[i][f.name] = round2(rng.Float64() * 10)
-		}
+	out := map[Feature]float64{}
+	for _, f := range features {
+		out[f.name] = rng.Float64() * 10
 	}
 
 	return out
 }
 
-func TestTheCutLetsFivePercentOfTheAuthorsWindowsPast(t *testing.T) {
-	features := rankedFeatures(KindChangeDescription)
+func TestVoiceDriftFiresAtTheStatedRateOnMixedWindows(t *testing.T) {
+	const (
+		sets, drafts = 40, 50
+		windows      = 300
+	)
 
-	for _, tc := range []struct{ windows, past int }{{40, 2}, {100, 5}, {19, 0}} {
-		measured := syntheticWindows(tc.windows, 7)
-		w := measuredWindows(measured, features)
-		scores := ownerScores(measured, features)
+	rng := rand.New(rand.NewPCG(7, 0))
+	fired := 0
+
+	for range sets {
+		owner := make(Windows, windows)
+		for i := range owner {
+			owner[i] = drawWindow(rng, i%5 != 0)
+		}
+
+		for range drafts {
+			stat, cut, _, ok := scoreDraft(drawWindow(rng, false), owner, voiceFeatures)
+			if !ok {
+				t.Fatal("scoreDraft abstained with 60 windows measuring every feature")
+			}
+
+			if stat > cut {
+				fired++
+			}
+		}
+	}
+
+	// A draft drawn like the author's windows passes the cut when it ranks
+	// among the 4 highest of the 61 scores in its pool: 6.6%. A cut set by
+	// every window, most scored on 2 to 4 features, lets about 1 in 4 past.
+	if rate := float64(fired) / (sets * drafts); rate < 0.03 || rate > 0.10 {
+		t.Errorf("drafts drawn like the author's windows fired %.1f%% of the time, want about %d%%", 100*rate,
+			voiceFalseAlarmPercent)
+	}
+}
+
+func TestCutAtLetsFivePercentOfTheScoresPast(t *testing.T) {
+	rng := rand.New(rand.NewPCG(7, 0))
+
+	for _, tc := range []struct{ scores, past int }{{40, 2}, {100, 5}, {19, 0}} {
+		scores := make([]float64, tc.scores)
+		for i := range scores {
+			scores[i] = rng.Float64()
+		}
+
+		cut := cutAt(scores)
 
 		past := 0
 
 		for _, s := range scores {
-			if s > w.Cut {
+			if s > cut {
 				past++
 			}
 		}
 
-		if len(scores) != tc.windows || past != tc.past {
-			t.Errorf("%d windows: %d scored and %d past the cut %v, want %d past", tc.windows, len(scores), past, w.Cut, tc.past)
+		if past != tc.past {
+			t.Errorf("%d scores: %d past the cut %v, want %d", tc.scores, past, cut, tc.past)
 		}
 
-		if tc.past == 0 && w.Cut != slices.Max(scores) {
-			t.Errorf("%d windows: cut %v, want the highest score %v", tc.windows, w.Cut, slices.Max(scores))
+		if tc.past == 0 && cut != slices.Max(scores) {
+			t.Errorf("%d scores: cut %v, want the highest %v", tc.scores, cut, slices.Max(scores))
 		}
 	}
 }
 
-func TestRankPCountsOnlyTheAgentDirection(t *testing.T) {
-	sorted := []float64{1, 2, 3, 4}
+func TestEveryVoiceFeatureReadsOnALongDraft(t *testing.T) {
+	got := readFeatures(MeasureShape(agentDraft, KindChangeDescription), voiceFeatures)
 
+	for _, f := range voiceFeatures {
+		if _, ok := got[f.name]; !ok {
+			t.Errorf("%s read nothing on a draft of %d words or more", f.name, voiceWindowWords)
+		}
+	}
+}
+
+func TestEveryJudgedKindHasAName(t *testing.T) {
+	for _, kind := range voiceJudged {
+		if voiceDraftNames[kind] == "" || voicePlurals[heldKind(kind)] == "" {
+			t.Errorf("%s has no draft name or no plural for its held kind", kind)
+		}
+	}
+
+	if got := nameOr(voiceDraftNames, KindGuide); got != string(KindGuide) {
+		t.Errorf("nameOr on a kind with no name = %q, want the kind's own name", got)
+	}
+}
+
+func TestRankPCountsOnlyTheAgentDirection(t *testing.T) {
 	cases := []struct {
+		sorted []float64
 		value  float64
 		higher bool
 		want   float64
 	}{
-		{3, true, 3.0 / 5},
-		{9, true, 1.0 / 5},
-		{0, true, 1},
-		{2, false, 3.0 / 5},
-		{0, false, 1.0 / 5},
+		{[]float64{1, 2, 3, 4}, 3, true, 2.0 / 4},
+		{[]float64{1, 2, 3, 4}, 4, true, 1.0 / 4},
+		{[]float64{1, 2, 3, 4}, 1, true, 1},
+		{[]float64{1, 2, 3, 4}, 2, false, 2.0 / 4},
+		{[]float64{1, 2, 3, 4}, 1, false, 1.0 / 4},
+		{[]float64{1, 2, 3, 4}, 4, false, 1},
+		{[]float64{1, 2, 2, 3}, 2, true, 3.0 / 4},
+		{[]float64{1, 2, 2, 3}, 2, false, 3.0 / 4},
 	}
 
 	for _, tc := range cases {
-		if got := rankP(sorted, tc.value, tc.higher); got != tc.want {
-			t.Errorf("rankP(%v, higher %v) = %v, want %v", tc.value, tc.higher, got, tc.want)
+		if got := rankP(tc.sorted, tc.value, tc.higher); got != tc.want {
+			t.Errorf("rankP(%v, %v, higher %v) = %v, want %v", tc.sorted, tc.value, tc.higher, got, tc.want)
 		}
 	}
 }
@@ -233,14 +299,14 @@ func markedTexts(n int) []string {
 func TestPoolWindowsChunksTheSameForTheSameSeed(t *testing.T) {
 	texts := markedTexts(12)
 
-	a := poolWindows(KindReviewReply, texts, 30, 13)
-	b := poolWindows(KindReviewReply, texts, 30, 13)
+	a := poolWindows(texts, KindReviewReply, 30, 13)
+	b := poolWindows(texts, KindReviewReply, 30, 13)
 
 	if len(a) != 4 || !slices.Equal(a, b) {
 		t.Errorf("one seed gave %q then %q, want the same 4 windows", a, b)
 	}
 
-	if c := poolWindows(KindReviewReply, texts, 30, 14); slices.Equal(a, c) {
+	if c := poolWindows(texts, KindReviewReply, 30, 14); slices.Equal(a, c) {
 		t.Errorf("seeds 13 and 14 gave the same windows %q", a)
 	}
 
@@ -250,7 +316,7 @@ func TestPoolWindowsChunksTheSameForTheSameSeed(t *testing.T) {
 }
 
 func TestPoolWindowsUsesEachTextOnceAndDropsTheRemainder(t *testing.T) {
-	windows := poolWindows(KindReviewReply, markedTexts(11), 30, 13)
+	windows := poolWindows(markedTexts(11), KindReviewReply, 30, 13)
 
 	if len(windows) != 3 {
 		t.Fatalf("11 texts of 10 words in windows of 30+ made %d windows, want 3", len(windows))
@@ -294,7 +360,7 @@ func TestPoolWindowsKeepsEveryCommitSubject(t *testing.T) {
 		texts[i] = fmt.Sprintf("fix the cache key for target %02d", i)
 	}
 
-	windows := poolWindows(KindCommitMessage, texts, 20, 13)
+	windows := poolWindows(texts, KindCommitMessage, 20, 13)
 	if len(windows) != 4 {
 		t.Fatalf("pooled 12 seven-word subjects into %d windows of 20+ words, want 4", len(windows))
 	}
@@ -306,10 +372,10 @@ func TestPoolWindowsKeepsEveryCommitSubject(t *testing.T) {
 	}
 }
 
-func TestMeasureWindowsMeasuresEachWindow(t *testing.T) {
-	shapes := MeasureWindows(markedTexts(12), KindReviewReply, 30, 13)
+func TestMeasureWindowShapesMeasuresEachWindow(t *testing.T) {
+	shapes := MeasureWindowShapes(markedTexts(12), KindReviewReply, 30, 13)
 	if len(shapes) != 4 {
-		t.Fatalf("MeasureWindows = %d shapes, want 4", len(shapes))
+		t.Fatalf("MeasureWindowShapes = %d shapes, want 4", len(shapes))
 	}
 
 	for _, s := range shapes {

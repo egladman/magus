@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Anthropic's skill guidance asks for the smallest set of high-signal tokens and one term per idea, and a restated line spends its tokens twice. The rewrite to the floor on 2026-10-13 merged lines like these by hand. A line restates another only when its negation, obligation, scope, condition and order words match too, since those are what a merge must keep. Over the 1041 lines that rewrite left, it fires twice, both restatements the merges missed. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+Anthropic's skill guidance asks for the smallest set of high-signal tokens and one term per idea, and a restated line spends its tokens twice. The rewrite of the shipped skills to the floor merged lines like these by hand. A line restates another only when its negation, obligation, scope, condition and order words match too, since those are what a merge must keep. Run over the lines that rewrite left, it fired only on restatements the merges missed. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

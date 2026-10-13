@@ -6,7 +6,6 @@ import (
 	"math"
 	"math/rand/v2"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -17,20 +16,22 @@ import (
 // than 95% of the author's.
 const RuleVoiceDrift Rule = "voice-drift"
 
+// VoiceSeed is the seed [BuildVoice] shuffles texts under before pooling them
+// into windows, so one set of texts always builds the same voice.
+const VoiceSeed uint64 = 13
+
 const (
 	// voiceWindowWords is the fewest words in a window of the author's texts,
 	// and in a draft voice-drift scores on its own.
 	voiceWindowWords = 200
-	// voiceDraftFloor is the fewest words voice-drift ever judges.
-	voiceDraftFloor = 15
 	// voiceFalseAlarmPercent is the share of the author's own windows the cut
 	// lets exceed it.
 	voiceFalseAlarmPercent = 5
+	// voiceKeepPercent is the share of the author's windows, and of the
+	// author's commit subjects, a draft must read further than to drift.
+	voiceKeepPercent = 100 - voiceFalseAlarmPercent
 	// minVoiceFeatures is the fewest features with data a score combines.
 	minVoiceFeatures = 2
-	// voiceSeed shuffles the texts before pooling, so one set of texts always
-	// builds the same voice.
-	voiceSeed uint64 = 13
 )
 
 // voiceFeature is one feature voice-drift ranks a draft on.
@@ -45,7 +46,7 @@ type voiceFeature struct {
 	higher bool
 	// off are the kinds the feature is not ranked on.
 	off  []Kind
-	read func(Shape) (float64, bool)
+	read func(s Shape, name Feature) (float64, bool)
 }
 
 const (
@@ -59,58 +60,53 @@ const (
 // false alarms; template_rate and tag_compression are off for review text and
 // colons for issues because their direction flipped between the author's eras.
 var voiceFeatures = []voiceFeature{
-	{name: "punctuation.comma", label: "commas", unit: per100Words, digits: 1, higher: true, read: punctuationRate("comma")},
-	{name: "punctuation.paren", label: "parentheses", unit: per100Words, digits: 1, higher: true, read: punctuationRate("paren")},
+	{name: "punctuation.comma", label: "commas", unit: per100Words, digits: 1, higher: true, read: mapEntry},
+	{name: "punctuation.paren", label: "parentheses", unit: per100Words, digits: 1, higher: true, read: mapEntry},
 	{
 		name: "punctuation.colon", label: "colons", unit: per100Words, digits: 1, higher: true,
-		off: []Kind{KindIssue}, read: punctuationRate("colon"),
+		off: []Kind{KindIssue}, read: mapEntry,
 	},
-	{
-		name: "punctuation.semicolon", label: "semicolons", unit: per100Words, digits: 1, higher: true,
-		read: punctuationRate("semicolon"),
-	},
-	{name: "function_words.i", label: `"I"`, unit: per1000Words, digits: 1, read: functionWordRate("i")},
-	{name: "function_words.and", label: `"and"`, unit: per1000Words, digits: 1, higher: true, read: functionWordRate("and")},
+	{name: "punctuation.semicolon", label: "semicolons", unit: per100Words, digits: 1, higher: true, read: mapEntry},
+	{name: "function_words.i", label: `"I"`, unit: per1000Words, digits: 1, read: mapEntry},
+	{name: "function_words.and", label: `"and"`, unit: per1000Words, digits: 1, higher: true, read: mapEntry},
 	{
 		name: "template_rate", label: "repeated part-of-speech 4-grams", unit: " of all", digits: 2, higher: true,
-		off: reviewText, read: unlessWithheld("template_rate", func(s Shape) float64 { return s.TemplateRate }),
+		off: reviewText, read: unlessWithheld(func(s Shape) float64 { return s.TemplateRate }),
 	},
 	{
 		name: "tag_compression", label: "part-of-speech compression", unit: " of raw size", digits: 2,
-		off: reviewText, read: unlessWithheld("tag_compression", func(s Shape) float64 { return s.TagCompression }),
+		off: reviewText, read: unlessWithheld(func(s Shape) float64 { return s.TagCompression }),
 	},
 	{
 		name: "grammar_per_1000.participial_clause", label: "participial clauses", unit: per1000Words, digits: 1,
-		higher: true, read: grammarRate("participial_clause"),
+		higher: true, read: mapEntry,
 	},
 }
 
-func punctuationRate(mark string) func(Shape) (float64, bool) {
-	return func(s Shape) (float64, bool) {
-		v, ok := s.Punctuation[mark]
+// mapEntry reads the feature "<map>.<key>" from its map in s.
+func mapEntry(s Shape, name Feature) (float64, bool) {
+	field, key, _ := strings.Cut(string(name), ".")
 
-		return v, ok
+	var m map[string]float64
+
+	switch field {
+	case "punctuation":
+		m = s.Punctuation
+	case "function_words":
+		m = s.FunctionWords
+	case "grammar_per_1000":
+		m = s.Grammar
 	}
+
+	v, ok := m[key]
+
+	return v, ok
 }
 
-func functionWordRate(word string) func(Shape) (float64, bool) {
-	return func(s Shape) (float64, bool) {
-		v, ok := s.FunctionWords[word]
-
-		return v, ok
+func unlessWithheld(value func(Shape) float64) func(Shape, Feature) (float64, bool) {
+	return func(s Shape, name Feature) (float64, bool) {
+		return value(s), !slices.Contains(s.Withheld, string(name))
 	}
-}
-
-func grammarRate(name string) func(Shape) (float64, bool) {
-	return func(s Shape) (float64, bool) {
-		v, ok := s.Grammar[name]
-
-		return v, ok
-	}
-}
-
-func unlessWithheld(name string, value func(Shape) float64) func(Shape) (float64, bool) {
-	return func(s Shape) (float64, bool) { return value(s), !slices.Contains(s.Withheld, name) }
 }
 
 // rankedFeatures is the features voice-drift ranks a text of kind on.
@@ -122,7 +118,7 @@ func readFeatures(s Shape, features []voiceFeature) map[Feature]float64 {
 	out := map[Feature]float64{}
 
 	for _, f := range features {
-		if v, ok := f.read(s); ok {
+		if v, ok := f.read(s, f.name); ok {
 			out[f.name] = v
 		}
 	}
@@ -130,12 +126,12 @@ func readFeatures(s Shape, features []voiceFeature) map[Feature]float64 {
 	return out
 }
 
-// MeasureWindows shuffles texts under seed, pools them into windows of at
-// least minWords words read as kind, and returns each window's [Shape]. Each
-// text lands in at most one window, and a last window under minWords is
+// MeasureWindowShapes shuffles texts under seed, pools them into windows of
+// at least minWords words read as kind, and returns each window's [Shape].
+// Each text lands in at most one window, and a last window under minWords is
 // dropped.
-func MeasureWindows(texts []string, kind Kind, minWords int, seed uint64) []Shape {
-	windows := poolWindows(kind, texts, minWords, seed)
+func MeasureWindowShapes(texts []string, kind Kind, minWords int, seed uint64) []Shape {
+	windows := poolWindows(texts, kind, minWords, seed)
 	out := make([]Shape, len(windows))
 
 	for i, w := range windows {
@@ -149,7 +145,7 @@ func MeasureWindows(texts []string, kind Kind, minWords int, seed uint64) []Shap
 // blank line apart, into windows of at least minWords words. The shuffle is
 // Eder's random sampling: windows cut from the texts in order would each
 // stand for one stretch of writing.
-func poolWindows(kind Kind, texts []string, minWords int, seed uint64) []string {
+func poolWindows(texts []string, kind Kind, minWords int, seed uint64) []string {
 	order := slices.Clone(texts)
 	rng := rand.New(rand.NewPCG(seed, 0))
 	rng.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
@@ -186,42 +182,61 @@ func poolWindows(kind Kind, texts []string, minWords int, seed uint64) []string 
 	return windows
 }
 
-// buildWindows pools texts into windows and sets the cut from them, or
-// returns nil when no window, scored against the others, has two features
-// with data.
-func buildWindows(kind Kind, texts []string) *Windows {
+// buildWindows pools texts into windows and keeps each window's features
+// with data, or returns nil when no window has minVoiceFeatures of them.
+func buildWindows(kind Kind, texts []string) Windows {
 	features := rankedFeatures(kind)
 
-	var measured []map[Feature]float64
-	for _, s := range MeasureWindows(texts, kind, voiceWindowWords, voiceSeed) {
-		measured = append(measured, readFeatures(s, features))
-	}
+	var out Windows
 
-	return measuredWindows(measured, features)
-}
-
-func measuredWindows(measured []map[Feature]float64, features []voiceFeature) *Windows {
-	stats := ownerScores(measured, features)
-	if len(stats) == 0 {
-		return nil
-	}
-
-	return &Windows{Count: len(measured), Values: sortedValues(measured), Cut: cutAt(stats)}
-}
-
-// ownerScores scores each window against the others, leaving it out of its
-// own reference, and keeps the scores of windows with two features with data.
-func ownerScores(measured []map[Feature]float64, features []voiceFeature) []float64 {
-	var stats []float64
-
-	for i, w := range measured {
-		others := sortedValues(slices.Delete(slices.Clone(measured), i, i+1))
-		if stat, parts := fisher(w, others, features); len(parts) >= minVoiceFeatures {
-			stats = append(stats, stat)
+	for _, s := range MeasureWindowShapes(texts, kind, voiceWindowWords, VoiceSeed) {
+		if w := readFeatures(s, features); len(w) >= minVoiceFeatures {
+			out = append(out, w)
 		}
 	}
 
-	return stats
+	return out
+}
+
+// scoreDraft scores draft on the features it has data for, against the
+// windows with data for all of them, and returns the cut those windows set.
+// The draft and each window are scored alike, each against the rest of the
+// pool the two make. Fisher's statistic grows with the features it sums, so
+// a cut from windows scored on fewer features, or on a reference without the
+// draft, would let more drafts past than it lets windows. It reports false
+// when the draft has fewer than minVoiceFeatures features or no window has
+// them all.
+func scoreDraft(draft map[Feature]float64, windows Windows, features []voiceFeature) (stat, cut float64, parts []voicePart, ok bool) {
+	scored := slices.DeleteFunc(slices.Clone(features), func(f voiceFeature) bool {
+		_, has := draft[f.name]
+
+		return !has
+	})
+
+	pool := slices.DeleteFunc(slices.Clone(windows), func(w map[Feature]float64) bool {
+		return slices.ContainsFunc(scored, func(f voiceFeature) bool {
+			_, has := w[f.name]
+
+			return !has
+		})
+	})
+
+	if len(scored) < minVoiceFeatures || len(pool) == 0 {
+		return 0, 0, nil, false
+	}
+
+	pool = append(pool, draft)
+	reference := sortedValues(pool)
+	owner := make([]float64, 0, len(pool)-1)
+
+	for _, w := range pool[:len(pool)-1] {
+		score, _ := fisher(w, reference, scored)
+		owner = append(owner, score)
+	}
+
+	stat, parts = fisher(draft, reference, scored)
+
+	return stat, cutAt(owner), parts, true
 }
 
 func sortedValues(measured []map[Feature]float64) map[Feature][]float64 {
@@ -256,8 +271,9 @@ type voicePart struct {
 	p       float64
 }
 
-// fisher combines the one-sided rank p-value of each feature measured with a
-// reference, -2 times the sum of their logs, and returns the parts it summed.
+// fisher combines the one-sided rank p-value of each feature, -2 times the
+// sum of their logs, and returns the parts it summed. measured has a value
+// for every feature, and reference holds that value among its own.
 func fisher(measured map[Feature]float64, reference map[Feature][]float64, features []voiceFeature) (float64, []voicePart) {
 	var (
 		stat  float64
@@ -265,14 +281,8 @@ func fisher(measured map[Feature]float64, reference map[Feature][]float64, featu
 	)
 
 	for _, f := range features {
-		value, ok := measured[f.name]
-		ref := reference[f.name]
-
-		if !ok || len(ref) == 0 {
-			continue
-		}
-
-		p := rankP(ref, value, f.higher)
+		value := measured[f.name]
+		p := rankP(reference[f.name], value, f.higher)
 		stat += -2 * math.Log(p)
 		parts = append(parts, voicePart{feature: f, value: value, p: p})
 	}
@@ -280,17 +290,25 @@ func fisher(measured map[Feature]float64, reference map[Feature][]float64, featu
 	return stat, parts
 }
 
-// rankP is (1 + the values of sorted at least as far as value in the
-// direction higher names) / (len(sorted) + 1).
+// rankP is the share of sorted at least as far as value in the direction
+// higher names. sorted holds value, so the share is never 0.
 func rankP(sorted []float64, value float64, higher bool) float64 {
 	var extreme int
+
 	if higher {
-		extreme = len(sorted) - sort.SearchFloat64s(sorted, value)
+		first, _ := slices.BinarySearch(sorted, value)
+		extreme = len(sorted) - first
 	} else {
-		extreme = sort.Search(len(sorted), func(i int) bool { return sorted[i] > value })
+		extreme, _ = slices.BinarySearchFunc(sorted, value, func(e, target float64) int {
+			if e > target {
+				return 1
+			}
+
+			return -1
+		})
 	}
 
-	return float64(1+extreme) / float64(len(sorted)+1)
+	return float64(extreme) / float64(len(sorted))
 }
 
 var voiceChecks = []check{
@@ -301,26 +319,27 @@ var voiceTexts = map[Rule]ruleText{
 	RuleVoiceDrift: {
 		code:      "PRF1040",
 		dimension: DimensionStance,
-		catches: "a draft that reads further from its author's own texts of its kind than 95 percent of them do, " +
-			"or a commit subject longer than 95 percent of the author's",
-		why: "Runs only with a voice file, which proofread voice build measures from the author's own texts, " +
-			"1,000 words or more of a kind, shuffled and pooled into windows of 200 words or more. A draft of 200 " +
-			"words or more is ranked against those windows on commas, parentheses, colons, semicolons, \"I\", " +
-			"\"and\", repeated part-of-speech 4-grams, part-of-speech compression and participial clauses, each " +
-			"only in the direction agent drafts move, and the ranks combine by Fisher's method. The cut lets 5 " +
-			"percent of the author's own windows, each scored against the rest, past it. A commit message is held " +
-			"to its subject's length instead. A study of one author, 2026-10-13, flagged 96 to 100 percent of " +
-			"agent drafts at 0 to 6 percent false alarms on the author's held-out 2018-24 text, and the subject " +
-			"rule 84.8 percent of agent commits at 6.0 percent. It caught 11 to 32 percent of light agent edits " +
-			"of the author's own text, so the rule detects agent drafts, not edits. No firing has been labeled, " +
-			"so the rule advises.",
+		catches: fmt.Sprintf("a draft that reads further from its author's own texts of its kind than %d percent of "+
+			"them do, or a commit subject longer than %d percent of the author's", voiceKeepPercent, voiceKeepPercent),
+		why: fmt.Sprintf("Runs only with a voice file, which proofread voice build measures from the author's own "+
+			"texts, 1,000 words or more of a kind, shuffled and pooled into windows of 200 words or more. A draft of "+
+			"200 words or more is ranked on commas, parentheses, colons, semicolons, \"I\", \"and\", repeated "+
+			"part-of-speech 4-grams, part-of-speech compression and participial clauses, each only in the direction "+
+			"agent drafts move, and the ranks combine by Fisher's method. The draft is scored on the features it has "+
+			"data for, against the author's windows with data for all of them, and the draft and each of those "+
+			"windows are scored alike against the rest; the draft drifts when it scores past all but %d percent of "+
+			"the windows. A commit message is held to the %dth percentile of the author's subject lengths instead. "+
+			"The features and their directions come from voice-calibration, which measured one author's held-out "+
+			"text against agent drafts and against light agent edits of that text: the rule separates drafts, not "+
+			"edits. No firing has been labeled, so the rule advises.", voiceFalseAlarmPercent, voiceKeepPercent),
 	},
 }
 
 // voiceDrift reports a text that drifts from its kind's reference in the
-// voice. It abstains on a kind with no reference, under voiceDraftFloor
-// words, under voiceWindowWords words, and when fewer than minVoiceFeatures
-// features have data. A commit message is judged on its subject alone.
+// voice. It abstains on a kind with no reference, under voiceWindowWords
+// words, when fewer than minVoiceFeatures features have data, and when no
+// window has data for every feature the text does. A commit message is
+// judged on its subject alone.
 func voiceDrift(in input) []Finding {
 	if in.opts.voice == nil {
 		return nil
@@ -345,36 +364,33 @@ func voiceDrift(in input) []Finding {
 
 	s := MeasureShape(text, kind)
 
-	switch {
-	case s.Words < voiceDraftFloor:
-		return nil
-	case s.Words < voiceWindowWords:
-		// TODO: pool a draft under 200 words with the drafts of its kind on its
-		// branch or in its thread and score the pool; gathering those drafts is
-		// the guard's job.
+	// TODO: pool a draft under 200 words with the drafts of its kind on its
+	// branch or in its thread and score the pool; gathering those drafts is
+	// the guard's job.
+	if s.Words < voiceWindowWords {
 		return nil
 	}
 
 	features := rankedFeatures(kind)
 
-	stat, parts := fisher(readFeatures(s, features), k.Windows.Values, features)
-	if len(parts) < minVoiceFeatures || stat <= k.Windows.Cut {
+	stat, cut, parts, ok := scoreDraft(readFeatures(s, features), k.Windows, features)
+	if !ok || stat <= cut {
 		return nil
 	}
 
-	return []Finding{{Message: driftMessage(in.kind, s.Words, parts, k.Windows.Values)}}
+	return []Finding{{Message: driftMessage(in.kind, s.Words, parts, sortedValues(k.Windows))}}
 }
 
-// subjectDrift reports a commit subject longer than p95 characters. A p95 of
-// 0 is no reference.
+// subjectDrift reports a commit subject longer than p95 characters, the
+// author's voiceKeepPercent percentile. A p95 of 0 is no reference.
 func subjectDrift(text string, p95 float64) []Finding {
 	chars := subjectChars(text)
 	if p95 == 0 || float64(chars) <= p95 {
 		return nil
 	}
 
-	return []Finding{{Message: fmt.Sprintf("The subject runs %d characters, longer than 95%% of your own commit "+
-		"subjects (yours: %s or fewer). Read it against how you write.", chars, formatValue(p95, 0))}}
+	return []Finding{{Message: fmt.Sprintf("The subject runs %d characters, longer than %d%% of your own commit "+
+		"subjects (yours: %s or fewer). Read it against how you write.", chars, voiceKeepPercent, formatValue(p95, 0))}}
 }
 
 func subjectChars(text string) int {
@@ -391,7 +407,7 @@ func subjectP95(texts []string) float64 {
 
 	slices.Sort(chars)
 
-	return round2(percentile(chars, 0.95))
+	return round2(percentile(chars, voiceKeepPercent/100.0))
 }
 
 var (
@@ -400,11 +416,13 @@ var (
 		KindReviewSummary:     "review",
 		KindReviewInline:      "comment",
 		KindReviewReply:       "reply",
+		KindCommitMessage:     "commit message",
 		KindIssue:             "issue",
 	}
 	voicePlurals = map[Kind]string{
 		KindChangeDescription: "change descriptions",
 		KindReviewReply:       "review comments",
+		KindCommitMessage:     "commit messages",
 		KindIssue:             "issues",
 	}
 )
@@ -430,8 +448,19 @@ func driftMessage(kind Kind, words int, parts []voicePart, reference map[Feature
 			ownerRange(ref, f.digits), direction))
 	}
 
-	return fmt.Sprintf("This %s reads further from your own %s than 95%% of your writing does (%d words): %s. "+
-		"Read it against how you write.", voiceDraftNames[kind], voicePlurals[heldKind(kind)], words, strings.Join(named, "; "))
+	return fmt.Sprintf("This %s reads further from your own %s than %d%% of your writing does (%d words): %s. "+
+		"Read it against how you write.", nameOr(voiceDraftNames, kind), nameOr(voicePlurals, heldKind(kind)),
+		voiceKeepPercent, words, strings.Join(named, "; "))
+}
+
+// nameOr is kind's entry in names, or the kind's own name for a kind added to
+// voiceJudged without one.
+func nameOr(names map[Kind]string, kind Kind) string {
+	if name, ok := names[kind]; ok {
+		return name
+	}
+
+	return string(kind)
 }
 
 // ownerRange is the 10th to 90th percentile of sorted, "none" when both are

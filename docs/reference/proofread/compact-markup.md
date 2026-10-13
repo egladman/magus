@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Measured in tiktoken o200k: bold plus backticks takes a line from 5 tokens to 8, and the same two facts cost 24 tokens as a Markdown table, 13 as a list and 11 as key: value lines. An agent acts on the words, not their emphasis. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+Measured in tiktoken o200k: bold plus backticks takes a line from 5 tokens to 8, and the same two facts cost 24 tokens as a Markdown table, 13 as a list and 11 as key: value lines. An agent acts on the words, not their emphasis. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

@@ -18,9 +18,6 @@ const (
 	// RuleListParallel reports a list item that opens with another part of
 	// speech, or another verb tense, than the list's other items.
 	RuleListParallel Rule = "list-parallel"
-	// RuleDateFormat reports a date written in another style than the text's
-	// other dates: 2026-10-13, Oct 2026, October 2026, 10/13/2026.
-	RuleDateFormat Rule = "date-format"
 )
 
 // listKinds are the Markdown kinds, each of which writes lists and dates.
@@ -138,8 +135,6 @@ func lists(prose []proseLine, mask func(string) string) []mdList {
 	return out
 }
 
-func asWritten(s string) string { return s }
-
 var (
 	// taskBox opens a task list item: "[ ] " or "[x] ".
 	taskBox = regexp.MustCompile(`^\[[ xX]\]\s+`)
@@ -161,53 +156,83 @@ func onlyCodeOrLink(text string) bool {
 	return !strings.ContainsFunc(linkText.ReplaceAllString(blankBackticks(text), ""), unicode.IsLetter)
 }
 
+// The classes the list and date rules sort entries into.
+const (
+	unclassed = ""
+
+	caseCapital   = "capital"
+	caseLowercase = "lowercase"
+
+	stopEnds = "stop"
+	stopNone = "none"
+
+	classVerb = "verb"
+	classNoun = "noun"
+
+	tenseBase    = "base"
+	tensePresent = "present"
+	tensePast    = "past"
+	tenseGerund  = "gerund"
+)
+
+// majority is the class most entries of a set hold.
+type majority struct {
+	class    string
+	count    int // entries of class
+	classed  int // entries of any class
+	distinct int // classes held
+}
+
 // minority returns the indexes of classes that differ from the class held by
-// at least share of the classed entries, "" being unclassed, and that class.
-// It returns nothing when fewer than 3 entries are classed or no class holds
-// share; on a tie the class that comes first wins.
-func minority(classes []string, share float64) ([]int, string, int) {
-	common, n, classed, distinct := mostCommon(classes)
-	if classed < 3 || distinct < 2 || float64(n) < share*float64(classed) {
-		return nil, "", 0
+// at least share of the classed entries, and that majority. It returns
+// nothing when fewer than 3 entries are classed or no class holds share; on
+// a tie the class that comes first wins.
+func minority(classes []string, share float64) ([]int, majority) {
+	common := mostCommon(classes)
+	if common.classed < 3 || common.distinct < 2 || float64(common.count) < share*float64(common.classed) {
+		return nil, majority{}
 	}
 
 	var out []int
 
 	for i, c := range classes {
-		if c != "" && c != common {
+		if c != unclassed && c != common.class {
 			out = append(out, i)
 		}
 	}
 
-	return out, common, n
+	return out, common
 }
 
-// mostCommon returns the class most entries of classes hold, "" being
-// unclassed, ties going to the class written first, with its count, the
-// number of entries classed and the number of distinct classes.
-func mostCommon(classes []string) (common string, n, classed, distinct int) {
+// mostCommon returns the class most entries of classes hold, ties going to
+// the class written first.
+func mostCommon(classes []string) majority {
+	var m majority
+
 	count := map[string]int{}
 
 	for _, c := range classes {
-		if c == "" {
+		if c == unclassed {
 			continue
 		}
 
 		if count[c] == 0 {
-			distinct++
+			m.distinct++
 		}
 
 		count[c]++
-		classed++
+		m.classed++
 	}
 
 	for _, c := range classes {
-		if c != "" && count[c] > count[common] {
-			common = c
+		if c != unclassed && count[c] > count[m.class] {
+			m.class = c
 		}
 	}
 
-	return common, count[common], classed, distinct
+	m.count = count[m.class]
+
+	return m
 }
 
 // listItems returns l's items that hold a word outside code and links.
@@ -229,7 +254,7 @@ func listItems(l mdList) []paragraph {
 func listMarks(in input) []Finding {
 	var out []Finding
 
-	for _, l := range lists(in.prose, asWritten) {
+	for _, l := range lists(in.prose, keep) {
 		items := listItems(l)
 		if len(items) < 3 {
 			continue
@@ -243,29 +268,29 @@ func listMarks(in input) []Finding {
 			stops[i] = closingStop(item.text)
 		}
 
-		odd, common, n := minority(cases, 0)
+		odd, common := minority(cases, 0)
 		for _, i := range odd {
 			word := firstWord(itemBody(items[i].text))
 			out = append(out, Finding{
 				Message: fmt.Sprintf("Open '%s' with a %s letter, as the list's other %d items do: one list, "+
-					"one form.", word, common, n),
+					"one form.", word, common.class, common.count),
 				Match: word, Line: items[i].head.line,
 			})
 		}
 
-		odd, common, n = minority(stops, 0)
+		odd, common = minority(stops, 0)
 		for _, i := range odd {
 			text := strings.TrimRight(items[i].text, " \t")
 			last := text[strings.LastIndexAny(text, " \t")+1:]
 
 			verb := "End it with a full stop"
-			if common == "none" {
+			if common.class == stopNone {
 				verb = "Drop the full stop"
 			}
 
 			out = append(out, Finding{
 				Message: fmt.Sprintf("%s after '%s', as the list's other %d items do: one list, one form.",
-					verb, last, n),
+					verb, last, common.count),
 				Match: last, Line: items[i].lineAt(len(text) - len(last)),
 			})
 		}
@@ -280,24 +305,24 @@ func listMarks(in input) []Finding {
 func initialCase(text string) string {
 	body := itemBody(text)
 	if strings.HasPrefix(body, "`") || strings.HasPrefix(body, "[") {
-		return ""
+		return unclassed
 	}
 
 	word := firstWord(body)
 	if word == "" {
-		return ""
+		return unclassed
 	}
 
 	first, size := utf8.DecodeRuneInString(word)
 	if strings.ContainsFunc(word[size:], unicode.IsUpper) {
-		return ""
+		return unclassed
 	}
 
 	if unicode.IsUpper(first) {
-		return "capital"
+		return caseCapital
 	}
 
-	return "lowercase"
+	return caseLowercase
 }
 
 // closingStop is "stop" for an item that ends a sentence, "none" for one that
@@ -306,17 +331,17 @@ func initialCase(text string) string {
 func closingStop(text string) string {
 	t := strings.TrimRight(text, " \t*_\"')")
 	if t == "" {
-		return ""
+		return unclassed
 	}
 
 	switch t[len(t)-1] {
 	case '.', '!', '?':
-		return "stop"
+		return stopEnds
 	case ':', ';', ',':
-		return ""
+		return unclassed
 	}
 
-	return "none"
+	return stopNone
 }
 
 // opener is the form an item opens with: a coarse word class, and a tense for
@@ -331,7 +356,7 @@ type opener struct {
 func listParallel(in input) []Finding {
 	var out []Finding
 
-	for _, l := range lists(in.prose, asWritten) {
+	for _, l := range lists(in.prose, keep) {
 		var (
 			items   []paragraph
 			openers []opener
@@ -349,22 +374,22 @@ func listParallel(in input) []Finding {
 			classes[i] = o.class
 		}
 
-		odd, common, n := minority(classes, 2.0/3)
+		odd, common := minority(classes, 2.0/3)
 		for _, i := range odd {
-			out = append(out, parallelFinding(items[i], openers[i], common, n, openers, classes))
+			out = append(out, parallelFinding(items[i], openers[i], common, openers, classes))
 		}
 
 		tenses := make([]string, len(openers))
 
 		for i, o := range openers {
-			if o.class == "verb" && !slices.Contains(odd, i) {
+			if o.class == classVerb && !slices.Contains(odd, i) {
 				tenses[i] = o.tense
 			}
 		}
 
-		odd, common, n = minority(tenses, 2.0/3)
+		odd, common = minority(tenses, 2.0/3)
 		for _, i := range odd {
-			out = append(out, parallelFinding(items[i], openers[i], common, n, openers, tenses))
+			out = append(out, parallelFinding(items[i], openers[i], common, openers, tenses))
 		}
 	}
 
@@ -373,16 +398,16 @@ func listParallel(in input) []Finding {
 
 // openerNames say what each class and tense opens an item with.
 var openerNames = map[string]string{
-	"verb": "a verb", "noun": "a noun phrase",
-	"base": "an imperative verb", "present": "a present-tense verb", "past": "a past-tense verb",
-	"gerund": "an -ing verb",
+	classVerb: "a verb", classNoun: "a noun phrase",
+	tenseBase: "an imperative verb", tensePresent: "a present-tense verb", tensePast: "a past-tense verb",
+	tenseGerund: "an -ing verb",
 }
 
-func parallelFinding(item paragraph, o opener, common string, n int, openers []opener, classes []string) Finding {
+func parallelFinding(item paragraph, o opener, common majority, openers []opener, classes []string) Finding {
 	example := ""
 
 	for i, c := range classes {
-		if c == common {
+		if c == common.class {
 			example = openers[i].word
 
 			break
@@ -391,25 +416,28 @@ func parallelFinding(item paragraph, o opener, common string, n int, openers []o
 
 	return Finding{
 		Message: fmt.Sprintf("Open '%s' with %s, as the list's other %d items do ('%s'): items of one list "+
-			"share one shape.", o.word, openerNames[common], n, example),
+			"share one shape.", o.word, openerNames[common.class], common.count, example),
 		Match: o.word, Line: item.head.line,
 	}
 }
 
 // itemOpener tags the first sentence of an item past any bold label and
-// returns the class of its first word. An item opening with code or a link,
-// or with a word of no class judged here (an adverb, a preposition, a
-// conjunction), has none.
+// returns the class of its first token as [postag.Tokenize] splits it, so
+// "Don't" opens with "Do" and "Re-run" stays one word. An item opening with
+// code, a link or punctuation, or with a word of no class judged here (an
+// adverb, a preposition, a conjunction), has none.
 func itemOpener(text string) (opener, bool) {
 	body := itemBody(boldLead.ReplaceAllString(taskBox.ReplaceAllString(text, ""), ""))
-	if strings.HasPrefix(body, "`") || strings.HasPrefix(body, "[") {
+	if r, _ := utf8.DecodeRuneInString(body); !unicode.IsLetter(r) {
 		return opener{}, false
 	}
 
-	word := firstWord(body)
+	word := strings.TrimRightFunc(strings.Fields(body)[0], func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 
 	sentences := splitSentences(maskSpans(body))
-	if word == "" || len(sentences) == 0 {
+	if len(sentences) == 0 {
 		return opener{}, false
 	}
 
@@ -420,15 +448,16 @@ func itemOpener(text string) (opener, bool) {
 			continue
 		}
 
-		if s.words[i] != strings.ToLower(word) {
+		// tagSentence lowercases its words and straightens their apostrophes.
+		if !strings.HasPrefix(strings.ReplaceAll(strings.ToLower(word), "’", "'"), s.words[i]) {
 			return opener{}, false
 		}
 
 		switch t.UPOS {
 		case postag.VERB, postag.AUX:
-			return opener{word: word, class: "verb", tense: verbTense(t.XPOS)}, true
+			return opener{word: word, class: classVerb, tense: verbTense(string(t.XPOS))}, true
 		case postag.NOUN, postag.PROPN, postag.PRON, postag.DET, postag.NUM, postag.ADJ:
-			return opener{word: word, class: "noun"}, true
+			return opener{word: word, class: classNoun}, true
 		}
 
 		return opener{}, false
@@ -442,14 +471,14 @@ func itemOpener(text string) (opener, bool) {
 func verbTense(xpos string) string {
 	switch xpos {
 	case "VB", "VBP":
-		return "base"
+		return tenseBase
 	case "VBZ":
-		return "present"
+		return tensePresent
 	case "VBD", "VBN":
-		return "past"
+		return tensePast
 	case "VBG":
-		return "gerund"
+		return tenseGerund
 	}
 
-	return ""
+	return unclassed
 }

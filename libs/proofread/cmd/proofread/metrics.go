@@ -33,7 +33,7 @@ func runMetrics(kind proofread.Kind, paths []string, stdin io.Reader, stdout, st
 		return failure(stderr, err)
 	}
 
-	return 0
+	return exitOK
 }
 
 func measure(kind proofread.Kind, paths []string, stdin io.Reader) ([]measured, error) {

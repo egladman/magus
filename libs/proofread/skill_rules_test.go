@@ -79,6 +79,20 @@ func TestSkillDescriptionBudgetJudgesEachSkillOfASet(t *testing.T) {
 	})
 }
 
+// A skill only the full form lists shifts every skill after it, so the forms
+// pair by name and not by position.
+func TestSkillDescriptionBudgetPairsTheFormsByName(t *testing.T) {
+	short := "Run builds and tests through magus targets before any raw language tool."
+	set := "{{if .Full}}---\nname: extra\ndescription: Read the worked examples.\n---\n{{end}}---\nname: a\n" +
+		"description: {{if .Full}}" + short + " Examples kept.{{else}}" + short + "{{end}}\n---\n"
+
+	assertFindings(t, skillOnly(set, RuleSkillDescriptionBudget), []Finding{{
+		Rule: RuleSkillDescriptionBudget, Decision: DecisionAdvise, Line: 7,
+		Message: "Give the full form a description of its own: 80% of its words repeat the short form's, " +
+			"and both load into every session.",
+	}})
+}
+
 func TestSkillSetDescriptionBudgetSumsBothFormsOfEverySkill(t *testing.T) {
 	entry := func(name string, short, full int) string {
 		return "---\nname: " + name + "\ndescription: \"{{if .Full}}" + wordRun(full) + "{{else}}" + wordRun(short) +

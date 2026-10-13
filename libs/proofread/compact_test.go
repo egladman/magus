@@ -72,6 +72,12 @@ func TestCompactMarkupReportsEmphasisAndTables(t *testing.T) {
 		{"a list marker and a product", "* run gate\n* 2 * 3 = 6\n", nil},
 		{"snake case and code", "Set max_line_words; run `**x**`.\n", nil},
 		{"a table in a fence", "```\n| a | b |\n| - | - |\n```\n", nil},
+		{"two italic words a space apart", "Run *once* *now*.\n", []Finding{italic, {
+			Rule: RuleCompactMarkup, Decision: DecisionAdvise, Line: 1, Match: "*now*", Replacements: []string{"now"},
+			Message: "Drop the emphasis in '*now*': the markers cost tokens and an agent acts on the words.",
+		}}},
+		{"a Python special name", "Call __init__ once; read __doc__.\n", nil},
+		{"a special name called or on a path", "Run __setup__(x), then foo.__meta__ and __pkg__.py.\n", nil},
 	}
 
 	for _, tc := range cases {
@@ -99,6 +105,7 @@ func TestCompactCostlyAbbrevReportsWhatCostsMoreThanTheWord(t *testing.T) {
 		{"dropped vowels", "Run tst before cmmt.\n", []Finding{finding("tst", "test"), finding("cmmt", "commit")}},
 		{"an abbreviation that saves", "Set cfg dir, open PR.\n", nil},
 		{"inside a path or code", "Read docs/w/x and `k8s`.\n", nil},
+		{"two a space apart", "Run w/ b/c stale.\n", []Finding{finding("w/", "with"), finding("b/c", "because")}},
 	}
 
 	for _, tc := range cases {
@@ -120,6 +127,10 @@ func TestCompactSymbolNegationKeepsNegationAWord(t *testing.T) {
 		{"a logic symbol", "Cache hit \u2260 pass.\n", []Finding{{
 			Match: "\u2260", Replacements: []string{"not equal"},
 			Message: "Write 'not equal', not '\u2260': a logic symbol is read wrong more often than its word.",
+		}}},
+		{"an arrow", "Build → test.\n", []Finding{{
+			Match: "→", Replacements: []string{"then"},
+			Message: "Write 'then', not '→': a logic symbol is read wrong more often than its word.",
 		}}},
 		{"a word", "Merge driver alone not enough.\n", nil},
 		{"code and an image", "Run `!true` and see ![shot](a.png).\n", nil},
@@ -223,12 +234,13 @@ func TestParseKindReadsAFormerName(t *testing.T) {
 		"agent-instructions":          KindAgentBrief,
 		"agent-instructions-template": KindSkillTemplate,
 		"agent-brief":                 KindAgentBrief,
-		"poem":                        "poem",
+		"poem":                        "",
 	}
 
 	for name, want := range cases {
-		if got := ParseKind(name); got != want {
-			t.Errorf("ParseKind(%q) = %q, want %q", name, got, want)
+		got, ok := ParseKind(name)
+		if got != want || ok != (want != "") {
+			t.Errorf("ParseKind(%q) = %q, %t, want %q, %t", name, got, ok, want, want != "")
 		}
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,15 +32,18 @@ func userCacheDir() (string, error) {
 	if x := os.Getenv("XDG_CACHE_HOME"); x != "" && filepath.IsAbs(x) {
 		return x, nil
 	}
+
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return lad, nil
 		}
 	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
+
 	return filepath.Join(home, ".cache"), nil
 }
 
@@ -50,40 +54,66 @@ func fetch(name string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("no pinned digest for %s", name)
 	}
+
 	cache, err := userCacheDir()
 	if err != nil {
 		return nil, err
 	}
+
 	dir := filepath.Join(cache, "magus", "postag", "UD_English-EWT-"+ewtRelease)
+
 	path := filepath.Join(dir, name)
 	if b, err := os.ReadFile(path); err == nil && digest(b) == want {
 		return b, nil
 	}
 
 	client := &http.Client{Timeout: 5 * time.Minute}
+
 	resp, err := client.Get(ewtBaseURL + name)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("get %s: %s", ewtBaseURL+name, resp.Status)
 	}
+
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("get %s: %w", ewtBaseURL+name, err)
 	}
+
 	if got := digest(b); got != want {
 		return nil, fmt.Errorf("%s: sha256 %s, want %s", name, got, want)
 	}
+
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+
+	// The digest already matched, so the bytes are good whether or not the
+	// cache keeps them. A per-run name keeps two trainers from sharing a temp
+	// file.
+	tmp, err := os.CreateTemp(dir, name+".*.tmp")
+	if err != nil {
 		return nil, err
 	}
-	return b, os.Rename(tmp, path)
+
+	_, writeErr := tmp.Write(b)
+	chmodErr := tmp.Chmod(0o644)
+	closeErr := tmp.Close()
+
+	if err := errors.Join(writeErr, chmodErr, closeErr); err != nil {
+		os.Remove(tmp.Name())
+		return nil, err
+	}
+
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		os.Remove(tmp.Name())
+	}
+
+	return b, nil
 }
 
 func digest(b []byte) string {

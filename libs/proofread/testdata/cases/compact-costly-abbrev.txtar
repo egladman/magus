@@ -7,6 +7,7 @@ Pick target, e.g. test.
 One gate, i.e. ci.
 Read mssg first.
 Run tst before push.
+Run w/ b/c stale.
 -- pass/agent-compact --
 Deploy to Kubernetes.
 Set cfg dir.

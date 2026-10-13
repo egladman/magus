@@ -3,6 +3,7 @@ package proofread
 import (
 	"bytes"
 	"compress/gzip"
+	"slices"
 	"strings"
 
 	"github.com/egladman/magus/libs/proofread/postag"
@@ -47,10 +48,16 @@ var grammarFeatures = []struct {
 // templateLength is the shortest POS n-gram Shaib et al. count as a template.
 const templateLength = 4
 
-// measureGrammar returns the grammar rates per 1000 of words, the template
-// rate and the tag compression of sentences, the masked sentences
-// [MeasureShape] splits.
-func measureGrammar(sentences [][]string, words int) (map[string]float64, float64, float64) {
+// grammarMeasures are the [Shape] fields read from part-of-speech tags.
+type grammarMeasures struct {
+	rates          map[string]float64
+	templateRate   float64
+	tagCompression float64
+}
+
+// measureGrammar measures sentences, the masked sentences [MeasureShape]
+// splits, its rates per 1000 of words.
+func measureGrammar(sentences [][]string, words int) grammarMeasures {
 	counts := make([]int, len(grammarFeatures))
 
 	var sequence []postag.UPOS
@@ -76,7 +83,11 @@ func measureGrammar(sentences [][]string, words int) (map[string]float64, float6
 		rates[feature.name] = round2(1000 * float64(counts[f]) / float64(words))
 	}
 
-	return rates, round4(templateRate(sequence)), round4(tagCompression(sequence))
+	return grammarMeasures{
+		rates:          rates,
+		templateRate:   round4(templateRate(sequence)),
+		tagCompression: round4(tagCompression(sequence)),
+	}
 }
 
 func tagSentence(sentence []string) tagged {
@@ -157,15 +168,7 @@ func tagCompression(sequence []postag.UPOS) float64 {
 	return float64(buf.Len()) / float64(len(raw))
 }
 
-func isUPOS(t postag.Tagged, tags ...postag.UPOS) bool {
-	for _, u := range tags {
-		if t.UPOS == u {
-			return true
-		}
-	}
-
-	return false
-}
+func isUPOS(t postag.Tagged, tags ...postag.UPOS) bool { return slices.Contains(tags, t.UPOS) }
 
 // finite reports whether t is a finite verb, which ends a sentence-initial
 // participial clause without the comma that closes one.

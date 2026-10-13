@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Negated framing was the main failure Elkins and Chun measured (arXiv 2601.09724): some models endorsed an action 80-97% of the time when asked whether it should not be done. MetaGlyph (van Gassen, arXiv 2601.07354) saved 62-81% of tokens with symbols, but Claude Haiku 4.5 read its set-membership symbol right 26% of the time, and the not-equal and therefore signs are 2 tokens each in o200k. Negation stays a word. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+Negated framing was the main failure Elkins and Chun measured (arXiv 2601.09724): some models endorsed an action 80-97% of the time when asked whether it should not be done. MetaGlyph (van Gassen, arXiv 2601.07354) saved 62-81% of tokens with symbols, but Claude Haiku 4.5 read its set-membership symbol right 26% of the time, and the not-equal and therefore signs are 2 tokens each in o200k. Negation stays a word. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

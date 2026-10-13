@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-The floor is one fact per line. IFScale (Jaroslawicz et al., arXiv 2507.11538) found the best model follows 68% of 500 instructions, and an instruction packed beside another on one line is the easier one to miss. A line counts as more than one fact when it runs long and joins clauses; the length is the 90th percentile of the 1041 prose lines of the skills rewritten to the floor on 2026-10-13. The measurements are in the 2026-10-13 machine-text research (research-machine-text.md in the proofread roadmap).
+The floor is one fact per line. IFScale (Jaroslawicz et al., arXiv 2507.11538) found the best model follows 68% of 500 instructions, and an instruction packed beside another on one line is the easier one to miss. A line counts as more than one fact when it runs long and joins clauses; the length is the 90th percentile of the prose line lengths of the skills magus ships once rewritten to the floor, a code span counted as one word. The measurements are in the machine-text research (research-machine-text.md in the proofread roadmap).
 
 ## Default decision
 

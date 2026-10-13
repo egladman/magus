@@ -88,7 +88,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 	kindField := fs.String("kind-field", "kind", "take each text's kind from this `field`")
 	format := fs.String("format", "text", "write the separations as `text` or json")
 	pool := fs.Int("pool", 0, "measure random chunks of at least this many `words` instead of single texts; 0 pools nothing")
-	seed := fs.Uint64("seed", 13, "shuffle the texts under this `seed` before pooling")
+	seed := fs.Uint64("seed", proofread.VoiceSeed, "shuffle the texts under this `seed` before pooling")
 
 	if err := fs.Parse(args); err != nil {
 		return exitError
@@ -121,7 +121,7 @@ func runVoiceEval(args []string, stdout, stderr io.Writer) int {
 			}
 
 			if *pool > 0 {
-				out[k] = proofread.MeasureWindows(list, k, *pool, *seed)
+				out[k] = proofread.MeasureWindowShapes(list, k, *pool, *seed)
 
 				continue
 			}
@@ -200,7 +200,7 @@ func separationTable(kind proofread.Kind, owner, other, pool int, seps []proofre
 	b.WriteString("\n")
 
 	if len(seps) == 0 {
-		fmt.Fprintf(&b, "  no feature measured on 5 %s on each side\n", unit)
+		fmt.Fprintf(&b, "  no feature measured on %d %s on each side\n", proofread.MinSeparationTexts, unit)
 
 		return b.String()
 	}
@@ -217,7 +217,7 @@ func separationTable(kind proofread.Kind, owner, other, pool int, seps []proofre
 			direction = "owner lower"
 		}
 
-		fmt.Fprintf(tw, "  %s\t%.3f\t%d\t%d\t%s\n", s.Feature, s.AUC, s.Owner, s.Other, direction)
+		fmt.Fprintf(tw, "  %s\t%.3f\t%d\t%d\t%s\n", s.Feature, s.AUC, s.OwnerTexts, s.OtherTexts, direction)
 	}
 
 	_ = tw.Flush()
@@ -239,7 +239,7 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 
 	out := map[proofread.Kind][]string{}
 
-	read := func(name string, r io.Reader) error {
+	read := func(name string, r io.Reader, fromStdin bool) error {
 		if field != "" {
 			return jsonLineTexts(name, r, kind, field, kindField, out)
 		}
@@ -249,7 +249,7 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 			return fmt.Errorf("read %s: %w", name, err)
 		}
 
-		if name != "stdin" {
+		if !fromStdin {
 			out[kind] = append(out[kind], string(data))
 
 			return nil
@@ -265,7 +265,7 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 	}
 
 	if len(paths) == 0 {
-		return out, read("stdin", stdin)
+		return out, read("stdin", stdin, true)
 	}
 
 	for _, p := range paths {
@@ -274,7 +274,7 @@ func voiceTexts(kind proofread.Kind, field, kindField string, paths []string, st
 			return nil, fmt.Errorf("read %s: %w", p, err)
 		}
 
-		err = read(p, f)
+		err = read(p, f, false)
 		f.Close()
 
 		if err != nil {
@@ -414,7 +414,7 @@ func voiceSummary(v *proofread.Voice, path string) string {
 		case kv.SubjectP95 > 0:
 			fmt.Fprintf(&b, ", subjects of %.0f characters or fewer 95%% of the time", kv.SubjectP95)
 		case kv.Windows != nil:
-			fmt.Fprintf(&b, ", %d windows, cut %.2f", kv.Windows.Count, kv.Windows.Cut)
+			fmt.Fprintf(&b, ", %d windows", len(kv.Windows))
 		default:
 			b.WriteString(", but no window measured two features, so voice-drift skips it")
 		}

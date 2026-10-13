@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-A host lists every installed skill by its description, so each one loads into every session whether or not the skill is used, and a full twin's loads beside its short sibling's. Measured 2026-10-13 over the 16 skills magus ships: 1444 words of authored description, 49 to 111 words each (p50 94, p75 101), 2396 words loaded in all with the twins and their back-references. The budget sits at p75, so the longest quarter advises. A twin that restated its sibling's description cost 10105 of 19113 description bytes before magus gave it a line of its own. Today's standalone twin lines share 44 to 62% of their content words with the short form's (back-references included), and each sibling's restated description plus a sentence shares 84 to 92%, so the line sits between them at 75%.
+A host lists every installed skill by its description, so each one loads into every session whether or not the skill is used, and a full twin's loads beside its short sibling's. The word budget is the 75th percentile of the authored descriptions of the skills magus ships, counted in words, so the longest quarter advises. A twin that restates its sibling's description loads the same words twice. The repeat line was set by comparing, over the same skills, the content words a twin's own line shares with its short form's against those a restated description plus a sentence shares; it sits between the two, so the first passes and the second advises.
 
 ## Default decision
 

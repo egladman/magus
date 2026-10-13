@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Google's review guide (eng-practices, "Handling pushback") does not accept "I'll clean it up later": follow-ups rarely happen, so the author files a bug and may add a TODO naming it. A reply holding a URL, an issue number (#123) or a tracker key (ABC-123) passes. It is a convention, not a study, so it advises.
+Google's review guide (eng-practices, "Handling pushback") does not accept "I'll clean it up later": follow-ups rarely happen, so the author files a bug and may add a TODO naming it. A reply holding a URL, an issue number (#123) or a tracker key (ABC-123) passes; a standard's name written the same way (UTF-8, SHA-256, ISO-8601) is no tracker key. It is a convention, not a study, so it advises.
 
 ## Default decision
 
