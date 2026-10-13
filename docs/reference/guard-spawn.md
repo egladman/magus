@@ -138,12 +138,12 @@ Both sides load the root magusfile alone, never the whole workspace; see
 
 ## Hosts
 
-| host        | spawn                         | continue          | `contextTokens` |
-| ----------- | ----------------------------- | ----------------- | --------------- |
-| Claude Code | `Agent`, `Task`               | `SendMessage`     | `SubagentStop`  |
-| Cursor      | `Task` on `preToolUse`        | none the host has | not reported    |
-| Codex       | `spawn_agent` on `PreToolUse` | none the host has | not reported    |
-| OpenCode    | not wired                     | not wired         | not wired       |
+| host        | spawn                           | continue          | `contextTokens` |
+| ----------- | ------------------------------- | ----------------- | --------------- |
+| Claude Code | `Agent`, `Task`                 | `SendMessage`     | `SubagentStop`  |
+| Cursor      | `Task` on `preToolUse`          | none the host has | not reported    |
+| Codex       | `spawn_agent` on `PreToolUse`   | none the host has | not reported    |
+| OpenCode    | `task` on `tool.execute.before` | none the host has | not reported    |
 
 Each change to the effective rules is recorded once on the activity trail as a
 `guard_policy` event, and every verdict event names the policy digest in force and

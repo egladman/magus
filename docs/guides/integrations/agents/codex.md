@@ -211,6 +211,15 @@ shown here:
             "statusMessage": "magus: briefing the subagent"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/magus-command.buzz -- --agent-name codex",
+            "statusMessage": "magus: joining the subagent to its spawn"
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -377,7 +386,9 @@ Three more hooks complete the picture of a subagent:
   `--format json`, answering as `SubagentStart`, so the checkout's state and live leases
   arrive as the child's `hookSpecificOutput.additionalContext`. This is the only channel
   that reaches a v2 child, and a live probe showed the child obeying it. The payload
-  names the child (`agent_id`, `agent_type`) and nothing about the spawn that made it.
+  names the child (`agent_id`, `agent_type`) and nothing about the spawn that made it,
+  so a second entry hands the same event to the command glue, which judges nothing and
+  joins the child's id to the spawn just before it.
 - `SubagentStop` carries `agent_id`, `agent_transcript_path` and
   `last_assistant_message`. magus reads the child's rollout for its last `token_count`
   record (`last_token_usage.input_tokens` against `model_context_window`) and files the
@@ -453,11 +464,14 @@ envelope and pipe it to `magus session notify`, exactly as the other hosts do; s
   matcher catches it, and the complete `tool_input` goes to the same glue as a shell
   command. A `compact` session start runs the rehydrate entry, and Codex reads its
   `hookSpecificOutput.additionalContext`.
-- **A child cannot be tied to the spawn that made it.** The v2 spawn's `message` is
+- **A child is tied to the spawn just before it.** The v2 spawn's `message` is
   encrypted and its response names the child by `task_name`, while the child's own events
-  carry an `agent_id` and `SubagentStart` names no task. The child is briefed and its
-  context size is filed, but the lease a spawn would hand it by a `lease:` marker or a
-  `<parent>/<role> <job>` description cannot be joined to it on this host. A session
+  carry an `agent_id` and `SubagentStart` names no task. So magus files each spawn that
+  passes, and the next `SubagentStart` within two minutes joins its `agent_id` to the
+  oldest spawn still waiting: the child is filed under that spawn's description, name and
+  model, and a `<parent>/<role> <job>` description attributes it to the job, as a
+  finished spawn does on Claude Code. Two spawns in flight at once are joined in the
+  order they were made, which Codex does not promise to start them in. A session
   started under `BAGGAGE=magus.lease=<id>` is attributed to that lease by its
   environment, which a Codex child inherits.
 - `ask` and the `Stop` schema limits hold. A hook `ask` is parsed, marked failed and the
@@ -475,7 +489,7 @@ Codex supports twelve hook events. This harness wires eight:
 | `PreToolUse`                | yes   | shell, file, MCP and spawn (`spawn_agent\|collaborationspawn_agent\|Agent`) matchers                       |
 | `PermissionRequest`         | yes   | answers the push approval                                                                                  |
 | `PostToolUse`               | yes   | the finished spawn, which names the child by `task_name` (v2) or `agent_id` (v1)                           |
-| `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`                                                |
+| `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`, and joins its id to the spawn before it      |
 | `SubagentStop`              | yes   | files the child's context size from the last `token_count` record of its rollout                           |
 | `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                                  |
 | `Stop`                      | yes   | the checkpoint, then the reply check                                                                       |

@@ -369,6 +369,16 @@ prints this entry alongside the entries above:
 }
 ```
 
+The tools that wait are matched on `PreToolUse` too, with the same command:
+`Monitor|TaskOutput|ScheduleWakeup|CronCreate`. A `Monitor` runs its `command` in
+the background and wakes the agent on each line it prints, so the command is judged
+as the shell line it is (busy-wait and process-poll apply), and the waiter rules
+count the watchers each agent holds: a second live one on the same subject, or one
+on work the agent backgrounded itself, is a duplicate, and five live at once are a
+pile (see [the guard](guard.md#what-magus-advises-by-default)). `ScheduleWakeup`
+and `CronCreate` carry a `prompt` beside a delay or a cron expression, which magus
+reads as a prompt queued for the same session rather than a spawn.
+
 `SendMessage` is the continuation of a subagent that already exists: a
 `tool_input` carrying `to` and `message`. It reaches the same verdict path as a
 spawn, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)

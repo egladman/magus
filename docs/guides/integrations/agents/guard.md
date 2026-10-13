@@ -230,6 +230,26 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   (`--call-background`, `--call-timeout-ms`), and a `magus run` or `magus affected` by a
   worker under a live lease that does not own the gate is refused when the host would
   run it in the background. A wiring that reports nothing leaves the rule silent.
+- **Switching the repository's git hooks off**
+  ([hooks-off](../../../reference/rules/hooks-off.md)): `--no-verify`, `git commit -n`,
+  and `-c core.hooksPath=/dev/null` or an empty path. Hooks are the checks a
+  repository's owners put in front of a commit or push. A hooks path naming a
+  directory is a different set of hooks rather than none, and passes.
+- **A here-document written to a file**
+  ([heredoc-write](../../../reference/rules/heredoc-write.md)) is judged as the file
+  write it is: `cat > f.go <<'EOF'` and `tee f.go <<'EOF'` meet the comment, lease and
+  workspace write rules a host's write tool meets, and a refused write refuses the
+  line, naming the write rule in brackets. Only a literal body is judged; one that
+  expands a parameter or runs a substitution cannot be read before it runs.
+- **A second worker for one job**
+  ([spawn-duplicate](../../../reference/rules/spawn-duplicate.md)): a spawn titled
+  `<parent>/<role> <job>` for a row still declared or running that an earlier spawn
+  in the session was attributed to. Continue the worker with a message, or stop it
+  first. A running row alone is not enough: a row stays running after its worker dies.
+
+Every file a patch writes is judged, not only the first: a multi-file
+`apply_patch` is held to what a write of each file alone would meet, and a refusal
+names the file it is about.
 
 ## What magus advises by default
 
@@ -243,6 +263,7 @@ workspace sets any of them to `deny` or `off` with
 | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
 | [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
+| [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that does not hold it to plain commands |
 | [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a loop that only sleeps between polls                                  |
 | [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |
 | [`chained-run`](../../../reference/rules/chained-run.md)                       | magus runs sequenced with `&&` or `;`                                  |
@@ -251,16 +272,21 @@ workspace sets any of them to `deny` or `off` with
 | [`grep-reader`](../../../reference/rules/grep-reader.md)                       | a definition lookup with a context flag                                |
 | [`interpreter-rewrite`](../../../reference/rules/interpreter-rewrite.md)       | an inline interpreter rewriting a tracked file                         |
 | [`magus-timeout`](../../../reference/rules/magus-timeout.md)                   | magus wrapped in `timeout`                                             |
+| [`monitor-duplicate`](../../../reference/rules/monitor-duplicate.md)           | a second live watcher on one subject, or one on your own work          |
+| [`monitor-pile`](../../../reference/rules/monitor-pile.md)                     | a third live waiter of one agent (refused at the fifth when raised)    |
 | [`output-pipe`](../../../reference/rules/output-pipe.md)                       | magus output piped into a filter                                       |
 | [`output-redirect`](../../../reference/rules/output-redirect.md)               | magus output sent to a file or discarded                               |
 | [`process-poll`](../../../reference/rules/process-poll.md)                     | a process table inspected to wait on magus work                        |
 | [`raw-tool`](../../../reference/rules/raw-tool.md)                             | a toolchain command a spell already wraps                              |
 | [`read-navigation`](../../../reference/rules/read-navigation.md)               | a whole read of a long Go, Buzz or Markdown file                       |
+| [`read-paging`](../../../reference/rules/read-paging.md)                       | the third window of a mapped file, paged through by one caller         |
 | [`scripted-rewrite`](../../../reference/rules/scripted-rewrite.md)             | a scripted substitute-and-write                                        |
 | [`search-translation`](../../../reference/rules/search-translation.md)         | a text search a graph query provably answers                           |
 | [`sed-in-place`](../../../reference/rules/sed-in-place.md)                     | `sed -i`                                                               |
 | [`sibling-checkout`](../../../reference/rules/sibling-checkout.md)             | a magus command relocated into another checkout                        |
+| [`sleep-poll`](../../../reference/rules/sleep-poll.md)                         | a sleep before a status read, or a backgrounded call that only sleeps  |
 | [`spawn-unbriefed`](../../../reference/rules/spawn-unbriefed.md)               | a subagent spawned before the multi-agent skill loaded                 |
+| [`spawn-waiter`](../../../reference/rules/spawn-waiter.md)                     | a spawn whose child exists to wait on other work                       |
 | [`stage-all`](../../../reference/rules/stage-all.md)                           | a whole-tree `git add`                                                 |
 | [`symbol-search`](../../../reference/rules/symbol-search.md)                   | a text search for a symbol the graph answers                           |
 | [`throwaway-copy`](../../../reference/rules/throwaway-copy.md)                 | a run inside a temp or scratchpad copy                                 |
@@ -334,6 +360,38 @@ same served command.
   checkout. Magus takes the project as an argument, and a host shell tool that
   needs a different directory for one call has a working_directory (or cwd)
   field.
+- **Waiting by hand draws advice.** Work you start in the background is
+  announced when it ends, so the waiter rules point every wait back at that
+  notice, at `magus job wait <job>` for another agent's job, or at
+  `magus status --watch=15s` for the project lock. `sleep-poll` matches a
+  sleep of ten seconds or more followed on the line by a one-shot status read
+  (`kill -0`, the process table, `magus status` or a job row,
+  `gh pr view|checks|status`, `gh run view|list`), and a backgrounded call
+  whose only work is sleeping and printing: a timer, whose notice says only
+  that time passed. A host's watcher (Claude Code's `Monitor`, recognized by
+  shape: a command, a description and a `timeout_ms`) runs its command as a
+  shell line, so busy-wait and process-poll judge that command too.
+  `monitor-duplicate` refuses a second live watcher on one subject (the process
+  pattern, pid, file, job, lock or CI run its command reads), one on a host task
+  capture or on the process of a command you backgrounded, and a second endless
+  backgrounded watch (`magus status --watch`, `tail -f`, `watch`); a leased
+  worker is refused an endless watch outright, since its waits are its own runs.
+  `monitor-pile` counts each agent's live waiters, watchers, timers and endless
+  watches together, from when each is armed to its timeout, and advises at the
+  third and refuses at the fifth. Re-arming a watcher that expired passes.
+- **A spawn that only waits draws advice** (`spawn-waiter`): a title or brief
+  opening on wait, poll, monitor, watch or babysit, or saying to wait for, on or
+  until an agent, worker or job. A subagent spawning a helper that speaks of
+  waiting is told once a session to hand the wait back to its parent
+  (`spawn-nested-waiter`, in [What magus explains](#what-magus-explains)).
+- **Paging through a mapped file draws advice** (`read-paging`): the third
+  distinct `sed -n` window of one Go, Buzz or Markdown file by one caller,
+  counting a host read tool's offset and limit, with the file's map. A window
+  inside one declaration or heading is a targeted read and never counts.
+- **A brief for a worker in its own worktree draws advice** unless it says to
+  run one plain command per call (`brief-plain-commands`), or when it shows a
+  command with a `$()`, a loop or an exec. A host that isolates the worker
+  refuses each command it cannot prove stays in the worktree.
 
 ## Setting a built-in rule
 
@@ -472,6 +530,10 @@ hook run failed are `continue`, `stopReason` and `suppressOutput`.
   pulls the rest in, and each extra invocation reloads the workspace. Only the
   dependency graph knows whether the two are genuinely independent, which is why
   this advises rather than denies.
+- A subagent spawning a helper whose title or brief opening speaks of waiting or
+  watching ([spawn-nested-waiter](../../../reference/rules/spawn-nested-waiter.md)),
+  once a session: the host tells a parent when its child ends, so the wait belongs
+  to whoever spawned the work.
 
 - The `ci` gate, under a lease whose ledger row declares a narrower
   `validation`: the gate runs once per branch, in the orchestrator's tree, after
@@ -597,8 +659,20 @@ it exists to deliver, such as the commands a search routes to or the files a
 new one is named against, keeps that answer inline.
 
 The advisories that correct the command itself (a `time` wrapper, a chained
-run) are exempt too, because a second firing reports a
-second mistake.
+run) are exempt from that hold, because a second firing reports a
+second mistake. What no advisory does is say the same thing twice: an advice
+whose rule and text match one already given to the same caller in the session
+is dropped, so a repeat of a standing fact, a still-failing workspace rule
+among them, reaches each caller once. A caller is the session, or the subagent
+within it when the host names one, since a host's subagents share their root's
+session. The precedent-search advice in a workspace with no symbol index yet
+is said once and then goes quiet, because a repeat saying the index is still
+missing changes nothing.
+
+A deny repeats, never silenced, with one exception: read-navigation refuses a
+whole read once per caller and file. The refusal carries the file's map, so the
+same caller asking for the same file again has the map in hand and chose the
+whole read; that read passes.
 
 A session is identified by the `session_id` your host reports, on the flag or in
 the envelope. A host that reports none is not silenced forever: those notices
