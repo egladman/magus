@@ -45,14 +45,25 @@ type spawnFields struct {
 }
 
 // spawnedAgentID reads the id a host assigned the child from a finished spawn call's
-// response, "" when the response names none. Both spellings are accepted because the
-// key is the host's and magus reads it by shape, never by host name.
+// response, "" when the response names none. The key is the host's and magus reads it by
+// shape, never by host name: `agentId`, `agent_id`, or `task_name`, the path a host that
+// addresses children by name hands back in place of an id.
+//
+// A response may be the object itself or a string holding its JSON; a string that is not
+// JSON names nothing.
 func spawnedAgentID(response any) string {
+	if s, ok := response.(string); ok {
+		var decoded any
+		if json.Unmarshal([]byte(s), &decoded) != nil {
+			return ""
+		}
+		response = decoded
+	}
 	m, ok := response.(map[string]any)
 	if !ok {
 		return ""
 	}
-	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"))
+	return cmp.Or(envelopeString(m, "agentId"), envelopeString(m, "agent_id"), envelopeString(m, "task_name"))
 }
 
 // judgeAgentEvent answers a spawn or a continuation of a subagent.
@@ -294,6 +305,9 @@ type spawnedAgent struct {
 	// ContextTokens is the agent's last observed context size, nil until its host
 	// reports usage for it.
 	ContextTokens *int64 `json:"context_tokens,omitempty"`
+	// ContextWindow is the largest context the agent's host says it can hold, nil until a
+	// host reports one alongside its usage.
+	ContextWindow *int64 `json:"context_window,omitempty"`
 }
 
 // recordSpawnedAgent files what a finished spawn call handed its child under the child's
@@ -325,6 +339,7 @@ func recordSpawnedAgent(ctx context.Context, at location, facts hint.Gate, who h
 		Name:          env.Spawn.Name,
 		Model:         env.DeclaredModel,
 		ContextTokens: prev.ContextTokens,
+		ContextWindow: prev.ContextWindow,
 	}
 	if row, ok := spawnTitleJob(ctx, at, env.Spawn.Description); ok {
 		rows, err := leaseRows(ctx, at)
@@ -710,12 +725,15 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 	if agentID == "" {
 		return
 	}
-	tokens, ok := lastContextTokens(transcript)
+	tokens, window, ok := lastContextUsage(transcript)
 	if !ok {
 		return
 	}
 	rec, _ := readSpawnedAgent(facts, agentID)
 	rec.ContextTokens = &tokens
+	if window > 0 {
+		rec.ContextWindow = &window
+	}
 	writeSpawnedAgent(facts, agentID, rec)
 }
 
@@ -723,7 +741,8 @@ func recordAgentUsage(facts hint.Gate, agentID, transcript string) {
 // turn and only its last usage record is wanted.
 const agentUsageTail = 512 << 10
 
-// transcriptUsage is the one shape read from a transcript line: a message's token usage.
+// transcriptUsage is the shapes read from a transcript line: a message's token usage, or
+// the token_count event another host's rollout records after each model call.
 type transcriptUsage struct {
 	Message struct {
 		Usage *struct {
@@ -732,29 +751,61 @@ type transcriptUsage struct {
 			CacheWrite int64 `json:"cache_creation_input_tokens"`
 		} `json:"usage"`
 	} `json:"message"`
+	Type    string `json:"type"`
+	Payload struct {
+		Type string `json:"type"`
+		// Info is null on a token_count event that reports only rate limits.
+		Info *struct {
+			Last *struct {
+				Input int64 `json:"input_tokens"`
+			} `json:"last_token_usage"`
+			Window int64 `json:"model_context_window"`
+		} `json:"info"`
+	} `json:"payload"`
 }
 
-// lastContextTokens reads the latest usage record in the tail of a JSONL transcript and
-// returns its input plus cache-read plus cache-write tokens: what the model was handed
-// on its last call, which is the context a resume would have to rebuild.
+// contextSize is what the model was handed on the line's call and the size of the window
+// it was handed it in (0 when the host does not report one), or false for a line that
+// reports no usage.
+func (u transcriptUsage) contextSize() (tokens, window int64, ok bool) {
+	if usage := u.Message.Usage; usage != nil {
+		return usage.Input + usage.CacheRead + usage.CacheWrite, 0, true
+	}
+	if info := u.Payload.Info; u.Type == "event_msg" && u.Payload.Type == "token_count" && info != nil && info.Last != nil {
+		// The count already includes the cached tokens, so nothing is added to it.
+		return info.Last.Input, info.Window, true
+	}
+	return 0, 0, false
+}
+
+// lastContextTokens is the size half of [lastContextUsage].
 func lastContextTokens(path string) (int64, bool) {
+	tokens, _, ok := lastContextUsage(path)
+	return tokens, ok
+}
+
+// lastContextUsage reads the latest usage record in the tail of a JSONL transcript and
+// returns its input plus cache-read plus cache-write tokens: what the model was handed
+// on its last call, which is the context a resume would have to rebuild. The window is
+// the host's own figure for how large that context may grow, 0 when it names none.
+func lastContextUsage(path string) (tokens, window int64, ok bool) {
 	if !filepath.IsAbs(path) {
-		return 0, false
+		return 0, 0, false
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, false
+		return 0, 0, false
 	}
 	defer f.Close()
 	info, err := f.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return 0, false
+		return 0, 0, false
 	}
 	start := max(info.Size()-agentUsageTail, 0)
 	buf := make([]byte, info.Size()-start)
 	n, err := f.ReadAt(buf, start)
 	if err != nil && !errors.Is(err, io.EOF) {
-		return 0, false
+		return 0, 0, false
 	}
 	// A short read must not feed the unwritten tail of buf to json.Unmarshal.
 	lines := bytes.Split(buf[:n], []byte("\n"))
@@ -768,13 +819,14 @@ func lastContextTokens(path string) (int64, bool) {
 			continue
 		}
 		var rec transcriptUsage
-		if json.Unmarshal(line, &rec) != nil || rec.Message.Usage == nil {
+		if json.Unmarshal(line, &rec) != nil {
 			continue
 		}
-		u := rec.Message.Usage
-		return u.Input + u.CacheRead + u.CacheWrite, true
+		if tokens, window, ok := rec.contextSize(); ok {
+			return tokens, window, true
+		}
 	}
-	return 0, false
+	return 0, 0, false
 }
 
 func readSpawnedAgent(facts hint.Gate, agentID string) (spawnedAgent, bool) {

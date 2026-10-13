@@ -1381,3 +1381,93 @@ magus\guard.spawn(fun (req: SpawnRequest) > GuardVerdict {
 	assert.Equal(t, phaseApprovedResolve, spawns[0].Phases[0].Name)
 	assert.True(t, spawns[0].Phases[0].Lapsed)
 }
+
+// Codex reports a finished spawn's response as a string holding JSON, and its v2 spawn
+// names the child by path rather than by id.
+func TestSpawnedAgentIDShapes(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		response any
+		want     string
+	}{
+		"a map, camel case":     {map[string]any{"agentId": "a1b2c3"}, "a1b2c3"},
+		"a map, snake case":     {map[string]any{"agent_id": "a1b2c3"}, "a1b2c3"},
+		"a JSON string":         {`{"agent_id":"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012","nickname":"Hubble"}`, "019e4c22-1b3d-7e90-8c44-5a6f7d8e9012"},
+		"a JSON string, v2":     {`{"task_name":"/root/audit_guard"}`, "/root/audit_guard"},
+		"a map, v2":             {map[string]any{"task_name": "/root/audit_guard", "nickname": "Hubble"}, "/root/audit_guard"},
+		"an id beats a path":    {`{"agent_id":"a1b2c3","task_name":"/root/x"}`, "a1b2c3"},
+		"a string, not JSON":    {"Agent spawned", ""},
+		"a JSON string, a list": {`["a1b2c3"]`, ""},
+		"an empty string":       {"", ""},
+		"no response":           {nil, ""},
+		"a number":              {42.0, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, spawnedAgentID(tc.response))
+		})
+	}
+}
+
+// The PostToolUse of a Codex spawn_agent carries the response as a string, and the
+// decoder must hand its child id on.
+func TestDecodeHookEnvelopeSpawnCodexResponse(t *testing.T) {
+	t.Parallel()
+
+	req, ok := decodeHookEnvelope(`{"session_id":"019e4c21","cwd":"/Users/dev/repo","hook_event_name":"PostToolUse","tool_name":"spawn_agent",` +
+		`"tool_input":{"message":"Audit internal/guard.","agent_type":"explorer"},"tool_use_id":"call_Qx8aTz1uJm",` +
+		`"tool_response":"{\"agent_id\":\"019e4c22-1b3d-7e90-8c44-5a6f7d8e9012\",\"nickname\":\"Hubble\"}"}`)
+	require.True(t, ok)
+	assert.True(t, req.IsSpawn)
+	assert.True(t, req.AfterCall)
+	assert.Equal(t, "019e4c22-1b3d-7e90-8c44-5a6f7d8e9012", req.SpawnedAgent)
+}
+
+// Codex records usage as event_msg/token_count lines in its rollout. Its input_tokens
+// already counts the cached tokens, so the size is that figure and no sum.
+func TestTranscriptUsageCodexTokenCount(t *testing.T) {
+	const (
+		started = `{"timestamp":"2026-10-13T09:14:02.100Z","type":"event_msg","payload":{"type":"task_started","turn_id":"019e4c21"}}`
+		first   = `{"timestamp":"2026-10-13T09:14:09.500Z","type":"event_msg","payload":{"type":"token_count","info":{` +
+			`"total_token_usage":{"input_tokens":30673,"cached_input_tokens":11008,"output_tokens":314,"reasoning_output_tokens":56,"total_tokens":30987},` +
+			`"last_token_usage":{"input_tokens":30673,"cached_input_tokens":11008,"output_tokens":314,"reasoning_output_tokens":56,"total_tokens":30987},` +
+			`"model_context_window":258400},"rate_limits":{"primary":{"used_percent":4.0}}}}`
+		last = `{"timestamp":"2026-10-13T09:14:21.900Z","type":"event_msg","payload":{"type":"token_count","info":{` +
+			`"total_token_usage":{"input_tokens":93120,"cached_input_tokens":61000,"output_tokens":901,"reasoning_output_tokens":120,"total_tokens":94021},` +
+			`"last_token_usage":{"input_tokens":62447,"cached_input_tokens":50000,"output_tokens":587,"reasoning_output_tokens":64,"total_tokens":63034},` +
+			`"model_context_window":258400},"rate_limits":{"primary":{"used_percent":5.0}}}}`
+		rateLimitsOnly = `{"timestamp":"2026-10-13T09:14:22.000Z","type":"event_msg","payload":{"type":"token_count","info":null,"rate_limits":{"primary":{"used_percent":5.0}}}}`
+		otherEvent     = `{"timestamp":"2026-10-13T09:14:22.100Z","type":"event_msg","payload":{"type":"agent_message","message":"done"}}`
+	)
+
+	t.Run("the last count wins, with its window", func(t *testing.T) {
+		tokens, window, ok := lastContextUsage(writeTranscript(t, started, first, last, otherEvent))
+		require.True(t, ok)
+		assert.Equal(t, int64(62447), tokens)
+		assert.Equal(t, int64(258400), window)
+	})
+	t.Run("a count with no info is skipped", func(t *testing.T) {
+		tokens, _, ok := lastContextUsage(writeTranscript(t, first, rateLimitsOnly))
+		require.True(t, ok)
+		assert.Equal(t, int64(30673), tokens)
+	})
+	t.Run("no count at all", func(t *testing.T) {
+		_, _, ok := lastContextUsage(writeTranscript(t, started, rateLimitsOnly, otherEvent))
+		assert.False(t, ok)
+	})
+	t.Run("a Claude Code record reports no window", func(t *testing.T) {
+		tokens, window, ok := lastContextUsage(writeTranscript(t, transcriptLastTurn))
+		require.True(t, ok)
+		assert.Equal(t, transcriptLastTokens, tokens)
+		assert.Zero(t, window)
+	})
+	t.Run("a stop files the size and the window", func(t *testing.T) {
+		ctx, cacheDir := spawnFixture(t)
+		facts := hint.NewGate(cacheDir, FactsKey("claude-code", "8f2c6a1e"))
+		Judge(ctx, Dependencies{}, Request{Input: subagentStop(t, "a1b2c3", writeTranscript(t, first, last)), Host: "claude-code"})
+		rec, ok := readSpawnedAgent(facts, "a1b2c3")
+		require.True(t, ok)
+		tokens, window := int64(62447), int64(258400)
+		assert.Equal(t, spawnedAgent{ContextTokens: &tokens, ContextWindow: &window}, rec)
+	})
+}
