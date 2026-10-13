@@ -87,7 +87,7 @@ type Store struct {
 	clock      func() time.Time
 	staleAfter *time.Duration
 	notices    io.Writer
-	// retain is the retention window's seam; nil means [DefaultRetain].
+	// retain is the retention window's seam; nil means the workspace's jobs.retain.
 	retain *time.Duration
 	// outputs is Location.Outputs.
 	outputs func(root string) AttemptResolver
@@ -883,7 +883,9 @@ func (s *Store) update(ctx context.Context, fn func(*jobsFile) error) error {
 			}
 			return err
 		}
-		s.retainDue(&f, s.now())
+		if err := s.retainDue(&f, s.now()); err != nil {
+			return err
+		}
 		raw, err := encodeJobs(f)
 		if err != nil {
 			return err
@@ -954,7 +956,7 @@ func encodeJobs(f jobsFile) ([]byte, error) {
 //
 // The dropped row is archived first, as Clear archives, so a delete is recoverable from
 // the sibling file rather than only from whatever the caller remembers. Archives last
-// [DefaultRetain]; see [Store.dropExpiredFiles].
+// jobs.retain; see [Store.dropExpiredFiles].
 func (s *Store) Delete(ctx context.Context, id string, force bool) (types.Job, error) {
 	id = strings.TrimSpace(id)
 	if err := authorizeDelete(s.Actor(), id); err != nil {

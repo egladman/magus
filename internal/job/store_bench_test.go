@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
 
@@ -65,7 +66,7 @@ func BenchmarkStoreAtRealSize(b *testing.B) {
 		retain time.Duration
 	}{
 		{"as-written", 0},
-		{"retained", DefaultRetain},
+		{"retained", config.Defaults().Jobs.Retain},
 	} {
 		s := NewStore(Location{StateBase: b.TempDir(), CacheDir: b.TempDir(), Root: b.TempDir(), Actor: &Actor{}})
 		s.retain = &tc.retain

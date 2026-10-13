@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -81,10 +82,11 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 		require.NoError(t, os.Chtimes(p, now.Add(-age), now.Add(-age)))
 		return p
 	}
-	oldArchive := plant("jobs-20260101T000000Z.json", DefaultRetain+time.Hour)
+	week := config.Defaults().Jobs.Retain
+	oldArchive := plant("jobs-20260101T000000Z.json", week+time.Hour)
 	newArchive := plant("jobs-20260201T000000Z.json", time.Hour)
 	lostTemp := plant(".jobs.json.tmp.123", 2*time.Hour)
-	other := plant("landing-probes.json", DefaultRetain+time.Hour)
+	other := plant("landing-probes.json", week+time.Hour)
 
 	write := func(rows ...types.Job) {
 		t.Helper()
@@ -116,6 +118,48 @@ func TestAWriteRetainsOncePerInterval(t *testing.T) {
 	assert.NoFileExists(t, lostTemp)
 	assert.FileExists(t, newArchive, "an archive younger than the window stays")
 	assert.FileExists(t, other, "only archives and temp files are the pass's to remove")
+}
+
+// The pass reads jobs.retain from the workspace's magus.yaml, where 0 keeps every row, and
+// a value that does not read fails the write rather than retire rows by a window nobody
+// chose.
+func TestARetentionPassReadsJobsRetain(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		yaml    string
+		want    []string
+		wantErr string
+	}{
+		"absent keeps a week": {want: []string{"two-days", "live"}},
+		"a day":               {yaml: "jobs:\n  retain: 24h\n", want: []string{"live"}},
+		"zero keeps every row": {yaml: "jobs:\n  retain: 0s\n", want: []string{"ten-days", "two-days", "live"}},
+		"negative":            {yaml: "jobs:\n  retain: -1h\n", wantErr: "retain"},
+		"not a duration":      {yaml: "jobs:\n  retain: forever\n", wantErr: "retain"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			if tc.yaml != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(root, config.Filename), []byte(tc.yaml), 0o644))
+			}
+			s := tmpStore(t, root)
+			s.clock = func() time.Time { return time.Unix(retainNow, 0) }
+			rows := []types.Job{aged("ten-days", types.StatePass, 10), aged("two-days", types.StatePass, 2), aged("live", types.StateRunning, 10)}
+			err := s.update(t.Context(), func(f *jobsFile) error {
+				f.Jobs, f.Retained = rows, retainNow-int64(retainEvery/time.Second)
+				return nil
+			})
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			got, err := s.read()
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, ids(got.Jobs))
+		})
+	}
 }
 
 // A delete archives the row it drops, not the whole store: archiving every row on every

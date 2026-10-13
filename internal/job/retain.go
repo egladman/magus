@@ -1,18 +1,15 @@
 package job
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/types"
 )
-
-// DefaultRetain is how long the store keeps a row that is over, and a file a clear or a
-// delete archived, once nothing has touched it: a week of history to read back, while the
-// file every hook call decodes stays the size of the work in flight.
-const DefaultRetain = 7 * 24 * time.Hour
 
 // retainEvery is the least time between two retention passes. A pass rides a write that
 // already holds the lock and rewrites the file, so its cost is one filter over rows the
@@ -78,29 +75,42 @@ func retire(rows []types.Job, now int64, window time.Duration) ([]types.Job, int
 // retainDue runs a retention pass over f when the last one is retainEvery old: it retires
 // rows (see [retire]) and removes the archives and stray temp files the window has
 // outlived. A file no pass has stamped is stamped and left whole, so the first pass runs
-// an interval after a store is created or first written by this magus.
-func (s *Store) retainDue(f *jobsFile, now time.Time) {
+// an interval after a store is created or first written by this magus. A jobs.retain that
+// does not read fails the write rather than retire rows by a window nobody chose.
+func (s *Store) retainDue(f *jobsFile, now time.Time) error {
 	if f.Retained == 0 {
 		f.Retained = now.Unix()
-		return
+		return nil
 	}
 	if now.Unix()-f.Retained < int64(retainEvery/time.Second) {
-		return
+		return nil
 	}
-	window := s.retainWindow()
+	window, err := s.retainWindow()
+	if err != nil {
+		return err
+	}
 	f.Retained = now.Unix()
 	f.Jobs, _ = retire(f.Jobs, now.Unix(), window)
 	s.dropExpiredFiles(now, window)
+	return nil
 }
 
-// retainWindow is how long a row that is over is kept.
-//
-// TODO: read jobs.retain from the workspace's magus.yaml once internal/config declares it.
-func (s *Store) retainWindow() time.Duration {
+// retainWindow is jobs.retain from the workspace's own magus.yaml: how long a row that is
+// over is kept. Workspace only, as jobs.stale_after is read (see [Store.resolveStaleAfter]):
+// a value in one person's global config must not drop rows from a repository that never
+// chose it.
+func (s *Store) retainWindow() (time.Duration, error) {
 	if s.retain != nil {
-		return *s.retain
+		return *s.retain, nil
 	}
-	return DefaultRetain
+	cfg, err := config.LoadWorkspaceOnly(s.root)
+	if err == nil {
+		err = config.Validate(cfg)
+	}
+	if err != nil {
+		return 0, fmt.Errorf("job: read jobs.retain to drop jobs that are over: %w", err)
+	}
+	return cfg.Jobs.Retain, nil
 }
 
 // dropExpiredFiles removes from the store's directory each archive (jobs-*.json) last

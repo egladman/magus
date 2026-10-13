@@ -197,7 +197,8 @@ type Diff struct {
 
 // Jobs bounds the job tree `magus job fork` declares. Every limit is unset by default, and
 // unset means no limit: a bound belongs to the workspace that chose it, never to magus.
-// StaleAfter is the exception, because it decides when magus ends a row nobody took.
+// StaleAfter and Retain are the exceptions, because they decide when magus ends a row
+// nobody took and when it drops one that is over.
 type Jobs struct {
 	// MaxDepth is how many levels below its root job a fork may land. 0 = unlimited.
 	MaxDepth int `json:"max_depth" yaml:"max_depth" validate:"gte=0"`
@@ -210,6 +211,11 @@ type Jobs struct {
 	// a taken one in `magus ls jobs` and `magus doctor`. Default 2h; 0 = never. Ending a row
 	// reads the workspace's own magus.yaml, never user-global config or the environment.
 	StaleAfter time.Duration `json:"stale_after" yaml:"stale_after" validate:"gte=0" merge:"written"`
+	// Retain is how long a job that is over (graded, ended, or exited with its result never
+	// collected), and the archive a clear or a delete wrote, stay in the job store once
+	// nothing touches them. Default 168h; 0 keeps them forever. Like StaleAfter it reads the
+	// workspace's own magus.yaml only.
+	Retain time.Duration `json:"retain" yaml:"retain" validate:"gte=0" merge:"written"`
 }
 
 // TuiEnabled reports whether `magus diff` may open the viewer.
@@ -901,6 +907,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_JOBS_MAX_LIVE", "jobs.max_live", "0", "How many live jobs one root's tree may hold at once, the new one included; 0 means unlimited"},
 		{"MAGUS_JOBS_DEFAULT_TIMEOUT", "jobs.default_timeout", "0", "Timeout for a fork that names no --timeout; 0 means no bound"},
 		{"MAGUS_JOBS_STALE_AFTER", "jobs.stale_after", "0", "Flag a live job nobody updated for this long in `magus ls jobs` and `magus doctor`; 0 never flags"},
+		{"MAGUS_JOBS_RETAIN", "jobs.retain", "168h", "How long a job that is over, and a clear's or delete's archive, stay in the job store; 0 keeps them; the store reads it from the workspace's magus.yaml only"},
 		{"MAGUS_SECRET_INTERACTIVE_TIMEOUT", "secret.interactive_timeout", "60s", "Bound on a secret-provider read when stdin is a terminal"},
 		{"MAGUS_SECRET_UNATTENDED_TIMEOUT", "secret.unattended_timeout", "10s", "Bound on a secret-provider read with no terminal to prompt on"},
 		{"MAGUS_KNOWLEDGE_WORKSPACES", "knowledge.workspaces", "", "Comma-separated extra workspace roots a --global knowledge-graph query unions in"},
@@ -976,7 +983,7 @@ func Defaults() Config {
 		},
 		HistoryPath:   DefaultHistoryPath(),
 		ShutdownGrace: DefaultShutdownGrace,
-		Jobs:          Jobs{StaleAfter: 2 * time.Hour},
+		Jobs:          Jobs{StaleAfter: 2 * time.Hour, Retain: 7 * 24 * time.Hour},
 		Queue:         Queue{CarryApprovals: CarryApprovals(queuetypes.DefaultCarryPolicy())},
 		// Kept in step with secret.DefaultTimeouts, which applies when a Resolver is built
 		// without options (tests, and any caller outside the run path).
