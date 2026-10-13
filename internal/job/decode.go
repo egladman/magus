@@ -123,6 +123,39 @@ func DecodeDeclaration(r io.Reader) (types.Declaration, error) {
 	return row, row.Validate()
 }
 
+// storeStamped are the members of a stored row that the store computes and a declaration
+// cannot carry. `magus describe job -o json` prints them beside the declared ones, and the
+// edit loop (describe, edit, apply) hands that record back, so [DecodeDeclarations] drops
+// them rather than refusing the loop at its second step. [DecodeDeclaration] still refuses
+// them, as `magus job fork` should: a caller declaring a creation time is wrong, while one
+// re-applying a record it read back is not. Any other unknown member is an error in both.
+var storeStamped = []string{
+	"holder", "releases", "unattributed", "entries", "write_proof", "reported_base",
+	"base_verdict", "registered_by", "registered", "checkout_root", "end_reason", "created",
+	"updated", "deadline", "result", "attempt", "gate_attempts", "last_run", "integration",
+	"waiter_evidence",
+}
+
+// dropStoreStamped is raw without the members in storeStamped. A record that is not an
+// object comes back as it was, for [DecodeDeclaration] to refuse in its own words.
+func dropStoreStamped(raw []byte) ([]byte, error) {
+	var members map[string]json.RawMessage
+	if json.Unmarshal(raw, &members) != nil {
+		return raw, nil
+	}
+	dropped := false
+	for _, name := range storeStamped {
+		if _, ok := members[name]; ok {
+			delete(members, name)
+			dropped = true
+		}
+	}
+	if !dropped {
+		return raw, nil
+	}
+	return json.Marshal(members)
+}
+
 // DecodeDeclarations reads the records `magus job apply -f` takes: one JSON object, a JSON
 // array of them, or one object per line. Each is held to [DecodeDeclaration]'s rules, and a
 // failure names the record by its position, so nothing is applied from a stream with one
@@ -154,7 +187,11 @@ func DecodeDeclarations(r io.Reader) ([]types.Declaration, error) {
 	rows := make([]types.Declaration, 0, len(parts))
 	seen := map[string]int{}
 	for i, part := range parts {
-		row, err := DecodeDeclaration(strings.NewReader(string(part)))
+		declared, err := dropStoreStamped(part)
+		if err != nil {
+			return nil, fmt.Errorf("record %d: %w", i+1, err)
+		}
+		row, err := DecodeDeclaration(strings.NewReader(string(declared)))
 		if err != nil {
 			return nil, fmt.Errorf("record %d: %w", i+1, err)
 		}

@@ -195,6 +195,30 @@ func TestDecodeDeclarationsReadsEveryShapeAndNamesABadRecord(t *testing.T) {
 	require.ErrorContains(t, err, "a is record 1 too")
 }
 
+// The edit loop hands `magus describe job -o json` back to apply. The store's members ride
+// along and are ignored; fork's decoder still refuses them (see
+// TestDecodeDeclarationRefusesTheStoresOwnFields), and a misspelled member is an error here.
+func TestDecodeDeclarationsIgnoresWhatTheStoreStamped(t *testing.T) {
+	t.Parallel()
+
+	stored := fmt.Sprintf(`{"schema_version":%d,"id":"a","write_paths":["internal/job"],"state":"declared",`+
+		`"created":1,"updated":2,"deadline":3,"registered":4,"registered_by":{"session":"s"},`+
+		`"write_proof":{},"reported_base":"abc","base_verdict":"match","checkout_root":"/w",`+
+		`"holder":{},"releases":[],"result":null}`, types.JobSchemaVersion)
+	rows, err := DecodeDeclarations(strings.NewReader(stored))
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, []string{"internal/job"}, rows[0].WritePaths)
+	assert.Equal(t, types.JobState("declared"), rows[0].State)
+
+	typo := strings.Replace(stored, `"write_paths"`, `"write_pathz"`, 1)
+	_, err = DecodeDeclarations(strings.NewReader(typo))
+	require.ErrorContains(t, err, "write_pathz")
+
+	_, err = DecodeDeclaration(strings.NewReader(stored))
+	require.ErrorContains(t, err, "unknown", "fork's decoder stays strict")
+}
+
 // An empty stdin is the shape of a pipeline that produced nothing, and reading it as an
 // empty record would record a row that erases the one it names.
 func TestDecodeRefusesAnEmptyInput(t *testing.T) {
