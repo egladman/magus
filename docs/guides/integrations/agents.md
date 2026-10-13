@@ -206,15 +206,13 @@ keychain login or `CLAUDE_CODE_OAUTH_TOKEN`, which the suite passes through.
 Every run writes a version report naming each host's binary, version and model
 beside each scenario's result.
 
-| variable                 | effect                                                 |
-| ------------------------ | ------------------------------------------------------ |
-| `MAGUS_E2E_HOSTS`        | comma-separated host ids to drive; all four by default |
-| `MAGUS_E2E_<HOST>_BIN`   | the host binary to use before the one on `PATH`        |
-| `MAGUS_E2E_<HOST>_MODEL` | the model the host runs                                |
-| `MAGUS_E2E_TIMEOUT`      | the bound on one host invocation                       |
-| `MAGUS_E2E_MAGUS`        | the magus binary to wire; `./magus` by default         |
-| `MAGUS_E2E_KEEP=1`       | keep each temporary workspace                          |
-| `MAGUS_E2E_REPORT`       | the version report's path                              |
+- `MAGUS_E2E_HOSTS`: comma-separated host ids to drive; all four by default
+- `MAGUS_E2E_<HOST>_BIN`: the host binary to use before the one on `PATH`
+- `MAGUS_E2E_<HOST>_MODEL`: the model the host runs
+- `MAGUS_E2E_TIMEOUT`: the bound on one host invocation
+- `MAGUS_E2E_MAGUS`: the magus binary to wire; `./magus` by default
+- `MAGUS_E2E_KEEP=1`: keep each temporary workspace
+- `MAGUS_E2E_REPORT`: the version report's path
 
 |             | command rules | declared-output rule | deny | advise | host E2E: shell verdict | MCP call rules                                       |
 | ----------- | ------------- | -------------------- | ---- | ------ | ----------------------- | ---------------------------------------------------- |
