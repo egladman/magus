@@ -1,10 +1,13 @@
 package guard
 
 import (
+	"cmp"
 	"context"
 	"errors"
+	"path/filepath"
 	"time"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/trail"
 )
 
@@ -81,6 +84,10 @@ func (p phaseShares) take(ctx context.Context, phase string) (budget time.Durati
 // context it was loaded with, and a share that ended would end every rule call after it.
 // Its budget is therefore all that remains, and the phases after it divide what it leaves.
 // With no deadline on ctx it has no budget and never lapses.
+//
+// A load that does not stop at the deadline is waited for, so a late answer still spares
+// what only a loaded policy can tell apart; a hook bounds the whole judgment, the load
+// included, with JudgeWithin.
 func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, trail.Phase, error) {
 	budget, _ := phaseShares{phaseLoadRules: 1}.take(ctx, phaseLoadRules)
 	start := time.Now()
@@ -91,6 +98,131 @@ func TimeRuleLoad[T any](ctx context.Context, load func() (T, error)) (T, trail.
 		BudgetMs:  budget.Milliseconds(),
 		Lapsed:    err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded),
 	}, err
+}
+
+// awaitDeadline runs work on a goroutine of its own and waits for it until ctx is done,
+// then answers ctx's error unless work answered by then. work is left running past that.
+func awaitDeadline[T any](ctx context.Context, work func() (T, error)) (T, error) {
+	type answer struct {
+		value T
+		err   error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		v, err := work()
+		done <- answer{v, err}
+	}()
+	select {
+	case a := <-done:
+		return a.value, a.err
+	case <-ctx.Done():
+	}
+	select {
+	case a := <-done:
+		return a.value, a.err
+	default:
+		var zero T
+		return zero, ctx.Err()
+	}
+}
+
+// JudgeWithin runs judge, a hook judgment for req, and answers by the hook's deadline on
+// ctx plus judgeReserve whether or not judge has: past that it answers unjudged, recorded
+// on the trail with the judgment lapsed, and leaves judge running for the process exit to
+// reclaim. A dry run has no host waiting on it and is judged to the end.
+//
+// Judge bounds each workspace rule phase, but not everything else on its path: a rule that
+// opens the workspace, the host's hook timeout read off its harness, a lock held by another
+// process. A host that cuts a hook off runs the call with no rule applied and tells the
+// agent nothing, so a late verdict is worth less than an unjudged one on time.
+//
+// base resolves the trail's location and names the judging binary when judge has not
+// answered; judge loads the rest itself, inside the bound.
+func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) Verdict) Verdict {
+	if req.DryRun {
+		return judge(ctx)
+	}
+	ctx, cancel := WithHookDeadline(ctx)
+	defer cancel()
+	if begunJudgment(ctx).path == "" {
+		ctx = BeginJudgment(ctx, base.CacheDir, req)
+	}
+	deadline, _ := ctx.Deadline()
+	start := time.Now()
+	done := make(chan Verdict, 1)
+	go func() { done <- judge(ctx) }()
+	timer := time.NewTimer(time.Until(deadline) + judgeReserve)
+	defer timer.Stop()
+	select {
+	case v := <-done:
+		return v
+	case <-timer.C:
+		return unjudged(context.WithoutCancel(ctx), base, req, time.Since(start))
+	}
+}
+
+// phaseAnswer is the trail's name for the bound JudgeWithin holds a whole judgment to.
+const phaseAnswer = "answer"
+
+// unjudgedNote tells a session that one of its calls went through with no rule judging it.
+var unjudgedNote = "This guard check did not finish within " + hookBudget.String() +
+	", so no rule judged this call; it ran because it only reads."
+
+// unjudged is the verdict for a hook call whose judgment did not answer within the bound,
+// in the stance a lapsed workspace rule phase takes: a call that changes state is denied
+// and one that only reads passes with a note. A call with nothing to judge passes as it
+// would have. It ends the call's judgment mark, since the host got its answer in time.
+func unjudged(ctx context.Context, base Dependencies, req Request, elapsed time.Duration) Verdict {
+	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
+	who := hookAttribution{Host: req.Host, Form: req.Form, Session: req.Session, Agent: req.Agent, Transcript: req.Transcript, Event: req.Event, Window: req.Window}
+	input, isPath, callDir := req.Input, req.IsPath, ""
+	if filepath.IsAbs(req.Dir) {
+		callDir = req.Dir
+		ctx = hookContextAt(ctx, base, req.Dir)
+	}
+	call := judgedCall{seam: seamCommand, what: "this command", lease: req.Lease}
+	readOnly := false
+	env, isEnvelope := decodeHookEnvelope(req.Input)
+	if isEnvelope {
+		ctx = hookContextAt(ctx, base, env.Cwd)
+		if callDir == "" && filepath.IsAbs(env.Cwd) {
+			callDir = env.Cwd
+		}
+		who.Session = cmp.Or(who.Session, env.Who.Session)
+		who.Transcript = cmp.Or(who.Transcript, env.Who.Transcript)
+		who.Event = cmp.Or(who.Event, env.Who.Event)
+		who.Agent = cmp.Or(who.Agent, env.Who.Agent)
+		input, isPath, readOnly = env.Value, isPath || env.IsPath, env.ReadOnlyTool
+	}
+	begunJudgment(ctx).end(time.Now(), noHookTimeout)
+	if req.Observe || req.Message || input == "" || (isEnvelope && (env.NothingToJudge || env.LoadedSkill != "")) {
+		return pass
+	}
+	tool := hookToolCommand
+	switch {
+	case isPath:
+		tool = hookToolWrite
+		call = judgedCall{seam: seamWrite, changes: true, what: "this file write", lease: req.Lease}
+	case env.IsSpawn || env.IsContinue:
+		call = judgedCall{seam: seamSpawn, changes: true, what: "a subagent spawn", lease: req.Lease}
+	default:
+		d := effectiveDialect(base.ShellDialect)
+		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease)
+	}
+	verdict := pass
+	verdict.Lease = req.Lease
+	if call.changes {
+		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
+		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, lapseReason(call, lapse, false), string(advisoryUnfinished)
+	} else {
+		verdict = applyRuleFailureNote(verdict, unjudgedNote, advisoryUnfinished)
+	}
+	ctx = context.WithValue(ctx, phaseLogKey{}, &phaseLog{
+		start: time.Now().Add(-elapsed),
+		done:  []trail.Phase{timedPhase(phaseAnswer, elapsed, hookBudget, true)},
+	})
+	appendHookActivity(ctx, hookLocation(ctx, base), input, who, tool, req.Lease, "", "", "", verdict, workspaceRuleRecord{}, base.judging(callDir))
+	return verdict
 }
 
 // phaseLog collects the phases of one judgment for its trail row. A judgment runs its

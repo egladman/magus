@@ -236,12 +236,19 @@ func shellCmdWithErrorWriter(ctx context.Context, in io.Reader, out, errOut io.W
 	// Marked before the rules load, so a hook its host kills while loading them is still
 	// reported to the session's next judgment.
 	ctx = guard.BeginJudgment(ctx, guardCacheDir(""), req)
-	// The hook ignores --root and loads no workspace up front: the one it judges in is
-	// wherever the host runs it.
-	deps := guardDependencies(ctx, "")
-	stopJudge := traceFromContext(ctx).phase("guard.judge")
-	verdict := guard.Judge(trail.ContextWithEntryPoint(ctx, entry), deps, req)
-	stopJudge()
+	ctx = trail.ContextWithEntryPoint(ctx, entry)
+	base := guard.Dependencies{CacheDir: guardCacheDir(""), BinaryVersion: version}
+	base.Binary, _ = runningBinaryPath()
+	// The rules load inside the bound too: a magusfile's imports parse to the end however
+	// long they take.
+	verdict := guard.JudgeWithin(ctx, base, req, func(ctx context.Context) guard.Verdict {
+		// The hook ignores --root and loads no workspace up front: the one it judges in is
+		// wherever the host runs it.
+		deps := guardDependencies(ctx, "")
+		stopJudge := traceFromContext(ctx).phase("guard.judge")
+		defer stopJudge()
+		return guard.Judge(ctx, deps, req)
+	})
 	// -q and -s mean the exit code IS the answer, which this command can honor exactly
 	// because its whole output is one verdict. They bound a run's progress chatter
 	// everywhere else; here there is no progress, so suppressing the verdict is the only

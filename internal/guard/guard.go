@@ -635,12 +635,7 @@ func hostUnnamed() Verdict {
 // judgment itself once it has resolved the session.
 func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	started := begunJudgment(ctx)
-	hostTimeout := hookTimeout(sync.OnceValues(func() (time.Duration, bool) {
-		if deps.HostHookTimeout == nil || req.Host == "" {
-			return 0, false
-		}
-		return deps.HostHookTimeout(context.WithoutCancel(ctx), req.Host)
-	}))
+	hostTimeout := hookTimeout(noHookTimeout)
 	defer func() { started.end(time.Now(), hostTimeout) }()
 	if req.Form != "" && strings.TrimSpace(req.Host) == "" {
 		return hostUnnamed()
@@ -652,6 +647,14 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		ctx, cancel = WithHookDeadline(ctx)
 	}
 	defer cancel()
+	// Bounded by the judgment's own deadline, which has passed by the time the deferred end
+	// runs: a judgment that ran that long does not then wait on a workspace load to say so.
+	hostTimeout = boundedTimeout(ctx, func(ctx context.Context) (time.Duration, bool) {
+		if deps.HostHookTimeout == nil || req.Host == "" {
+			return 0, false
+		}
+		return deps.HostHookTimeout(ctx, req.Host)
+	})
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
 	input := req.Input

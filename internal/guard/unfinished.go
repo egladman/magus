@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egladman/magus/internal/hint"
@@ -32,6 +33,33 @@ const advisoryUnfinished hint.MarkerKind = "guard-unfinished"
 // judgment older than hookBudget: a host that gives up sooner than the guard's own budget
 // is one the guard cannot answer in time anyway.
 type hookTimeout func() (time.Duration, bool)
+
+// noHookTimeout is a host whose harness declares no hook timeout, or one not asked.
+func noHookTimeout() (time.Duration, bool) { return 0, false }
+
+// boundedTimeout asks lookup once, and only while ctx has time left: the answer opens the
+// workspace and loads the host's harness spell, seconds on a loaded machine, and a judgment
+// still waiting on it when its host gives up is the cut-off the mark exists to report. A
+// lookup that has not answered by ctx's end counts as no timeout declared.
+func boundedTimeout(ctx context.Context, lookup func(context.Context) (time.Duration, bool)) hookTimeout {
+	type declared struct {
+		d  time.Duration
+		ok bool
+	}
+	return sync.OnceValues(func() (time.Duration, bool) {
+		if ctx.Err() != nil {
+			return 0, false
+		}
+		got, err := awaitDeadline(ctx, func() (declared, error) {
+			d, ok := lookup(ctx)
+			return declared{d, ok}, nil
+		})
+		if err != nil {
+			return 0, false
+		}
+		return got.d, got.ok
+	})
+}
 
 // judgmentMark is the file one judgment keeps while it runs. Zero marks nothing.
 type judgmentMark struct {

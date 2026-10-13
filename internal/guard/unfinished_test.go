@@ -13,9 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// unknownTimeout is a host whose harness declares no hook timeout.
-func unknownTimeout() (time.Duration, bool) { return 0, false }
-
 // declaredTimeout is a host whose harness declares d.
 func declaredTimeout(d time.Duration) hookTimeout {
 	return func() (time.Duration, bool) { return d, true }
@@ -51,8 +48,8 @@ func TestAbandonedCountsEachUnfinishedJudgmentOnce(t *testing.T) {
 	hung := beginJudgment(cacheDir, "claude-code/s1", now.Add(-time.Minute))
 	markOwnedBy(t, cacheDir, "claude-code/s2", now.Add(-time.Minute), dead)
 
-	assert.Equal(t, 2, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, unknownTimeout))
-	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, unknownTimeout),
+	assert.Equal(t, 2, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, noHookTimeout))
+	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, noHookTimeout),
 		"a judgment still running is not taken to be abandoned by a host that declares no hook timeout")
 	assert.Equal(t, 0, beginJudgment(cacheDir, "claude-code/s1", now).abandoned(now, declaredTimeout(2*time.Minute)))
 	assert.Equal(t, 1, running.abandoned(now, declaredTimeout(10*time.Second)), "past the declared timeout")
@@ -63,7 +60,7 @@ func TestAbandonedCountsEachUnfinishedJudgmentOnce(t *testing.T) {
 func TestBeginJudgmentMarksNothingWithoutASessionKey(t *testing.T) {
 	assert.Equal(t, judgmentMark{}, beginJudgment(t.TempDir(), "", time.Now()))
 	assert.Equal(t, judgmentMark{}, beginJudgment("", "claude-code/s1", time.Now()))
-	assert.Equal(t, 0, judgmentMark{}.abandoned(time.Now(), unknownTimeout))
+	assert.Equal(t, 0, judgmentMark{}.abandoned(time.Now(), noHookTimeout))
 }
 
 // A judgment that answers while its host still waits removes its mark. One its host stopped
@@ -81,7 +78,7 @@ func TestEndKeepsTheMarkOfAJudgmentItsHostAbandoned(t *testing.T) {
 		"answered in time":                 {time.Second, declaredTimeout(10 * time.Second), false},
 		"past the declared timeout":        {10 * time.Second, declaredTimeout(10 * time.Second), true},
 		"inside a longer declared timeout": {15 * time.Second, declaredTimeout(time.Minute), false},
-		"slow, with no timeout declared":   {15 * time.Second, unknownTimeout, false},
+		"slow, with no timeout declared":   {15 * time.Second, noHookTimeout, false},
 	} {
 		m := beginJudgment(cacheDir, "claude-code/s1", now.Add(-c.ran))
 		m.end(now, c.timeout)
@@ -117,6 +114,31 @@ func TestJudgeReportsChecksThatNeverFinished(t *testing.T) {
 
 	again := Judge(ctx, Dependencies{}, Request{Host: "claude-code", Session: "s1", Input: "ls"})
 	assert.NotContains(t, again.Context, "never finished")
+}
+
+// The host's hook timeout is read off its harness, which opens the workspace. A judgment
+// asks only while its own deadline has time left, so a slow read never holds a verdict past
+// the bound its host is waiting on, and a check still running is then left uncounted.
+func TestJudgeStopsAskingTheHostTimeoutAtItsDeadline(t *testing.T) {
+	ctx, cacheDir := spawnFixture(t)
+	markOwnedBy(t, cacheDir, FactsKey("claude-code", "s1"), time.Now().Add(-time.Minute), os.Getpid())
+	release := make(chan struct{})
+	defer close(release)
+	deps := Dependencies{HostHookTimeout: func(context.Context, string) (time.Duration, bool) {
+		<-release
+		return 10 * time.Second, true
+	}}
+	ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
+	defer cancel()
+
+	done := make(chan Verdict, 1)
+	go func() { done <- Judge(ctx, deps, Request{Host: "claude-code", Session: "s1", Input: "ls"}) }()
+	select {
+	case v := <-done:
+		assert.NotContains(t, v.Context, "never finished")
+	case <-time.After(5 * time.Second):
+		t.Fatal("Judge waited on the host's hook timeout past its own deadline")
+	}
 }
 
 // BeginJudgment marks the judgment before any rule loads, keyed on the session an envelope

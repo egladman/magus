@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -76,6 +77,80 @@ func TestTimeRuleLoadLapsesOnlyAFailurePastTheDeadline(t *testing.T) {
 
 	_, unbounded, _ := TimeRuleLoad(t.Context(), load(failed))
 	assert.Equal(t, trail.Phase{Name: phaseLoadRules, ElapsedMs: unbounded.ElapsedMs}, unbounded)
+}
+
+// A judgment stuck where no deadline reaches still answers in time: past the hook's bound a
+// call that changes state is denied, one that only reads goes through with a note, and the
+// trail records the judgment as lapsed. The host got its answer, so the mark is ended.
+func TestJudgeWithinAnswersAStuckJudgmentByTheDeadline(t *testing.T) {
+	// A host's read tool, as the hook glue restates it.
+	read := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Read","tool_input":{"command":"sed -n 1,40p notes.txt"}}`
+	cases := map[string]struct {
+		req      Request
+		decision string
+		tool     string
+	}{
+		"a command that changes state": {Request{Input: "touch notes.txt"}, "deny", hookToolCommand},
+		"a file write":                 {Request{Input: "notes.txt", IsPath: true}, "deny", hookToolWrite},
+		"a command that reads":         {Request{Input: "ls -la"}, "advise", hookToolCommand},
+		"a host's read":                {Request{Input: read}, "advise", hookToolCommand},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx, cacheDir := spawnFixture(t)
+			ctx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			defer cancel()
+			release := make(chan struct{})
+			defer close(release)
+			req := c.req
+			req.Host, req.Session = "claude-code", "s1"
+
+			start := time.Now()
+			v := JudgeWithin(ctx, Dependencies{}, req, func(context.Context) Verdict {
+				<-release
+				return Verdict{Decision: decisionPass}
+			})
+			assert.Less(t, time.Since(start), 2*time.Second)
+			assert.Equal(t, verdictWithRule(c.decision, string(advisoryUnfinished)), unworded(v))
+			if c.decision == "deny" {
+				assert.Contains(t, v.Reason, "the guard's judgment did not finish within 7s. A call that changes state is denied rather than let through unjudged; retry it.")
+			} else {
+				assert.Equal(t, unjudgedNote, v.Context)
+			}
+
+			rows := trailEvents(t, cacheDir, trail.KindAgentCommand)
+			require.Len(t, rows, 1)
+			assert.Equal(t, c.tool, rows[0].Action)
+			require.NotEmpty(t, rows[0].Phases)
+			assert.Equal(t, phaseAnswer, rows[0].Phases[0].Name)
+			assert.True(t, rows[0].Phases[0].Lapsed)
+			assert.Equal(t, hookBudget.Milliseconds(), rows[0].Phases[0].BudgetMs)
+
+			entries, err := os.ReadDir(filepath.Join(cacheDir, unfinishedDir))
+			require.NoError(t, err)
+			for _, e := range entries {
+				marks, err := os.ReadDir(filepath.Join(cacheDir, unfinishedDir, e.Name()))
+				require.NoError(t, err)
+				assert.Empty(t, marks, "the host was answered, so no later check reports this one")
+			}
+		})
+	}
+}
+
+// A judgment that answers in time is the verdict, and a dry run is judged to the end.
+func TestJudgeWithinKeepsAJudgmentThatAnswersBeforeTheDeadline(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	want := Verdict{Decision: decisionAdvise, Context: "judged"}
+	judge := func(context.Context) Verdict { return want }
+	assert.Equal(t, want, JudgeWithin(ctx, Dependencies{}, Request{Input: "ls", Host: "claude-code", Session: "s1"}, judge))
+
+	short, cancel := context.WithTimeout(ctx, time.Millisecond)
+	defer cancel()
+	slow := func(context.Context) Verdict {
+		time.Sleep(700 * time.Millisecond)
+		return want
+	}
+	assert.Equal(t, want, JudgeWithin(short, Dependencies{}, Request{Input: "ls", DryRun: true}, slow))
 }
 
 // A lapse is worded against its budget, rounded for a reader, or as having had none.
