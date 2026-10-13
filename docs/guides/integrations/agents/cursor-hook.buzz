@@ -24,10 +24,10 @@
 // Read and the Write after it), and the after-call event answers from that file without
 // asking magus again: one call, one row in the activity trail.
 //
-// The shell is gated on preToolUse, whose updated_input Cursor applies: a command
-// that passes runs with stdin closed and MAGUS_LOG_SILENT set, the same rewrite Claude
-// Code gets. beforeShellExecution then sees the rewritten line and lets it through
-// unjudged; it judges only a command preToolUse never saw.
+// The shell is gated on preToolUse and the command runs exactly as Cursor sent it: Cursor
+// already gives a command empty stdin, and magus does not rewrite what a host sends.
+// beforeShellExecution then lets the line through unjudged; it judges only a command
+// preToolUse never saw.
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
@@ -87,10 +87,6 @@ final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was 
 final AGENT_NAME = "--agent-name";
 final REPORTS_SKILLS = "--reports-skills";
 
-// Prefixed to every shell command that passes. An export rather than a `NAME=value`
-// prefix, which would reach only the first command of the line.
-final SILENT_PREFIX = "export MAGUS_LOG_SILENT=true; ";
-
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";
 
@@ -110,7 +106,6 @@ object Verdict {
     decision: str,
     reason: str,
     context: str,
-    updatedCommand: str,
 }
 
 // Scope is the attribution one event shares across every judgment it makes.
@@ -395,7 +390,6 @@ fun parseVerdict(stdout: str) > Verdict? {
         decision = decision,
         reason = hook\field(parsed, dotPath: "reason"),
         context = hook\field(parsed, dotPath: "context"),
-        updatedCommand = hook\field(parsed, dotPath: "updated_command"),
     };
 }
 
@@ -411,17 +405,13 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
 }
 
 // verdict asks magus about one call, or returns null when it could not answer. ask is
-// whether the reply can put an ask in front of the person, which only a gating event can;
-// rewrites is whether the reply hands Cursor an updated command.
-fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, rewrites: bool, family: str) > Verdict? {
+// whether the reply can put an ask in front of the person, which only a gating event can.
+fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, family: str) > Verdict? {
     final guard = Guard{ bin = scope.bin, payload = payload };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
-    final newest = mut [<str>];
-    foreach (word in attributed) { newest.append(word); }
-    if (rewrites) { newest.append("--rewrites-input"); }
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
-    final answer = judged(guard, attempts: [newest, attributed, bare], family: family, session: scope.session);
+    final answer = judged(guard, attempts: [attributed, bare], family: family, session: scope.session);
     if (answer == "") { return null; }
     final got = parseVerdict(answer);
     if (got == null and hook\noticeOnce(scope.session, family: "unreadable-verdict", file: "cursor-hook.buzz")) {
@@ -434,7 +424,7 @@ fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, rewrites: bool,
 // prompt. Pass and advise both allow, because a gating event has no context field; the
 // advice waits for the after-call event. A decision this file does not know is refused,
 // so a copy older than the guard contract cannot read a new verdict as consent.
-fun gateReply(v: Verdict, updated: {str: any}?) > str {
+fun gateReply(v: Verdict) > str {
     if (v.decision == "deny" or v.decision == "ask") {
         return json\stringify({
             "permission": v.decision,
@@ -442,10 +432,7 @@ fun gateReply(v: Verdict, updated: {str: any}?) > str {
             "agent_message": v.reason,
         }) catch ALLOW;
     }
-    if (v.decision == "pass" or v.decision == "advise") {
-        if (updated == null) { return ALLOW; }
-        return json\stringify({"permission": "allow", "updated_input": updated!}) catch ALLOW;
-    }
+    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
     return json\stringify({
         "permission": "deny",
         "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
@@ -464,19 +451,18 @@ fun fileVerdict(scope: Scope, event: any?, v: Verdict) > void {
 }
 
 fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, rewrites: false, family: family);
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, family: family);
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
-    return gateReply(v!, updated: null);
+    return gateReply(v!);
 }
 
-// gateShell judges a shell command on preToolUse and, when it passes, hands Cursor the
-// command it runs instead. The line beforeShellExecution will see is marked as judged.
+// gateShell judges a shell command on preToolUse. The line beforeShellExecution will see
+// is marked as judged.
 fun gateShell(scope: Scope, event: any?) > str {
-    final input = (hook\dig(event, dotPath: "tool_input") as? {str: any}) ?? {<str: any>};
-    final command = hook\field(input, dotPath: "command");
+    final command = hook\field(event, dotPath: "tool_input.command");
     if (command == "") { return ALLOW; }
-    final v = verdict(scope, payload: command, asPath: false, ask: true, rewrites: true, family: "failed-command");
+    final v = verdict(scope, payload: command, asPath: false, ask: true, family: "failed-command");
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
     if (v!.decision == "ask") {
@@ -484,19 +470,14 @@ fun gateShell(scope: Scope, event: any?) > str {
         // beforeShellExecution as typed.
         remember("shell", parts: [scope.session, command], value: "");
     }
-    if (v!.decision != "pass" and v!.decision != "advise") { return gateReply(v!, updated: null); }
-    var line = command;
-    if (v!.updatedCommand != "") { line = v!.updatedCommand; }
-    if (!line.startsWith(SILENT_PREFIX)) { line = SILENT_PREFIX + line; }
-    final updated = mut {<str: any>};
-    foreach (name, value in input) { updated[name] = value; }
-    updated["command"] = line;
-    remember("shell", parts: [scope.session, line], value: "");
-    return gateReply(v!, updated: updated);
+    if (v!.decision == "pass" or v!.decision == "advise") {
+        remember("shell", parts: [scope.session, command], value: "");
+    }
+    return gateReply(v!);
 }
 
 fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, rewrites: false, family: family);
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, family: family);
     if (v == null or v!.decision != "advise") { return ""; }
     return v!.context;
 }
@@ -543,12 +524,12 @@ fun gateMcp(scope: Scope, event: any?) > str {
     if (payload == "") {
         return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
     }
-    final v = verdict(scope, payload: payload, asPath: false, ask: true, rewrites: false, family: "failed-mcp");
+    final v = verdict(scope, payload: payload, asPath: false, ask: true, family: "failed-mcp");
     if (v == null) { return ALLOW; }
     var context = "";
     if (v!.decision == "advise") { context = v!.context; }
     remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
-    return gateReply(v!, updated: null);
+    return gateReply(v!);
 }
 
 // brief is the capped `magus session --brief`, or "" when there is none or it is over
@@ -613,8 +594,7 @@ fun afterCall(scope: Scope, event: any?) > str {
         final held = recall("verdict", parts: [scope.session, id, tool]);
         if (held != null) { return held!; }
     }
-    var command = hook\field(event, dotPath: "tool_input.command");
-    if (command.startsWith(SILENT_PREFIX)) { command = command.sub(SILENT_PREFIX.len()); }
+    final command = hook\field(event, dotPath: "tool_input.command");
     if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
     final search = searchCommand(event);
     if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }

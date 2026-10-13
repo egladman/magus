@@ -1,6 +1,6 @@
 ---
 title: Cursor
-description: Wiring magus into Cursor (AGENTS.md for guidance, one hook script for its wired events, the reply check on stop, and what Cursor's contract cannot express).
+description: Wiring magus into Cursor (AGENTS.md for guidance, one hook script for its wired events, the opt-in reply check on stop, and what Cursor's contract cannot express).
 tags: [agents, cursor, AGENTS.md, guard, hooks]
 ---
 
@@ -9,16 +9,17 @@ tags: [agents, cursor, AGENTS.md, guard, hooks]
 Cursor reads an `AGENTS.md` at the repository root and Agent Skills from
 `.agents/skills`, `.cursor/skills` and `.claude/skills`, and it runs hooks as
 programs with the event on stdin. One self-contained script covers every event
-magus uses bar `stop`, which runs the separate reply check, so installing the
-guard is a single download.
+magus uses, so installing the guard is a single download. The reply check on
+`stop` is a separate script you wire on purpose; magus does not ship it in the
+hook config.
 
 | what            | where                                                                          |
 | --------------- | ------------------------------------------------------------------------------ |
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it)                       |
 | skills          | `.agents/skills`, short and full forms                                         |
 | guard wiring    | `.cursor/hooks.json`                                                           |
-| quiet output    | the guard prefixes each shell command it passes with `MAGUS_LOG_SILENT=true`   |
-| shell commands  | `preToolUse`: deny and advise reach the model; stdin closed on a pass          |
+| quiet output    | not set: Cursor has no env setting and the guard rewrites no command           |
+| shell commands  | `preToolUse`: deny and advise reach the model; the command runs as sent        |
 | file writes     | deny and advise both reach the model                                           |
 | MCP calls       | `beforeMCPExecution` (deny/ask), advise on `postToolUse`                       |
 | failed calls    | `postToolUseFailure` carries the call's advice                                 |
@@ -28,7 +29,7 @@ guard is a single download.
 | your messages   | `beforeSubmitPrompt`, recorded and always let through (not under `-p`)         |
 | skill loads     | the `Read` of a `SKILL.md` on `preToolUse`, with `--reports-skills`            |
 | subagent spawns | `preToolUse` (`Task`), judged as a spawn                                       |
-| reply check     | `stop`, a `followup_message` that Cursor submits as another turn (not `-p`)    |
+| reply check     | opt-in: `stop`, a `followup_message` Cursor submits as another turn (not `-p`) |
 | scout agent     | `.cursor/agents/magus-scout.md`, `readonly: true`                              |
 | session load    | [`magus-session-load-cursor.buzz`](session-load.md#cursor)                     |
 | MCP             | [MCP](../mcp.md)                                                               |
@@ -87,10 +88,10 @@ start Magus solely to obtain tools.
 `MAGUS_LOG_SILENT=true` is `-s` on every magus command: verdicts, refs and failures,
 without each reason or a wait note under a minute. Cursor has no setting for the
 environment of the commands its agent runs, and the `env` a `sessionStart` reply
-carries reaches later hooks only. So `.cursor/hooks.json` sets nothing; instead
-the guard's `preToolUse` reply rewrites every shell command it passes to start
-with `export MAGUS_LOG_SILENT=true;`. Cursor runs the rewritten command:
-probed on cursor-agent 2026.10.01, where `echo $MAGUS_LOG_SILENT` printed `true`.
+carries reaches later hooks only. So `.cursor/hooks.json` sets nothing, and the
+guard hands every shell command back as Cursor sent it: magus does not transform
+what a host sends. To quiet magus there, set `MAGUS_LOG_SILENT=true` in the
+environment that starts Cursor.
 
 ## Guard hook
 
@@ -155,14 +156,13 @@ and points every event at that copy, name included:
     "preCompact": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
     "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }],
-    "stop": [{ "command": "magus buzz -s .cursor/hooks/proofread-reply.buzz -- --agent-name cursor", "timeout": 10, "loop_limit": 1 }]
+    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor --reports-skills", "timeout": 10 }]
   }
 }
 ```
 
-The `stop` entry is the one that runs a second script, [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz),
-described under [Judging the reply a turn ends with](#judging-the-reply-a-turn-ends-with).
+The reply check is a second script, [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz),
+that you add on purpose; see [Judging the reply a turn ends with](#judging-the-reply-a-turn-ends-with).
 
 It is deliberately self-contained rather than delegating to the shared
 templates: needing five files to install a guard is how a guard ends up not
@@ -184,13 +184,12 @@ as on every other host. The tool name is part of the key because Cursor reuses o
 2026.10.01). A filed verdict whose after-call event never came is removed after a
 day.
 
-The shell is gated on `preToolUse`, because that reply can rewrite the command and
-`beforeShellExecution`'s cannot. A command that passes comes back as
-`export MAGUS_LOG_SILENT=true; exec </dev/null; <command>` in `updated_input`, the
-stdin rewrite Claude Code gets, and Cursor runs that line; three commands in a row
-ran in one probe, so the persistent shell survives the `exec`. `beforeShellExecution`
-then sees the rewritten line, recognizes it as already judged, and allows it; it
-judges only a command `preToolUse` never saw, which keeps it as the fallback.
+The shell is gated on `preToolUse`, and a command that passes runs exactly as Cursor
+sent it. Cursor already gives a command empty stdin (probed live), so the stdin
+rewrite Claude Code gets has nothing to do here, and magus does not transform what a
+host sends. `beforeShellExecution` then sees the same line, recognizes it as already
+judged, and allows it; it judges only a command `preToolUse` never saw, which keeps
+it as the fallback.
 
 A push at a commit no passing gate covers gets the verdict `ask`, and
 `preToolUse` answers `permission: "ask"`: Cursor shows you the reason,
@@ -243,10 +242,10 @@ script also accepts `file_path`.
 // Read and the Write after it), and the after-call event answers from that file without
 // asking magus again: one call, one row in the activity trail.
 //
-// The shell is gated on preToolUse, whose updated_input Cursor applies: a command
-// that passes runs with stdin closed and MAGUS_LOG_SILENT set, the same rewrite Claude
-// Code gets. beforeShellExecution then sees the rewritten line and lets it through
-// unjudged; it judges only a command preToolUse never saw.
+// The shell is gated on preToolUse and the command runs exactly as Cursor sent it: Cursor
+// already gives a command empty stdin, and magus does not rewrite what a host sends.
+// beforeShellExecution then lets the line through unjudged; it judges only a command
+// preToolUse never saw.
 //
 // Grep, Glob, and Read never reach beforeShellExecution. They are restated as
 // the shell commands the guard already judges, and gated on preToolUse, because
@@ -306,10 +305,6 @@ final UNNAMED = "[MGS3024] this hook was not given --agent-name, so nothing was 
 final AGENT_NAME = "--agent-name";
 final REPORTS_SKILLS = "--reports-skills";
 
-// Prefixed to every shell command that passes. An export rather than a `NAME=value`
-// prefix, which would reach only the first command of the line.
-final SILENT_PREFIX = "export MAGUS_LOG_SILENT=true; ";
-
 // How Cursor names an MCP call on preToolUse and postToolUse.
 final MCP_TOOL_PREFIX = "MCP:";
 
@@ -329,7 +324,6 @@ object Verdict {
     decision: str,
     reason: str,
     context: str,
-    updatedCommand: str,
 }
 
 // Scope is the attribution one event shares across every judgment it makes.
@@ -614,7 +608,6 @@ fun parseVerdict(stdout: str) > Verdict? {
         decision = decision,
         reason = hook\field(parsed, dotPath: "reason"),
         context = hook\field(parsed, dotPath: "context"),
-        updatedCommand = hook\field(parsed, dotPath: "updated_command"),
     };
 }
 
@@ -630,17 +623,13 @@ fun shellArgs(scope: Scope, asPath: bool, ask: bool) > [str] {
 }
 
 // verdict asks magus about one call, or returns null when it could not answer. ask is
-// whether the reply can put an ask in front of the person, which only a gating event can;
-// rewrites is whether the reply hands Cursor an updated command.
-fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, rewrites: bool, family: str) > Verdict? {
+// whether the reply can put an ask in front of the person, which only a gating event can.
+fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, family: str) > Verdict? {
     final guard = Guard{ bin = scope.bin, payload = payload };
     final attributed = shellArgs(scope, asPath: asPath, ask: ask);
-    final newest = mut [<str>];
-    foreach (word in attributed) { newest.append(word); }
-    if (rewrites) { newest.append("--rewrites-input"); }
     final bare = mut ["-o", "json"];
     if (asPath) { bare.append("--path"); }
-    final answer = judged(guard, attempts: [newest, attributed, bare], family: family, session: scope.session);
+    final answer = judged(guard, attempts: [attributed, bare], family: family, session: scope.session);
     if (answer == "") { return null; }
     final got = parseVerdict(answer);
     if (got == null and hook\noticeOnce(scope.session, family: "unreadable-verdict", file: "cursor-hook.buzz")) {
@@ -653,7 +642,7 @@ fun verdict(scope: Scope, payload: str, asPath: bool, ask: bool, rewrites: bool,
 // prompt. Pass and advise both allow, because a gating event has no context field; the
 // advice waits for the after-call event. A decision this file does not know is refused,
 // so a copy older than the guard contract cannot read a new verdict as consent.
-fun gateReply(v: Verdict, updated: {str: any}?) > str {
+fun gateReply(v: Verdict) > str {
     if (v.decision == "deny" or v.decision == "ask") {
         return json\stringify({
             "permission": v.decision,
@@ -661,10 +650,7 @@ fun gateReply(v: Verdict, updated: {str: any}?) > str {
             "agent_message": v.reason,
         }) catch ALLOW;
     }
-    if (v.decision == "pass" or v.decision == "advise") {
-        if (updated == null) { return ALLOW; }
-        return json\stringify({"permission": "allow", "updated_input": updated!}) catch ALLOW;
-    }
+    if (v.decision == "pass" or v.decision == "advise") { return ALLOW; }
     return json\stringify({
         "permission": "deny",
         "user_message": "magus guard returned the decision {v.decision}, which this hook does not know. Update docs/guides/integrations/agents/cursor-hook.buzz from the magus docs.",
@@ -683,19 +669,18 @@ fun fileVerdict(scope: Scope, event: any?, v: Verdict) > void {
 }
 
 fun gateCall(scope: Scope, event: any?, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, rewrites: false, family: family);
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: true, family: family);
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
-    return gateReply(v!, updated: null);
+    return gateReply(v!);
 }
 
-// gateShell judges a shell command on preToolUse and, when it passes, hands Cursor the
-// command it runs instead. The line beforeShellExecution will see is marked as judged.
+// gateShell judges a shell command on preToolUse. The line beforeShellExecution will see
+// is marked as judged.
 fun gateShell(scope: Scope, event: any?) > str {
-    final input = (hook\dig(event, dotPath: "tool_input") as? {str: any}) ?? {<str: any>};
-    final command = hook\field(input, dotPath: "command");
+    final command = hook\field(event, dotPath: "tool_input.command");
     if (command == "") { return ALLOW; }
-    final v = verdict(scope, payload: command, asPath: false, ask: true, rewrites: true, family: "failed-command");
+    final v = verdict(scope, payload: command, asPath: false, ask: true, family: "failed-command");
     if (v == null) { return ALLOW; }
     fileVerdict(scope, event: event, v: v!);
     if (v!.decision == "ask") {
@@ -703,19 +688,14 @@ fun gateShell(scope: Scope, event: any?) > str {
         // beforeShellExecution as typed.
         remember("shell", parts: [scope.session, command], value: "");
     }
-    if (v!.decision != "pass" and v!.decision != "advise") { return gateReply(v!, updated: null); }
-    var line = command;
-    if (v!.updatedCommand != "") { line = v!.updatedCommand; }
-    if (!line.startsWith(SILENT_PREFIX)) { line = SILENT_PREFIX + line; }
-    final updated = mut {<str: any>};
-    foreach (name, value in input) { updated[name] = value; }
-    updated["command"] = line;
-    remember("shell", parts: [scope.session, line], value: "");
-    return gateReply(v!, updated: updated);
+    if (v!.decision == "pass" or v!.decision == "advise") {
+        remember("shell", parts: [scope.session, command], value: "");
+    }
+    return gateReply(v!);
 }
 
 fun advice(scope: Scope, payload: str, asPath: bool, family: str) > str {
-    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, rewrites: false, family: family);
+    final v = verdict(scope, payload: payload, asPath: asPath, ask: false, family: family);
     if (v == null or v!.decision != "advise") { return ""; }
     return v!.context;
 }
@@ -762,12 +742,12 @@ fun gateMcp(scope: Scope, event: any?) > str {
     if (payload == "") {
         return denyBoth("magus guard: beforeMCPExecution missing mcp_server_name or tool_name; refusing rather than guessing");
     }
-    final v = verdict(scope, payload: payload, asPath: false, ask: true, rewrites: false, family: "failed-mcp");
+    final v = verdict(scope, payload: payload, asPath: false, ask: true, family: "failed-mcp");
     if (v == null) { return ALLOW; }
     var context = "";
     if (v!.decision == "advise") { context = v!.context; }
     remember("mcp", parts: mcpKey(scope, tool: hook\field(event, dotPath: "tool_name"), event: event), value: context);
-    return gateReply(v!, updated: null);
+    return gateReply(v!);
 }
 
 // brief is the capped `magus session --brief`, or "" when there is none or it is over
@@ -832,8 +812,7 @@ fun afterCall(scope: Scope, event: any?) > str {
         final held = recall("verdict", parts: [scope.session, id, tool]);
         if (held != null) { return held!; }
     }
-    var command = hook\field(event, dotPath: "tool_input.command");
-    if (command.startsWith(SILENT_PREFIX)) { command = command.sub(SILENT_PREFIX.len()); }
+    final command = hook\field(event, dotPath: "tool_input.command");
     if (command != "") { return advice(scope, payload: command, asPath: false, family: "failed-command"); }
     final search = searchCommand(event);
     if (search != "") { return advice(scope, payload: search, asPath: false, family: "failed-search"); }
@@ -1061,9 +1040,22 @@ coming back needs.
 
 ## Judging the reply a turn ends with
 
-`stop` runs [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) with
-`--agent-name cursor`, which runs the `proofread` binary over the turn's last
-reply. Cursor's `stop` event carries `status`, `loop_count` and `transcript_path`
+Nothing here is wired by default: the reply check judges your agent's replies with
+the `proofread` binary, which is a choice, not part of the guard. To turn it on, download
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add this entry to
+`.cursor/hooks.json`:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "stop": [{ "command": "magus buzz -s .cursor/hooks/proofread-reply.buzz -- --agent-name cursor", "timeout": 10, "loop_limit": 1 }]
+  }
+}
+```
+
+`stop` then runs the script with `--agent-name cursor`, which runs the `proofread`
+binary over the turn's last reply. Cursor's `stop` event carries `status`, `loop_count` and `transcript_path`
 and no reply text, so the script reads the reply out of the transcript: the last
 assistant message that has text, stopping at the last user message. When there are
 findings it prints `{"followup_message": "..."}`, which Cursor submits as another
@@ -1107,10 +1099,11 @@ Every claim below that cites a probe was run against cursor-agent 2026.10.01
 (`~/.local/bin/cursor-agent -p`) with logging hooks in a scratch workspace; the rest
 cite [Cursor hooks](https://cursor.com/docs/agent/hooks).
 
-**Eleven of Cursor's twenty-one hook events are wired.** `sessionStart`,
+**Ten of Cursor's twenty-one hook events are wired.** `sessionStart`,
 `beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, `postToolUse`,
-`postToolUseFailure`, `preCompact`, `subagentStart`, `sessionEnd`,
-`beforeSubmitPrompt` and `stop`. The rest are not, for these reasons:
+`postToolUseFailure`, `preCompact`, `subagentStart`, `sessionEnd` and
+`beforeSubmitPrompt`. `stop` carries the opt-in reply check and nothing by default.
+The rest are not wired, for these reasons:
 
 - `subagentStop` carries `summary`, `modified_files` and `agent_transcript_path`
   and names no subagent id (Cursor hooks), and it never fired in the probe below.
@@ -1124,12 +1117,12 @@ cite [Cursor hooks](https://cursor.com/docs/agent/hooks).
 
 **Hook all eighteen agent events at once and a run can die.** With every agent
 event hooked, cursor-agent runs sometimes ended `Connection lost ...
-WritableIterable is closed` (probed); the eleven above have not shown it.
+WritableIterable is closed` (probed); the ten above have not shown it.
 
 **`-p` fires no turn events.** Under `cursor-agent -p`, `sessionStart` and
 `sessionEnd` fired and `beforeSubmitPrompt`, `stop` and `afterAgentResponse` did
 not (probed). So a headless run records none of your messages and gets no reply
-check; an interactive session does both.
+check if you wired one; an interactive session does both.
 
 **`subagentStart` never fires in the CLI.** With `subagentStart` and `subagentStop`
 hooked, a `Task` ran a child to completion and neither fired; neither did
