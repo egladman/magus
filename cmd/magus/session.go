@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent/model"
 	"github.com/egladman/magus/internal/guard"
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
@@ -899,6 +900,9 @@ type sessionShowOutput struct {
 	// when the trail here holds nothing for it, which is the case for a session that ran
 	// in another worktree.
 	Trail *trail.SessionTrail `json:"trail,omitempty"`
+	// Cost is what the session's context and spawns cost. The sections the trail could not
+	// measure are named in its not_measured map rather than left out or zeroed.
+	Cost *sessionCost `json:"cost,omitempty"`
 }
 
 // sessionTrailEvents bounds the trail walk behind the join: recent work is what a reader
@@ -913,7 +917,8 @@ func sessionShow(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Report one loaded session: what it ran grouped by program, what today's")
 			fmt.Fprintln(os.Stderr, "guard rules say about each command, which skills it loaded, and which")
-			fmt.Fprintln(os.Stderr, "files it read and wrote.")
+			fmt.Fprintln(os.Stderr, "files it read and wrote, and what its context and spawns cost. A cost")
+			fmt.Fprintln(os.Stderr, "section the guard trail could not measure says so.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "The id is a host session id, listed by `magus session ls`. Sessions")
 			fmt.Fprintln(os.Stderr, "arrive here through `magus session load`.")
@@ -948,6 +953,7 @@ func sessionShow(root string, args []string) error {
 
 	out := summarizeSession(rest[0], events)
 	out.Trail = sessionTrailHere(root, rest[0])
+	out.Cost = summarizeCost(out.Trail, nil, model.Shipped().Merge(globalCfg.Agents.ModelOverrides()))
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
@@ -1119,6 +1125,9 @@ func renderSessionShow(w io.Writer, s sessionShowOutput) {
 			fmt.Fprintf(w, "  model %s", model)
 			fmt.Fprintf(w, "  %s\n", sp.At.Format("2006-01-02 15:04:05"))
 		}
+	}
+	if s.Cost != nil {
+		renderCost(w, s.Cost)
 	}
 }
 
