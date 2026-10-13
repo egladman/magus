@@ -28,54 +28,108 @@ type Metrics struct {
 
 var anySpan = regexp.MustCompile("`+[^`]*`+")
 
-// Measure returns the metrics of text read as kind. Only prose is measured:
-// front matter, fenced and indented code, tables, HTML, link targets, URLs and
-// headings are dropped, and each code span counts as one word of one
-// syllable, since a span inflates the grade when its identifiers are counted
-// as words. A sentence ends at a word closing with '.', '!' or '?', or at the
-// end of its paragraph or list item.
-func Measure(text string, kind Kind) Metrics {
+// codeWord stands in for a masked code span: one word of one syllable that no
+// sentence ends on, and that the shape measures can tell from the prose word
+// "code".
+const codeWord = "`code`"
+
+func maskSpans(s string) string { return anySpan.ReplaceAllString(s, " "+codeWord+" ") }
+
+// Measure returns the metrics of text read as kind. Only prose is measured,
+// read as [JudgeText] reads it for the rules: a Markdown kind drops front
+// matter, fenced and indented code, tables, HTML, link targets, URLs, what a
+// platform wrote and headings, and a titled kind's first line is a sentence of
+// its own. A doc comment, a message, help text and a tool description are
+// plain text that drops indented code and URLs alone. Each code span counts as
+// one word of one syllable, since a span inflates the grade when its
+// identifiers are counted as words. A sentence ends at a word closing with
+// '.', '!' or '?', or at the end of its paragraph or list item.
+func Measure(text string, kind Kind) Metrics { return measure(readKind(text, kind)) }
+
+// readKind returns the paragraphs and list items of text read as kind, the one
+// reading [Measure], [MeasureShape] and the voice measures share. Headings
+// stay in, marked, for the measures that count them.
+func readKind(text string, kind Kind) []paragraph {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
-	var prose []proseLine
+	switch kind {
+	case KindDocComment, KindMessage, KindCLIHelp, KindToolDescription:
+		for i, ln := range raw {
+			raw[i] = bareURL.ReplaceAllString(ln, "")
+		}
 
-	if kind == KindDocComment {
-		prose = readProse(raw, false)
-	} else {
-		lines := markdownProse(raw, kind != KindChangeDescription && kind != KindReviewReply)
-		wrapCodeSpans(lines)
-		prose = readProse(lines, true)
+		return paragraphs(readProse(raw, false), keep)
 	}
 
-	mask := func(s string) string { return anySpan.ReplaceAllString(s, " code ") }
+	_, prose := readMarkdown(blankBoilerplate(raw), kind)
 
+	return paragraphs(prose, keep)
+}
+
+// readMarkdown reads raw, its boilerplate already blanked, as kind's Markdown:
+// the lines with everything but prose blanked, and the prose they hold.
+func readMarkdown(raw []string, kind Kind) ([]string, []proseLine) {
+	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
+	wrapCodeSpans(lines)
+	prose := readProse(lines, kind != KindCommitMessage)
+
+	if titled(kind) {
+		// The title is a paragraph of its own, however close the description
+		// starts below it.
+		for i := range prose {
+			if prose[i].line > 1 {
+				prose[i].opens, prose[i].paragraph = true, true
+
+				break
+			}
+		}
+	}
+
+	return lines, prose
+}
+
+// splitSentences splits one paragraph's masked text into sentences of words.
+func splitSentences(text string) [][]string {
+	var out [][]string
+
+	var sentence []string
+
+	for _, token := range strings.Fields(text) {
+		if countWords(token) == 0 {
+			continue
+		}
+
+		sentence = append(sentence, token)
+
+		if endsSentence(token) {
+			out = append(out, sentence)
+			sentence = nil
+		}
+	}
+
+	if len(sentence) > 0 {
+		out = append(out, sentence)
+	}
+
+	return out
+}
+
+func measure(paras []paragraph) Metrics {
 	var m Metrics
 
 	var lengths []int
 
-	for _, para := range paragraphs(prose, keep) {
+	for _, para := range paras {
 		if para.head.heading {
 			continue
 		}
 
-		var n int
+		for _, sentence := range splitSentences(maskSpans(para.text)) {
+			lengths = append(lengths, len(sentence))
 
-		for _, token := range strings.Fields(mask(para.text)) {
-			if !strings.ContainsFunc(token, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
-				continue
+			for _, word := range sentence {
+				m.Syllables += Syllables(word)
 			}
-
-			n++
-			m.Syllables += Syllables(token)
-
-			if endsSentence(token) {
-				lengths = append(lengths, n)
-				n = 0
-			}
-		}
-
-		if n > 0 {
-			lengths = append(lengths, n)
 		}
 	}
 

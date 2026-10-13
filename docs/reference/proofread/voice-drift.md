@@ -20,7 +20,7 @@ the dimension of its rule, the cost it names to the reader.
 
 ## Why
 
-Runs only with a voice file, which proofread voice build measures from the author's own texts. A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one text in five drifts on any one feature by construction, and a finding needs two. A study of one author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 commits: two or more features over range fired on 9 percent of that author's descriptions against 66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of commits. Those rates are in-sample and count p90 alone, and no firing has been labeled, so the rule advises.
+Runs only with a voice file, which proofread voice build measures from the author's own texts. A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one text in five drifts on any one feature by construction, and a finding needs two. A study of one author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 commits: two or more features over p90 fired on 9 percent of that author's descriptions against 66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of commits. Those rates are in-sample and count only features over p90, while the rule counts a feature under p10 too, so on the same texts it fires at least that often, on the author's and the agent's alike. No firing has been labeled, so the rule advises.
 
 ## Default decision
 

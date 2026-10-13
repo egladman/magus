@@ -54,21 +54,7 @@ func judgeText(text string, kind Kind, o options) []Finding {
 	}
 
 	raw = blankBoilerplate(raw)
-	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
-	wrapCodeSpans(lines)
-	prose := readProse(lines, kind != KindCommitMessage)
-
-	if titled(kind) {
-		// The title is a paragraph of its own, however close the description
-		// starts below it.
-		for i := range prose {
-			if prose[i].line > 1 {
-				prose[i].opens, prose[i].paragraph = true, true
-
-				break
-			}
-		}
-	}
+	lines, prose := readMarkdown(raw, kind)
 
 	return run(input{kind: kind, prose: prose, lines: lines, source: raw, opts: o})
 }

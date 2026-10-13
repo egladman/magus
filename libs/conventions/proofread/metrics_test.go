@@ -45,6 +45,42 @@ func TestMeasureEndsASentenceAtItsParagraphOrItem(t *testing.T) {
 	}
 }
 
+func TestMeasureReadsEachKindAsJudgeTextDoes(t *testing.T) {
+	cases := map[string]struct {
+		kind             Kind
+		text             string
+		words, sentences int
+	}{
+		"a change description's title is a sentence of its own": {
+			KindChangeDescription, "Add the cache\nIt reads the graph once.", 8, 2,
+		},
+		"a change description drops what a platform wrote": {
+			KindChangeDescription,
+			"Add the cache\n\nIt reads the graph once.\n\nYou can make the agent smarter by setting up custom instructions today.",
+			8, 2,
+		},
+		"a change description has no front matter": {KindChangeDescription, "---\nnote: kept\n---\nThe map races.", 5, 2},
+		"a review reply has no front matter":       {KindReviewReply, "---\nnote: kept\n---\nThe map races.", 5, 2},
+		"a review reply reads a heading":           {KindReviewReply, "## Heads up\n\nThe map races.", 3, 1},
+		"a reference drops front matter":           {KindReference, "---\nnote: dropped\n---\nThe map races.", 3, 1},
+		"a commit message reads no heading":        {KindCommitMessage, "Fix the race\n\n# Notes on it\n\nThe map races.", 9, 3},
+		"a commit message subject is a sentence":   {KindCommitMessage, "Fix the race\nThe map races.", 6, 2},
+		"a doc comment drops indented code and URLs": {
+			KindDocComment, "F runs it. See https://example.com/a/b.\n\n\tcode block here\n", 4, 2,
+		},
+		"a doc comment keeps Markdown it does not read": {KindDocComment, "## F runs it.", 3, 1},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := Measure(tc.text, tc.kind)
+			if got.Words != tc.words || got.Sentences != tc.sentences {
+				t.Errorf("Measure = %d words in %d sentences, want %d in %d", got.Words, got.Sentences, tc.words, tc.sentences)
+			}
+		})
+	}
+}
+
 func TestMeasureOfNoProseIsZero(t *testing.T) {
 	if got := Measure("```\ncode\n```\n", KindReference); got != (Metrics{}) {
 		t.Errorf("Measure = %+v, want zero", got)

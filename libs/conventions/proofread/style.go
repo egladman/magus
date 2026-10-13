@@ -296,10 +296,12 @@ var voiceTexts = map[Rule]ruleText{
 			"A feature drifts when the text measures under its p10 or over its p90 for the kind, so about one " +
 			"text in five drifts on any one feature by construction, and a finding needs two. A study of one " +
 			"author, 2026-10-10, set p90 thresholds on 254 hand-typed descriptions, 286 replies and 1,055 " +
-			"commits: two or more features over range fired on 9 percent of that author's descriptions against " +
+			"commits: two or more features over p90 fired on 9 percent of that author's descriptions against " +
 			"66 percent of agent descriptions, 7 against 46 percent of replies, and 5 against 60 percent of " +
-			"commits. Those rates are in-sample and count p90 alone, and no firing has been labeled, so the " +
-			"rule advises.",
+			"commits. Those rates are in-sample and count only features over p90, while the rule counts a " +
+			"feature under p10 too, so on the same texts it fires at least that often, on the author's and the " +
+			"agent's alike. No firing has " +
+			"been labeled, so the rule advises.",
 	},
 }
 
@@ -364,20 +366,17 @@ var (
 // measureStyle measures text read as kind, from the prose [Measure] reads and
 // split into sentences as it splits them.
 func measureStyle(text string, kind Kind) styleSample {
-	m := Measure(text, kind)
+	paras := readKind(text, kind)
+	m := measure(paras)
 	s := styleSample{words: m.Words, features: map[Feature]float64{}}
 
 	if m.Words == 0 {
 		return s
 	}
 
-	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	lines := markdownProse(raw, kind != KindReviewReply && !titled(kind))
-	wrapCodeSpans(lines)
-
 	var paragraphCount, longest, punctuation, spans, contractions, formatting, markers int
 
-	for _, para := range paragraphs(readProse(lines, kind != KindCommitMessage), keep) {
+	for _, para := range paras {
 		formatting += len(boldSpan.FindAllString(para.text, -1))
 
 		if para.head.heading {
@@ -387,7 +386,7 @@ func measureStyle(text string, kind Kind) styleSample {
 		}
 
 		spans += len(anySpan.FindAllString(para.text, -1))
-		prose := anySpan.ReplaceAllString(para.text, " code ")
+		prose := maskSpans(para.text)
 
 		n := 0
 
@@ -424,7 +423,8 @@ func measureStyle(text string, kind Kind) styleSample {
 	}
 
 	if kind == KindCommitMessage {
-		s.features[FeatureSubjectChars] = float64(utf8.RuneCountInString(strings.TrimSpace(raw[0])))
+		subject, _, _ := strings.Cut(text, "\n")
+		s.features[FeatureSubjectChars] = float64(utf8.RuneCountInString(strings.TrimSpace(subject)))
 	}
 
 	if m.Sentences >= 3 {

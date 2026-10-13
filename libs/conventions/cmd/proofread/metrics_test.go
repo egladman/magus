@@ -51,11 +51,40 @@ func TestMetricsMeasuresStdinAndSymbols(t *testing.T) {
 		t.Errorf("reply metrics = %+v", got)
 	}
 
+	if s := got[0].Shape; s.Words != 7 || s.Sentences != 2 || s.Punctuation["question"] != 0 || len(s.Withheld) != 8 {
+		t.Errorf("reply shape = %+v, want 7 words in 2 sentences with every length-bound measure withheld", s)
+	}
+
 	symbols := `[{"node":"n","source":"a.go:3","language":"go","name":"F","kind":"function","owner":"","doc":"F runs it."}]`
 
 	got = metricsOf(t, []string{"doc-comment", "-metrics"}, symbols)
 	if len(got) != 1 || got[0].Source != "a.go:3" || got[0].Words != 3 {
 		t.Errorf("doc metrics = %+v", got)
+	}
+}
+
+func TestMetricsWritesTheShapeAsItsOwnObject(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"review-reply", "-metrics"}, strings.NewReader("Is it safe? Yes."), &stdout, &stderr); code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+
+	var out []struct {
+		Words int `json:"words"`
+		Shape struct {
+			Words               int                `json:"words"`
+			Punctuation         map[string]float64 `json:"punctuation"`
+			RhetoricalQuestions float64            `json:"rhetorical_questions_per_1000"`
+		} `json:"shape"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+
+	// 4 words: one question mark is 25 per 100, one answered question 250 per 1000.
+	if len(out) != 1 || out[0].Words != 4 || out[0].Shape.Words != 4 || out[0].Shape.Punctuation["question"] != 25 ||
+		out[0].Shape.RhetoricalQuestions != 250 {
+		t.Errorf("metrics = %s", stdout.String())
 	}
 }
 

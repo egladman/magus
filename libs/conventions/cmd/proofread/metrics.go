@@ -8,15 +8,21 @@ import (
 	"github.com/egladman/magus/libs/conventions/proofread"
 )
 
-// measured is one text's metrics beside the name a finding from it carries.
+// measured is one text's metrics and shape beside the name a finding from it
+// carries.
 type measured struct {
 	Source string `json:"source"`
 	proofread.Metrics
+	Shape proofread.Shape `json:"shape"`
 }
 
-// runMetrics writes the readability metrics of each text kind names, as a
-// JSON array in input order: each file of a kind read from files, each
-// symbol's doc of a doc-comment array, or the one text on stdin.
+func measureText(source, text string, kind proofread.Kind) measured {
+	return measured{source, proofread.Measure(text, kind), proofread.MeasureShape(text, kind)}
+}
+
+// runMetrics writes the readability metrics and the shape of each text kind
+// names, as a JSON array in input order: each file of a kind read from files,
+// each symbol's doc of a doc-comment array, or the one text on stdin.
 func runMetrics(kind proofread.Kind, paths []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	out, err := measure(kind, paths, stdin)
 	if err != nil {
@@ -45,7 +51,7 @@ func measure(kind proofread.Kind, paths []string, stdin io.Reader) ([]measured, 
 		}
 
 		for _, r := range records {
-			out = append(out, measured{r.Source, proofread.Measure(r.Doc, kind)})
+			out = append(out, measureText(r.Source, r.Doc, kind))
 		}
 	case readsFiles(kind):
 		for _, p := range paths {
@@ -54,7 +60,7 @@ func measure(kind proofread.Kind, paths []string, stdin io.Reader) ([]measured, 
 				return nil, fmt.Errorf("read %s: %w", p, err)
 			}
 
-			out = append(out, measured{p, proofread.Measure(string(text), kind)})
+			out = append(out, measureText(p, string(text), kind))
 		}
 	default:
 		if len(paths) > 0 {
@@ -66,7 +72,7 @@ func measure(kind proofread.Kind, paths []string, stdin io.Reader) ([]measured, 
 			return nil, fmt.Errorf("read the %s: %w", kind, err)
 		}
 
-		out = append(out, measured{string(kind), proofread.Measure(string(text), kind)})
+		out = append(out, measureText(string(kind), string(text), kind))
 	}
 
 	return out, nil
