@@ -230,6 +230,39 @@ or `bash -c '...'` all reach the same verdict as the bare command.
   (`--call-background`, `--call-timeout-ms`), and a `magus run` or `magus affected` by a
   worker under a live lease that does not own the gate is refused when the host would
   run it in the background. A wiring that reports nothing leaves the rule silent.
+- **A backgrounded shell command with nothing to end it**
+  ([background-unbounded](../../../reference/rules/background-unbounded.md)). A command
+  the host runs in the background outlives the agent that started it, and the host
+  stops it only when asked. Each command in the line needs a bound: `timeout N` or
+  `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils
+  installs `gtimeout`), a magus target run (bounded by its target's timeout), or a
+  builtin that returns at once. A pipeline is bounded by its first command; a `while`
+  or `until` loop never is. timeout signals its own process group, so a child that
+  starts its own session escapes it; add `--kill-after=10` for a command that ignores
+  TERM. A watcher's command ends at its own expiry and is not judged here.
+- **Finishing with background work still running**
+  ([background-left](../../../reference/rules/background-left.md)). A host does not
+  stop a finished subagent's background tasks, and nobody is told when one ends: a
+  transcript search a scout left behind ran for four hours after it reported. At a
+  subagent's stop magus reads the subagent's own transcript for the shell commands
+  it ran in the background (asked for, moved there by a foreground timeout, or a
+  watcher's command) that no completion notice, stop call or watcher expiry has
+  ended, and refuses the stop naming each by id, start time, age and command. Stop
+  each by its id, or wait for its notice, then finish. At a root session's stop it
+  only advises, and only of tasks older than 30 minutes: a root wakes on a task's
+  completion notice, so a young task is one it waits on.
+
+  What each host can carry:
+
+  | Host        | Refuses a subagent's stop | Advises at the root's stop | Bounds a backgrounded command |
+  | ----------- | ------------------------- | -------------------------- | ----------------------------- |
+  | Claude Code | yes (SubagentStop `decision: block`) | yes (Stop) | yes (`run_in_background`) |
+  | Codex       | no: SubagentStop reaches magus, but its rollout records no background task in a shape the rule reads | no, for the same reason | no: its shell call carries no background flag |
+  | Cursor      | no: `subagentStop` never fired in probes, and its transcript has no tool ids, results or times | no: `stop` never fires under `-p`, and the transcript cannot say what is live | no: the wiring reports no background flag |
+  | OpenCode    | no: the plugin sees session events, not a stop it can refuse | no | no: its bash tool has no background mode |
+
+  A host the rule cannot read is never refused: the rule says nothing rather than
+  guess.
 - **Switching the repository's git hooks off**
   ([hooks-off](../../../reference/rules/hooks-off.md)): `--no-verify`, `git commit -n`,
   and `-c core.hooksPath=/dev/null` or an empty path. Hooks are the checks a
