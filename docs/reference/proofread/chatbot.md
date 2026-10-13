@@ -1,13 +1,13 @@
 ---
 title: "chatbot"
-description: "A deny rule by default: it refuses text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer."
+description: "A rule that is off by default: it reports text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer once a decisions table turns it on."
 tags: [proofread, rules, chatbot, advise]
 aliases: [reference/prose/chatbot]
 ---
 
 # chatbot
 
-A deny rule by default: it refuses text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer.
+A rule that is off by default: it reports text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer once a decisions table turns it on.
 
 ## What it catches
 

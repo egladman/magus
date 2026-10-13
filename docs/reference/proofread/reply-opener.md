@@ -1,13 +1,13 @@
 ---
 title: "reply-opener"
-description: "A deny rule by default: it refuses a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\")."
+description: "A rule that is off by default: it reports a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\") once a decisions table turns it on."
 tags: [proofread, rules, reply-opener, advise]
 aliases: [reference/prose/reply-opener]
 ---
 
 # reply-opener
 
-A deny rule by default: it refuses a sentence of a review reply that opens by contradicting ("No,", "As I said").
+A rule that is off by default: it reports a sentence of a review reply that opens by contradicting ("No,", "As I said") once a decisions table turns it on.
 
 ## What it catches
 

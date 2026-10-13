@@ -1,13 +1,13 @@
 ---
 title: "filler"
-description: "A deny rule by default: it refuses throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\")."
+description: "A rule that is off by default: it reports throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\") once a decisions table turns it on."
 tags: [proofread, rules, filler, advise]
 aliases: [reference/prose/filler]
 ---
 
 # filler
 
-A deny rule by default: it refuses throat-clearing ("Note that") and filler adverbs ("simply", "basically").
+A rule that is off by default: it reports throat-clearing ("Note that") and filler adverbs ("simply", "basically") once a decisions table turns it on.
 
 ## What it catches
 

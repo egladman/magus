@@ -1,13 +1,13 @@
 ---
 title: "judgment-as-fact"
-description: "A deny rule by default: it refuses a recommendation in a review reply stated as a fact, with no reason given."
+description: "A rule that is off by default: it reports a recommendation in a review reply stated as a fact, with no reason given once a decisions table turns it on."
 tags: [proofread, rules, judgment-as-fact, advise]
 aliases: [reference/prose/judgment-as-fact]
 ---
 
 # judgment-as-fact
 
-A deny rule by default: it refuses a recommendation in a review reply stated as a fact, with no reason given.
+A rule that is off by default: it reports a recommendation in a review reply stated as a fact, with no reason given once a decisions table turns it on.
 
 ## What it catches
 

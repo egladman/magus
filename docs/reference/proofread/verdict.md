@@ -1,13 +1,13 @@
 ---
 title: "verdict"
-description: "A deny rule by default: it refuses a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\")."
+description: "A rule that is off by default: it reports a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\") once a decisions table turns it on."
 tags: [proofread, rules, verdict, advise]
 aliases: [reference/prose/verdict]
 ---
 
 # verdict
 
-A deny rule by default: it refuses a judgment word standing in for the behavior it judges ("was broken", "a mess").
+A rule that is off by default: it reports a judgment word standing in for the behavior it judges ("was broken", "a mess") once a decisions table turns it on.
 
 ## What it catches
 

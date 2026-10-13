@@ -1,13 +1,13 @@
 ---
 title: "absolute"
-description: "A deny rule by default: it refuses never, nobody or nothing as a claim about the past (\"has never fired\", \"nobody checked\")."
+description: "A rule that is off by default: it reports never, nobody or nothing as a claim about the past (\"has never fired\", \"nobody checked\") once a decisions table turns it on."
 tags: [proofread, rules, absolute, advise]
 aliases: [reference/prose/absolute]
 ---
 
 # absolute
 
-A deny rule by default: it refuses never, nobody or nothing as a claim about the past ("has never fired", "nobody checked").
+A rule that is off by default: it reports never, nobody or nothing as a claim about the past ("has never fired", "nobody checked") once a decisions table turns it on.
 
 ## What it catches
 

@@ -1,13 +1,13 @@
 ---
 title: "ing-tail"
-description: "A deny rule by default: it refuses a participle clause added to claim significance (\", highlighting the importance of\")."
+description: "A rule that is off by default: it reports a participle clause added to claim significance (\", highlighting the importance of\") once a decisions table turns it on."
 tags: [proofread, rules, ing-tail, advise]
 aliases: [reference/prose/ing-tail]
 ---
 
 # ing-tail
 
-A deny rule by default: it refuses a participle clause added to claim significance (", highlighting the importance of").
+A rule that is off by default: it reports a participle clause added to claim significance (", highlighting the importance of") once a decisions table turns it on.
 
 ## What it catches
 

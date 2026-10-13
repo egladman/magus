@@ -337,7 +337,7 @@ func nonspecific(in input) []Finding {
 	return nil
 }
 
-var whyAsked = regexp.MustCompile(`^Why (?:did|would|do|are|were|didn't|don't|wouldn't|aren't) you\b`)
+var whyAsked = regexp.MustCompile(`(?i)^why (?:did|would|do|are|were|didn't|don't|wouldn't|aren't) you\b`)
 
 func whyOpener(in input) []Finding {
 	var out []Finding

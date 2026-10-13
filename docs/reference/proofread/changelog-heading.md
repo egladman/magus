@@ -1,13 +1,13 @@
 ---
 title: "changelog-heading"
-description: "A deny rule by default: it refuses a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\"."
+description: "A rule that is off by default: it reports a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\" once a decisions table turns it on."
 tags: [proofread, rules, changelog-heading, advise]
 aliases: [reference/prose/changelog-heading]
 ---
 
 # changelog-heading
 
-A deny rule by default: it refuses a changelog version heading that is not "## [version] - date" or "## [Unreleased]".
+A rule that is off by default: it reports a changelog version heading that is not "## [version] - date" or "## [Unreleased]" once a decisions table turns it on.
 
 ## What it catches
 

@@ -1,13 +1,13 @@
 ---
 title: "staccato"
-description: "A deny rule by default: it refuses three or more consecutive sentences of six words or fewer in one paragraph."
+description: "A rule that is off by default: it reports three or more consecutive sentences of six words or fewer in one paragraph once a decisions table turns it on."
 tags: [proofread, rules, staccato, advise]
 aliases: [reference/prose/staccato]
 ---
 
 # staccato
 
-A deny rule by default: it refuses three or more consecutive sentences of six words or fewer in one paragraph.
+A rule that is off by default: it reports three or more consecutive sentences of six words or fewer in one paragraph once a decisions table turns it on.
 
 ## What it catches
 

@@ -1,13 +1,13 @@
 ---
 title: "claim"
-description: "A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet."
+description: "A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on."
 tags: [proofread, rules, claim, advise]
 aliases: [reference/prose/claim]
 ---
 
 # claim
 
-A deny rule by default: it refuses a measurement, a comparison or a completion with no evidence in its sentence or bullet.
+A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on.
 
 ## What it catches
 

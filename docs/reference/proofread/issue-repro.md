@@ -1,13 +1,13 @@
 ---
 title: "issue-repro"
-description: "A deny rule by default: it refuses a bug report with neither what happened against what was expected, nor steps to reproduce it."
+description: "A rule that is off by default: it reports a bug report with neither what happened against what was expected, nor steps to reproduce it once a decisions table turns it on."
 tags: [proofread, rules, issue-repro, advise]
 aliases: [reference/prose/issue-repro]
 ---
 
 # issue-repro
 
-A deny rule by default: it refuses a bug report with neither what happened against what was expected, nor steps to reproduce it.
+A rule that is off by default: it reports a bug report with neither what happened against what was expected, nor steps to reproduce it once a decisions table turns it on.
 
 ## What it catches
 

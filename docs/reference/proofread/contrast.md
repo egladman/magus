@@ -1,13 +1,13 @@
 ---
 title: "contrast"
-description: "A deny rule by default: it refuses a claim made by denying its opposite first (\"not just X, it is Y\")."
+description: "A rule that is off by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\") once a decisions table turns it on."
 tags: [proofread, rules, contrast, advise]
 aliases: [reference/prose/contrast]
 ---
 
 # contrast
 
-A deny rule by default: it refuses a claim made by denying its opposite first ("not just X, it is Y").
+A rule that is off by default: it reports a claim made by denying its opposite first ("not just X, it is Y") once a decisions table turns it on.
 
 ## What it catches
 

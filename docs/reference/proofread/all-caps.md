@@ -1,13 +1,13 @@
 ---
 title: "all-caps"
-description: "A deny rule by default: it refuses words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\")."
+description: "A rule that is off by default: it reports words in capitals for emphasis in a review reply (\"DO NOT\", \"NEVER\") once a decisions table turns it on."
 tags: [proofread, rules, all-caps, advise]
 aliases: [reference/prose/all-caps]
 ---
 
 # all-caps
 
-A deny rule by default: it refuses words in capitals for emphasis in a review reply ("DO NOT", "NEVER").
+A rule that is off by default: it reports words in capitals for emphasis in a review reply ("DO NOT", "NEVER") once a decisions table turns it on.
 
 ## What it catches
 

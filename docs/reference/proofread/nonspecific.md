@@ -1,13 +1,13 @@
 ---
 title: "nonspecific"
-description: "A deny rule by default: it refuses a top-level review comment that judges or asks for a change and names no code, path, line, example or reason."
+description: "A rule that is off by default: it reports a top-level review comment that judges or asks for a change and names no code, path, line, example or reason once a decisions table turns it on."
 tags: [proofread, rules, nonspecific, advise]
 aliases: [reference/prose/nonspecific]
 ---
 
 # nonspecific
 
-A deny rule by default: it refuses a top-level review comment that judges or asks for a change and names no code, path, line, example or reason.
+A rule that is off by default: it reports a top-level review comment that judges or asks for a change and names no code, path, line, example or reason once a decisions table turns it on.
 
 ## What it catches
 

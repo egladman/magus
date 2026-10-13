@@ -1,13 +1,13 @@
 ---
 title: "second-person"
-description: "A deny rule by default: it refuses we, us, our or ours in a guide, which speaks to the reader as you."
+description: "A rule that is off by default: it reports we, us, our or ours in a guide, which speaks to the reader as you once a decisions table turns it on."
 tags: [proofread, rules, second-person, advise]
 aliases: [reference/prose/second-person]
 ---
 
 # second-person
 
-A deny rule by default: it refuses we, us, our or ours in a guide, which speaks to the reader as you.
+A rule that is off by default: it reports we, us, our or ours in a guide, which speaks to the reader as you once a decisions table turns it on.
 
 ## What it catches
 

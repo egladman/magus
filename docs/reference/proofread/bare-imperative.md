@@ -1,13 +1,13 @@
 ---
 title: "bare-imperative"
-description: "A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere (\"Fix this.\")."
+description: "A rule that is off by default: it reports a short command in a review reply that gives no reason anywhere (\"Fix this.\") once a decisions table turns it on."
 tags: [proofread, rules, bare-imperative, advise]
 aliases: [reference/prose/bare-imperative]
 ---
 
 # bare-imperative
 
-A deny rule by default: it refuses a short command in a review reply that gives no reason anywhere ("Fix this.").
+A rule that is off by default: it reports a short command in a review reply that gives no reason anywhere ("Fix this.") once a decisions table turns it on.
 
 ## What it catches
 

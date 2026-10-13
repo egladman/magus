@@ -1,13 +1,13 @@
 ---
 title: "option-list"
-description: "A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives."
+description: "A rule that is off by default: it reports an agent reply that lays out labeled options or alternatives once a decisions table turns it on."
 tags: [proofread, rules, option-list, advise]
 aliases: [reference/prose/option-list]
 ---
 
 # option-list
 
-A deny rule by default: it refuses an agent reply that lays out labeled options or alternatives.
+A rule that is off by default: it reports an agent reply that lays out labeled options or alternatives once a decisions table turns it on.
 
 ## What it catches
 

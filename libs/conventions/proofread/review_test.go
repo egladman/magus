@@ -152,6 +152,8 @@ func TestWhyOpenerReportsAQuestionAboutTheAuthorsChoice(t *testing.T) {
 		{"why did you", KindReviewReply, "Why did you add the lock?", []string{"1:Why did you"}},
 		{"why would you", KindReviewReply, "Looks close. Why would you copy the map?", []string{"1:Why would you"}},
 		{"after emphasis", KindReviewReply, "**Why are you** sorting twice?", []string{"1:Why are you"}},
+		{"lowercase", KindReviewReply, "why did you add the lock?", []string{"1:why did you"}},
+		{"lowercase after a sentence", KindReviewReply, "Looks close. why would you copy the map?", []string{"1:why would you"}},
 		{"a why about the code", KindReviewReply, "Why does the cache miss here?", nil},
 		{"mid-sentence", KindReviewReply, "I see why you added the lock.", nil},
 		{"quoted", KindReviewReply, "The guide says to avoid \"Why did you\" openers.", nil},

@@ -1,13 +1,13 @@
 ---
 title: "condescension"
-description: "A deny rule by default: it refuses a word that tells the reader how hard a step should feel or what they should already know."
+description: "A rule that is off by default: it reports a word that tells the reader how hard a step should feel or what they should already know once a decisions table turns it on."
 tags: [proofread, rules, condescension, advise]
 aliases: [reference/prose/condescension]
 ---
 
 # condescension
 
-A deny rule by default: it refuses a word that tells the reader how hard a step should feel or what they should already know.
+A rule that is off by default: it reports a word that tells the reader how hard a step should feel or what they should already know once a decisions table turns it on.
 
 ## What it catches
 

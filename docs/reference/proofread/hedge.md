@@ -1,13 +1,13 @@
 ---
 title: "hedge"
-description: "A deny rule by default: it refuses a softener qualifying a claim (\"might fix\", \"could potentially\")."
+description: "A rule that is off by default: it reports a softener qualifying a claim (\"might fix\", \"could potentially\") once a decisions table turns it on."
 tags: [proofread, rules, hedge, advise]
 aliases: [reference/prose/hedge]
 ---
 
 # hedge
 
-A deny rule by default: it refuses a softener qualifying a claim ("might fix", "could potentially").
+A rule that is off by default: it reports a softener qualifying a claim ("might fix", "could potentially") once a decisions table turns it on.
 
 ## What it catches
 

@@ -1,13 +1,13 @@
 ---
 title: "intent"
-description: "A deny rule by default: it refuses a motive given to a tool or a person (\"guessed\", \"pretends\")."
+description: "A rule that is off by default: it reports a motive given to a tool or a person (\"guessed\", \"pretends\") once a decisions table turns it on."
 tags: [proofread, rules, intent, advise]
 aliases: [reference/prose/intent]
 ---
 
 # intent
 
-A deny rule by default: it refuses a motive given to a tool or a person ("guessed", "pretends").
+A rule that is off by default: it reports a motive given to a tool or a person ("guessed", "pretends") once a decisions table turns it on.
 
 ## What it catches
 
