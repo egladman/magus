@@ -28,7 +28,9 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [conflict-rewrite](conflict-rewrite.md)           | an inline interpreter rewriting a file that holds merge conflict markers                             |
 | [credential-verb](credential-verb.md)             | an agent minting, printing, rotating or revoking a credential through the CLI                        |
 | [focus-read](focus-read.md)                       | a read outside the paths a focus lease was given                                                     |
+| [heredoc-write](heredoc-write.md)                 | a here-document written to a file, judged as the file write it is                                    |
 | [hook-wiring-write](hook-wiring-write.md)         | a leased or agent-attributed write to the hook wiring the guard is installed by                      |
+| [hooks-off](hooks-off.md)                         | a git call with the repository's hooks switched off                                                  |
 | [inline-alias](inline-alias.md)                   | a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs                   |
 | [lease-gate](lease-gate.md)                       | a leased worker running the gate instead of the check it was assigned                                |
 | [lease-harness](lease-harness.md)                 | a leased worker rewriting the harness skill trees that steer it                                      |
@@ -41,6 +43,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [policy-unloaded](policy-unloaded.md)             | a push, merge, spawn or state-writing magus verb while the guard policy that judges it does not load |
 | [push-ungated](push-ungated.md)                   | a push at a commit with no green gate: the person is asked, a leased worker refused                  |
 | [shared-stash](shared-stash.md)                   | a bare stash push or pop, on a stack every worktree shares                                           |
+| [spawn-duplicate](spawn-duplicate.md)             | a spawn for a job that already has a worker                                                          |
 | [stale-binary](stale-binary.md)                   | a call that changes state while the magus judging it cannot load this tree's guard policy            |
 | [token-state](token-state.md)                     | an agent reading or writing the token secrets: the operator token file or the token store            |
 | [vcs-off-switch](vcs-off-switch.md)               | an agent's write setting vcs.enabled: false in a magus.yaml this workspace reads                     |
@@ -55,6 +58,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | [architecture-unbriefed](architecture-unbriefed.md)     | an agent's next call after a structure question, or a new directory, before the architecture skill |
 | [brief-command](brief-command.md)                       | a spawn or continuation brief that teaches a command the guard denies                              |
+| [brief-plain-commands](brief-plain-commands.md)         | a brief for an isolated worker that does not hold it to one plain command per call                 |
 | [busy-wait](busy-wait.md)                               | a loop that only sleeps between polls, holding a tool slot for its whole wait                      |
 | [buzz-unbriefed](buzz-unbriefed.md)                     | the first Buzz a session authors, by file write or `magus buzz -e`, before reading the Buzz skill  |
 | [capture-filter](capture-filter.md)                     | a filter over a run capture or log, which cuts the failure block apart                             |
@@ -67,12 +71,12 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [exit-status-echo](exit-status-echo.md)                 | a line ending by printing an exit status, which the harness already reports                        |
 | [filter-without-input](filter-without-input.md)         | a filter with no file, pipe or redirect, which reads a stdin nothing feeds                         |
 | [focus](focus.md)                                       | a read or write outside the paths the running job declared                                         |
-| [gate-repeat](gate-repeat.md)                           | the gate run again soon after it passed, repeating work already done                               |
+| [gate-repeat](gate-repeat.md)                           | the gate run a third time over a tree its last green verdict already covers                        |
 | [generated-write](generated-write.md)                   | a hand edit to a declared output, which the next run overwrites                                    |
 | [graph-pipe](graph-pipe.md)                             | a read-only graph verb piped into a text filter, when magus projects the record itself             |
 | [graph-stale](graph-stale.md)                           | a graph read, or a graph-backed deny, while the graph describes another tree                       |
 | [grep-reader](grep-reader.md)                           | a definition lookup with a context flag (`grep -A40 'func X'`), which uses grep to read the body   |
-| [guard-unfinished](guard-unfinished.md)                 | earlier guard checks that never finished, so no rule judged their calls                            |
+| [guard-unfinished](guard-unfinished.md)                 | guard checks that never finished, so no rule judged their calls                                    |
 | [hook-wiring](hook-wiring.md)                           | a write to the host wiring that decides whether these rules run at all                             |
 | [installed-skill](installed-skill.md)                   | a write to an installed skill copy, which re-installing discards                                   |
 | [instruction-write](instruction-write.md)               | a write to a cross-host instruction file, which every session loads whole                          |
@@ -82,6 +86,8 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [lease-terminal](lease-terminal.md)                     | a call naming a lease whose row has already finished                                               |
 | [leased-path](leased-path.md)                           | a write into paths a running lease owns, by a caller that names no lease                           |
 | [magus-timeout](magus-timeout.md)                       | a magus call wrapped in coreutils `timeout` or `gtimeout`, which kills it from outside             |
+| [monitor-duplicate](monitor-duplicate.md)               | a second live watcher on one subject, or one on work the agent backgrounded itself                 |
+| [monitor-pile](monitor-pile.md)                         | an agent arming a waiter while several of its own are already live                                 |
 | [new-file](new-file.md)                                 | a new file in a directory whose naming has settled                                                 |
 | [new-source-dir](new-source-dir.md)                     | a new file that opens a directory, which is a boundary rather than a file                          |
 | [output-pipe](output-pipe.md)                           | magus output piped into a filter, when magus projects the record itself                            |
@@ -91,6 +97,7 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [push-gate](push-gate.md)                               | a push the run log does not prove ungated, which names the gate and lets it through                |
 | [raw-tool](raw-tool.md)                                 | a toolchain command a spell already wraps, run outside the cache                                   |
 | [read-navigation](read-navigation.md)                   | a whole read of a Go, Buzz or Markdown file past the workspace's line limit                        |
+| [read-paging](read-paging.md)                           | a mapped file read window by window, past two windows of it                                        |
 | [read-symbol](read-symbol.md)                           | a bounded read inside one indexed declaration, which refs --definition --source prints checked     |
 | [regen-source](regen-source.md)                         | a hand edit to a file a target regenerates                                                         |
 | [revert-classify](revert-classify.md)                   | a revert that has not classified what it is reverting                                              |
@@ -101,8 +108,11 @@ Rules for written text, such as pull request descriptions and docs, are the
 | [shared-checkout](shared-checkout.md)                   | a spawn into a checkout a live job already holds and writes                                        |
 | [sibling-checkout](sibling-checkout.md)                 | a magus command relocated into another checkout, judging a tree nobody ships                       |
 | [skill-source](skill-source.md)                         | a write to an installed skill copy rather than to its source                                       |
+| [sleep-poll](sleep-poll.md)                             | a sleep before a one-shot status read, or a backgrounded call that only sleeps                     |
 | [source-read](source-read.md)                           | an unbounded source read the symbol index has already answered                                     |
+| [spawn-nested-waiter](spawn-nested-waiter.md)           | a subagent spawning a helper whose title or brief opening speaks of waiting or watching            |
 | [spawn-unbriefed](spawn-unbriefed.md)                   | a subagent spawned before the multi-agent skill loaded                                             |
+| [spawn-waiter](spawn-waiter.md)                         | a spawn whose child exists to wait on, poll or watch other work                                    |
 | [split-run](split-run.md)                               | the same target run again on a different project set, as a separate call                           |
 | [stage-all](stage-all.md)                               | a whole-tree `git add` (-A, -u, ., --all, --update), which sweeps in regenerated output            |
 | [stage-classify](stage-classify.md)                     | staging without classifying, when generated and source differ                                      |
