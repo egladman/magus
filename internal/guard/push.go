@@ -58,6 +58,10 @@ const (
 	gateIncomplete
 	// gatePassed is a gate run at this commit that finished with every target passing.
 	gatePassed
+	// gateMoved is a push that follows, on the same line, a command that moves the revision
+	// it publishes. The revision is read before the line runs, so no gate record can be
+	// matched to the commit that goes out.
+	gateMoved
 )
 
 // gateCoverageAt reads the run log for gate invocations built from commit.
@@ -265,6 +269,11 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	// a refusal there is one nobody can clear.
 	case gateUnknown, gatePassed:
 		return "", ""
+	// Refused for every caller, worker or not: nobody can be asked about a commit that does
+	// not exist yet, and the next call grades the real HEAD.
+	case gateMoved:
+		return decisionDeny, "this line pushes after a command that changes what is pushed (a commit, merge, rebase, reset or the like), so the gate cannot be matched to the revision that goes out.\n" +
+			"Run the commit on its own, then push in a separate call: the push is then graded at the real HEAD."
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
 	case gateFailed:
@@ -301,7 +310,56 @@ func pushCoverage(ctx context.Context, deps Dependencies, hook location, command
 	if cover == gateUnknown {
 		cover = gateCoverageAt(workspaceRunsDir(at.cacheDir), commit)
 	}
+	// Only a question that could be asked becomes a refusal: a fresh clone or a host with
+	// no run log still has nothing to prove.
+	if cover != gateUnknown && revisionMovesBeforePush(command, d, cwd) {
+		return gateMoved, ""
+	}
 	return cover, commit
+}
+
+// revisionMovesBeforePush reports a push on command that runs after a command that changes
+// the revision it publishes, whichever of `;`, `&&`, `||`, a newline or a subshell joins
+// them. The revision is read before any of it runs, so a gate recorded at that HEAD says
+// nothing about the commit the push sends.
+func revisionMovesBeforePush(command string, d Dialect, cwd string) bool {
+	calls, ok := locateCalls(command, d, cwd, func(c hint.Invocation) bool { return isPush(c) || movesRevision(c) }, false)
+	if !ok {
+		return false
+	}
+	moved := false
+	for _, c := range calls {
+		if !isPush(c.inv) {
+			moved = true
+		} else if moved {
+			return true
+		}
+	}
+	return false
+}
+
+// movesRevision reports a git, hg, sl or jj command that changes the revision a later
+// push publishes: it records a commit, replays or joins history, or resets the branch.
+func movesRevision(c hint.Invocation) bool {
+	sub, _ := vcsSubcommand(c)
+	switch c.Name {
+	case "git":
+		switch sub {
+		case "commit", "merge", "cherry-pick", "am", "rebase", "reset", "pull", "revert":
+			return true
+		}
+	case "hg", "sl":
+		switch sub {
+		case "commit", "ci", "amend", "merge", "rebase", "graft", "import", "histedit", "backout", "fold", "split", "absorb":
+			return true
+		}
+	case "jj":
+		switch sub {
+		case "commit", "describe", "desc", "new", "squash", "rebase", "split", "abandon", "absorb", "duplicate", "revert":
+			return true
+		}
+	}
+	return false
 }
 
 // pushSite is where a push runs and what it publishes.

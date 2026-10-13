@@ -116,7 +116,8 @@ var denyRuleDocs = []types.RuleDoc{
 			"This one reads the run log, so the finding is a fact: which invocations ran the gate, which commit each was built from, and how it finished. That is what makes stopping the call legitimate here where the rest of this tier only advises. " +
 			"It matches on the COMMIT and not the exact tree, deliberately: an exact match would expire on the first comment typo after a green run, which is the delta the cadence already says to push, and a rule that fires there is one people route around. " +
 			"Publishing work in progress is legitimate and indistinguishable from an oversight, so a session no job lease binds gets the verdict `ask`: the host's own approval prompt puts the push in front of the person, and approving it publishes. A marker the agent types is not consent, so nothing it says clears this. " +
-			"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked."},
+			"A session bound to a lease is a worker, and workers do not publish: it gets `deny`, and nobody is asked. " +
+			"A push that follows a commit, merge, cherry-pick, am, rebase, reset or pull on the same line (git, hg, sl or jj; joined by `;`, `&&`, `||`, a newline or a subshell) is denied for everyone: the revision is read before the line runs, so a gate recorded at that HEAD says nothing about the commit that goes out. Run the commit alone and push in the next call, where the push is graded at the real HEAD."},
 	{Name: string(denyRuleInlineAlias),
 		Catches: "a VCS alias defined inline (`git -c alias.x=...`), which hides the command it runs",
 		Why: "git expands `git -c alias.x='reset --hard' x` into `git reset --hard`, so the word every git rule reads as the subcommand names nothing, and a reset, clean or push would pass unjudged. " +

@@ -2701,6 +2701,12 @@ func evaluateLine(deps Dependencies, held *heldAdvice, command string, d Dialect
 			}
 			advisory = v
 		}
+		// The push gate reads the verdict's rule, so a commit or add earlier on the line must
+		// not speak in its place: `git commit -m x && git push` reached the push ungated
+		// because the commit's advisory was the one the line returned.
+		if advisory.Rule.Name != advisoryPushGate && slices.ContainsFunc(cmds, isPush) {
+			advisory = ShellVerdict{Context: pushGuardContext, Why: pushGuardContextWhy, Rule: denyRule{Name: advisoryPushGate}}
+		}
 	} else if !parsed {
 		if v, matched := gitGuardFallback(command, grade); matched {
 			if v.Deny != "" {

@@ -517,3 +517,58 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 		assert.Equal(t, verdictWithRule("advise", string(advisoryPushGate)), unworded(v))
 	})
 }
+
+// TestPushAfterACommitOnTheLineIsRefused pins the bypass: every push alone on its line was
+// graded and every `commit && push` passed, because the revision is read before the line
+// runs. A green gate at that HEAD covers none of what the commit adds.
+func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	runLog(t, runs, "a.jsonl", "v0.4.3-97-gabc1234", "pass", "affected", "ci")
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+
+	refused := []string{
+		"git commit -m x && git push",
+		"git add x.go && git commit -m x ; git push origin HEAD",
+		"git commit -m x || git push",
+		"git commit -m x\ngit push",
+		"(git commit -m x && git push)",
+		"git -C . commit -m x && git push",
+		"git merge topic && git push",
+		"git cherry-pick abc && git push",
+		"git am p.patch && git push",
+		"git rebase main && git push",
+		"git reset --soft HEAD~1 && git push",
+		"hg commit -m x && hg push",
+		"sl ci -m x && sl push",
+		"jj commit -m x && jj git push",
+		"jj describe -m x && jj git push",
+		"git push && git commit -m x && git push",
+	}
+	for _, line := range refused {
+		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+		assert.Equal(t, verdictWithRule("deny", string(denyRulePushUngated)), unworded(v), line)
+		assert.Contains(t, v.Reason, "in a separate call", line)
+	}
+
+	passes := []string{
+		"git push origin HEAD",
+		"git push && git commit -m x",
+		"git status && git push",
+		"hg push",
+	}
+	for _, line := range passes {
+		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+		assert.Contains(t, []string{"pass", "advise"}, v.Decision, line)
+	}
+}
+
+// TestPushAfterACommitStandsDownWithNoRunLog pins that the refusal needs a gate record to
+// stand against: a fresh clone has nothing to prove, so the line passes as it did.
+func TestPushAfterACommitStandsDownWithNoRunLog(t *testing.T) {
+	ctx, _ := fleetFixture(t)
+	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+	v := Judge(ctx, deps, Request{Input: "git commit -m x && git push", RendersAsk: true})
+	assert.Contains(t, []string{"pass", "advise"}, v.Decision)
+}
