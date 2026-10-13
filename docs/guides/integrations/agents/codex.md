@@ -1,6 +1,6 @@
 ---
 title: Codex
-description: Wiring magus into Codex (skills in .agents/skills, the AGENTS.md block you paste, MCP in the user-level config, and the hooks that carry the guard, the spawn check, the message record, the checkpoint, the reply check and the post-compaction brief).
+description: Wiring magus into Codex (skills in .agents/skills, the AGENTS.md block you paste, MCP in the user-level config, and the hooks that carry the guard, the spawn check, the message record, the checkpoint, the opt-in reply check and the post-compaction brief).
 tags: [agents, codex, skills, AGENTS.md, guard, hooks, MCP]
 ---
 
@@ -27,7 +27,7 @@ contract.
 | subagent record | `PostToolUse` names the child, `SubagentStop` sizes it          |
 | your messages   | `UserPromptSubmit`, recorded and never answered                 |
 | checkpoint      | `Stop`                                                          |
-| reply check     | `Stop`, a `block` decision that continues the turn once         |
+| reply check     | opt-in: `Stop`, a `block` that continues the turn once          |
 | scout agent     | `.codex/agents/magus-scout.toml`, `sandbox_mode = "read-only"`  |
 | rehydration     | `SessionStart` (`compact`)                                      |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)                    |
@@ -266,15 +266,6 @@ shown here:
             "statusMessage": "magus: recording where the work stands"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
-            "statusMessage": "magus: proofreading the reply"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -338,7 +329,7 @@ harness` prints and run `magus agent harness verify`. See
 [Adapting a Buzz harness](../../../reference/skills/magus-workspace-rules.md) and
 [Recurring guard friction](guard.md#recurring-guard-friction).
 
-The first `Stop` entry is not a guard. It records where the work stands each time a
+The `Stop` entry is not a guard. It records where the work stands each time a
 turn ends, which is worth having here in particular: a Codex session that runs
 out of usage stops mid-task, and the transcript it leaves behind is addressed by
 a session id nobody wrote down. `magus session` lists what it recorded, and
@@ -346,8 +337,30 @@ a session id nobody wrote down. `magus session` lists what it recorded, and
 
 ### Judging the reply a turn ends with
 
-The second `Stop` entry runs [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz)
-with `--agent-name codex`. It reads `last_assistant_message`, runs the `proofread`
+Nothing here is wired by default: the reply check judges your agent's replies with
+the `proofread` binary, which is a choice, not part of the guard. To turn it on, download
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add a second `Stop`
+entry to `.codex/hooks.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
+            "statusMessage": "magus: proofreading the reply"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The script runs with `--agent-name codex`. It reads `last_assistant_message`, runs the `proofread`
 binary over it, and, when there are findings, prints
 `{"decision": "block", "reason": "..."}`. Codex continues the turn with the reason
 as a new prompt, so the findings reach the agent as a request to send the reply
@@ -492,7 +505,7 @@ Codex supports twelve hook events. This harness wires eight:
 | `SubagentStart`             | yes   | hands the child the checkout's brief as `additionalContext`, and joins its id to the spawn before it      |
 | `SubagentStop`              | yes   | files the child's context size from the last `token_count` record of its rollout                           |
 | `SessionStart`              | yes   | `compact` only, the post-compaction brief                                                                  |
-| `Stop`                      | yes   | the checkpoint, then the reply check                                                                       |
+| `Stop`                      | yes   | the checkpoint; the reply check is a second entry you add on purpose                                       |
 | `UserPromptSubmit`          | yes   | records your message                                                                                       |
 | `PreCompact`, `PostCompact` | no    | their output schema carries no `hookSpecificOutput`, so nothing can steer compaction                       |
 | `Interrupt`                 | no    | nothing consumes it                                                                                        |

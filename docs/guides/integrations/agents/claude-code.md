@@ -25,7 +25,7 @@ event.
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
-| reply check      | `Stop`, advice for the next turn; the spell declares it       |
+| reply check      | opt-in: `Stop`, advice for the next turn; you wire it         |
 | your messages    | `UserPromptSubmit`, recorded and never answered               |
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
@@ -495,18 +495,17 @@ record by hand, which is the form to reach for when you are the one stopping.
 
 ## Judging the reply a turn ends with
 
-The spell declares a second `Stop` entry for
-[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz), so
-`magus describe harness claude-code` prints it beside the checkpoint and the merge
-command writes it. It runs the `proofread` binary over the turn's last message and
-hands up to five findings back to the agent as `additionalContext`. It needs no
-magus workspace, only `proofread` on `PATH`, in `__PROOFREAD_BIN`, or named with
-`-- --proofread PATH`; `__PROOFREAD_DECISIONS` or `-- --decisions FILE` sets your own
-decisions. The entry carries no path of your own on purpose, since the spell ships to
-every workspace: set the two variables in the settings `env` object instead, which a
-merge never overwrites. It never blocks the stop and prints nothing when proofread is
-missing or the agent is already continuing. [Check writing in a commit hook](../../proofread.md)
-covers the setup.
+The spell does not wire this. The reply check judges your agent's replies against the
+rules in `proofread`, which is a choice about how your agent writes and not part of the
+guard, so a merge never writes it and never removes one you add. To turn it on, download
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) and add a second `Stop`
+entry to `.claude/settings.json` by hand. The script runs the `proofread` binary over the
+turn's last message and hands up to five findings back to the agent as
+`additionalContext`. It needs no magus workspace, only `proofread` on `PATH`, in
+`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `__PROOFREAD_DECISIONS` or
+`-- --decisions FILE` sets your own decisions. It never blocks the stop and prints
+nothing when proofread is missing or the agent is already continuing.
+[Check writing in a commit hook](../../proofread.md) covers the setup.
 
 ```json
 {
@@ -664,7 +663,7 @@ too complex to verify". Split such a line, as that refusal says. A
 often, even around `stat` or `git status`.
 
 This harness wires six events: `PreToolUse`, `PostToolUse` (a finished spawn's child
-id), `SessionStart`, `Stop` (the checkpoint and the reply check), `SubagentStop` (a
+id), `SessionStart`, `Stop` (the checkpoint), `SubagentStop` (a
 subagent's context size) and `UserPromptSubmit`. The Bash entry alone carries
 `--foreground-default-ms` and `--foreground-max-ms`, Claude Code's Bash timeout limits
 (`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`): the glue reads the call's

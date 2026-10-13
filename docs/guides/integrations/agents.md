@@ -193,8 +193,9 @@ the way a user wires one (the harness spell, the shipped hook templates, the
 merge `magus describe harness` prints, the skills), and drives the host
 headless through scripted turns. The scenarios cover a shell deny and advise,
 a judged read, a write to a declared output, a denied write, an MCP call, the
-recorded prompt, the reply check, the checkpoint, a skill load, a judged spawn
-with its child and context size, and the brief after a compaction. Each one
+recorded prompt, the opt-in reply check once the workspace wires it, the checkpoint,
+a skill load, a judged spawn with its child and context size, and the brief after a
+compaction. Each one
 asserts on what magus recorded and on what the model said back, so a verdict
 that never reached the model fails.
 
@@ -215,15 +216,15 @@ beside each scenario's result.
 | `MAGUS_E2E_KEEP=1`       | keep each temporary workspace                          |
 | `MAGUS_E2E_REPORT`       | the version report's path                              |
 
-|             | command rules | declared-output rule | deny | advise | host E2E: shell deny | MCP call rules                                       |
-| ----------- | ------------- | -------------------- | ---- | ------ | -------------------- | ---------------------------------------------------- |
-| Claude Code | yes           | yes                  | yes  | yes    | yes                  | wired, rule-empty; live pending                      |
-| Codex       | yes           | yes                  | yes  | yes    | yes                  | wired, fixture-verified; live pending                |
-| Cursor      | yes           | yes                  | yes  | yes    | not yet run          | gated: `beforeMCPExecution`; advise on `postToolUse` |
-| OpenCode    | yes           | yes                  | yes  | yes    | yes                  | wired; live-probed on 1.18.30                        |
+|             | command rules | declared-output rule | deny | advise | host E2E: shell verdict | MCP call rules                                       |
+| ----------- | ------------- | -------------------- | ---- | ------ | ----------------------- | ---------------------------------------------------- |
+| Claude Code | yes           | yes                  | yes  | yes    | yes                     | wired, rule-empty; live pending                      |
+| Codex       | yes           | yes                  | yes  | yes    | yes                     | wired, fixture-verified; live pending                |
+| Cursor      | yes           | yes                  | yes  | yes    | not yet run             | gated: `beforeMCPExecution`; advise on `postToolUse` |
+| OpenCode    | yes           | yes                  | yes  | yes    | yes                     | wired; live-probed on 1.18.30                        |
 
 "Fixture-verified" means the adapter executed against this binary with a
-controlled host event on stdin. "Host E2E: shell deny" means a locally
+controlled host event on stdin. "Host E2E: shell verdict" means a locally
 installed host discovered the workspace's configuration, dispatched the
 command hook, and delivered its deny to the model. Neither label proves
 filesystem-path delivery, MCP delivery, or lifecycle delivery unless that cell
@@ -257,6 +258,7 @@ above explicitly marks them proven.
 | MCP call guard              | `PreToolUse` `mcp__magus__.*` (rule-empty) | `PreToolUse` `mcp__.*` (fixture-verified; live dispatch pending)   | `beforeMCPExecution` (`failClosed`); advise on `postToolUse` (`MCP:`)     | `tool.execute.before` `magus_*`   |
 | post-compaction rehydration | `SessionStart` `compact`                   | `SessionStart` `compact` (JSON envelope)                           | `preCompact` marks it; the next `postToolUse` carries the brief again     | not wired: only a PRE hook exists |
 | checkpoint                  | `Stop`                                     | `Stop`                                                             | `sessionEnd`                                                              | root `session.idle` bus event     |
+| reply check (opt-in)        | `Stop`, hand-written                       | `Stop`, hand-written                                               | `stop`, hand-written, `loop_limit` 1                                      | root `session.idle` via env var   |
 | lease provenance            | `PreToolUse` on the sub-agent tool         | `PreToolUse` on `spawn_agent`, `collaborationspawn_agent`, `Agent` | `preToolUse` `Task`; `subagentStart` never fires on cursor-agent          | `tool.execute.before` `task`      |
 | subagent id                 | `PostToolUse` on the sub-agent tool        | `PostToolUse` on the spawn names the child                         | not expressible: no `postToolUse` for `Task`, no parent id on child calls | `tool.execute.after` `task`       |
 | subagent brief              | not wired                                  | `SubagentStart` (`additionalContext`)                              | not expressible: `subagentStart` never fires                              | not wired                         |
@@ -265,6 +267,11 @@ above explicitly marks them proven.
 | tool-failure hint           | not wired                                  | not wired                                                          | `postToolUseFailure.additional_context`                                   | not wired                         |
 | skill load                  | `PreToolUse` `Skill`                       | not expressible: no hook on a skill load                           | `preToolUse` `Read` of a `SKILL.md`, with `--reports-skills`              | not wired                         |
 | session-load adapter        | ships one                                  | ships one                                                          | ships one (`magus-session-load-cursor.buzz`)                              | ships one                         |
+
+The reply check is on no host by default. It judges how your agent writes, which is
+a choice and not part of the guard, so no harness spell wires it and a merge never
+removes an entry you add. Each host page shows the entry to add; the script is
+[`proofread-reply.buzz`](agents/guard-templates.md#proofread-replybuzz).
 
 Two kinds of blank belong in that table and they are not the same. **Not
 expressible** is a host contract magus cannot reach through, and it is named

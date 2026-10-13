@@ -109,15 +109,6 @@
             "statusMessage": "magus: recording where the work stands"
           }
         ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name codex",
-            "statusMessage": "magus: proofreading the reply"
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
