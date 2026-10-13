@@ -19,7 +19,10 @@ import (
 // (MGS3031): an empty declaration, a claim on a glob rather than one file, a checkout whose
 // version control does not place changed lines, or a file whose extension has no diff
 // driver. An entry that names an existing path as written (`notes/a#b.md`) is refused as
-// ambiguous, naming the two spellings that mean the path. A claim nothing checks reads as a boundary and is none, so it is an error rather
+// ambiguous, naming the two spellings that mean the path. A claim word that names more than
+// one existing declaration of its file (`ctx`, `String`) is refused too, with words that
+// name one; a word that names none is accepted, as the declaration may not be written yet
+// (see ForkNotes). A claim nothing checks reads as a boundary and is none, so it is an error rather
 // than a note on the row. A deny path is held to the same rules because the guard grades
 // it by the same placement, and one it cannot place denies the whole file while the row
 // names one declaration.
@@ -30,7 +33,7 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 	if store == nil || store.root == "" {
 		return nil
 	}
-	type claimedFile struct{ field, path string }
+	type claimedFile struct{ field, path, decl string }
 	var claimed []claimedFile
 	var refused []string
 	for _, list := range []struct {
@@ -54,7 +57,7 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 			case p == "" || strings.ContainsAny(p, globMeta):
 				refused = append(refused, list.field+fmt.Sprintf("%q claims a declaration of a pattern, and a declaration lives in one file", entry))
 			default:
-				claimed = append(claimed, claimedFile{list.field, path.Clean(p)})
+				claimed = append(claimed, claimedFile{list.field, path.Clean(p), decl})
 			}
 		}
 	}
@@ -63,7 +66,8 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 		for i, c := range claimed {
 			files[i] = c.path
 		}
-		drivers, why := claimDrivers(ctx, store.root, files)
+		driver, drivers, why := claimDrivers(ctx, store.root, files)
+		placed := map[string][]string{}
 		for _, c := range claimed {
 			switch {
 			case why != "":
@@ -71,6 +75,15 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 			case drivers[c.path] == "":
 				refused = append(refused, c.field+fmt.Sprintf("%q has no diff driver, so no changed line of it can be placed in a declaration;"+
 					" give %s one in .gitattributes (`magus doctor` lists the managed ones)", c.path, driverPattern(c.path)))
+			default:
+				all, ok := placed[c.path]
+				if !ok {
+					all, _ = declarationsOf(ctx, driver, store.root, c.path)
+					placed[c.path] = all
+				}
+				if matched := namedDeclarations(c.decl, all); len(matched) > 1 {
+					refused = append(refused, c.field+ambiguousClaim(c.path, c.decl, matched, all))
+				}
 			}
 		}
 	}
@@ -83,20 +96,21 @@ func RefuseUngradableClaims(ctx context.Context, store *Store, row types.Job) er
 }
 
 // claimDrivers asks root's version control which diff driver names each path's
-// declarations, or says why it cannot.
-func claimDrivers(ctx context.Context, root string, paths []string) (map[string]string, string) {
+// declarations, or says why it cannot. It returns the version control with the answer, so a
+// caller can place a file's lines without resolving it again.
+func claimDrivers(ctx context.Context, root string, paths []string) (types.VCSDriver, map[string]string, string) {
 	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
 	switch {
 	case err != nil:
-		return nil, fmt.Sprintf("no version control answered here (%v)", err)
+		return nil, nil, fmt.Sprintf("no version control answered here (%v)", err)
 	case res.Source == types.VCSSourceDisabled || res.VCS == nil:
-		return nil, "version control is disabled here, so no diff places a changed line"
+		return nil, nil, "version control is disabled here, so no diff places a changed line"
 	}
 	drivers, err := res.VCS.Drivers(ctx, root, paths)
 	if err != nil {
-		return nil, fmt.Sprintf("its diff driver could not be read: %v", err)
+		return nil, nil, fmt.Sprintf("its diff driver could not be read: %v", err)
 	}
-	return drivers, ""
+	return res.VCS, drivers, ""
 }
 
 // driverPattern is the .gitattributes pattern a driver for p would be declared under.
@@ -156,17 +170,15 @@ func RefuseUnorderedFileShare(ctx context.Context, store *Store, rows []types.Jo
 				if !types.PathsIntersect(mine, theirs) {
 					continue
 				}
-				touched := touchedInFile(ctx, store, rows, holder.ID, file)
+				touched, unknown := touchedDeclarations(ctx, store, rows, holder.ID, file)
 				return types.DiagnosticErrorf(types.WritePathFileShared,
 					"job: %s declares %q, and %s (%s, updated %s ago) already holds %q. Both are live and neither"+
 						" is the other's parent, child, or depends_on partner, so %s has one owner unless the rows"+
-						" say otherwise. %s has touched %s in it so far. Claim `%s#<declaration>` on both rows, add"+
-						" `--depends-on %s` to %s, or fold %s into %s",
+						" say otherwise. %s has touched %s in it so far. %s",
 					row.ID, mine, holder.ID, holder.State, updatedAgo(holder), theirs,
 					file,
-					holder.ID, touched,
-					file, holder.ID, row.ID,
-					row.ID, holder.ID)
+					holder.ID, describeTouched(touched, unknown),
+					splitAdvice(ctx, store, row, holder, file, touched))
 			}
 		}
 	}
@@ -227,39 +239,255 @@ func dependsOnTransitively(combined []types.Job, from, on string) bool {
 	return false
 }
 
-// touchedInFile is what holder has changed inside file so far, restricted to file, for the
-// refusal to name: the declarations already touched, "none yet" before any diff exists, or
-// why that cannot be read. Reads the tree once per refusal; a fork this rule passes never
+// touchedDeclarations are the declarations holder has changed inside file so far, sorted,
+// with "" standing for lines no declaration encloses. unknown says why they cannot be
+// read and is "" when they can. Reads the tree once per call; a fork the rule passes never
 // pays for it.
-func touchedInFile(ctx context.Context, store *Store, rows []types.Job, holder, file string) string {
+func touchedDeclarations(ctx context.Context, store *Store, rows []types.Job, holder, file string) (decls []string, unknown string) {
 	driver, _ := resolveDriver(ctx, store.root)
 	fp := readFootprint(ctx, driver, rows, holder)
 	if !fp.known {
-		reason := fp.reason
-		if reason == "" {
-			reason = "its footprint could not be read"
+		if fp.reason == "" {
+			return nil, "its footprint could not be read"
 		}
-		return fmt.Sprintf("unknown (%s)", reason)
+		return nil, fp.reason
 	}
-	var decls []string
 	for _, r := range fp.regions {
-		loc := r.Location()
-		if loc.Path != file {
-			continue
+		if loc := r.Location(); loc.Path == file {
+			decls = appendUnique(decls, loc.Declaration)
 		}
-		d := loc.Declaration
-		if d == "" {
-			d = "the top of the file"
-		}
-		if !slices.Contains(decls, d) {
-			decls = append(decls, d)
-		}
+	}
+	slices.Sort(decls)
+	return decls, ""
+}
+
+// describeTouched is touchedDeclarations as a refusal names it.
+func describeTouched(decls []string, unknown string) string {
+	if unknown != "" {
+		return fmt.Sprintf("unknown (%s)", unknown)
 	}
 	if len(decls) == 0 {
 		return "none yet"
 	}
-	slices.Sort(decls)
-	return strings.Join(decls, ", ")
+	named := slices.Clone(decls)
+	for i, d := range named {
+		if d == "" {
+			named[i] = "the top of the file"
+		}
+	}
+	return strings.Join(named, ", ")
+}
+
+// splitAdvice is what a refusal tells the new job to do about file, which holder already
+// holds. When the holder's touched declarations and the job's symbol goals each name
+// declarations of file, it prints the claim pair that splits the file and says whether the
+// two are disjoint. magus writes neither claim: the rows are the orchestrator's. With
+// nothing to compute a pair from it gives the generic advice.
+func splitAdvice(ctx context.Context, store *Store, row, holder types.Job, file string, touched []string) string {
+	orElse := fmt.Sprintf("add `--depends-on %s` to %s, or fold %s into %s", holder.ID, row.ID, row.ID, holder.ID)
+	generic := fmt.Sprintf("Claim `%s#<declaration>` on both rows, %s", file, orElse)
+	driver, _ := resolveDriver(ctx, store.root)
+	if driver == nil {
+		return generic
+	}
+	all, _ := declarationsOf(ctx, driver, store.root, file)
+	var theirs, mine []string
+	for _, d := range touched {
+		if d != "" {
+			theirs = appendUnique(theirs, claimWord(d, all))
+		}
+	}
+	for _, g := range row.Goals {
+		if g.Kind != types.GoalKindSymbol {
+			continue
+		}
+		for _, symbol := range g.Symbols {
+			if len(namedDeclarations(symbol, all)) == 1 {
+				mine = appendUnique(mine, symbol)
+			}
+		}
+	}
+	claims := func(words []string, id string) string {
+		quoted := make([]string, len(words))
+		for i, w := range words {
+			quoted[i] = "`" + file + "#" + w + "`"
+		}
+		return strings.Join(quoted, ", ") + " on " + id
+	}
+	switch {
+	case len(theirs) == 0 && len(mine) == 0:
+		return generic
+	case len(theirs) == 0:
+		return fmt.Sprintf("Claim %s (its symbol goals name it) and a declaration other than that on %s, or %s", claims(mine, row.ID), holder.ID, orElse)
+	case len(mine) == 0:
+		return fmt.Sprintf("Claim %s (it has touched it) and a declaration other than that on %s, or %s", claims(theirs, holder.ID), row.ID, orElse)
+	}
+	for _, m := range mine {
+		for _, t := range theirs {
+			if sameDeclaration(m, t, all) {
+				return fmt.Sprintf("%s's symbol goals and %s's touched work both reach %s in it, so a claim cannot split them: %s", row.ID, holder.ID, m, orElse)
+			}
+		}
+	}
+	return fmt.Sprintf("Claim %s and %s, which name different declarations (nothing was written to either row), or %s",
+		claims(theirs, holder.ID), claims(mine, row.ID), orElse)
+}
+
+// sameDeclaration reports whether the claim words a and b name one declaration of all.
+func sameDeclaration(a, b string, all []string) bool {
+	return a == b || slices.ContainsFunc(all, func(d string) bool { return types.NamesDeclaration(a, d) && types.NamesDeclaration(b, d) })
+}
+
+func appendUnique(list []string, s string) []string {
+	if slices.Contains(list, s) {
+		return list
+	}
+	return append(list, s)
+}
+
+// declarationsOf lists the declarations of file as its diff driver places them, in file
+// order and without the preamble; false when the file cannot be read or placed. A file
+// compared with nothing is all added, which is how a RegionReporter says where each of its
+// declarations lies.
+func declarationsOf(ctx context.Context, driver types.VCSDriver, root, file string) ([]string, bool) {
+	body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
+	if err != nil {
+		return nil, false
+	}
+	regions, err := driver.RegionsBetween(ctx, root, file, nil, body)
+	if err != nil {
+		return nil, false
+	}
+	var decls []string
+	for _, r := range regions {
+		if d := r.Location().Declaration; d != "" && d != types.Preamble {
+			decls = appendUnique(decls, d)
+		}
+	}
+	return decls, true
+}
+
+// namedDeclarations are the entries of all that claim names.
+func namedDeclarations(claim string, all []string) []string {
+	return slices.DeleteFunc(slices.Clone(all), func(d string) bool { return !types.NamesDeclaration(claim, d) })
+}
+
+// ambiguousClaim is the MGS3031 reason for a claim naming several declarations of file:
+// the guard and `job wait` would hold every one of them, not the one its author meant.
+func ambiguousClaim(file, claim string, matched, all []string) string {
+	var alternatives []string
+	for _, d := range matched[:min(len(matched), 3)] {
+		alternatives = append(alternatives, "`"+claimWord(d, all)+"`")
+	}
+	return fmt.Sprintf("%q names %d declarations of %s (such as `%s`), and a claim guards exactly one; use a word only one of them has, such as %s",
+		file+"#"+claim, len(matched), file, strings.TrimSpace(matched[0]), strings.Join(alternatives, ", "))
+}
+
+// claimWord is the shortest word of declaration that names it and no other entry of all:
+// a heading's text, else an identifier (preferring one that is called, which is the name),
+// else the whole line.
+func claimWord(declaration string, all []string) string {
+	names := func(word string) bool {
+		return types.NamesDeclaration(word, declaration) && !slices.ContainsFunc(all, func(d string) bool {
+			return d != declaration && types.NamesDeclaration(word, d)
+		})
+	}
+	if strings.HasPrefix(declaration, "#") {
+		if heading := strings.TrimSpace(strings.TrimLeft(declaration, "#")); names(heading) {
+			return heading
+		}
+	}
+	var first string
+	for i := 0; i < len(declaration); {
+		if !wordByte(declaration[i]) {
+			i++
+			continue
+		}
+		j := i
+		for j < len(declaration) && wordByte(declaration[j]) {
+			j++
+		}
+		if word := declaration[i:j]; names(word) {
+			if j < len(declaration) && declaration[j] == '(' {
+				return word
+			}
+			if first == "" {
+				first = word
+			}
+		}
+		i = j
+	}
+	if first != "" {
+		return first
+	}
+	return strings.TrimSpace(declaration)
+}
+
+func wordByte(b byte) bool {
+	return b == '_' || b == '$' || b >= '0' && b <= '9' || b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || b >= 0x80
+}
+
+// ForkNotes are what a fork that passed owes its reader, one line each: a write-path claim
+// that names no declaration of its file yet (allowed, since the declaration may not be
+// written; echoed so a typo shows), and, for a file row shares with a job in the same
+// checkout or not yet taken (write_proof overlapping), the claim pair that would split it.
+// Nothing is written to a row. A nil store, or one with no workspace root, has no tree to
+// read and returns nil.
+func ForkNotes(ctx context.Context, store *Store, rows []types.Job, row types.Job) []string {
+	if store == nil || store.root == "" {
+		return nil
+	}
+	var notes []string
+	for _, entry := range row.WritePaths {
+		file, ok := literalClaimableFile(store.root, entry)
+		if !ok {
+			continue
+		}
+		_, decl := types.SplitClaim(entry)
+		if decl == "" || decl == types.Preamble {
+			continue
+		}
+		driver, drivers, why := claimDrivers(ctx, store.root, []string{file})
+		if why != "" || drivers[file] == "" {
+			continue
+		}
+		all, readable := declarationsOf(ctx, driver, store.root, file)
+		switch {
+		case !readable:
+			notes = append(notes, fmt.Sprintf("%s does not exist yet in this checkout, so %q names a declaration once it is written", file, entry))
+		case len(namedDeclarations(decl, all)) == 0:
+			notes = append(notes, fmt.Sprintf("%q names no declaration of %s yet; it holds one once written, so check the spelling", entry, file))
+		}
+	}
+	here, _ := filepath.Abs(store.root)
+	var shared []string
+	for _, peer := range rows {
+		if peer.ID == row.ID || !Editing(peer) || len(peer.WritePaths) == 0 || peer.CheckoutRoot != "" && peer.CheckoutRoot != here {
+			continue
+		}
+		for _, mine := range row.WritePaths {
+			file, ok := literalClaimableFile(store.root, mine)
+			if !ok || slices.Contains(shared, peer.ID+" "+file) {
+				continue
+			}
+			if _, driven := types.MatchDiffDriver(file); !driven {
+				continue
+			}
+			for _, theirs := range peer.WritePaths {
+				if other, ok := literalClaimableFile(store.root, theirs); !ok || other != file || !types.PathsIntersect(mine, theirs) {
+					continue
+				}
+				shared = append(shared, peer.ID+" "+file)
+				var touched []string
+				if peer.CheckoutRoot != "" {
+					touched, _ = touchedDeclarations(ctx, store, rows, peer.ID, file)
+				}
+				notes = append(notes, fmt.Sprintf("%s and %s both write %s. %s", row.ID, peer.ID, file, splitAdvice(ctx, store, row, peer, file, touched)))
+				break
+			}
+		}
+	}
+	return notes
 }
 
 // updatedAgo is how long ago row last wrote itself, as a refusal names it.

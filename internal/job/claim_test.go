@@ -2,6 +2,7 @@ package job
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
@@ -189,6 +190,158 @@ func TestRefuseUnorderedFileShareReadsTheReplacementsDependsOn(t *testing.T) {
 	require.NoError(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement))
 	replacement.DependsOn = nil
 	require.ErrorIs(t, RefuseUnorderedFileShare(context.Background(), s, rows, replacement), types.WritePathFileShared)
+}
+
+const claimGo = `package run
+
+func A(ctx int) {
+	a()
+}
+
+func B(ctx int) {
+	b()
+}
+
+func C() {
+	c()
+}
+`
+
+var claimFiles = map[string]string{".gitattributes": "*.go diff=golang\n", "run.go": claimGo}
+
+// A claim word that several declarations of its file share guards all of them, not the one
+// its author meant, so the fork is refused with words that name one each. A word that
+// names none is accepted: the declaration may not be written yet.
+func TestRefuseUngradableClaimsAmbiguousWord(t *testing.T) {
+	t.Parallel()
+
+	root := testkit.NewRepo(t, claimFiles).Root()
+	for _, tc := range []struct {
+		name  string
+		paths []string
+		want  string
+	}{
+		{"a word one declaration has", []string{"run.go#A"}, ""},
+		{"the whole declaration line", []string{"run.go#func C() {"}, ""},
+		{"a declaration not written yet", []string{"run.go#helper"}, ""},
+		{"a word several declarations share", []string{"run.go#ctx"},
+			"\"run.go#ctx\" names 2 declarations of run.go (such as `func A(ctx int) {`), and a claim guards exactly one; use a word only one of them has, such as `A`, `B`"},
+		{"a word every declaration shares", []string{"run.go#func"}, `"run.go#func" names 3 declarations of run.go`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := NewStore(tmpLoc(t, root))
+			err := RefuseUngradableClaims(context.Background(), s, types.Job{ID: "wave/job", WritePaths: tc.paths})
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, types.WritePathClaimUngradable)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+
+	t.Run("a deny path is held to it", func(t *testing.T) {
+		t.Parallel()
+		err := RefuseUngradableClaims(context.Background(), NewStore(tmpLoc(t, root)), types.Job{ID: "wave/job", DenyPaths: []string{"run.go#ctx"}})
+		require.ErrorIs(t, err, types.WritePathClaimUngradable)
+		assert.Contains(t, err.Error(), `deny path "run.go#ctx" names 2 declarations of run.go`)
+	})
+}
+
+// The refusal prints the claim pair it computed, from the declarations the holder has
+// touched and the symbols the new job's goals name, and says whether the two are disjoint.
+func TestRefuseUnorderedFileSharePrintsTheClaimPair(t *testing.T) {
+	t.Parallel()
+
+	bRoot := testkit.NewRepo(t, claimFiles).Root()
+	aRepo := testkit.NewRepo(t, claimFiles)
+	aRev := aRepo.Head()
+	aRepo.WriteTree(map[string]string{"run.go": strings.Replace(claimGo, "a()", "a2()", 1)})
+
+	symbol := func(names ...string) []types.Goal {
+		return []types.Goal{{ID: "g", Kind: types.GoalKindSymbol, Expect: types.ExpectChanged, Symbols: names}}
+	}
+	for _, tc := range []struct {
+		name  string
+		goals []types.Goal
+		holds []string
+		want  []string
+	}{
+		{"disjoint declarations", symbol("C"), []string{"run.go"}, []string{
+			"A has touched func A(ctx int) { in it so far.",
+			"Claim `run.go#A` on A and `run.go#C` on B, which name different declarations (nothing was written to either row), or add `--depends-on A` to B, or fold B into A",
+		}},
+		{"the same declaration", symbol("A"), []string{"run.go"}, []string{
+			"B's symbol goals and A's touched work both reach A in it, so a claim cannot split them: add `--depends-on A` to B, or fold B into A",
+		}},
+		{"a symbol the file does not define", symbol("Missing"), []string{"run.go"}, []string{
+			"Claim `run.go#A` on A (it has touched it) and a declaration other than that on B",
+		}},
+		{"no symbol goal at all", nil, []string{"run.go"}, []string{
+			"Claim `run.go#A` on A (it has touched it) and a declaration other than that on B",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := NewStore(tmpLoc(t, bRoot))
+			seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: tc.holds, Checkpoint: aRev, CheckoutRoot: aRepo.Root()})
+			rows, err := s.List()
+			require.NoError(t, err)
+
+			err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: tc.goals})
+			require.ErrorIs(t, err, types.WritePathFileShared)
+			for _, want := range tc.want {
+				assert.Contains(t, err.Error(), want)
+			}
+		})
+	}
+
+	t.Run("a holder that has touched nothing, and a job with no symbol goals, get the generic advice", func(t *testing.T) {
+		t.Parallel()
+		quiet := testkit.NewRepo(t, claimFiles)
+		s := NewStore(tmpLoc(t, bRoot))
+		seed(t, s, types.Job{ID: "A", State: types.StateRunning, WritePaths: []string{"run.go"}, Checkpoint: quiet.Head(), CheckoutRoot: quiet.Root()})
+		rows, err := s.List()
+		require.NoError(t, err)
+
+		err = RefuseUnorderedFileShare(context.Background(), s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}})
+		require.ErrorIs(t, err, types.WritePathFileShared)
+		assert.Contains(t, err.Error(), "Claim `run.go#<declaration>` on both rows, add `--depends-on A` to B, or fold B into A")
+	})
+}
+
+func TestForkNotes(t *testing.T) {
+	t.Parallel()
+
+	root := testkit.NewRepo(t, claimFiles).Root()
+	s := NewStore(tmpLoc(t, root))
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name  string
+		paths []string
+		want  []string
+	}{
+		{"a claim that names a declaration", []string{"run.go#A"}, nil},
+		{"the preamble", []string{"run.go#(preamble)"}, nil},
+		{"a whole file", []string{"run.go"}, nil},
+		{"a claim that names none", []string{"run.go#helper"}, []string{`"run.go#helper" names no declaration of run.go yet; it holds one once written, so check the spelling`}},
+		{"a claim in a file not written yet", []string{"new.go#helper"}, []string{`new.go does not exist yet in this checkout, so "new.go#helper" names a declaration once it is written`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, ForkNotes(ctx, s, nil, types.Job{ID: "B", WritePaths: tc.paths}))
+		})
+	}
+
+	t.Run("a file shared with a job not yet taken", func(t *testing.T) {
+		t.Parallel()
+		rows := []types.Job{{ID: "A", State: types.StateDeclared, WritePaths: []string{"run.go"}}}
+		goals := []types.Goal{{ID: "g", Kind: types.GoalKindSymbol, Expect: types.ExpectChanged, Symbols: []string{"C"}}}
+		got := ForkNotes(ctx, s, rows, types.Job{ID: "B", WritePaths: []string{"run.go"}, Goals: goals})
+		assert.Equal(t, []string{"B and A both write run.go. Claim `run.go#C` on B (its symbol goals name it) and a declaration other than that on A, or add `--depends-on A` to B, or fold B into A"}, got)
+	})
 }
 
 // strPtr returns a pointer to s, for a test table field that must tell "not given" (nil)
