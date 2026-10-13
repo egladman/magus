@@ -757,10 +757,17 @@ func writeRepoFile(t *testing.T, dir, name, body string) {
 }
 
 // eachBackend runs fn against every backend whose binary is installed.
+//
+// The caller and every backend run in parallel, since hg and sl spawn slow processes and
+// each fn works in its own t.TempDir. So neither fn nor its caller may use t.Setenv or
+// t.Chdir, and the caller may not touch anything fn reads after eachBackend returns:
+// the subtests have not started by then.
 func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 	t.Helper()
+	t.Parallel()
 	for _, b := range parityBackends() {
 		t.Run(b.name, func(t *testing.T) {
+			t.Parallel()
 			if _, err := exec.LookPath(b.bin); err != nil {
 				t.Skipf("%s not available", b.bin)
 			}
