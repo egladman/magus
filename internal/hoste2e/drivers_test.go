@@ -3,11 +3,12 @@
 package hoste2e
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // Isolation, per host, from the user's own config:

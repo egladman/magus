@@ -3,12 +3,12 @@
 package hoste2e
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 )
 

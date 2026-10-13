@@ -3,7 +3,6 @@
 package hoste2e
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 // The prompts are scripts, not tasks: each step names the tool to use so the hook it
