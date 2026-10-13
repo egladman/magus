@@ -271,12 +271,14 @@ func sourcedBy(sources []types.Glob, written []string) (best types.Glob, specifi
 }
 
 // outputProbes are the paths that stand for g when asking the VCS whether it ignores it:
-// the first outputProbeLimit files g matches now, or the pattern itself read as a path when
-// it matches none yet, which an ignore rule on any directory above it still catches.
+// the first outputProbeLimit files g matches within outputProbeDirs directories, or the
+// pattern itself read as a path when that finds none, which an ignore rule on any
+// directory above it, or on its file name, still catches.
 func outputProbes(root string, g types.Glob) []string {
 	if !types.IsLiteralGlob(g.Pattern) {
 		var matches []string
-		_ = doublestar.GlobWalk(os.DirFS(root), g.Pattern, func(p string, _ fs.DirEntry) error {
+		tree := &boundedDirs{FS: os.DirFS(root), left: outputProbeDirs}
+		_ = doublestar.GlobWalk(tree, g.Pattern, func(p string, _ fs.DirEntry) error {
 			if g.Excludes(p) {
 				return nil
 			}
@@ -296,3 +298,22 @@ func outputProbes(root string, g types.Glob) []string {
 // generated tree whole or not at all in practice, and matching every file of a glob such
 // as docs/gen/** walked thousands of files on every fork and describe that listed it.
 const outputProbeLimit = 16
+
+// outputProbeDirs bounds the directories one probe reads: a glob matching few files under
+// a wide tree, such as **/gen/*.go, otherwise walked the whole checkout to find them.
+const outputProbeDirs = 64
+
+// boundedDirs is an fs.FS that lists at most left directories. GlobWalk skips a directory
+// it cannot list, so a spent budget ends the walk without failing it.
+type boundedDirs struct {
+	fs.FS
+	left int
+}
+
+func (b *boundedDirs) ReadDir(name string) ([]fs.DirEntry, error) {
+	if b.left <= 0 {
+		return nil, fs.ErrPermission
+	}
+	b.left--
+	return fs.ReadDir(b.FS, name)
+}

@@ -138,8 +138,9 @@ func TestRegeneratedOutside(t *testing.T) {
 // The text lists outputs in rank order up to the cap, counts the rest with the targets
 // behind them, and ends with who regenerates them.
 // An output's ignore probe stands on its first outputProbeLimit files, skipping excluded
-// ones, and on the pattern itself when it matches nothing yet: matching every file of a
-// generated tree walked thousands on every fork and describe that listed it.
+// ones, found within outputProbeDirs directories, and on the pattern itself when that
+// finds none: matching every file of a generated tree walked thousands on every fork and
+// describe that listed it.
 func TestOutputProbesStopAtTheLimit(t *testing.T) {
 	t.Parallel()
 
@@ -156,6 +157,16 @@ func TestOutputProbesStopAtTheLimit(t *testing.T) {
 	}
 	assert.NotContains(t, outputProbes(root, types.Glob{Pattern: "gen/**/*.md", Except: []string{"gen/d0"}}), "gen/d0/f000.md")
 	assert.Equal(t, []string{"none/**"}, outputProbes(root, types.Glob{Pattern: "none/**"}))
+
+	wide := t.TempDir()
+	for i := range outputProbeDirs + 4 {
+		require.NoError(t, os.MkdirAll(filepath.Join(wide, fmt.Sprintf("d%03d", i)), 0o755))
+	}
+	require.NoError(t, os.MkdirAll(filepath.Join(wide, "zz"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(wide, "zz", "late.md"), nil, 0o644))
+	assert.Equal(t, []string{"**/*.md"}, outputProbes(wide, types.Glob{Pattern: "**/*.md"}),
+		"a walk past outputProbeDirs directories stops and the pattern stands for the output")
+	assert.Equal(t, []string{"zz/late.md"}, outputProbes(wide, types.Glob{Pattern: "zz/*.md"}))
 }
 
 func TestRenderRegeneratedCapsTheListing(t *testing.T) {
