@@ -606,8 +606,13 @@ func releaseOnEnd(at location, who hookAttribution, command string) {
 // bindingUnlessEnded is b, or no binding when b names a job that ended in a verdict (pass,
 // fail or no_return), for the caller to release. A wait ends a job from its orchestrator's
 // session, so releaseOnEnd never sees the holder's call; the holder's own next call
-// releases it instead. An exited row still holds: a rejected wait sends the holder back to
-// the same paths.
+// releases it instead.
+//
+// An exited row still holds its holder, since a rejected wait sends it back to the same
+// paths, until the caller's BAGGAGE claims another job still declared or running. The
+// holder filed its result, so nothing of the exited job is left to grade, and keeping the
+// binding graded a resumed worker under the job it had finished. A binding to a job in
+// flight still outranks the claim: a worker cannot rewrite its own grading from a shell.
 func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Binding {
 	if b.Job == "" || b.Gone {
 		return b
@@ -616,11 +621,21 @@ func bindingUnlessEnded(ctx context.Context, at location, b job.Binding) job.Bin
 	if err != nil {
 		return b
 	}
-	i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == b.Job })
-	if i < 0 || !rows[i].State.Terminal() {
-		return b
+	state := func(id string) types.JobState {
+		if i := slices.IndexFunc(rows, func(row types.Job) bool { return row.ID == id }); i >= 0 {
+			return rows[i].State
+		}
+		return ""
 	}
-	return job.Binding{}
+	switch held := state(b.Job); {
+	case held.Terminal():
+		return job.Binding{}
+	case held == types.StateExited:
+		if claim := trail.LeaseFromEnv(); claim != b.Job && state(claim).Editing() {
+			return job.Binding{}
+		}
+	}
+	return b
 }
 
 // registerAgentBase records the base of the checkout a subagent's call runs in for the
