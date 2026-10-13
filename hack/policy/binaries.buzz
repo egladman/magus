@@ -105,7 +105,8 @@ fun foreignBinary(p: helpers\Program, where: Where, disk: Disk) > str {
 // goIntoCheckout: `go -C <dir>` out of this workspace and into a checkout of magus, for a
 // verb one of that checkout's targets covers. The pure raw-tool rule passes a -C that
 // leaves the workspace, since a foreign tree is not its to funnel; a checkout of magus is.
-// The one exception is the bootstrap into a checkout with no binary yet.
+// The bootstrap is internal/guard's to judge: it refuses one over a binary that loads the
+// tree and allows one over a binary that cannot (MGS1021), which this rule cannot tell apart.
 fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     if (p.name != "go") { return ""; }
     final call = helpers\goCall(p.args);
@@ -117,15 +118,7 @@ fun goIntoCheckout(p: helpers\Program, where: Where, disk: Disk) > str {
     final root = absolute(call.chdir, dir: where.dir);
     final isCheckout = disk.isCheckout;
     if (root == "" or !isCheckout(root)) { return ""; }
-    if (bootstrap(call.args)) {
-        final hasBinary = disk.hasBinary;
-        if (!hasBinary(root)) { return ""; }
-        return "not a bootstrap: that checkout already has a magus binary\n"
-            + "{root} has one; rebuild it with `{root}/magus --root {root} run go-build .`. "
-            + "If that binary cannot load the tree "
-            + "(MGS1021 after a pull or merge), move it aside first, then bootstrap: "
-            + "`mv {root}/magus {root}/magus.old`, then `{bootstrapIn(root)}`.";
-    }
+    if (bootstrap(call.args)) { return ""; }
     return ("go -C into another checkout of magus runs outside its cache and its drift tracking\n"
         + "`go -C {root} {verb}` runs a toolchain command in another checkout of magus; run the target from that checkout: "
         + "`{root}/magus --root {root} run <target> .`. " + ownBinaryHint(root, disk: disk, lease: where.lease)).trim();
@@ -281,7 +274,7 @@ test "go -C into a foreign tree, inside the workspace, or for an uncovered verb 
     }
 }
 
-test "the bootstrap into another checkout passes only while it has no binary" {
+test "the bootstrap into another checkout is left to internal/guard, binary or not" {
     final fresh = fakeDisk(["/w/a", "/w/b"], binaries: ["/w/b"]);
     foreach (argv in [
         ["go", "-C", "/w/a", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."],
@@ -290,8 +283,7 @@ test "the bootstrap into another checkout passes only while it has no binary" {
         std\assert(binaryDenial([argv], where: inB, disk: fresh) == "", message: argv.join(" "));
     }
     final built = binaryDenial([["go", "-C", "/w/a", "run", "-trimpath", "./cmd/magus", "run", "go-build", "--no-cache", "."]], where: inB, disk: twoCheckouts);
-    std\assert(built.indexOf("not a bootstrap") == 0, message: "a binary already there");
-    std\assert(built.indexOf("mv /w/a/magus /w/a/magus.old") != null, message: "names the deadlock escape");
+    std\assert(built == "", message: "a binary already there: internal/guard tells a stale one from a live one");
     foreach (argv in [
         ["go", "-C", "/w/a", "build", "-o", "magus", "./cmd/magus"],
         ["go", "-C", "/w/a", "run", "-trimpath", "./cmd/magus", "run", "go-build", "."],
