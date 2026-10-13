@@ -19,6 +19,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/log/attr"
+	"github.com/egladman/magus/internal/risk"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/settle"
 	"github.com/egladman/magus/internal/ward"
@@ -187,6 +188,13 @@ func vcsResolveUsage(w io.Writer) {
 	fmt.Fprintln(w, "every path first and regenerating once is both faster and the only way to")
 	fmt.Fprintln(w, "settle a file one side deleted, which no VCS calls a merge driver for.")
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "With --against, a source file two jobs both wrote also settles when each side")
+	fmt.Fprintln(w, "carries one job's work, every such job passed `magus job wait`, their claims on")
+	fmt.Fprintln(w, "it (<file>#<declaration>) are disjoint, and a project's merge_low_risk covers it.")
+	fmt.Fprintln(w, "Each edit must sit in its own job's claims; import lines merge as a set. A file")
+	fmt.Fprintln(w, "a job claims gets a line saying it settled or which condition failed. Needs a")
+	fmt.Fprintln(w, "VCS that reports a merge base: git does; Mercurial, Sapling and jj do not.")
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --against <ref>  merge <ref> first, then settle what it conflicts with.")
 	fmt.Fprintln(w, "                   Needs a clean tree. Leaves the merge in progress to")
@@ -254,7 +262,14 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return errors.New("vcs resolve: version control is disabled for this workspace, resolve this merge by hand")
 	}
 
+	// The revision the merge starts from, which settling by job claims reads as ours.
+	var ours string
 	if rf.Against != "" {
+		meta, err := res.VCS.Metadata(ctx, m.Root())
+		if err != nil {
+			return fmt.Errorf("vcs resolve: %w", err)
+		}
+		ours = meta.ID
 		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
 		if err != nil {
 			return err
@@ -281,6 +296,11 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if !globalCfg.DryRun {
 		if conflicts, err = autoResolveConflicts(ctx, m, res.VCS, conflicts); err != nil {
 			return err
+		}
+		if len(conflicts) > 0 && rf.Against != "" {
+			if conflicts, err = settleByClaims(ctx, m, res.VCS, ours, rf.Against, conflicts); err != nil {
+				return err
+			}
 		}
 		if len(conflicts) == 0 {
 			return nil
@@ -328,6 +348,197 @@ func autoResolveConflicts(ctx context.Context, m *magus.Magus, drv types.VCSDriv
 		fmt.Println("vcs resolve: every conflict is resolved")
 	}
 	return left, nil
+}
+
+// settleByClaims settles the content conflicts that jobs on the two sides of a merge of
+// against into ours reached through disjoint declaration claims, and returns the conflicts
+// still standing. A path settles only when every condition holds:
+//   - a project's merge_low_risk covers it, and a diff driver places its declarations;
+//   - the VCS reports one merge base for the two sides;
+//   - each side carries the work of a job that writes the path, and every such job is
+//     recorded pass by `magus job wait`;
+//   - each of those jobs writes it by declaration claims alone, and the sides' claims are
+//     disjoint;
+//   - risk.MergeByClaims settles every region the two sides' edits meet in.
+//
+// A path some job claims by declaration gets one line saying it settled or which condition
+// failed. A path no job claims is passed over in silence, since claims say nothing about it.
+func settleByClaims(ctx context.Context, m *magus.Magus, drv types.VCSDriver, ours, against string, conflicts []types.Conflict) ([]types.Conflict, error) {
+	root := m.Root()
+	store, err := openJobs(root)
+	var rows []types.Job
+	if err == nil {
+		rows, err = store.List()
+	}
+	if err != nil {
+		fmt.Printf("vcs resolve: no conflict settles by job claims: the job store: %v\n", err)
+		return conflicts, nil
+	}
+	s := claimSettle{m: m, drv: drv, ours: ours, theirs: against}
+	var left []types.Conflict
+	for _, c := range conflicts {
+		writers, claimed := jobsWriting(rows, c.Path)
+		if c.Kind != types.ConflictKindContent || !claimed || m.FindOutputProducer(filepath.Join(root, filepath.FromSlash(c.Path))) != nil {
+			left = append(left, c)
+			continue
+		}
+		merged, how, err := s.settle(ctx, c.Path, writers)
+		if err != nil {
+			return nil, fmt.Errorf("vcs resolve: %s: %w", c.Path, err)
+		}
+		if merged == nil {
+			fmt.Printf("vcs resolve: %s not settled by job claims: %s\n", c.Path, how)
+			left = append(left, c)
+			continue
+		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(c.Path)), merged, 0o644); err != nil {
+			return nil, fmt.Errorf("vcs resolve: %w", err)
+		}
+		if err := drv.MarkResolved(ctx, root, []string{c.Path}); err != nil {
+			return nil, fmt.Errorf("vcs resolve: %w", err)
+		}
+		fmt.Printf("vcs resolve: settled %s by job claims: %s\n", c.Path, how)
+	}
+	if len(left) == 0 {
+		fmt.Println("vcs resolve: every conflict is resolved")
+	}
+	return left, nil
+}
+
+// jobsWriting returns the rows with a write path on p, and whether any of them claims p by
+// declaration.
+func jobsWriting(rows []types.Job, p string) (writers []types.Job, claimed bool) {
+	for _, row := range rows {
+		writes := false
+		for _, e := range row.WritePaths {
+			if types.PathsIntersect(e, p) {
+				writes = true
+				claimed = claimed || types.HasClaim(e)
+			}
+		}
+		if writes {
+			writers = append(writers, row)
+		}
+	}
+	return writers, claimed
+}
+
+// claimSettle decides paths for settleByClaims. ours and theirs are the two revisions the
+// merge joins; the merge base between them is looked up once.
+type claimSettle struct {
+	m            *magus.Magus
+	drv          types.VCSDriver
+	ours, theirs string
+
+	looked  bool
+	base    string
+	baseWhy string
+	baseErr error
+}
+
+// settle is the merge of p, or nil and the first condition that failed. how names the
+// claims either way.
+func (s *claimSettle) settle(ctx context.Context, p string, writers []types.Job) (merged []byte, how string, err error) {
+	if _, _, ok := risk.MatchScopes(risk.MergeScopes(s.m.All()), p); !ok {
+		return nil, "no project's merge_low_risk covers it", nil
+	}
+	if _, ok := types.MatchDiffDriver(p); !ok {
+		return nil, "no diff driver places its declarations", nil
+	}
+	base, why, err := s.mergeBase(ctx)
+	if why != "" || err != nil {
+		return nil, why, err
+	}
+	var jobs [2][]types.Job
+	for _, row := range writers {
+		if side := s.sideOf(ctx, row, base); side >= 0 {
+			jobs[side] = append(jobs[side], row)
+		}
+	}
+	var claims, cited [2][]string
+	for side, rows := range jobs {
+		if len(rows) == 0 {
+			return nil, fmt.Sprintf("no job whose work %s carries writes it", s.sideName(side)), nil
+		}
+		for _, row := range rows {
+			if row.State != types.StatePass {
+				return nil, fmt.Sprintf("job %s is %s, not recorded pass by `magus job wait`", row.ID, cmp.Or(row.State, types.StateDeclared)), nil
+			}
+			for _, e := range row.WritePaths {
+				if !types.PathsIntersect(e, p) {
+					continue
+				}
+				_, decl := types.SplitClaim(e)
+				if decl == "" {
+					return nil, fmt.Sprintf("job %s writes it whole (%s), not by declaration", row.ID, e), nil
+				}
+				claims[side] = append(claims[side], decl)
+				cited[side] = append(cited[side], e+" (job "+row.ID+")")
+			}
+		}
+	}
+	if a, b, ok := risk.OverlappingClaims(claims[0], claims[1]); ok {
+		return nil, fmt.Sprintf("the claims overlap: %s#%s on %s, %s#%s on %s", p, a, s.sideName(0), p, b, s.sideName(1)), nil
+	}
+	var content [3][]byte
+	for i, rev := range []string{base, s.ours, s.theirs} {
+		text, err := s.drv.ReadFileAt(ctx, s.m.Root(), rev, p)
+		if err != nil {
+			return nil, fmt.Sprintf("it cannot be read at %s: %v", rev, err), nil
+		}
+		content[i] = []byte(text)
+	}
+	res, err := risk.MergeByClaims(p, content[0], content[1], content[2], claims[0], claims[1])
+	if err != nil {
+		return nil, err.Error(), nil
+	}
+	return res.Content, strings.Join(cited[0], ", ") + " against " + strings.Join(cited[1], ", ") + "; every job passed", nil
+}
+
+func (s *claimSettle) sideName(side int) string {
+	if side == 0 {
+		return "ours"
+	}
+	return s.theirs
+}
+
+func (s *claimSettle) mergeBase(ctx context.Context) (base, why string, err error) {
+	if !s.looked {
+		s.looked = true
+		var ok bool
+		s.base, ok, s.baseErr = s.drv.MergeBase(ctx, s.m.Root(), s.ours, s.theirs)
+		switch {
+		case errors.Is(s.baseErr, types.ErrVCSUnsupported):
+			s.baseErr = nil
+			s.baseWhy = s.drv.Name() + " reports no merge base, and each side's edits are measured from one"
+		case s.baseErr == nil && !ok:
+			s.baseWhy = "the sides share no one merge base"
+		}
+	}
+	return s.base, s.baseWhy, s.baseErr
+}
+
+// sideOf is the side whose history carries row's work, 0 for ours and 1 for theirs, or -1
+// for neither: the work is already in the merge base, or no revision here names it. The
+// work is the revision row's checkout has checked out, else a revision named row.ID: the
+// branch-per-job convention hack/dev/merge-job-branches.buzz also reads.
+func (s *claimSettle) sideOf(ctx context.Context, row types.Job, base string) int {
+	tip := row.ID
+	if info, err := os.Stat(row.CheckoutRoot); err == nil && info.IsDir() {
+		if ref, err := s.drv.Ref(ctx, row.CheckoutRoot); err == nil && ref != "" {
+			tip = ref
+		}
+	}
+	root := s.m.Root()
+	if in, err := s.drv.IsAncestor(ctx, root, tip, base); err != nil || in {
+		return -1
+	}
+	for side, rev := range []string{s.ours, s.theirs} {
+		if in, err := s.drv.IsAncestor(ctx, root, tip, rev); err == nil && in {
+			return side
+		}
+	}
+	return -1
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that
