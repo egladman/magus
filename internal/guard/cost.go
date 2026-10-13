@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/hint"
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/observability"
+	"github.com/egladman/magus/internal/ward"
 	"github.com/egladman/magus/types"
 )
 
@@ -430,7 +431,7 @@ func orientationFile(p string) bool {
 
 // delegableClass names the work a shell line does that a subagent could have done in the
 // caller's place, "" for any other line. The final gate is never delegable: the main
-// thread runs it.
+// thread runs it, and neither is a command that costFree reports.
 func delegableClass(line string) string {
 	if commandRunsGate(line) {
 		return ""
@@ -440,11 +441,149 @@ func delegableClass(line string) string {
 		return ""
 	}
 	for _, c := range cmds {
+		if freeInvocation(c) {
+			continue
+		}
 		if class := invocationClass(c); class != "" {
 			return class
 		}
 	}
 	return ""
+}
+
+// costFree reports a shell line whose output is a ref or one line, so running it in the
+// main thread adds nothing to the context every later call re-sends, and no subagent would
+// do it cheaper. The cost rules that keep large output out of that context leave it alone,
+// which matters most for work a subagent may not do: only the main session builds ./magus,
+// so a main thread past its budget must still be able to. A line that changes directory
+// first is judged by the rest of it.
+func costFree(line string) bool {
+	if strings.TrimSpace(line) == ward.BootstrapCommand {
+		return true
+	}
+	cmds, ok := ParseCommands(line)
+	if !ok {
+		return false
+	}
+	free := false
+	for _, c := range cmds {
+		switch {
+		case isCdInvocation(c):
+		case freeInvocation(c):
+			free = true
+		default:
+			return false
+		}
+	}
+	return free
+}
+
+func freeInvocation(c hint.Invocation) bool {
+	if isMagusInvocation(c) {
+		return freeMagus(c.Args)
+	}
+	v := vcsInvocation(c)
+	if v == nil || v.Tool != "git" {
+		return false
+	}
+	switch v.Subcommand {
+	case "commit", "cherry-pick", "branch":
+		return true
+	case "status":
+		return hasFlag(v.Args, 's', "short")
+	case "log":
+		return hasFlag(v.Args, 0, "oneline") && !hasFlag(v.Args, 'p', "patch") && !hasFlag(v.Args, 'u', "") && logLimited(v.Args)
+	}
+	return false
+}
+
+// logLimited reports a git log argv that bounds its commit count: -n N, -nN, --max-count
+// or -N.
+func logLimited(args []string) bool {
+	if hasFlag(args, 'n', "max-count") {
+		return true
+	}
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if len(a) > 1 && a[0] == '-' && strings.Trim(a[1:], "0123456789") == "" {
+			return true
+		}
+	}
+	return false
+}
+
+// freeMagus reports a magus argv that prints a ref or one line: a run or an affected set
+// asked for silence, the build of ./magus itself, a job verb that files or waits, a
+// projection down to names or one template field, or the identity of a run's output.
+func freeMagus(args []string) bool {
+	words := magusSubcommandWords(args)
+	if len(words) == 0 {
+		return false
+	}
+	switch words[0] {
+	case "run", "affected":
+		if magusSilent(args) {
+			return true
+		}
+		if words[0] == "run" && len(words) > 1 && (words[1] == "go-build" || words[1] == "go::go-build") {
+			return true
+		}
+	case "job":
+		if len(words) > 1 {
+			switch words[1] {
+			case "fork", "exit", "apply", "wait":
+				return true
+			}
+		}
+	case "query":
+		if len(words) > 1 && words[1] == "output" && magusFlag(args, "identity") {
+			return true
+		}
+	}
+	return magusProjection(args)
+}
+
+// magusSilent reports -s or --silent, which makes run and affected print a ref.
+func magusSilent(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "" || a[0] != '-' {
+			continue
+		}
+		name, value, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if (name == "s" || name == "silent") && value != "false" {
+			return true
+		}
+	}
+	return false
+}
+
+// magusProjection reports an -o that asks for ids (name) or one template field: output
+// whose size does not grow with the workspace.
+func magusProjection(args []string) bool {
+	for i, a := range args {
+		if a == "--" {
+			return false
+		}
+		if a == "" || a[0] != '-' {
+			continue
+		}
+		name, value, hasValue := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if name != "o" && name != "output" {
+			continue
+		}
+		if !hasValue && i+1 < len(args) {
+			value = args[i+1]
+		}
+		if value == "name" || strings.HasPrefix(value, "template=") {
+			return true
+		}
+	}
+	return false
 }
 
 func invocationClass(c hint.Invocation) string {
@@ -488,8 +627,12 @@ func invocationClass(c hint.Invocation) string {
 		}
 	}
 	if isMagusInvocation(c) {
-		if words := magusSubcommandWords(c.Args); len(words) > 0 && words[0] == "run" {
+		switch words := magusSubcommandWords(c.Args); {
+		case len(words) > 0 && words[0] == "run":
 			return delegableRun
+		case len(words) > 1 && words[0] == "query" && words[1] == "output":
+			// A full log; costFree took the --identity form before it got here.
+			return delegableRead
 		}
 	}
 	return ""
@@ -521,14 +664,16 @@ func observeCall(ctx context.Context, at location, input string, who hookAttribu
 		return out
 	}
 	out.billing = accountAt(at.workspace).billing
+	free := false
 	if tool == hookToolCommand {
 		out.class = delegableClass(input)
+		free = costFree(input)
 	}
 	ran := verdict.Decision == decisionPass || verdict.Decision == decisionAdvise
 	var results []toolResult
 	if thread == types.AgentThreadMain && lease == "" {
 		st := readCostState(facts)
-		out.shadow = shadowVerdicts(st, mainCall{known: known, billing: out.billing, window: contextWindow(st, at), class: out.class, line: input})
+		out.shadow = shadowVerdicts(st, mainCall{known: known, billing: out.billing, window: contextWindow(st, at), class: out.class, free: free, line: input})
 		results = st.readTranscript(who.Transcript)
 		switch {
 		case ran && tool == hookToolCommand && out.class != "":

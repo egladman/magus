@@ -56,30 +56,110 @@ func TestCallerThread(t *testing.T) {
 func TestDelegableClass(t *testing.T) {
 	t.Parallel()
 	for line, want := range map[string]string{
-		"rg -n Judge internal":             delegableSearch,
-		"grep -rn Judge internal":          delegableSearch,
-		"find . -name '*.go'":              delegableSearch,
-		"grep Judge internal/guard/x.go":   "",
-		"cat internal/guard/guard.go":      delegableRead,
-		"sed -n 10,40p internal/a.go":      delegableRead,
-		"cat AGENTS.md":                    "",
-		"git diff":                         delegableDiff,
-		"git diff --stat":                  "",
-		"git show HEAD":                    delegableDiff,
-		"git log -p -3":                    delegableDiff,
-		"git log --oneline -n 20":          "",
-		"git status --short":               "",
-		"./magus run test internal/guard":  delegableRun,
-		"./magus affected ci":              "",
-		"./magus query output out1":        "",
-		"./magus job wait a3-rules":        "",
-		"curl -sS https://example.com/x":   delegableFetch,
-		"go version":                       "",
-		"cd internal && rg -l Verdict .":   delegableSearch,
-		"git diff --name-only main...HEAD": "",
+		"rg -n Judge internal":                 delegableSearch,
+		"grep -rn Judge internal":              delegableSearch,
+		"find . -name '*.go'":                  delegableSearch,
+		"grep Judge internal/guard/x.go":       "",
+		"cat internal/guard/guard.go":          delegableRead,
+		"sed -n 10,40p internal/a.go":          delegableRead,
+		"cat AGENTS.md":                        "",
+		"git diff":                             delegableDiff,
+		"git diff --stat":                      "",
+		"git show HEAD":                        delegableDiff,
+		"git log -p -3":                        delegableDiff,
+		"git log --oneline -n 20":              "",
+		"git status --short":                   "",
+		"./magus run test internal/guard":      delegableRun,
+		"./magus affected ci":                  "",
+		"./magus query output out1":            delegableRead,
+		"./magus query output out1 --identity": "",
+		"./magus job wait a3-rules":            "",
+		"./magus run go-build . -s":            "",
+		"./magus run go-build .":               "",
+		"./magus run test internal/guard -s":   "",
+		"git commit -m x":                      "",
+		"curl -sS https://example.com/x":       delegableFetch,
+		"go version":                           "",
+		"cd internal && rg -l Verdict .":       delegableSearch,
+		"git diff --name-only main...HEAD":     "",
 	} {
 		assert.Equal(t, want, delegableClass(line), line)
 	}
+}
+
+// Each line prints a ref or one line, so no cost rule that keeps output out of the main
+// thread's context has anything to judge.
+var costFreeLines = []string{
+	"./magus run go-build . -s",
+	"./magus run go-build . --silent",
+	"./magus run go-build .",
+	"./magus run test internal/guard -s",
+	"./magus affected ci --silent",
+	"./magus affected ci -s",
+	"cd /r && ./magus run go-build . -s",
+	"GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .",
+	"./magus job fork a1",
+	"./magus job exit a1 --stdin",
+	"./magus job apply a1",
+	"./magus job wait a1",
+	"./magus describe job a1 -o name",
+	"./magus describe job a1 -o=name",
+	"./magus describe job a1 --output name",
+	"./magus describe job a1 -o template='{{.State}}'",
+	"./magus ls -o name",
+	"./magus query output out1 --identity",
+	"git status --short",
+	"git status -sb",
+	"git log --oneline -n 5",
+	"git log --oneline -5",
+	"git log --oneline --max-count=5",
+	"git cherry-pick abc123",
+	"git commit -m 'x'",
+	"git branch root-allow",
+}
+
+// Each line can print a lot, or is not one of the quiet ones, and stays judged.
+var costBoundLines = map[string]string{
+	"cat internal/guard/guard.go":                 delegableRead,
+	"sed -n 1,400p internal/guard/guard.go":       delegableRead,
+	"rg -n Judge internal":                        delegableSearch,
+	"grep -rn Judge internal":                     delegableSearch,
+	"find . -name '*.go'":                         delegableSearch,
+	"git diff":                                    delegableDiff,
+	"git show HEAD":                               delegableDiff,
+	"git log -p -3":                               delegableDiff,
+	"git log --oneline -p -n 3":                   delegableDiff,
+	"./magus run test internal/guard":             delegableRun,
+	"./magus run test internal/guard -- -s":       delegableRun,
+	"./magus run test internal/guard -- --silent": delegableRun,
+	"./magus query output out1":                   delegableRead,
+	"./magus describe job a1 -o json":             "",
+	"./magus describe job a1":                     "",
+	"git status":                                  "",
+	"git log --oneline":                           "",
+	"cd /r && rg -n Judge internal":               delegableSearch,
+	"./magus run go-build . -s && rg -n Judge .":  delegableSearch,
+	"curl -sS https://example.com/x":              delegableFetch,
+}
+
+func TestCostFree(t *testing.T) {
+	t.Parallel()
+	for _, line := range costFreeLines {
+		assert.True(t, costFree(line), line)
+		assert.Empty(t, delegableClass(line), line)
+	}
+	for line, class := range costBoundLines {
+		assert.False(t, costFree(line), line)
+		assert.Equal(t, class, delegableClass(line), line)
+	}
+	assert.False(t, costFree("cd /r"), "a line that only changes directory is not a quiet command")
+	assert.False(t, costFree(""))
+}
+
+func TestInputClassOfAFreeCommandIsNone(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, inputClass(map[string]any{"command": "./magus run go-build . -s"}))
+	assert.Equal(t, delegableRead, inputClass(map[string]any{"command": "./magus query output out1"}))
 }
 
 func TestInputClassReadsAHostToolByShape(t *testing.T) {

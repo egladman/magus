@@ -88,6 +88,77 @@ func TestMainFindingsByLevel(t *testing.T) {
 	assert.Empty(t, mainFindings(levelSetting(types.GuardProfileStrict), small, diff))
 }
 
+// A main thread past its budget and its streak is neither refused nor advised for a call
+// that prints a ref or one line, at any level, and is refused for the calls that read.
+func TestFreeCallsEscapeTheBudgetRules(t *testing.T) {
+	t.Parallel()
+	st := costState{Tokens: 900_000, Streak: 20, Repeats: map[string]int{}}
+	call := func(line string) mainCall {
+		return mainCall{known: true, window: 1_000_000, class: delegableClass(line), free: costFree(line), line: line}
+	}
+	for _, level := range []types.GuardProfile{types.GuardProfileLight, types.GuardProfileStandard, types.GuardProfileStrict} {
+		for _, line := range costFreeLines {
+			rules := rulesOf(mainFindings(levelSetting(level), st, call(line)))
+			assert.NotContains(t, rules, denyRuleRootContextBudget, "%s at %s", line, level)
+			assert.NotContains(t, rules, denyRuleRootHeavyCommand, "%s at %s", line, level)
+		}
+	}
+	for line := range costBoundLines {
+		if delegableClass(line) == "" {
+			continue
+		}
+		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStrict), st, call(line)))
+		assert.True(t, rules[denyRuleRootContextBudget], line)
+		assert.True(t, rules[denyRuleRootHeavyCommand], line)
+	}
+	for _, line := range []string{"./magus describe job a1 -o json", "git status"} {
+		rules := rulesOf(mainFindings(levelSetting(types.GuardProfileStandard), st, call(line)))
+		assert.Contains(t, rules, denyRuleRootContextBudget, "a call that is not free is still advised: %s", line)
+	}
+}
+
+// A worker may not build ./magus, so the main thread past its budget must still be able to.
+// Judged whole, the quiet calls pass the budget rules and the reads do not.
+func TestMainThreadPastTheBudgetStillBuilds(t *testing.T) {
+	ctx, cache := spawnFixture(t)
+	deps := strictDeps(t)
+	who := hookAttribution{Host: "claude-code", Session: "s"}
+	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	budgetRule := func(v Verdict) bool {
+		return v.Rule == string(denyRuleRootContextBudget) || v.Rule == string(denyRuleRootHeavyCommand)
+	}
+	judge := func(line string) Verdict {
+		writeCostState(hint.NewGate(cache, who.factsKey()), costState{Tokens: 900_000, Streak: 20})
+		return Judge(ctx, deps, Request{Input: line, Host: who.Host, Session: who.Session})
+	}
+
+	for _, line := range []string{"./magus run go-build . -s", "git status --short", "./magus job wait a1", "./magus describe job a1 -o name"} {
+		assert.False(t, budgetRule(judge(line)), line)
+	}
+	for _, line := range []string{"git diff", "git show HEAD"} {
+		v := judge(line)
+		assert.Equal(t, decisionDeny, v.Decision, line)
+		assert.Equal(t, string(denyRuleRootContextBudget), v.Rule, line)
+	}
+}
+
+// Handing work to a subagent is what the budget rules ask for, so a spawn is never refused
+// or advised by them however large the context.
+func TestSpawnsEscapeTheBudgetRules(t *testing.T) {
+	ctx, cache := spawnFixture(t)
+	deps := strictDeps(t)
+	who := hookAttribution{Host: "claude-code", Session: "s"}
+	hostGate(cache, who.Host).MarkFired(hostAgentsKind)
+	writeCostState(hint.NewGate(cache, who.factsKey()), costState{Tokens: 900_000, Streak: 20})
+
+	v := Judge(ctx, deps, Request{Host: "claude-code", Input: hookJSON(t, map[string]any{
+		"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": "Agent",
+		"tool_input": map[string]any{"description": "orchestrator/scout scout", "prompt": "Read internal/job and report.", "model": "haiku"},
+	})})
+	assert.NotEqual(t, string(denyRuleRootContextBudget), v.Rule)
+	assert.NotEqual(t, string(denyRuleRootHeavyCommand), v.Rule)
+}
+
 // A result past the size is said once a session at light, and once per tool above it.
 func TestResultCapKeys(t *testing.T) {
 	t.Parallel()

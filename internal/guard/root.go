@@ -118,7 +118,10 @@ type mainCall struct {
 	window  int64
 	// class is the call's delegable class, "" for a call no subagent would make for it.
 	class string
-	line  string
+	// free is whether the call is costFree: its output is a ref or one line, so it adds
+	// nothing the budget rules exist to keep out of the context.
+	free bool
+	line string
 }
 
 // costFinding is one cost rule matching a call: a refusal, or advice said once per
@@ -135,7 +138,7 @@ type costFinding struct {
 func mainFindings(setting func(string) builtin.Setting, st costState, c mainCall) []costFinding {
 	var out []costFinding
 	s := setting(string(denyRuleRootContextBudget))
-	if l := settingLadder(s, s.Tokens, budgetFigures(c.billing, c.window)); st.Tokens > 0 {
+	if l := settingLadder(s, s.Tokens, budgetFigures(c.billing, c.window)); st.Tokens > 0 && !c.free {
 		switch {
 		case l.deny > 0 && st.Tokens >= int64(l.deny) && c.class != "":
 			out = append(out, costFinding{rule: denyRuleRootContextBudget, deny: true, key: hint.MarkerKind(denyRuleRootContextBudget),
@@ -254,7 +257,7 @@ func gradeMainCommand(deps Dependencies, verdict Verdict, in commandRuleInput, w
 		return verdict
 	}
 	st := readCostState(facts)
-	call := mainCall{known: known, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), line: in.command}
+	call := mainCall{known: known, billing: accountAt(at.workspace).billing, window: contextWindow(st, at), class: delegableClass(in.command), free: costFree(in.command), line: in.command}
 	return applyFindings(hint.NewGate(at.cacheDir, who.callerKey()), verdict, mainFindings(deps.settingOf, st, call), known)
 }
 
