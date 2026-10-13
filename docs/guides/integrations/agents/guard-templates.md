@@ -246,7 +246,7 @@ judge a `Read` exactly as they judge the `cat` it replaces.
 // denies a leased worker's. Where Codex cannot prompt at all (no rules file, a
 // permission_mode that never asks, a call no rule matches) the ask renders as a deny that
 // names the person's own terminal.
-// magus-guard-template: 25
+// magus-guard-template: 26
 // magus-guard-coverage: schema=2 host=claude-code input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=claude-code input=mcp deny=model advise=model pass=none ask=human
@@ -314,6 +314,10 @@ final UPDATED_INPUT_SLOT = "__MAGUS_UPDATED_INPUT__";
 final UPDATED_COMMAND = `{{toJson .}}`;
 final ADVISE_REWRITE = `{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}{{with index . "updated_command"}},"updatedInput":__MAGUS_UPDATED_INPUT__{{end}}}}`;
 final REWRITE_ONLY = `{{with index . "updated_command"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":__MAGUS_UPDATED_INPUT__}}{{end}}`;
+
+// A stop event reads no hookSpecificOutput: a block with a reason sends the agent back to
+// work, and a systemMessage shows the person a notice and lets the stop through.
+final STOP_REPLY = `{{if eq .decision "deny"}}{"decision":"block","reason":{{toJson .reason}}}{{else if eq .decision "advise"}}{"systemMessage":{{toJson .context}}}{{end}}`;
 
 final PERMISSION_NO_DECISION = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest"}}`;
 final PERMISSION_ALLOW = `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`;
@@ -743,6 +747,8 @@ fun main(args: [str]) > void {
     if (response == "" and eventName == "PermissionRequest") {
         response = permissionResponse(pushRule);
         capabilities.append("--renders-ask");
+    } else if (response == "" and (eventName == "Stop" or eventName == "SubagentStop")) {
+        response = STOP_REPLY;
     } else if (response == "") {
         // Only a shell command the host itself will run can come back rewritten: a Read
         // restated as `cat` is not what the host runs, and a whole event is not a command.
@@ -926,7 +932,7 @@ wasteful, not destructive.
 // before its first rule: an installed copy never self-corrects. Claude Code prompts on it;
 // Codex does not support a hook ask and no Codex rule prompts for a write, so there it
 // renders as a deny.
-// magus-guard-template: 25
+// magus-guard-template: 26
 // magus-guard-coverage: schema=2 host=claude-code input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=codex input=path deny=model advise=model pass=none ask=model
 
@@ -1187,7 +1193,7 @@ input, and this file carries no verdict on any input.
 // never denies, never advises, and cannot change what your host does next. The
 // parity gates ask that question only of artifacts that answer it.
 //
-// magus-guard-template: 25
+// magus-guard-template: 26
 
 // EVERY call that can fail is caught, deliberately.
 //
@@ -1389,7 +1395,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // this file carries no verdict on any input. It never denies, never advises, and
 // cannot change what your host does next.
 //
-// magus-guard-template: 25
+// magus-guard-template: 26
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that can fail is a hook that can break
 // the session it was meant to observe, and a record of where the work stopped is
@@ -1541,7 +1547,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // carries no verdict on any input. It never denies, never advises, and cannot
 // change what your host does next.
 //
-// magus-guard-template: 25
+// magus-guard-template: 26
 
 // EVERY call that can fail is caught, matching the templates beside it. A hook that
 // can fail is a hook that can break the session it was meant to help.
@@ -1686,7 +1692,7 @@ import "lib/hook" as hook;
 //
 // NO magus-guard-coverage line: it judges nothing on any input.
 //
-// magus-guard-template: 25
+// magus-guard-template: 26
 
 final ENV_FILE_FLAG = "--env-file";
 final BOOTSTRAP = "GOEXPERIMENT=jsonv2 go run -trimpath ./cmd/magus run go-build --no-cache .";
@@ -1937,7 +1943,7 @@ It declares no `magus-guard-coverage` line, for the reason
 // NO magus-guard-coverage line, for the reason magus-checkpoint.buzz has none: this file
 // carries no verdict on any input.
 //
-// magus-guard-template: 25
+// magus-guard-template: 26
 
 import "io";
 import "fs";
