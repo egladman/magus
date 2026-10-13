@@ -472,6 +472,13 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) error {
 			cfg.Jobs.Retain = d
 		}
 	}
+	if v := getenv("MAGUS_JOBS_MAX_VALIDATIONS"); v != "" {
+		if n, err := strconv.Atoi(v); err != nil {
+			errs = append(errs, fmt.Errorf("MAGUS_JOBS_MAX_VALIDATIONS: %w", err))
+		} else {
+			cfg.Jobs.MaxValidations = n
+		}
+	}
 	if v := getenv("MAGUS_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err != nil {
 			errs = append(errs, fmt.Errorf("MAGUS_CONCURRENCY: %w", err))

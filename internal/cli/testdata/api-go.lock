@@ -1354,6 +1354,7 @@ github.com/egladman/magus/types.EditedFile.DigestAfter field string "json:\"dige
 github.com/egladman/magus/types.EditedFile.DigestBefore field string "json:\"digest_before\" yaml:\"digest_before\""
 github.com/egladman/magus/types.EditedFile.Path field string "json:\"path\"          yaml:\"path\""
 github.com/egladman/magus/types.EmitDiagnostic func(ctx context.Context, ev DiagnosticEvent)
+github.com/egladman/magus/types.EndReasonSessionEnded const untyped string = "its holder's session ended"
 github.com/egladman/magus/types.EndedAncestor func(rows []Job, id string) (Job, bool)
 github.com/egladman/magus/types.EnsureReturnCapture func(ctx context.Context) context.Context
 github.com/egladman/magus/types.EntryPoint type string
@@ -1899,6 +1900,7 @@ github.com/egladman/magus/types.Job.DenyPaths field []string "json:\"deny_paths,
 github.com/egladman/magus/types.Job.DependsOn field []string "json:\"depends_on,omitempty\" yaml:\"depends_on,omitempty\""
 github.com/egladman/magus/types.Job.EffectiveGoals method func() []Goal
 github.com/egladman/magus/types.Job.EndReason field string "json:\"end_reason,omitempty\" yaml:\"end_reason,omitempty\""
+github.com/egladman/magus/types.Job.EndedWithSession method func() bool
 github.com/egladman/magus/types.Job.Entries field []JobEntry "json:\"entries,omitempty\" yaml:\"entries,omitempty\""
 github.com/egladman/magus/types.Job.GateAttempts field []JobGateAttempt "json:\"gate_attempts,omitempty\" yaml:\"gate_attempts,omitempty\""
 github.com/egladman/magus/types.Job.Goals field []Goal "json:\"goals,omitempty\" yaml:\"goals,omitempty\""

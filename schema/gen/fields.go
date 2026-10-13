@@ -573,6 +573,14 @@ var Fields = []fieldtype.Field{
 		Usage:    "MAGUS_JOBS_RETAIN: Retain is how long a job that is over (graded, ended, or exited with its result never collected), and the archive a c...",
 	},
 	{
+		GoPath:   "Jobs.MaxValidations",
+		YamlPath: "jobs.max_validations",
+		EnvVar:   "MAGUS_JOBS_MAX_VALIDATIONS",
+		Flag:     fieldtype.FlagNames{Long: "jobs-max-validations"},
+		Kind:     fieldtype.KindInt,
+		Usage:    "MAGUS_JOBS_MAX_VALIDATIONS: MaxValidations is how many 'magus run's one job tree's leased workers may have going at once; a run past it waits for...",
+	},
+	{
 		GoPath:   "Concurrency",
 		YamlPath: "concurrency",
 		EnvVar:   "MAGUS_CONCURRENCY",

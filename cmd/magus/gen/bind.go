@@ -70,6 +70,7 @@ func BindFlags(fs *flag.FlagSet, cfg *config.Config) {
 	fs.DurationVar(&cfg.Jobs.DefaultTimeout, "jobs-default-timeout", cfg.Jobs.DefaultTimeout, "MAGUS_JOBS_DEFAULT_TIMEOUT: DefaultTimeout bounds a fork that names no --timeout.")
 	fs.DurationVar(&cfg.Jobs.StaleAfter, "jobs-stale-after", cfg.Jobs.StaleAfter, "MAGUS_JOBS_STALE_AFTER: StaleAfter ends a declared job nobody took and nobody updated for this long, and flags a taken one in 'magus ls jobs'...")
 	fs.DurationVar(&cfg.Jobs.Retain, "jobs-retain", cfg.Jobs.Retain, "MAGUS_JOBS_RETAIN: Retain is how long a job that is over (graded, ended, or exited with its result never collected), and the archive a c...")
+	fs.IntVar(&cfg.Jobs.MaxValidations, "jobs-max-validations", cfg.Jobs.MaxValidations, "MAGUS_JOBS_MAX_VALIDATIONS: MaxValidations is how many 'magus run's one job tree's leased workers may have going at once; a run past it waits for...")
 	fs.IntVar(&cfg.Concurrency, "concurrency", cfg.Concurrency, "MAGUS_CONCURRENCY: Concurrency caps concurrent builds; top-level and in-process fan-out share one limiter.")
 	fs.IntVar(&cfg.Concurrency, "j", cfg.Concurrency, "Short for --concurrency")
 	fs.TextVar(&cfg.ConcurrencyProfile, "concurrency-profile", cfg.ConcurrencyProfile, "MAGUS_CONCURRENCY_PROFILE: ConcurrencyProfile sets the default width relative to the machine: conservative (half the cores), balanced (min(cores...")
