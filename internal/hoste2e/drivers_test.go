@@ -14,8 +14,8 @@ import (
 //
 //   - claude: --setting-sources project keeps ~/.claude/settings.json (and its hooks)
 //     out, --strict-mcp-config keeps user MCP servers out. Auth is the logged-in
-//     keychain entry, so CLAUDE_CONFIG_DIR stays unset, and Claude Code may record the
-//     temp project in its own ~/.claude.json state.
+//     keychain entry or CLAUDE_CODE_OAUTH_TOKEN, so CLAUDE_CONFIG_DIR stays unset, and
+//     Claude Code may record the temp project in its own ~/.claude.json state.
 //   - codex: CODEX_HOME is a temp dir holding a symlink to ~/.codex/auth.json and a
 //     config.toml written here, so the trust entry and the MCP table land there.
 //   - cursor: cursor-agent documents no config-dir override; the workspace's
@@ -27,7 +27,8 @@ import (
 // Every host gets XDG_STATE_HOME at a temp dir, which holds magus's session store.
 
 func claudeDriver() *hostDriver {
-	h := &hostDriver{id: "claude-code", spell: "claude-code", binary: "claude", model: envModel("CLAUDE", "haiku")}
+	h := &hostDriver{id: "claude-code", spell: "claude-code", binary: "claude", model: envModel("CLAUDE", "haiku"),
+		login: "a keychain login from `claude /login`, or CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`"}
 	// The desktop engine is newer than the CLI cask; it is preferred when the suite runs
 	// inside a desktop session that exports it.
 	h.locate("CLAUDE", [2]string{os.Getenv("CLAUDE_CODE_EXECPATH"), "CLAUDE_CODE_EXECPATH"})

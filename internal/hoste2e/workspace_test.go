@@ -81,12 +81,17 @@ func newNonce(t *testing.T) string {
 
 // scrubbedEnv drops what would tie a host or its hooks to the session running this
 // suite: a lease in BAGGAGE, a nested-host marker, magus settings for another tree.
+// CLAUDE_CODE_OAUTH_TOKEN is a login, not session state, so it passes through.
 func scrubbedEnv() []string {
 	drop := []string{"MAGUS_", "__MAGUS", "BAGGAGE=", "CLAUDECODE=", "CLAUDE_CODE_", "CLAUDE_PROJECT_DIR=", "CLAUDE_ENV_FILE=",
 		"AI_AGENT=", "CODEX_", "OPENCODE_CONFIG", "XDG_STATE_HOME=", "XDG_CONFIG_HOME=", "GIT_DIR=", "GIT_WORK_TREE=", "GIT_INDEX_FILE="}
 	var env []string
 next:
 	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "CLAUDE_CODE_OAUTH_TOKEN=") {
+			env = append(env, kv)
+			continue
+		}
 		for _, prefix := range drop {
 			if strings.HasPrefix(kv, prefix) {
 				continue next

@@ -27,6 +27,8 @@ type hostDriver struct {
 	// unauthenticated is the host's own words when it refused a turn for want of a
 	// login; every later scenario skips, since the suite never logs a host in.
 	unauthenticated string
+	// login names the logins the host reads, for the skip a refused turn reports.
+	login string
 
 	// env isolates the host's own config and state from the user's.
 	env func(t *testing.T, w *workspace) []string
@@ -150,6 +152,15 @@ func (h *hostDriver) play(t, owner *testing.T, prompts []string) *session {
 	}
 	t.Logf("%s reply: %s", h.id, clip(s.lastReply()))
 	return s
+}
+
+// notLoggedIn is the skip detail for a host that refused a turn for want of a login.
+func (h *hostDriver) notLoggedIn() string {
+	detail := h.binary + " is not logged in"
+	if h.login != "" {
+		detail += " (it reads " + h.login + ")"
+	}
+	return detail + ": " + h.unauthenticated
 }
 
 func tail(s string, n int) string {

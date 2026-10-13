@@ -254,7 +254,7 @@ func TestHosts(t *testing.T) {
 							t.Skip(reason)
 						}
 						if h.unauthenticated != "" {
-							detail = h.binary + " is not logged in: " + h.unauthenticated
+							detail = h.notLoggedIn()
 							t.Skip(detail)
 						}
 						if failed[sc.conv] {
@@ -271,7 +271,7 @@ func TestHosts(t *testing.T) {
 							sessions[sc.conv], failed[sc.conv] = s, false
 						}
 						if h.unauthenticated != "" {
-							detail = h.binary + " is not logged in: " + h.unauthenticated
+							detail = h.notLoggedIn()
 							t.Skip(detail)
 						}
 						sc.check(t, h, s)
