@@ -1372,8 +1372,9 @@ func jobExecCommand(ctx context.Context, root string, pos []string, base string,
 	case <-timer.C:
 		stopGroup(h.PGID, exited)
 		job.NoteEnded(ctx, root, lease, broker.EndedMessage(h, h.DeadlineReason()))
-		return types.ExitError{Code: 124, Err: fmt.Errorf("magus job exec: `%s` ran past its %s timeout, so its process group was stopped",
-			h.Command, timeout)}
+		slog.ErrorContext(ctx, fmt.Sprintf("`%s` ran past its %s timeout, so its process group was stopped", h.Command, timeout),
+			attr.Notice(""), attr.Component("magus job exec"))
+		return types.ExitError{Code: 124}
 	}
 }
 
