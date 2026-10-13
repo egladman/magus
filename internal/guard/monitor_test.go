@@ -88,8 +88,8 @@ func TestMonitorDuplicateAndPile(t *testing.T) {
 func TestMonitorOnABackgroundedCommandsProcessIsADuplicate(t *testing.T) {
 	ctx, _ := spawnFixture(t)
 	raised := withSetting(string(denyRuleMonitorDuplicate), builtin.Deny)
-	run := Judge(ctx, raised, Request{Input: "go version", Session: "watchers", Host: "claude-code", Agent: "w1", CallBackground: true})
-	require.NotEqual(t, "deny", run.Decision)
+	run := Judge(ctx, raised, Request{Input: "timeout 600 go version", Session: "watchers", Host: "claude-code", Agent: "w1", CallBackground: true})
+	require.NotEqual(t, "deny", run.Decision, run.Reason)
 	v := Judge(ctx, raised, Request{Input: monitorCall(t, "w1", `until ! pgrep -f "go version"; do sleep 15; done`), Host: "claude-code"})
 	assert.Equal(t, "deny", v.Decision)
 	assert.Equal(t, string(denyRuleMonitorDuplicate), v.Rule)

@@ -1169,7 +1169,9 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 			}
 		}
 		// A watcher ends at its own expiry, so only a plain backgrounded call needs a bound.
-		if verdict.Decision != decisionDeny {
+		// A backgrounded waiter is the waiter rules' to judge: they count it toward the pile
+		// and name what to wait on instead, which a bound would not.
+		if verdict.Decision != decisionDeny && !waits {
 			if d := denyUnboundedBackground(input, call.background && !env.IsWatch, shellD); d.refused() {
 				refuseWith(denyRuleBackgroundUnbounded, d)
 			}

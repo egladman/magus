@@ -230,3 +230,20 @@ func TestEndStoppedSessionEndsTheJobOnlyWhenTheStopStands(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.True(t, rows[0].EndedWithSession(), rows[0].EndReason)
 }
+
+// A backgrounded call nothing bounds is refused, unless it is a waiter: the waiter rules
+// judge that one, though it is unbounded too.
+func TestJudgeRefusesAnUnboundedBackgroundedCall(t *testing.T) {
+	ctx, _ := spawnFixture(t)
+	judge := func(line string) Verdict {
+		return Judge(ctx, Dependencies{}, Request{Input: line, Session: "bg", Host: "claude-code", CallBackground: true})
+	}
+	v := judge("rsync -a src/ dst/")
+	assert.Equal(t, "deny", v.Decision)
+	assert.Equal(t, string(denyRuleBackgroundUnbounded), v.Rule)
+	assert.NotEqual(t, "deny", judge("timeout 600 rsync -a src/ dst/").Decision)
+
+	timer := judge("sleep 540")
+	assert.NotEqual(t, "deny", timer.Decision, timer.Reason)
+	assert.NotEqual(t, string(denyRuleBackgroundUnbounded), timer.Rule)
+}
