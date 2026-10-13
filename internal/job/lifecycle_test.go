@@ -555,7 +555,8 @@ func TestListEndsExitedJobsWhoseWorkLanded(t *testing.T) {
 
 // One read probes at most landingBudget rows, least recently probed first, and records
 // each before probing it: a guard hook killed mid-probe has still taken its turn, so the
-// next read moves on instead of starting the same probes over.
+// next round moves on instead of starting the same probes over. Reads inside one
+// landingRound share that round and probe nothing more.
 func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
 	s, _ := sweepStore(t, 100_000, 0)
 	var rows []types.Job
@@ -575,8 +576,12 @@ func TestALandingSweepIsBoundedAndRecordsItsProbesFirst(t *testing.T) {
 	assert.Equal(t, []string{"exited-0", "exited-1", "exited-2", "exited-3"}, probed)
 	probed = nil
 	states(t, s)
-	assert.Equal(t, []string{"exited-4", "exited-5"}, probed, "the next read takes the rows the budget left")
+	assert.Empty(t, probed, "a read inside the round probes nothing")
+	s.clock = func() time.Time { return time.Unix(100_000, 0).Add(landingRound) }
+	states(t, s)
+	assert.Equal(t, []string{"exited-4", "exited-5"}, probed, "the next round takes the rows the budget left")
 	probed = nil
+	s.clock = func() time.Time { return time.Unix(100_000, 0).Add(2 * landingRound) }
 	states(t, s)
 	assert.Empty(t, probed, "every row was probed within the interval")
 }

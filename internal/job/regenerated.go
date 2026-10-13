@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path"
@@ -38,9 +39,10 @@ const RegeneratedLimit = 12
 //
 // A target's sources are its ctx.readsFiles, or its project's sources when it declares
 // none: the footprint the cache keys it on. A write path is expanded against the tree
-// under root, and a literal one names a file even before it exists. An output whose every
-// file the VCS ignores is dropped, because it never reaches the diff the job is graded on;
-// ignored may be nil, which drops nothing.
+// under root, and a literal one names a file even before it exists. An output whose files
+// the VCS ignores is dropped, because it never reaches the diff the job is graded on: its
+// first few files stand for it (see [outputProbes]). ignored may be nil, which drops
+// nothing.
 //
 // Most specific first, by the literal prefix of the matching source glob: a target reading
 // `internal/cli/**/*.go` sorts before one reading `**/*.go`, and a target that declares no
@@ -269,14 +271,28 @@ func sourcedBy(sources []types.Glob, written []string) (best types.Glob, specifi
 }
 
 // outputProbes are the paths that stand for g when asking the VCS whether it ignores it:
-// the files g matches now, or the pattern itself read as a path when it matches none yet,
-// which an ignore rule on any directory above it still catches.
+// the first outputProbeLimit files g matches now, or the pattern itself read as a path when
+// it matches none yet, which an ignore rule on any directory above it still catches.
 func outputProbes(root string, g types.Glob) []string {
 	if !types.IsLiteralGlob(g.Pattern) {
-		matches, _ := doublestar.Glob(os.DirFS(root), g.Pattern, doublestar.WithFilesOnly(), doublestar.WithNoFollow())
-		if matches = slices.DeleteFunc(matches, g.Excludes); len(matches) > 0 {
+		var matches []string
+		_ = doublestar.GlobWalk(os.DirFS(root), g.Pattern, func(p string, _ fs.DirEntry) error {
+			if g.Excludes(p) {
+				return nil
+			}
+			if matches = append(matches, p); len(matches) == outputProbeLimit {
+				return fs.SkipAll
+			}
+			return nil
+		}, doublestar.WithFilesOnly(), doublestar.WithNoFollow())
+		if len(matches) > 0 {
 			return matches
 		}
 	}
 	return []string{g.Pattern}
 }
+
+// outputProbeLimit is how many of an output's files stand for it. An ignore rule covers a
+// generated tree whole or not at all in practice, and matching every file of a glob such
+// as docs/gen/** walked thousands of files on every fork and describe that listed it.
+const outputProbeLimit = 16

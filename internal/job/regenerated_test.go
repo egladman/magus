@@ -137,6 +137,27 @@ func TestRegeneratedOutside(t *testing.T) {
 
 // The text lists outputs in rank order up to the cap, counts the rest with the targets
 // behind them, and ends with who regenerates them.
+// An output's ignore probe stands on its first outputProbeLimit files, skipping excluded
+// ones, and on the pattern itself when it matches nothing yet: matching every file of a
+// generated tree walked thousands on every fork and describe that listed it.
+func TestOutputProbesStopAtTheLimit(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for i := range outputProbeLimit * 3 {
+		path := filepath.Join(root, "gen", fmt.Sprintf("d%d", i%4), fmt.Sprintf("f%03d.md", i))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, nil, 0o644))
+	}
+	probes := outputProbes(root, types.Glob{Pattern: "gen/**/*.md"})
+	assert.Len(t, probes, outputProbeLimit)
+	for _, p := range probes {
+		assert.True(t, strings.HasPrefix(p, "gen/d"), p)
+	}
+	assert.NotContains(t, outputProbes(root, types.Glob{Pattern: "gen/**/*.md", Except: []string{"gen/d0"}}), "gen/d0/f000.md")
+	assert.Equal(t, []string{"none/**"}, outputProbes(root, types.Glob{Pattern: "none/**"}))
+}
+
 func TestRenderRegeneratedCapsTheListing(t *testing.T) {
 	t.Parallel()
 

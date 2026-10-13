@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/hint"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -255,10 +256,19 @@ func (s *Store) Binding(c Caller) Binding {
 //
 // Checkout records are not swept: MarkerPath keys one on a hash of its cache dir, and
 // nothing maps the hash back to a checkout.
-func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
+//
+// A pass reads every record, one file per caller that ever bound, so it runs only when
+// this read ended a row, a row the last pass saw is gone, or recordSweepEvery has passed
+// since it (see [Store.recordsSwept]). A checkout removed under a row that is already
+// over, and a record naming a row that never existed, wait for that interval.
+func (s *Store) sweepRecords(w *sweeper, rows []types.Job, ended bool) {
 	if s.err != nil || s.path == "" {
 		return
 	}
+	if !ended && s.recordsSwept(w.now, rows) {
+		return
+	}
+	defer s.writeRecordsSwept(w.now, rows)
 	dir := filepath.Join(filepath.Dir(s.path), agentRecordDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -281,6 +291,50 @@ func (s *Store) sweepRecords(w *sweeper, rows []types.Job) {
 		// reads as unbound, the opening a tombstone exists to close. A bind landing since
 		// the read is overwritten, and the guard's refusal tells that worker to bind again.
 		_ = file.ReplaceFile(path, fmt.Appendf(nil, "%s %s %d\n", tombstoneTag, b.Job, w.now), 0o600)
+	}
+}
+
+// recordSweepEvery is the longest a full pass over the binding records waits once no row
+// it saw has gone.
+const recordSweepEvery = 10 * time.Minute
+
+// recordsSweptFile holds when the last full pass over the binding records ran and the
+// rows it saw, beside jobs.json, so the interval holds across processes.
+const recordsSweptFile = "records-swept.json"
+
+type recordsPass struct {
+	At   int64    `json:"at"`
+	Rows []string `json:"rows"`
+}
+
+// recordsSwept reports whether a pass within recordSweepEvery of now saw only rows that
+// are still in rows. A history that cannot be read reads as no pass.
+func (s *Store) recordsSwept(now int64, rows []types.Job) bool {
+	raw, err := os.ReadFile(filepath.Join(filepath.Dir(s.path), recordsSweptFile))
+	if err != nil {
+		return false
+	}
+	var last recordsPass
+	if json.Unmarshal(raw, &last) != nil {
+		return false
+	}
+	if since := now - last.At; since < 0 || since >= int64(recordSweepEvery/time.Second) {
+		return false
+	}
+	present := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		present[r.ID] = true
+	}
+	return !slices.ContainsFunc(last.Rows, func(id string) bool { return !present[id] })
+}
+
+func (s *Store) writeRecordsSwept(now int64, rows []types.Job) {
+	pass := recordsPass{At: now, Rows: make([]string, len(rows))}
+	for i, r := range rows {
+		pass.Rows[i] = r.ID
+	}
+	if raw, err := json.Marshal(pass); err == nil {
+		_ = file.WriteFileAtomic(filepath.Join(filepath.Dir(s.path), recordsSweptFile), raw, 0o644)
 	}
 }
 

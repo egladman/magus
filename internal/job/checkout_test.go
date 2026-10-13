@@ -525,6 +525,44 @@ func TestListPrunesTombstonesAfterStaleAfter(t *testing.T) {
 	}
 }
 
+// A pass over the binding records reads one file per caller that ever bound, so a read
+// runs one only when it ended a row, when a row the last pass saw is gone, or once
+// recordSweepEvery has passed. A record naming a row that never existed waits for the
+// interval; one naming a row somebody removed is tombstoned by the next read.
+func TestListSweepsRecordsOncePerIntervalUnlessARowGoes(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	s, _ := sweepStore(t, 1_000, time.Hour)
+	here := t.TempDir()
+	plant(t, s,
+		types.Job{ID: "w/here", State: types.StateRunning, CheckoutRoot: here, Registered: 900, Created: 900, Updated: 900},
+		types.Job{ID: "w/removed", State: types.StateRunning, CheckoutRoot: here, Registered: 900, Created: 900, Updated: 900},
+	)
+	nobody := Caller{Host: "claude-code", Session: "s1", Agent: "a1"}
+	removed := Caller{Host: "claude-code", Session: "s1", Agent: "a2"}
+	require.NoError(t, s.Bind(removed, "w/removed"))
+	_, err := s.List()
+	require.NoError(t, err)
+
+	require.NoError(t, s.Bind(nobody, "w/nobody"))
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/nobody"}, s.Binding(nobody), "inside the interval, with every row still there, no pass runs")
+
+	_, err = s.Delete(t.Context(), "w/removed", false)
+	require.NoError(t, err)
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/removed", Gone: true, swept: 1_000}, s.Binding(removed), "a row the last pass saw is gone")
+	assert.Equal(t, Binding{Job: "w/nobody", Gone: true, swept: 1_000}, s.Binding(nobody), "the pass reads every record")
+
+	require.NoError(t, s.Bind(nobody, "w/nobody-again"))
+	s.clock = func() time.Time { return time.Unix(1_000, 0).Add(recordSweepEvery) }
+	_, err = s.List()
+	require.NoError(t, err)
+	assert.Equal(t, Binding{Job: "w/nobody-again", Gone: true, swept: 1_000 + int64(recordSweepEvery/time.Second)}, s.Binding(nobody),
+		"the interval runs a pass")
+}
+
 // A tombstoned caller binds again the way any caller does, and the new record replaces
 // the tombstone whole.
 func TestBindReplacesATombstone(t *testing.T) {

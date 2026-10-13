@@ -880,22 +880,22 @@ func (s *Store) sweep(f jobsFile) (jobsFile, error) {
 	}
 	w := &sweeper{now: clock().Unix(), window: sync.OnceValues(s.resolveStaleAfter), gone: map[string]bool{}}
 	w.landed = s.landings(f.Jobs, w.now)
-	f, err := s.endDead(w, f)
+	f, ended, err := s.endDead(w, f)
 	if err != nil {
 		return jobsFile{}, err
 	}
-	s.sweepRecords(w, f.Jobs)
+	s.sweepRecords(w, f.Jobs, ended)
 	return f, nil
 }
 
-// endDead ends every row in f that w proves dead. The verdict is reached twice: once
-// lock-free, so a plan with nothing to end costs no lock, and again under the file lock
-// against a fresh read, so a row another process revived in between is not ended on a
-// stale view.
-func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, error) {
+// endDead ends every row in f that w proves dead, and reports whether it ended any. The
+// verdict is reached twice: once lock-free, so a plan with nothing to end costs no lock,
+// and again under the file lock against a fresh read, so a row another process revived in
+// between is not ended on a stale view.
+func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, bool, error) {
 	dead, err := w.dead(f.Jobs)
 	if err != nil || len(dead) == 0 {
-		return f, err
+		return f, false, err
 	}
 	err = s.update(context.Background(), func(cur *jobsFile) error {
 		var err error
@@ -915,7 +915,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, error) {
 		return nil
 	})
 	if err != nil {
-		return jobsFile{}, err
+		return jobsFile{}, false, err
 	}
 	out := s.notices
 	if out == nil {
@@ -924,7 +924,7 @@ func (s *Store) endDead(w *sweeper, f jobsFile) (jobsFile, error) {
 	for _, e := range dead {
 		fmt.Fprintf(out, "ended %s: %s\n", e.id, e.reason)
 	}
-	return f, nil
+	return f, len(dead) > 0, nil
 }
 
 // Ending is one live row [Store.Prune] ends, and the end_reason it records.
@@ -1115,12 +1115,13 @@ func landingCandidate(row types.Job) bool {
 }
 
 // landings probes the exited rows not probed within landingInterval, at most
-// landingBudget of them and least recently probed first, and returns the ones whose work
-// landed. The probes are recorded BEFORE they run: a process killed mid-probe (a guard
-// hook past its deadline) has still taken its turn, so the next reader moves on to the
-// rows after it rather than starting the same probes again, and two readers at once split
-// the rows rather than both probing every one. A probe history that cannot be read or
-// written only costs the interval, never a verdict.
+// landingBudget of them, least recently probed first, in at most one round per
+// landingRound, and returns the ones whose work landed. The probes are recorded BEFORE
+// they run: a process killed mid-probe (a guard hook past its deadline) has still taken
+// its turn, so the next reader moves on to the rows after it rather than starting the
+// same probes again, and two readers at once split the rows rather than both probing
+// every one. A probe history that cannot be read or written only costs the interval,
+// never a verdict.
 func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 	probe := s.landed
 	if probe == nil {
@@ -1145,6 +1146,9 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 			due = append(due, row)
 		}
 	}
+	if since := now - lastProbeRound(history); since >= 0 && since < int64(landingRound/time.Second) {
+		due = nil
+	}
 	slices.SortStableFunc(due, func(a, b types.Job) int { return cmp.Compare(history[a.ID].At, history[b.ID].At) })
 	due = due[:min(len(due), landingBudget)]
 	for _, row := range due {
@@ -1166,6 +1170,20 @@ func (s *Store) landings(rows []types.Job, now int64) map[string]landing {
 // lists on every hook call, and a probe runs several VCS subprocesses, so a pass over
 // every exited row held a hook past its deadline. The rest wait for later sweeps.
 const landingBudget = 4
+
+// landingRound is the least time between two probe rounds, whichever processes read. A
+// store holding more unprobed rows than one budget had every read probe four of them, so
+// each fork, exit and hook call ran a few dozen VCS subprocesses.
+const landingRound = time.Minute
+
+// lastProbeRound is when the latest recorded probe ran, in unix seconds; 0 for none.
+func lastProbeRound(history map[string]landingProbe) int64 {
+	var last int64
+	for _, p := range history {
+		last = max(last, p.At)
+	}
+	return last
+}
 
 func (s *Store) readLandingProbes() map[string]landingProbe {
 	if s.err != nil || s.path == "" {
