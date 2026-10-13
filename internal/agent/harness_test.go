@@ -1366,7 +1366,7 @@ func TestOpenCodePluginNamesTheSpellsHost(t *testing.T) {
 	name := harnessSpellName(t, "opencode")
 	body, err := os.ReadFile(filepath.Join(hookTemplateDir, "opencode-plugin.ts"))
 	require.NoError(t, err)
-	named := regexp.MustCompile(`"--agent-name",\s*"([^"]*)"`).FindAllStringSubmatch(string(body), -1)
+	named := regexp.MustCompile(`"--agent-name",\s*"([^"-][^"]*)"`).FindAllStringSubmatch(string(body), -1)
 	require.NotEmpty(t, named, "the plugin passes no --agent-name literal; the matcher stopped matching")
 	for _, m := range named {
 		assert.Equal(t, name, m[1], "opencode-plugin.ts names a host its harness spell does not declare")

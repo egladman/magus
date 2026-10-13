@@ -10,26 +10,32 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 89)
-	assert.Equal(t, map[string]Decision{
-		"read-navigation": Advise,
-		"brief-command":   Advise,
-		"stage-all":       Advise,
-		"whole-tree":      Deny,
-		"lease-write":     Deny,
-		"push-ungated":    Deny,
-		"lease-state":     Advise,
-		"push-gate":       Advise,
-	}, map[string]Decision{
-		"read-navigation": got["read-navigation"],
-		"brief-command":   got["brief-command"],
-		"stage-all":       got["stage-all"],
-		"whole-tree":      got["whole-tree"],
-		"lease-write":     got["lease-write"],
-		"push-ungated":    got["push-ungated"],
-		"lease-state":     got["lease-state"],
-		"push-gate":       got["push-gate"],
-	})
+	assert.Len(t, got, 99)
+	want := map[string]Decision{
+		"read-navigation":      Advise,
+		"brief-command":        Advise,
+		"stage-all":            Advise,
+		"whole-tree":           Deny,
+		"lease-write":          Deny,
+		"push-ungated":         Deny,
+		"lease-state":          Advise,
+		"push-gate":            Advise,
+		"sleep-poll":           Advise,
+		"read-paging":          Advise,
+		"brief-plain-commands": Advise,
+		"monitor-duplicate":    Advise,
+		"monitor-pile":         Advise,
+		"spawn-waiter":         Advise,
+		"spawn-nested-waiter":  Advise,
+		"heredoc-write":        Deny,
+		"hooks-off":            Deny,
+		"spawn-duplicate":      Deny,
+	}
+	have := map[string]Decision{}
+	for name := range want {
+		have[name] = got[name]
+	}
+	assert.Equal(t, want, have)
 
 	got["whole-tree"] = Off
 	assert.Equal(t, Deny, Defaults()["whole-tree"], "Defaults hands out a copy")
