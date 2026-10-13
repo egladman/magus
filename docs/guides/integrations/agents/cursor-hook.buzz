@@ -359,16 +359,24 @@ fun failureNotice(guard: Guard, failed: proc\ExecResult?) > str {
         + "Rebuild or update THAT binary to restore the guard.";
 }
 
+final UNKNOWN_FLAG = "flag provided but not defined";
+
+// rejectedFlag is magus-command.buzz's: only a flag the binary predates is asked again.
+fun rejectedFlag(result: proc\ExecResult?) > bool {
+    return result != null
+        and result!.code != 0
+        and hook\trimTrailingNewlines(result!.stdout) == ""
+        and result!.stderr.indexOf(UNKNOWN_FLAG) != null;
+}
+
 // judged returns magus's answer, or "" when the binary could not give one. Each attempt
-// drops flags an older binary may reject, newest first. A non-zero status with a reply
-// is a deny; retrying that would judge the call twice. Empty stdout with a non-zero
-// status is a binary that rejected a flag.
+// drops flags an older binary may reject, newest first, and runs only after the one
+// before it was refused for such a flag.
 fun judged(guard: Guard, attempts: [[str]], family: str, session: str) > str {
     var result: proc\ExecResult? = null;
     foreach (extra in attempts) {
-        if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
-            result = judge(guard, extra: extra);
-        }
+        result = judge(guard, extra: extra);
+        if (!rejectedFlag(result)) { break; }
     }
     if (result == null or (result!.code != 0 and hook\trimTrailingNewlines(result!.stdout) == "")) {
         if (hook\noticeOnce(session, family: family, file: "cursor-hook.buzz")) {
