@@ -23,7 +23,7 @@ Both provisioning scripts are idempotent: they clear `.benchmark/`, `.claude/`,
 
 | Component      | rampant (ARM-0)                                     | full (ARM-1)                                                                                                                               |
 | -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --skill-form both` with the given binary (a short body per skill plus its `-full` twin)       |
+| Skills         | none installed; no `.claude/skills` at all          | `magus agent install .claude/skills --force --skill-form both` with the given binary (a short body per skill plus its `-full` twin)        |
 | Guard hooks    | 3 PreToolUse entries kept, each `"command": "true"` | the shipped `magus-{command,path,observe}.buzz` copied to `.claude/hooks/`, wired by matcher, pinned to the given binary via `__MAGUS_BIN` |
 | MAGUS.md       | absent                                              | `magus describe graph -o markdown`, rendered with the given binary                                                                         |
 | CLAUDE.md      | `repo-description.md` verbatim                      | the same file plus the marker-bounded block `magus agent starter` prints                                                                   |
@@ -46,10 +46,10 @@ the repo prose, is what the arms differ by.
 Three arms reuse the full recipe and differ from it, and from each other, only
 in the skill bodies. Each is a pair of few-line wrappers over `full/`:
 
-| Arm            | Skills                                                                  |
-| -------------- | ----------------------------------------------------------------------- |
-| `skills-full`  | `--skill-form full`: one full body per skill                            |
-| `skills-short` | `--skill-form short`: one short body per skill                          |
+| Arm            | Skills                                                                    |
+| -------------- | ------------------------------------------------------------------------- |
+| `skills-full`  | `--skill-form full`: one full body per skill                              |
+| `skills-short` | `--skill-form short`: one short body per skill                            |
 | `skills-c1`    | the directory `BENCH_C1_DIR` names, copied verbatim into `.claude/skills` |
 
 `full/provision.sh` reads the choice from `BENCH_SKILL_FORM` (default `both`)
