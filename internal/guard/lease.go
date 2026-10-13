@@ -1336,7 +1336,9 @@ func validationNamesGate(validation string) bool {
 // worker that pushes, stashes, reverts or rewrites history edits the state it is being
 // integrated from, and a whole-tree revert destroys a sibling's uncommitted work. A commit
 // is the exception: one on the worker's own branch, in the checkout its lease was taken
-// in, adds to that tree without moving anything the orchestrator reads.
+// in, adds to that tree without moving anything the orchestrator reads. So is an init
+// that creates a repository outside the checkout, and the verbs after it on the same line
+// inside that repository.
 //
 // The command is parsed before the ledger is read: every tool call under a bound lease
 // reaches this rule, and most of them are not version control.
@@ -1356,20 +1358,33 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 	if role == "" {
 		return ""
 	}
-	for _, c := range cmds {
-		if op := workerVCSOp(c); op != "" && !recordsCommit(c) {
-			return workerVCSDenial("`"+command+"`", op, me, role, "")
+	// A line that creates a repository is located call by call, whatever else it runs:
+	// the verbs after the init may belong to the repository it made.
+	creates := slices.ContainsFunc(cmds, isInit)
+	if !creates {
+		for _, c := range cmds {
+			if op := workerVCSOp(c); op != "" && !recordsCommit(c) {
+				return workerVCSDenial("`"+command+"`", op, me, role, "")
+			}
 		}
+	}
+	matches := recordsCommit
+	if creates {
+		matches = func(c hint.Invocation) bool { return workerVCSOp(c) != "" }
 	}
 	d := effectiveDialect(deps.ShellDialect)
 	cwd, _ := deps.workingDir()
-	calls, ok := locateCalls(command, d, cwd, recordsCommit, false)
+	calls, ok := locateCalls(command, d, cwd, matches, false)
 	if !ok {
 		return workerVCSDenial("`"+command+"`", "commit", me, role, "The line does not parse, so where it commits cannot be read.")
 	}
 	envDir, envWhy := gitDirAssigned(command, d)
+	var fresh []string
 	for _, c := range calls {
 		site, unlocated := shellCommitSite(c)
+		if isInit(c.inv) && unlocated == "" {
+			unlocated = nonLiteralInit(c)
+		}
 		if c.inv.Name == "git" && unlocated == "" {
 			switch {
 			case envWhy != "":
@@ -1380,9 +1395,33 @@ func denyLeaseScopedVCS(ctx context.Context, deps Dependencies, actingLease, com
 				site.gitDir = filepath.Join(site.dir, envDir)
 			}
 		}
+		if freshRepoRuns(c.inv, site, unlocated, fresh) {
+			continue
+		}
 		op, refused, why := workerVCSRefusal(ctx, deps.VCS, me, c.inv, site, unlocated)
 		if refused {
 			return workerVCSDenial("`"+command+"`", op, me, role, why)
+		}
+		if isInit(c.inv) {
+			dest, _ := initRefusal(me, c.inv, site, unlocated)
+			fresh = append(fresh, dest)
+		}
+	}
+	return ""
+}
+
+// nonLiteralInit says why a shell line's init cannot be placed, "" when every word of it is
+// literal. The directory operand and the options that move the repository are read off
+// those words, so one the shell expands, or an init reached through a wrapper whose
+// arguments arrive as rendered text, could create the repository anywhere.
+func nonLiteralInit(c locatedCall) string {
+	if c.args == nil {
+		return "It runs through a wrapper, so where it commits cannot be read."
+	}
+	for _, w := range c.args {
+		lit, ok := literalArg(w.Parts)
+		if !ok || strings.ContainsAny(lit, "*?[{") {
+			return "A word of it is not one literal string, so where it commits cannot be read."
 		}
 	}
 	return ""
@@ -1400,7 +1439,7 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	if backend == "git" && unlocated == "" {
 		site, unlocated, relocated = gitEnvSite(site, env)
 	}
-	if unlocated == "" && !relocated && backend == "git" && actsInPlace(inv) &&
+	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) && actsInPlace(inv) &&
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
 		return nil
 	}
@@ -1524,6 +1563,13 @@ func workerRole(row types.Job, caller job.Caller) string {
 // it; why is the commit's own reason, "" for an operation no worker may run.
 func workerVCSDenial(what, op string, row types.Job, role, why string) string {
 	checkout := cmp.Or(row.CheckoutRoot, "the checkout its lease was taken in")
+	if strings.HasSuffix(op, " init") {
+		return fmt.Sprintf("magus workspace: a worker creates a repository only outside its checkout, %s.\n"+
+			"%s runs `%s`, and lease %s is %s. %s "+
+			"A worker may `%s` in a directory that neither lies in %s nor belongs to a checkout of its repository, with no GIT_DIR, --git-dir or -C pointing back into it, and may run version control inside what it creates on the same line. "+
+			leaseActorClause("create it"),
+			checkout, what, op, row.ID, role, why, op, checkout)
+	}
 	lead := "magus workspace: `" + op + "` stays with the orchestrator, not a worker; report your worktree path, branch and `git status --short`."
 	if why != "" {
 		lead = "magus workspace: a worker commits only on its own branch in its own checkout, " + checkout + "."
@@ -1547,8 +1593,8 @@ type vcsSite struct {
 
 // workerVCSRefusal is the one decision behind lease-vcs, shared by the shell rule and
 // vcs\cmd so the two cannot disagree: whether a worker lease may run inv at site. op names
-// the mutation, "" for a call that mutates nothing. A commit is refused with why; every
-// other mutation is refused with no why. unlocated is why site could not be read, which
+// the mutation, "" for a call that mutates nothing. A commit or an init is refused with
+// why; every other mutation is refused with no why. unlocated is why site could not be read, which
 // refuses a commit, since a commit that cannot be placed cannot be shown to be in the
 // worker's own checkout.
 func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (op string, refused bool, why string) {
@@ -1556,6 +1602,9 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 	switch {
 	case op == "":
 		return "", false, ""
+	case isInit(inv):
+		_, why := initRefusal(row, inv, site, unlocated)
+		return initOp(inv), why != "", why
 	case !recordsCommit(inv):
 		return op, true, ""
 	case unlocated != "":
@@ -1565,6 +1614,211 @@ func workerVCSRefusal(ctx context.Context, opts types.VCSOptions, row types.Job,
 		return op, true, why
 	}
 	return op, false, ""
+}
+
+// initArgs returns the words after an init's subcommand and reports whether inv is one:
+// git, hg and sl `init`, and `jj git init`.
+func initArgs(inv hint.Invocation) (args []string, ok bool) {
+	sub, rest := vcsSubcommand(inv)
+	switch inv.Name {
+	case "git", "hg", "sl":
+		return rest, sub == "init"
+	case "jj":
+		if sub != "git" {
+			return nil, false
+		}
+		nested, nestedRest := vcsSubcommand(hint.Invocation{Name: inv.Name, Args: rest})
+		return nestedRest, nested == "init"
+	}
+	return nil, false
+}
+
+func isInit(inv hint.Invocation) bool {
+	_, ok := initArgs(inv)
+	return ok
+}
+
+// initOp names an init as workerVCSDenial words it.
+func initOp(inv hint.Invocation) string {
+	if inv.Name == "jj" {
+		return "jj git init"
+	}
+	return inv.Name + " init"
+}
+
+// initOption describes one option of an init: whether it takes a value, as the next word
+// or after `=`, and whether that value is a directory the repository's files land in.
+type initOption struct{ valued, dir bool }
+
+// initOptions are the options each backend's init takes. One outside the table refuses
+// the init: git reads unique prefixes of its long options, so an unlisted spelling may be
+// one that relocates the repository.
+var initOptions = map[string]map[string]initOption{
+	"git": {
+		"-q": {}, "--quiet": {}, "--bare": {}, "--shared": {}, "--template": {valued: true},
+		"-b": {valued: true}, "--initial-branch": {valued: true}, "--object-format": {valued: true},
+		"--ref-format": {valued: true}, "--separate-git-dir": {valued: true, dir: true},
+	},
+	"hg": {"--git": {}, "--no-git": {}},
+	"sl": {"--git": {}, "--no-git": {}},
+	"jj": {"--colocate": {}, "--no-colocate": {}, "--git-repo": {valued: true, dir: true}},
+}
+
+// initOperands reads an init's words into the one directory operand it names, "" for none,
+// and the directories its options point the repository's files at.
+func initOperands(backend string, args []string) (operand string, dirs []string, why string) {
+	var operands []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(a, "-") || a == "-" {
+			operands = append(operands, a)
+			continue
+		}
+		name, value, joined := strings.Cut(a, "=")
+		opt, known := initOptions[backend][name]
+		if !known {
+			return "", nil, "Its option " + name + " is not one init is known to take, so where it creates the repository cannot be read."
+		}
+		if opt.valued && !joined {
+			if i++; i >= len(args) {
+				return "", nil, "Its option " + name + " has no value."
+			}
+			value = args[i]
+		}
+		if opt.dir {
+			dirs = append(dirs, value)
+		}
+	}
+	if len(operands) > 1 {
+		return "", nil, "It names more than one directory."
+	}
+	if len(operands) == 1 {
+		operand = operands[0]
+	}
+	return operand, dirs, ""
+}
+
+// initRefusal says why a worker's init is refused, "" when it creates its repository
+// wholly outside the lease's checkout, in a directory no checkout of the job's repository
+// holds. dest is that repository's work tree. unlocated is why site could not be read.
+//
+// Everything that decides where the files land is read: the directory operand, -C, a git
+// directory named by --git-dir, GIT_DIR or --separate-git-dir, and jj's --git-repo. One that
+// cannot be read refuses the init, as does any that points back into the checkout.
+func initRefusal(row types.Job, inv hint.Invocation, site vcsSite, unlocated string) (dest, why string) {
+	if unlocated != "" {
+		return "", strings.ReplaceAll(unlocated, "commits", "initializes")
+	}
+	if row.CheckoutRoot == "" {
+		return "", "The lease records no checkout_root, so it cannot be shown that the repository lies outside the worker's checkout; `magus job exec` stamps one."
+	}
+	if inv.Name == "git" {
+		if parseGit(inv.Args).configured {
+			return "", "It sets inline config, which can move where the repository lands."
+		}
+	} else {
+		if slices.ContainsFunc(inv.Args, func(a string) bool { return relocatesInit(inv.Name, a) }) {
+			return "", "It names another directory to run in, so where it creates the repository cannot be read."
+		}
+		if parseVCS(inv.Name, inv.Args).alias != "" {
+			return "", "It defines an alias or loads config, which can change what init does."
+		}
+	}
+	args, _ := initArgs(inv)
+	operand, dirs, why := initOperands(inv.Name, args)
+	if why != "" {
+		return "", why
+	}
+	dest = site.dir
+	if operand != "" {
+		if strings.HasPrefix(operand, "~") || strings.Contains(operand, "://") {
+			return "", "The directory it names is not one local literal path, so where it creates the repository cannot be read."
+		}
+		dest = resolveFrom(site.dir, operand)
+	}
+	dest, err := filepath.Abs(dest)
+	if err != nil {
+		return "", "Where it creates the repository cannot be read."
+	}
+	dirs = append(dirs, dest)
+	if site.gitDir != "" {
+		dirs = append(dirs, site.gitDir)
+	}
+	for _, d := range dirs {
+		if !filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
+			return "", "A directory it names is not an absolute literal path, so where it creates the repository cannot be read."
+		}
+		if bad := outsideCheckout(row.CheckoutRoot, d); bad != "" {
+			return "", bad
+		}
+	}
+	return dest, ""
+}
+
+// relocatesInit reports whether arg is hg, sl or jj's option moving the program off its
+// working directory, or an abbreviation hg and sl accept of one.
+func relocatesInit(backend, arg string) bool {
+	name, _, _ := strings.Cut(arg, "=")
+	return slices.ContainsFunc(relocatingFlags[backend], func(flag string) bool {
+		switch {
+		case len(flag) == 2:
+			return strings.HasPrefix(arg, flag)
+		case backend == "jj":
+			return name == flag
+		}
+		return name == flag || strings.HasPrefix(name, "--") && len(name) > 3 && strings.HasPrefix(flag, name)
+	})
+}
+
+// outsideCheckout says why dir may not hold a repository a worker creates: it lies in the
+// lease's checkout, holds it, or belongs to a checkout of the same repository, one that
+// shares the checkout's common git directory.
+func outsideCheckout(checkout, dir string) string {
+	switch {
+	case within(dir, checkout):
+		return fmt.Sprintf("%s lies in the lease's checkout, %s.", dir, checkout)
+	case within(checkout, dir):
+		return fmt.Sprintf("%s holds the lease's checkout, %s.", dir, checkout)
+	}
+	if _, common, ok := gitCheckout(dir); ok {
+		if _, own, ok := gitCheckout(checkout); ok && samePath(common, own) {
+			return fmt.Sprintf("%s lies in a checkout of the repository the lease works in.", dir)
+		}
+	}
+	return ""
+}
+
+// freshRepoRuns reports whether a worker may run inv at site because site is inside a
+// repository an earlier init on the same line created, listed in fresh. The call must act
+// in that repository alone: not push, not name config the worker could point at the
+// checkout, and not be a verb that writes to a path its operands name.
+func freshRepoRuns(inv hint.Invocation, site vcsSite, unlocated string, fresh []string) bool {
+	if unlocated != "" || !slices.ContainsFunc(fresh, func(f string) bool {
+		return within(site.dir, f) && (site.gitDir == "" || within(site.gitDir, f))
+	}) || isPush(inv) || isInit(inv) {
+		return false
+	}
+	if inv.Name != "git" {
+		return parseVCS(inv.Name, inv.Args).alias == ""
+	}
+	g := parseGit(inv.Args)
+	switch {
+	case g.configured:
+		return false
+	case slices.Contains([]string{"clone", "worktree", "archive", "format-patch", "bundle", "submodule", "checkout-index"}, g.sub):
+		return false
+	case g.sub == "config":
+		return !slices.ContainsFunc(g.rest, func(a string) bool {
+			a = strings.ToLower(a)
+			return strings.Contains(a, "worktree") || strings.HasPrefix(a, "--file") || strings.HasPrefix(a, "--blob") ||
+				a == "--global" || a == "--system" || a == "-f"
+		})
+	}
+	return !slices.ContainsFunc(g.rest, func(a string) bool { return strings.HasPrefix(a, "--output") })
 }
 
 // commitRefusal says why a worker's commit at site is refused, "" when it is in the

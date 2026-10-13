@@ -592,6 +592,157 @@ func TestDenyLeaseScopedVCSRefusesACommitAnywhereElse(t *testing.T) {
 		"It commits in "+r.main+", and the lease was taken in "+wt+".")
 }
 
+// TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout pins every spelling of an init
+// that creates a repository outside the worker's checkout and in no checkout of the job's
+// repository, and the verbs after it on the same line that stay inside the new repository.
+func TestDenyLeaseScopedVCSLetsAWorkerInitOutsideItsCheckout(t *testing.T) {
+	ctx, _, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	from := Dependencies{callDir: wt}
+	for _, command := range []string{
+		"git init -q " + scratch,
+		"git init -q -b main --template= " + scratch,
+		"git init --initial-branch=main " + scratch + "/new/repo",
+		"git -C " + scratch + " init",
+		"cd " + scratch + " && git init -q",
+		"hg init " + scratch,
+		"sl init " + scratch,
+		"jj git init --colocate " + scratch,
+		"git init -q " + scratch + " && git -C " + scratch + " config user.email t@example.com && git -C " + scratch + " add . && git -C " + scratch + " commit -q --allow-empty -m done",
+		"cd " + scratch + " && git init -q && git config user.name t && git commit -q --allow-empty -m done && git branch topic && git checkout -q topic",
+		"git init -q " + scratch + " && git -C " + wt + " commit -m done",
+	} {
+		assert.Empty(t, denyLeaseScopedVCS(ctx, from, worker.ID, command), "%q", command)
+	}
+}
+
+// TestDenyLeaseScopedVCSRefusesAnInitThatReachesTheCheckout pins each init a worker may not
+// run: in the checkout or another checkout of its repository, through any relocation that
+// lands the files there, in a place the line does not name literally, or with a verb after
+// it that leaves the new repository.
+func TestDenyLeaseScopedVCSRefusesAnInitThatReachesTheCheckout(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	from := Dependencies{callDir: wt}
+	for _, command := range []string{
+		"git init",
+		"git init -q .",
+		"git init " + wt + "/sub",
+		"git init " + r.main + "/sub",
+		"git init " + filepath.Dir(wt),
+		"git -C " + wt + " init",
+		"git -C " + scratch + " -C " + wt + " init",
+		"cd " + wt + " && git init -q",
+		"git init " + filepath.Join(wt, "..", filepath.Base(wt), "sub"),
+		"git init -q " + scratch + " && git -C " + scratch + " init " + wt + "/sub",
+		"GIT_DIR=" + wt + "/.git git init " + scratch,
+		"GIT_DIR=" + r.main + "/.git git init -q " + scratch,
+		"env GIT_DIR=" + r.main + "/.git git init " + scratch,
+		"GIT_WORK_TREE=" + wt + " git init " + scratch,
+		"GIT_COMMON_DIR=" + r.main + "/.git git init " + scratch,
+		"git --git-dir=" + r.main + "/.git init " + scratch,
+		"git --work-tree " + wt + " init " + scratch,
+		"git -c core.worktree=" + wt + " init " + scratch,
+		"git init --separate-git-dir " + wt + "/gitdir " + scratch,
+		"git init --separate-git-dir=gitdir " + scratch,
+		"git init --sep " + scratch + "/g " + scratch,
+		"git init " + scratch + " " + wt,
+		"git init \"$dir\"",
+		"git init " + scratch + "/*",
+		"git init ~/scratch",
+		"bash -c 'git init " + scratch + "'",
+		"if true; then git init " + scratch + "; fi",
+		"hg init",
+		"hg --cwd " + wt + " init " + scratch,
+		"hg -R " + wt + " init " + scratch,
+		"hg init ssh://host/repo",
+		"jj git init",
+		"jj git init --git-repo " + r.main + " " + scratch,
+		"jj git init --config-toml 'x=1' " + scratch,
+		"git init -q " + scratch + " && git -C " + scratch + " push origin HEAD",
+		"git init -q " + scratch + " && git -C " + r.main + " commit -m done",
+		"git init -q " + scratch + " && git -C " + r.main + " reset --hard",
+		"git init -q " + scratch + " && git -C " + scratch + " config core.worktree " + wt,
+		"git init -q " + scratch + " && git -C " + scratch + " -c core.worktree=" + wt + " clean -fdx",
+		"git init -q " + scratch + " && git -C " + scratch + " worktree add " + wt + "/x",
+		"git init -q " + scratch + " && git -C " + scratch + " config --global alias.x status",
+		"git init -q " + scratch + " && git --git-dir=" + r.main + "/.git -C " + scratch + " reset --hard",
+		"git init -q " + scratch + " && cd " + wt + " && git reset --hard",
+		"git init -q " + scratch + " && git stash",
+		"git reset --hard && git init -q " + scratch,
+	} {
+		reason := denyLeaseScopedVCS(ctx, from, worker.ID, command)
+		assert.NotEmpty(t, reason, "%q", command)
+	}
+
+	reason := denyLeaseScopedVCS(ctx, from, worker.ID, "git init -q "+wt+"/sub")
+	assert.Contains(t, reason, "a worker creates a repository only outside its checkout, "+wt)
+	assert.Contains(t, reason, wt+"/sub lies in the lease's checkout")
+	assert.Contains(t, reason, "a worker under orchestrator")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+r.main+"/sub"), "lies in a checkout of the repository the lease works in")
+	assert.Contains(t, denyLeaseScopedVCS(ctx, from, worker.ID, "git init "+filepath.Dir(wt)), "holds the lease's checkout")
+}
+
+// TestVCSCmdRefusalLetsAWorkerInitAScratchRepository pins vcs.cmd to the same init
+// allowance, in the shape hack/dev/merge-job-branches.buzz calls it: an init in a fresh
+// temporary directory, after which the scratch-repository rules cover the repository.
+func TestVCSCmdRefusalLetsAWorkerInitAScratchRepository(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := t.TempDir()
+	fixture := filepath.Join(scratch, "merge-job-branches-test-1")
+	require.NoError(t, os.Mkdir(fixture, 0o755))
+
+	for name, c := range map[string]struct {
+		backend string
+		args    []string
+		dir     string
+	}{
+		"git init in a fresh directory":          {"git", []string{"init", "-q", "-b", "main"}, fixture},
+		"git init of a directory not made yet":   {"git", []string{"init", "-q", filepath.Join(scratch, "later")}, wt},
+		"git init through -C":                    {"git", []string{"-C", fixture, "init"}, wt},
+		"git init with the git directory beside": {"git", []string{"--git-dir", filepath.Join(fixture, ".git"), "init"}, fixture},
+		"hg init":                                {"hg", []string{"init", fixture}, wt},
+		"sl init":                                {"sl", []string{"init"}, fixture},
+		"jj git init":                            {"jj", []string{"git", "init", fixture}, wt},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, nil), name)
+	}
+
+	r.git(fixture, "init", "-q")
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", []string{"config", "user.name", "t"}, fixture, nil), "config in the new repository")
+	require.NoError(t, vcsCmdRefusal(ctx, worker, "git", commit, fixture, nil), "commit in the new repository")
+
+	for name, c := range map[string]struct {
+		backend string
+		args    []string
+		dir     string
+		env     []string
+	}{
+		"git init in the checkout":           {"git", []string{"init", "-q"}, wt, nil},
+		"git init in the primary checkout":   {"git", []string{"init", "-q"}, r.main, nil},
+		"git init below the checkout":        {"git", []string{"init", "-q", filepath.Join(wt, "sub")}, fixture, nil},
+		"git init -C the checkout":           {"git", []string{"-C", wt, "init"}, fixture, nil},
+		"git init through --git-dir":         {"git", []string{"--git-dir", filepath.Join(r.main, ".git"), "init"}, fixture, nil},
+		"git init with GIT_DIR on the job":   {"git", []string{"init", "-q"}, fixture, []string{"GIT_DIR=" + filepath.Join(r.main, ".git")}},
+		"git init with GIT_WORK_TREE":        {"git", []string{"init", "-q"}, fixture, []string{"GIT_WORK_TREE=" + wt}},
+		"git init separating the git dir in": {"git", []string{"init", "--separate-git-dir", filepath.Join(wt, "g")}, fixture, nil},
+		"git init with core.worktree inline": {"git", []string{"-c", "core.worktree=" + wt, "init"}, fixture, nil},
+		"hg init in the checkout":            {"hg", []string{"init"}, wt, nil},
+		"hg init relocated by --cwd":         {"hg", []string{"--cwd", wt, "init", fixture}, fixture, nil},
+		"jj git init in the checkout":        {"jj", []string{"git", "init"}, wt, nil},
+		"jj git init of the job's git repo":  {"jj", []string{"git", "init", "--git-repo", r.main, fixture}, fixture, nil},
+	} {
+		err := vcsCmdRefusal(ctx, worker, c.backend, c.args, c.dir, c.env)
+		require.Error(t, err, name)
+		assert.Contains(t, err.Error(), "a worker creates a repository only outside its checkout, "+wt, name)
+	}
+
+	noCheckout := worker
+	noCheckout.CheckoutRoot = ""
+	require.Error(t, vcsCmdRefusal(ctx, noCheckout, "git", []string{"init", "-q"}, fixture, nil), "a lease with no checkout_root cannot show the repository is outside it")
+}
+
 // TestDenyLeaseScopedVCSRefusesTheWrongBranch pins the branch half: a worker's own
 // checkout on the base branch, with no branch, or the primary checkout is not its own branch.
 func TestDenyLeaseScopedVCSRefusesTheWrongBranch(t *testing.T) {
