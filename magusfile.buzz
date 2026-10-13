@@ -2571,7 +2571,7 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
 // spends tokens. MAGUS_AGENT_EVAL_VARIANTS, _REPS and _RESULTS pass through.
 export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
     final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
-    final env = {"GOEXPERIMENT": "jsonv2", "MAGUS_AGENT_EVAL": "1", "CLAUDE_CODE_OAUTH_TOKEN": token};
+    final env = mut {"GOEXPERIMENT": "jsonv2", "MAGUS_AGENT_EVAL": "1", "CLAUDE_CODE_OAUTH_TOKEN": token};
     foreach (name in ["MAGUS_AGENT_EVAL_VARIANTS", "MAGUS_AGENT_EVAL_REPS", "MAGUS_AGENT_EVAL_RESULTS"]) {
         env[name] = os\env(name) ?? "";
     }
