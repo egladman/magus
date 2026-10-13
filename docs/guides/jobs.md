@@ -348,6 +348,25 @@ currency: 0 of 1 goal(s) met
       carries no output_ref, so there is no run to reopen
 ```
 
+### Splitting a file by declaration
+
+Handing a file over is the fallback. When the two jobs touch different declarations of a
+file with a diff driver, each row claims its own with `<file>#<declaration>` and neither
+waits. `--depends-on` is for two jobs on the same declaration.
+
+A fork refused with [MGS3032](../reference/codes/sandbox/MGS3032.md) prints the claim pair
+to use. It reads the declarations the holder has touched so far and the symbols the new
+job's goals name, and says whether the two are disjoint. It never writes a claim into
+either row; the person or orchestrator who declares the rows re-forks them with the pair.
+
+A claim names a declaration, and the word must name exactly one declaration of its file.
+`ctx` or `String` names every line that holds it, so the fork is refused with
+[MGS3031](../reference/codes/sandbox/MGS3031.md), which prints words that name one each.
+A word that names none is accepted, because the declaration may not be written yet.
+
+When removing a code path, flag or test reaches the goal, deleting it is a valid route:
+give the deletion to the job that owns that declaration rather than adding a parallel path.
+
 ## CI checks the merged work
 
 Each job passed in the worktree it was written in. Whether the work still passes

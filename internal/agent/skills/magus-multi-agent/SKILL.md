@@ -299,15 +299,15 @@ Read the facts:
 - `depends_on` carries the owner's direct edges.
 - Affinity stays with `{{tool "client"}}` (`{{buzz "insight"}}`, read affinity). Without MCP,
   run `{{cmd "buzz"}} -e` printing `magus\insight().affinity`.
-- Use `{{cmd "refs"}} <symbol>` when two jobs may touch the same API{{if .Full}}; `{{cmd "path"}} <a> <b>` settles
-  a suspicious pair{{end}}.
+- Use `{{cmd "refs"}} <symbol>` when two jobs may touch the same API.
 
 A read-only job has no write set, so it is outside this analysis.
 
 Two jobs may run together only when:
 
 - The combined classification reports no overlaps: source write sets and declared
-  outputs disjoint.
+  outputs disjoint, or sharing a file by claiming DIFFERENT declarations of it
+  (`<file>#<declaration>`, the default; `--depends-on` is for the SAME one).
 - Neither consumes an API or generated artifact the other changes.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
@@ -450,9 +450,9 @@ each verifies. [reference.md](reference.md) has the table and the rename pattern
 ## Observe through the correct control plane
 
 Run workers non-blocking; block on one only when your next action needs its result.
-Watch processes with `{{cmd "status"}} --watch=15s`. Never message a worker to ask how it
-is going: `{{cmd "describe job"}} <job>` grades where it stands, and `{{cmd "job watch"}} <job>`
-shows it happening. Message a worker only to CHANGE what it was handed.
+`{{cmd "status"}} --watch=15s` is for a person, never an agent's background task: an agent waits
+for its own run's completion notice. The root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>`
+only when it needs to know. Never message a worker to ask how it is going, only to CHANGE what it was handed.
 [reference.md](reference.md) covers blocked workers and auditing what a job ran.
 
 ## Integrate and verify

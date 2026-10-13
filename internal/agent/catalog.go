@@ -368,7 +368,7 @@ import (
 // 121: magus-test-design and magus-context-audit state their claims as verbs, and the
 // descriptions of magus-diagram, magus-context-audit and magus-run shorten their lead
 // sentence and name what not to use them for.
-const SkillVersion = 121
+const SkillVersion = 122
 
 const skillLicense = "GPL-3.0-or-later"
 

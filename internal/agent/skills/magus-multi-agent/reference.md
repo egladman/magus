@@ -10,14 +10,26 @@ matches one (`api`, `internal/**`) is refused with {{mgslink "MGS3018"}}{{if .Fu
 claims every file under it and so overlaps every job editing anything there{{end}}.
 
 Two jobs share one file by claiming declarations in it: `<file>#<declaration>`, such
-as `internal/agent/catalog.go#SkillVersion`.
+as `internal/agent/catalog.go#SkillVersion`. This is the default whenever two jobs touch
+different declarations of a file; `--depends-on` is for two jobs on the SAME one.
 
 - A claim names one file, never a glob.
 - The file needs a diff driver (`{{cmd "doctor"}}` lists the managed ones); otherwise
   fork refuses with {{mgslink "MGS3031"}}.
+- The word must name exactly one declaration of the file. `ctx` or `String` names every
+  line that holds it, so fork refuses it with {{mgslink "MGS3031"}} and prints words that
+  name one each. A word that names none is accepted, because the declaration may not be
+  written yet; check its spelling.
+- A fork refused with {{mgslink "MGS3032"}} (another checkout holds the file) prints the
+  claim pair it computed: the declarations the holder has touched so far, and the symbols
+  the new job's goals name, with whether the two are disjoint. Re-fork both rows with the
+  pair, or follow the other advice it prints. Neither row is written for you.
 - Two jobs that must edit the SAME declaration still have one owner. Give it to one
   job, or order them with `--depends-on`{{if .Full}}. Claiming the whole file, or a glob over its directory, is
   what serializes every other job that needed one function in it{{end}}.
+- Deleting is a valid route. When removing a code path, flag, fallback or test reaches
+  the goal, the job that owns that declaration deletes it; a second job never adds a
+  parallel path beside it.
 
 The check is `<target> <project> [-- args]` with the `{{cmd "run"}}` implied (`"test ."`,
 `"go-test api -- -run TestStore"`), never the gate or a target that chains to it.
@@ -255,15 +267,18 @@ edit job and spends budget for nothing.
 Track the job tree, agent state, messages, and completion in the provider's agent or
 task view. Use it to keep the store aware of descendants.
 
-Watch processes and shared workspace resources with magus:
+A person at a terminal watches processes and shared workspace resources with magus:
 
 ```sh
 magus status --watch=15s
 ```
 
 It shows magus process state, lock holders, and shared-service state and adoption. It
-does not show an agent thinking without running a magus process. Never replace it with
-sleep loops, repeated `ps`, or a waiting agent.
+does not show an agent thinking without running a magus process. It is for that person:
+an agent never starts it, or a sleep or tick loop, as a background task, and never
+replaces it with repeated `ps` or a waiting agent. An agent waits for its own run's
+completion notice; the root reads `{{cmd "describe job"}} <job>` or `{{cmd "job watch"}} <job>`
+only when it needs to know.
 
 To wait for a process you did not start to end, use your host's own wait or monitor
 tool{{if .Full}}: a shell loop holds your tool slot for the whole wait{{end}}.
