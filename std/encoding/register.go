@@ -5,12 +5,12 @@
 // (resolvePath, checkRead, checkWrite, optStringDefault, ...): every helper a
 // text codec needs is local to its own file, so splitting them into their
 // own leaf packages hides real behavior behind a real package boundary
-// instead of just renaming a file. See magus-local-development's survey for
-// the modules that do NOT have this property (fs, http, crypto, env, path,
-// os, vcs, archive): their shared helpers ARE the sandbox enforcement layer,
-// so pulling any one of them out would force exporting resolvePath/checkRead/
-// checkWrite onto the public API, the wrong direction to move right after
-// fixing bypasses of exactly those checks.
+// instead of just renaming a file. The modules that do NOT have this property
+// (fs, http, crypto, env, path, os, vcs, archive) keep their shared helpers in
+// std: those helpers ARE the sandbox enforcement layer, so pulling any one of
+// them out would force exporting resolvePath/checkRead/checkWrite onto the
+// public API, the wrong direction to move right after fixing bypasses of
+// exactly those checks.
 //
 // This package's Module values reach std's own registry vocabulary (the
 // std.Module type) by importing std, which is the only direction that works:
