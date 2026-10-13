@@ -141,6 +141,11 @@ final SPAWN_MATCHER = "Agent|Task";
 // continuation as well as every spawn.
 final CONTINUE_MATCHER = "SendMessage";
 
+// The tools that wait: a watcher running a command in the background, a read of a
+// background task's output, and a prompt queued for later. A watcher's command is judged
+// as the shell line it is, and the waiter rules count what each agent has armed.
+final WAITER_MATCHER = "Monitor|TaskOutput|ScheduleWakeup|CronCreate";
+
 // The lifecycle wrappers judge nothing, which is why they are built from
 // claude_buzz_command directly: their names are their own rather than an entry of the
 // hook template.
@@ -206,6 +211,7 @@ fun claude_entries() > [any] {
                 claude_matched_entry("Grep|Glob", cmd: claude_guard_command()),
                 claude_matched_entry(SKILL_MATCHER, cmd: claude_guard_command()),
                 claude_matched_entry(SPAWN_MATCHER + "|" + CONTINUE_MATCHER, cmd: claude_guard_command()),
+                claude_matched_entry(WAITER_MATCHER, cmd: claude_guard_command()),
             ],
         },
         {
@@ -479,6 +485,17 @@ test "the one per-entry flag rides after the argv separator" {
         "the path entry is the named glue command plus one forwarded flag");
 }
 
+test "the waiting tools reach the guard before they run" {
+    var wired = false;
+    foreach (entry in claude_entries()[0]["entries"] as [any]) {
+        if ((entry["matcher"] as? str) != WAITER_MATCHER) { continue; }
+        wired = true;
+        final hooks = entry["hooks"] as [any];
+        assert\equal((hooks[0]["command"] as? str) ?? "", claude_guard_command(), "judged like any other tool call");
+    }
+    assert\isTrue(wired, "Monitor, TaskOutput, ScheduleWakeup and CronCreate are matched on PreToolUse");
+}
+
 test "only the Bash entry declares the foreground limits, from the constants harness_limits returns" {
     final limits = claude_limits();
     assert\equal("{limits["foreground_default_ms"]}", "120000", "the Bash tool's default timeout");
@@ -617,7 +634,7 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     final pre_path = pre["path"] as [str];
     assert\equal(pre_path[1], "PreToolUse", "command path mcp and read ride PreToolUse");
     final pre_entries = pre["entries"] as [any];
-    assert\equal(pre_entries.len(), 8, "Bash path mcp Read-observe Read-guard search skill and spawn matchers");
+    assert\equal(pre_entries.len(), 9, "Bash path mcp Read-observe Read-guard search skill spawn and waiter matchers");
     foreach (entry in pre_entries) {
         final hooks = entry["hooks"] as [any];
         assert\equal(hooks.len(), 1, "one command hook per matcher");

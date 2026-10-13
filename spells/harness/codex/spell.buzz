@@ -122,6 +122,12 @@ fun codex_entries() > [any] {
                 {
                     "hooks": [codex_command_hook(codex_rehydrate_command(), "magus: briefing the subagent")],
                 },
+                {
+                    // Judges nothing. The start names the child by the id its own calls
+                    // carry, which magus joins to the spawn just before it, so the child is
+                    // graded under the job that spawn's description named.
+                    "hooks": [codex_command_hook(codex_guard_command(), "magus: joining the subagent to its spawn")],
+                },
             ],
         },
         {
@@ -484,6 +490,7 @@ test "harness_entries covers the tool, subagent, session, Stop and message event
     assert\equal("{post_entries[0]["matcher"]}", SPAWN_MATCHER, "the child's name rides the spawn's response");
     assert\equal(codex_commands("PostToolUse")[0], codex_guard_command(), "recorded by the command glue");
     assert\equal(codex_commands("SubagentStart")[0], codex_rehydrate_command(), "the child is briefed through additionalContext");
+    assert\equal(codex_commands("SubagentStart")[1], codex_guard_command(), "the child's id is joined to its spawn by the command glue");
     assert\equal(codex_commands("SubagentStop")[0], codex_guard_command(), "the child's context size is filed by the command glue");
     assert\equal(codex_commands("SessionStart")[0], codex_rehydrate_command(), "rehydrate on compact");
     final start_entries = codex_block("SessionStart")!["entries"] as [any];
