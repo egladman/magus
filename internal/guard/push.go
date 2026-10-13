@@ -272,8 +272,8 @@ func gradePushWithoutGate(cover gateCoverage, commit, lease string) (decision, r
 	// Refused for every caller, worker or not: nobody can be asked about a commit that does
 	// not exist yet, and the next call grades the real HEAD.
 	case gateMoved:
-		return decisionDeny, "this line pushes after a command that changes what is pushed (a commit, merge, rebase, reset or the like), so the gate cannot be matched to the revision that goes out.\n" +
-			"Run the commit on its own, then push in a separate call: the push is then graded at the real HEAD."
+		return decisionDeny, "this line pushes after a command that changes what is pushed: run that command on its own, then push in a separate call.\n" +
+			"A commit, merge, rebase, reset or the like moves the revision after the gate is matched to it; the separate push is graded at the real HEAD."
 	case gateAbsent:
 		state = "no `" + string(types.TargetCI) + "` run is recorded at this commit"
 	case gateFailed:

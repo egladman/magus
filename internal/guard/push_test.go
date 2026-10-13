@@ -522,11 +522,16 @@ func TestRelocatedPushGradesTheCheckoutItRunsIn(t *testing.T) {
 // graded and every `commit && push` passed, because the revision is read before the line
 // runs. A green gate at that HEAD covers none of what the commit adds.
 func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
-	ctx, _ := fleetFixture(t)
-	runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
-	require.NoError(t, os.MkdirAll(runs, 0o755))
-	runLog(t, runs, "a.jsonl", "v0.4.3-97-gabc1234", "pass", "affected", "ci")
 	deps := Dependencies{Revision: func(context.Context, string, string) string { return "abc1234" }}
+	// A fresh session per line: a repeated denial is worded as a one-line summary, and
+	// each line must show the instruction the first time it is refused.
+	gated := func(t *testing.T) context.Context {
+		ctx, _ := fleetFixture(t)
+		runs := filepath.Join(hookLocation(ctx, Dependencies{}).cacheDir, cache.RunsDir)
+		require.NoError(t, os.MkdirAll(runs, 0o755))
+		runLog(t, runs, "a.jsonl", "v0.4.3-97-gabc1234", "pass", "affected", "ci")
+		return ctx
+	}
 
 	refused := []string{
 		"git commit -m x && git push",
@@ -547,7 +552,7 @@ func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
 		"git push && git commit -m x && git push",
 	}
 	for _, line := range refused {
-		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
+		v := Judge(gated(t), deps, Request{Input: line, RendersAsk: true})
 		assert.Equal(t, verdictWithRule("deny", string(denyRulePushUngated)), unworded(v), line)
 		assert.Contains(t, v.Reason, "in a separate call", line)
 	}
@@ -558,6 +563,7 @@ func TestPushAfterACommitOnTheLineIsRefused(t *testing.T) {
 		"git status && git push",
 		"hg push",
 	}
+	ctx := gated(t)
 	for _, line := range passes {
 		v := Judge(ctx, deps, Request{Input: line, RendersAsk: true})
 		assert.Contains(t, []string{"pass", "advise"}, v.Decision, line)
