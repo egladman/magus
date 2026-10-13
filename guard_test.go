@@ -394,7 +394,9 @@ func TestEffectiveBuiltinsWithoutAnApprovalAuthority(t *testing.T) {
 
 	got, err := rules.EffectiveBuiltins(t.Context())
 	require.NoError(t, err)
-	assert.Nil(t, got, "nothing declared is the defaults")
+	assert.Equal(t, builtin.Setting{Decision: builtin.Advise, Profile: types.GuardProfileLight}, got["stall"],
+		"nothing declared is the light level")
+	assert.Equal(t, builtin.Setting{Decision: builtin.Off}, got["root-repeat"], "a rule light leaves alone keeps its default")
 
 	rules.registry.SetBuiltins(map[string]builtin.Setting{"whole-tree": {Decision: builtin.Off}})
 	got, err = rules.EffectiveBuiltins(t.Context())

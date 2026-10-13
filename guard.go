@@ -1132,7 +1132,8 @@ func (g *GuardRules) ApprovedBuiltins(ctx context.Context) (map[string]builtin.S
 // rule, the stricter of the approved and the working-tree declaration, each expanded from
 // its own magus\guard.profile level raised by the person's agents.profile and resolved
 // over the compiled defaults, so a loosening waits for approval and a tightening applies
-// at once. Nil when neither side sets any rule, which the guard reads as the defaults.
+// at once. Nil when neither side sets any rule, as at the off level with nothing declared,
+// which the guard reads as the defaults; an unset level is light, which sets rules.
 //
 // When the approved declaration cannot be resolved the defaults at the light level stand
 // in for it, beside the error: a working tree can still tighten, and cannot loosen past
