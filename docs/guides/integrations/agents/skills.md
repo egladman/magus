@@ -204,3 +204,9 @@ configuration is needed to make a host find it. The `magus-workspace-rules`
 skill carries the stamp format and the rest of the method. When a local rule
 turns out to be true everywhere, it graduates upstream as a pull request against
 `internal/agent/skills/`, or as an issue quoting the stamped rule.
+
+A skill loads only when a brief names it or a hook demands it, so a rule that must
+hold on every edit belongs in the instruction file despite what that costs. The local
+skill is for guidance one kind of task needs. Contributors to magus itself find the
+full set of homes in
+[Where a rule lives](https://github.com/egladman/magus/blob/main/CONTRIBUTING.md#where-a-rule-lives).

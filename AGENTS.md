@@ -79,17 +79,28 @@ saying it, delete it here.
   (`types/enums.go`).
 - A type a magusfile or script reads lives in `types/`, not behind an alias.
 - Language changes in `libs/gopherbuzz/` match upstream Buzz.
-- Code kept only for older data, artifacts or callers carries
-  `compat(until: <condition>):`. The condition is something you can observe ("no
-  store still serves ed25519 envelopes"), never a date. Secondary sites say
-  `compat: see <primary site>`. An exported API gets `// Deprecated:` instead.
+- magus is pre-1.0, so breaking is fine: rename, remove or change a name, flag or
+  format without a migration path. Add no compat shim, dual reader, fallback for
+  older callers or `Deprecated:` alias without asking Eli first.
+- Deleting is an option. Before adding code to keep something working, check
+  whether removing the old path, flag, fallback, test or doc section reaches the
+  goal.
+- A shim Eli approved carries `compat(until: <condition>):`. The condition is
+  something you can observe ("no store still serves ed25519 envelopes"), never a
+  date. Secondary sites say `compat: see <primary site>`. An approved exported API
+  gets `// Deprecated:` instead.
+- Before proposing a design or reversing one, read what was decided: `magus query
+  "kind=docsection id=~decisions/ <terms>"` and the refusal rows in
+  [docs/doctrine.md](docs/doctrine.md#a-record-of-refusals). Reopen one only with
+  new evidence.
 - `TODO`, `FIXME` and `BUG` comments stay; never add `godox` or a linter that
   reports them.
 - Before fixing behavior that looks wrong, find the test that pins it.
 - The docs site is classless Pico: semantic HTML, few custom classes, no inline
   styles.
-- A convention that matters gets an enforcement point (`internal/guard/dir.go` is
-  the example). A convention kept only in prose holds about half the time.
+- A convention that matters gets an enforcement point;
+  [Where a rule lives](CONTRIBUTING.md#where-a-rule-lives) says which. A
+  convention kept only in prose holds about half the time.
 
 ## Gotchas
 
