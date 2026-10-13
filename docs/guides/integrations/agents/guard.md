@@ -264,7 +264,7 @@ workspace sets any of them to `deny` or `off` with
 | [`architecture-unbriefed`](../../../reference/rules/architecture-unbriefed.md) | an agent acting on structure before it read the architecture skill     |
 | [`brief-command`](../../../reference/rules/brief-command.md)                   | a spawn or continuation brief that teaches a command the guard refuses |
 | [`brief-plain-commands`](../../../reference/rules/brief-plain-commands.md)     | a brief for an isolated worker that does not hold it to plain commands |
-| [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a loop that only sleeps between polls                                  |
+| [`busy-wait`](../../../reference/rules/busy-wait.md)                           | a while or until loop that sleeps; a for loop that sleeps until break  |
 | [`buzz-unbriefed`](../../../reference/rules/buzz-unbriefed.md)                 | the first Buzz a session authors, before it read the Buzz skill        |
 | [`chained-run`](../../../reference/rules/chained-run.md)                       | magus runs sequenced with `&&` or `;`                                  |
 | [`exit-status-echo`](../../../reference/rules/exit-status-echo.md)             | a line ending by printing an exit status                               |
@@ -368,7 +368,9 @@ same served command.
   (`kill -0`, the process table, `magus status` or a job row,
   `gh pr view|checks|status`, `gh run view|list`), and a backgrounded call
   whose only work is sleeping and printing: a timer, whose notice says only
-  that time passed. A host's watcher (Claude Code's `Monitor`, recognized by
+  that time passed. `busy-wait` matches any `while` or `until` loop that sleeps,
+  whatever it tests and whatever else each pass runs, and a `for` loop that only
+  sleeps or sleeps until it breaks out. A host's watcher (Claude Code's `Monitor`, recognized by
   shape: a command, a description and a `timeout_ms`) runs its command as a
   shell line, so busy-wait and process-poll judge that command too.
   `monitor-duplicate` refuses a second live watcher on one subject (the process
