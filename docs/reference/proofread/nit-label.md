@@ -1,13 +1,13 @@
 ---
 title: "nit-label"
-description: "An advisory by default: it explains, and blocks nothing, on an inline review comment labeled nit on a blocking demand, or blocking on an optional one."
-tags: [proofread, rules, nit-label, advise]
+description: "A rule that is off by default: it reports an inline review comment labeled nit on a blocking demand, or blocking on an optional one once a decisions table turns it on."
+tags: [proofread, rules, nit-label, off]
 aliases: [reference/prose/nit-label]
 ---
 
 # nit-label
 
-An advisory by default: it explains, and blocks nothing, on an inline review comment labeled nit on a blocking demand, or blocking on an optional one.
+A rule that is off by default: it reports an inline review comment labeled nit on a blocking demand, or blocking on an optional one once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8031`. The decision depends on the kind of text judged:
 
 | Kind            | Default |
 | --------------- | ------- |
-| `review-inline` | advise  |
+| `review-inline` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "nit-label", "code": "PRF8031", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/nit-label/"}
+{"rule": "nit-label", "code": "PRF8031", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/nit-label/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -1,7 +1,7 @@
 ---
 title: "verdict"
 description: "A rule that is off by default: it reports a judgment word standing in for the behavior it judges (\"was broken\", \"a mess\") once a decisions table turns it on."
-tags: [proofread, rules, verdict, advise]
+tags: [proofread, rules, verdict, off]
 aliases: [reference/prose/verdict]
 ---
 
@@ -56,7 +56,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "verdict", "code": "PRF2002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/verdict/"}
+{"rule": "verdict", "code": "PRF2002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/verdict/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

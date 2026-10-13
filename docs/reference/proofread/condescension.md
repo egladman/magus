@@ -1,7 +1,7 @@
 ---
 title: "condescension"
 description: "A rule that is off by default: it reports a word that tells the reader how hard a step should feel or what they should already know once a decisions table turns it on."
-tags: [proofread, rules, condescension, advise]
+tags: [proofread, rules, condescension, off]
 aliases: [reference/prose/condescension]
 ---
 
@@ -63,7 +63,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "condescension", "code": "PRF2006", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
+{"rule": "condescension", "code": "PRF2006", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/condescension/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

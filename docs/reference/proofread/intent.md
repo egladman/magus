@@ -1,7 +1,7 @@
 ---
 title: "intent"
 description: "A rule that is off by default: it reports a motive given to a tool or a person (\"guessed\", \"pretends\") once a decisions table turns it on."
-tags: [proofread, rules, intent, advise]
+tags: [proofread, rules, intent, off]
 aliases: [reference/prose/intent]
 ---
 
@@ -57,7 +57,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "intent", "code": "PRF2004", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/intent/"}
+{"rule": "intent", "code": "PRF2004", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/intent/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

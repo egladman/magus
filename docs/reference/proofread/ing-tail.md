@@ -1,7 +1,7 @@
 ---
 title: "ing-tail"
 description: "A rule that is off by default: it reports a participle clause added to claim significance (\", highlighting the importance of\") once a decisions table turns it on."
-tags: [proofread, rules, ing-tail, advise]
+tags: [proofread, rules, ing-tail, off]
 aliases: [reference/prose/ing-tail]
 ---
 
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "ing-tail", "code": "PRF4011", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/ing-tail/"}
+{"rule": "ing-tail", "code": "PRF4011", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/ing-tail/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

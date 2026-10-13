@@ -278,15 +278,17 @@ func TestRunTakesAnchored(t *testing.T) {
 func TestRunTakesTheReviewEvent(t *testing.T) {
 	const body = "Approving, but the lock must be fixed before merge."
 
+	advise := writeFile(t, t.TempDir(), "d.json", `{"rules":{"approve-blocker":"advise"}}`)
+
 	var stdout, stderr bytes.Buffer
-	if code := run([]string{"review-summary", "-event", "APPROVE"}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run([]string{"review-summary", "-event", "APPROVE", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		!strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("APPROVE: code %d, stdout %s, stderr %s; want an approve-blocker finding", code, stdout.String(), stderr.String())
 	}
 
 	stdout.Reset()
 
-	if code := run([]string{"review-summary", "-event", "COMMENT"}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
+	if code := run([]string{"review-summary", "-event", "COMMENT", "-decisions", advise}, strings.NewReader(body), &stdout, &stderr); code != exitOK ||
 		strings.Contains(stdout.String(), `"approve-blocker"`) {
 		t.Errorf("COMMENT: code %d, stdout %s; want no approve-blocker finding", code, stdout.String())
 	}

@@ -1,7 +1,7 @@
 ---
 title: "staccato"
 description: "A rule that is off by default: it reports three or more consecutive sentences of six words or fewer in one paragraph once a decisions table turns it on."
-tags: [proofread, rules, staccato, advise]
+tags: [proofread, rules, staccato, off]
 aliases: [reference/prose/staccato]
 ---
 
@@ -54,7 +54,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "staccato", "code": "PRF4012", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/staccato/"}
+{"rule": "staccato", "code": "PRF4012", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/staccato/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

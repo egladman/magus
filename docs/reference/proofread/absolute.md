@@ -1,7 +1,7 @@
 ---
 title: "absolute"
 description: "A rule that is off by default: it reports never, nobody or nothing as a claim about the past (\"has never fired\", \"nobody checked\") once a decisions table turns it on."
-tags: [proofread, rules, absolute, advise]
+tags: [proofread, rules, absolute, off]
 aliases: [reference/prose/absolute]
 ---
 
@@ -56,7 +56,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "absolute", "code": "PRF2003", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/absolute/"}
+{"rule": "absolute", "code": "PRF2003", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/absolute/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -1,13 +1,13 @@
 ---
 title: "impatience"
-description: "An advisory by default: it explains, and blocks nothing, on a review reply that reads as impatient: \"as I said\", \"for the last time\", \"obviously\"."
-tags: [proofread, rules, impatience, advise]
+description: "A rule that is off by default: it reports a review reply that reads as impatient: \"as I said\", \"for the last time\", \"obviously\" once a decisions table turns it on."
+tags: [proofread, rules, impatience, off]
 aliases: [reference/prose/impatience]
 ---
 
 # impatience
 
-An advisory by default: it explains, and blocks nothing, on a review reply that reads as impatient: "as I said", "for the last time", "obviously".
+A rule that is off by default: it reports a review reply that reads as impatient: "as I said", "for the last time", "obviously" once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8037`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "impatience", "code": "PRF8037", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/impatience/"}
+{"rule": "impatience", "code": "PRF8037", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/impatience/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -42,11 +42,21 @@ final RULES: {str: str} = {
     "comment-budget": "deny",
     "block-budget": "deny",
     "banned-word": "deny",
+    // The review rules ship off until a labeling round measures them; here they advise, each
+    // backed by the study or convention its page cites.
+    "no-reason": "advise",
+    "nit-label": "advise",
+    "empty-request-changes": "advise",
+    "approve-blocker": "advise",
+    "bare-lgtm": "advise",
+    "deferral-no-link": "advise",
+    "decline-no-reason": "advise",
+    "impatience": "advise",
 };
 
-// DECISIONS_FILE is RULES as the JSON file .claude/settings.json hands the proofread-reply
-// hook, which runs where this module cannot be imported, and the comment guard hands proofread
-// for a stylesheet read from stdin. A test holds the two equal.
+// DECISIONS_FILE is RULES as the JSON file a caller that cannot import this module hands
+// proofread: the console's stylesheet lint and the comment guard for a stylesheet read from
+// stdin. A test holds the two equal.
 export final DECISIONS_FILE = "hack/policy/proofread-decisions.json";
 
 // PATHS are the exemptions by workspace-relative glob, each with its reason. A glob that

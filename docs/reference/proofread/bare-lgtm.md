@@ -1,13 +1,13 @@
 ---
 title: "bare-lgtm"
-description: "An advisory by default: it explains, and blocks nothing, on a review summary that only approves: \"LGTM\", \"ship it\", \"looks good\"."
-tags: [proofread, rules, bare-lgtm, advise]
+description: "A rule that is off by default: it reports a review summary that only approves: \"LGTM\", \"ship it\", \"looks good\" once a decisions table turns it on."
+tags: [proofread, rules, bare-lgtm, off]
 aliases: [reference/prose/bare-lgtm]
 ---
 
 # bare-lgtm
 
-An advisory by default: it explains, and blocks nothing, on a review summary that only approves: "LGTM", "ship it", "looks good".
+A rule that is off by default: it reports a review summary that only approves: "LGTM", "ship it", "looks good" once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8034`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | advise  |
+| `review-summary` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "bare-lgtm", "code": "PRF8034", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/bare-lgtm/"}
+{"rule": "bare-lgtm", "code": "PRF8034", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/bare-lgtm/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

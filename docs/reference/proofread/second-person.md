@@ -1,7 +1,7 @@
 ---
 title: "second-person"
 description: "A rule that is off by default: it reports we, us, our or ours in a guide, which speaks to the reader as you once a decisions table turns it on."
-tags: [proofread, rules, second-person, advise]
+tags: [proofread, rules, second-person, off]
 aliases: [reference/prose/second-person]
 ---
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "second-person", "code": "PRF1003", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
+{"rule": "second-person", "code": "PRF1003", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/second-person/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

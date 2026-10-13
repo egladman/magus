@@ -230,14 +230,17 @@ fun kindLabel(kind: str) > str {
     return "`" + kind + "`";
 }
 
-// proofreadTier is the decision a rule is filed under: house rules ship off, and a rule that
-// denies anywhere is a deny rule.
+// proofreadTier is the decision a rule is filed under: house rules ship off, a rule that
+// denies anywhere is a deny rule, and one that advises nowhere is off.
 fun proofreadTier(r: ProofreadRule) > str {
     if (r.house) { return "off"; }
+    var advises = false;
     foreach (kind in r.kinds) {
         if (r.decisions[kind] == "deny") { return "deny"; }
+        if (r.decisions[kind] == "advise") { advises = true; }
     }
-    return "advise";
+    if (advises) { return "advise"; }
+    return "off";
 }
 
 fun kindsWith(r: ProofreadRule, decision: str) > [str] {

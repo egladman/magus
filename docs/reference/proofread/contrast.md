@@ -1,7 +1,7 @@
 ---
 title: "contrast"
 description: "A rule that is off by default: it reports a claim made by denying its opposite first (\"not just X, it is Y\") once a decisions table turns it on."
-tags: [proofread, rules, contrast, advise]
+tags: [proofread, rules, contrast, off]
 aliases: [reference/prose/contrast]
 ---
 
@@ -59,7 +59,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "contrast", "code": "PRF4010", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
+{"rule": "contrast", "code": "PRF4010", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/contrast/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

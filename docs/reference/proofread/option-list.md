@@ -1,7 +1,7 @@
 ---
 title: "option-list"
 description: "A rule that is off by default: it reports an agent reply that lays out labeled options or alternatives once a decisions table turns it on."
-tags: [proofread, rules, option-list, advise]
+tags: [proofread, rules, option-list, off]
 aliases: [reference/prose/option-list]
 ---
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "option-list", "code": "PRF8023", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/option-list/"}
+{"rule": "option-list", "code": "PRF8023", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/option-list/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

@@ -1,7 +1,7 @@
 ---
 title: "filler"
 description: "A rule that is off by default: it reports throat-clearing (\"Note that\") and filler adverbs (\"simply\", \"basically\") once a decisions table turns it on."
-tags: [proofread, rules, filler, advise]
+tags: [proofread, rules, filler, off]
 aliases: [reference/prose/filler]
 ---
 
@@ -65,7 +65,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "filler", "code": "PRF4001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
+{"rule": "filler", "code": "PRF4001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/filler/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

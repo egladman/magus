@@ -1,7 +1,7 @@
 ---
 title: "reply-opener"
 description: "A rule that is off by default: it reports a sentence of a review reply that opens by contradicting (\"No,\", \"As I said\") once a decisions table turns it on."
-tags: [proofread, rules, reply-opener, advise]
+tags: [proofread, rules, reply-opener, off]
 aliases: [reference/prose/reply-opener]
 ---
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "reply-opener", "code": "PRF8001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
+{"rule": "reply-opener", "code": "PRF8001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/reply-opener/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

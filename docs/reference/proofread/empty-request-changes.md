@@ -1,13 +1,13 @@
 ---
 title: "empty-request-changes"
-description: "An advisory by default: it explains, and blocks nothing, on a review requesting changes whose body names nothing blocking and points at no inline comment."
-tags: [proofread, rules, empty-request-changes, advise]
+description: "A rule that is off by default: it reports a review requesting changes whose body names nothing blocking and points at no inline comment once a decisions table turns it on."
+tags: [proofread, rules, empty-request-changes, off]
 aliases: [reference/prose/empty-request-changes]
 ---
 
 # empty-request-changes
 
-An advisory by default: it explains, and blocks nothing, on a review requesting changes whose body names nothing blocking and points at no inline comment.
+A rule that is off by default: it reports a review requesting changes whose body names nothing blocking and points at no inline comment once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8032`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | advise  |
+| `review-summary` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "empty-request-changes", "code": "PRF8032", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/empty-request-changes/"}
+{"rule": "empty-request-changes", "code": "PRF8032", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/empty-request-changes/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

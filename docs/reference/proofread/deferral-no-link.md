@@ -1,13 +1,13 @@
 ---
 title: "deferral-no-link"
-description: "An advisory by default: it explains, and blocks nothing, on a review reply deferring to later, a follow-up or a TODO, with no issue link or number."
-tags: [proofread, rules, deferral-no-link, advise]
+description: "A rule that is off by default: it reports a review reply deferring to later, a follow-up or a TODO, with no issue link or number once a decisions table turns it on."
+tags: [proofread, rules, deferral-no-link, off]
 aliases: [reference/prose/deferral-no-link]
 ---
 
 # deferral-no-link
 
-An advisory by default: it explains, and blocks nothing, on a review reply deferring to later, a follow-up or a TODO, with no issue link or number.
+A rule that is off by default: it reports a review reply deferring to later, a follow-up or a TODO, with no issue link or number once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8035`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "deferral-no-link", "code": "PRF8035", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/deferral-no-link/"}
+{"rule": "deferral-no-link", "code": "PRF8035", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/deferral-no-link/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

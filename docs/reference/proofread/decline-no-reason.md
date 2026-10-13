@@ -1,13 +1,13 @@
 ---
 title: "decline-no-reason"
-description: "An advisory by default: it explains, and blocks nothing, on a short review reply declining the change (\"won't fix\", \"No, ...\") with no reason."
-tags: [proofread, rules, decline-no-reason, advise]
+description: "A rule that is off by default: it reports a short review reply declining the change (\"won't fix\", \"No, ...\") with no reason once a decisions table turns it on."
+tags: [proofread, rules, decline-no-reason, off]
 aliases: [reference/prose/decline-no-reason]
 ---
 
 # decline-no-reason
 
-An advisory by default: it explains, and blocks nothing, on a short review reply declining the change ("won't fix", "No, ...") with no reason.
+A rule that is off by default: it reports a short review reply declining the change ("won't fix", "No, ...") with no reason once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8036`. The decision depends on the kind of text judged:
 
 | Kind           | Default |
 | -------------- | ------- |
-| `review-reply` | advise  |
+| `review-reply` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "decline-no-reason", "code": "PRF8036", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/decline-no-reason/"}
+{"rule": "decline-no-reason", "code": "PRF8036", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/decline-no-reason/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

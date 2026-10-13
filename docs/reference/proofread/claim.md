@@ -1,7 +1,7 @@
 ---
 title: "claim"
 description: "A rule that is off by default: it reports a measurement, a comparison or a completion with no evidence in its sentence or bullet once a decisions table turns it on."
-tags: [proofread, rules, claim, advise]
+tags: [proofread, rules, claim, off]
 aliases: [reference/prose/claim]
 ---
 
@@ -57,7 +57,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "claim", "code": "PRF3001", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
+{"rule": "claim", "code": "PRF3001", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/claim/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

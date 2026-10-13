@@ -1,7 +1,7 @@
 ---
 title: "judgment-as-fact"
 description: "A rule that is off by default: it reports a recommendation in a review reply stated as a fact, with no reason given once a decisions table turns it on."
-tags: [proofread, rules, judgment-as-fact, advise]
+tags: [proofread, rules, judgment-as-fact, off]
 aliases: [reference/prose/judgment-as-fact]
 ---
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "judgment-as-fact", "code": "PRF8002", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/judgment-as-fact/"}
+{"rule": "judgment-as-fact", "code": "PRF8002", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/judgment-as-fact/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

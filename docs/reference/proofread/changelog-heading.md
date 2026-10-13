@@ -1,7 +1,7 @@
 ---
 title: "changelog-heading"
 description: "A rule that is off by default: it reports a changelog version heading that is not \"## [version] - date\" or \"## [Unreleased]\" once a decisions table turns it on."
-tags: [proofread, rules, changelog-heading, advise]
+tags: [proofread, rules, changelog-heading, off]
 aliases: [reference/prose/changelog-heading]
 ---
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "changelog-heading", "code": "PRF1030", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-heading/"}
+{"rule": "changelog-heading", "code": "PRF1030", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/changelog-heading/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

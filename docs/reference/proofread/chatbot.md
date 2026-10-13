@@ -1,7 +1,7 @@
 ---
 title: "chatbot"
 description: "A rule that is off by default: it reports text a chat assistant addressed to its user: an offer, flattery, a knowledge disclaimer once a decisions table turns it on."
-tags: [proofread, rules, chatbot, advise]
+tags: [proofread, rules, chatbot, off]
 aliases: [reference/prose/chatbot]
 ---
 
@@ -61,7 +61,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "chatbot", "code": "PRF4004", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
+{"rule": "chatbot", "code": "PRF4004", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/chatbot/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

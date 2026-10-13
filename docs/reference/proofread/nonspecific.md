@@ -1,7 +1,7 @@
 ---
 title: "nonspecific"
 description: "A rule that is off by default: it reports a top-level review comment that judges or asks for a change and names no code, path, line, example or reason once a decisions table turns it on."
-tags: [proofread, rules, nonspecific, advise]
+tags: [proofread, rules, nonspecific, off]
 aliases: [reference/prose/nonspecific]
 ---
 
@@ -53,7 +53,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "nonspecific", "code": "PRF8010", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/nonspecific/"}
+{"rule": "nonspecific", "code": "PRF8010", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/nonspecific/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

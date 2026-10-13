@@ -1,13 +1,13 @@
 ---
 title: "approve-blocker"
-description: "An advisory by default: it explains, and blocks nothing, on an approving review whose body names a blocker (\"must fix\", \"blocking\", \"before merge\")."
-tags: [proofread, rules, approve-blocker, advise]
+description: "A rule that is off by default: it reports an approving review whose body names a blocker (\"must fix\", \"blocking\", \"before merge\") once a decisions table turns it on."
+tags: [proofread, rules, approve-blocker, off]
 aliases: [reference/prose/approve-blocker]
 ---
 
 # approve-blocker
 
-An advisory by default: it explains, and blocks nothing, on an approving review whose body names a blocker ("must fix", "blocking", "before merge").
+A rule that is off by default: it reports an approving review whose body names a blocker ("must fix", "blocking", "before merge") once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8033`. The decision depends on the kind of text judged:
 
 | Kind             | Default |
 | ---------------- | ------- |
-| `review-summary` | advise  |
+| `review-summary` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "approve-blocker", "code": "PRF8033", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/approve-blocker/"}
+{"rule": "approve-blocker", "code": "PRF8033", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/approve-blocker/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

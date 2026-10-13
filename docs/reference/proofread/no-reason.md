@@ -1,13 +1,13 @@
 ---
 title: "no-reason"
-description: "An advisory by default: it explains, and blocks nothing, on an inline review comment that asks for a change and gives no reason."
-tags: [proofread, rules, no-reason, advise]
+description: "A rule that is off by default: it reports an inline review comment that asks for a change and gives no reason once a decisions table turns it on."
+tags: [proofread, rules, no-reason, off]
 aliases: [reference/prose/no-reason]
 ---
 
 # no-reason
 
-An advisory by default: it explains, and blocks nothing, on an inline review comment that asks for a change and gives no reason.
+A rule that is off by default: it reports an inline review comment that asks for a change and gives no reason once a decisions table turns it on.
 
 ## What it catches
 
@@ -28,7 +28,7 @@ The code is `PRF8030`. The decision depends on the kind of text judged:
 
 | Kind            | Default |
 | --------------- | ------- |
-| `review-inline` | advise  |
+| `review-inline` | off     |
 
 ## Changing it
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "no-reason", "code": "PRF8030", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/no-reason/"}
+{"rule": "no-reason", "code": "PRF8030", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/no-reason/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.

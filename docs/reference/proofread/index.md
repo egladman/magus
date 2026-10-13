@@ -136,14 +136,14 @@ Each rule also has a dimension, the cost its findings name to the reader:
 | [unbacked-done](unbacked-done.md)                 | PRF8024 | evidence  | advise  | a claim of done, fixed, verified or passing with no command, output ref, file or link beside it              |
 | [short-reply-heading](short-reply-heading.md)     | PRF8025 | structure | advise  | a heading in an agent reply under 300 words                                                                  |
 | [agreement-opener](agreement-opener.md)           | PRF8026 | stance    | advise  | an agent reply that opens with praise or agreement ("Great question", "You're right")                        |
-| [no-reason](no-reason.md)                         | PRF8030 | evidence  | advise  | an inline review comment that asks for a change and gives no reason                                          |
-| [nit-label](nit-label.md)                         | PRF8031 | stance    | advise  | an inline review comment labeled nit on a blocking demand, or blocking on an optional one                    |
-| [empty-request-changes](empty-request-changes.md) | PRF8032 | evidence  | advise  | a review requesting changes whose body names nothing blocking and points at no inline comment                |
-| [approve-blocker](approve-blocker.md)             | PRF8033 | stance    | advise  | an approving review whose body names a blocker ("must fix", "blocking", "before merge")                      |
-| [bare-lgtm](bare-lgtm.md)                         | PRF8034 | evidence  | advise  | a review summary that only approves: "LGTM", "ship it", "looks good"                                         |
-| [deferral-no-link](deferral-no-link.md)           | PRF8035 | evidence  | advise  | a review reply deferring to later, a follow-up or a TODO, with no issue link or number                       |
-| [decline-no-reason](decline-no-reason.md)         | PRF8036 | stance    | advise  | a short review reply declining the change ("won't fix", "No, ...") with no reason                            |
-| [impatience](impatience.md)                       | PRF8037 | stance    | advise  | a review reply that reads as impatient: "as I said", "for the last time", "obviously"                        |
+| [no-reason](no-reason.md)                         | PRF8030 | evidence  | off     | an inline review comment that asks for a change and gives no reason                                          |
+| [nit-label](nit-label.md)                         | PRF8031 | stance    | off     | an inline review comment labeled nit on a blocking demand, or blocking on an optional one                    |
+| [empty-request-changes](empty-request-changes.md) | PRF8032 | evidence  | off     | a review requesting changes whose body names nothing blocking and points at no inline comment                |
+| [approve-blocker](approve-blocker.md)             | PRF8033 | stance    | off     | an approving review whose body names a blocker ("must fix", "blocking", "before merge")                      |
+| [bare-lgtm](bare-lgtm.md)                         | PRF8034 | evidence  | off     | a review summary that only approves: "LGTM", "ship it", "looks good"                                         |
+| [deferral-no-link](deferral-no-link.md)           | PRF8035 | evidence  | off     | a review reply deferring to later, a follow-up or a TODO, with no issue link or number                       |
+| [decline-no-reason](decline-no-reason.md)         | PRF8036 | stance    | off     | a short review reply declining the change ("won't fix", "No, ...") with no reason                            |
+| [impatience](impatience.md)                       | PRF8037 | stance    | off     | a review reply that reads as impatient: "as I said", "for the last time", "obviously"                        |
 
 ## Messages a program prints
 

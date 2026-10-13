@@ -1,7 +1,7 @@
 ---
 title: "issue-repro"
 description: "A rule that is off by default: it reports a bug report with neither what happened against what was expected, nor steps to reproduce it once a decisions table turns it on."
-tags: [proofread, rules, issue-repro, advise]
+tags: [proofread, rules, issue-repro, off]
 aliases: [reference/prose/issue-repro]
 ---
 
@@ -51,7 +51,7 @@ last match wins. A rule set to `off` never reports.
 A finding names the rule, its code and the decision that applies, and links here:
 
 ```json
-{"rule": "issue-repro", "code": "PRF1020", "decision": "advise", "url": "https://eli.gladman.cc/magus/reference/proofread/issue-repro/"}
+{"rule": "issue-repro", "code": "PRF1020", "decision": "off", "url": "https://eli.gladman.cc/magus/reference/proofread/issue-repro/"}
 ```
 
 `proofread rules` prints this entry with every other rule's.
