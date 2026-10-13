@@ -78,7 +78,7 @@ apply report what would merge and call nothing on the provider.
 ### queue plan options
 
 **--changes** *document* (default: -)
-: The mergequeue.changes/v1 \`document\`, or - for stdin
+: The mergequeue.changes/v1 \`document\`, or \`-\` for stdin
 
 **--depth** *int* (default: 3)
 : Candidates of one partition that validate at once
@@ -125,7 +125,7 @@ apply report what would merge and call nothing on the provider.
 : Name of the configured \`remote\` changes and the base are fetched from
 
 **--remote-cache-read**
-: Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key
+: Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key
 
 **--stdin**
 : Read the mergequeue.plan/v1 document from stdin; required
@@ -177,7 +177,7 @@ apply report what would merge and call nothing on the provider.
 : \`provider\`: a built-in name (github) or a .buzz file
 
 **--regenerate** *command*
-: The base's own regeneration \`command\` and its arguments, run with no shell and the projects that regenerate them added ahead of its first \`--\` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it
+: The base's regeneration \`command\`, run with no shell or credential: projects go ahead of its first \`--\`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.
 
 **--remote** *remote* (default: origin)
 : Name of the configured \`remote\` changes and the base are fetched from

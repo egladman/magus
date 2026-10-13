@@ -770,7 +770,7 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 	fs.BoolVar(&f.Detach, FlagRunDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
 	fs.BoolVar(&f.Open, FlagRunOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagRunStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
-	fs.StringVar(&f.Race, FlagRunRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
+	fs.StringVar(&f.Race, FlagRunRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
 	fs.DurationVar(&f.Timeout, FlagRunTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
 	fs.BoolVar(&f.Stdin, FlagRunStdin, false, "Run the shards of a saved shard plan, the document affected --plan prints, read from stdin; the plan names the target and the projects")
 	fs.StringVar(&f.Shard, FlagRunShard, "", "With --stdin: run only the saved plan's shard with this id. Without it: a label naming this run's shard in a CI matrix, paired with --n-shards; it selects nothing")
@@ -835,7 +835,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Run in the background as its own session, writing to a log under $XDG_STATE_HOME/magus/detached/; prints the pid and the log path and returns. Needs no server")
 	fs.BoolVar(&f.Open, FlagAffectedOpen, false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
 	fs.BoolVar(&f.Step, FlagAffectedStep, false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
-	fs.StringVar(&f.Race, FlagAffectedRace, "", "Race-condition diagnostics (watch|replay, comma-combinable); omit to disable. watch: attribution-gated fsnotify detection (MGS4001/4002/4004), emitting only when >=2 projects' output snapshots confirm a shared write. replay: re-runs cacheable output-declaring projects sequentially to content-hash outputs for non-determinism (MGS4003); roughly doubles wall-clock.")
+	fs.StringVar(&f.Race, FlagAffectedRace, "", "Race diagnostics: watch, replay, or watch,replay. watch flags a write two projects both claim (MGS4001, 4002, 4004). replay reruns cacheable projects in sequence and compares output hashes for non-determinism (MGS4003), at double the time.")
 	fs.DurationVar(&f.Timeout, FlagAffectedTimeout, 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
 	fs.BoolVar(&f.Graph, FlagAffectedGraph, false, "Render the dependency graph for the affected scope instead of executing")
 	fs.BoolVar(&f.Upstream, FlagAffectedUpstream, false, "With --graph: show dependents instead of dependencies")
@@ -884,7 +884,7 @@ func BindAffectedPlan(fs *flag.FlagSet, d AffectedPlanDefaults) *AffectedPlanFla
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, d.MaxShards, "With --plan: maximum CI shards (-1 = unlimited)")
 	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, d.MaxParallelBudget, "With --plan: cross-shard concurrency cap; 0 = unlimited")
-	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
+	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to")
 	return &f
 }
 
@@ -1072,7 +1072,7 @@ func BindQuery(fs *flag.FlagSet, d QueryDefaults) *QueryFlags {
 	fs.StringVar(&f.Kind, FlagQueryKind, "", "Restrict matches to these node kinds (comma-separated)")
 	fs.BoolVar(&f.Refresh, FlagQueryRefresh, false, "Force a full graph rebuild before querying")
 	fs.BoolVar(&f.Global, FlagQueryGlobal, false, "Query across the workspaces registered in config (knowledge.workspaces); IDs are namespaced by workspace")
-	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity - descriptor, lineage, cache key, component digests")
+	fs.BoolVar(&f.Identity, FlagQueryIdentity, false, "output <ref>: show the run's identity (descriptor, lineage, cache key, component digests)")
 	fs.BoolVar(&f.Attempts, FlagQueryAttempts, false, "output <ref>: list the ref's stored attempts (newest first)")
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Stdin, FlagQueryStdin, false, "output: print records `-o jsonl` wrote, from stdin; writes nothing")
@@ -1129,10 +1129,10 @@ type RefsFlags struct {
 func BindRefs(fs *flag.FlagSet) *RefsFlags {
 	var f RefsFlags
 	fs.BoolVar(&f.Refresh, FlagRefsRefresh, false, "Re-ingest the SCIP index before answering")
-	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
+	fs.BoolVar(&f.Occurrences, FlagRefsOccurrences, false, "Every exact source range, uncapped and verified against the tree: the view a mechanical edit needs. The default line list is capped and describes fan-in.")
 	fs.BoolVar(&f.Definition, FlagRefsDefinition, false, "Print each definition as path:start-end, the lines its body spans, checked against the file on disk. A range the index did not record is said, never guessed")
 	fs.BoolVar(&f.Source, FlagRefsSource, false, "With --definition (implied), also print the definition's lines: a symbol's body by name, in place of grep -n then sed -n")
-	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope the search, as grep's do; without any it searches the workspace")
+	fs.BoolVar(&f.Text, FlagRefsText, false, "Raw substring search, no symbol index: print path:line:text matches and exit 0/1/2 for matched/no-match/error (grep's contract, not refs' verdict exit codes). Trailing paths scope it, as grep's do; with none it searches the workspace")
 	fs.IntVar(&f.Limit, FlagRefsLimit, 0, "Print at most this many --text matches, then say how many more there were (0 for all). What `| head` would do, without losing the count or the exit code")
 	fs.StringVar(&f.Rename, FlagRefsRename, "", "Rename the symbol to this name at every verified occurrence, after grading every file under the acting lease; every file is written or none is")
 	return &f
@@ -1356,7 +1356,7 @@ type QueuePlanFlags struct {
 // BindQueuePlan registers `magus queue plan`'s flags on fs and returns the destination.
 func BindQueuePlan(fs *flag.FlagSet) *QueuePlanFlags {
 	var f QueuePlanFlags
-	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1 `document`, or - for stdin")
+	fs.StringVar(&f.Changes, FlagQueuePlanChanges, "-", "The mergequeue.changes/v1 `document`, or `-` for stdin")
 	fs.StringVar(&f.Provider, FlagQueuePlanProvider, "", "`provider` approval at each head is checked with")
 	fs.StringVar(&f.Out, FlagQueuePlanOut, "", "`file` the mergequeue.plan/v1 document is written to")
 	fs.IntVar(&f.Depth, FlagQueuePlanDepth, 3, "Candidates of one partition that validate at once")
@@ -1392,7 +1392,7 @@ func BindQueueValidate(fs *flag.FlagSet) *QueueValidateFlags {
 	fs.StringVar(&f.Verdicts, FlagQueueValidateVerdicts, "", "`directory` the plan and the verdicts are written to, one entry per change; apply reads it as its <source>")
 	fs.StringVar(&f.Only, FlagQueueValidateOnly, "", "Validate this one `change`; the changes beneath it in its partition are merged under it but not gated")
 	fs.IntVar(&f.Parallel, FlagQueueValidateParallel, 0, "Candidates built or gated at once across every partition; 0 is one per CPU")
-	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from the GitHub Actions cache service through a loopback proxy that forwards lookups upstream with the runner's ACTIONS_RUNTIME_TOKEN and refuses every write; hooks get a stand-in token, cache.remote.trusted_keys, and remote writes off. Refused without the runner's credentials or a trusted key")
+	fs.BoolVar(&f.RemoteCacheRead, FlagQueueValidateRemoteCacheRead, false, "Let hooks read magus's remote cache from GitHub Actions through a loopback proxy that forwards lookups with the runner's token and refuses writes. Hooks get a stand-in token. Refused without runner credentials or a trusted key")
 	fs.StringVar(&f.Facts, FlagQueueValidateFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
 	fs.StringVar(&f.Target, FlagQueueValidateTarget, "ci", "magus `target` the affected set is computed for; not with --facts")
 	fs.StringVar(&f.Remote, FlagQueueValidateRemote, "origin", "Name of the configured `remote` changes and the base are fetched from")
@@ -1448,7 +1448,7 @@ func BindQueueApply(fs *flag.FlagSet) *QueueApplyFlags {
 	fs.DurationVar(&f.Interval, FlagQueueApplyInterval, time.Duration(10000000000), "How often <source> is read while following it")
 	fs.StringVar(&f.Committer, FlagQueueApplyCommitter, "", "\"Name <email>\" committing each update commit, overriding the provider's committer; with neither, a change needing one waits and apply stops")
 	fs.StringVar(&f.App, FlagQueueApplyApp, "", "`app` whose credential the provider writes with, as the provider names it (github: a GitHub App's slug[:App ID], required). apply refuses to start when the base requires --status-context from another integration (MGS3019)")
-	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's own regeneration `command` and its arguments, run with no shell and the projects that regenerate them added ahead of its first `--` and the generated files to rewrite on stdin, only where the build tool proves the change touches none of its code; elsewhere apply checks the bundle validation left; no credential reaches it")
+	fs.StringVar(&f.Regenerate, FlagQueueApplyRegenerate, "", "The base's regeneration `command`, run with no shell or credential: projects go ahead of its first `--`, files to rewrite on stdin. It runs only where the build tool proves the change misses its code; elsewhere apply checks the rest.")
 	fs.StringVar(&f.ReproduceGate, FlagQueueApplyReproduceGate, "", "The `command` validate's --gate is given, shown on each kick-back validation decided so its author can run it again; apply never runs it, and never takes it from a verdict")
 	fs.StringVar(&f.ReproduceRegenerate, FlagQueueApplyReproduceRegenerate, "", "The `command` validate's --regenerate is given, shown beside --reproduce-gate")
 	fs.StringVar(&f.Facts, FlagQueueApplyFacts, "", "`command` and its arguments, run with no shell and the fact asked for appended, answering what a change affects and which files are generated, for a build tool other than magus; without it the magus workspace at --root answers")
@@ -1498,7 +1498,7 @@ func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
 	var f DoctorFlags
 	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
 	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
-	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run - name, subject, and MGS code - without running any of them")
+	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run (name, subject, and MGS code) without running any of them")
 	return &f
 }
 
@@ -1760,7 +1760,7 @@ type JobApplyFlags struct {
 // BindJobApply registers `magus job apply`'s flags on fs and returns the destination.
 func BindJobApply(fs *flag.FlagSet) *JobApplyFlags {
 	var f JobApplyFlags
-	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or - for stdin; one JSON job, a JSON array, or one job per line")
+	fs.StringVar(&f.F, FlagJobApplyF, "", "The records to apply: a file, or `-` for stdin; one JSON job, a JSON array, or one job per line")
 	return &f
 }
 

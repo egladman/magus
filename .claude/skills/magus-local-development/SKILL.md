@@ -73,7 +73,7 @@ four outputs stale and three tests red until regeneration:
   `*-generate` target that owns the stale output.
 - The guard DENIES raw `go generate`, like every raw Go entry point.
 - A tree with no loadable magus binary cannot regenerate. Build one first (see
-  "Which magus binary" in CLAUDE.md), or regenerate from a tree that has one.
+  "Binary" in AGENTS.md), or regenerate from a tree that has one.
 
 <!-- rule: the-server-is-one-process-many-runs; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commits c5cfc0c33, bdc077d33, dce52e193, 985cb26f8;

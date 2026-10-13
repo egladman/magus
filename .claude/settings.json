@@ -143,7 +143,7 @@
       {
         "hooks": [
           {
-            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --proofread libs/conventions/gen/proofread --decisions hack/policy/proofread-decisions.json",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
             "timeout": 10,
             "type": "command"
           }

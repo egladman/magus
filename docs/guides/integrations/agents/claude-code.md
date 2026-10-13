@@ -25,6 +25,8 @@ event.
 | MCP              | [MCP](../mcp.md)                                              |
 | attention events | `Notification`, `Stop`, `SubagentStop`                        |
 | checkpoint       | `Stop`                                                        |
+| reply check      | `Stop`, advice for the next turn; the spell declares it       |
+| your messages    | `UserPromptSubmit`, recorded and never answered               |
 | rehydration      | `SessionStart` (`compact`, `resume`)                          |
 | lease            | `PreToolUse` on the sub-agent tool                            |
 | declared model   | `PreToolUse` on the sub-agent tool, when the caller named one |
@@ -483,12 +485,17 @@ record by hand, which is the form to reach for when you are the one stopping.
 
 ## Judging the reply a turn ends with
 
-Add a second `Stop` entry for `proofread-reply.buzz`, which runs the
-`proofread` binary over the turn's last message and hands up to five findings back
-to the agent as context. It needs no magus workspace, only `proofread` on `PATH`, in
-`__PROOFREAD_BIN`, or named with `-- --proofread PATH`; `-- --decisions FILE` sets your
-own decisions. It never blocks the stop and prints nothing when proofread is missing
-or the agent is already continuing. [Check writing in a commit hook](../../proofread.md)
+The spell declares a second `Stop` entry for
+[`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz), so
+`magus describe harness claude-code` prints it beside the checkpoint and the merge
+command writes it. It runs the `proofread` binary over the turn's last message and
+hands up to five findings back to the agent as `additionalContext`. It needs no
+magus workspace, only `proofread` on `PATH`, in `__PROOFREAD_BIN`, or named with
+`-- --proofread PATH`; `__PROOFREAD_DECISIONS` or `-- --decisions FILE` sets your own
+decisions. The entry carries no path of your own on purpose, since the spell ships to
+every workspace: set the two variables in the settings `env` object instead, which a
+merge never overwrites. It never blocks the stop and prints nothing when proofread is
+missing or the agent is already continuing. [Check writing in a commit hook](../../proofread.md)
 covers the setup.
 
 ```json
@@ -499,7 +506,7 @@ covers the setup.
         "hooks": [
           {
             "type": "command",
-            "command": "./magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz",
+            "command": "magus buzz -C \"$CLAUDE_PROJECT_DIR\" -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name claude-code",
             "timeout": 10
           }
         ]
@@ -509,8 +516,8 @@ covers the setup.
 }
 ```
 
-This repository dogfoods it as its own `Stop` entry beside the checkpoint, with its
-built `proofread` and the decisions in `hack/policy/proofread-decisions.json`.
+`--agent-name` is required: the script picks the output shape of its host from it, and
+Codex and Cursor take different ones.
 
 ## Handing a compacted session its state back
 
@@ -640,6 +647,14 @@ borderline (runtime-computed values beside a redirect) as "exec inside a constru
 too complex to verify". Split such a line, as that refusal says. A
 `{ <command>` ... `} </dev/null` group avoids the word but was refused far more
 often, even around `stat` or `git status`.
+
+This harness wires six events: `PreToolUse`, `PostToolUse` (a finished spawn's child
+id), `SessionStart`, `Stop` (the checkpoint and the reply check), `SubagentStop` (a
+subagent's context size) and `UserPromptSubmit`. The Bash entry alone carries
+`--foreground-default-ms` and `--foreground-max-ms`, Claude Code's Bash timeout limits
+(`BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`): the glue reads the call's
+`timeout` and `run_in_background`, which only Claude Code's Bash tool has, so no other
+host's shell entry declares them.
 
 That is not the same as using everything this host offers. `PostToolUseFailure`,
 `PermissionRequest` and `PreCompact` are available and unused, on the test every

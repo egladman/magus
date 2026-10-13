@@ -202,12 +202,15 @@ label you choose, exactly as on the guard hook.
 
 ## Judging the reply a turn ends with
 
-Wire whatever event fires when an agent finishes a turn to `proofread-reply.buzz`.
-It reads `last_assistant_message` and `stop_hook_active` from the envelope, runs
-`proofread agent-reply`, and prints up to five findings as `additionalContext`
-under `hookSpecificOutput`. It prints no decision and exits 0, so a host cannot
-read it as a verdict. A host that spells the fields differently needs its own
-adapter; see [Check writing in a commit hook](../../proofread.md).
+Wire whatever event fires when an agent finishes a turn to `proofread-reply.buzz`,
+with `-- --agent-name <host>`. It reads the reply, runs `proofread agent-reply`, and
+hands up to five findings back in the shape the host takes: `additionalContext` under
+`hookSpecificOutput` for `claude-code`, a `block` decision with a `reason` for
+`codex`, a `followup_message` for `cursor`. Any other name is reported on stderr and
+answered with nothing, because a reply shaped for another host is one this host may
+reject. It exits 0 and judges nothing while the agent is already continuing. A host
+that spells the fields differently, or has no event that can return text to the
+agent, needs its own adapter; see [Check writing in a commit hook](../../proofread.md).
 
 ## Handing a session its state back
 

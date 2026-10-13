@@ -20,6 +20,8 @@ window. One file carries all of it.
 | file writes    | deny and advise both reach the model                                                          |
 | MCP calls      | not wired: `tool.execute.before` sees it, its tool-name convention is unconfirmed (see below) |
 | checkpoint     | the `session.idle` bus event                                                                  |
+| reply check    | not wired: `session.idle` cannot hand text back to the agent (see below)                      |
+| scout agent    | `.opencode/agents/magus-scout.md`, `permission: edit: deny`                                   |
 | rehydration    | `experimental.session.compacting`                                                             |
 | MCP            | [MCP](../mcp.md)                                                                              |
 | quiet output   | not set: its config has no key for it; set `MAGUS_LOG_SILENT=true` yourself (see below)       |
@@ -131,7 +133,7 @@ other templates.
 // for a leased worker's. Where that prompt cannot happen (the config does not ask, or the
 // call is not a plain push the pattern matches) an ask throws, naming the person's own
 // terminal. A decision this file does not know throws too, and never allows.
-// magus-guard-template: 23
+// magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=opencode input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=opencode input=path deny=model advise=model pass=none ask=model
 // magus-guard-coverage: schema=2 host=opencode input=mcp deny=none advise=none pass=none ask=none
@@ -602,8 +604,29 @@ If you would rather not have the plugin do it, running
 `--agent-name opencode` records the identical row.
 `magus session checkpoint --note "..."` writes it by hand.
 
+## The reply check and the scout
+
+The reply check that Claude Code, Codex and Cursor run when a turn ends is not
+wired here. Those hosts each have a stop event that accepts an answer: context for
+the next turn, a `block` decision, or a follow-up message. OpenCode's closest event,
+`session.idle`, is on a read-only bus. A subscriber can observe it, as the
+checkpoint does, and cannot return text to the agent, so a finding has nowhere to
+go. [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) answers
+`claude-code`, `codex` and `cursor` and reports any other `--agent-name` as having
+no reply shape.
+
+The scout agent's file sets `permission: edit: deny`, which OpenCode applies to
+every file-changing tool, so the read-only promise in its instructions is a
+setting as well. `bash` stays at the session's own setting, because the scout's job
+is running read-only magus commands.
+
 ## Coverage and limits
 
+- Nothing in `harness_entries` is merged: OpenCode has no hook config, so the spell
+  writes the agent files and the push permission, and the plugin is the only hook.
+  The plugin wires `tool.execute.before` and `.after`, `permission.ask`,
+  `experimental.session.compacting` and the `session.idle` checkpoint. It has no
+  prompt, spawn or reply hook, for the reasons above and below.
 - An `advise` verdict is appended to the tool result that call produced, joined
   to it by `callID`. It is judged once, before the call, and delivered after it:
   judging again in `tool.execute.after` would record two verdicts for one call.

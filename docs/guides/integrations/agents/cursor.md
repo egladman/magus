@@ -1,6 +1,6 @@
 ---
 title: Cursor
-description: Wiring magus into Cursor (AGENTS.md for guidance, one self-contained hook script for its wired events, and the one job Cursor's contract cannot express).
+description: Wiring magus into Cursor (AGENTS.md for guidance, one hook script for its wired events, the reply check on stop, and what Cursor's contract cannot express).
 tags: [agents, cursor, AGENTS.md, guard, hooks]
 ---
 
@@ -8,8 +8,8 @@ tags: [agents, cursor, AGENTS.md, guard, hooks]
 
 Cursor does not read Agent Skills directories. It reads an `AGENTS.md` at the
 repository root, and it runs hooks as programs with the event on stdin. One
-self-contained script covers every event magus uses, so installing the whole
-integration is a single download.
+self-contained script covers every event magus uses bar `stop`, which runs the
+separate reply check, so installing the guard is a single download.
 
 | what            | where                                                                      |
 | --------------- | -------------------------------------------------------------------------- |
@@ -21,6 +21,10 @@ integration is a single download.
 | MCP calls       | `beforeMCPExecution` (deny/ask reach the model; advise unwired, see below) |
 | session start   | `sessionStart` (`env` + size-budgeted `session --brief`)                   |
 | checkpoint      | `sessionEnd`                                                               |
+| your messages   | `beforeSubmitPrompt`, recorded and always let through                      |
+| subagent spawns | `preToolUse` (`Task`), judged as a spawn; `subagentStart` records it too   |
+| reply check     | `stop`, a `followup_message` that Cursor submits as another turn           |
+| scout agent     | `.cursor/agents/magus-scout.md`, `readonly: true`                          |
 | lease           | `subagentStart` (unverified live, see below)                               |
 | MCP             | [MCP](../mcp.md)                                                           |
 
@@ -124,15 +128,20 @@ and points every event at that copy, name included:
     "sessionStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
     "beforeShellExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
     "beforeMCPExecution": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "failClosed": true, "timeout": 10 }],
-    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "preToolUse": [{ "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
     "postToolUse": [
       { "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch", "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }
     ],
     "subagentStart": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
-    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }]
+    "sessionEnd": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "beforeSubmitPrompt": [{ "command": "magus buzz -s .cursor/hooks/cursor-hook.buzz -- --agent-name cursor", "timeout": 10 }],
+    "stop": [{ "command": "magus buzz -s .cursor/hooks/proofread-reply.buzz -- --agent-name cursor", "timeout": 10, "loop_limit": 1 }]
   }
 }
 ```
+
+The `stop` entry is the one that runs a second script, [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz),
+described under [Judging the reply a turn ends with](#judging-the-reply-a-turn-ends-with).
 
 It is deliberately self-contained rather than delegating to the shared
 templates: needing five files to install a guard is how a guard ends up not
@@ -195,6 +204,16 @@ script also accepts `file_path`.
 // the shell commands the guard already judges, and gated on preToolUse, because
 // a deny has to land before the tool runs.
 //
+// A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
+// is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
+// spawn by, so a workspace spawn rule can deny it. subagentStart records the same spawn
+// again from the child's side, which is why the trail holds two spawn rows per subagent.
+// Cursor documents no Task tool_input fields; a call with no prompt in it has nothing to
+// judge and is allowed.
+//
+// beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
+// the topics it raises and judges nothing; the reply only says to go on.
+//
 // beforeMCPExecution carries tool_name, tool_input and mcp_server_name. Magus
 // grades MCP as mcp__<server>__<tool>, so this file rewrites the envelope before
 // judging. afterMCPExecution is observation-only, and postToolUse still has no
@@ -207,7 +226,7 @@ script also accepts `file_path`.
 // Cursor has also raced additional_context away before; env is the half that sticks.
 // Compaction still has no model-facing rehydrate event.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
@@ -247,6 +266,9 @@ final ADVISE = `{{if eq .decision "advise"}}{"additional_context":{{toJson .cont
 final SESSION_BRIEF_MAX_BYTES = 16384;
 
 final ALLOW = `{"permission":"allow"}`;
+
+// The only reply a beforeSubmitPrompt hook owes Cursor: the message goes through.
+final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
 final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
@@ -579,8 +601,44 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
     }) catch void;
 }
 
+// recordMessage hands the person's message to `magus shell --message` and reads nothing
+// back: a binary too old for the flag costs the record, never the message.
+fun recordMessage(scope: Scope, event: any?) > void {
+    final message = hook\field(event, dotPath: "prompt");
+    if (message == "") { return; }
+    proc\exec(scope.bin, args: [
+        "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
+        "--session", scope.session, "--transcript", scope.transcript,
+        "--event", "beforeSubmitPrompt",
+    ], opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": message,
+    }) catch void;
+}
+
+// taskPayload restates a Task call as the envelope magus recognizes a spawn by, or "" when
+// the call carries no prompt to hand it.
+fun taskPayload(event: any?) > str {
+    final input = hook\dig(event, dotPath: "tool_input");
+    if (hook\field(input, dotPath: "prompt") == "") { return ""; }
+    final envelope = {
+        "tool_name": "Task",
+        "tool_input": input,
+        "session_id": readSession(event),
+        "cwd": firstField(event, keys: ["cwd"]),
+        "transcript_path": hook\field(event, dotPath: "transcript_path"),
+        "hook_event_name": "preToolUse",
+    };
+    return json\stringify(envelope) catch "";
+}
+
 fun unnamed(eventName: str) > void {
     warn(UNNAMED);
+    if (eventName == "beforeSubmitPrompt") {
+        io\stdout.write(SUBMIT_CONTINUE) catch void;
+        return;
+    }
     if (eventName == "beforeShellExecution" or eventName == "preToolUse") {
         io\stdout.write(denyBoth(UNNAMED)) catch void;
         return;
@@ -622,6 +680,10 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         recordSpawn(scope.bin, agent: scope.agent, event: event);
         return ALLOW;
     }
+    if (eventName == "beforeSubmitPrompt") {
+        recordMessage(scope, event: event);
+        return SUBMIT_CONTINUE;
+    }
     if (eventName == "beforeMCPExecution") {
         final payload = mcpPayload(event);
         if (payload == "") {
@@ -633,6 +695,11 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         return gate(scope, payload: hook\field(event, dotPath: "command"), asPath: false, family: "failed-command");
     }
     if (eventName == "preToolUse") {
+        if (hook\field(event, dotPath: "tool_name") == "Task") {
+            final spawn = taskPayload(event);
+            if (spawn == "") { return ALLOW; }
+            return gate(scope, payload: spawn, asPath: false, family: "failed-spawn");
+        }
         final search = searchCommand(event);
         if (search != "") { return gate(scope, payload: search, asPath: false, family: "failed-search"); }
         final writePath = toolPath(event);
@@ -680,6 +747,7 @@ fun main(args: [str]) > void {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
         }
         if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }
+        if (eventName == "beforeSubmitPrompt") { io\stdout.write(SUBMIT_CONTINUE) catch void; }
         return;
     }
     io\stdout.write(dispatch(event, eventName: eventName, bin: bin, agent: agent)) catch void;
@@ -707,6 +775,26 @@ coming back needs.
 
 `magus session checkpoint --note "..."` writes the same record by hand.
 
+## Judging the reply a turn ends with
+
+`stop` runs [`proofread-reply.buzz`](guard-templates.md#proofread-replybuzz) with
+`--agent-name cursor`, which runs the `proofread` binary over the turn's last
+reply. Cursor's `stop` event carries `status`, `loop_count` and `transcript_path`
+and no reply text, so the script reads the reply out of the transcript: the last
+assistant message that has text, stopping at the last user message. When there are
+findings it prints `{"followup_message": "..."}`, which Cursor submits as another
+turn, so the agent is asked to send the reply again, fixed. A `stop` hook cannot
+block; this is the only channel it has.
+
+The script stays silent when `loop_count` is above 0, so it never judges a reply it
+asked for, when `status` is not `completed`, when `transcript_path` is null, and
+when `proofread` is missing. The entry also sets `"loop_limit": 1`, under Cursor's
+default of 5. `__PROOFREAD_BIN` names the binary and `__PROOFREAD_DECISIONS` a
+decisions file. The transcript's JSON lines (a `role`, and `message.content` text
+parts) were read from Cursor's own transcript files on one machine and are not
+documented, so this arm is **unverified live**: check that a turn with findings
+produces a follow-up before relying on it.
+
 ## Lease capture
 
 `subagentStart` fires when Cursor hands work to a subagent, and carries the
@@ -717,7 +805,16 @@ recognizes a spawn by a `tool_input` carrying a `prompt`, never by a tool name i
 would have to enumerate per host.
 
 It records; it does not judge. A lease prompt is prose, so the verdict is always
-a pass and the arm always allows. To join those events to a job, write the
+a pass and the arm always allows.
+
+`preToolUse` on `Task` is the other side of the same spawn, and it does judge: the
+script restates the call as the envelope magus recognizes a spawn by, a `tool_input`
+carrying a `prompt`, and gates it, so a workspace [`magus\guard.spawn`](../../../reference/guard-spawn.md)
+rule can deny it. Cursor documents no fields for a `Task` call's `tool_input`; one
+with no `prompt` has nothing to judge and is allowed. Both events record the spawn,
+so the trail holds two `agent_spawn` rows for one subagent, the same price judged
+calls pay here. Neither entry declares `--reports-skills`, because Cursor documents
+no hook on a skill load. To join those events to a job, write the
 marker line documented in [Any other host](any-host.md#lease-capture) at the top
 of the prompt you hand the subagent.
 
@@ -728,6 +825,25 @@ never fires costs nothing and a missing one cannot be found; check
 `magus session` for `agent_spawn` events before relying on it.
 
 ## Coverage and limits
+
+**Nine of Cursor's twenty-one hook events are wired.** `sessionStart`,
+`beforeShellExecution`, `beforeMCPExecution`, `preToolUse`, `postToolUse`,
+`subagentStart`, `sessionEnd`, `beforeSubmitPrompt` and `stop`. The rest are not,
+for these reasons:
+
+- `subagentStop` carries `summary`, `modified_files` and `agent_transcript_path`
+  and names no subagent id, which the context size magus files for a subagent is
+  keyed on, and Cursor reports no per-agent token usage in its transcript.
+- `afterShellExecution`, `afterMCPExecution`, `afterFileEdit`, `afterTabFileEdit`,
+  `afterAgentResponse` and `afterAgentThought` are observation only, and `postToolUse`
+  already carries the advise.
+- `beforeReadFile` and `beforeTabFileRead` would gate a read the `preToolUse`
+  `Read` matcher already gates.
+- `postToolUseFailure` has no response fields, see below.
+- `preCompact`, `workspaceOpen`: nothing in magus consumes them.
+
+**Reading the reply out of the transcript** (above) is the one arm that rests on an
+undocumented file format.
 
 **MCP calls are gated on `beforeMCPExecution`.** Cursor publishes
 `tool_name`, `tool_input`, and `mcp_server_name` on that event; the script

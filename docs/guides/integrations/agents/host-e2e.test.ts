@@ -115,6 +115,40 @@ test("runtime harness spells cover read observation and checkpoints", () => {
   assert.ok(opencodeSpell.includes(".opencode/skills"), "opencode installs skills");
 });
 
+test("the hosts with a stop event run the reply check, and OpenCode's idle event stays out", () => {
+  const spell = (name: string) =>
+    readFileSync(path.join(repository, "spells/harness", name, "spell.buzz"), "utf8");
+  for (const name of ["claude-code", "codex", "cursor"]) {
+    assert.ok(spell(name).includes("proofread-reply"), `${name} must run the reply check`);
+  }
+  // session.idle cannot feed text back to the agent, so there is nothing for the check to do.
+  assert.ok(
+    !spell("opencode").includes("proofread-reply"),
+    "opencode has no stop event to carry it",
+  );
+});
+
+test("codex and cursor wire the prompt and spawn hooks claude-code has", () => {
+  const codex = readFileSync(path.join(repository, "spells/harness/codex/spell.buzz"), "utf8");
+  assert.match(codex, /"UserPromptSubmit"/, "codex records the person's message");
+  assert.match(codex, /SPAWN_MATCHER = "spawn_agent"/, "codex judges a subagent spawn");
+  const cursor = readFileSync(path.join(repository, "spells/harness/cursor/spell.buzz"), "utf8");
+  assert.match(cursor, /"beforeSubmitPrompt"/, "cursor records the person's message");
+  assert.match(cursor, /Read\|Task"/, "cursor judges a Task spawn on preToolUse");
+  // Neither host documents a hook on a skill load, so neither entry may claim one is reported.
+  for (const spell of [codex, cursor]) {
+    assert.ok(!/REPORTS_SKILLS =/.test(spell), "no capability for a skill hook the host lacks");
+  }
+});
+
+test("the scout agent is read-only by each host's own setting", () => {
+  const text = (name: string) =>
+    readFileSync(path.join(repository, "spells/harness", name, "spell.buzz"), "utf8");
+  assert.ok(text("codex").includes('sandbox_mode = \\"read-only\\"'), "codex sandbox");
+  assert.ok(text("opencode").includes("permission:\\n  edit: deny"), "opencode permission");
+  assert.ok(text("cursor").includes("readonly: true"), "cursor readonly");
+});
+
 test("selects the named VCS-neutral command-deny scenario", () => {
   assert.deepEqual(selectedScenarios(), [
     {

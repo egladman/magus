@@ -272,12 +272,24 @@ grep 'magus-command.buzz' .claude/settings.json
 grep 'CLAUDE_ENV_FILE' .claude/settings.json
 grep 'magus-command.buzz' .codex/hooks.json
 grep 'cursor-hook.buzz' .cursor/hooks.json
+grep 'proofread-reply.buzz -- --agent-name claude-code' .claude/settings.json
+grep 'proofread-reply.buzz -- --agent-name codex' .codex/hooks.json
+grep 'proofread-reply.buzz -- --agent-name cursor' .cursor/hooks.json
+grep '"matcher": "spawn_agent"' .codex/hooks.json
+grep '"UserPromptSubmit"' .codex/hooks.json
+grep '"beforeSubmitPrompt"' .cursor/hooks.json
+grep '"loop_limit": 1' .cursor/hooks.json
+grep 'sandbox_mode = "read-only"' .codex/agents/magus-scout.toml
 exec sh rewrite.sh
 grep 'stale-rendering' .claude/settings.json
 exec sh merge.sh
 ! grep 'stale-rendering' .claude/settings.json
 ! grep 'stale-rendering' .codex/hooks.json
 ! grep 'stale-rendering' .cursor/hooks.json
+grep -count=1 'proofread-reply.buzz' .claude/settings.json
+grep -count=1 'proofread-reply.buzz' .codex/hooks.json
+grep -count=1 'proofread-reply.buzz' .cursor/hooks.json
+grep -count=1 'spawn_agent' .codex/hooks.json
 exec magus describe harness claude-code
 stdout '^claude-code harness: current$'
 exec magus describe harness codex

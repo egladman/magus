@@ -54,6 +54,7 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 		{"codex", agent.HarnessAgentFile{
 			Path: ".codex/agents/magus-scout.toml",
 			Content: "name = \"magus-scout\"\ndescription = " + quoted + "\n" +
+				"sandbox_mode = \"read-only\"\n" +
 				"developer_instructions = '''\n" + instructions + "'''\n",
 			Hint: "magus-scout runs on agents.default_subagent_model; set it under [agents] in ~/.codex/config.toml to a cheaper model to run lookups for less",
 		}},
@@ -64,7 +65,7 @@ func TestHarnessSpellsRenderTheShippedAgent(t *testing.T) {
 		}},
 		{"opencode", agent.HarnessAgentFile{
 			Path:    ".opencode/agents/magus-scout.md",
-			Content: "---\ndescription: " + quoted + "\nmode: subagent\n---\n\n" + instructions,
+			Content: "---\ndescription: " + quoted + "\nmode: subagent\npermission:\n  edit: deny\n---\n\n" + instructions,
 		}},
 	}
 	for _, tc := range cases {

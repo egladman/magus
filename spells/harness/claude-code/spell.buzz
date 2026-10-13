@@ -152,6 +152,14 @@ fun claude_checkpoint_command() > str {
     return claude_named_command("magus-checkpoint", flags: [<str>]);
 }
 
+// claude_proofread_command judges the reply a turn ends with and hands the findings back as
+// the next turn's context. It names no binary and no decisions file: proofread comes from
+// PATH or __PROOFREAD_BIN, and a workspace's own table from __PROOFREAD_DECISIONS, which a
+// project sets in the settings "env" object beside the variables this spell writes.
+fun claude_proofread_command() > str {
+    return claude_named_command("proofread-reply", flags: [<str>]);
+}
+
 // claude_session_command puts the root first on PATH for the agent's own Bash tool
 // commands, and through them everything those commands start, so `magus` typed there is
 // the checkout's build rather than whatever the shell that launched Claude Code had.
@@ -218,6 +226,9 @@ fun claude_entries() > [any] {
             "entries": [
                 {
                     "hooks": [claude_command_hook(claude_checkpoint_command())],
+                },
+                {
+                    "hooks": [claude_command_hook(claude_proofread_command())],
                 },
             ],
         },
@@ -495,6 +506,7 @@ test "every glue entry names this host, and the rehydrate wrapper takes no argum
     assert\isTrue(claude_path_command().indexOf(named) != null, "path hook");
     assert\isTrue(claude_observe_command().endsWith(named), "read hook");
     assert\isTrue(claude_checkpoint_command().endsWith(named), "Stop checkpoint");
+    assert\isTrue(claude_proofread_command().endsWith(named), "Stop proofread, which picks its output shape by host");
     assert\isTrue(claude_rehydrate_command().indexOf("--agent-name") == null,
         "rehydrate reads no host, and would report the argument as unsupported");
 }
@@ -576,13 +588,21 @@ test "every entry runs a shipped template and nothing else" {
     foreach (block in claude_entries()) {
         foreach (entry in block["entries"] as [any]) {
             final cmd = "{(entry["hooks"] as [any])[0]["command"]}";
-            assert\isTrue(cmd.indexOf(" -s docs/guides/integrations/agents/magus-") != null, "a shipped template: {cmd}");
+            final shipped = cmd.indexOf(" -s docs/guides/integrations/agents/magus-") != null
+                or cmd.indexOf(" -s docs/guides/integrations/agents/proofread-reply.buzz") != null;
+            assert\isTrue(shipped, "a shipped template: {cmd}");
             assert\isTrue(cmd.indexOf("#") == null, "no marker: {cmd}");
             foreach (meta in [";", "&&", "||", "|", ">", "$("]) {
                 assert\isTrue(cmd.indexOf(meta) == null, "one plain command, no shell around it: {cmd}");
             }
         }
     }
+}
+
+test "the proofread entry names no workspace path, so the spell ships to any workspace" {
+    final cmd = claude_proofread_command();
+    assert\isTrue(cmd.endsWith("proofread-reply.buzz -- --agent-name claude-code"), cmd);
+    assert\isTrue(cmd.indexOf("--proofread") == null and cmd.indexOf("--decisions") == null, "binary and table come from the environment: {cmd}");
 }
 
 test "the session entry hands the glue the file the Bash tool sources" {
@@ -625,7 +645,11 @@ test "harness_entries covers PreToolUse PostToolUse SessionStart Stop SubagentSt
     assert\equal(start_entries[1]["matcher"] as? str, "compact", "rehydrate");
     final stop = entries[3];
     final stop_path = stop["path"] as [str];
-    assert\equal(stop_path[1], "Stop", "checkpoint");
+    assert\equal(stop_path[1], "Stop", "checkpoint, then the reply check");
+    final stop_entries = stop["entries"] as [any];
+    assert\equal(stop_entries.len(), 2, "the checkpoint entry and the proofread entry");
+    assert\equal("{(stop_entries[0]["hooks"] as [any])[0]["command"]}", claude_checkpoint_command(), "records where the work stands");
+    assert\equal("{(stop_entries[1]["hooks"] as [any])[0]["command"]}", claude_proofread_command(), "judges the reply");
     final subagent = entries[4];
     final subagent_path = subagent["path"] as [str];
     assert\equal(subagent_path[1], "SubagentStop", "a subagent's usage for a later continue");

@@ -97,7 +97,7 @@ final GUIDES = ["docs/guides/**"];
 final FRAGMENTS = ["changes/unreleased/*.md"];
 
 // kindOf is proofread's kind for the hand-written file at rel: a skill body the
-// agent package renders, a skill an agent loads as written, a changelog fragment, a
+// agent package renders, a skill or an AGENTS.md an agent loads as written, a changelog fragment, a
 // guide, or any other Markdown, which a reader looks things up in.
 export fun kindOf(rel: str) > str !> any {
     if (path\matchesAny(FRAGMENTS, path: rel)) {
@@ -106,7 +106,7 @@ export fun kindOf(rel: str) > str !> any {
     if (path\matchesAny(["internal/agent/skills/*/SKILL.md"], path: rel)) {
         return "agent-instructions-template";
     }
-    if (path\matchesAny([".claude/skills/*/SKILL.md"], path: rel)) {
+    if (path\matchesAny([".claude/skills/*/SKILL.md", "AGENTS.md", "**/AGENTS.md", "internal/agent/agents-section.md"], path: rel)) {
         return "agent-instructions";
     }
     if (path\matchesAny(GUIDES, path: rel)) {
@@ -599,7 +599,9 @@ test "a judge that does not run is an error, not a pass" {
 test "a skill body, a loaded skill, a guide and any other page each take their own kind" {
     assert\equal(kindOf("internal/agent/skills/magus-run/SKILL.md"), want: "agent-instructions-template", message: "a body");
     assert\equal(kindOf(".claude/skills/shepherd-pull-requests/SKILL.md"), want: "agent-instructions", message: "a loaded skill");
-    assert\equal(kindOf("internal/agent/agents-section.md"), want: "reference", message: "not a skill");
+    assert\equal(kindOf("internal/agent/agents-section.md"), want: "agent-instructions", message: "the AGENTS.md block");
+    assert\equal(kindOf("AGENTS.md"), want: "agent-instructions", message: "loaded every session");
+    assert\equal(kindOf("console/AGENTS.md"), want: "agent-instructions", message: "a nested AGENTS.md");
     assert\equal(kindOf(".claude/skills/x/notes.md"), want: "reference", message: "not a SKILL.md");
     foreach (page in ["docs/guides/integrations/agents/leases.md", "docs/guides/setup.md",
         "docs/guides/setup/linux.md", "docs/guides/migrating/from-nx.md"]) {

@@ -108,9 +108,15 @@ fun opencode_yaml_quote(text: str) > str {
 
 // opencode_agent renders one shipped agent as an OpenCode subagent file. It sets no model,
 // so the agent inherits the one the invoking session uses, and OpenCode names its agents
-// by file name rather than a frontmatter field.
+// by file name rather than a frontmatter field. A read-only agent denies the edit
+// permission, which covers every file-changing tool; bash stays at the session's setting
+// because the agent's job is running read-only magus commands.
 fun opencode_agent(agent: {str: any}) > {str: any} {
-    final content = "---\ndescription: " + opencode_yaml_quote("{agent["description"]}") + "\nmode: subagent\n---\n\n" + "{agent["instructions"]}".trim() + "\n";
+    var content = "---\ndescription: " + opencode_yaml_quote("{agent["description"]}") + "\nmode: subagent\n";
+    if (agent["read_only"] == true) {
+        content = content + "permission:\n  edit: deny\n";
+    }
+    content = content + "---\n\n" + "{agent["instructions"]}".trim() + "\n";
     return {
         "path": ".opencode/agents/{agent["name"]}.md",
         "content": content,
@@ -134,7 +140,7 @@ export fun harness_agents(target: Target, cb: fun(any)) > [any] {
     return opencode_agents(agents as [any]);
 }
 
-test "harness_agents renders a subagent with no model" {
+test "harness_agents renders a read-only subagent that denies edits and sets no model" {
     final file = opencode_agent({
         "name": "magus-scout",
         "description": "Answers lookups: read-only, \"quoted\" and \\ escaped.",
@@ -145,10 +151,21 @@ test "harness_agents renders a subagent with no model" {
     assert\equal("{file["path"]}", ".opencode/agents/magus-scout.md", "OpenCode reads .opencode/agents");
     assert\equal(
         "{file["content"]}",
-        "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\n---\n\nFirst line.\n\nSecond line.\n",
+        "---\ndescription: \"Answers lookups: read-only, \\\"quoted\\\" and \\\\ escaped.\"\nmode: subagent\npermission:\n  edit: deny\n---\n\nFirst line.\n\nSecond line.\n",
         "frontmatter then the instructions",
     );
     assert\isTrue("{file["content"]}".indexOf("model") == null, "the invoking session's model applies");
+}
+
+test "harness_agents leaves permissions alone for a writable subagent" {
+    final file = opencode_agent({
+        "name": "magus-worker",
+        "description": "Edits files.",
+        "instructions": "First line.\n",
+        "read_only": false,
+        "class": "standard",
+    });
+    assert\isTrue("{file["content"]}".indexOf("permission") == null, "the session's permissions apply");
 }
 
 test "harness_agents renders nothing when the call carries no agents" {

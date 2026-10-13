@@ -1,7 +1,7 @@
 ---
 title: magus-diagram
 generated_from: internal/agent/skills/magus-diagram/SKILL.md
-description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand."
+description: "Write, check and view an architecture figure with magus/figure, the embedded Buzz module."
 tags: [agents, skills, magus-diagram]
 skill_full_bytes: 8189
 skill_short_bytes: 6715
@@ -9,7 +9,7 @@ skill_short_bytes: 6715
 
 # magus-diagram
 
-Write, check and view an architecture figure with magus/figure, the embedded Buzz module: boxes built from the knowledge graph's own Dir records, groups over a declared layer or a dirs set, edges derived from imports and declared calls, and a layout nobody places by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-lang.
+Write, check and view an architecture figure with magus/figure, the embedded Buzz module. Boxes come from the knowledge graph's own Dir records, groups from a declared layer or a dirs set, edges from imports and declared calls, and nobody places boxes by hand. Use when a doc or review needs a picture of one subsystem, process or package scope, when a figure refuses to draw and names the call to change, and when reading the console's Diagrams page. Do NOT use to draw the whole workspace or to place boxes by coordinate; for Buzz syntax itself use magus-buzz-lang.
 
 Install it, rather than copying from this page:
 
@@ -28,9 +28,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `120` |
+| `agent-skill-version` | `121` |
 | `knowledge-schema-version` | `17` |
-| `skill-content` | `e7a0f1d3f188` |
+| `skill-content` | `82147101094d` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both forms below report it: they go stale together, never one silently, and a change to another skill does not move it.

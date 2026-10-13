@@ -68,7 +68,7 @@ via `depends_on` instead.
   (see [cache.md](cache.md#the-cache-key)); that is the entirety of its
   runtime effect.
 
-## Caching interplay
+## Caching and needs
 
 A cache hit on a target means **its body never runs**, so any `magus\needs`
 calls inside that body never dispatch either, on a hit. This has two

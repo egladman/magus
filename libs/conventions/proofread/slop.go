@@ -618,7 +618,8 @@ func headingCase(in input) []Finding {
 
 		capitalized, title := 0, true
 
-		for _, w := range fields[1:] {
+		for i := 1; i < len(fields); i++ {
+			w := fields[i]
 			if headingStops[strings.ToLower(w)] {
 				continue
 			}
@@ -629,7 +630,9 @@ func headingCase(in input) []Finding {
 				break
 			}
 
-			capitalized++
+			if !inNameList(fields, i) {
+				capitalized++
+			}
 		}
 
 		if title && capitalized >= 3 {
@@ -642,4 +645,23 @@ func headingCase(in input) []Finding {
 	}
 
 	return out
+}
+
+// inNameList reports whether fields[i] is one name in a list joined by commas or
+// by a lower-case "or" or "and": the names in "Coming from TypeScript, Go, Python
+// or Swift" are proper nouns, not title case. A capitalized "And" joins nothing,
+// so a title-cased heading keeps counting its words.
+func inNameList(fields []string, i int) bool {
+	joins := func(w string) bool { return w == "or" || w == "and" }
+
+	switch {
+	case strings.HasSuffix(fields[i], ","):
+		return true
+	case i+1 < len(fields) && joins(fields[i+1]):
+		return true
+	case i > 0 && (strings.HasSuffix(fields[i-1], ",") || joins(fields[i-1])):
+		return true
+	}
+
+	return false
 }

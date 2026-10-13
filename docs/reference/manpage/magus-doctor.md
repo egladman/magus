@@ -45,7 +45,7 @@ without running any, so the name can be looked up rather than provoked.
 : Run the remedy each finding names, where one exists (see --dry-run to list them first)
 
 **--list**
-: Print every check magus would run - name, subject, and MGS code - without running any of them
+: Print every check magus would run (name, subject, and MGS code) without running any of them
 
 **--probe**
 : Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)

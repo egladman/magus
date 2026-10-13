@@ -1,9 +1,9 @@
 {
-  "version": 1,
   "hooks": {
-    "sessionStart": [
+    "beforeMCPExecution": [
       {
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "failClosed": true,
         "timeout": 10
       }
     ],
@@ -13,30 +13,23 @@
         "timeout": 10
       }
     ],
-    "beforeMCPExecution": [
+    "beforeSubmitPrompt": [
       {
-        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
-        "failClosed": true,
-        "timeout": 10
-      }
-    ],
-    "preToolUse": [
-      {
-        "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read",
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
     ],
     "postToolUse": [
       {
-        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch",
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "matcher": "Shell|Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|WebSearch|WebFetch",
         "timeout": 10
       }
     ],
-    "subagentStart": [
+    "preToolUse": [
       {
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "matcher": "Write|StrReplace|Delete|Edit|NotebookEdit|Grep|Glob|Read|Task",
         "timeout": 10
       }
     ],
@@ -45,6 +38,26 @@
         "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
         "timeout": 10
       }
+    ],
+    "sessionStart": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
+      }
+    ],
+    "stop": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/proofread-reply.buzz -- --agent-name cursor",
+        "loop_limit": 1,
+        "timeout": 10
+      }
+    ],
+    "subagentStart": [
+      {
+        "command": "magus buzz -s docs/guides/integrations/agents/cursor-hook.buzz -- --agent-name cursor",
+        "timeout": 10
+      }
     ]
-  }
+  },
+  "version": 1
 }

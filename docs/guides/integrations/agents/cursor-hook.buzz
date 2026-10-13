@@ -22,6 +22,16 @@
 // the shell commands the guard already judges, and gated on preToolUse, because
 // a deny has to land before the tool runs.
 //
+// A Task call reaches preToolUse like any other tool, and is gated there as the spawn it
+// is: the brief and the subagent type go to `magus shell` in the envelope it recognizes a
+// spawn by, so a workspace spawn rule can deny it. subagentStart records the same spawn
+// again from the child's side, which is why the trail holds two spawn rows per subagent.
+// Cursor documents no Task tool_input fields; a call with no prompt in it has nothing to
+// judge and is allowed.
+//
+// beforeSubmitPrompt hands the person's message to `magus shell --message`, which records
+// the topics it raises and judges nothing; the reply only says to go on.
+//
 // beforeMCPExecution carries tool_name, tool_input and mcp_server_name. Magus
 // grades MCP as mcp__<server>__<tool>, so this file rewrites the envelope before
 // judging. afterMCPExecution is observation-only, and postToolUse still has no
@@ -34,7 +44,7 @@
 // Cursor has also raced additional_context away before; env is the half that sticks.
 // Compaction still has no model-facing rehydrate event.
 //
-// magus-guard-template: 23
+// magus-guard-template: 24
 // magus-guard-coverage: schema=2 host=cursor input=command deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=path deny=model advise=model pass=none ask=human
 // magus-guard-coverage: schema=2 host=cursor input=mcp deny=model advise=none pass=none ask=human
@@ -74,6 +84,9 @@ final ADVISE = `{{if eq .decision "advise"}}{"additional_context":{{toJson .cont
 final SESSION_BRIEF_MAX_BYTES = 16384;
 
 final ALLOW = `{"permission":"allow"}`;
+
+// The only reply a beforeSubmitPrompt hook owes Cursor: the message goes through.
+final SUBMIT_CONTINUE = `{"continue":true}`;
 final EMPTY = `{}`;
 
 final UNAVAILABLE_TEXT = "magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set __MAGUS_BIN to its path, to restore the guard.";
@@ -406,8 +419,44 @@ fun recordSpawn(bin: str, agent: str, event: any?) > void {
     }) catch void;
 }
 
+// recordMessage hands the person's message to `magus shell --message` and reads nothing
+// back: a binary too old for the flag costs the record, never the message.
+fun recordMessage(scope: Scope, event: any?) > void {
+    final message = hook\field(event, dotPath: "prompt");
+    if (message == "") { return; }
+    proc\exec(scope.bin, args: [
+        "shell", "--message", AGENT_NAME, scope.agent, "--transport", "buzz",
+        "--session", scope.session, "--transcript", scope.transcript,
+        "--event", "beforeSubmitPrompt",
+    ], opts: {
+        "quiet": true,
+        "allow_failure": true,
+        "stdin": message,
+    }) catch void;
+}
+
+// taskPayload restates a Task call as the envelope magus recognizes a spawn by, or "" when
+// the call carries no prompt to hand it.
+fun taskPayload(event: any?) > str {
+    final input = hook\dig(event, dotPath: "tool_input");
+    if (hook\field(input, dotPath: "prompt") == "") { return ""; }
+    final envelope = {
+        "tool_name": "Task",
+        "tool_input": input,
+        "session_id": readSession(event),
+        "cwd": firstField(event, keys: ["cwd"]),
+        "transcript_path": hook\field(event, dotPath: "transcript_path"),
+        "hook_event_name": "preToolUse",
+    };
+    return json\stringify(envelope) catch "";
+}
+
 fun unnamed(eventName: str) > void {
     warn(UNNAMED);
+    if (eventName == "beforeSubmitPrompt") {
+        io\stdout.write(SUBMIT_CONTINUE) catch void;
+        return;
+    }
     if (eventName == "beforeShellExecution" or eventName == "preToolUse") {
         io\stdout.write(denyBoth(UNNAMED)) catch void;
         return;
@@ -449,6 +498,10 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         recordSpawn(scope.bin, agent: scope.agent, event: event);
         return ALLOW;
     }
+    if (eventName == "beforeSubmitPrompt") {
+        recordMessage(scope, event: event);
+        return SUBMIT_CONTINUE;
+    }
     if (eventName == "beforeMCPExecution") {
         final payload = mcpPayload(event);
         if (payload == "") {
@@ -460,6 +513,11 @@ fun dispatch(event: any?, eventName: str, bin: str, agent: str) > str {
         return gate(scope, payload: hook\field(event, dotPath: "command"), asPath: false, family: "failed-command");
     }
     if (eventName == "preToolUse") {
+        if (hook\field(event, dotPath: "tool_name") == "Task") {
+            final spawn = taskPayload(event);
+            if (spawn == "") { return ALLOW; }
+            return gate(scope, payload: spawn, asPath: false, family: "failed-spawn");
+        }
         final search = searchCommand(event);
         if (search != "") { return gate(scope, payload: search, asPath: false, family: "failed-search"); }
         final writePath = toolPath(event);
@@ -507,6 +565,7 @@ fun main(args: [str]) > void {
             io\stderr.write(unavailableNotice(text: UNAVAILABLE_TEXT) + "\n") catch void;
         }
         if (gates(eventName)) { io\stdout.write(ALLOW) catch void; }
+        if (eventName == "beforeSubmitPrompt") { io\stdout.write(SUBMIT_CONTINUE) catch void; }
         return;
     }
     io\stdout.write(dispatch(event, eventName: eventName, bin: bin, agent: agent)) catch void;

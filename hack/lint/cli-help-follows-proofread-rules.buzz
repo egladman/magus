@@ -37,21 +37,7 @@ final KEY = 60;
 // KEY bytes: a sentence over 40 words, text over 240 runes, a spaced hyphen as a dash, or a
 // filler word. Reword the text in internal/cli/registry.go and delete its entry; the man
 // pages and the flag bindings regenerate from it.
-export final BASELINE: [str] = [
-    "Every exact source range, uncapped and verified against the ",
-    "Let hooks read magus's remote cache from the GitHub Actions ",
-    "Pack a spell directory's tracked files as an OCI artifact wi",
-    "Print every check magus would run - name, subject, and MGS c",
-    "Print what one job grants its holder: the criteria, the writ",
-    "Race-condition diagnostics (watch|replay, comma-combinable);",
-    "Raw substring search, no symbol index: print path:line:text ",
-    "Stream magus events as JSONL - one event per line - so an ed",
-    "The base's own regeneration `command` and its arguments, run",
-    "The mergequeue.changes/v1 `document`, or - for stdin",
-    "The records to apply: a file, or - for stdin; one JSON job, ",
-    "With --plan: add per-shard detail - the invocation, its spel",
-    "output <ref>: show the run's identity - descriptor, lineage,",
-];
+export final BASELINE: [str] = [];
 
 // reads keys lint-rules on the registry and on everything the judge is linked from.
 export fun reads() > [str] {
