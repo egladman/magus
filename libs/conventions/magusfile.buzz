@@ -34,6 +34,16 @@ export fun index_generate(ctx: magus\Context, args: [str]) > void !> any {
     index\render("libs/conventions");
 }
 
+// Trains postag's model on UD English EWT, fetched by a pinned digest, and writes the
+// test split its accuracy test reads. Not part of generate: it needs the network.
+export fun postag_generate(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("postag/internal/train/*.go", "go.mod");
+    ctx.writesFiles("postag/gen/model.gz", "postag/testdata/en_ewt-ud-test.conllu.gz");
+    go["go-run"](ctx, {"args": ["./postag/internal/train",
+                                "-model", "postag/gen/model.gz",
+                                "-testdata", "postag/testdata/en_ewt-ud-test.conllu.gz"]});
+}
+
 export fun format(ctx: magus\Context, args: [str]) > void {
     // readsFiles replaces the project baseline, so the next two lines must name every
     // input. The markdown glob mirrors dprint.json `includes`; keep the two in step.

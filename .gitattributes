@@ -1,4 +1,4 @@
-# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-187-g720ad04ed (commit 720ad04edc169b1c02ff543ec80a0ed638749995, 2026-10-11T20:24:55-04:00)
+# BEGIN magus-generated - do not edit this section manually; written by magus v0.5.0-rc.3-55-g971497a65 (commit 971497a65ff397184686fb3e1168586c73ea2c30, 2026-10-12T21:21:44-04:00)
 *.go diff=golang
 *.py diff=python
 *.rs diff=rust
@@ -141,6 +141,8 @@ libs/conventions/MAGUS.md merge=magus linguist-generated
 libs/conventions/coverage.out merge=magus linguist-generated
 libs/conventions/gen/proofread merge=magus linguist-generated
 libs/conventions/gen/proofread.inputs merge=magus linguist-generated
+libs/conventions/postag/gen/model.gz merge=magus linguist-generated
+libs/conventions/postag/testdata/en_ewt-ud-test.conllu.gz merge=magus linguist-generated
 libs/diagnostics/MAGUS.md merge=magus linguist-generated
 libs/diagnostics/coverage.out merge=magus linguist-generated
 libs/gopherbuzz/MAGUS.md merge=magus linguist-generated

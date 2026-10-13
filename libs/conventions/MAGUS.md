@@ -6,13 +6,14 @@ Up: [workspace index](../../MAGUS.md)
 
 Query: `magus query project=libs/conventions`
 
-| Target            | What it does                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `generate`        | Regenerates MAGUS.md and fails on drift.                                                      |
-| `format`          |                                                                                               |
-| `lint`            | go-vet only: the custom golangci-lint binary is built from this module.                       |
-| `build`           | Compiles every analyzer package; the module root holds none.                                  |
-| `proofread-build` | Links proofread, so the pull request guard and the writing checks never wait on the compiler. |
-| `test`            | Runs the suite; the root merges coverage.out into its coverage badge.                         |
-| `ci`              | The anchor `magus affected ci` keys off.                                                      |
-| `index-generate`  | Renders MAGUS.md, this project's target catalog.                                              |
+| Target            | What it does                                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `generate`        | Regenerates MAGUS.md and fails on drift.                                                                                |
+| `postag-generate` | Trains postag's model on UD English EWT, fetched by a pinned digest, and writes the test split its accuracy test reads. |
+| `format`          |                                                                                                                         |
+| `lint`            | go-vet only: the custom golangci-lint binary is built from this module.                                                 |
+| `build`           | Compiles every analyzer package; the module root holds none.                                                            |
+| `proofread-build` | Links proofread, so the pull request guard and the writing checks never wait on the compiler.                           |
+| `test`            | Runs the suite; the root merges coverage.out into its coverage badge.                                                   |
+| `ci`              | The anchor `magus affected ci` keys off.                                                                                |
+| `index-generate`  | Renders MAGUS.md, this project's target catalog.                                                                        |
