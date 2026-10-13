@@ -1076,6 +1076,7 @@ type recordingProvider struct {
 func (p *recordingProvider) Enabled() bool                                                       { return true }
 func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Attr)               {}
 func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
+func (p *recordingProvider) RecordAgentCall(context.Context, observability.AgentCall)            {}
 func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
 func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
 func (p *recordingProvider) RecordCacheSaved(context.Context, float64)                           {}
