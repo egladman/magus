@@ -19,7 +19,7 @@ and takes a `//nolint:<name> // <reason>` where an exception is deliberate.
 | `globalrestore` | a test assigning a configured package-level variable with no `t.Cleanup` or `defer` restoring it            |
 | `fieldwise`     | a test asserting every field of a struct one at a time instead of comparing the whole value once            |
 | `providerio`    | Go source outside an allowlist reaching toward a CI/VCS provider (an HTTP client, or a provider SDK import) |
-| `diagmsg`       | a message that runs long, stacks reasons, names two commands or opens with a one- to three-word tag         |
+| `diagmsg`       | a diagnostic that runs long, stacks reasons, names two commands or opens with a one- to three-word tag      |
 | `errmsg`        | an error joining clauses, misplacing `%w` or naming the wrong origin, or an error's text in a log record    |
 | `stderrprint`   | a write to `os.Stderr` outside a usage function and the display, which the verbosity flags never see        |
 

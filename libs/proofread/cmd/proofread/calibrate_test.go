@@ -244,7 +244,7 @@ func TestCalibrateRefusesFlagsItCannotUse(t *testing.T) {
 			[]string{"-sample", "-", "-gates"}, "",
 			"proofread: -cases and -gates replay the labeled cases and cannot be combined with -sample",
 		},
-		"a bad record": {[]string{"-sample", "-", "-kind", "message"}, "{}\n{", "proofread: sample line 2: unexpected end of JSON input"},
+		"a bad record": {[]string{"-sample", "-", "-kind", "diagnostic"}, "{}\n{", "proofread: sample line 2: unexpected end of JSON input"},
 		"an empty dir": {[]string{"-cases", "."}, "", "proofread: no case files in ."},
 	}
 

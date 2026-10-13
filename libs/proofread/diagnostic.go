@@ -12,7 +12,7 @@ import (
 // command and a ref.
 const MessageRunes = 160
 
-// JudgeMessage runs the [KindMessage] rules over text, holding it to maxRunes
+// JudgeMessage runs the [KindDiagnostic] rules over text, holding it to maxRunes
 // runes, or to [MessageRunes] when maxRunes is 0. Text is judged as written:
 // a caller standing in for a value the text does not hold, such as a format
 // verb, replaces it with one rune first. Each finding's line is its line in
@@ -29,7 +29,7 @@ func judgeMessage(text string, maxRunes int, o options) []Finding {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	lines := strings.Split(text, "\n")
 
-	return run(input{kind: KindMessage, text: text, lines: lines, source: lines, maxRunes: maxRunes, opts: o})
+	return run(input{kind: KindDiagnostic, text: text, lines: lines, source: lines, maxRunes: maxRunes, opts: o})
 }
 
 // lineAt is the 1-based line of text holding offset.

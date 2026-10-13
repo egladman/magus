@@ -1,5 +1,5 @@
 // Package diagmsg judges the messages a program prints to whoever runs it,
-// by the [proofread.KindMessage] rules: a verdict, one next command, and a ref for
+// by the [proofread.KindDiagnostic] rules: a verdict, one next command, and a ref for
 // the rationale, never a paragraph.
 //
 // A message is found where it is built: the argument a configured function
@@ -133,7 +133,7 @@ func New(opts Options) (*analysis.Analyzer, error) {
 	if slices.Contains(opts.Prefixes, "") {
 		return nil, errors.New("diagmsg: an empty prefix would mark every string")
 	}
-	messageRules := proofread.KindRules(proofread.KindMessage)
+	messageRules := proofread.KindRules(proofread.KindDiagnostic)
 	for _, r := range opts.Rules {
 		if !slices.Contains(messageRules, r) {
 			return nil, fmt.Errorf("diagmsg: rule %q is not one of %q", r, messageRules)

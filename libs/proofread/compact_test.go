@@ -234,6 +234,8 @@ func TestParseKindReadsAFormerName(t *testing.T) {
 		"agent-instructions":          KindAgentBrief,
 		"agent-instructions-template": KindSkillTemplate,
 		"agent-brief":                 KindAgentBrief,
+		"message":                     KindDiagnostic,
+		"diagnostic":                  KindDiagnostic,
 		"poem":                        "",
 	}
 

@@ -113,9 +113,9 @@ func TestMessageTagReportsAComponentTagOrMarker(t *testing.T) {
 
 func TestMessageRulesJudgeOnlyMessages(t *testing.T) {
 	want := []Rule{RuleMessageLength, RuleMessageRationale, RuleMessageCommands, RuleMessageTag}
-	got := slices.DeleteFunc(KindRules(KindMessage), func(r Rule) bool { return r == RuleSuppressionUnused })
+	got := slices.DeleteFunc(KindRules(KindDiagnostic), func(r Rule) bool { return r == RuleSuppressionUnused })
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("KindRules(KindMessage) = %q, want %q", got, want)
+		t.Errorf("KindRules(KindDiagnostic) = %q, want %q", got, want)
 	}
 
 	text := "server: refused because x, so y"
@@ -125,5 +125,5 @@ func TestMessageRulesJudgeOnlyMessages(t *testing.T) {
 		}
 	}
 
-	assertFindings(t, JudgeText(text, KindMessage), JudgeMessage(text, MessageRunes))
+	assertFindings(t, JudgeText(text, KindDiagnostic), JudgeMessage(text, MessageRunes))
 }

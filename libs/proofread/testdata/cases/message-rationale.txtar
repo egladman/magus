@@ -1,11 +1,11 @@
 A printed message stacking more than one reason.
--- hit/message --
+-- hit/diagnostic --
 denied because the cache is shared, so write elsewhere
 refused; the row is ended, which no exec revives
--- hit/message whole --
+-- hit/diagnostic whole --
 refused because x
 retry, meaning y
--- pass/message --
+-- pass/diagnostic --
 the cache dir is magus's own, so write under .magus/tmp
 run `a so b because c` instead
 the words "so" and "because" are joins

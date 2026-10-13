@@ -1,15 +1,15 @@
 Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 A printed message opening with a component tag or a marker.
--- hit/message --
+-- hit/diagnostic --
 server: not running
 merge-driver: refreshed
 [AGENT] read the plan
--- pass/message --
+-- pass/diagnostic --
 graph is stale: run `magus graph build`
 Server: not running
 magus workspace: denied
 run `x [TAG]`
--- hit/message --
+-- hit/diagnostic --
 auth: token %s has insecure permissions %#o (want 0600)
 magus: could not locate workspace root; run `%s` to bootstrap one
 job: %s claims a declaration no footprint can grade: %s.

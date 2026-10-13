@@ -53,7 +53,7 @@ func readKind(text string, kind Kind) []paragraph {
 	raw := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
 
 	switch kind {
-	case KindDocComment, KindMessage, KindCLIHelp, KindToolDescription:
+	case KindDocComment, KindDiagnostic, KindCLIHelp, KindToolDescription:
 		for i, ln := range raw {
 			raw[i] = bareURL.ReplaceAllString(ln, "")
 		}

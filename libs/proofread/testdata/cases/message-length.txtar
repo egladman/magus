@@ -1,12 +1,12 @@
 Cases from labeling round 2 (2026-10-11, two labelers, adjudicated).
 A printed message over 160 runes.
--- hit/message --
+-- hit/diagnostic --
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 the graph is stale because the last build ran at an older commit than the one checked out, so every query answers from lines that moved since then: run `magus graph build`
--- pass/message --
+-- pass/diagnostic --
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 graph is stale: run `magus graph build`
--- hit/message --
+-- hit/diagnostic --
 magus\skills: no workspace on the context; it reads the workspace's skill directories, so run it from a magusfile target or a `magus buzz` script inside a workspace
 magus\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\cmd or a magus\describe method
 refusing to overwrite %s: it carries knowledge-schema v%d and this build renders v%d, so regenerating it here would downgrade committed output. The running binary is %s.
@@ -30,10 +30,10 @@ spell import %q is declared remote in magus.yaml but %s also holds it, and a rem
 spell import %q is defined at %s but shadowed by %s: imports resolve root-wins, so the deeper spell is dead. Move or rename it, or acknowledge the shadow with a reason.
 pid %d (%s), upstream of this run in a pipe, %s, so this run started nothing. A pipeline of magus runs stops at its first failed stage: fix that stage, then rerun.
 secret grant %q: host %q is not ASCII; punycode an internationalized host yourself, because case folding a non-ASCII host would let a lookalike name satisfy this grant
--- hit/message whole --
+-- hit/diagnostic whole --
 not running the %s gate for branch %s: it re-verifies a gate that already passed.
 %s
   machine pool: %s
   override: pass --no-redundancy-check to run it here anyway
--- hit/message whole --
+-- hit/diagnostic whole --
 this gate was superseded by a later gate on the same tree (pid %d, started %s, %s); its verdict would have described a tree that has since changed; nothing here was wrong.

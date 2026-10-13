@@ -26,9 +26,9 @@ One reason names the cause; a second is an argument the reader did not ask for a
 
 The code is `PRF9002`. The decision depends on the kind of text judged:
 
-| Kind      | Default |
-| --------- | ------- |
-| `message` | deny    |
+| Kind         | Default |
+| ------------ | ------- |
+| `diagnostic` | deny    |
 
 ## Changing it
 

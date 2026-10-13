@@ -38,7 +38,7 @@ The code is `PRF1090`. The decision depends on the kind of text judged:
 | `review-summary`     | deny    |
 | `review-inline`      | deny    |
 | `review-reply`       | deny    |
-| `message`            | deny    |
+| `diagnostic`         | deny    |
 | `commit-message`     | deny    |
 | `cli-help`           | deny    |
 | `issue`              | deny    |

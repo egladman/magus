@@ -132,11 +132,11 @@ const (
 	// KindReviewReply is a reply in a review thread, or a comment on a pull
 	// request's conversation: Markdown with no title line.
 	KindReviewReply Kind = "review-reply"
-	// KindMessage is one message a program prints to whoever runs it: a
-	// diagnostic, a guard verdict, a breadcrumb's reason. It is plain text, not
-	// Markdown, held to the message rules alone: a verdict, one next command,
-	// and a ref for the rationale.
-	KindMessage Kind = "message"
+	// KindDiagnostic is one text a program prints to whoever runs it: an error,
+	// a guard verdict, a breadcrumb's reason. It is plain text, not Markdown, held
+	// to the message rules alone: a verdict, one next command, and a ref for the
+	// rationale.
+	KindDiagnostic Kind = "diagnostic"
 	// KindCommitMessage is a commit message: a subject line, then an optional
 	// body after a blank line, read in a one-line log long after the change.
 	KindCommitMessage Kind = "commit-message"
@@ -170,15 +170,20 @@ const (
 // compat(until: no caller, decisions table, round record or case file names
 // agent-instructions or agent-instructions-template): the names these kinds
 // had before kinds were named for their reader.
+//
+// compat(until: no caller, decisions table, round record or case file names the
+// message kind): the name KindDiagnostic had before it was told apart from
+// commit-message.
 var kindAliases = map[string]Kind{
 	"agent-instructions":          KindAgentBrief,
 	"agent-instructions-template": KindSkillTemplate,
+	"message":                     KindDiagnostic,
 }
 
 // kinds is every kind proofread judges; ParseKind answers from it.
 var kinds = []Kind{
 	KindDocComment, KindReference, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
-	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindMessage, KindCommitMessage,
+	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage,
 	KindCLIHelp, KindIssue, KindReleaseNotes, KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
 }
 
@@ -223,7 +228,7 @@ var (
 	// reviewText is every text a review posts: its body, a comment on a line of
 	// the diff and a reply in a thread.
 	reviewText = []Kind{KindReviewSummary, KindReviewInline, KindReviewReply}
-	message    = []Kind{KindMessage}
+	diagnostic = []Kind{KindDiagnostic}
 	// changeText is what a repository writes about its own changes for the people
 	// who follow them: a commit, an issue, release notes and a changelog.
 	changeText = []Kind{KindCommitMessage, KindIssue, KindReleaseNotes, KindChangelog}
@@ -285,10 +290,10 @@ var checks = slices.Concat(coreChecks, cssChecks, toneChecks, slopChecks, messag
 	compactChecks, skillChecks, []check{templateCheck})
 
 var messageChecks = []check{
-	{rule: RuleMessageLength, on: message, judge: messageLength},
-	{rule: RuleMessageRationale, on: message, judge: messageRationale},
-	{rule: RuleMessageCommands, on: message, judge: messageCommands},
-	{rule: RuleMessageTag, on: message, judge: messageTag},
+	{rule: RuleMessageLength, on: diagnostic, judge: messageLength},
+	{rule: RuleMessageRationale, on: diagnostic, judge: messageRationale},
+	{rule: RuleMessageCommands, on: diagnostic, judge: messageCommands},
+	{rule: RuleMessageTag, on: diagnostic, judge: messageTag},
 }
 
 // templateCheck has no judge: a template that does not render is reported
@@ -477,7 +482,7 @@ type input struct {
 	// still in them, for a rule that asks whether a sentence cites something.
 	source []string
 	opts   options
-	// text is a [KindMessage]'s whole text and maxRunes its length cap.
+	// text is a [KindDiagnostic]'s whole text and maxRunes its length cap.
 	text     string
 	maxRunes int
 	// css is the comment [judgeStylesheet] is judging, set for

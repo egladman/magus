@@ -167,7 +167,7 @@ func TestLoadCasesRefusesAFileItCannotRead(t *testing.T) {
 		"an unknown label": {"filler.txtar", "c\n-- miss/reference --\nx\n", `filler.txtar:2: label "miss" is none of hit, pass, fp, fn or author`},
 		"an author kind with no voice": {"filler.txtar", "-- author/reference --\nx\n",
 			"filler.txtar: the author sections: a voice measures change-description, review-reply, commit-message and issue, not reference"},
-		"a kind not judged": {"filler.txtar", "-- hit/message --\nx\n", `filler.txtar:1: rule filler does not judge kind "message"`},
+		"a kind not judged": {"filler.txtar", "-- hit/diagnostic --\nx\n", `filler.txtar:1: rule filler does not judge kind "diagnostic"`},
 		"an unknown attr":   {"filler.txtar", "-- hit/reference loud --\nx\n", `filler.txtar:1: unknown attribute "loud"`},
 		"a bad thread":      {"long-thread.txtar", "-- hit/review-reply thread=x --\nx\n", `long-thread.txtar:1: thread="x" is not a count`},
 		"a later section":   {"filler.txtar", "-- hit/reference --\nx\ny\n-- hit/nope --\nz\n", `filler.txtar:4: rule filler does not judge kind "nope"`},

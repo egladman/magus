@@ -26,9 +26,9 @@ A message is read in a terminal at the moment something went wrong: about two li
 
 The code is `PRF9001`. The decision depends on the kind of text judged:
 
-| Kind      | Default |
-| --------- | ------- |
-| `message` | deny    |
+| Kind         | Default |
+| ------------ | ------- |
+| `diagnostic` | deny    |
 
 ## Changing it
 

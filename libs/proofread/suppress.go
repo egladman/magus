@@ -15,7 +15,7 @@ const RuleSuppressionUnused Rule = "suppression-unused"
 // text's own markers rather than its prose.
 var everyKind = []Kind{
 	KindDocComment, KindReference, KindChangeDescription, KindAgentBrief, KindAgentCompact, KindSkillTemplate,
-	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindMessage, KindCommitMessage, KindCLIHelp, KindIssue, KindReleaseNotes,
+	KindGuide, KindReviewSummary, KindReviewInline, KindReviewReply, KindDiagnostic, KindCommitMessage, KindCLIHelp, KindIssue, KindReleaseNotes,
 	KindChangelog, KindAgentReply, KindToolDescription, KindStylesheet,
 }
 

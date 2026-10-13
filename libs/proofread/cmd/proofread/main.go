@@ -100,7 +100,7 @@ var subcommands = []subcommand{
 	{"review-summary", proofread.KindReviewSummary, inputStdin, "", "judge a review's body on stdin, its verdict in -event"},
 	{"review-inline", proofread.KindReviewInline, inputStdin, "", "judge a review comment on a line of the diff, on stdin"},
 	{"review-reply", proofread.KindReviewReply, inputStdin, "", "judge a reply in a review thread or a pull request comment, on stdin"},
-	{"message", proofread.KindMessage, inputStdin, "", "judge one message a program prints, on stdin"},
+	{"diagnostic", proofread.KindDiagnostic, inputStdin, "", "judge one diagnostic a program prints, on stdin"},
 	{"commit-message", proofread.KindCommitMessage, inputStdin, "[FILE]", "judge a commit message from FILE or stdin, its subject on the first line"},
 	{"cli-help", proofread.KindCLIHelp, inputStdin, "", "judge a command's or a flag's help text on stdin"},
 	{"issue", proofread.KindIssue, inputStdin, "", "judge an issue on stdin, its title on the first line"},

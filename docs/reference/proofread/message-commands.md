@@ -26,9 +26,9 @@ A reader runs the first command a message names. A second competes with it, so a
 
 The code is `PRF9003`. The decision depends on the kind of text judged:
 
-| Kind      | Default |
-| --------- | ------- |
-| `message` | deny    |
+| Kind         | Default |
+| ------------ | ------- |
+| `diagnostic` | deny    |
 
 ## Changing it
 
