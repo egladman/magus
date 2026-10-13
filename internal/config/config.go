@@ -127,6 +127,14 @@ type Config struct {
 	// worse than a flag: one MAGUS_REQUIRED_VERSION exported in a CI environment
 	// would silently disable the floor for every workspace that session touches.
 	RequiredVersion string `json:"required_version" yaml:"required_version" cli:"-"`
+
+	// Agents states facts about the account agents run under and a person's guard level.
+	// See Agents.
+	//
+	// cli:"-": magus.yaml ONLY. A flag would be an AI-specific CLI flag on every verb, and
+	// one exported env var would flip billing or the level for every workspace a shell
+	// touches without a trace in any file.
+	Agents Agents `json:"agents" yaml:"agents" cli:"-"`
 }
 
 // Queue configures the merge queue, `magus queue`.

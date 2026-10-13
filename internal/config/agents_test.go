@@ -1,0 +1,127 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/types"
+)
+
+func writeYAML(t *testing.T, dir, body string) string {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	path := filepath.Join(dir, Filename)
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	return path
+}
+
+func TestAgentsDecodesAndValidates(t *testing.T) {
+	path := writeYAML(t, t.TempDir(), `agents:
+  billing: metered
+  profile: strict
+  models:
+    claude-next-1: {window: 2000000, cache_read: 0.3, price_step: 200000, step_factor: 2}
+`)
+	cfg, err := LoadFile(path, true)
+	require.NoError(t, err)
+	assert.Equal(t, types.AgentBillingMetered, cfg.Agents.Billing)
+	assert.Equal(t, types.GuardProfileStrict, cfg.Agents.Profile)
+	assert.Equal(t, []types.ModelFacts{{ID: "claude-next-1", Window: 2_000_000, CacheRead: 0.3, PriceStep: 200_000, StepFactor: 2}},
+		cfg.Agents.ModelOverrides())
+}
+
+// Each value the guard could not honor fails the load: an agents section that reads as
+// applied and is not would price or police a session by facts nobody stated.
+func TestAgentsMisconfigurationIsAnError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{"unknown billing", "agents:\n  billing: oauth\n", "oauth"},
+		{"unknown profile", "agents:\n  profile: max\n", "max"},
+		{"unknown key", "agents:\n  budget: 5\n", "budget"},
+		{"unknown model key", "agents:\n  models:\n    m: {window: 1000, input: 3}\n", "input"},
+		{"window missing", "agents:\n  models:\n    m: {cache_read: 0.1}\n", "agents.models[m].window: must be >= 1 (got 0)"},
+		{"window negative", "agents:\n  models:\n    m: {window: -1}\n", "agents.models[m].window: must be >= 1 (got -1)"},
+		{"negative price", "agents:\n  models:\n    m: {window: 1000, cache_read: -0.1}\n", "agents.models[m].cache_read: must be >= 0"},
+		{"step without factor", "agents:\n  models:\n    m: {window: 1000, price_step: 100}\n", "agents.models[m].step_factor: failed required_with"},
+		{"factor below 1", "agents:\n  models:\n    m: {window: 1000, price_step: 100, step_factor: 0.5}\n", "agents.models[m].step_factor: must be >= 1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := LoadFile(writeYAML(t, t.TempDir(), tc.body), true)
+			require.Error(t, err)
+			assert.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestDetectBilling(t *testing.T) {
+	env := func(kv map[string]string) func(string) string {
+		return func(k string) string { return kv[k] }
+	}
+	assert.Equal(t, types.AgentBillingMetered, DetectBilling(env(map[string]string{"ANTHROPIC_API_KEY": "sk-test"})))
+	assert.Equal(t, types.AgentBillingMetered, DetectBilling(env(map[string]string{"CLAUDE_CODE_USE_BEDROCK": "1"})))
+	assert.Equal(t, types.AgentBillingMetered, DetectBilling(env(map[string]string{"CLAUDE_CODE_USE_VERTEX": "true"})))
+	assert.Empty(t, DetectBilling(env(map[string]string{"CLAUDE_CODE_USE_BEDROCK": "0", "CLAUDE_CODE_USE_VERTEX": "false"})))
+	assert.Empty(t, DetectBilling(env(map[string]string{"CLAUDE_CODE_OAUTH_TOKEN": "x"})), "OAuth tells nothing")
+	assert.Empty(t, DetectBilling(env(nil)))
+}
+
+func TestResolveBilling(t *testing.T) {
+	metered := func(k string) string {
+		if k == "ANTHROPIC_API_KEY" {
+			return "sk-test"
+		}
+		return ""
+	}
+	none := func(string) string { return "" }
+
+	got, err := Agents{Billing: types.AgentBillingQuota}.ResolveBilling(none)
+	require.NoError(t, err)
+	assert.Equal(t, types.AgentBillingQuota, got, "with nothing detected the declaration stands")
+
+	got, err = Agents{}.ResolveBilling(metered)
+	require.NoError(t, err)
+	assert.Equal(t, types.AgentBillingMetered, got)
+
+	got, err = Agents{Billing: types.AgentBillingQuota}.ResolveBilling(metered)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, "agents.billing is quota, but the agent host bills per token")
+	assert.Equal(t, types.AgentBillingMetered, got, "the detected mode stands beside the error")
+}
+
+// The workspace's magus.yaml wins for billing, as layering always does, but a profile
+// takes the higher of the two tiers: neither may lower what the other raised.
+func TestLoadAgentsLayersTiers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	writeYAML(t, filepath.Join(home, "magus"), "agents:\n  billing: quota\n  profile: strict\n")
+	root := t.TempDir()
+	writeYAML(t, root, "agents:\n  billing: metered\n  profile: off\n")
+
+	got, err := LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, types.AgentBillingMetered, got.Billing)
+	assert.Equal(t, types.GuardProfileStrict, got.Profile)
+
+	writeYAML(t, filepath.Join(home, "magus"), "agents:\n  profile: off\n")
+	writeYAML(t, root, "agents:\n  profile: standard\n")
+	got, err = LoadAgents(root)
+	require.NoError(t, err)
+	assert.Equal(t, types.GuardProfileStandard, got.Profile)
+
+	empty := t.TempDir()
+	writeYAML(t, filepath.Join(home, "magus"), "cache:\n  size_mb: 1\n")
+	got, err = LoadAgents(empty)
+	require.NoError(t, err)
+	assert.Empty(t, got.Profile, "no tier stating a level leaves it unset")
+
+	writeYAML(t, root, "agents:\n  billing: oauth\n")
+	_, err = LoadAgents(root)
+	require.Error(t, err)
+}
