@@ -2,11 +2,14 @@ package main
 
 import (
 	"archive/tar"
+	"cmp"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/fixture"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/libs/testkit"
+	"github.com/egladman/magus/libs/testkit/testscript"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -615,5 +619,63 @@ func TestAgentStarterDocPlainASCIISelfContained(t *testing.T) {
 	assert.Contains(t, doc, vcsSafetyRule) // the shared safety rule
 	for _, r := range doc {
 		require.Less(t, r, rune(128), "sample AGENTS.md must be plain ASCII")
+	}
+}
+
+// agentEvalEnv is read at package initialization because TestMain replaces the
+// environment with an isolated one before any test runs. The claude credentials are
+// the only variables the agent gets from the caller's environment.
+var agentEvalEnv = func() map[string]string {
+	env := map[string]string{}
+	for _, name := range []string{
+		"MAGUS_AGENT_EVAL",
+		"MAGUS_AGENT_EVAL_VARIANTS",
+		"MAGUS_AGENT_EVAL_REPS",
+		"MAGUS_AGENT_EVAL_RESULTS",
+		"CLAUDE_CODE_OAUTH_TOKEN",
+		"ANTHROPIC_API_KEY",
+	} {
+		if v, ok := os.LookupEnv(name); ok {
+			env[name] = v
+		}
+	}
+	return env
+}()
+
+// TestAgentEval runs every testdata/agenteval task with a real claude, once per skill
+// variant and rep, and appends one row per run to MAGUS_AGENT_EVAL_RESULTS (default
+// magus-agenteval.jsonl in the temp dir). It spends tokens, so it skips unless
+// MAGUS_AGENT_EVAL=1.
+//
+// MAGUS_AGENT_EVAL_VARIANTS is a comma-separated list of skill forms or skills
+// directories (default full,short); MAGUS_AGENT_EVAL_REPS is the runs per variant
+// (default 1).
+func TestAgentEval(t *testing.T) {
+	if agentEvalEnv["MAGUS_AGENT_EVAL"] != "1" {
+		t.Skip("MAGUS_AGENT_EVAL=1 runs the agent eval, which spends tokens")
+	}
+	variants := strings.Split(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_VARIANTS"], "full,short"), ",")
+	reps, err := strconv.Atoi(cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_REPS"], "1"))
+	require.NoError(t, err, "MAGUS_AGENT_EVAL_REPS")
+	results := cmp.Or(agentEvalEnv["MAGUS_AGENT_EVAL_RESULTS"], filepath.Join(os.TempDir(), "magus-agenteval.jsonl"))
+	t.Logf("results: %s", results)
+
+	auth := testscript.WithSetup(func(e *testscript.Env) error {
+		for _, name := range []string{"CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"} {
+			if v := agentEvalEnv[name]; v != "" {
+				e.Setenv(name, v)
+			}
+		}
+		return nil
+	})
+	for _, variant := range variants {
+		for rep := 1; rep <= reps; rep++ {
+			t.Run(fmt.Sprintf("%s/%d", filepath.Base(variant), rep), func(t *testing.T) {
+				testscript.Run(t, filepath.Join("testdata", "agenteval"),
+					auth,
+					testscript.WithSetup(testscript.InstallSkills(variant)),
+					testscript.WithAgent(testscript.Agent{Variant: variant, Rep: rep, Results: results}))
+			})
+		}
 	}
 }

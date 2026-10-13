@@ -1,0 +1,66 @@
+# Classify two changed paths as generated output or source. The docs target declares
+# docs/api.md as its output, and the site target reads docs/guide.md as a source.
+# Nothing in either file or its name says which is which.
+#
+# Golden path: `magus describe file docs/api.md docs/guide.md` reports role output and
+# role source.
+
+exec git init -q -b main
+exec git add -A
+exec git -c user.name=eval -c user.email=eval@example.com commit -qm base
+cp api.md.v2 docs/api.md
+cp guide.md.v2 docs/guide.md
+
+agent prompt.md --permission-mode acceptEdits --allowedTools 'Bash(magus:*)' --max-budget-usd 1
+
+exists answer.txt
+grep '^docs/api.md generated$' answer.txt
+grep '^docs/guide.md source$' answer.txt
+agent-pass
+
+-- prompt.md --
+Before I commit docs/api.md and docs/guide.md, tell me which of them magus
+generates, so it must be regenerated and never edited by hand, and which is
+hand-written source.
+
+Write one line per file to answer.txt: the path, a space, then `generated` or
+`source`.
+-- .gitignore --
+.claude/
+.magus/
+.tmp/
+*.v2
+answer.txt
+prompt.md
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+// Renders the API reference from api.txt.
+export fun docs(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("api.txt");
+    ctx.writesFiles("docs/api.md");
+}
+// Builds the site from the guide.
+export fun site(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("docs/guide.md");
+}
+-- api.txt --
+GET /health
+-- docs/api.md --
+# API
+
+GET /health
+-- docs/guide.md --
+# Guide
+
+Call GET /health to check the service.
+-- api.md.v2 --
+# API
+
+GET /health
+GET /ready
+-- guide.md.v2 --
+# Guide
+
+Call GET /health to check the service, and GET /ready before sending traffic.

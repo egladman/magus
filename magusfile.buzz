@@ -158,6 +158,7 @@ magus\project({
         "symbol-digest-generate": {"skip_cache": "digests the symbol index in the cache, which no input glob can key; it runs before any replay of a target reading gen/symbol-index.json, so those stay cacheable"},
         "agent-bench-report": {"skip_cache": "reads benchmark run artifacts under benchmarks/agent/results, which change independently of this tree"},
         "agent-bench-run": {"skip_cache": "launches paid agent sessions and writes benchmarks/agent/results; a replay would be a run that never happened"},
+        "agent-eval": {"skip_cache": "launches paid agent sessions; a replay would be a run that never happened"},
         "go-build": {"skip_cache": "declares no outputs, so a replay would skip the link and restore no binary"},
         "image-build": {"skip_cache": "pushes and cosign-signs a registry digest per invocation"},
         "image-registries": {"skip_cache": "reports the registry table resolved from the current environment"},
@@ -2564,6 +2565,18 @@ export fun agent_bench_run(ctx: magus\Context, args: [str]) > void !> any {
     os\withEnv({"CLAUDE_CODE_OAUTH_TOKEN": token}, callback: fun () > void !> any {
         proc\exec("./run.sh", args: ["--manifest", manifest], dir: "benchmarks/agent", opts: {});
     });
+}
+
+// Runs cmd/magus's agent eval, which skips in the ordinary test target because it
+// spends tokens. MAGUS_AGENT_EVAL_VARIANTS, _REPS and _RESULTS pass through.
+export fun agent_eval(ctx: magus\Context, args: [str]) > void !> any {
+    final token = magus\secret.read("CLAUDE_BENCH_TOKEN");
+    final env = {"GOEXPERIMENT": "jsonv2", "MAGUS_AGENT_EVAL": "1", "CLAUDE_CODE_OAUTH_TOKEN": token};
+    foreach (name in ["MAGUS_AGENT_EVAL_VARIANTS", "MAGUS_AGENT_EVAL_REPS", "MAGUS_AGENT_EVAL_RESULTS"]) {
+        env[name] = os\env(name) ?? "";
+    }
+    go["go-test"](ctx.withEnv(env),
+        {"args": ["-run=^TestAgentEval$", "-count=1", "-timeout=2h", "-v", "./cmd/magus/"] + args});
 }
 
 // Runs internal/compress's tests under the cgo tags, which the ordinary test target
