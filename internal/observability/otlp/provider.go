@@ -338,7 +338,7 @@ func (disabledProvider) RecordPoolAcquire(_ context.Context, _ float64, _ int64)
 func (disabledProvider) RecordPoolRelease(_ context.Context, _ int64)                          {}
 func (disabledProvider) RecordPoolWaiting(_ context.Context, _ int64)                          {}
 func (disabledProvider) RecordMCPCall(_ context.Context, _ observability.MCPCall)              {}
-func (disabledProvider) RecordAgentCall(_ context.Context, _ observability.AgentCall)            {}
+func (disabledProvider) RecordAgentCall(_ context.Context, _ observability.AgentCall)          {}
 func (disabledProvider) RecordSandboxApply(_ context.Context, _ float64, _, _ string)          {}
 func (disabledProvider) RecordSandboxRules(_ context.Context, _ observability.SandboxRules)    {}
 func (disabledProvider) RecordSandboxCheck(_ context.Context, _, _, _ string)                  {}
