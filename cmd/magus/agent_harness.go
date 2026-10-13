@@ -309,6 +309,9 @@ func agentHarnessVerifyCmd(ctx context.Context, rootOverride string, args []stri
 		if result.SettingStatus != "" && result.SettingStatus != agent.HarnessVerified && firstFail == nil {
 			firstFail = fmt.Errorf("magus agent harness verify: %s settings for %s (%s)", result.SettingStatus, result.ID, result.SettingReason)
 		}
+		if result.PluginStatus != "" && result.PluginStatus != agent.HarnessVerified && firstFail == nil {
+			firstFail = fmt.Errorf("magus agent harness verify: %s plugin for %s (%s)", result.PluginStatus, result.ID, result.PluginReason)
+		}
 	}
 	return firstFail
 }
@@ -369,6 +372,15 @@ func writeHarnessVerification(w io.Writer, typed agent.HarnessVerification) erro
 		_, err = fmt.Fprintf(w, "%s %s settings", typed.SettingStatus, typed.ID)
 		if err == nil && typed.SettingReason != "" {
 			_, err = fmt.Fprintf(w, " (%s)", typed.SettingReason)
+		}
+		if err == nil {
+			_, err = fmt.Fprintln(w)
+		}
+	}
+	if err == nil && typed.PluginStatus != "" {
+		_, err = fmt.Fprintf(w, "%s %s plugin", typed.PluginStatus, typed.ID)
+		if err == nil && typed.PluginReason != "" {
+			_, err = fmt.Fprintf(w, " (%s)", typed.PluginReason)
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(w)

@@ -161,6 +161,11 @@ type HarnessVerification struct {
 	// empty when it keeps none.
 	SettingStatus HarnessStatus `json:"setting_status,omitempty"`
 	SettingReason string        `json:"setting_reason,omitempty"`
+	// PluginStatus is whether each Claude Code plugin the workspace enables through the
+	// descriptor's settings is installed for this person, empty when the descriptor enables
+	// none or the workspace has not turned it on. Uncovered names the install command.
+	PluginStatus HarnessStatus `json:"plugin_status,omitempty"`
+	PluginReason string        `json:"plugin_reason,omitempty"`
 }
 
 // HarnessSpellLoader resolves a harness descriptor from a magusfile-selected
@@ -567,8 +572,132 @@ func VerifyHarness(ctx context.Context, root, id string) (HarnessVerification, e
 		verifyHarnessPrompts(root, d, &result)
 		verifyHarnessAgents(root, d, &result)
 		verifyHarnessSettings(root, d, &result)
+		verifyHarnessPlugins(root, d, &result)
 	}
 	return result, err
+}
+
+// verifyHarnessPlugins reports whether each plugin a descriptor's settings enable is
+// installed for this person. Enabling a plugin in a workspace's settings installs it for
+// nobody: Claude Code keeps what each person installed under their own config dir, so a
+// workspace can read as wired while the plugin never loads. A plugin the workspace has not
+// enabled is not this check's business and leaves the status empty.
+func verifyHarnessPlugins(root string, d HarnessDescriptor, result *HarnessVerification) {
+	for _, s := range d.Settings {
+		id, ok := enabledPluginID(s)
+		if !ok {
+			continue
+		}
+		if file, err := planHarnessSetting(root, s); err != nil || len(file.Changes) > 0 {
+			continue
+		}
+		installed, err := claudePluginInstalled(id)
+		switch {
+		case err != nil:
+			result.PluginStatus, result.PluginReason = HarnessUnprobed, err.Error()
+			return
+		case !installed:
+			result.PluginStatus = HarnessUncovered
+			result.PluginReason = pluginMissingReason(d, s, id)
+			return
+		}
+		result.PluginStatus = HarnessVerified
+	}
+}
+
+func enabledPluginID(s HarnessSetting) (string, bool) {
+	if len(s.Key) != 2 || s.Key[0] != "enabledPlugins" || s.Value != true {
+		return "", false
+	}
+	return s.Key[1], true
+}
+
+// pluginMissingReason names the one-time install line. The marketplace repo comes from the
+// extraKnownMarketplaces setting the descriptor keeps for the plugin's marketplace, and
+// falls back to the marketplace name when it keeps none.
+func pluginMissingReason(d HarnessDescriptor, enabled HarnessSetting, id string) string {
+	name, marketplace, _ := strings.Cut(id, "@")
+	source := marketplace
+	for _, s := range d.Settings {
+		if len(s.Key) != 2 || s.Key[0] != "extraKnownMarketplaces" || s.Key[1] != marketplace {
+			continue
+		}
+		if repo := marketplaceRepo(s.Value); repo != "" {
+			source = repo
+		}
+	}
+	reason := fmt.Sprintf("%s is enabled in %s but not installed for this person (%s lists it nowhere); run once in Claude Code: /plugin install %s --marketplace %s",
+		id, enabled.Path, filepath.Join(claudeConfigDir(), "plugins", "installed_plugins.json"), name, source)
+	if registered, err := claudeMarketplaceKnown(marketplace); err == nil && !registered {
+		reason += " (marketplace " + marketplace + " is not registered either)"
+	}
+	return reason
+}
+
+func marketplaceRepo(value any) string {
+	spec, _ := value.(map[string]any)
+	source, _ := spec["source"].(map[string]any)
+	repo, _ := source["repo"].(string)
+	return repo
+}
+
+// claudeConfigDir is where Claude Code keeps per-person state: CLAUDE_CONFIG_DIR when set,
+// else ~/.claude.
+func claudeConfigDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".claude"
+	}
+	return filepath.Join(home, ".claude")
+}
+
+// readClaudePluginStore decodes one JSON file of Claude Code's plugin store. An absent file
+// reads as an empty document: a person who never installed a plugin has none.
+func readClaudePluginStore(name string) (map[string]any, error) {
+	path := filepath.Join(claudeConfigDir(), "plugins", name)
+	body, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return map[string]any{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	doc := map[string]any{}
+	if err := decodeHarnessJSON(body, &doc); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return doc, nil
+}
+
+// claudePluginInstalled reads installed_plugins.json, which maps "<plugin>@<marketplace>"
+// to its installs (one per scope; a single object in the first file version). An install in
+// any scope counts: a project-scope install made from another checkout of the same
+// repository must not fail a worktree.
+func claudePluginInstalled(id string) (bool, error) {
+	doc, err := readClaudePluginStore("installed_plugins.json")
+	if err != nil {
+		return false, err
+	}
+	plugins, _ := doc["plugins"].(map[string]any)
+	switch v := plugins[id].(type) {
+	case []any:
+		return len(v) > 0, nil
+	case map[string]any:
+		return len(v) > 0, nil
+	}
+	return false, nil
+}
+
+func claudeMarketplaceKnown(name string) (bool, error) {
+	doc, err := readClaudePluginStore("known_marketplaces.json")
+	if err != nil {
+		return false, err
+	}
+	_, ok := doc[name]
+	return ok, nil
 }
 
 func verifyHarnessConfig(ctx context.Context, root string, d HarnessDescriptor, source string) (HarnessVerification, error) {

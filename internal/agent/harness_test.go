@@ -869,6 +869,7 @@ func writeSettingsHarness(t *testing.T) {
 func TestPlanHarnessPlansSettings(t *testing.T) {
 	root := t.TempDir()
 	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
 	config := filepath.Join(root, ".claude", "settings.json")
 	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
 	require.NoError(t, os.WriteFile(config, []byte(`{"model": "m", "enabledPlugins": {"other@x": true}}`), 0o644))
@@ -928,6 +929,124 @@ func TestPlanHarnessRefusesASettingThePersonChanged(t *testing.T) {
 	result, err := VerifyHarness(untimedProbes(), root, "moder")
 	require.NoError(t, err)
 	assert.Equal(t, HarnessUncovered, result.SettingStatus)
+}
+
+// writeClaudePluginStore stands in for the plugin store Claude Code keeps per person, under
+// a config dir of its own so no test reads the machine's.
+func writeClaudePluginStore(t *testing.T, files map[string]string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "plugins"), 0o755))
+	for name, body := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "plugins", name), []byte(body), 0o644))
+	}
+}
+
+// TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled pins that settings alone do not
+// make a plugin appear: a workspace that enables it while the person has not installed it
+// is uncovered, and the reason names the one-time install line.
+func TestVerifyHarnessReportsAnEnabledPluginNobodyInstalled(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, nil)
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessVerified, result.SettingStatus, "the settings are in place; the install is the gap")
+	assert.Equal(t, HarnessUncovered, result.PluginStatus)
+	assert.Contains(t, result.PluginReason, "/plugin install magus --marketplace egladman/magus")
+	assert.Contains(t, result.PluginReason, "magus@magus")
+	assert.Contains(t, result.PluginReason, "not registered")
+}
+
+// TestVerifyHarnessReadsAnInstalledPluginAsCurrent covers both shapes of the install record:
+// the list of installs per scope, and the single object of the first file version.
+func TestVerifyHarnessReadsAnInstalledPluginAsCurrent(t *testing.T) {
+	for name, installed := range map[string]string{
+		"list":   `{"version": 2, "plugins": {"magus@magus": [{"scope": "user", "version": "1.0.0"}]}}`,
+		"object": `{"version": 1, "plugins": {"magus@magus": {"version": "1.0.0"}}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeSettingsHarness(t)
+			writeClaudePluginStore(t, map[string]string{"installed_plugins.json": installed})
+			mergeHarness(t, root, "moder")
+
+			result, err := VerifyHarness(untimedProbes(), root, "moder")
+			require.NoError(t, err)
+			assert.Equal(t, HarnessVerified, result.PluginStatus)
+			assert.Empty(t, result.PluginReason)
+		})
+	}
+}
+
+// TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable pins the silence: an unmerged
+// settings file, or one where the person turned the plugin off, is not an install gap.
+func TestVerifyHarnessIgnoresAPluginTheWorkspaceDoesNotEnable(t *testing.T) {
+	for name, settings := range map[string]string{
+		"no settings file": "",
+		"other plugin":     `{"enabledPlugins": {"other@x": true}}`,
+		"turned off":       `{"enabledPlugins": {"magus@magus": false}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeSettingsHarness(t)
+			writeClaudePluginStore(t, nil)
+			if settings != "" {
+				path := filepath.Join(root, ".claude", "settings.json")
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte(settings), 0o644))
+			}
+
+			result, err := VerifyHarness(untimedProbes(), root, "moder")
+			require.NoError(t, err)
+			assert.Empty(t, result.PluginStatus)
+			assert.Empty(t, result.PluginReason)
+		})
+	}
+}
+
+// TestVerifyHarnessPluginInstallLineFollowsTheDescriptor pins that the install line is read
+// from the descriptor's marketplace, not hardcoded to this repository's.
+func TestVerifyHarnessPluginInstallLineFollowsTheDescriptor(t *testing.T) {
+	root := t.TempDir()
+	registerHarnessSpell(t, "other-mod", `{
+  "schema_version": 2,
+  "id": "other-mod",
+  "display": {"name": "Other"},
+  "skills": {"paths": [], "form": "both"},
+  "settings": [
+    {"path": ".claude/settings.json", "key": ["extraKnownMarketplaces", "tools"], "value": {"source": {"source": "github", "repo": "acme/tools"}}},
+    {"path": ".claude/settings.json", "key": ["enabledPlugins", "lint@tools"], "value": true}
+  ]
+}`)
+	writeClaudePluginStore(t, map[string]string{
+		"installed_plugins.json":  `{"version": 2, "plugins": {"magus@magus": [{"scope": "user"}]}}`,
+		"known_marketplaces.json": `{"tools": {}}`,
+	})
+	mergeHarness(t, root, "other-mod")
+
+	result, err := VerifyHarness(untimedProbes(), root, "other-mod")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUncovered, result.PluginStatus)
+	assert.Contains(t, result.PluginReason, "/plugin install lint --marketplace acme/tools")
+	assert.NotContains(t, result.PluginReason, "not registered")
+}
+
+// TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed pins that a corrupt store is not
+// read as "not installed": magus cannot tell, and says so.
+func TestVerifyHarnessPluginStoreThatCannotBeReadIsUnprobed(t *testing.T) {
+	root := t.TempDir()
+	writeSettingsHarness(t)
+	writeClaudePluginStore(t, map[string]string{"installed_plugins.json": `{not json`})
+	mergeHarness(t, root, "moder")
+
+	result, err := VerifyHarness(untimedProbes(), root, "moder")
+	require.NoError(t, err)
+	assert.Equal(t, HarnessUnprobed, result.PluginStatus)
+	assert.Contains(t, result.PluginReason, "installed_plugins.json")
 }
 
 // TestHarnessDescriptorRejectsAMalformedSetting pins that a setting names a key and a value
