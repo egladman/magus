@@ -122,6 +122,7 @@ func Wait(ctx context.Context, store *Store, id string, result *types.JobResult,
 			return types.JobStatus{}, err
 		}
 	}
+	seen.Stale = staleRuns(ctx, workTree(store.root, jobs[i]), seen, ev.result, ev.runs()...)
 
 	var taken *types.JobIntegration
 	if len(evidence) > 0 {
@@ -245,6 +246,15 @@ func (ev graded) withWaiterEvidence(ctx context.Context, store *Store, row types
 	return out, taken, nil
 }
 
+// runs is every run ev holds: the check's, then each goal's.
+func (ev graded) runs() []types.JobAttempt {
+	out := []types.JobAttempt{ev.attempt}
+	for _, g := range ev.gateAttempts {
+		out = append(out, g.Attempt)
+	}
+	return out
+}
+
 // goalRun is the ref and the run ev holds for goalID, zero when it holds none.
 func (ev graded) goalRun(goalID string) (string, types.JobAttempt) {
 	if goalID == types.PrimaryGoalID {
@@ -343,7 +353,46 @@ func sameChangedPaths(ctx context.Context, holder, here string, changed []string
 // readAsNow refuses unless run read each of paths, local slash paths under here, as they
 // read now; see [sameChangedPaths] for the witnesses.
 func readAsNow(ctx context.Context, here string, paths []string, run types.JobAttempt) error {
-	name := cmp.Or(run.AttemptID, run.Ref)
+	if why := unreadSince(ctx, here, paths, run); why != "" {
+		return fmt.Errorf("job: a run here proves the holder's work only if %s", why)
+	}
+	return nil
+}
+
+// staleRuns names, by [attemptKey], each of runs that read one of the job's changed paths other
+// than it reads now in tree, with why: the job wrote after the run, so the run graded
+// other files. The changed paths are those observed since the checkpoint and those the
+// result names.
+func staleRuns(ctx context.Context, tree string, seen Observed, result types.JobResult, runs ...types.JobAttempt) map[string]string {
+	if tree == "" {
+		return nil
+	}
+	var changed []string
+	for _, c := range slices.Concat(seen.Changed, result.ChangedPaths) {
+		if p := path.Clean(filepath.ToSlash(strings.TrimSpace(c))); filepath.IsLocal(filepath.FromSlash(p)) {
+			changed = append(changed, p)
+		}
+	}
+	changed = slices.Compact(slices.Sorted(slices.Values(changed)))
+	stale := map[string]string{}
+	for _, run := range runs {
+		if !run.Found {
+			continue
+		}
+		if why := unreadSince(ctx, tree, changed, run); why != "" {
+			stale[attemptKey(run)] = why
+		}
+	}
+	return stale
+}
+
+// attemptKey names one recorded run: its attempt id, which no later run takes over, else its ref.
+func attemptKey(run types.JobAttempt) string { return cmp.Or(run.AttemptID, run.Ref) }
+
+// unreadSince says why run did not read each of paths, local slash paths under here, as
+// they read now, or "" when it did.
+func unreadSince(ctx context.Context, here string, paths []string, run types.JobAttempt) string {
+	name := attemptKey(run)
 	var driver types.VCSDriver
 	if run.Revision != "" && !run.Dirty {
 		driver = revisionReader(ctx, here, run.Revision)
@@ -365,13 +414,13 @@ func readAsNow(ctx context.Context, here string, paths []string, run types.JobAt
 	}
 	switch {
 	case len(moved) > 0:
-		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths read now as the run read them,"+
+		return fmt.Sprintf("the changed paths read now as the run read them,"+
 			" and %d in %s differ from %s, the clean revision run %s read: %s", len(moved), here, run.Revision, name, listPaths(moved))
 	case len(later) > 0:
-		return fmt.Errorf("job: a run here proves the holder's work only if the changed paths did not change after it started,"+
+		return fmt.Sprintf("the changed paths did not change after it started,"+
 			" and %d changed in %s after %s, when run %s started: %s", len(later), here, started.UTC().Format(time.RFC3339), name, listPaths(later))
 	}
-	return nil
+	return ""
 }
 
 // revisionReader is the VCS that reads revision in root, or nil when none can: without one
@@ -651,6 +700,7 @@ func GradeGates(ctx context.Context, store *Store, id string, observe Observer) 
 			return types.JobStatus{}, err
 		}
 	}
+	seen.Stale = staleRuns(ctx, workTree(store.root, row), seen, result, graded{attempt: attempt, gateAttempts: gateAttempts}.runs()...)
 	// Graded against a row whose state is cleared, so the "already verified" rule does not
 	// fire on a job that legitimately passed: this asks where the gates stand, and a job
 	// that finished stands with all of them met.
@@ -1096,11 +1146,14 @@ func (s *Store) writeLandingProbes(probes map[string]landingProbe) {
 //
 // CONTENT, not ancestry, because the base usually gains the work as a squash commit
 // holding several jobs' branches, which no ancestry walk connects to any of them. The
-// work landed when every changed path the result names reads the same at the row's
-// checkout HEAD as at the base, and differs at HEAD from the row's checkpoint: a path
-// equal at HEAD and checkpoint is uncommitted, so HEAD says nothing about it. A path
-// that reads at neither side (a deletion, or a checkout already removed) leaves the row
-// unproven.
+// work landed when every path the checkout's diff since the checkpoint shows reads the
+// same at the row's checkout HEAD as at the base, and differs at HEAD from the row's
+// checkpoint: a path equal at HEAD and checkpoint is uncommitted, so HEAD says nothing
+// about it. A path that reads at neither side (a deletion, or a checkout already removed)
+// leaves the row unproven.
+//
+// The diff is read, never the result's changed_paths: a result naming the part of the work
+// that landed would otherwise end the job while the rest has not.
 func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 	if s.root == "" {
 		return ""
@@ -1122,7 +1175,11 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 		return ""
 	}
 	checkpoint := checkpointRevision(row.Checkpoint)
-	for _, changed := range row.Result.ChangedPaths {
+	seen := changedSince(ctx, driver, "", row.CheckoutRoot, checkpoint)
+	if !seen.ChangedKnown || len(seen.Changed) == 0 {
+		return ""
+	}
+	for _, changed := range seen.Changed {
 		p := path.Clean(filepath.ToSlash(strings.TrimSpace(changed)))
 		ours, err := driver.ReadFileAt(ctx, row.CheckoutRoot, head.ID, p)
 		if err != nil {
@@ -1136,7 +1193,7 @@ func (s *Store) landedOnBase(ctx context.Context, row types.Job) string {
 		}
 	}
 	return fmt.Sprintf("its work landed on %s at %s: the %d changed path(s) at %s in %s read the same there",
-		res.Base, shortRevision(base), len(row.Result.ChangedPaths), shortRevision(head), row.CheckoutRoot)
+		res.Base, shortRevision(base), len(seen.Changed), shortRevision(head), row.CheckoutRoot)
 }
 
 // shortRevision is the commit's short id, or its id cut to 12 when the backend gave none.

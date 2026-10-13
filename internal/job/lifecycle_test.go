@@ -608,6 +608,27 @@ func TestLandedJobsEndWhenSquashedIntoOneBaseCommit(t *testing.T) {
 	assert.Contains(t, string(probes), `"job-c"`, "an unproven row waits out the interval before its next probe")
 }
 
+// A result naming only the part of the work the base took does not end the job: the
+// landing is judged on the checkout's own diff, and the rest of it is still unlanded.
+func TestALandedSubsetOfTheWorkLeavesTheJobExited(t *testing.T) {
+	repo := testkit.NewRepo(t, map[string]string{"a.go": "package a\n", "b.go": "package b\n"})
+	seedRev := repo.Head()
+	wt := repo.AddWorktree("job")
+	wt.Write("a.go", "package a // landed\n")
+	wt.Write("b.go", "package b // not merged\n")
+	wt.Git("commit", "-q", "-am", "job")
+
+	repo.Commit("take a.go alone", map[string]string{"a.go": "package a // landed\n"})
+	repo.Git("update-ref", "refs/remotes/origin/main", repo.Head())
+
+	s := tmpStore(t, repo.Root())
+	s.notices = io.Discard
+	plant(t, s, types.Job{ID: "job", State: types.StateExited, Checkpoint: seedRev, CheckoutRoot: wt.Root(),
+		WritePaths: []string{"a.go", "b.go"}, Result: &types.JobResult{ChangedPaths: []string{"a.go"}}, Updated: 1})
+
+	assert.Equal(t, types.StateExited, states(t, s)["job"].State)
+}
+
 // Exit resolves a ref the caller's checkout never recorded in the checkout the job was
 // taken in, so an orchestrator can file its worker's result; with no Outputs it refuses.
 func TestExitResolvesARefFromTheJobsCheckout(t *testing.T) {
@@ -1191,6 +1212,33 @@ func TestWaitEvidenceRefusesAFileChangedAfterTheRun(t *testing.T) {
 
 	require.ErrorContains(t, err, "did not change after it")
 	assert.Contains(t, err.Error(), "cmd/magus/ledger.go")
+	j.requireUnmoved(t)
+}
+
+// The holder's own passing run grades the files it read; a changed path written after it
+// means the pass is for other files, and the job stays open.
+func TestWaitRefusesAHolderRunTheJobWroteAfter(t *testing.T) {
+	t.Parallel()
+
+	// Dated within the range a file time holds, which passedHere's is not.
+	run := passedHere
+	run.TimestampMs = time.Now().Add(time.Minute).UnixMilli()
+	j := exitedWithRuns(t, acceptRow(), passingResult(), map[string]types.JobAttempt{"a1b2c3d4": run})
+	graded, err := GradeGates(t.Context(), NewStore(j.loc), j.row.ID, observeClaim(j.result))
+	require.NoError(t, err)
+	require.True(t, graded.Verified, "the control: a run after every write passes")
+
+	later := time.UnixMilli(run.TimestampMs).Add(time.Hour)
+	changed := j.result.ChangedPaths[0]
+	require.NoError(t, os.Chtimes(filepath.Join(j.holder, filepath.FromSlash(changed)), later, later))
+
+	status, err := Wait(t.Context(), NewStore(j.loc), j.row.ID, nil, nil, observeClaim(j.result), nil)
+	require.NoError(t, err)
+	assert.False(t, status.Verified)
+	require.Len(t, status.Gates, 1)
+	require.Len(t, status.Gates[0].Violations, 1, status.Gates[0].Violations)
+	assert.Contains(t, status.Gates[0].Violations[0], "predates the job's last write")
+	assert.Contains(t, status.Gates[0].Violations[0], changed)
 	j.requireUnmoved(t)
 }
 

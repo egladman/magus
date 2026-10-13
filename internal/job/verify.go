@@ -73,6 +73,10 @@ type Observed struct {
 	// GreenGate is the newest green ci gate recorded for this checkout's branch, with
 	// the tier of the change since it. The zero value means none was found or assessed.
 	GreenGate GreenGate
+	// Stale holds, by [attemptKey], each run behind the job's evidence that read a changed path
+	// other than it reads now, with why: the job wrote after it, so its pass graded other
+	// files. A run absent from it read the tree as it stands, or was never compared.
+	Stale map[string]string
 	// DefaultCharms are the default_charms in effect in the job's checkout, which `magus
 	// run` stacks under the charms a target names. A check is resolved against them before
 	// it is compared with a recorded run; nil resolves every check to the charms it names.
@@ -434,6 +438,9 @@ func verifyGate(row types.Job, gate types.Goal, ref string, attempt types.JobAtt
 		case captured < row.Created:
 			status.Violations = append(status.Violations, fmt.Sprintf("was captured before job declaration (second %d < %d), so historical output cannot close this job", captured, row.Created))
 		}
+	}
+	if why, ok := seen.Stale[attemptKey(attempt)]; ok {
+		status.Violations = append(status.Violations, fmt.Sprintf("the run behind output ref %q predates the job's last write: it proves the work only if %s", status.OutputRef, why))
 	}
 	if !bindsTo(gate.Check, attempt, seen.DefaultCharms) {
 		status.Violations = append(status.Violations, fmt.Sprintf("output ref %q records `%s` and this goal's check runs `%s`, so the evidence is from a different run",

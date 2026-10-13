@@ -461,6 +461,25 @@ func TestCheckGateUnderDefaultCharms(t *testing.T) {
 	assert.Contains(t, status.Violations[0], "this goal's check runs `magus run test:rw .`")
 }
 
+// A run the job wrote after grades other files, so its pass is not this job's; the run is
+// named by attempt id, which no later run of the same step takes over.
+func TestCheckGateRefusesARunTheJobWroteAfter(t *testing.T) {
+	t.Parallel()
+
+	row := types.Job{ID: "fix/job-store"}
+	gate := types.Goal{ID: "check", Kind: types.GoalKindCheck, Expect: types.ExpectPassed, Check: types.LeaseCheck{Target: "test", Project: "."}}
+	run := types.JobAttempt{Found: true, Ref: "out57a24bec47f2", AttemptID: "att1", Project: ".", Target: "test"}
+
+	status := verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"out57a24bec47f2": "the ref, not the run"}})
+	assert.True(t, status.Verified, status.Violations)
+
+	status = verifyGate(row, gate, run.Ref, run, Observed{Stale: map[string]string{"att1": "a.go changed after it started"}})
+	assert.False(t, status.Verified)
+	require.Len(t, status.Violations, 1)
+	assert.Contains(t, status.Violations[0], "predates the job's last write")
+	assert.Contains(t, status.Violations[0], "a.go changed after it started")
+}
+
 // A directory declaration covers what is under it and a glob covers only what it matches.
 // The second half is the one worth pinning: falling back to a glob's literal prefix would
 // accept exactly the writes the declaration excludes.
