@@ -56,6 +56,23 @@ func adviseDoc(d types.RuleDoc, enrolled bool) types.RuleDoc {
 	return d
 }
 
+var ruleDocBackgroundLeft = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleBackgroundLeft),
+	Catches: "an agent finishing while shell commands it ran in the background are still running",
+	Why: "A host does not stop a finished subagent's background tasks, and once the subagent has reported nobody is told when one ends or that it is still running: a transcript search left behind by a scout ran for four hours. " +
+		"At a subagent's stop magus reads the subagent's own transcript for the shell commands it ran in the background (run_in_background, a foreground call the host moved to the background, a watcher's command) that no completion notice, stop call or watcher expiry has ended, and refuses the stop naming each by id, start time, age and command. " +
+		"At a root session's stop it advises instead, and only of tasks older than 30 minutes: a root wakes on a task's completion notice, so a young task is one it is waiting on, and the person is there to decide. " +
+		"Reads the host's transcript by shape, so a host whose transcript records no background task in that shape is never refused. Set to advise, a subagent's stop is advised too.",
+})
+
+var ruleDocBackgroundUnbounded = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
+	Name:    string(denyRuleBackgroundUnbounded),
+	Catches: "a shell command run in the background with nothing to end it",
+	Why: "A backgrounded command outlives the agent that started it, and the host stops it only when asked. " +
+		"It fires when the wiring reports that the host runs the call in the background and some command in the line is not bounded: `timeout N` or `gtimeout N` in front of it (stock macOS ships neither; Homebrew's coreutils installs `gtimeout`), a magus target run (bounded by its target's timeout), or a builtin that returns at once. A pipeline is bounded by its first command; a while or until loop never is. " +
+		"timeout signals its own process group, so a child that starts its own session escapes it; `--kill-after` ends a command that ignores TERM. A watcher's command is bounded by its own expiry and is not judged here.",
+})
+
 var ruleDocBacktickSubstitution = denyDoc(types.RuleDoc{ //nolint:unused // read through the registry denyDoc fills
 	Name:    string(denyRuleBacktickSubstitution),
 	Catches: "a backtick command substitution, which inside double quotes runs a command",

@@ -98,6 +98,8 @@ var defaults = map[string]Decision{
 
 	// Irreversible, or a boundary someone else drew.
 	"agent-sign-off":        Deny,
+	"background-left":       Deny,
+	"background-unbounded":  Deny,
 	"backtick-substitution": Deny,
 	"cache-dir-write":       Deny,
 	"claimed-declaration":   Deny,
