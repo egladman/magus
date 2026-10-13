@@ -280,6 +280,23 @@ type AgentCommand struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
+	// Thread is which thread of its session the caller is; see types.CommandRequest.
+	Thread types.AgentThread
+	// ContextTokens and ContextModel are the caller's last reported context size and the
+	// model it was reported for; 0 and empty when the host reported none.
+	ContextTokens int64
+	ContextModel  string
+	// Billing is the billing mode in effect for the call, empty when unknown.
+	Billing types.AgentBilling
+	// DelegableClass names the kind of work a subagent could have done in the caller's
+	// place (a search, a source read, a diff, a target run), empty for any other command.
+	DelegableClass string
+	// ResultChars is the size of the tool's result on an observation made after the call,
+	// 0 before it.
+	ResultChars int
+	// Shadow is what each guard profile would have decided for the call, whichever one is
+	// in force, so a level can be judged from the calls it would have changed.
+	Shadow map[types.GuardProfile]types.GuardDecision
 }
 
 const agentCommandSchemaVersion = 1
@@ -457,6 +474,16 @@ type AgentSpawn struct {
 	BinaryVersion string
 	Cwd           string
 	Phases        []Phase
+	// Thread, ContextTokens, ContextModel, Billing, DelegableClass, ResultChars and Shadow
+	// are the CALLER's, as on AgentCommand. ContextModel is the model the caller runs as,
+	// never the child's: that one is DeclaredModel.
+	Thread         types.AgentThread
+	ContextTokens  int64
+	ContextModel   string
+	Billing        types.AgentBilling
+	DelegableClass string
+	ResultChars    int
+	Shadow         map[types.GuardProfile]types.GuardDecision
 }
 
 // RuleFailure is one side of a workspace guard rule that judged nothing, and why.

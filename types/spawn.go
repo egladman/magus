@@ -91,6 +91,10 @@ type SpawnRequest struct {
 	// Lease is the job row a worker acts under, nil for root. A bound id the job store
 	// does not carry comes back with only its ID set.
 	Lease *Job
+	// Thread, ThreadKnown and Context are the CALLER's, as on CommandRequest.
+	Thread      AgentThread
+	ThreadKnown bool
+	Context     *AgentContext
 	// Target is the agent a continue addresses, nil on a spawn.
 	Target *SpawnTarget
 }

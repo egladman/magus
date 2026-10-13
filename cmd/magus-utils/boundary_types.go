@@ -275,6 +275,8 @@ var boundaryTypes = []boundaryType{
 	// request's lease is one, and the verdict both return. The guard hands a rule the
 	// request and the rule hands back the verdict, so all need encoders: allow/advise/deny
 	// build the verdict on the Go side.
+	// Before the three requests, which each carry the caller's.
+	{Name: "AgentContext", Type: reflect.TypeFor[types.AgentContext](), RuntimeObject: true},
 	{Name: "SpawnTarget", Type: reflect.TypeFor[types.SpawnTarget](), RuntimeObject: true},
 	{Name: "SpawnRequest", Type: reflect.TypeFor[types.SpawnRequest](), RuntimeObject: true},
 	{Name: "VCSInvocation", Type: reflect.TypeFor[types.VCSInvocation](), RuntimeObject: true},
