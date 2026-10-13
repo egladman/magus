@@ -224,7 +224,21 @@ func (s *Store) Report(ctx context.Context, now int64, staleAfter time.Duration)
 		return types.JobList{}, err
 	}
 	list := types.NewJobList(rows).Flag(now, staleAfter)
-	list.Overlaps = MeasureOverlaps(ctx, s.root, list.Jobs, list.Overlaps)
+	// A footprint reads each holder's diff, a VCS call per changed path, and a stale row's
+	// holder is the one least likely to still be writing: on a store of abandoned rows,
+	// measuring them all held `magus ls jobs` for minutes.
+	stale := func(o types.JobOverlap) bool {
+		return slices.Contains(list.Stale, o.JobA) || slices.Contains(list.Stale, o.JobB)
+	}
+	measured := MeasureOverlaps(ctx, s.root, list.Jobs, slices.DeleteFunc(slices.Clone(list.Overlaps), stale))
+	for i, o := range list.Overlaps {
+		if !stale(o) {
+			list.Overlaps[i], measured = measured[0], measured[1:]
+			continue
+		}
+		list.Overlaps[i].Footprint = &types.JobOverlapFootprint{Verdict: types.FootprintUnknown,
+			Reason: fmt.Sprintf("not measured: %s or %s is stale (jobs.stale_after is %s)", o.JobA, o.JobB, staleAfter)}
+	}
 	return list, nil
 }
 

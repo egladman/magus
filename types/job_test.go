@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -612,6 +613,39 @@ func TestJobListFlagsAQueuedJobStaleOnlyOnceItsDependenciesEnd(t *testing.T) {
 	rows[0].State, rows[0].Updated = StatePass, now-hour
 	assert.Equal(t, []string{"lone"}, NewJobList(rows).Flag(now, 2*time.Hour).Stale, "the waiter's clock starts at its dependency's end")
 	assert.Equal(t, []string{"queued", "lone"}, NewJobList(rows).Flag(now+2*hour, 2*time.Hour).Stale)
+}
+
+// JobAncestors walks nearest first, stops at a parent the rows do not carry and at a
+// cycle, and allocates only the chain it returns: every list asks it of every live row,
+// and a per-call index of the whole store made one list quadratic in allocations.
+func TestJobAncestors(t *testing.T) {
+	rows := []Job{
+		{ID: "root"},
+		{ID: "mid", Parent: "root"},
+		{ID: "leaf", Parent: "mid"},
+		{ID: "orphan", Parent: "missing"},
+		{ID: "a", Parent: "b"},
+		{ID: "b", Parent: "a"},
+		{ID: "into", Parent: "a"},
+	}
+	ids := func(id string) []string {
+		var out []string
+		for _, a := range JobAncestors(rows, id) {
+			out = append(out, a.ID)
+		}
+		return out
+	}
+	assert.Equal(t, []string{"mid", "root"}, ids("leaf"))
+	assert.Empty(t, ids("root"))
+	assert.Empty(t, ids("orphan"), "a parent the rows do not carry ends the walk")
+	assert.Equal(t, []string{"b"}, ids("a"), "a cycle back to the start ends the walk")
+	assert.Equal(t, []string{"a", "b"}, ids("into"), "a cycle above the start ends the walk")
+
+	for i := range 1000 {
+		rows = append(rows, Job{ID: fmt.Sprintf("filler-%d", i)})
+	}
+	allocs := testing.AllocsPerRun(10, func() { JobAncestors(rows, "leaf") })
+	assert.LessOrEqual(t, allocs, 4.0, "only the returned chain allocates, whatever the store's size")
 }
 
 // A footprint that is not known still says so on the wire: footprint_known is never

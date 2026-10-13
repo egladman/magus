@@ -1596,17 +1596,23 @@ func EndedAncestor(rows []Job, id string) (Job, bool) {
 
 // JobAncestors walks id's parent chain nearest first. It stops at a parent the rows do not
 // carry and at a cycle, since either means the plan is already damaged.
+//
+// A scan per step rather than an index of rows: chains are a few rows deep, and every
+// list flags each live row through this, so a map of the whole store per call made one
+// list quadratic in allocations. The chain walked so far is the cycle check.
 func JobAncestors(rows []Job, id string) []Job {
-	byID := make(map[string]Job, len(rows))
-	for _, r := range rows {
-		byID[r.ID] = r
+	find := func(id string) (Job, bool) {
+		i := slices.IndexFunc(rows, func(r Job) bool { return r.ID == id })
+		if i < 0 {
+			return Job{}, false
+		}
+		return rows[i], true
 	}
 	var out []Job
-	seen := map[string]bool{id: true}
-	cur, ok := byID[id]
-	for ok && cur.Parent != "" && !seen[cur.Parent] {
-		seen[cur.Parent] = true
-		if cur, ok = byID[cur.Parent]; ok {
+	seen := func(id string) bool { return slices.ContainsFunc(out, func(a Job) bool { return a.ID == id }) }
+	cur, ok := find(id)
+	for ok && cur.Parent != "" && cur.Parent != id && !seen(cur.Parent) {
+		if cur, ok = find(cur.Parent); ok {
 			out = append(out, cur)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/libs/testkit"
 	"github.com/egladman/magus/types"
@@ -553,4 +554,44 @@ func TestMeasureOverlaps(t *testing.T) {
 		Shared:  []string{"api/x.go#func X() {"},
 	}, got[0].Footprint, got[0].Footprint.Reason)
 	assert.Empty(t, MeasureOverlaps(t.Context(), "/nonexistent", rows, nil))
+}
+
+// Report measures the footprint of an overlap between two rows still being worked and
+// leaves one with a stale row unmeasured, saying why, in the order the overlaps were
+// derived: each footprint reads its holders' diffs, and on a store of abandoned rows
+// measuring them all held `magus ls jobs` for minutes.
+func TestReportSkipsFootprintsOfStaleRows(t *testing.T) {
+	t.Parallel()
+
+	repo := testkit.NewRepo(t, map[string]string{".gitattributes": "*.go diff=golang\n", "api/x.go": "package api\n\nfunc X() {\n\treturn\n}\n"})
+	root := repo.Root()
+	rev := repo.Head()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "api", "x.go"), []byte("package api\n\nfunc X() {\n\tpanic(1)\n}\n"), 0o644))
+	const now, hour = int64(100_000), int64(3600)
+	s, _ := sweepStore(t, now, 2*time.Hour)
+	s.root = root
+	held := func(id, path string, updated int64) types.Job {
+		return types.Job{ID: id, State: types.StateRunning, Checkpoint: rev, CheckoutRoot: root, WritePaths: []string{path},
+			Registered: updated, Created: updated, Updated: updated}
+	}
+	plant(t, s, held("old", "api", now-3*hour), held("a", "api", now), held("b", "api/x.go", now))
+
+	list, err := s.Report(t.Context(), now, 2*time.Hour)
+	require.NoError(t, err)
+
+	type got struct {
+		A, B    string
+		Verdict string
+		Reason  string
+	}
+	var overlaps []got
+	for _, o := range list.Overlaps {
+		require.NotNil(t, o.Footprint, "%s and %s", o.JobA, o.JobB)
+		overlaps = append(overlaps, got{o.JobA, o.JobB, o.Footprint.Verdict, o.Footprint.Reason})
+	}
+	assert.Equal(t, []got{
+		{"old", "a", types.FootprintUnknown, "not measured: old or a is stale (jobs.stale_after is 2h0m0s)"},
+		{"old", "b", types.FootprintUnknown, "not measured: old or b is stale (jobs.stale_after is 2h0m0s)"},
+		{"a", "b", types.FootprintShared, ""},
+	}, overlaps)
 }
