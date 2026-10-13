@@ -142,6 +142,7 @@ test "an output claiming a hand-authored skill is reported" {
     assert\equal(support\messages(got), want: [
         "declares .claude/skills/magus-skill-authoring/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/magus-local-development/SKILL.md as a generated output, but magus never writes it",
+        "declares .claude/skills/idiomatic-adrs/SKILL.md as a generated output, but magus never writes it",
         "declares .claude/skills/shepherd-pull-requests/SKILL.md as a generated output, but magus never writes it",
-    ], message: "all three");
+    ], message: "all four");
 }
