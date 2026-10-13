@@ -10,7 +10,7 @@ import (
 
 func TestDefaults(t *testing.T) {
 	got := Defaults()
-	assert.Len(t, got, 101)
+	assert.Len(t, got, 108)
 	want := map[string]Decision{
 		"read-navigation":      Advise,
 		"brief-command":        Advise,
@@ -32,6 +32,14 @@ func TestDefaults(t *testing.T) {
 		"spawn-duplicate":      Deny,
 		"background-left":      Deny,
 		"background-unbounded": Deny,
+
+		"root-context-budget":         Off,
+		"root-heavy-command":          Off,
+		"root-result-cap":             Off,
+		"root-repeat":                 Off,
+		"spawn-names-model":           Off,
+		"spawn-principal-for-economy": Off,
+		"stall":                       Off,
 	}
 	have := map[string]Decision{}
 	for name := range want {
@@ -182,8 +190,7 @@ func TestStricter(t *testing.T) {
 	}
 }
 
-// testRule gives one compiled rule every parameter for the length of a test, since no
-// shipped rule takes tokens, calls or chars yet.
+// testRule gives one compiled rule every parameter for the length of a test.
 func testRule(t *testing.T) string {
 	t.Helper()
 	const name = "test-cost-rule"
@@ -205,7 +212,7 @@ func TestResolveChecksEachParameter(t *testing.T) {
 		want string
 	}{
 		{"tokens on a rule without it", "stage-all", Setting{Decision: Advise, Tokens: 1000},
-			`built-in rule "stage-all" takes no tokens parameter; only test-cost-rule does`},
+			`built-in rule "stage-all" takes no tokens parameter; only root-context-budget, test-cost-rule do`},
 		{"tokens below 1", rule, Setting{Decision: Advise, Tokens: -1},
 			`built-in rule "test-cost-rule": tokens is -1; give 1 or more, or leave it out`},
 		{"tokens past every window", rule, Setting{Decision: Advise, Tokens: 1_000_001},
@@ -230,11 +237,26 @@ func TestResolveChecksEachParameter(t *testing.T) {
 	assert.Equal(t, ok, got[rule])
 }
 
-func TestResolveNamesNoTakerForAnUnusedParameter(t *testing.T) {
+func TestResolveNamesEveryTakerOfAParameter(t *testing.T) {
 	_, err := Resolve(map[string]Setting{"stage-all": {Decision: Deny, Calls: 3}})
 	var de *types.DiagnosticError
 	require.ErrorAs(t, err, &de)
-	assert.Equal(t, `built-in rule "stage-all" takes no calls parameter; no rule does`, de.Msg)
+	assert.Equal(t, `built-in rule "stage-all" takes no calls parameter; only root-heavy-command, root-repeat, stall do`, de.Msg)
+}
+
+// A rule that only ever explains cannot be declared to refuse.
+func TestResolveRefusesADenyOnARuleThatNeverDenies(t *testing.T) {
+	for _, name := range []string{"root-result-cap", "spawn-principal-for-economy", "stall"} {
+		_, err := Resolve(map[string]Setting{name: {Decision: Deny}})
+		var de *types.DiagnosticError
+		require.ErrorAs(t, err, &de, name)
+		assert.Equal(t, types.GuardRuleMisdeclared, de.Code)
+		assert.Equal(t, `built-in rule "`+name+`" never refuses; give off or advise`, de.Msg)
+		assert.NotEmpty(t, types.DiagnosticRationale(err), name)
+
+		_, err = Resolve(map[string]Setting{name: {Decision: Advise}})
+		require.NoError(t, err, name)
+	}
 }
 
 // At one decision each threshold takes the lower of the two, and an unset one yields:
@@ -248,6 +270,18 @@ func TestStricterMergesThresholds(t *testing.T) {
 
 	deny := Setting{Decision: Deny, Tokens: 900_000}
 	assert.Equal(t, deny, Stricter(a, deny), "a stricter decision wins whole")
+}
+
+// At one decision the higher level's figures stand, since they are the lower; a level
+// beats none, which reads the rule's own figures.
+func TestStricterKeepsTheHigherLevel(t *testing.T) {
+	standard := Setting{Decision: Advise, Profile: types.GuardProfileStandard}
+	strict := Setting{Decision: Advise, Profile: types.GuardProfileStrict}
+	declared := Setting{Decision: Advise}
+	assert.Equal(t, strict, Stricter(standard, strict))
+	assert.Equal(t, strict, Stricter(strict, standard))
+	assert.Equal(t, standard, Stricter(declared, standard))
+	assert.Equal(t, standard, Stricter(standard, declared))
 }
 
 // Every level is defined, and each row resolves as a declaration would, so none sets a
@@ -278,7 +312,7 @@ func TestResolveProfileExpandsThenDeclared(t *testing.T) {
 	require.NoError(t, err)
 	got, err := Resolve(expanded)
 	require.NoError(t, err)
-	assert.Equal(t, Setting{Decision: Deny, Calls: 8}, got[rule])
+	assert.Equal(t, Setting{Decision: Deny, Calls: 8, Profile: types.GuardProfileStrict}, got[rule], "a level stamps its rows")
 	assert.Equal(t, Setting{Decision: Off}, got["stage-all"], "the declaration overrides the profile")
 	assert.Equal(t, Setting{Decision: Advise}, got["raw-tool"], "a rule neither names keeps its default")
 	assert.Len(t, declared, 1, "ResolveProfile leaves declared alone")
@@ -286,7 +320,10 @@ func TestResolveProfileExpandsThenDeclared(t *testing.T) {
 
 	light, err := ResolveProfile("", nil)
 	require.NoError(t, err)
-	assert.Equal(t, profiles[types.GuardProfileLight], light, "unset is light")
+	assert.Len(t, light, len(profiles[types.GuardProfileLight]), "unset is light")
+	for name, s := range light {
+		assert.Equal(t, types.GuardProfileLight, s.Profile, name)
+	}
 
 	_, err = ResolveProfile("max", nil)
 	var de *types.DiagnosticError

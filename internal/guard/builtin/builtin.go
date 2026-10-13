@@ -39,24 +39,71 @@ type Setting struct {
 	Calls int
 	// Chars is the size of one tool result in characters.
 	Chars int
+	// Profile is the level whose row gave this setting, empty for one the workspace
+	// declared or a compiled default. A rule whose figures depend on the level and the
+	// account's billing reads it when no parameter is set.
+	Profile types.GuardProfile
 }
 
-const readNavigation = "read-navigation"
+const (
+	readNavigation           = "read-navigation"
+	rootContextBudget        = "root-context-budget"
+	rootHeavyCommand         = "root-heavy-command"
+	rootResultCap            = "root-result-cap"
+	rootRepeat               = "root-repeat"
+	spawnNamesModel          = "spawn-names-model"
+	spawnPrincipalForEconomy = "spawn-principal-for-economy"
+	stall                    = "stall"
+)
 
 // params maps each rule that takes a parameter to the parameters it takes, by the names
 // magus\guard.builtins spells them.
 var params = map[string][]string{
-	readNavigation: {"lines"},
+	readNavigation:    {"lines"},
+	rootContextBudget: {"tokens"},
+	rootHeavyCommand:  {"calls"},
+	rootResultCap:     {"chars"},
+	rootRepeat:        {"calls"},
+	stall:             {"calls"},
+}
+
+// neverDeny names the rules that only ever explain, so a deny declared for one is a
+// misdeclaration rather than a refusal nobody would see.
+var neverDeny = map[string]string{
+	rootResultCap:            "it reads a result the call already returned",
+	spawnPrincipalForEconomy: "a read-only job can need the strongest model, and nothing on the spawn says which",
+	stall:                    "it routes a block to the root and refuses nothing itself",
 }
 
 // profiles maps each level to the settings it gives the rules it names. A level leaves
 // every other rule at its default, and a rule magus\guard.builtins names overrides the
-// level's setting for it.
+// level's setting for it. The figures each level fires at belong to the rules, which read
+// them by the level ResolveProfile stamps on the setting.
 var profiles = map[types.GuardProfile]map[string]Setting{
-	types.GuardProfileOff:      {},
-	types.GuardProfileLight:    {},
-	types.GuardProfileStandard: {},
-	types.GuardProfileStrict:   {},
+	types.GuardProfileOff: {},
+	types.GuardProfileLight: {
+		rootContextBudget: {Decision: Advise},
+		rootResultCap:     {Decision: Advise},
+		stall:             {Decision: Advise},
+	},
+	types.GuardProfileStandard: {
+		rootContextBudget:        {Decision: Advise},
+		rootHeavyCommand:         {Decision: Advise},
+		rootResultCap:            {Decision: Advise},
+		rootRepeat:               {Decision: Advise},
+		spawnNamesModel:          {Decision: Advise},
+		spawnPrincipalForEconomy: {Decision: Advise},
+		stall:                    {Decision: Advise},
+	},
+	types.GuardProfileStrict: {
+		rootContextBudget:        {Decision: Deny},
+		rootHeavyCommand:         {Decision: Deny},
+		rootResultCap:            {Decision: Advise},
+		rootRepeat:               {Decision: Deny},
+		spawnNamesModel:          {Decision: Deny},
+		spawnPrincipalForEconomy: {Decision: Advise},
+		stall:                    {Decision: Advise},
+	},
 }
 
 // defaults must name exactly the rules internal/guard catalogs. A rule that refuses
@@ -169,6 +216,16 @@ var defaults = map[string]Decision{
 	"timed-magus":         Advise,
 	"unleased-write":      Advise,
 
+	// The cost rules and the stall rule are off until a level turns them on, and the
+	// level a workspace gets when it declares none is light.
+	rootContextBudget:        Off,
+	rootHeavyCommand:         Off,
+	rootResultCap:            Off,
+	rootRepeat:               Off,
+	spawnNamesModel:          Off,
+	spawnPrincipalForEconomy: Off,
+	stall:                    Off,
+
 	"guard-unfinished":         Advise,
 	"workspace-command-failed": Advise,
 	"workspace-spawn-failed":   Advise,
@@ -241,6 +298,10 @@ func validate(name string, s Setting) error {
 		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"built-in rule %q: decision %q is not off, advise or deny", name, s.Decision)
 	}
+	if why, ok := neverDeny[name]; ok && s.Decision == Deny {
+		return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+			"built-in rule %q never refuses; give off or advise", name).WithWhy(why)
+	}
 	window := model.Shipped().LargestWindow()
 	for _, p := range []struct {
 		param string
@@ -264,17 +325,12 @@ func validate(name string, s Setting) error {
 				}
 			}
 			slices.Sort(takers)
-			switch len(takers) {
-			case 0:
-				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-					"built-in rule %q takes no %s parameter; no rule does", name, p.param)
-			case 1:
+			if len(takers) == 1 {
 				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 					"built-in rule %q takes no %s parameter; only %s does", name, p.param, takers[0])
-			default:
-				return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
-					"built-in rule %q takes no %s parameter; only %s do", name, p.param, strings.Join(takers, ", "))
 			}
+			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
+				"built-in rule %q takes no %s parameter; only %s do", name, p.param, strings.Join(takers, ", "))
 		}
 		if p.value < p.min {
 			return types.DiagnosticErrorf(types.GuardRuleMisdeclared,
@@ -293,7 +349,8 @@ func validate(name string, s Setting) error {
 // same decision each parameter takes the lower threshold of the two, since a lower one
 // fires sooner. An unset Lines beats any set one, since unset judges every whole read
 // rather than only the long ones; any other unset parameter yields to a set one, since
-// unset defers to the rule's own figure.
+// unset defers to the rule's own figure. Of two levels the higher-ranked one stands, since
+// its figures are the lower.
 func Stricter(a, b Setting) Setting {
 	ra, rb := rank(a.Decision), rank(b.Decision)
 	switch {
@@ -315,21 +372,25 @@ func Stricter(a, b Setting) Setting {
 	out.Tokens = lower(a.Tokens, b.Tokens)
 	out.Calls = lower(a.Calls, b.Calls)
 	out.Chars = lower(a.Chars, b.Chars)
+	if b.Profile != "" && (a.Profile == "" || b.Profile.Rank() > a.Profile.Rank()) {
+		out.Profile = b.Profile
+	}
 	return out
 }
 
 // ResolveProfile expands profile p into the declaration Resolve takes: the settings p
-// gives its rules, with declared applied over them rule by rule. Unset p is light. An
-// unknown p is an MGS1045 error. Neither map is modified.
+// gives its rules, each stamped with p's level, with declared applied over them rule by
+// rule. Unset p is light. An unknown p is an MGS1045 error. Neither map is modified.
 func ResolveProfile(p types.GuardProfile, declared map[string]Setting) (map[string]Setting, error) {
 	row, ok := profiles[p.Level()]
 	if !ok {
 		return nil, types.DiagnosticErrorf(types.GuardRuleMisdeclared,
 			"unknown guard profile %q; give one of %s", string(p), strings.Join(p.Values(), ", "))
 	}
-	out := maps.Clone(row)
-	if out == nil {
-		out = map[string]Setting{}
+	out := make(map[string]Setting, len(row)+len(declared))
+	for name, s := range row {
+		s.Profile = p.Level()
+		out[name] = s
 	}
 	maps.Copy(out, declared)
 	return out, nil
