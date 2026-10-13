@@ -678,6 +678,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		return deps.HostHookTimeout(ctx, req.Host)
 	})
 	ctx = withPhaseLog(ctx, deps.RuleLoad)
+	judgmentPhases(ctx).settle(deps)
 	deps.revisions = &revisionMemo{current: map[string]string{}}
 	input := req.Input
 	hasInput := input != ""
@@ -781,6 +782,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 	deps.caller = who.caller()
 	policyDigest := ""
 	if !req.DryRun {
+		rememberSettings(location.cacheDir, deps.Builtins)
 		policyDigest = recordPolicy(ctx, deps, location, false)
 	}
 	ctx = withJobStoreRows(ctx, location)
@@ -1102,15 +1104,7 @@ func Judge(ctx context.Context, deps Dependencies, req Request) Verdict {
 		}
 		waiter, waits := waiterCall(ctx, deps, facts, env, req.CallBackground, actingLease, who.Agent, input, shellD, now)
 		if waits {
-			w := deps.grade(gradeWatch(facts, who.Agent, waiter.worker, waiter.watchCall, now))
-			// A timer the workspace only advises against yields to the pile's own word, which
-			// says more: how many are already live.
-			if waiter.timer {
-				if t := deps.grade(ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); t.Deny != "" || w.Deny == "" && w.Context == "" {
-					w = stronger(w, t)
-				}
-			}
-			v = stronger(v, w)
+			v = stronger(v, gradeWaiter(deps, facts, who.Agent, waiter, now))
 		}
 		if v.Deny == "" {
 			v = stronger(v, deps.grade(judgeHeredocWrites(ctx, deps, req, who, callDir, actingLease, input, shellD)))
@@ -1992,13 +1986,47 @@ type locationKey struct{}
 // same file for itself. Nothing inside a hook call writes the store, so one snapshot is
 // what those four reads already agreed on. A workspace spawn rule reads the same pin
 // through magus\job.list.
+//
+// A read sweeps the store, and a sweep can run the VCS once per row, so a hook waits on it
+// at most jobRowsBudget, ending judgeReserve before ctx does, like a workspace open. The
+// read is the job_rows phase underway while it runs, so a judgment that stalls in it names
+// it; one that answers leaves no row, and one that runs out pins the deadline's error and is
+// recorded lapsed, which askWorkspaceRules reports as a lapse. Once one has run out in a
+// judgment the rest answer at once. A dry run waits as long as ctx allows.
 func withJobStoreRows(ctx context.Context, at location) context.Context {
 	if at.cacheDir == "" {
 		return ctx
 	}
-	rows, err := listJobRows(job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace}))
+	log := judgmentPhases(ctx)
+	if log.lapsed(phaseJobRows) {
+		return job.WithSnapshot(ctx, job.Snapshot{Err: context.DeadlineExceeded})
+	}
+	log.underway(phaseJobRows)
+	budget := jobRowsBudget
+	deadline, bounded := ctx.Deadline()
+	switch {
+	case bounded && isDryRun(ctx):
+		budget = max(time.Until(deadline)-judgeReserve, 0)
+	case bounded:
+		budget = min(budget, max(time.Until(deadline)-judgeReserve, 0))
+	}
+	wait, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	start := time.Now()
+	store := job.NewStore(job.Location{CacheDir: at.cacheDir, Root: at.workspace})
+	rows, err := awaitDeadline(wait, func() ([]types.Job, error) { return listJobRows(store) })
+	if err != nil && wait.Err() != nil {
+		log.record(timedPhase(phaseJobRows, time.Since(start), budget, true))
+	} else {
+		log.underway("")
+	}
 	return job.WithSnapshot(ctx, job.Snapshot{Rows: rows, Err: err})
 }
+
+// jobRowsBudget bounds a hook's wait for the job store's rows, half the hook's budget as a
+// workspace open's is: a sweep that probes landings takes seconds, and one cut off before
+// it records them is repeated by the next hook.
+const jobRowsBudget = hookBudget / 2
 
 // withOutputStore lets magus\output in a workspace rule read the output store of the
 // checkout being judged, which a description citing its runs is held to. A rule has no

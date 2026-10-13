@@ -104,7 +104,8 @@ const resolveShares = 2
 //
 // Each phase (resolving the approved rule, calling it, calling the working tree's) gets its
 // share of what remains of ctx's deadline, and runs to completion when ctx has none. One
-// that runs out, or a rule load deps reports lapsed, is the answer's lapse, for denyLapse
+// that runs out, a rule load deps reports lapsed, or a job store read that ran out
+// (withJobStoreRows) is the answer's lapse, for denyLapse
 // to judge. Any other failure contributes nothing and is reported, following
 // magus\guard.shell's standing on a broken workspace rule: the built-ins still apply and
 // the agent is not bricked by a typo in the magusfile. No side loading at all is reported
@@ -126,6 +127,14 @@ func askWorkspaceRules(ctx context.Context, seam functionSeam, deps Dependencies
 		})
 	case deps.LoadFailure != nil:
 		out.failures = append(out.failures, trail.RuleFailure{Side: decidedByWorktree, Error: "the magusfile failed to load: " + deps.LoadFailure.Error()})
+	}
+	// The lease rules read the job store, and one that could not be read in time judged
+	// nothing.
+	if p, ok := log.lapsedPhase(phaseJobRows); ok {
+		lapsed(ruleLapse{
+			side: decidedByBuiltin, budget: time.Duration(p.BudgetMs) * time.Millisecond,
+			said: lapseWording{"reading the job store", "finish"}, failed: lapseWording{"the job store", "answer"},
+		})
 	}
 	shares := phaseShares{}
 	if resolveApproved != nil {

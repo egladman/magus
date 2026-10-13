@@ -34,6 +34,7 @@ const (
 	phaseApprovedRule    = "approved_rule"
 	phaseWorktreeRule    = "worktree_rule"
 	phaseInspect         = "inspect"
+	phaseJobRows         = "job_rows"
 	phaseJudge           = "judge"
 )
 
@@ -146,8 +147,8 @@ func awaitDeadline[T any](ctx context.Context, work func() (T, error)) (T, error
 // process. A host that cuts a hook off runs the call with no rule applied and tells the
 // agent nothing, so a late verdict is worth less than an unjudged one on time.
 //
-// base resolves the trail's location and names the judging binary when judge has not
-// answered; judge loads the rest itself, inside the bound.
+// base resolves the trail's location, names the judging binary and carries the spell
+// catalog when judge has not answered; judge loads the rest itself, inside the bound.
 func JudgeWithin(ctx context.Context, base Dependencies, req Request, judge func(context.Context) Verdict) Verdict {
 	if req.DryRun {
 		return judge(ctx)
@@ -191,10 +192,13 @@ var unjudgedNote = "This guard check did not finish within " + hookBudget.String
 // and one that only reads passes with a note. A call with nothing to judge passes as it
 // would have. It ends the call's judgment mark, since the host got its answer in time.
 //
+// The built-in rules that read only the call run first (lapsedRules), and what they refuse
+// is refused however the call is graded below.
+//
 // Past lapsesBeforeDegrade lapses in a row in the session, a call that changes state passes
-// too, with a notice naming the phase that stalled; the first such notice says why and what
-// to check, the rest say only that the guard is still not judging. The trail row records
-// log's finished phases, the one underway, and the bound.
+// too, with a notice naming the phase that stalled, unless it pushes; the first such notice
+// says why and what to check, the rest say only that the guard is still not judging. The
+// trail row records log's finished phases, the one underway, and the bound.
 func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog) Verdict {
 	elapsed := time.Since(log.start)
 	pass := Verdict{SchemaVersion: agent.GuardSchemaVersion, Decision: decisionPass}
@@ -225,6 +229,7 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	}
 	stalled := log.stalled()
 	tool := hookToolCommand
+	pushes := false
 	switch {
 	case isPath:
 		tool = hookToolWrite
@@ -234,12 +239,19 @@ func unjudged(ctx context.Context, base Dependencies, req Request, log *phaseLog
 	default:
 		d := effectiveDialect(base.ShellDialect)
 		call.changes = !readOnly && !readOnlyLine(input, d) && !recoveryLine(input, d, req.Lease)
+		cmds, _ := ParseCommandsDialect(input, d)
+		pushes = slices.ContainsFunc(cmds, isPush)
 	}
 	verdict := pass
 	verdict.Lease = req.Lease
 	lapses := mark.lapsed()
+	builtins := lapsedRules(ctx, base, log, req, env, who, input, isPath, hookLocation(ctx, base).cacheDir)
 	switch {
-	case call.changes && lapses <= lapsesBeforeDegrade:
+	case builtins.Deny != "":
+		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, builtins.Deny, builtins.RuleName()
+	case call.changes && (lapses <= lapsesBeforeDegrade || pushes):
+		// A push is never degraded: the gate it needs proven is in the run log, which only
+		// a judgment that finishes reads.
 		lapse := ruleLapse{budget: hookBudget, said: lapseWording{"the guard's judgment", "finish"}}
 		verdict.Decision, verdict.Reason, verdict.Rule = decisionDeny, lapseReason(call, lapse, false), string(advisoryUnfinished)
 	case call.changes:
@@ -280,9 +292,10 @@ func degradedNote(call judgedCall, stalled trail.Phase, finished []trail.Phase, 
 		"and check `magus status` for what is running."
 }
 
-// phaseLog collects the phases of one judgment for its trail row, and the one underway. The
-// judgment writes it while JudgeWithin may read it to word a lapse, hence the lock. Every
-// method is a no-op, or answers zero, on a nil log.
+// phaseLog collects the phases of one judgment for its trail row, the one underway, and the
+// dependencies it loaded, which a lapse grades the built-in rules by. The judgment writes
+// it while JudgeWithin may read it to word a lapse, hence the lock. Every method is a no-op,
+// or answers zero, on a nil log.
 type phaseLog struct {
 	start time.Time
 
@@ -290,6 +303,8 @@ type phaseLog struct {
 	done    []trail.Phase
 	running string
 	since   time.Time
+	// deps is what the judgment loaded, nil until it has.
+	deps *Dependencies
 }
 
 type phaseLogKey struct{}
@@ -350,12 +365,45 @@ func (l *phaseLog) finished() []trail.Phase {
 
 // lapsed reports whether a recorded phase named name ran out of time.
 func (l *phaseLog) lapsed(name string) bool {
+	_, ok := l.lapsedPhase(name)
+	return ok
+}
+
+// lapsedPhase is the first recorded phase named name that ran out of time.
+func (l *phaseLog) lapsedPhase(name string) (trail.Phase, bool) {
 	if l == nil {
-		return false
+		return trail.Phase{}, false
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return slices.ContainsFunc(l.done, func(p trail.Phase) bool { return p.Name == name && p.Lapsed })
+	i := slices.IndexFunc(l.done, func(p trail.Phase) bool { return p.Name == name && p.Lapsed })
+	if i < 0 {
+		return trail.Phase{}, false
+	}
+	return l.done[i], true
+}
+
+// settle records the dependencies the judgment loaded, for a lapse to grade the call by.
+func (l *phaseLog) settle(deps Dependencies) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.deps = &deps
+}
+
+// settled is what settle recorded, false before the judgment loaded anything.
+func (l *phaseLog) settled() (Dependencies, bool) {
+	if l == nil {
+		return Dependencies{}, false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.deps == nil {
+		return Dependencies{}, false
+	}
+	return *l.deps, true
 }
 
 // stalled is the phase underway, lapsed and timed from its start, or zero when none is.

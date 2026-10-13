@@ -287,8 +287,21 @@ func gradeWatch(facts hint.Gate, agent string, worker bool, w watchCall, now tim
 	return ShellVerdict{}
 }
 
+// gradeWaiter is the graded verdict on arming waiter: gradeWatch's, and for a timer the
+// sleep-poll deny, which yields to the pile's own word when the workspace only advises
+// against it, since the pile says more: how many are already live.
+func gradeWaiter(deps Dependencies, facts hint.Gate, agent string, waiter waiterCheck, now time.Time) ShellVerdict {
+	w := deps.grade(gradeWatch(facts, agent, waiter.worker, waiter.watchCall, now))
+	if waiter.timer {
+		if t := deps.grade(ShellVerdict{Deny: denySleepTimer, Why: denySleepTimerWhy, Rule: denyRule{Name: denyRuleSleepPoll}}); t.Deny != "" || w.Deny == "" && w.Context == "" {
+			w = stronger(w, t)
+		}
+	}
+	return w
+}
+
 const (
-	denyMonitorDuplicate = "a watcher on this subject is already live for you; one per subject is all it takes, and it wakes you when the subject changes."
+	denyMonitorDuplicate ="a watcher on this subject is already live for you; one per subject is all it takes, and it wakes you when the subject changes."
 	denyMonitorOwnWork   = "this watches work you backgrounded, which the host announces when it ends; drop the watcher and wait for that notice."
 	denyMonitorWorker    = "a worker's waits are its own runs, and each one's end is announced; drop this endless watch, background the run itself, and wait for its completion notice."
 	// One Why for both arms: they are one rule, and the reason is the same.
