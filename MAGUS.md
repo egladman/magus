@@ -62,7 +62,7 @@ magus graph export -o json  # the whole graph
 | module     | built in | `magus query kind=module`     |                                                                                                                       |
 | method     | built in | `magus query kind=method`     |                                                                                                                       |
 | diagnostic | built in | `magus query kind=diagnostic` | `MGS3009`, `MGS1021`, `MGS3030`                                                                                       |
-| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/reference/manpage/magus-doctor.md`, `docs/guides/integrations/agents/guard.md` |
+| doc        |    1000+ | `magus query kind=doc`        | `docs/reference/rules/index.md`, `docs/guides/integrations/agents/guard.md`, `docs/reference/manpage/magus-doctor.md` |
 | dir        |     500+ | `magus query kind=dir`        | `changes/unreleased`, `docs/reference/rules`, `docs/reference/proofread`                                              |
 | file       |     400+ | `magus query kind=file`       | `libs/figure/figure.buzz`, `magusfile.buzz`, `hack/ci/pull-requests.buzz`                                             |
 | function   |    3000+ | `magus query kind=function`   | `apiBase`, `main`, `describe`                                                                                         |
