@@ -175,9 +175,12 @@ magus\project({
         // The raced suite measured 13m21s of its own work on a loaded 8-core machine, with
         // vcs, cmd/magus and internal/guard each over five minutes: the hg and sl parity
         // tests alone spend about seven minutes spawning those tools.
+        // slots as go-test: its go-test ops run inline under this step's seat, so the seat
+        // is what sizes their -p and GOMAXPROCS.
         "test": {
             "timeout": "25m",
             "memory_mb": 10240,
+            "slots": 4,
             "sandbox": {"allow": if (os\platform()[0] == "linux") [{"path": "/proc", "mode": "ro"}] else []},
         },
         "coverage-render": {"skip_cache": "reads the console's figure and the assembled site, which it cannot declare as inputs"},
