@@ -807,6 +807,55 @@ func TestVCSCmdRefusalLetsAWorkerCommitInAnotherRepository(t *testing.T) {
 	require.Error(t, vcsCmdRefusal(ctx, worker, "git", []string{"push"}, r.main, nil))
 }
 
+// TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex pins GIT_INDEX_FILE in the
+// shape hack/dev/split-into-branches.buzz runs `--apply`: a scratch index outside the
+// checkout leaves the scratch-repository exemption standing, while an index in the
+// checkout, in its shared git directory, or one that cannot be placed still refuses.
+func TestVCSCmdRefusalLetsAScratchRepositoryUseATemporaryIndex(t *testing.T) {
+	ctx, r, worker, wt := leaseVCSRepo(t)
+	scratch := testkit.NewRepo(t, nil).Root()
+	outside := filepath.Join(t.TempDir(), "index")
+	readTree := []string{"read-tree", "HEAD"}
+	commit := []string{"commit", "-q", "--allow-empty", "-m", "done"}
+
+	for name, c := range map[string]struct {
+		args  []string
+		dir   string
+		index string
+	}{
+		"read-tree into an index outside both":     {readTree, scratch, outside},
+		"commit from an index outside both":        {commit, scratch, outside},
+		"an index relative to the scratch repo":    {readTree, scratch, "scratch-index"},
+		"-C into the scratch repo from the worker": {append([]string{"-C", scratch}, readTree...), wt, outside},
+	} {
+		require.NoError(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, []string{"GIT_INDEX_FILE=" + c.index}), name)
+	}
+
+	for name, c := range map[string]struct {
+		args  []string
+		dir   string
+		index string
+	}{
+		"an index in the checkout":             {readTree, scratch, filepath.Join(wt, "index")},
+		"an index in the shared git directory": {readTree, scratch, filepath.Join(r.main, ".git", "scratch-index")},
+		"an index under the home shorthand":    {readTree, scratch, "~/index"},
+		"an empty index":                       {readTree, scratch, ""},
+		"the worker's own checkout":            {readTree, wt, outside},
+		"the primary checkout":                 {readTree, r.main, outside},
+	} {
+		require.Error(t, vcsCmdRefusal(ctx, worker, "git", c.args, c.dir, []string{"GIT_INDEX_FILE=" + c.index}), name)
+	}
+
+	err := vcsCmdRefusal(ctx, worker, "git", commit, scratch, []string{"GIT_INDEX_FILE=" + filepath.Join(wt, "index")})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Its environment sets GIT_INDEX_FILE")
+
+	noCheckout := worker
+	noCheckout.CheckoutRoot = ""
+	require.Error(t, vcsCmdRefusal(ctx, noCheckout, "git", readTree, scratch, []string{"GIT_INDEX_FILE=" + outside}),
+		"a lease with no checkout_root cannot show the index is outside it")
+}
+
 // TestVCSCmdRefusalReadsTheJobsCheckoutUnderAnyAlias pins the exemption against spellings
 // of the job's repository that differ from the registered path as strings: a case variant
 // on a case-insensitive filesystem, macOS's firmlinked data volume, and a symlinked parent.

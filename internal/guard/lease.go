@@ -1437,7 +1437,7 @@ func vcsCmdRefusal(ctx context.Context, row types.Job, backend string, args []st
 	site, unlocated := argvSite(inv, dir)
 	relocated := false
 	if backend == "git" && unlocated == "" {
-		site, unlocated, relocated = gitEnvSite(site, env)
+		site, unlocated, relocated = gitEnvSite(site, env, row.CheckoutRoot)
 	}
 	if unlocated == "" && !relocated && backend == "git" && !isInit(inv) && actsInPlace(inv) &&
 		inOtherRepository(site, row.CheckoutRoot) && workTreeAt(ctx, site.dir, row.CheckoutRoot) {
@@ -1458,11 +1458,15 @@ var gitLocationVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GI
 // directory as --git-dir does, unless the arguments already named one; any other of
 // gitLocationVars leaves the commit unplaced. relocated reports that env set any of them,
 // which rules out the scratch-repository exemption: that exemption reads the repository
-// off the directory alone.
-func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, relocated bool) {
+// off the directory alone. A GIT_INDEX_FILE is the exception when both it and site lie
+// outside checkout and its git directory: a scratch index there moves no file of the job's.
+func gitEnvSite(site vcsSite, env []string, checkout string) (_ vcsSite, unlocated string, relocated bool) {
 	for _, name := range gitLocationVars {
 		value, ok := envValue(env, name)
 		if !ok {
+			continue
+		}
+		if name == "GIT_INDEX_FILE" && scratchIndex(site.dir, value, checkout) {
 			continue
 		}
 		relocated = true
@@ -1479,6 +1483,23 @@ func gitEnvSite(site vcsSite, env []string) (_ vcsSite, unlocated string, reloca
 		}
 	}
 	return site, "", relocated
+}
+
+// scratchIndex reports whether index, a GIT_INDEX_FILE value, names a literal path that,
+// like dir, lies outside checkout and outside the git directory its checkouts share.
+// False when checkout is unset or its git directory cannot be read.
+func scratchIndex(dir, index, checkout string) bool {
+	if checkout == "" || index == "" || strings.HasPrefix(index, "~") {
+		return false
+	}
+	if !filepath.IsAbs(index) {
+		index = filepath.Join(dir, index)
+	}
+	if within(dir, checkout) || within(index, checkout) {
+		return false
+	}
+	_, common, ok := gitCheckout(checkout)
+	return ok && !within(index, common)
 }
 
 // envValue is name's value in env as exec hands it to a child: the last entry wins, and
